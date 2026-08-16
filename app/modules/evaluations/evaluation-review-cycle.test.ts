@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it } from "vitest";
 
 import type { Viewer } from "~/platform/auth/authorize.server";
 import { ensureDemoEvaluationData } from "./demo.server";
+import { ensureEvaluationDecisionTemplateFixture } from "./evaluation-test-fixtures";
 import {
   EvaluationRevisionConflictError,
   EvaluationService,
@@ -141,6 +142,11 @@ async function resetCycleFixture() {
     .bind(admin.eventId)
     .run();
   await ensureDemoEvaluationData(env as unknown as CloudflareEnvironment);
+  await ensureEvaluationDecisionTemplateFixture(
+    env.DB,
+    admin.eventId,
+    admin.personId,
+  );
 }
 
 async function seedTerminalDecisionCandidates() {

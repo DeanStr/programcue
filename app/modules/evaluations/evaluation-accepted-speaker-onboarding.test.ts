@@ -1,11 +1,13 @@
 import { env } from "cloudflare:test";
-import { beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { DEFAULT_EVENT_BRAND_ACCENT } from "~/lib/brand";
+import type { AirtableProviderBoundary } from "~/modules/airtable/airtable-provider-boundary.server";
 import type { Viewer } from "~/platform/auth/authorize.server";
 import { ensureDemoData } from "~/platform/demo/seed.server";
 import { processCommunicationSend } from "../../../workers/queue/communication-send";
 import { EvaluationDecisionService } from "./evaluation-decision-service.server";
+import { ensureEvaluationDecisionTemplateFixture } from "./evaluation-test-fixtures";
 import {
   EvaluationRevisionConflictError,
   EvaluationService,
@@ -278,6 +280,11 @@ describe("evaluation vertical slice", () => {
   beforeEach(async () => {
     const testEnv = env as unknown as CloudflareEnvironment;
     await ensureDemoData(testEnv);
+    await ensureEvaluationDecisionTemplateFixture(
+      env.DB,
+      admin.eventId,
+      admin.personId,
+    );
     await env.DB.batch([
       env.DB.prepare(
         `DELETE FROM task_instances
@@ -346,6 +353,7 @@ describe("evaluation vertical slice", () => {
           submissionId: "eval-test-submission",
           decision: "accepted",
           sessionTrackId: "demo-track-operations",
+          sessionFormatKey: "presentation",
           rationale: "A trackless acceptance must not be released.",
           release: true,
           confirmedWithoutReview: true,
@@ -403,6 +411,7 @@ describe("evaluation vertical slice", () => {
           submissionId: "eval-test-submission",
           decision: "accepted",
           sessionTrackId: "demo-track-ai",
+          sessionFormatKey: "presentation",
           rationale: "The programme track is an explicit acceptance choice.",
           release: true,
           confirmedWithoutReview: true,
@@ -460,6 +469,7 @@ describe("evaluation vertical slice", () => {
             submissionId: "eval-test-submission",
             decision: "accepted",
             sessionTrackId: "demo-track-operations",
+            sessionFormatKey: "presentation",
             rationale: "This preview must not commit with a stale track name.",
             release: true,
             confirmedWithoutReview: true,
@@ -514,6 +524,7 @@ describe("evaluation vertical slice", () => {
           submissionId: "eval-test-submission",
           decision: "accepted",
           sessionTrackId: "demo-track-operations",
+          sessionFormatKey: "presentation",
           rationale: "Strong programme fit.",
           release: true,
         }),
@@ -522,6 +533,7 @@ describe("evaluation vertical slice", () => {
         submissionId: "eval-test-submission",
         decision: "accepted",
         sessionTrackId: "demo-track-operations",
+        sessionFormatKey: "presentation",
         rationale: "Strong programme fit.",
         release: true,
         confirmedWithoutReview: true,
@@ -602,7 +614,7 @@ describe("evaluation vertical slice", () => {
           rationale: "A late reversal must use an explicit reopen workflow.",
           release: true,
         }),
-      ).rejects.toThrow(/released decisions are final/i);
+      ).rejects.toThrow(/reopen an eligible released outcome/i);
       await expect(
         service.decide(admin, {
           submissionId: "eval-test-submission",
@@ -610,7 +622,7 @@ describe("evaluation vertical slice", () => {
           rationale: "A draft cannot replace a released decision either.",
           release: false,
         }),
-      ).rejects.toThrow(/released decisions are final/i);
+      ).rejects.toThrow(/reopen an eligible released outcome/i);
       const finalState = await env.DB.prepare(
         `
         SELECT s.status,
@@ -652,6 +664,7 @@ describe("evaluation vertical slice", () => {
         submissionId: "eval-test-submission",
         decision: "accepted",
         sessionTrackId: "demo-track-operations",
+        sessionFormatKey: "presentation",
         rationale: "Strong programme fit.",
         release: true,
         confirmedWithoutReview: true,
@@ -694,6 +707,7 @@ describe("evaluation vertical slice", () => {
           submissionId: "eval-test-submission",
           decision: "accepted",
           sessionTrackId: "demo-track-operations",
+          sessionFormatKey: "presentation",
           rationale: "Strong programme fit.",
           release: true,
           confirmedWithoutReview: true,
@@ -805,6 +819,7 @@ describe("evaluation vertical slice", () => {
         submissionId: "eval-test-submission",
         decision: "accepted" as const,
         sessionTrackId: "demo-track-operations",
+        sessionFormatKey: "presentation",
         rationale: "Strong programme fit.",
         release: true,
         confirmedWithoutReview: true,
@@ -949,6 +964,7 @@ describe("evaluation vertical slice", () => {
           submissionId: "eval-test-submission",
           decision: "accepted",
           sessionTrackId: "demo-track-operations",
+          sessionFormatKey: "presentation",
           rationale: "Strong programme fit.",
           release: true,
           confirmedWithoutReview: true,
@@ -1197,6 +1213,7 @@ describe("evaluation vertical slice", () => {
         submissionId: "eval-test-submission",
         decision: "accepted",
         sessionTrackId: "demo-track-operations",
+        sessionFormatKey: "presentation",
         rationale: "Create the configured onboarding plan.",
         release: true,
         confirmedWithoutReview: true,
@@ -1350,6 +1367,7 @@ describe("evaluation vertical slice", () => {
             submissionId: "eval-test-submission",
             decision: "accepted",
             sessionTrackId: "demo-track-operations",
+            sessionFormatKey: "presentation",
             rationale: "This plan must be committed as one unit.",
             release: true,
             confirmedWithoutReview: true,
@@ -1426,6 +1444,7 @@ describe("evaluation vertical slice", () => {
           submissionId: "eval-test-submission",
           decision: "accepted",
           sessionTrackId: "demo-track-operations",
+          sessionFormatKey: "round-table",
           rationale: "Strong programme fit.",
           release: true,
           confirmedWithoutReview: true,
@@ -1444,6 +1463,296 @@ describe("evaluation vertical slice", () => {
           .bind(event!.sessionFormatsJson, admin.eventId, admin.organisationId)
           .run();
       }
+    });
+
+    it("maps a legacy submitted format to an explicitly selected current format", async () => {
+      await resetEvaluationFixture();
+      const service = new EvaluationService(evaluationEnvironment());
+      const event = await env.DB.prepare(
+        "SELECT session_formats_json AS sessionFormatsJson FROM events WHERE id = ? AND organisation_id = ?",
+      )
+        .bind(admin.eventId, admin.organisationId)
+        .first<{ sessionFormatsJson: string }>();
+      expect(event).not.toBeNull();
+      const configuredFormats = (
+        JSON.parse(event!.sessionFormatsJson) as Array<Record<string, unknown>>
+      )
+        .filter((format) => format.key !== "presentation")
+        .concat({
+          key: "talk",
+          label: "Talk",
+          defaultDurationMinutes: 50,
+          position: 1,
+        });
+      try {
+        await env.DB.prepare(
+          "UPDATE events SET session_formats_json = ? WHERE id = ? AND organisation_id = ?",
+        )
+          .bind(
+            JSON.stringify(configuredFormats),
+            admin.eventId,
+            admin.organisationId,
+          )
+          .run();
+
+        await expect(
+          service.decide(admin, {
+            submissionId: "eval-test-submission",
+            decision: "accepted",
+            sessionTrackId: "demo-track-operations",
+            rationale: "Legacy format needs a current mapping.",
+            release: true,
+            confirmedWithoutReview: true,
+          }),
+        ).rejects.toThrow(/choose the current session format/i);
+
+        const result = await service.decide(admin, {
+          submissionId: "eval-test-submission",
+          decision: "accepted",
+          sessionTrackId: "demo-track-operations",
+          sessionFormatKey: "talk",
+          rationale: "Legacy format mapped to the current Talk format.",
+          release: true,
+          confirmedWithoutReview: true,
+        });
+        await expect(
+          env.DB.prepare(
+            "SELECT format, duration_minutes AS durationMinutes FROM sessions WHERE id = ? AND event_id = ?",
+          )
+            .bind(result.sessionId, admin.eventId)
+            .first(),
+        ).resolves.toEqual({ format: "talk", durationMinutes: 50 });
+      } finally {
+        await env.DB.prepare(
+          "UPDATE events SET session_formats_json = ? WHERE id = ? AND organisation_id = ?",
+        )
+          .bind(event!.sessionFormatsJson, admin.eventId, admin.organisationId)
+          .run();
+      }
+    });
+
+    it("refuses release before mutation when no active decision template exists", async () => {
+      await resetEvaluationFixture();
+      await env.DB.prepare(
+        "DELETE FROM communication_templates WHERE event_id = ? AND category = 'decision'",
+      )
+        .bind(admin.eventId)
+        .run();
+      const service = new EvaluationService(evaluationEnvironment());
+
+      await expect(
+        service.decide(admin, {
+          submissionId: "eval-test-submission",
+          decision: "rejected",
+          rationale: "A release must have an applicant notification path.",
+          release: true,
+          confirmedWithoutReview: true,
+        }),
+      ).rejects.toThrow(/publish and activate a decision email template/i);
+      await expect(
+        env.DB.prepare(
+          `SELECT status,
+                  (SELECT COUNT(*) FROM submission_decisions decision
+                    WHERE decision.submission_id = submissions.id) AS decisionCount
+             FROM submissions WHERE id = 'eval-test-submission'`,
+        ).first(),
+      ).resolves.toEqual({ status: "submitted", decisionCount: 0 });
+    });
+
+    it("refuses release before mutation when the decision sender is unavailable", async () => {
+      await resetEvaluationFixture();
+      await env.DB.prepare(
+        "UPDATE sender_profiles SET status = 'disabled' WHERE event_id = ?",
+      )
+        .bind(admin.eventId)
+        .run();
+
+      await expect(
+        new EvaluationService(evaluationEnvironment()).decide(admin, {
+          submissionId: "eval-test-submission",
+          decision: "rejected",
+          rationale: "A release must have a verified sender.",
+          release: true,
+          confirmedWithoutReview: true,
+        }),
+      ).rejects.toThrow(/verified sender profile is required/i);
+      await expect(
+        env.DB.prepare(
+          `SELECT status,
+                  (SELECT COUNT(*) FROM submission_decisions decision
+                    WHERE decision.submission_id = submissions.id) AS decisionCount
+             FROM submissions WHERE id = 'eval-test-submission'`,
+        ).first(),
+      ).resolves.toEqual({ status: "submitted", decisionCount: 0 });
+    });
+
+    it("refuses release before mutation when the recipient email is invalid", async () => {
+      await resetEvaluationFixture();
+      await env.DB.prepare(
+        `UPDATE people SET email = 'not-an-email'
+          WHERE id = 'person-demo-submitter'`,
+      ).run();
+
+      await expect(
+        new EvaluationService(evaluationEnvironment()).decide(admin, {
+          submissionId: "eval-test-submission",
+          decision: "rejected",
+          rationale: "A release must have a deliverable recipient.",
+          release: true,
+          confirmedWithoutReview: true,
+        }),
+      ).rejects.toThrow(/valid verified email address/i);
+      await expect(
+        env.DB.prepare(
+          `SELECT status,
+                  (SELECT COUNT(*) FROM submission_decisions decision
+                    WHERE decision.submission_id = submissions.id) AS decisionCount
+             FROM submissions WHERE id = 'eval-test-submission'`,
+        ).first(),
+      ).resolves.toEqual({ status: "submitted", decisionCount: 0 });
+    });
+
+    it("refuses release before mutation when the email provider is unconfigured", async () => {
+      await resetEvaluationFixture();
+      const unconfigured = {
+        ...evaluationEnvironment(),
+        EMAIL_PROVIDER: undefined,
+      } as unknown as CloudflareEnvironment;
+
+      await expect(
+        new EvaluationService(unconfigured).decide(admin, {
+          submissionId: "eval-test-submission",
+          decision: "rejected",
+          rationale: "A release must have a configured delivery provider.",
+          release: true,
+          confirmedWithoutReview: true,
+        }),
+      ).rejects.toThrow(/EMAIL_PROVIDER must be explicitly configured/i);
+      await expect(
+        env.DB.prepare(
+          `SELECT status,
+                  (SELECT COUNT(*) FROM submission_decisions decision
+                    WHERE decision.submission_id = submissions.id) AS decisionCount
+             FROM submissions WHERE id = 'eval-test-submission'`,
+        ).first(),
+      ).resolves.toEqual({ status: "submitted", decisionCount: 0 });
+    });
+
+    it("reopens a released rejection for an explicit corrected decision", async () => {
+      await resetEvaluationFixture();
+      const service = new EvaluationService(evaluationEnvironment());
+      const released = await service.decide(admin, {
+        submissionId: "eval-test-submission",
+        decision: "rejected",
+        rationale: "Initial outcome based on incomplete evidence.",
+        release: true,
+        confirmedWithoutReview: true,
+      });
+
+      const executeIdempotent = vi.fn(
+        async (
+          _viewer: unknown,
+          _command: unknown,
+          execute: () => Promise<unknown>,
+        ) => execute(),
+      );
+      const correctionService = new EvaluationService(evaluationEnvironment(), {
+        airtable: {
+          executeIdempotent,
+        } as unknown as AirtableProviderBoundary,
+      });
+      const reopened = await correctionService.reopenDecision(admin, {
+        submissionId: "eval-test-submission",
+        reason: "The committee received material correcting evidence.",
+        confirmed: true,
+      });
+      expect(reopened.notificationCancelled).toBe(true);
+      expect(executeIdempotent).toHaveBeenCalledWith(
+        expect.objectContaining({ eventId: admin.eventId }),
+        expect.objectContaining({ operation: "evaluation.decision.reopen" }),
+        expect.any(Function),
+      );
+
+      await expect(
+        env.DB.prepare(
+          `SELECT submission.status, decision.status AS decisionStatus,
+                  (SELECT operation.status FROM operation_jobs operation
+                    WHERE operation.id = ?) AS notificationStatus,
+                  (SELECT COUNT(*) FROM audit_events audit
+                    WHERE audit.entity_id = decision.id
+                      AND audit.action = 'decision.reopened') AS reopenAuditCount
+             FROM submissions submission
+             JOIN submission_decisions decision
+               ON decision.submission_id = submission.id
+            WHERE submission.id = 'eval-test-submission'
+              AND decision.id = ?`,
+        )
+          .bind(released.notificationOperationId, released.decisionId)
+          .first(),
+      ).resolves.toEqual({
+        status: "decision_ready",
+        decisionStatus: "superseded",
+        notificationStatus: "cancelled",
+        reopenAuditCount: 1,
+      });
+
+      const corrected = await service.decide(admin, {
+        submissionId: "eval-test-submission",
+        decision: "accepted",
+        sessionTrackId: "demo-track-operations",
+        sessionFormatKey: "presentation",
+        rationale: "Corrected outcome after reviewing the new evidence.",
+        release: true,
+        confirmedWithoutReview: true,
+      });
+      expect(corrected.sessionId).toBeTruthy();
+    });
+
+    it("fails closed when the original decision notification is already sending", async () => {
+      await resetEvaluationFixture();
+      const service = new EvaluationService(evaluationEnvironment());
+      const released = await service.decide(admin, {
+        submissionId: "eval-test-submission",
+        decision: "rejected",
+        rationale: "Initial outcome before the correction request.",
+        release: true,
+        confirmedWithoutReview: true,
+      });
+      await env.DB.prepare(
+        `UPDATE operation_jobs
+            SET status = 'running', claim_token = 'active-decision-send',
+                claim_expires_at = unixepoch() + 60
+          WHERE id = ? AND event_id = ?`,
+      )
+        .bind(released.notificationOperationId, admin.eventId)
+        .run();
+
+      await expect(
+        service.reopenDecision(admin, {
+          submissionId: "eval-test-submission",
+          reason: "Material correcting evidence arrived during delivery.",
+          confirmed: true,
+        }),
+      ).rejects.toThrow(/changed before it could be reopened/i);
+      await expect(
+        env.DB.prepare(
+          `SELECT submission.status, decision.status AS decisionStatus,
+                  operation.status AS notificationStatus
+             FROM submissions submission
+             JOIN submission_decisions decision
+               ON decision.submission_id = submission.id
+              AND decision.event_id = submission.event_id
+             JOIN operation_jobs operation ON operation.id = ?
+            WHERE submission.id = 'eval-test-submission'
+              AND decision.id = ?`,
+        )
+          .bind(released.notificationOperationId, released.decisionId)
+          .first(),
+      ).resolves.toEqual({
+        status: "rejected",
+        decisionStatus: "published",
+        notificationStatus: "running",
+      });
     });
 
     it("fails accepted release if the claimed speaker set changes before provisioning", async () => {
@@ -1480,6 +1789,7 @@ describe("evaluation vertical slice", () => {
             submissionId: "eval-test-submission",
             decision: "accepted",
             sessionTrackId: "demo-track-operations",
+            sessionFormatKey: "presentation",
             rationale: "The full speaker set must be provisioned together.",
             release: true,
             confirmedWithoutReview: true,
@@ -1571,6 +1881,7 @@ describe("evaluation vertical slice", () => {
           submissionId: "eval-unclaimed-submission",
           decision: "accepted",
           sessionTrackId: "demo-track-operations",
+          sessionFormatKey: "presentation",
           rationale: "Strong proposal.",
           release: true,
           confirmedWithoutReview: true,

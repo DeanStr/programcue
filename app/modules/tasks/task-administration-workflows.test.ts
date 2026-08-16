@@ -1,7 +1,8 @@
 import { env } from "cloudflare:test";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { ZodError } from "zod";
 
+import type { AirtableProviderBoundary } from "~/modules/airtable/airtable-provider-boundary.server";
 import type { Viewer } from "~/platform/auth/authorize.server";
 import {
   acceptTestFileScanDispatch,
@@ -200,6 +201,69 @@ describe("onboarding task service", () => {
           reason: "",
         }),
       ).rejects.toThrow("Explain why");
+    });
+
+    it("extends one speaker task deadline with audited event-local intent", async () => {
+      const testEnv = env as unknown as CloudflareEnvironment;
+      await ensureDemoSpeakerData(testEnv);
+      const executeIdempotent = vi.fn(
+        async (
+          _viewer: unknown,
+          _command: unknown,
+          execute: () => Promise<unknown>,
+        ) => execute(),
+      );
+      const service = new TaskService(testEnv, {
+        airtable: {
+          executeIdempotent,
+        } as unknown as AirtableProviderBoundary,
+      });
+      const taskId = await createChecklistTask(
+        testEnv,
+        `Deadline extension ${crypto.randomUUID()}`,
+      );
+      await testEnv.DB.prepare(
+        `UPDATE task_instances
+            SET due_at = unixepoch() - 60, status = 'overdue',
+                readiness_state = 'overdue'
+          WHERE id = ? AND event_id = ?`,
+      )
+        .bind(taskId, admin.eventId)
+        .run();
+
+      const result = await service.extendSpeakerDeadline(admin, {
+        taskId,
+        revision: 1,
+        dueDate: "2035-05-20",
+        reason: "Speaker requested an agreed individual extension.",
+      });
+      expect(result.dueAt).toBeGreaterThan(Math.floor(Date.now() / 1_000));
+      expect(executeIdempotent).toHaveBeenCalledWith(
+        expect.objectContaining({ eventId: admin.eventId }),
+        expect.objectContaining({ operation: "task.deadline.extend" }),
+        expect.any(Function),
+        { replay: "reject" },
+      );
+      await expect(
+        testEnv.DB.prepare(
+          `SELECT status, readiness_state AS readinessState,
+                  readiness_percent AS readinessPercent, due_at AS dueAt,
+                  revision,
+                  (SELECT COUNT(*) FROM audit_events audit
+                    WHERE audit.entity_id = task_instances.id
+                      AND audit.action = 'task.deadline.extended') AS auditCount
+             FROM task_instances WHERE id = ? AND event_id = ?`,
+        )
+          .bind(taskId, admin.eventId)
+          .first(),
+      ).resolves.toEqual({
+        status: "not_started",
+        readinessState: "on_track",
+        readinessPercent: 0,
+        dueAt: result.dueAt,
+        revision: 2,
+        auditCount: 1,
+      });
     });
   });
 

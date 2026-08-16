@@ -42,6 +42,7 @@ describe("administrator content ZIP resource", () => {
     const suffix = crypto.randomUUID();
     const assetId = `route-zip-asset-${suffix}`;
     const versionId = `route-zip-version-${suffix}`;
+    const taskId = `route-zip-task-${suffix}`;
     const objectKey = `private/route-zip-tests/${versionId}`;
     const bytes = new TextEncoder().encode("route ZIP transport evidence");
     const stored = await workerEnv.FILES.put(objectKey, bytes);
@@ -60,12 +61,21 @@ describe("administrator content ZIP resource", () => {
     if (!session) throw new Error("The demo session fixture is unavailable.");
     await workerEnv.DB.batch([
       workerEnv.DB.prepare(
+        `INSERT INTO task_instances (
+           id, event_id, target_type, target_id, owner_person_id, title,
+           task_type, impact, status, readiness_state, readiness_percent,
+           revision, created_at, updated_at
+         ) VALUES (?, ?, 'speaker', ?, ?, 'Upload session slides',
+                   'file_upload', 'high', 'submitted', 'on_track', 100, 1,
+                   unixepoch(), unixepoch())`,
+      ).bind(taskId, DEMO_EVENT_ID, session.speakerId, session.speakerId),
+      workerEnv.DB.prepare(
         `INSERT INTO file_assets (
            id, event_id, owner_person_id, target_type, target_id, asset_kind,
            status, created_at, updated_at
-         ) VALUES (?, ?, ?, 'session', ?, 'slides', 'active',
+         ) VALUES (?, ?, ?, 'task', ?, 'task_evidence', 'active',
                    unixepoch(), unixepoch())`,
-      ).bind(assetId, DEMO_EVENT_ID, session.speakerId, session.id),
+      ).bind(assetId, DEMO_EVENT_ID, session.speakerId, taskId),
       workerEnv.DB.prepare(
         `INSERT INTO file_versions (
            id, event_id, asset_id, version_number, object_key,
@@ -96,6 +106,7 @@ describe("administrator content ZIP resource", () => {
       viewer,
       { assetIds: [assetId], groupBy: "session" },
     );
+    expect(preview.entries[0]?.sessionName).toBe("Unassigned");
     const eventCookie = currentEventCookie(DEMO_EVENT_ID, workerEnv).split(
       ";",
       1,

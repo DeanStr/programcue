@@ -30,7 +30,6 @@ import { EmptyState } from "~/components/ui/states";
 import { ensureDemoCrmData } from "~/modules/crm/demo.server";
 import { crmStages } from "~/modules/crm/crm-schema";
 import { CrmService, CrmStateError } from "~/modules/crm/crm-service.server";
-import { currentEventCookie } from "~/platform/auth/current-event.server";
 import { requireOrganisationAdministrator } from "~/platform/auth/organisation.server";
 import { getCloudflareContext } from "~/platform/cloudflare-context";
 
@@ -117,12 +116,12 @@ export async function action({ request, context, params }: Route.ActionArgs) {
         form.get("eventId"),
         form.get("idempotencyKey"),
       );
-      return redirect(
-        `/admin/speakers?person=${encodeURIComponent(added.personId)}`,
-        {
-          headers: { "set-cookie": currentEventCookie(added.eventId, env) },
-        },
-      );
+      return {
+        ok: true,
+        message: added.created
+          ? "Added this contact to the target event as a prospect. The current event was not changed."
+          : "This contact is already in the target event. No duplicate was created and the current event was not changed.",
+      } satisfies ActionResult;
     }
     return data<ActionResult>(
       { ok: false, message: "Unsupported Speaker Network contact action." },

@@ -23,6 +23,7 @@ import {
 } from "~/components/form-builder-panels";
 import { useConfirm } from "~/components/ui/confirm-dialog";
 import { ensureDemoSubmissionForm } from "~/modules/submissions/demo-submissions.server";
+import { closeDateFromEpoch } from "~/modules/submissions/submission-repository-shared";
 import type { SaveFormInput } from "~/modules/submissions/submission-schema";
 import { SubmissionService } from "~/modules/submissions/submission-service.server";
 import {
@@ -291,6 +292,16 @@ export default function FormBuilder({ loaderData }: Route.ComponentProps) {
     ? `/apply/${publishedPublicSlug}`
     : null;
   const eventTimezone = loaderData.workspace?.eventTimezone ?? "UTC";
+  const publishedCloseDate = loaderData.workspace?.publishedVersion
+    ? closeDateFromEpoch(
+        loaderData.workspace.publishedVersion.settings.closesAt ?? null,
+        eventTimezone,
+      )
+    : null;
+  const publishedClosingDateChanged = Boolean(
+    loaderData.workspace?.publishedVersion &&
+    input.closeDate !== publishedCloseDate,
+  );
   return (
     <Form
       ref={formRef}
@@ -344,6 +355,23 @@ export default function FormBuilder({ loaderData }: Route.ComponentProps) {
           </button>
         </div>
       </div>
+
+      {publishedClosingDateChanged ? (
+        <div className="validation-item warn mb" role="status">
+          <strong>The closing-date change is still a draft</strong>
+          <span>
+            The public application currently{" "}
+            {publishedCloseDate
+              ? "closes " + publishedCloseDate
+              : "has no closing date"}
+            . Save this draft, then publish the new version to make the{" "}
+            {input.closeDate
+              ? input.closeDate + " closing date"
+              : "removal of the closing date"}{" "}
+            live.
+          </span>
+        </div>
+      ) : null}
 
       {publishOpen ? (
         <Dialog

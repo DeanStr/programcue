@@ -249,6 +249,33 @@ export async function action({ request, context }: Route.ActionArgs) {
         message: "Task plan assigned, including any missing prerequisites.",
       });
     }
+    if (intent === "extend-deadline") {
+      const taskId = String(form.get("taskId") ?? "");
+      const result = await service.extendSpeakerDeadline(viewer, {
+        taskId,
+        revision: form.get("revision"),
+        dueDate: form.get("dueDate"),
+        reason: form.get("reason"),
+      });
+      const realtimeFailure = await recordRouteChange(env, viewer, {
+        entityType: "task_instance",
+        entityId: taskId,
+        changeType: "progress",
+      });
+      const warning = [result.webhookWarning, realtimeFailure?.message]
+        .filter(Boolean)
+        .join(" ");
+      if (warning) {
+        return data(
+          { ok: false, committed: true, message: warning },
+          { status: 207 },
+        );
+      }
+      return data({
+        ok: true,
+        message: "Speaker deadline extended for this task only.",
+      });
+    }
     if (["approve", "complete", "waive", "reopen"].includes(intent)) {
       const taskId = String(form.get("taskId") ?? "");
       const result = await service.administerTask(viewer, {

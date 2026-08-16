@@ -513,6 +513,7 @@ export function DecisionDialog() {
     "accepted" | "waitlisted" | "rejected"
   >("accepted");
   const [sessionTrackId, setSessionTrackId] = useState("");
+  const [sessionFormatKey, setSessionFormatKey] = useState("");
   const defaultSessionTrackId =
     selected?.tracks.length === 1 ? selected.tracks[0]!.id : "";
   const selectedSessionTrack = selected?.tracks.find(
@@ -521,16 +522,32 @@ export function DecisionDialog() {
   const sessionTrackSelectionUnavailable = Boolean(
     sessionTrackId && !selectedSessionTrack,
   );
+  const matchingSubmittedFormat = loaderData.sessionFormats.find(
+    (format) =>
+      format.key === selected?.format?.trim().toLowerCase() ||
+      format.label.trim().toLowerCase() ===
+        selected?.format?.trim().toLowerCase(),
+  );
+  const selectedSessionFormat = loaderData.sessionFormats.find(
+    (format) => format.key === sessionFormatKey,
+  );
   useEffect(() => {
     const draft = selected?.decisionDraft;
     setDecision(draft?.decision ?? "accepted");
     setSessionTrackId(
       draft ? (draft.sessionTrackId ?? "") : defaultSessionTrackId,
     );
+    setSessionFormatKey(
+      draft
+        ? (draft.sessionFormatKey ?? matchingSubmittedFormat?.key ?? "")
+        : (matchingSubmittedFormat?.key ?? ""),
+    );
   }, [
     defaultSessionTrackId,
+    matchingSubmittedFormat?.key,
     selected?.decisionDraft?.decision,
     selected?.decisionDraft?.revisionNumber,
+    selected?.decisionDraft?.sessionFormatKey,
     selected?.decisionDraft?.sessionTrackId,
     selected?.id,
   ]);
@@ -576,6 +593,29 @@ export function DecisionDialog() {
             <option value="waitlisted">Maybe</option>
             <option value="rejected">Reject</option>
           </select>
+        </label>
+        <label className="label">
+          Acceptance session format
+          <select
+            className="select"
+            name="sessionFormatKey"
+            value={sessionFormatKey}
+            onChange={(event) => setSessionFormatKey(event.target.value)}
+            required={decision === "accepted"}
+            disabled={decision !== "accepted"}
+          >
+            <option value="">Choose the current session format</option>
+            {loaderData.sessionFormats.map((format) => (
+              <option key={format.key} value={format.key}>
+                {format.label} · {format.defaultDurationMinutes} minutes
+              </option>
+            ))}
+          </select>
+          <span className={matchingSubmittedFormat ? "help" : "field-error"}>
+            {matchingSubmittedFormat
+              ? `Submitted as ${selected.format}. Confirm the current programme format.`
+              : `Submitted as ${selected.format || "an unspecified format"}, which no longer matches the event configuration. Map it explicitly before accepting.`}
+          </span>
         </label>
         <label className="label">
           Acceptance programme track
@@ -680,6 +720,13 @@ export function DecisionDialog() {
                   : decision === "accepted"
                     ? "Choose the programme track before saving or releasing this acceptance."
                     : "This outcome does not create a programme session."}
+            </li>
+            <li>
+              {decision === "accepted" && selectedSessionFormat
+                ? `The accepted session will use the current ${selectedSessionFormat.label} format.`
+                : decision === "accepted"
+                  ? "Choose the current session format before saving or releasing this acceptance."
+                  : "No session format is needed for this outcome."}
             </li>
             <li>
               Release cancels every unfinished reviewer assignment for this

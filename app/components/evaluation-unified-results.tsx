@@ -432,6 +432,73 @@ export function EvaluationUnifiedResults() {
                                 No decision history for this round.
                               </p>
                             )}
+                            {(() => {
+                              const releasedDecision =
+                                result.decisionHistory.find(
+                                  (decision) => decision.status === "published",
+                                );
+                              if (
+                                !releasedDecision ||
+                                releasedDecision.decision === "accepted" ||
+                                !loaderData.canManageEvaluationAccess
+                              ) {
+                                return null;
+                              }
+                              return (
+                                <details className="mt">
+                                  <summary className="btn small">
+                                    Reopen released decision
+                                  </summary>
+                                  <Form method="post" className="stack mt">
+                                    <input
+                                      type="hidden"
+                                      name="intent"
+                                      value="reopen-decision"
+                                    />
+                                    <input
+                                      type="hidden"
+                                      name="submissionId"
+                                      value={result.id}
+                                    />
+                                    <div className="validation-item warn">
+                                      <strong>
+                                        Prior messages cannot be recalled
+                                      </strong>
+                                      <span>
+                                        Reopening supersedes the released{" "}
+                                        {humanise(releasedDecision.decision)}{" "}
+                                        outcome and returns this proposal to
+                                        decision-ready state. You must release
+                                        the corrected outcome separately.
+                                      </span>
+                                    </div>
+                                    <label className="label">
+                                      Correction reason
+                                      <textarea
+                                        className="textarea"
+                                        name="reason"
+                                        minLength={10}
+                                        maxLength={2_000}
+                                        required
+                                      />
+                                    </label>
+                                    <label className="speaker-confirm">
+                                      <input
+                                        type="checkbox"
+                                        name="confirmed"
+                                        value="true"
+                                        required
+                                      />
+                                      I understand the prior notification cannot
+                                      be recalled.
+                                    </label>
+                                    <button className="btn small danger">
+                                      Confirm reopen
+                                    </button>
+                                  </Form>
+                                </details>
+                              );
+                            })()}
                           </div>
                         </div>
                       </details>

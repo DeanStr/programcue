@@ -550,7 +550,8 @@ export async function loader({ request, context }: LoaderFunctionArgs) {
            JOIN events event
              ON event.id = decision.event_id AND event.organisation_id = ?
            JOIN people person ON person.id = decision.decided_by_person_id
-          WHERE decision.event_id = ? AND decision.round_id = ?
+          WHERE decision.event_id = ?
+            AND (decision.round_id = ? OR decision.round_id IS NULL)
           ORDER BY decision.submission_id, decision.revision_number DESC`,
       )
         .bind(viewer.organisationId, viewer.eventId, resultsRoundId)
@@ -593,6 +594,7 @@ export async function loader({ request, context }: LoaderFunctionArgs) {
       rationale: string;
       includeReviewerFeedback: boolean;
       sessionTrackId: string | null;
+      sessionFormatKey: string | null;
       sessionDurationMinutes: number | null;
     }
   >();
@@ -601,7 +603,10 @@ export async function loader({ request, context }: LoaderFunctionArgs) {
     const effectPreview = decisionDraftEffectPreviewSchema.safeParse(
       JSON.parse(row.effectPreviewJson),
     );
-    if (!effectPreview.success) {
+    if (
+      !effectPreview.success ||
+      (row.decision === "accepted" && !effectPreview.data.sessionFormatKey)
+    ) {
       throw new Error(
         `Decision draft ${row.submissionId} has invalid persisted preview data.`,
       );
@@ -826,6 +831,7 @@ export async function loader({ request, context }: LoaderFunctionArgs) {
     resultsExportIntent: crypto.randomUUID(),
     focusedRoundId: requestedRoundId || null,
     eventTimezone: event.timezone,
+    sessionFormats: event.sessionFormats,
     acceptedSpeakerInvitationResendEnabled: String(env.DEMO_MODE) !== "true",
   };
 }

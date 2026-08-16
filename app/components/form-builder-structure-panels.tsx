@@ -155,8 +155,8 @@ export function PublicationSettingsFields({
           name="closeDate"
           type="date"
           value={input.closeDate ?? ""}
-          onChange={(event) =>
-            change({ ...input, closeDate: event.target.value || null })
+          onInput={(event) =>
+            change({ ...input, closeDate: event.currentTarget.value || null })
           }
         />
       </label>

@@ -92,7 +92,9 @@ export async function loadScheduleWorkspaceD1(
 ): Promise<ScheduleWorkspace> {
   const event = await env.DB.prepare(
     `
-      SELECT e.id, e.name, e.starts_at AS startsAt, e.ends_at AS endsAt,
+      SELECT e.id, e.name, e.slug AS publicSlug,
+             e.programme_published_at AS programmePublishedAt,
+             e.starts_at AS startsAt, e.ends_at AS endsAt,
              e.timezone, e.brand_accent AS brandAccent, e.revision,
              e.repository_provider AS repositoryProvider,
              e.session_formats_json AS sessionFormatsJson
@@ -103,6 +105,8 @@ export async function loadScheduleWorkspaceD1(
     .bind(viewer.eventId, viewer.organisationId)
     .first<WorkspaceEvent>();
   if (!event) throw new Error("Event not found.");
+  if (!event.publicSlug.trim())
+    throw new Error("Event has no valid public programme slug.");
 
   const [version, rooms, tracks, sessions, policyRow] = await Promise.all([
     env.DB.prepare(

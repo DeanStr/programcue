@@ -4,6 +4,7 @@ import { beforeEach, describe, expect, it } from "vitest";
 import type { Viewer } from "~/platform/auth/authorize.server";
 import { ensureDemoData } from "~/platform/demo/seed.server";
 import { EvaluationService } from "./evaluation-service.server";
+import { ensureEvaluationDecisionTemplateFixture } from "./evaluation-test-fixtures";
 
 const admin: Viewer = {
   personId: "person-demo-admin",
@@ -216,6 +217,11 @@ describe("evaluation vertical slice", () => {
   beforeEach(async () => {
     const testEnv = env as unknown as CloudflareEnvironment;
     await ensureDemoData(testEnv);
+    await ensureEvaluationDecisionTemplateFixture(
+      env.DB,
+      admin.eventId,
+      admin.personId,
+    );
     await env.DB.batch([
       env.DB.prepare(
         `DELETE FROM task_instances
@@ -294,6 +300,7 @@ describe("evaluation vertical slice", () => {
             submissionId: "eval-test-submission",
             decision: "accepted",
             sessionTrackId: "demo-track-operations",
+            sessionFormatKey: "presentation",
             rationale: "Ready for release.",
             release: true,
             confirmedWithoutReview: true,
@@ -316,6 +323,7 @@ describe("evaluation vertical slice", () => {
               submissionId: "eval-test-submission",
               decision: "accepted",
               sessionTrackId: "demo-track-operations",
+              sessionFormatKey: "presentation",
               rationale: "Inactive plans must not grant release authority.",
               release: true,
               confirmedWithoutReview: true,
@@ -359,6 +367,7 @@ describe("evaluation vertical slice", () => {
             submissionId: "eval-test-submission",
             decision: "accepted",
             sessionTrackId: "demo-track-operations",
+            sessionFormatKey: "presentation",
             rationale: "The authority must still exist at the write boundary.",
             release: true,
             confirmedWithoutReview: true,

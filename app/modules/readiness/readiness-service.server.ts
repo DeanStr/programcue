@@ -5,7 +5,10 @@ import {
   calculateReadiness,
   type ReadinessTask,
 } from "./readiness-rules";
-import type { ProgrammeSetupStep } from "./programme-workflow-phases";
+import {
+  groupProgrammeSetupSteps,
+  type ProgrammeSetupStep,
+} from "./programme-workflow-phases";
 
 type CountRow = { total: number; complete?: number; failed?: number };
 export type DeliveryChannel = "email" | "sms" | "push" | "calendar";
@@ -611,7 +614,6 @@ export class ReadinessService {
       (sum, blocker) => sum + blocker.count,
       0,
     );
-    const percentage = calculateOverallReadiness(workflows, declaredBlockers);
     const setupGuide = [
       {
         key: "event-details",
@@ -662,6 +664,15 @@ export class ReadinessService {
         complete: Boolean(event.publicationComplete),
       },
     ] satisfies ProgrammeSetupStep[];
+    const setupPhases = groupProgrammeSetupSteps(setupGuide);
+    const setupPercentage = percent(
+      setupPhases.filter((phase) => phase.complete).length,
+      setupPhases.length,
+    );
+    const percentage = Math.min(
+      calculateOverallReadiness(workflows, declaredBlockers),
+      setupPercentage,
+    );
     return {
       eventId: viewer.eventId,
       eventTimezone: event.timezone,
@@ -677,7 +688,7 @@ export class ReadinessService {
               : "at_risk",
         declaredBlockers,
         explanation:
-          "Equal-weighted average across six workflows. Any declared blocker prevents a 100% ready result.",
+          "Equal-weighted average across six operational workflows, capped by completion of the four programme setup phases. Any declared blocker prevents a 100% ready result.",
       },
       setupGuide,
       workflows,

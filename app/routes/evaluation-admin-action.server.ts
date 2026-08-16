@@ -690,6 +690,7 @@ export async function action({ request, context }: ActionFunctionArgs) {
         release: released,
         confirmedWithoutReview: values.get("confirmedWithoutReview") === "true",
         sessionTrackId: values.get("sessionTrackId") || null,
+        sessionFormatKey: values.get("sessionFormatKey") || null,
         sessionDurationMinutes: values.get("sessionDurationMinutes") || null,
       });
       const realtimeFailure = await recordRouteChange(env, viewer, {
@@ -726,6 +727,34 @@ export async function action({ request, context }: ActionFunctionArgs) {
       return {
         ok: true,
         message: outcome.message,
+      };
+    }
+    if (values.get("intent") === "reopen-decision") {
+      const result = await service.reopenDecision(viewer, {
+        submissionId: values.get("submissionId"),
+        reason: values.get("reason"),
+        confirmed: values.get("confirmed") === "true",
+      });
+      const realtimeFailure = await recordRouteChange(env, viewer, {
+        entityType: "submission_decision",
+        entityId: result.decisionId,
+        changeType: "updated",
+      });
+      if (realtimeFailure) {
+        return data(
+          {
+            ok: false,
+            committed: true,
+            message: `Decision reopened. ${realtimeFailure.message}`,
+          },
+          { status: 207 },
+        );
+      }
+      return {
+        ok: true,
+        message: result.notificationCancelled
+          ? "Decision reopened for correction and its pending notification was cancelled. Messages already sent cannot be recalled; record and release the corrected outcome explicitly."
+          : "Decision reopened for correction. Messages already sent cannot be recalled; record and release the corrected outcome explicitly.",
       };
     }
     return data(

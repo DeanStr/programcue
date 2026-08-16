@@ -259,6 +259,28 @@ operation. Bulk confirmation claims only its unchanged stored preview and
 carries the same snapshots into each target batch. Targets remain independently
 atomic, so a multi-target run may honestly finish `partially_failed`.
 
+The current audit-remediation worktree closes the remaining reproduced
+cross-surface defects without claiming deployment. Accepted decisions now
+require an explicit current session-format mapping when a submitted legacy
+label no longer matches Event Setup, and decision release fails before mutation
+unless the recipient, provider, verified sender and published decision template
+are all delivery-ready. Released rejected and waitlisted outcomes have a
+confirmed, reasoned and audited reopen path;
+accepted outcomes remain protected because they already own linked programme
+and onboarding records. A failed schedule placement is presented as a rejected
+preflight rather than contradicting the persisted open-conflict count. Overall
+readiness cannot exceed completed setup-phase readiness. Saved CFP closing-date
+changes identify the still-live published date and require republication.
+Speaker-target tasks support one-person deadline extensions with revision,
+reason, audit and webhook evidence. Direct-session entry points are exposed from
+Programme and Schedule, CRM event handoff reports created/no-op results without
+silently switching the current event. Content ZIP preview uses only explicit
+session or submission relationships; speaker-task ownership alone remains
+honestly Unassigned instead of guessing a session. Schedule publication
+names the canonical public programme destination and exposes it as an action
+after publication. Focused service and Chromium workflow coverage exercises
+these boundaries locally.
+
 The current worktree keeps the intentionally shared evaluation fixture and
 closes five evaluator-audit defects. Its guide now derives Priya's
 activation/draft/submission state and Sam's valid-or-expired invitation/

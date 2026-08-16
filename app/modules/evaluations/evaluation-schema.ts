@@ -337,6 +337,16 @@ export const decisionBaseSchema = z.object({
     .describe(
       "Required for an accepted decision and must identify one of the proposal's submitted tracks.",
     ),
+  sessionFormatKey: z
+    .string()
+    .trim()
+    .min(1)
+    .max(100)
+    .nullable()
+    .default(null)
+    .describe(
+      "Required for an accepted decision and identifies the current event session format used by the programme session.",
+    ),
   sessionDurationMinutes: z.coerce
     .number()
     .int()
@@ -349,11 +359,16 @@ export const decisionBaseSchema = z.object({
 export const decisionDraftEffectPreviewSchema = z.object({
   includeReviewerFeedback: z.boolean(),
   sessionTrackId: z.string().trim().min(1).max(100).nullable(),
+  sessionFormatKey: z.string().trim().min(1).max(100).nullable(),
   sessionDurationMinutes: z.number().int().min(5).max(1_440).nullable(),
 });
 
-export function requireAcceptedSessionTrack(
-  decision: { decision: string; sessionTrackId: string | null },
+export function requireAcceptedSessionConfiguration(
+  decision: {
+    decision: string;
+    sessionTrackId: string | null;
+    sessionFormatKey: string | null;
+  },
   context: z.RefinementCtx,
 ) {
   if (decision.decision === "accepted" && !decision.sessionTrackId) {
@@ -363,11 +378,28 @@ export function requireAcceptedSessionTrack(
       message: "Choose the programme track for the accepted session.",
     });
   }
+  if (decision.decision === "accepted" && !decision.sessionFormatKey) {
+    context.addIssue({
+      code: "custom",
+      path: ["sessionFormatKey"],
+      message: "Choose the current session format for the accepted session.",
+    });
+  }
 }
 
 export const decisionSchema = decisionBaseSchema.superRefine(
-  requireAcceptedSessionTrack,
+  requireAcceptedSessionConfiguration,
 );
+
+export const decisionReopenSchema = z.object({
+  submissionId: z.string().trim().min(1),
+  reason: z
+    .string()
+    .trim()
+    .min(10, "Explain why the released decision must be reopened.")
+    .max(2_000),
+  confirmed: z.literal(true),
+});
 
 export const evaluationTeamSchema = z.object({
   teamId: z.string().trim().min(1).nullable().default(null),

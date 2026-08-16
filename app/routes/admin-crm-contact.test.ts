@@ -19,7 +19,7 @@ function context() {
 afterEach(() => vi.restoreAllMocks());
 
 describe("Speaker Network event handoff", () => {
-  it("opens the roster at the handed-off prospect and selects the target event", async () => {
+  it("reports a successful handoff without changing the current event", async () => {
     await ensureDemoData(env as unknown as CloudflareEnvironment);
     const handoff = vi
       .spyOn(CrmService.prototype, "addContactToEvent")
@@ -51,16 +51,11 @@ describe("Speaker Network event handoff", () => {
       context: context(),
     } as never);
 
-    if (!(result instanceof Response)) {
-      throw new Error("CRM event handoff did not redirect to the roster.");
-    }
-    expect(result.status).toBe(302);
-    expect(result.headers.get("location")).toBe(
-      "/admin/speakers?person=person-demo-speaker",
-    );
-    expect(result.headers.get("set-cookie")).toContain(
-      "program_cue_event=evt-handoff-target",
-    );
+    expect(result).toEqual({
+      ok: true,
+      message:
+        "Added this contact to the target event as a prospect. The current event was not changed.",
+    });
     expect(handoff).toHaveBeenCalledWith(
       expect.objectContaining({
         organisationId: "org-future-events",
@@ -70,5 +65,42 @@ describe("Speaker Network event handoff", () => {
       "evt-handoff-target",
       "crm-delivery-test",
     );
+  });
+
+  it("reports an existing event connection as a no-op", async () => {
+    await ensureDemoData(env as unknown as CloudflareEnvironment);
+    vi.spyOn(CrmService.prototype, "addContactToEvent").mockResolvedValue({
+      eventId: "evt-handoff-target",
+      personId: "person-demo-speaker",
+      workflowStatus: "prospect",
+      created: false,
+    });
+
+    const result = await action({
+      request: new Request(
+        "http://localhost/admin/crm/contacts/person-demo-speaker",
+        {
+          method: "POST",
+          headers: {
+            cookie:
+              "program_cue_demo_identity=administrator; program_cue_event=evt-foe-2025",
+            origin: "http://localhost",
+          },
+          body: new URLSearchParams({
+            _intent: "add_to_event",
+            eventId: "evt-handoff-target",
+            idempotencyKey: "crm-no-op-test",
+          }),
+        },
+      ),
+      params: { personId: "person-demo-speaker" },
+      context: context(),
+    } as never);
+
+    expect(result).toEqual({
+      ok: true,
+      message:
+        "This contact is already in the target event. No duplicate was created and the current event was not changed.",
+    });
   });
 });

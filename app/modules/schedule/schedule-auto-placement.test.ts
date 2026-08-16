@@ -55,6 +55,8 @@ function workspace(
     event: {
       id: "event-1",
       name: "Test event",
+      publicSlug: "test-event",
+      programmePublishedAt: null,
       startsAt: eventStartsAt,
       endsAt: eventEndsAt,
       timezone: "UTC",

@@ -70,6 +70,19 @@ test("task dashboard filters visible work and keeps template creation open", asy
     templateCreation.getByRole("button", { name: "Create template" }),
   ).toBeVisible();
 
+  const slidesTask = assignedWork.getByRole("row").filter({
+    has: page.getByText("Upload presentation slides", { exact: true }),
+  });
+  await slidesTask.getByText("Extend deadline", { exact: true }).click();
+  await slidesTask.getByLabel(/New deadline/).fill("2035-05-20");
+  await slidesTask
+    .getByLabel("Reason for deadline extension")
+    .fill("Speaker requested an individual extension.");
+  await slidesTask.getByRole("button", { name: "Confirm extension" }).click();
+  await expect(
+    page.getByRole("status").filter({ hasText: "Speaker deadline extended" }),
+  ).toBeVisible();
+
   await filters.getByLabel("Status").selectOption("completed");
   await filters.getByRole("button", { name: "Apply filters" }).click();
   await expect(page).toHaveURL(/state=completed/u);

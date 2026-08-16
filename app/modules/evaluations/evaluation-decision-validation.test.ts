@@ -7,6 +7,7 @@ import {
   EvaluationRevisionConflictError,
   EvaluationService,
 } from "./evaluation-service.server";
+import { ensureEvaluationDecisionTemplateFixture } from "./evaluation-test-fixtures";
 
 const admin: Viewer = {
   personId: "person-demo-admin",
@@ -213,6 +214,11 @@ describe("evaluation vertical slice", () => {
   beforeEach(async () => {
     const testEnv = env as unknown as CloudflareEnvironment;
     await ensureDemoData(testEnv);
+    await ensureEvaluationDecisionTemplateFixture(
+      env.DB,
+      admin.eventId,
+      admin.personId,
+    );
     await env.DB.batch([
       env.DB.prepare(
         `DELETE FROM task_instances

@@ -2,6 +2,7 @@ import { z } from "zod";
 import type { Viewer } from "~/platform/auth/authorize.server";
 import { WebhookService } from "~/platform/operations/webhook-service.server";
 import {
+  fixedDateEndEpoch,
   type TaskCompletionMutationResult,
   type TaskRow,
   TaskStateError,
@@ -15,6 +16,190 @@ import {
 } from "./task-service-foundation.server";
 
 export class TaskAdministrationWorkflows extends TaskServiceFoundation {
+  async extendSpeakerDeadline(viewer: Viewer, rawInput: unknown) {
+    return this.projectCommand(
+      viewer,
+      "task.deadline.extend",
+      rawInput,
+      () => this.extendSpeakerDeadlineD1(viewer, rawInput),
+      { replay: "reject" },
+    );
+  }
+
+  protected async extendSpeakerDeadlineD1(viewer: Viewer, rawInput: unknown) {
+    const event = await this.assertEvent(viewer);
+    const input = z
+      .object({
+        taskId: z.string().min(1),
+        revision: z.coerce.number().int().positive(),
+        dueDate: z.iso.date(),
+        reason: z
+          .string()
+          .trim()
+          .min(5, "Explain why this deadline is changing.")
+          .max(1_000),
+      })
+      .parse(rawInput);
+    const dueAt = fixedDateEndEpoch(input.dueDate, event.timezone)!;
+    if (dueAt <= Math.floor(Date.now() / 1_000)) {
+      throw new TaskStateError("Choose a future deadline extension date.");
+    }
+    const task = await this.env.DB.prepare(
+      `SELECT id, due_at AS dueAt, status, target_type AS targetType
+         FROM task_instances
+        WHERE id = ? AND event_id = ? AND revision = ?`,
+    )
+      .bind(input.taskId, viewer.eventId, input.revision)
+      .first<{
+        id: string;
+        dueAt: number | null;
+        status: string;
+        targetType: string;
+      }>();
+    if (!task) {
+      throw new TaskStateError(
+        "The task changed. Refresh before extending its deadline.",
+      );
+    }
+    if (task.targetType !== "speaker") {
+      throw new TaskStateError(
+        "Per-participant deadline extensions apply only to speaker tasks.",
+      );
+    }
+    if (["completed", "waived"].includes(task.status)) {
+      throw new TaskStateError(
+        "Completed or waived tasks do not need a deadline extension.",
+      );
+    }
+    if (task.dueAt !== null && dueAt <= task.dueAt) {
+      throw new TaskStateError(
+        "The new deadline must be later than the current deadline.",
+      );
+    }
+    await this.requireTaskWebhookReadiness(viewer, "task.updated");
+    const operationId = crypto.randomUUID();
+    const auditEventId = crypto.randomUUID();
+    const webhook = new WebhookService(this.env);
+    const preparedWebhook = await webhook.prepareEventForAudit(
+      viewer,
+      {
+        eventType: "task.updated",
+        entityType: "task",
+        entityId: task.id,
+        idempotencyKey: `task.deadline.extended:${task.id}:${operationId}`,
+        correlationId: operationId,
+        data: {
+          action: "deadline_extended",
+          priorDueAt: task.dueAt,
+          dueAt,
+          reason: input.reason,
+        },
+      },
+      auditEventId,
+    );
+    const statements = [
+      this.env.DB.prepare(
+        `INSERT INTO audit_events (
+           id, actor_kind, origin, metadata_version, organisation_id, event_id,
+           actor_person_id, action, entity_type, entity_id, correlation_id,
+           metadata_json, created_at
+         )
+         SELECT ?, 'person', 'admin_ui', 1, ?, ?, ?,
+                'task.deadline.extended', 'task_instance', ?, ?, ?, unixepoch()
+          WHERE EXISTS (
+            SELECT 1 FROM task_instances
+             WHERE id = ? AND event_id = ? AND revision = ?
+               AND target_type = 'speaker'
+               AND status NOT IN ('completed','waived')
+               AND (due_at IS NULL OR due_at < ?)
+          )`,
+      ).bind(
+        auditEventId,
+        viewer.organisationId,
+        viewer.eventId,
+        viewer.personId,
+        task.id,
+        operationId,
+        JSON.stringify({
+          priorDueAt: task.dueAt,
+          dueAt,
+          reason: input.reason,
+        }),
+        task.id,
+        viewer.eventId,
+        input.revision,
+        dueAt,
+      ),
+      this.env.DB.prepare(
+        `UPDATE task_instances AS task
+            SET due_at = ?,
+                status = CASE
+                  WHEN status = 'overdue' AND EXISTS (
+                    SELECT 1 FROM task_instance_dependencies dependency
+                    JOIN task_instances prerequisite
+                      ON prerequisite.id = dependency.depends_on_task_id
+                   WHERE dependency.task_id = task.id
+                     AND prerequisite.status NOT IN ('completed','waived')
+                  ) THEN 'blocked'
+                  WHEN status = 'overdue' THEN 'not_started'
+                  ELSE status
+                END,
+                readiness_state = CASE
+                  WHEN status = 'overdue' AND EXISTS (
+                    SELECT 1 FROM task_instance_dependencies dependency
+                    JOIN task_instances prerequisite
+                      ON prerequisite.id = dependency.depends_on_task_id
+                   WHERE dependency.task_id = task.id
+                     AND prerequisite.status NOT IN ('completed','waived')
+                  ) THEN 'blocked'
+                  WHEN status = 'overdue' THEN 'on_track'
+                  ELSE readiness_state
+                END,
+                readiness_percent = CASE
+                  WHEN status = 'overdue' THEN 0
+                  ELSE readiness_percent
+                END,
+                revision = revision + 1, last_operation_id = ?,
+                updated_at = unixepoch()
+          WHERE id = ? AND event_id = ? AND revision = ?
+            AND target_type = 'speaker'
+            AND status NOT IN ('completed','waived')
+            AND (due_at IS NULL OR due_at < ?)
+            AND EXISTS (
+              SELECT 1 FROM audit_events
+               WHERE id = ? AND organisation_id = ? AND event_id = ?
+            )`,
+      ).bind(
+        dueAt,
+        operationId,
+        task.id,
+        viewer.eventId,
+        input.revision,
+        dueAt,
+        auditEventId,
+        viewer.organisationId,
+        viewer.eventId,
+      ),
+      ...preparedWebhook.statements,
+    ];
+    const [audit, updated] = await this.env.DB.batch(statements);
+    if ((audit.meta.changes ?? 0) !== 1 || (updated.meta.changes ?? 0) !== 1) {
+      throw new TaskStateError(
+        "The task changed. Refresh before extending its deadline.",
+      );
+    }
+    const deliveries = await webhook.dispatchPreparedEvent(preparedWebhook);
+    return {
+      taskId: task.id,
+      dueAt,
+      webhookWarning: deliveries.some(
+        (delivery) => delivery.status === "queue_failed",
+      )
+        ? "The deadline was extended, but one or more outbound webhooks need a queue retry."
+        : null,
+    };
+  }
+
   async getAdminWorkspace(viewer: Viewer) {
     await this.projectCommand(
       viewer,

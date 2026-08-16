@@ -1,5 +1,6 @@
 import { ensureDemoEvaluationData } from "~/modules/evaluations/demo.server";
 import { DEFAULT_EVENT_BRAND_ACCENT } from "~/lib/brand";
+import { requireEmailProviderConfiguration } from "~/modules/communications/email-provider.server";
 import { INITIAL_EVENT_SESSION_FORMATS_JSON } from "~/modules/events/event-configuration";
 import { CANONICAL_EVENT_FILE_POLICY_JSON } from "~/modules/files/file-policy";
 import { defaultProgrammeEmbedConfiguration } from "~/modules/programme/programme-embed-configuration";
@@ -184,6 +185,7 @@ const DEMO_SUBMISSION_CONFIRMATION_VERSION_ID =
   "7d527639-cf8c-4886-a490-c09d8019310f";
 const DEMO_DECISION_TEMPLATE_ID = "572ae193-24e3-4746-b148-4757f54f83bd";
 const DEMO_DECISION_VERSION_ID = "95e1b191-434c-4be1-acb8-915f435f561f";
+const DEMO_DECISION_SENDER_ID = "sender-demo-decision-notifications";
 const DEMO_COMMUNICATION_TEMPLATE_TIMESTAMP = Math.floor(
   Date.parse("2026-08-01T12:00:00Z") / 1_000,
 );
@@ -887,11 +889,20 @@ async function seedShowcaseCohort(env: CloudflareEnvironment) {
 }
 
 async function seedJudgedDemoWorkflow(env: CloudflareEnvironment) {
+  const emailProvider = requireEmailProviderConfiguration(env);
   await ensureDemoData(env);
   await ensureDemoSubmissionForm(env);
   await ensureDemoEvaluationData(env);
   await ensureDemoSpeakerData(env);
   await env.DB.batch([
+    env.DB.prepare(
+      `INSERT OR IGNORE INTO sender_profiles (
+         id, event_id, name, from_name, from_email, reply_to_email,
+         provider, status, created_at, updated_at
+       ) VALUES (?, ?, 'Demo decision notifications', 'Program Cue Demo',
+                 'notifications@example.invalid', 'notifications@example.invalid',
+                 ?, 'verified', unixepoch(), unixepoch())`,
+    ).bind(DEMO_DECISION_SENDER_ID, DEMO_EVENT_ID, emailProvider.provider),
     env.DB.prepare(
       `INSERT OR IGNORE INTO communication_templates (
          id, event_id, name, category, status, created_by_person_id,
@@ -1070,6 +1081,7 @@ export type DemoBaselineEvidence = {
   canonicalEventConfiguration: number;
   canonicalOrganisationMemberships: number;
   publishedTemplates: number;
+  verifiedDecisionSenders: number;
   showcaseMemberships: number;
   showcaseReviewerAssignments: number;
   showcaseApplicantSubmissions: number;
@@ -1100,6 +1112,7 @@ export function demoBaselineIsComplete(evidence: DemoBaselineEvidence) {
     evidence.canonicalEventConfiguration === 1 &&
     evidence.canonicalOrganisationMemberships === 1 &&
     evidence.publishedTemplates === 5 &&
+    evidence.verifiedDecisionSenders === 1 &&
     evidence.showcaseMemberships === 6 &&
     evidence.showcaseReviewerAssignments >= 1 &&
     evidence.showcaseApplicantSubmissions >= 1 &&
@@ -1400,9 +1413,21 @@ async function baselineEvidence(env: CloudflareEnvironment) {
     .first<DemoBaselineEvidence>();
   if (!row)
     throw new Error("The restored demo baseline could not be verified.");
+  const sender = await env.DB.prepare(
+    `SELECT COUNT(*) AS count FROM sender_profiles
+      WHERE id = ? AND event_id = ? AND provider = ? AND status = 'verified'
+        AND from_email = 'notifications@example.invalid'`,
+  )
+    .bind(
+      DEMO_DECISION_SENDER_ID,
+      DEMO_EVENT_ID,
+      requireEmailProviderConfiguration(env).provider,
+    )
+    .first<{ count: number }>();
   const evidence = Object.fromEntries(
     Object.entries(row).map(([key, value]) => [key, Number(value)]),
-  ) as typeof row;
+  ) as DemoBaselineEvidence;
+  evidence.verifiedDecisionSenders = Number(sender?.count ?? 0);
   return evidence;
 }
 
@@ -1477,6 +1502,7 @@ export async function resetDemoEvent(
   if (!env.FILES) {
     throw new Error("Required Cloudflare binding FILES is unavailable.");
   }
+  requireEmailProviderConfiguration(env);
   const assertRetentionIncomplete = async () => {
     const event = await env.DB.prepare(
       `SELECT participant_retention_completed_at AS completedAt

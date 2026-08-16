@@ -111,6 +111,59 @@ beforeEach(async () => {
 });
 
 describe("evaluation administration results", () => {
+  it("includes no-review releases in decision history so they can be corrected", async () => {
+    const decisionId = `evaluation-admin-unscoped-${crypto.randomUUID()}`;
+    await workerEnv.DB.batch([
+      workerEnv.DB.prepare(
+        `UPDATE submissions SET status = 'waitlisted', revision = revision + 1
+          WHERE id = 'demo-evaluation-submission-calm'
+            AND event_id = 'evt-foe-2025'`,
+      ),
+      workerEnv.DB.prepare(
+        `INSERT INTO submission_decisions (
+           id, event_id, submission_id, round_id, revision_number, status,
+           decision, decided_by_person_id, rationale,
+           notification_feedback_json, effect_preview_json,
+           decided_at, published_at
+         ) VALUES (?, 'evt-foe-2025', 'demo-evaluation-submission-calm', NULL,
+                   1, 'published', 'waitlisted', 'person-demo-admin',
+                   'Released through an explicit no-review override.', '[]', '{}',
+                   unixepoch(), unixepoch())`,
+      ).bind(decisionId),
+    ]);
+
+    try {
+      const result = await loader({
+        request: loaderRequest(),
+        params: {},
+        context: context(),
+      } as never);
+      expect(
+        result.results.find(
+          (submission) => submission.id === "demo-evaluation-submission-calm",
+        )?.decisionHistory,
+      ).toContainEqual(
+        expect.objectContaining({
+          id: decisionId,
+          status: "published",
+          decision: "waitlisted",
+        }),
+      );
+    } finally {
+      await workerEnv.DB.batch([
+        workerEnv.DB.prepare(
+          "DELETE FROM submission_decisions WHERE id = ? AND event_id = 'evt-foe-2025'",
+        ).bind(decisionId),
+        workerEnv.DB.prepare(
+          `UPDATE submissions
+              SET status = 'assigned', revision = 1, last_operation_id = NULL
+            WHERE id = 'demo-evaluation-submission-calm'
+              AND event_id = 'evt-foe-2025'`,
+        ),
+      ]);
+    }
+  });
+
   it("projects the latest decision draft back into the decision editor", async () => {
     await expect(
       action({

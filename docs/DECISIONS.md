@@ -427,8 +427,40 @@ invalidation subsystem remain excluded.
 - **Actionable schedule conflicts:** rejected speaker overlaps name the speaker
   and both session titles. A generic conflict count is not an adequate operator
   explanation.
+- **Decision format remapping:** every accepted outcome requires and stores an
+  explicit current Event Setup session-format key. Submitted labels are context
+  for the organiser, never an implicit programme-data fallback.
+- **Released-outcome correction:** rejected and waitlisted decisions may be
+  reopened only through an owner/administrator confirmation with a durable
+  reason and audit evidence. The prior notification cannot be recalled.
+  Accepted decisions are not generically reopened because they already create
+  linked session, speaker, invitation and onboarding records; correction must
+  start from those explicit records rather than deleting them implicitly.
+- **Setup-bounded readiness:** operational readiness may expose useful partial
+  progress, but the overall percentage cannot exceed the proportion of complete
+  setup phases. A new event therefore cannot claim full readiness while most
+  setup phases remain incomplete.
+- **Per-speaker deadline changes:** a speaker-target task may receive a later
+  event-local deadline without changing the template or another speaker's task.
+  The command requires the exact task revision, a reason and a future later
+  date, and records audit/webhook evidence.
+- **Draft publication feedback:** changing a published CFP closing date changes
+  only its editable version until publication. The builder names the currently
+  live date and the required save-then-publish sequence instead of implying that
+  saving changed the public application.
+- **CRM event handoff:** adding an existing Network contact to an event reports
+  whether the membership was created or already existed and retains the
+  operator's current-event context. Navigation to the target roster is an
+  explicit user action, not a side effect of the mutation.
 
 ## Communication operations decisions
+
+A final-decision release requires a valid recipient, configured email provider,
+verified sender and active decision template with a valid published email
+version before any submission or decision mutation occurs. The delivery Worker
+revalidates these mutable dependencies when it runs. A later configuration
+change does not pretend that an earlier failed delivery was queued; failed
+communication work links to the existing Operations retry path.
 
 Delivery health is a read model over existing communication and delivery rows,
 not a new tracking subsystem. The event summary defaults to the latest 90 days;

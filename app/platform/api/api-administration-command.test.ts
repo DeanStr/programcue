@@ -4,6 +4,7 @@ import { RouterContextProvider } from "react-router";
 
 import routeConfig from "~/routes";
 import { ensureDemoEvaluationData } from "~/modules/evaluations/demo.server";
+import { ensureEvaluationDecisionTemplateFixture } from "~/modules/evaluations/evaluation-test-fixtures";
 import { ScheduleService } from "~/modules/schedule/schedule-service.server";
 import { ensureDemoSpeakerData } from "~/modules/speakers/demo.server";
 import { SubmissionService } from "~/modules/submissions/submission-service.server";
@@ -99,6 +100,11 @@ beforeEach(async () => {
   await ensureDemoSpeakerData(testEnv);
   await ensureDemoProgramme(testEnv);
   await ensureDemoEvaluationData(testEnv);
+  await ensureEvaluationDecisionTemplateFixture(
+    testEnv.DB,
+    eventId,
+    administrator.personId,
+  );
 });
 
 describe("versioned administration commands", () => {

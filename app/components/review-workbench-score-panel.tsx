@@ -420,7 +420,7 @@ export function ReviewScorePanel() {
           ) : null}
           <div className="review-overall-fields">
             <label className="label">
-              Recommendation
+              Overall recommendation
               <select
                 className="select"
                 name="recommendation"

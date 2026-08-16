@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Form, Link, useNavigation } from "react-router";
+import { Form, Link, useLocation, useNavigation } from "react-router";
 
 import { PersonDuplicateWarning } from "~/components/person-duplicate-warning";
 import { DomainStatusBadge } from "~/components/ui/domain-status-badge";
@@ -330,7 +330,9 @@ export function SubmissionAdminDetailPanel({
         <section className="card pad">
           <div className="card-title">
             <h2>Saved application revisions</h2>
-            <span className="pill right">{submission.savedRevisions.length}</span>
+            <span className="pill right">
+              {submission.savedRevisions.length}
+            </span>
           </div>
           {submission.savedRevisions.length ? (
             <ol className="timeline">
@@ -483,6 +485,7 @@ export function ManualEntryPanels({
   actionResult?: SubmissionsAdminActionResult;
 }) {
   const navigation = useNavigation();
+  const location = useLocation();
   const [directSpeakers, setDirectSpeakers] = useState<
     SubmissionAdminSpeakerInput[]
   >([{ name: "", email: "", biography: "" }]);
@@ -616,7 +619,11 @@ export function ManualEntryPanels({
         </Form>
       </details>
 
-      <details className="card pad">
+      <details
+        className="card pad"
+        id="create-direct-session"
+        open={location.hash === "#create-direct-session" || undefined}
+      >
         <summary>
           <strong>Create a guaranteed direct session</strong>{" "}
           <span className="subtle">

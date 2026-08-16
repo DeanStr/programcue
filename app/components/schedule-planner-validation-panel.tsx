@@ -6,27 +6,34 @@ import type {
 import {
   conflictEntryIds,
   conflictTypeName,
+  type ScheduleActionConflictNotice,
 } from "./schedule-planner-workspace-helpers";
 
 export function ScheduleValidationPanel({
   workspace,
+  latestPlacementConflicts,
   fetcher,
   revealConflictEntries,
 }: {
   workspace: SchedulePlannerWorkspaceData;
+  latestPlacementConflicts: ScheduleActionConflictNotice[];
   fetcher: ScheduleFetcher;
   revealConflictEntries(entryIds: string[]): void;
 }) {
+  const latestPlacementWasBlocked =
+    workspace.conflicts.length === 0 && latestPlacementConflicts.length > 0;
   return (
     <aside id="schedule-validation" className="card pad schedule-conflicts">
       <div className="card-title">
         <h2>Validation</h2>
         <span
-          className={`status ${workspace.conflicts.length ? "danger" : "success"}`}
+          className={`status ${workspace.conflicts.length || latestPlacementWasBlocked ? "danger" : "success"}`}
         >
           {workspace.conflicts.length
             ? `${workspace.conflicts.length} open`
-            : "Ready"}
+            : latestPlacementWasBlocked
+              ? "Placement blocked"
+              : "Ready"}
         </span>
       </div>
       <details className="mb">
@@ -136,7 +143,17 @@ export function ScheduleValidationPanel({
           </div>
         );
       })}
-      {!workspace.conflicts.length ? (
+      {latestPlacementWasBlocked ? (
+        <div className="validation-item error" role="status">
+          <strong>Latest placement was rejected</strong>
+          <span>
+            {latestPlacementConflicts.length} blocking conflict
+            {latestPlacementConflicts.length === 1 ? "" : "s"} were found during
+            preflight. No conflicting placement was saved; adjust the time or
+            room and try again.
+          </span>
+        </div>
+      ) : !workspace.conflicts.length ? (
         <div className="validation-item ok">No recorded conflicts.</div>
       ) : null}
     </aside>

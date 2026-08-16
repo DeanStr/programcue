@@ -97,6 +97,13 @@ test.describe.serial("submissions vertical slice", () => {
     await expect(
       page.getByRole("heading", { name: "Call for Speakers Form Builder" }),
     ).toBeVisible();
+    await expect(
+      page.getByRole("button", { name: "Save draft" }),
+    ).toBeEnabled();
+    await page.getByLabel("Closing date").fill("2035-12-31");
+    await expect(
+      page.getByText("The closing-date change is still a draft"),
+    ).toBeVisible();
     await page
       .getByLabel("Introduction")
       .fill(
@@ -121,6 +128,9 @@ test.describe.serial("submissions vertical slice", () => {
       page.locator(".validation-item.ok[role='status']").filter({
         hasText: "Draft form saved.",
       }),
+    ).toBeVisible();
+    await expect(
+      page.getByText("The closing-date change is still a draft"),
     ).toBeVisible();
     await expect(
       page.getByRole("button", { name: "Publish version" }),
@@ -576,15 +586,19 @@ test.describe.serial("submissions vertical slice", () => {
     page,
   }) => {
     const unique = Date.now();
-    await page.goto("/admin/submissions");
+    await page.goto("/admin/schedule");
+    await page
+      .getByRole("link", { name: "Create direct session", exact: true })
+      .click();
+    await expect(page).toHaveURL(
+      /\/admin\/submissions#create-direct-session$/u,
+    );
     const directSession = page.locator("details").filter({
       has: page.getByText("Create a guaranteed direct session", {
         exact: true,
       }),
     });
-    await directSession
-      .getByText("Create a guaranteed direct session", { exact: true })
-      .click();
+    await expect(directSession).toHaveAttribute("open", "");
     await directSession
       .getByLabel("Session title")
       .fill(`Sponsor briefing ${unique}`);

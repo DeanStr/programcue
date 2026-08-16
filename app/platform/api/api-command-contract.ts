@@ -2,7 +2,7 @@ import { z } from "zod";
 
 import {
   decisionBaseSchema,
-  requireAcceptedSessionTrack,
+  requireAcceptedSessionConfiguration,
 } from "~/modules/evaluations/evaluation-schema";
 import {
   administratorInvitationSchema,
@@ -82,7 +82,7 @@ export const apiDecisionSchema = decisionBaseSchema
   .omit({ release: true })
   .extend({ confirmed: z.literal(true) })
   .strict()
-  .superRefine(requireAcceptedSessionTrack);
+  .superRefine(requireAcceptedSessionConfiguration);
 
 export const apiTaskTemplateSchema = taskTemplateInputSchema.strict();
 export const apiTaskAssignmentSchema = z

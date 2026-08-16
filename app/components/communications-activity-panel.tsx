@@ -80,35 +80,45 @@ export function RecentCommunications({
                     ) : ["scheduled", "queued", "failed"].includes(
                         item.status,
                       ) ? (
-                      <Form
-                        method="post"
-                        onSubmit={(event) => {
-                          event.preventDefault();
-                          const form = event.currentTarget;
-                          confirm(
-                            {
-                              title: "Cancel this communication?",
-                              description: `${item.recipientCount - item.sentCount} of ${item.recipientCount} deliveries have not been sent and never will be. Deliveries already sent cannot be recalled.`,
-                              records: [item.id],
-                              confirmLabel: "Cancel communication",
-                              cancelLabel: "Keep communication",
-                            },
-                            () => submit(form),
-                          );
-                        }}
-                      >
-                        <input type="hidden" name="intent" value="cancel" />
-                        <input
-                          type="hidden"
-                          name="communicationId"
-                          value={item.id}
-                        />
-                        <button className="btn small" disabled={working}>
-                          {working && pendingIntent === "cancel"
-                            ? "Cancelling…"
-                            : "Cancel"}
-                        </button>
-                      </Form>
+                      <div className="page-actions">
+                        <Form
+                          method="post"
+                          onSubmit={(event) => {
+                            event.preventDefault();
+                            const form = event.currentTarget;
+                            confirm(
+                              {
+                                title: "Cancel this communication?",
+                                description: `${item.recipientCount - item.sentCount} of ${item.recipientCount} deliveries have not been sent and never will be. Deliveries already sent cannot be recalled.`,
+                                records: [item.id],
+                                confirmLabel: "Cancel communication",
+                                cancelLabel: "Keep communication",
+                              },
+                              () => submit(form),
+                            );
+                          }}
+                        >
+                          <input type="hidden" name="intent" value="cancel" />
+                          <input
+                            type="hidden"
+                            name="communicationId"
+                            value={item.id}
+                          />
+                          <button className="btn small" disabled={working}>
+                            {working && pendingIntent === "cancel"
+                              ? "Cancelling…"
+                              : "Cancel"}
+                          </button>
+                        </Form>
+                        {item.status === "failed" && item.operationId ? (
+                          <Link
+                            className="btn small"
+                            to={`/admin/operations?operation=${encodeURIComponent(item.operationId)}`}
+                          >
+                            Retry in Operations
+                          </Link>
+                        ) : null}
+                      </div>
                     ) : item.operationId ? (
                       <Link
                         className="btn small"

@@ -9,6 +9,7 @@ export type DecisionSubmission = {
   reference: string;
   format: string | null;
   category: string | null;
+  notificationAddress: string | null;
   status: string;
   revision: number;
   snapshotJson: string | null;
@@ -288,6 +289,9 @@ export function buildDecisionStatements(input: {
   sessionDurationMinutes: number;
   sessionTrack: { id: string; name: string } | null;
   notificationOperationId: string | null;
+  notificationTemplateVersionId: string | null;
+  notificationSenderProfileId: string | null;
+  notificationAddress: string | null;
   notificationFeedback: string[];
   roundId: string | null;
   speakerMemberships: Array<{ membershipId: string; personId: string }>;
@@ -311,6 +315,9 @@ export function buildDecisionStatements(input: {
     sessionDurationMinutes,
     sessionTrack,
     notificationOperationId,
+    notificationTemplateVersionId,
+    notificationSenderProfileId,
+    notificationAddress,
     notificationFeedback,
     roundId,
     speakerMemberships,
@@ -325,6 +332,16 @@ export function buildDecisionStatements(input: {
   if (parsed.decision !== "accepted" && sessionTrack) {
     throw new Error(
       "Only accepted decision statements may carry a programme track.",
+    );
+  }
+  if (
+    status === "published" &&
+    (!notificationTemplateVersionId ||
+      !notificationSenderProfileId ||
+      !notificationAddress)
+  ) {
+    throw new Error(
+      "Published decision statements require confirmed notification readiness.",
     );
   }
   const speakerSetGuard = speakerMemberships.length
@@ -413,6 +430,35 @@ export function buildDecisionStatements(input: {
                )
              )
            )
+           AND (
+             ? <> 'published'
+             OR (
+               EXISTS (
+                 SELECT 1
+                   FROM communication_template_versions decision_version
+                   JOIN communication_templates decision_template
+                     ON decision_template.id = decision_version.template_id
+                    AND decision_template.event_id = decision_version.event_id
+                  WHERE decision_version.id = ?
+                    AND decision_version.event_id = submissions.event_id
+                    AND decision_template.status = 'active'
+                    AND decision_version.status = 'published'
+                    AND decision_version.category = 'decision'
+                    AND decision_version.channel = 'email'
+               )
+               AND EXISTS (
+                 SELECT 1 FROM sender_profiles decision_sender
+                  WHERE decision_sender.id = ?
+                    AND decision_sender.event_id = submissions.event_id
+                    AND decision_sender.status = 'verified'
+               )
+               AND COALESCE(
+                 (SELECT recipient.email FROM people recipient
+                   WHERE recipient.id = submissions.submitter_person_id),
+                 submissions.submitter_email
+               ) = ?
+             )
+           )
       `,
     ).bind(
       submissionStatus,
@@ -431,6 +477,10 @@ export function buildDecisionStatements(input: {
       status,
       viewer.role,
       viewer.role,
+      status,
+      notificationTemplateVersionId,
+      notificationSenderProfileId,
+      notificationAddress,
     ),
     env.DB.prepare(
       `
@@ -516,6 +566,7 @@ export function buildDecisionStatements(input: {
         includeReviewerFeedback: parsed.includeReviewerFeedback,
         sessionTrackId: sessionTrack?.id ?? null,
         sessionTrackName: sessionTrack?.name ?? null,
+        sessionFormatKey: sessionId ? format : null,
         sessionDurationMinutes: parsed.sessionDurationMinutes ?? null,
       }),
       `decision:${submission.id}:${revision}`,

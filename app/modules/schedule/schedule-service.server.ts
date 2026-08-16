@@ -43,6 +43,8 @@ import {
 export type WorkspaceEvent = {
   id: string;
   name: string;
+  publicSlug: string;
+  programmePublishedAt: number | null;
   startsAt: number;
   endsAt: number;
   timezone: string;

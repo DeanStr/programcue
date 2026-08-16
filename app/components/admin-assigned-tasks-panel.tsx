@@ -325,6 +325,47 @@ export function AdminAssignedTasksPanel({
                       </details>
                     ) : null}
                   </Form>
+                  {task.targetType === "speaker" &&
+                  !["completed", "waived"].includes(task.status) ? (
+                    <details className="mt">
+                      <summary className="btn small">Extend deadline</summary>
+                      <Form method="post" className="stack mt">
+                        <input
+                          type="hidden"
+                          name="intent"
+                          value="extend-deadline"
+                        />
+                        <input type="hidden" name="taskId" value={task.id} />
+                        <input
+                          type="hidden"
+                          name="revision"
+                          value={task.revision}
+                        />
+                        <label className="label">
+                          New deadline ({data.eventTimezone})
+                          <input
+                            className="field"
+                            type="date"
+                            name="dueDate"
+                            required
+                          />
+                        </label>
+                        <label className="label">
+                          Reason for deadline extension
+                          <input
+                            className="field"
+                            name="reason"
+                            minLength={5}
+                            maxLength={1_000}
+                            required
+                          />
+                        </label>
+                        <button className="btn small" disabled={busy}>
+                          Confirm extension
+                        </button>
+                      </Form>
+                    </details>
+                  ) : null}
                   <details className="mt">
                     <summary className="btn small">Add comment</summary>
                     <Form method="post" className="stack mt">

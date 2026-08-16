@@ -97,6 +97,19 @@ export function SchedulePlannerWorkspace({
           <p>Build and publish a conflict-checked programme.</p>
         </div>
         <div className="page-actions">
+          {workspace.event.programmePublishedAt ? (
+            <Link
+              className="btn"
+              to={`/public/programme/${workspace.event.publicSlug}`}
+              target="_blank"
+              rel="noreferrer"
+            >
+              Open public programme
+            </Link>
+          ) : null}
+          <Link className="btn" to="/admin/submissions#create-direct-session">
+            Create direct session
+          </Link>
           <button
             className="btn"
             type="button"
@@ -447,6 +460,7 @@ export function SchedulePlannerWorkspace({
           />
           <ScheduleValidationPanel
             workspace={workspace}
+            latestPlacementConflicts={actionNotices.conflicts}
             fetcher={fetcher}
             revealConflictEntries={revealConflictEntries}
           />

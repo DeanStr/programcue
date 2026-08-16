@@ -182,7 +182,7 @@ export function AdminCommandDialog({
       label: "Direct session",
       description: "Enter a proposal on behalf of an invited speaker",
       meta: "Configure",
-      run: () => selectCommand("/admin/submissions"),
+      run: () => selectCommand("/admin/submissions#create-direct-session"),
     },
     {
       value: "create readiness task checklist",

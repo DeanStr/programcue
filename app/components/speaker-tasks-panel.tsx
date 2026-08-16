@@ -245,7 +245,7 @@ export function SpeakerTasksPanel({
                       kinds={[
                         {
                           value: "task_evidence",
-                          label: `Task evidence (${maximumMegabytes(portal.event.filePolicy.supportingDocumentMaximumBytes)} MB maximum)`,
+                          label: `Task evidence · PDF, DOC, DOCX, XLS, XLSX, ZIP, JPG, PNG or WebP (${maximumMegabytes(portal.event.filePolicy.supportingDocumentMaximumBytes)} MB maximum)`,
                           accept:
                             ".pdf,.doc,.docx,.xls,.xlsx,.zip,.jpg,.jpeg,.png,.webp",
                           maximumBytes:

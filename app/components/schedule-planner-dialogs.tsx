@@ -263,6 +263,10 @@ export function SchedulePublicationDialog({
         Publish version {workspace.version.versionNumber} with{" "}
         <strong>{workspace.entries.length} scheduled sessions</strong>.
       </p>
+      <p>
+        This version will be available at{" "}
+        <strong>/public/programme/{workspace.event.publicSlug}</strong>.
+      </p>
       <p className="help">
         Confirming publication makes this exact schedule-version snapshot
         authoritative. If this draft is blocked, the currently published

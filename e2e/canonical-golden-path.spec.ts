@@ -516,11 +516,17 @@ test.describe.serial("canonical D1-backed judged workflow", () => {
     await expect(publication).toContainText(
       "currently published programme remains unchanged",
     );
+    await expect(publication).toContainText(
+      "/public/programme/future-of-events-2027",
+    );
     await expect(publication).toContainText("revalidated before publication");
     await publication
       .getByRole("button", { name: "Confirm publication" })
       .click();
     await expectStatus(page, "Schedule published");
+    await expect(
+      page.getByRole("link", { name: "Open public programme" }),
+    ).toHaveAttribute("href", "/public/programme/future-of-events-2027");
 
     await waitForInterface(page, "/public/programme/future-of-events-2027");
     await expect(

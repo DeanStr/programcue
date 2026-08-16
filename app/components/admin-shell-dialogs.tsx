@@ -384,7 +384,7 @@ export function AdminAuxiliaryDialogs({
           <div className="pc-menu">
             <Link
               className="pc-menu-item"
-              to="/admin/submissions"
+              to="/admin/submissions#create-direct-session"
               onClick={closeDialog}
               data-dialog-autofocus
             >
@@ -392,9 +392,9 @@ export function AdminAuxiliaryDialogs({
                 <Files aria-hidden size={16} />
               </span>
               <span className="pc-menu-copy">
-                <strong>Submission</strong>
+                <strong>Direct session</strong>
                 <small>
-                  Enter a programme proposal in the application queue.
+                  Add an invited, sponsored or guaranteed programme session.
                 </small>
               </span>
             </Link>

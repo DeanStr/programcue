@@ -53,7 +53,7 @@ export class EvaluationDemoActivationError extends Error {
 export class EvaluationDecisionFinalError extends Error {
   constructor() {
     super(
-      "This submission already has a released decision. Released decisions are final until an explicit reopen workflow is implemented.",
+      "This submission already has a released decision. Reopen an eligible released outcome before recording a correction.",
     );
     this.name = "EvaluationDecisionFinalError";
   }

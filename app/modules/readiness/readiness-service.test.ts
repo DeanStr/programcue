@@ -65,6 +65,14 @@ describe("D1-backed command centre", () => {
     expect(
       incompletePhases.find((phase) => phase.key === "setup"),
     ).toMatchObject({ complete: false });
+    const completedPhasePercentage = Math.round(
+      (incompletePhases.filter((phase) => phase.complete).length /
+        incompletePhases.length) *
+        100,
+    );
+    expect(incomplete.readiness.percentage).toBeLessThanOrEqual(
+      completedPhasePercentage,
+    );
 
     await testEnv.DB.prepare(
       "UPDATE events SET description = 'A configured event.' WHERE id = ?",

@@ -1,7 +1,5 @@
-import {
-  findSessionFormatConfiguration,
-  parseSessionFormatsConfiguration,
-} from "~/modules/events/event-configuration";
+import { inspectDecisionNotificationReadiness } from "~/modules/communications/decision-notification-readiness.server";
+import { parseSessionFormatsConfiguration } from "~/modules/events/event-configuration";
 import { submittedSnapshotSchema } from "~/modules/submissions/submission-schema";
 import type { Viewer } from "~/platform/auth/authorize.server";
 import { WebhookService } from "~/platform/operations/webhook-service.server";
@@ -20,7 +18,7 @@ import {
   EvaluationStateError,
   EvaluationValidationError,
 } from "./evaluation-errors";
-import { decisionSchema } from "./evaluation-schema";
+import { decisionReopenSchema, decisionSchema } from "./evaluation-schema";
 import { acceptedSpeakerInvitationOutcome } from "./evaluation-decision-invitation-outcome.server";
 import {
   assertAcceptanceTaskPlan,
@@ -30,6 +28,284 @@ import {
 
 export class EvaluationDecisionService {
   constructor(private readonly env: CloudflareEnvironment) {}
+
+  async reopen(viewer: Viewer, input: unknown) {
+    await assertDecisionViewerEvent(this.env, viewer);
+    if (viewer.role !== "owner" && viewer.role !== "administrator") {
+      throw new EvaluationDecisionAuthorityError();
+    }
+    const parsed = decisionReopenSchema.parse(input);
+    const released = await this.env.DB.prepare(
+      `SELECT decision.id AS decisionId, decision.decision,
+              submission.status AS submissionStatus, submission.revision,
+              (SELECT operation.id
+                 FROM operation_jobs operation
+                WHERE operation.event_id = decision.event_id
+                  AND operation.organisation_id = event.organisation_id
+                  AND operation.type = 'decision.notification'
+                  AND json_extract(operation.payload_json, '$.payload.decisionId') = decision.id
+                ORDER BY operation.created_at DESC
+                LIMIT 1) AS notificationOperationId
+         FROM submission_decisions decision
+         JOIN submissions submission
+           ON submission.id = decision.submission_id
+          AND submission.event_id = decision.event_id
+         JOIN events event
+           ON event.id = decision.event_id AND event.organisation_id = ?
+        WHERE decision.event_id = ? AND decision.submission_id = ?
+          AND decision.status = 'published'
+        LIMIT 1`,
+    )
+      .bind(viewer.organisationId, viewer.eventId, parsed.submissionId)
+      .first<{
+        decisionId: string;
+        decision: "accepted" | "rejected" | "waitlisted";
+        submissionStatus: string;
+        revision: number;
+        notificationOperationId: string | null;
+      }>();
+    if (!released) {
+      throw new EvaluationStateError(
+        "No released decision is available to reopen.",
+      );
+    }
+    if (released.decision === "accepted") {
+      throw new EvaluationValidationError(
+        "A released acceptance owns programme, speaker and task records. Correct the linked session workflow before changing that outcome.",
+      );
+    }
+    if (released.submissionStatus !== released.decision) {
+      throw new EvaluationRevisionConflictError(
+        "The submission no longer matches its released decision. Refresh before reopening it.",
+      );
+    }
+    const operationId = crypto.randomUUID();
+    const auditEventId = crypto.randomUUID();
+    const [
+      auditInsert,
+      ,
+      ,
+      ,
+      notificationCancellation,
+      decisionUpdate,
+      submissionUpdate,
+      eventChange,
+    ] = await this.env.DB.batch([
+      this.env.DB.prepare(
+        `INSERT INTO audit_events (
+             id, actor_kind, origin, metadata_version, organisation_id, event_id,
+             actor_person_id, action, entity_type, entity_id, correlation_id,
+             metadata_json, created_at
+           )
+           SELECT ?, 'person', 'admin_ui', 1, ?, ?, ?, 'decision.reopened',
+                  'submission_decision', decision.id, ?,
+                  json_object('submissionId', decision.submission_id,
+                              'priorDecision', decision.decision,
+                              'reason', ?),
+                  unixepoch()
+             FROM submission_decisions decision
+             JOIN submissions submission
+               ON submission.id = decision.submission_id
+              AND submission.event_id = decision.event_id
+             JOIN events event
+               ON event.id = decision.event_id AND event.organisation_id = ?
+            WHERE decision.id = ? AND decision.event_id = ?
+              AND decision.submission_id = ? AND decision.status = 'published'
+              AND decision.decision = ? AND decision.decision <> 'accepted'
+              AND submission.revision = ? AND submission.status = ?
+              AND (
+                ? IS NULL
+                OR NOT EXISTS (
+                  SELECT 1 FROM operation_jobs active_notification
+                   WHERE active_notification.id = ?
+                     AND active_notification.event_id = decision.event_id
+                     AND active_notification.organisation_id = event.organisation_id
+                     AND active_notification.status = 'running'
+                )
+              )`,
+      ).bind(
+        auditEventId,
+        viewer.organisationId,
+        viewer.eventId,
+        viewer.personId,
+        operationId,
+        parsed.reason,
+        viewer.organisationId,
+        released.decisionId,
+        viewer.eventId,
+        parsed.submissionId,
+        released.decision,
+        released.revision,
+        released.decision,
+        released.notificationOperationId,
+        released.notificationOperationId,
+      ),
+      this.env.DB.prepare(
+        `UPDATE communications
+              SET status = 'cancelled', cancelled_at = unixepoch(),
+                  updated_at = unixepoch()
+            WHERE operation_id = ? AND event_id = ?
+              AND status IN ('draft','scheduled','queued','failed')
+              AND EXISTS (
+                SELECT 1 FROM audit_events
+                 WHERE id = ? AND organisation_id = ? AND event_id = ?
+              )`,
+      ).bind(
+        released.notificationOperationId,
+        viewer.eventId,
+        auditEventId,
+        viewer.organisationId,
+        viewer.eventId,
+      ),
+      this.env.DB.prepare(
+        `UPDATE communication_deliveries
+              SET status = 'cancelled', updated_at = unixepoch()
+            WHERE event_id = ? AND status IN ('queued','failed')
+              AND communication_id IN (
+                SELECT communication.id FROM communications communication
+                 WHERE communication.operation_id = ?
+                   AND communication.event_id = communication_deliveries.event_id
+                   AND communication.status = 'cancelled'
+              )`,
+      ).bind(viewer.eventId, released.notificationOperationId),
+      this.env.DB.prepare(
+        `UPDATE operation_items
+              SET status = 'skipped', error_code = 'DECISION_REOPENED',
+                  error_message = 'The original decision was reopened before delivery.',
+                  completed_at = unixepoch(), updated_at = unixepoch()
+            WHERE operation_id = ? AND status IN ('pending','failed')
+              AND EXISTS (
+                SELECT 1 FROM audit_events
+                 WHERE id = ? AND organisation_id = ? AND event_id = ?
+              )`,
+      ).bind(
+        released.notificationOperationId,
+        auditEventId,
+        viewer.organisationId,
+        viewer.eventId,
+      ),
+      this.env.DB.prepare(
+        `UPDATE operation_jobs
+              SET status = 'cancelled', last_error = NULL,
+                  completed_at = unixepoch(), claim_token = NULL,
+                  claim_expires_at = NULL, updated_at = unixepoch()
+            WHERE id = ? AND event_id = ? AND organisation_id = ?
+              AND type = 'decision.notification'
+              AND status IN (
+                'queued','queue_failed','received','retrying','failed','partially_failed'
+              )
+              AND claim_token IS NULL
+              AND EXISTS (
+                SELECT 1 FROM audit_events
+                 WHERE id = ? AND organisation_id = ? AND event_id = ?
+              )`,
+      ).bind(
+        released.notificationOperationId,
+        viewer.eventId,
+        viewer.organisationId,
+        auditEventId,
+        viewer.organisationId,
+        viewer.eventId,
+      ),
+      this.env.DB.prepare(
+        `UPDATE submission_decisions
+            SET status = 'superseded'
+          WHERE id = ? AND event_id = ? AND submission_id = ?
+            AND status = 'published' AND decision = ?
+            AND EXISTS (
+              SELECT 1 FROM submissions
+               WHERE submissions.id = submission_decisions.submission_id
+                 AND submissions.event_id = submission_decisions.event_id
+                 AND submissions.revision = ? AND submissions.status = ?
+            )
+            AND EXISTS (
+              SELECT 1 FROM audit_events
+               WHERE id = ? AND organisation_id = ? AND event_id = ?
+            )
+            AND (
+              ? IS NULL
+              OR EXISTS (
+                SELECT 1 FROM operation_jobs obsolete_notification
+                 WHERE obsolete_notification.id = ?
+                   AND obsolete_notification.event_id = submission_decisions.event_id
+                   AND obsolete_notification.organisation_id = ?
+                   AND obsolete_notification.status IN ('cancelled','completed')
+              )
+            )`,
+      ).bind(
+        released.decisionId,
+        viewer.eventId,
+        parsed.submissionId,
+        released.decision,
+        released.revision,
+        released.decision,
+        auditEventId,
+        viewer.organisationId,
+        viewer.eventId,
+        released.notificationOperationId,
+        released.notificationOperationId,
+        viewer.organisationId,
+      ),
+      this.env.DB.prepare(
+        `UPDATE submissions
+            SET status = 'decision_ready', revision = revision + 1,
+                last_operation_id = ?, updated_at = unixepoch()
+          WHERE id = ? AND event_id = ? AND revision = ? AND status = ?
+            AND EXISTS (
+              SELECT 1 FROM submission_decisions decision
+               WHERE decision.id = ? AND decision.event_id = submissions.event_id
+                 AND decision.status = 'superseded'
+            )
+            AND EXISTS (
+              SELECT 1 FROM audit_events
+               WHERE id = ? AND organisation_id = ? AND event_id = ?
+            )`,
+      ).bind(
+        operationId,
+        parsed.submissionId,
+        viewer.eventId,
+        released.revision,
+        released.decision,
+        released.decisionId,
+        auditEventId,
+        viewer.organisationId,
+        viewer.eventId,
+      ),
+      this.env.DB.prepare(
+        `INSERT INTO event_changes (
+           event_id, entity_type, entity_id, change_type, correlation_id,
+           created_at
+         )
+         SELECT ?, 'submission_decision', ?, 'updated', ?, unixepoch()
+          WHERE EXISTS (
+            SELECT 1 FROM submissions
+             WHERE id = ? AND event_id = ? AND last_operation_id = ?
+          )`,
+      ).bind(
+        viewer.eventId,
+        released.decisionId,
+        operationId,
+        parsed.submissionId,
+        viewer.eventId,
+        operationId,
+      ),
+    ]);
+    if (
+      (auditInsert.meta.changes ?? 0) !== 1 ||
+      (decisionUpdate.meta.changes ?? 0) !== 1 ||
+      (submissionUpdate.meta.changes ?? 0) !== 1 ||
+      (eventChange.meta.changes ?? 0) !== 1
+    ) {
+      throw new EvaluationRevisionConflictError(
+        "The decision changed before it could be reopened. Refresh before trying again.",
+      );
+    }
+    return {
+      decisionId: released.decisionId,
+      submissionId: parsed.submissionId,
+      notificationCancelled: (notificationCancellation.meta.changes ?? 0) === 1,
+    };
+  }
 
   async decide(viewer: Viewer, input: unknown, commandId?: string) {
     await assertDecisionViewerEvent(this.env, viewer);
@@ -131,8 +407,10 @@ export class EvaluationDecisionService {
     const submission = await this.env.DB.prepare(
       `
       SELECT s.id, s.title, s.public_reference AS reference, s.format, s.category,
+             COALESCE(person.email, s.submitter_email) AS notificationAddress,
              s.status, s.revision, s.submitted_snapshot_json AS snapshotJson
         FROM submissions s JOIN events e ON e.id = s.event_id
+        LEFT JOIN people person ON person.id = s.submitter_person_id
        WHERE s.id = ? AND s.event_id = ? AND e.organisation_id = ? AND s.status NOT IN ('draft','withdrawn')
     `,
     )
@@ -276,12 +554,6 @@ export class EvaluationDecisionService {
       const description = snapshot.data.answers.description;
       sessionDescription =
         typeof description === "string" ? description.trim() : "";
-      const submittedFormat = snapshot.data.answers.format;
-      const formatLabel = Array.isArray(submittedFormat)
-        ? submittedFormat.join(", ")
-        : typeof submittedFormat === "string"
-          ? submittedFormat
-          : "";
       const event = await this.env.DB.prepare(
         `SELECT name, brand_accent AS brandAccent,
                 starts_at AS startsAt, ends_at AS endsAt,
@@ -306,10 +578,13 @@ export class EvaluationDecisionService {
       }
       let configuredFormat;
       try {
-        configuredFormat = findSessionFormatConfiguration(
-          parseSessionFormatsConfiguration(event.sessionFormatsJson),
-          formatLabel,
+        const configuredFormats = parseSessionFormatsConfiguration(
+          event.sessionFormatsJson,
         );
+        configuredFormat =
+          configuredFormats.find(
+            (candidate) => candidate.key === parsed.sessionFormatKey,
+          ) ?? null;
       } catch (error) {
         throw new EvaluationStateError(
           error instanceof Error
@@ -318,8 +593,8 @@ export class EvaluationDecisionService {
         );
       }
       if (!configuredFormat) {
-        throw new EvaluationStateError(
-          `The accepted submission format ${formatLabel ? `“${formatLabel}”` : "is missing and"} is not configured for this event.`,
+        throw new EvaluationValidationError(
+          "Choose a current session format for the accepted session.",
         );
       }
       format = configuredFormat.key;
@@ -408,6 +683,28 @@ export class EvaluationDecisionService {
     if (parsed.release && !operationsQueue) {
       throw new Error("Required OPERATIONS_QUEUE binding is unavailable.");
     }
+    let notificationTemplateVersionId: string | null = null;
+    let notificationSenderProfileId: string | null = null;
+    if (parsed.release) {
+      const notificationReadiness = await inspectDecisionNotificationReadiness(
+        this.env,
+        {
+          organisationId: viewer.organisationId,
+          eventId: viewer.eventId,
+          recipientAddress: submission.notificationAddress,
+        },
+      );
+      if (notificationReadiness.error) {
+        throw new EvaluationValidationError(notificationReadiness.error);
+      }
+      if (!notificationReadiness.template || !notificationReadiness.sender) {
+        throw new Error(
+          "Decision notification readiness succeeded without its required records.",
+        );
+      }
+      notificationTemplateVersionId = notificationReadiness.template.id;
+      notificationSenderProfileId = notificationReadiness.sender.id;
+    }
     const speakerInvitationPlans =
       sessionId && acceptedEvent
         ? await prepareAcceptedSpeakerInvitationPlans({
@@ -456,6 +753,9 @@ export class EvaluationDecisionService {
       sessionDurationMinutes,
       sessionTrack,
       notificationOperationId,
+      notificationTemplateVersionId,
+      notificationSenderProfileId,
+      notificationAddress: submission.notificationAddress,
       notificationFeedback,
       roundId: completedRound?.roundId ?? null,
       speakerMemberships,

@@ -1,8 +1,7 @@
 import { z } from "zod";
 
-import { templateContentSchema } from "../../app/modules/communications/communication-schema";
-import { requireEmailProviderConfiguration } from "../../app/modules/communications/email-provider.server";
 import { communicationDeliveryIdempotencyKey } from "../../app/modules/communications/communication-service-shared";
+import { inspectDecisionNotificationReadiness } from "../../app/modules/communications/decision-notification-readiness.server";
 import { processCommunicationSend } from "./communication-send";
 import type { QueueProviderDependencies } from "./handler-types";
 import { markTriggerFailure } from "./notification-failure";
@@ -134,78 +133,17 @@ export async function processDecisionNotification(
     .array(z.string().trim().min(1).max(8_000))
     .max(100)
     .parse(JSON.parse(decision.notificationFeedbackJson));
-  let emailProvider: ReturnType<
-    typeof requireEmailProviderConfiguration
-  > | null = null;
-  let emailProviderError: string | null = null;
-  try {
-    emailProvider = requireEmailProviderConfiguration(env);
-  } catch (error) {
-    emailProviderError =
-      error instanceof Error
-        ? error.message
-        : "Email provider configuration is invalid.";
-  }
-  const [template, sender] = await Promise.all([
-    env.DB.prepare(
-      `
-      SELECT tv.id, tv.subject_template AS subjectTemplate, tv.content_json AS contentJson
-        FROM communication_template_versions tv
-        JOIN communication_templates t ON t.id = tv.template_id AND t.event_id = tv.event_id
-       WHERE tv.event_id = ? AND tv.status = 'published' AND tv.channel = 'email'
-         AND tv.category = 'decision' AND t.status = 'active'
-       ORDER BY tv.published_at DESC LIMIT 1
-    `,
-    )
-      .bind(message.eventId)
-      .first<{
-        id: string;
-        subjectTemplate: string | null;
-        contentJson: string;
-      }>(),
-    env.DB.prepare(
-      `
-      SELECT id, from_name AS fromName, from_email AS fromEmail
-        FROM sender_profiles WHERE event_id = ? AND provider = ? AND status = 'verified'
-       ORDER BY updated_at DESC LIMIT 1
-    `,
-    )
-      .bind(
-        message.eventId,
-        emailProvider?.provider ?? "email-provider-unavailable",
-      )
-      .first<{ id: string; fromName: string; fromEmail: string }>(),
-  ]);
-
-  let configurationError: string | null = null;
-  let content: z.infer<typeof templateContentSchema> | null = null;
-  if (!decision.address || !z.email().safeParse(decision.address).success)
-    configurationError =
-      "The decision recipient does not have a valid verified email address.";
-  else if (!template)
-    configurationError =
-      "Publish an active decision email template before releasing decisions.";
-  else if (
-    template.subjectTemplate === null ||
-    template.subjectTemplate !== template.subjectTemplate.trim() ||
-    template.subjectTemplate.length < 1 ||
-    template.subjectTemplate.length > 200
-  )
-    configurationError =
-      "The published decision email template has an invalid subject.";
-  else {
-    try {
-      content = templateContentSchema.parse(JSON.parse(template.contentJson));
-    } catch {
-      configurationError =
-        "The published decision email template contains invalid content.";
-    }
-  }
-  if (!configurationError && emailProviderError)
-    configurationError = emailProviderError;
-  if (!configurationError && !sender)
-    configurationError =
-      "A verified sender profile is required for decision notifications.";
+  const {
+    error: configurationError,
+    provider: emailProvider,
+    template,
+    content,
+    sender,
+  } = await inspectDecisionNotificationReadiness(env, {
+    organisationId: message.organisationId,
+    eventId: message.eventId,
+    recipientAddress: decision.address,
+  });
 
   const existing = await env.DB.prepare(
     "SELECT id FROM communications WHERE event_id = ? AND idempotency_key = ?",

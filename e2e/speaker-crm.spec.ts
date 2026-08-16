@@ -160,7 +160,11 @@ test("organization CRM covers directory, relationship, pipeline, handoff and out
 
   await page.getByLabel("Target event").selectOption("evt-foe-2025");
   await page.getByRole("button", { name: "Add prospect to event" }).click();
-  await expect(page).toHaveURL(/\/admin\/speakers\?person=/u);
+  await expect(page).toHaveURL(/\/admin\/crm\/contacts\//u);
+  await expect(page.locator(".validation-item[role='status']")).toContainText(
+    "The current event was not changed",
+  );
+  await page.goto("/admin/speakers?query=Marcus%20Okafor");
   const focusedSpeaker = page.getByRole("row").filter({
     has: page.getByRole("link", { name: "Marcus Okafor" }),
   });

@@ -91,4 +91,10 @@ export class TaskService {
   ) {
     return this.administration.administerTask(...args);
   }
+
+  extendSpeakerDeadline(
+    ...args: Parameters<TaskAdministrationWorkflows["extendSpeakerDeadline"]>
+  ) {
+    return this.administration.extendSpeakerDeadline(...args);
+  }
 }

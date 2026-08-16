@@ -72,7 +72,10 @@ export async function action({ request, params, context }: Route.ActionArgs) {
         configurationJson: form.get("configurationJson"),
         confirmed: form.get("confirmed"),
       });
-      return data({ ok: true, message: "Managed embed configuration updated." });
+      return data({
+        ok: true,
+        message: "Managed embed configuration updated.",
+      });
     }
     if (intent === "transition-managed-embed") {
       const nextStatus = String(form.get("nextStatus") ?? "");
@@ -134,6 +137,9 @@ export default function AdminSection({ loaderData }: Route.ComponentProps) {
           </p>
         </div>
         <div className="page-actions">
+          <Link className="btn" to="/admin/submissions#create-direct-session">
+            Create direct session
+          </Link>
           <Link
             className="btn"
             to={`/public/programme/${loaderData.publicSlug}`}

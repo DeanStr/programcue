@@ -7086,6 +7086,20 @@
               }
             ]
           },
+          "sessionFormatKey": {
+            "default": null,
+            "description": "Required for an accepted decision and identifies the current event session format used by the programme session.",
+            "anyOf": [
+              {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 100
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "sessionDurationMinutes": {
             "default": null,
             "anyOf": [

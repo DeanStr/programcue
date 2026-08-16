@@ -56,6 +56,16 @@ class EvaluationDecisionWorkflow extends EvaluationServiceFoundation {
         ),
     );
   }
+
+  reopen(viewer: Viewer, input: unknown) {
+    return this.projectCommand(
+      viewer,
+      "evaluation.decision.reopen",
+      input,
+      undefined,
+      () => new EvaluationDecisionService(this.env).reopen(viewer, input),
+    );
+  }
 }
 
 /** Stable evaluation façade composed from independent use-case services. */
@@ -167,6 +177,9 @@ export class EvaluationService {
   }
   decide(...args: Parameters<EvaluationDecisionWorkflow["decide"]>) {
     return this.decisions.decide(...args);
+  }
+  reopenDecision(...args: Parameters<EvaluationDecisionService["reopen"]>) {
+    return this.decisions.reopen(...args);
   }
   listDiscussion(...args: Parameters<EvaluationDiscussionWorkflows["listDiscussion"]>) {
     return this.discussion.listDiscussion(...args);
