@@ -141,17 +141,22 @@ test("an invited speaker can explicitly choose the created event and see its tas
 
   await page.goto("/admin/speakers");
   await page.locator("body[data-hydrated='true']").waitFor();
-  const addSpeaker = page.locator("details").filter({
-    has: page.getByText("Add speaker record", { exact: true }),
-  });
-  await addSpeaker.locator("summary").click();
-  await addSpeaker.getByLabel("Name", { exact: true }).fill("Priya Shah");
-  await addSpeaker
-    .getByLabel("Email", { exact: true })
+  const addSpeakerSummary = page
+    .locator("summary")
+    .filter({ hasText: "Add speaker record" });
+  await addSpeakerSummary.click();
+  await page.locator("#manual-speaker-name").fill("Priya Shah");
+  await page
+    .locator('input[name="email"]')
+    .filter({ visible: true })
     .fill("priya.speaker@example.com");
-  await addSpeaker.getByRole("button", { name: "Add speaker record" }).click();
-  await addSpeaker.getByLabel(/I reviewed these identities/).check();
-  await addSpeaker.getByRole("button", { name: "Add speaker record" }).click();
+  await page
+    .getByRole("button", { name: "Add speaker record", exact: true })
+    .click();
+  await page.getByLabel(/I reviewed these identities/).check();
+  await page
+    .getByRole("button", { name: "Add speaker record", exact: true })
+    .click();
   await expect(
     page.getByText(
       /existing identity was added or restored on this event roster/i,

@@ -243,14 +243,14 @@ test.describe.serial("ABS-S2/S3 abstract management workflow", () => {
     await page.getByLabel("Six-digit code").fill("424242");
     await page.getByRole("button", { name: "Verify and open drafts" }).click();
     await page.getByRole("button", { name: "Start application" }).click();
-    await page.getByLabel("Session title *").fill(SUBMISSION_TITLE);
+    await page.getByLabel("Session title").fill(SUBMISSION_TITLE);
     await page
-      .getByLabel("Session description *")
+      .getByLabel("Session description")
       .fill(
         "A practical talk about making event data useful to programme teams.",
       );
     await page.getByLabel("Event Operations").check();
-    await page.getByLabel("Format *").selectOption("Presentation");
+    await page.getByLabel("Format").selectOption("Presentation");
     await page.getByLabel("Speaker 1 name").fill("Priya Raman");
     await page
       .getByLabel("Biography")

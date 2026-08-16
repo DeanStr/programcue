@@ -67,7 +67,7 @@ test("authenticated application stays within the mobile viewport", async ({
   ).toBeVisible();
   await page.getByRole("button", { name: "Start application" }).click();
 
-  await expect(page.getByLabel("Session title *")).toBeVisible();
+  await expect(page.getByLabel("Session title")).toBeVisible();
   await expectNoHorizontalPageOverflow(page);
 });
 

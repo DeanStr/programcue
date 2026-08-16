@@ -146,27 +146,27 @@ test.describe.serial("cross-surface interaction standards", () => {
   }) => {
     await page.goto("/admin/speakers");
     await page.locator("body[data-hydrated='true']").waitFor();
-    const speakerRecordDisclosure = page.locator("details").filter({
-      has: page.getByText("Add speaker record", { exact: true }),
-    });
-    await speakerRecordDisclosure.locator("summary").click();
+    const speakerRecordSummary = page
+      .locator("summary")
+      .filter({ hasText: "Add speaker record" });
+    const speakerRecordDisclosure = speakerRecordSummary.locator("..");
+    await speakerRecordSummary.click();
     await expect(speakerRecordDisclosure).toHaveAttribute("open", "");
-    await speakerRecordDisclosure
-      .getByLabel("Name", { exact: true })
-      .fill("Priya Shah");
-    await speakerRecordDisclosure
-      .getByLabel("Email", { exact: true })
+    await page.locator("#manual-speaker-name").fill("Priya Shah");
+    await page
+      .locator('input[name="email"]')
+      .filter({ visible: true })
       .fill("priya.speaker@example.com");
-    await speakerRecordDisclosure
-      .getByRole("button", { name: "Add speaker record" })
+    await page
+      .getByRole("button", { name: "Add speaker record", exact: true })
       .click();
 
     await expect(
       page.getByRole("heading", { name: "Likely existing person" }),
     ).toBeVisible();
     await page.getByLabel(/I reviewed these identities/).check();
-    await speakerRecordDisclosure
-      .getByRole("button", { name: "Add speaker record" })
+    await page
+      .getByRole("button", { name: "Add speaker record", exact: true })
       .click();
     await expect(
       page.getByText(

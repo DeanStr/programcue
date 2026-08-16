@@ -208,6 +208,11 @@ export function usePublicProgrammeModel(loaderData: PublicProgrammeLoaderData) {
   const [standaloneGalleryQuery, setStandaloneGalleryQueryState] = useState(
     initialPublicSearch.current.get("galleryQuery") ?? "",
   );
+  const pendingTextQueries = useRef({
+    query,
+    directory: standaloneDirectoryQuery,
+    gallery: standaloneGalleryQuery,
+  });
   const days = useMemo(
     () => [
       ...new Set(
@@ -294,17 +299,21 @@ export function usePublicProgrammeModel(loaderData: PublicProgrammeLoaderData) {
   const speakerProfileReturnFocusRef = useRef<HTMLElement | null>(null);
   const visibleEmbedControls = new Set(embedOptions.controls);
   const visibleEmbedFields = new Set(embedOptions.fields);
-  function replacePublicSearchParameter(name: string, value: string) {
-    if (embedded) return;
+  function publicSearchWithPendingQueries() {
     const search = new URLSearchParams(location.search);
     for (const [searchName, pendingValue] of [
-      ["query", query.trim()],
-      ["speakerQuery", standaloneDirectoryQuery.trim()],
-      ["galleryQuery", standaloneGalleryQuery.trim()],
+      ["query", pendingTextQueries.current.query.trim()],
+      ["speakerQuery", pendingTextQueries.current.directory.trim()],
+      ["galleryQuery", pendingTextQueries.current.gallery.trim()],
     ] as const) {
       if (pendingValue) search.set(searchName, pendingValue);
       else search.delete(searchName);
     }
+    return search;
+  }
+  function replacePublicSearchParameter(name: string, value: string) {
+    if (embedded) return;
+    const search = publicSearchWithPendingQueries();
     if (value) search.set(name, value);
     else search.delete(name);
     const nextSearch = search.size ? `?${search}` : "";
@@ -318,7 +327,18 @@ export function usePublicProgrammeModel(loaderData: PublicProgrammeLoaderData) {
       { replace: true, preventScrollReset: true },
     );
   }
-  const setQuery = (value: string) => setQueryState(value);
+  const setQuery = (value: string) => {
+    pendingTextQueries.current.query = value;
+    setQueryState(value);
+  };
+  const setStandaloneDirectoryQuery = (value: string) => {
+    pendingTextQueries.current.directory = value;
+    setStandaloneDirectoryQueryState(value);
+  };
+  const setStandaloneGalleryQuery = (value: string) => {
+    pendingTextQueries.current.gallery = value;
+    setStandaloneGalleryQueryState(value);
+  };
   const setTrack = (value: string) => {
     setTrackState(value);
     replacePublicSearchParameter("track", value);
@@ -424,9 +444,17 @@ export function usePublicProgrammeModel(loaderData: PublicProgrammeLoaderData) {
       );
       return;
     }
-    setQueryState(search.get("query") ?? "");
-    setStandaloneDirectoryQueryState(search.get("speakerQuery") ?? "");
-    setStandaloneGalleryQueryState(search.get("galleryQuery") ?? "");
+    const nextQuery = search.get("query") ?? "";
+    const nextDirectoryQuery = search.get("speakerQuery") ?? "";
+    const nextGalleryQuery = search.get("galleryQuery") ?? "";
+    pendingTextQueries.current = {
+      query: nextQuery,
+      directory: nextDirectoryQuery,
+      gallery: nextGalleryQuery,
+    };
+    setQueryState(nextQuery);
+    setStandaloneDirectoryQueryState(nextDirectoryQuery);
+    setStandaloneGalleryQueryState(nextGalleryQuery);
     const requestedDay = search.get("day") ?? "";
     const requestedTrack = search.get("track") ?? "";
     const requestedFormat = search.get("format") ?? "";
@@ -522,11 +550,9 @@ export function usePublicProgrammeModel(loaderData: PublicProgrammeLoaderData) {
     return matchesFacets && matchesQuery;
   });
   const directoryQuery = embedded ? query : standaloneDirectoryQuery;
-  const setDirectoryQuery = embedded
-    ? setQuery
-    : setStandaloneDirectoryQueryState;
+  const setDirectoryQuery = embedded ? setQuery : setStandaloneDirectoryQuery;
   const galleryQuery = embedded ? query : standaloneGalleryQuery;
-  const setGalleryQuery = embedded ? setQuery : setStandaloneGalleryQueryState;
+  const setGalleryQuery = embedded ? setQuery : setStandaloneGalleryQuery;
   const speakerSurfaceSource = embedded ? visibleSpeakers : orderedSpeakers;
   const directorySpeakers = useMemo(() => {
     const normalisedDirectoryQuery = embedded
@@ -613,12 +639,14 @@ export function usePublicProgrammeModel(loaderData: PublicProgrammeLoaderData) {
       setEmbeddedSelectedSpeakerId(speakerId);
       return;
     }
-    const search = new URLSearchParams(location.search);
+    const search = publicSearchWithPendingQueries();
     search.set("speaker", speakerId);
+    const nextSearch = `?${search}`;
+    pendingClientSearches.current.add(nextSearch);
     void navigate(
       {
         pathname: location.pathname,
-        search: `?${search}`,
+        search: nextSearch,
         hash:
           loaderData.surface === "gallery"
             ? "#speaker-gallery-detail"
@@ -632,43 +660,44 @@ export function usePublicProgrammeModel(loaderData: PublicProgrammeLoaderData) {
 
   function closeSpeakerProfile() {
     const returnFocus = speakerProfileReturnFocusRef.current;
-    const fallbackTargets = [
-      returnFocus,
-      selectedSpeakerId
-        ? document.getElementById(`speaker-gallery-card-${selectedSpeakerId}`)
-        : null,
-      selectedSpeakerId
-        ? document.getElementById(`public-speaker-card-${selectedSpeakerId}`)
-        : null,
-      selectedSpeakerId
-        ? document.getElementById(`speaker-profile-link-${selectedSpeakerId}`)
-        : null,
-      document.getElementById("speaker-gallery-search"),
-      document.getElementById("public-speaker-search"),
-    ];
-    const focusTarget =
-      fallbackTargets.find((element): element is HTMLElement =>
+    const findFocusTarget = () =>
+      [
+        returnFocus,
+        selectedSpeakerId
+          ? document.getElementById(`speaker-gallery-card-${selectedSpeakerId}`)
+          : null,
+        selectedSpeakerId
+          ? document.getElementById(`public-speaker-card-${selectedSpeakerId}`)
+          : null,
+        selectedSpeakerId
+          ? document.getElementById(`speaker-profile-link-${selectedSpeakerId}`)
+          : null,
+        document.getElementById("speaker-gallery-search"),
+        document.getElementById("public-speaker-search"),
+      ].find((element): element is HTMLElement =>
         Boolean(element?.isConnected),
       ) ?? null;
     if (embedded) {
       setEmbeddedSelectedSpeakerId("");
       speakerProfileReturnFocusRef.current = null;
-      requestAnimationFrame(() => focusTarget?.focus());
+      requestAnimationFrame(() => findFocusTarget()?.focus());
       return;
     }
-    const search = new URLSearchParams(location.search);
+    const search = publicSearchWithPendingQueries();
     search.delete("speaker");
+    const nextSearch = search.size ? `?${search}` : "";
+    pendingClientSearches.current.add(nextSearch);
     speakerProfileReturnFocusRef.current = null;
     void Promise.resolve(
       navigate(
         {
           pathname: location.pathname,
-          search: search.size ? `?${search}` : "",
+          search: nextSearch,
           hash: "",
         },
         { preventScrollReset: true },
       ),
-    ).then(() => focusTarget?.focus());
+    ).then(() => findFocusTarget()?.focus());
   }
 
   /**

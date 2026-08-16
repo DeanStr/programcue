@@ -201,7 +201,7 @@ test.describe.serial("canonical D1-backed judged workflow", () => {
         hasText: "Complete the highlighted required field before submitting.",
       }),
     ).toBeVisible();
-    await expect(page.getByLabel("Session title *")).toBeFocused();
+    await expect(page.getByLabel("Session title")).toBeFocused();
     await page
       .getByText("Your claimed speaker profile", { exact: true })
       .click();
@@ -214,15 +214,15 @@ test.describe.serial("canonical D1-backed judged workflow", () => {
       .fill("Riley builds accountable programme operations and handoffs.");
     await profile.getByRole("button", { name: "Save my profile" }).click();
     await expectStatus(page, "Your speaker profile was updated");
-    await page.getByLabel("Session title *").fill(SUBMISSION_TITLE);
+    await page.getByLabel("Session title").fill(SUBMISSION_TITLE);
     await page
-      .getByLabel("Session description *")
+      .getByLabel("Session description")
       .fill(
         "A practical operating model for accountable handoffs across programme, speaker and venue teams.",
       );
     await page.getByLabel("Event Operations").check();
     await page.getByLabel("Leadership").check();
-    await page.getByLabel("Format *").selectOption("Presentation");
+    await page.getByLabel("Format").selectOption("Presentation");
     await page.getByLabel("Speaker 1 name").fill(SPEAKER_NAME);
     await page.getByRole("button", { name: "Save draft" }).click();
     await expectStatus(page, "Your draft has been saved");

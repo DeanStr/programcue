@@ -67,6 +67,23 @@ async function dragWithPointer(page: Page, source: Locator, target: Locator) {
   await page.mouse.up();
 }
 
+async function setStableFieldId(page: Page, fieldId: string) {
+  const advancedIdentity = page
+    .locator("details")
+    .filter({ hasText: "Advanced identity" });
+  if ((await advancedIdentity.getAttribute("open")) === null) {
+    await advancedIdentity.locator("summary").click();
+  }
+  const allowIdChange = advancedIdentity.getByLabel(
+    "Allow this stable ID to change",
+  );
+  const stableFieldId = advancedIdentity.getByLabel("Stable field ID");
+  await expect(allowIdChange).not.toBeChecked();
+  await allowIdChange.check();
+  await expect(stableFieldId).toBeEnabled();
+  await stableFieldId.fill(fieldId);
+}
+
 test.describe.serial("submissions vertical slice", () => {
   test.beforeEach(async ({ page }) => {
     await page.context().addCookies([
@@ -113,7 +130,7 @@ test.describe.serial("submissions vertical slice", () => {
       .getByRole("region", { name: "Visual call-for-speakers form editor" })
       .getByRole("button", { name: "Add URL" })
       .click();
-    await page.getByLabel("Stable field ID").fill(`takeaway_url_${unique}`);
+    await setStableFieldId(page, `takeaway_url_${unique}`);
     await page
       .getByLabel("Label", { exact: true })
       .fill(`Attendee takeaway link ${unique}`);
@@ -468,9 +485,7 @@ test.describe.serial("submissions vertical slice", () => {
       );
     await page.getByLabel("Event Operations").check();
     await page.getByLabel("Format").selectOption("Workshop");
-    await expect(
-      page.getByLabel("Materials and room setup"),
-    ).toBeVisible();
+    await expect(page.getByLabel("Materials and room setup")).toBeVisible();
     await page
       .getByLabel("Materials and room setup")
       .fill("Moveable tables, a projector, and sticky notes.");
@@ -526,9 +541,7 @@ test.describe.serial("submissions vertical slice", () => {
       }),
     ).toBeVisible();
     await page.reload();
-    await expect(
-      page.getByLabel("Session description"),
-    ).toHaveValue(
+    await expect(page.getByLabel("Session description")).toHaveValue(
       new RegExp(`${revisionSentence.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}$`),
     );
 
@@ -644,21 +657,19 @@ test.describe.serial("submissions vertical slice", () => {
 
     const editor = page.getByLabel("Visual call-for-speakers form editor");
     await editor.getByRole("button", { name: "Add Long text" }).click();
-    await page.getByLabel("Stable field ID").fill(`key_takeaway_${unique}`);
+    await setStableFieldId(page, `key_takeaway_${unique}`);
     await page.getByLabel("Label", { exact: true }).fill("Key takeaway");
     await page.getByLabel("Required when visible").check();
 
     await editor.getByRole("button", { name: "Add Dropdown" }).click();
-    await page.getByLabel("Stable field ID").fill(`audience_level_${unique}`);
+    await setStableFieldId(page, `audience_level_${unique}`);
     await page.getByLabel("Label", { exact: true }).fill("Audience level");
     await page
       .getByLabel("Options, one per line")
       .fill("Beginner\nIntermediate\nAdvanced");
 
     await editor.getByRole("button", { name: "Add Long text" }).click();
-    await page
-      .getByLabel("Stable field ID")
-      .fill(`workshop_prerequisites_${unique}`);
+    await setStableFieldId(page, `workshop_prerequisites_${unique}`);
     await page
       .getByLabel("Label", { exact: true })
       .fill("Workshop prerequisites");
@@ -701,9 +712,7 @@ test.describe.serial("submissions vertical slice", () => {
     await page.getByRole("button", { name: "Verify and open drafts" }).click();
     await page.getByRole("button", { name: "Start application" }).click();
 
-    await expect(
-      page.getByLabel("Key takeaway"),
-    ).toBeVisible();
+    await expect(page.getByLabel("Key takeaway")).toBeVisible();
     const audienceLevel = page.getByLabel("Audience level");
     await expect(audienceLevel).toBeVisible();
     await expect(page.getByLabel("Workshop prerequisites")).toBeHidden();

@@ -43,6 +43,10 @@ test.beforeEach(async ({ page }) => {
   await waitForInterface(page, "/public/programme/future-of-events-2027");
 });
 
+test.afterEach(async ({ request }) => {
+  await resetDemoEvent(request);
+});
+
 test("schedule source search updates its URL without reloading the workspace", async ({
   page,
 }) => {
@@ -125,7 +129,10 @@ test("schedule and programme render the event calendar date and timezone", async
     page.getByRole("heading", { name: "Fri, May 21 · Room view" }),
   ).toBeVisible();
   await expect(
-    page.getByRole("button", { name: "Community and Connection", exact: true }),
+    page.getByRole("button", {
+      name: "Community and Connection",
+      exact: true,
+    }),
   ).toBeVisible();
   await expect(
     page.getByText("9:30 AM", { exact: true }).first(),
@@ -207,9 +214,8 @@ test("focuses the exact named schedule record", async ({ page }) => {
 });
 
 test.describe("mutable schedule authoring", () => {
-  test.afterEach(async ({ context, request }) => {
+  test.afterEach(async ({ context }) => {
     await context.setOffline(false);
-    await resetDemoEvent(request);
   });
 
   test("autosaves revisioned session content and explicitly restores offline schedule notes", async ({
