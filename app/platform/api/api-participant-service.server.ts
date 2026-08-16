@@ -11,7 +11,7 @@ import {
 import {
   type AcceptedCoSpeakerInvitationInput,
   acceptedCoSpeakerInvitationSchema,
-} from "~/modules/submissions/submission-co-speaker-workflows.server";
+} from "~/modules/submissions/submission-accepted-co-speaker-workflows.server";
 import { SubmissionService } from "~/modules/submissions/submission-service.server";
 import type { Viewer } from "~/platform/auth/authorize.server";
 import type { EvaluatorEmailRouting } from "~/platform/evaluation/evaluator-email-alias.server";

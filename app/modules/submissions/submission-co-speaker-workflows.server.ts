@@ -19,11 +19,6 @@ import {
   SubmissionServiceFoundation,
 } from "./submission-service-foundation.server";
 
-export {
-  type AcceptedCoSpeakerInvitationInput,
-  acceptedCoSpeakerInvitationSchema,
-} from "./submission-accepted-co-speaker-workflows.server";
-
 export class SubmissionCoSpeakerWorkflows extends SubmissionServiceFoundation {
   async updateClaimedSpeakerProfile(
     publicSlug: string,

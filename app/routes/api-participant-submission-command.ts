@@ -1,5 +1,5 @@
 import { ZodError, z } from "zod";
-import { acceptedCoSpeakerInvitationSchema } from "~/modules/submissions/submission-co-speaker-workflows.server";
+import { acceptedCoSpeakerInvitationSchema } from "~/modules/submissions/submission-accepted-co-speaker-workflows.server";
 import {
   SubmissionDraftSavedError,
   SubmissionRevisionConflictError,

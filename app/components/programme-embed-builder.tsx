@@ -1,36 +1,23 @@
 import { Check, Clipboard, ExternalLink, RotateCcw } from "lucide-react";
-import { useState } from "react";
-import { Form, useActionData } from "react-router";
+import { Form } from "react-router";
 import { DerivedSlugField } from "~/components/ui/derived-slug-field";
 import { EventDateTime } from "~/components/ui/event-date-time";
 import {
-  defaultProgrammeEmbedConfiguration,
-  managedProgrammeEmbedUrl,
-  managedProgrammeWidgetSnippet,
   PROGRAMME_EMBED_CONTROLS,
   PROGRAMME_EMBED_FIELDS,
   PROGRAMME_EMBED_SURFACES,
   type ProgrammeEmbedConfiguration,
-  ProgrammeEmbedConfigurationError,
   type ProgrammeEmbedControl,
   type ProgrammeEmbedField,
   type ProgrammeEmbedSurface,
-  parseProgrammeEmbedHeight,
-  programmeEmbedFilterOptions,
-  programmeEmbedUrl,
-  programmeIframeSnippet,
-  programmeWidgetSnippet,
 } from "~/modules/programme/programme-embed-configuration";
 import type { ManagedProgrammeEmbed } from "~/modules/programme/programme-embed-service.server";
-
-type EmbedSession = {
-  startsAt: number | null;
-  status: string;
-  track: string | null;
-  format: string;
-  room: string | null;
-  visibility: string;
-};
+import {
+  type ProgrammeEmbedBuilderController,
+  type ProgrammeEmbedSession,
+  programmeEmbedSurfaceLabels,
+  useProgrammeEmbedBuilder,
+} from "./use-programme-embed-builder";
 
 const controlLabels: Record<ProgrammeEmbedControl, string> = {
   search: "Search",
@@ -38,14 +25,6 @@ const controlLabels: Record<ProgrammeEmbedControl, string> = {
   track: "Track",
   format: "Format",
   room: "Room",
-};
-
-const surfaceLabels: Record<ProgrammeEmbedSurface, string> = {
-  sessions: "Programme / session list",
-  speakers: "Speakers list",
-  agenda: "Agenda",
-  schedule: "Schedule itinerary",
-  gallery: "Speaker gallery",
 };
 
 const fieldLabels: Record<ProgrammeEmbedField, string> = {
@@ -61,69 +40,39 @@ const fieldLabels: Record<ProgrammeEmbedField, string> = {
   sessions: "Linked sessions and counts",
 };
 
-type EmbedOutput = "iframe" | "widget";
-type PreviewWidth = "desktop" | "mobile";
-type CopyState = "idle" | "copied" | "failed";
-type EmbedActionData = { ok?: boolean; message?: string } | undefined;
-
-type ConfigurationWorkflowProps = {
-  configuration: ProgrammeEmbedConfiguration;
-  eventAccent: string;
-  days: string[];
-  tracks: string[];
-  formats: string[];
-  rooms: string[];
-  heightInput: string;
-  heightError: string | null;
-  previewWidth: PreviewWidth;
-  previewUrl: string;
-  eventName: string;
-  output: EmbedOutput;
-  code: string;
-  copyState: CopyState;
-  publicSlug: string;
-  reset(): void;
-  update<Key extends keyof ProgrammeEmbedConfiguration>(
-    key: Key,
-    value: ProgrammeEmbedConfiguration[Key],
-  ): void;
-  toggleControl(control: ProgrammeEmbedControl): void;
-  toggleField(field: ProgrammeEmbedField): void;
-  setHeightInput(value: string): void;
-  setCopyState(value: CopyState): void;
-  setManagedConfirmed(value: boolean): void;
-  setPreviewWidth(value: PreviewWidth): void;
-  setOutput(value: EmbedOutput): void;
-  copyCode(): Promise<void>;
-};
-
 function EmbedConfigurationWorkflow({
-  configuration,
+  workflow,
   eventAccent,
-  days,
-  tracks,
-  formats,
-  rooms,
-  heightInput,
-  heightError,
-  previewWidth,
-  previewUrl,
-  eventName,
-  output,
-  code,
-  copyState,
-  publicSlug,
-  reset,
-  update,
-  toggleControl,
-  toggleField,
-  setHeightInput,
-  setCopyState,
-  setManagedConfirmed,
-  setPreviewWidth,
-  setOutput,
-  copyCode,
-}: ConfigurationWorkflowProps) {
+}: {
+  workflow: ProgrammeEmbedBuilderController["configurationWorkflow"];
+  eventAccent: string;
+}) {
+  const {
+    configuration,
+    days,
+    tracks,
+    formats,
+    rooms,
+    heightInput,
+    heightError,
+    previewWidth,
+    previewUrl,
+    eventName,
+    output,
+    code,
+    copyState,
+    publicSlug,
+    reset,
+    update,
+    toggleControl,
+    toggleField,
+    setHeightInput,
+    setCopyState,
+    setManagedConfirmed,
+    setPreviewWidth,
+    setOutput,
+    copyCode,
+  } = workflow;
   return (
     <>
       <div className="card-title programme-embed-builder-title">
@@ -158,7 +107,7 @@ function EmbedConfigurationWorkflow({
               >
                 {PROGRAMME_EMBED_SURFACES.map((surface) => (
                   <option key={surface} value={surface}>
-                    {surfaceLabels[surface]}
+                    {programmeEmbedSurfaceLabels[surface]}
                   </option>
                 ))}
               </select>
@@ -510,53 +459,34 @@ function EmbedConfigurationWorkflow({
   );
 }
 
-type ManagedEmbedWorkflowProps = {
-  actionData: EmbedActionData;
-  selectedEmbed: ManagedProgrammeEmbed | undefined;
-  outputConfiguration: ProgrammeEmbedConfiguration | null;
-  managedName: string;
-  managedSlug: string;
-  publicSlug: string;
-  installationNote: string;
-  changedConfigurationFields: Array<keyof ProgrammeEmbedConfiguration>;
-  managedConfirmed: boolean;
-  selectedManagedUrl: string | null;
-  output: EmbedOutput;
-  selectedManagedCode: string;
-  managedEmbeds: ManagedProgrammeEmbed[];
-  timezone: string;
-  selectedEmbedId: string | null;
-  reset(): void;
-  setManagedName(value: string): void;
-  setManagedSlug(value: string): void;
-  setInstallationNote(value: string): void;
-  setManagedConfirmed(value: boolean): void;
-  loadManagedEmbed(embed: ManagedProgrammeEmbed): void;
-};
-
 function ManagedEmbedWorkflow({
-  actionData,
-  selectedEmbed,
-  outputConfiguration,
-  managedName,
-  managedSlug,
-  publicSlug,
-  installationNote,
-  changedConfigurationFields,
-  managedConfirmed,
-  selectedManagedUrl,
-  output,
-  selectedManagedCode,
-  managedEmbeds,
-  timezone,
-  selectedEmbedId,
-  reset,
-  setManagedName,
-  setManagedSlug,
-  setInstallationNote,
-  setManagedConfirmed,
-  loadManagedEmbed,
-}: ManagedEmbedWorkflowProps) {
+  workflow,
+}: {
+  workflow: ProgrammeEmbedBuilderController["managedWorkflow"];
+}) {
+  const {
+    actionData,
+    selectedEmbed,
+    outputConfiguration,
+    managedName,
+    managedSlug,
+    publicSlug,
+    installationNote,
+    changedConfigurationFields,
+    managedConfirmed,
+    selectedManagedUrl,
+    output,
+    selectedManagedCode,
+    managedEmbeds,
+    timezone,
+    selectedEmbedId,
+    reset,
+    setManagedName,
+    setManagedSlug,
+    setInstallationNote,
+    setManagedConfirmed,
+    loadManagedEmbed,
+  } = workflow;
   return (
     <div className="mt stack" id="managed-programme-embeds">
       <div>
@@ -917,223 +847,25 @@ export function ProgrammeEmbedBuilder({
   eventName: string;
   eventAccent: string;
   timezone: string;
-  sessions: EmbedSession[];
+  sessions: ProgrammeEmbedSession[];
   managedEmbeds: ManagedProgrammeEmbed[];
 }) {
-  const actionData = useActionData() as
-    | { ok?: boolean; message?: string }
-    | undefined;
-  const [configuration, setConfiguration] =
-    useState<ProgrammeEmbedConfiguration>(defaultProgrammeEmbedConfiguration);
-  const [heightInput, setHeightInput] = useState(
-    String(defaultProgrammeEmbedConfiguration().height),
-  );
-  const [output, setOutput] = useState<"iframe" | "widget">("iframe");
-  const [previewWidth, setPreviewWidth] = useState<"desktop" | "mobile">(
-    "desktop",
-  );
-  const [copyState, setCopyState] = useState<"idle" | "copied" | "failed">(
-    "idle",
-  );
-  const [selectedEmbedId, setSelectedEmbedId] = useState<string | null>(null);
-  const [managedName, setManagedName] = useState("");
-  const [managedSlug, setManagedSlug] = useState("");
-  const [installationNote, setInstallationNote] = useState("");
-  const [managedConfirmed, setManagedConfirmed] = useState(false);
-  const { days, tracks, formats, rooms } = programmeEmbedFilterOptions(
-    sessions,
+  const { configurationWorkflow, managedWorkflow } = useProgrammeEmbedBuilder({
+    publicOrigin,
+    publicSlug,
+    eventName,
     timezone,
-  );
-  const previewUrl = programmeEmbedUrl(publicOrigin, publicSlug, configuration);
-  const target = `programcue-${publicSlug}-${configuration.surface}`;
-  const title = `${eventName} ${surfaceLabels[configuration.surface]}`;
-  let parsedHeight: number | null = null;
-  let heightError: string | null = null;
-  try {
-    parsedHeight = parseProgrammeEmbedHeight(heightInput);
-  } catch (error) {
-    if (error instanceof ProgrammeEmbedConfigurationError) {
-      heightError = error.message;
-    } else {
-      throw error;
-    }
-  }
-  const outputConfiguration =
-    parsedHeight === null ? null : { ...configuration, height: parsedHeight };
-  const code =
-    outputConfiguration === null
-      ? ""
-      : output === "iframe"
-        ? programmeIframeSnippet(previewUrl, title, outputConfiguration.height)
-        : programmeWidgetSnippet({
-            origin: publicOrigin,
-            eventSlug: publicSlug,
-            target,
-            title,
-            configuration: outputConfiguration,
-          });
-  const selectedEmbed = managedEmbeds.find(
-    (embed) => embed.id === selectedEmbedId,
-  );
-  const selectedManagedUrl = selectedEmbed
-    ? managedProgrammeEmbedUrl(publicOrigin, publicSlug, selectedEmbed.slug)
-    : null;
-  const selectedManagedCode =
-    selectedEmbed && outputConfiguration
-      ? output === "iframe"
-        ? programmeIframeSnippet(
-            selectedManagedUrl!,
-            `${eventName} ${selectedEmbed.name}`,
-            outputConfiguration.height,
-          )
-        : managedProgrammeWidgetSnippet({
-            origin: publicOrigin,
-            eventSlug: publicSlug,
-            embedSlug: selectedEmbed.slug,
-            target: `programcue-${publicSlug}-${selectedEmbed.slug}`,
-            title: `${eventName} ${selectedEmbed.name}`,
-            height: outputConfiguration.height,
-          })
-      : "";
-  const changedConfigurationFields = selectedEmbed
-    ? (
-        Object.keys(selectedEmbed.configuration) as Array<
-          keyof ProgrammeEmbedConfiguration
-        >
-      ).filter(
-        (key) =>
-          JSON.stringify(selectedEmbed.configuration[key]) !==
-          JSON.stringify(outputConfiguration?.[key]),
-      )
-    : [];
-
-  function update<Key extends keyof ProgrammeEmbedConfiguration>(
-    key: Key,
-    value: ProgrammeEmbedConfiguration[Key],
-  ) {
-    setConfiguration((current) => ({ ...current, [key]: value }));
-    setCopyState("idle");
-    setManagedConfirmed(false);
-  }
-
-  function toggleControl(control: ProgrammeEmbedControl) {
-    update(
-      "controls",
-      configuration.controls.includes(control)
-        ? configuration.controls.filter((value) => value !== control)
-        : PROGRAMME_EMBED_CONTROLS.filter(
-            (value) =>
-              value === control || configuration.controls.includes(value),
-          ),
-    );
-  }
-
-  function toggleField(field: ProgrammeEmbedField) {
-    update(
-      "fields",
-      configuration.fields.includes(field)
-        ? configuration.fields.filter((value) => value !== field)
-        : PROGRAMME_EMBED_FIELDS.filter(
-            (value) => value === field || configuration.fields.includes(value),
-          ),
-    );
-  }
-
-  async function copyCode() {
-    if (!navigator.clipboard?.writeText) {
-      setCopyState("failed");
-      return;
-    }
-    try {
-      await navigator.clipboard.writeText(code);
-      setCopyState("copied");
-    } catch {
-      setCopyState("failed");
-    }
-  }
-
-  function reset() {
-    const defaults = defaultProgrammeEmbedConfiguration();
-    setConfiguration(defaults);
-    setHeightInput(String(defaults.height));
-    setOutput("iframe");
-    setPreviewWidth("desktop");
-    setCopyState("idle");
-    setSelectedEmbedId(null);
-    setManagedName("");
-    setManagedSlug("");
-    setInstallationNote("");
-    setManagedConfirmed(false);
-  }
-
-  function loadManagedEmbed(embed: ManagedProgrammeEmbed) {
-    setSelectedEmbedId(embed.id);
-    setManagedName(embed.name);
-    setManagedSlug(embed.slug);
-    setInstallationNote(embed.installationNote ?? "");
-    setConfiguration({
-      ...embed.configuration,
-      controls: [...embed.configuration.controls],
-      fields: [...embed.configuration.fields],
-    });
-    setHeightInput(String(embed.configuration.height));
-    setManagedConfirmed(false);
-    setCopyState("idle");
-  }
-
+    sessions,
+    managedEmbeds,
+  });
   return (
     <section className="card pad mt programme-embed-builder">
       <EmbedConfigurationWorkflow
-        configuration={configuration}
+        workflow={configurationWorkflow}
         eventAccent={eventAccent}
-        days={days}
-        tracks={tracks}
-        formats={formats}
-        rooms={rooms}
-        heightInput={heightInput}
-        heightError={heightError}
-        previewWidth={previewWidth}
-        previewUrl={previewUrl}
-        eventName={eventName}
-        output={output}
-        code={code}
-        copyState={copyState}
-        publicSlug={publicSlug}
-        reset={reset}
-        update={update}
-        toggleControl={toggleControl}
-        toggleField={toggleField}
-        setHeightInput={setHeightInput}
-        setCopyState={setCopyState}
-        setManagedConfirmed={setManagedConfirmed}
-        setPreviewWidth={setPreviewWidth}
-        setOutput={setOutput}
-        copyCode={copyCode}
       />
 
-      <ManagedEmbedWorkflow
-        actionData={actionData}
-        selectedEmbed={selectedEmbed}
-        outputConfiguration={outputConfiguration}
-        managedName={managedName}
-        managedSlug={managedSlug}
-        publicSlug={publicSlug}
-        installationNote={installationNote}
-        changedConfigurationFields={changedConfigurationFields}
-        managedConfirmed={managedConfirmed}
-        selectedManagedUrl={selectedManagedUrl}
-        output={output}
-        selectedManagedCode={selectedManagedCode}
-        managedEmbeds={managedEmbeds}
-        timezone={timezone}
-        selectedEmbedId={selectedEmbedId}
-        reset={reset}
-        setManagedName={setManagedName}
-        setManagedSlug={setManagedSlug}
-        setInstallationNote={setInstallationNote}
-        setManagedConfirmed={setManagedConfirmed}
-        loadManagedEmbed={loadManagedEmbed}
-      />
+      <ManagedEmbedWorkflow workflow={managedWorkflow} />
     </section>
   );
 }
