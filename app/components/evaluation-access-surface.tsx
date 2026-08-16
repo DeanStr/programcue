@@ -502,11 +502,19 @@ export function EvaluationAccessSurface({
               </li>
             </ul>
           </div>
-          <Form method="post">
+          <Form className="pc-eval-lock-control" method="post">
             <input type="hidden" name="_intent" value="lock" />
-            <button className="btn pc-eval-quiet" type="submit">
+            <button
+              aria-describedby="evaluation-lock-help"
+              className="btn pc-eval-quiet"
+              type="submit"
+            >
               <ShieldCheck aria-hidden size={15} /> Lock evaluation
             </button>
+            <p id="evaluation-lock-help">
+              Requires the access code again on this browser. Shared data is
+              unchanged.
+            </p>
           </Form>
         </div>
         <div className="pc-eval-hero-session">

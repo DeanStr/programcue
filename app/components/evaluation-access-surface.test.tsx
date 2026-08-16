@@ -129,6 +129,15 @@ describe("evaluation persona board", () => {
     expect(markup).toContain("Reset evaluation data");
   });
 
+  it("explains that locking affects this browser but not shared data", () => {
+    const markup = render();
+
+    expect(markup).toContain('aria-describedby="evaluation-lock-help"');
+    expect(markup).toContain(
+      "Requires the access code again on this browser. Shared data is unchanged.",
+    );
+  });
+
   it("submits each persona with its own intent and identity", () => {
     const markup = render();
 
