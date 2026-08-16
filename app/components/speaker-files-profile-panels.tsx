@@ -195,13 +195,20 @@ export function SpeakerProfilePanel({
     portal.profile.travelPreferences ?? "",
   );
   const blocker = useUnsavedChanges(dirty);
+  // biome-ignore lint/correctness/useExhaustiveDependencies: The persisted revision is the authoritative reset boundary even when a save normalizes to the same visible profile values.
   useEffect(() => {
     setLinkedinUrl(portal.profile.linkedinUrl ?? "");
     setXHandle(portal.profile.xHandle ? `@${portal.profile.xHandle}` : "");
     setBiography(portal.profile.biography ?? "");
     setTravelPreferences(portal.profile.travelPreferences ?? "");
     setDirty(false);
-  }, [portal.profile.revision]);
+  }, [
+    portal.profile.biography,
+    portal.profile.linkedinUrl,
+    portal.profile.revision,
+    portal.profile.travelPreferences,
+    portal.profile.xHandle,
+  ]);
   const headshot = portal.files.find(
     (file) =>
       file.kind === "headshot" &&

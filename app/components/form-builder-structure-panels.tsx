@@ -66,10 +66,7 @@ export function FormStructurePanel({
               })
             }
           />
-          <CharacterCount
-            value={input.schema.introduction}
-            maximum={2_000}
-          />
+          <CharacterCount value={input.schema.introduction} maximum={2_000} />
         </label>
         {operationMessage ? (
           <div className="validation-item error mb" role="alert">
@@ -237,7 +234,8 @@ export function PublicationSettingsFields({
           ? input.maxSpeakers === null
             ? "+"
             : ""
-          : `–${input.maxSpeakers}`} speaker
+          : `–${input.maxSpeakers}`}{" "}
+        speaker
         {input.maxSpeakers === 1 ? "" : "s"}.
       </p>
       <label className="label">

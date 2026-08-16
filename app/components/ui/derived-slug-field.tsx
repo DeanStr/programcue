@@ -1,11 +1,7 @@
 import { useEffect, useId, useRef, useState } from "react";
 import { useFetcher } from "react-router";
 
-import {
-  canonicalSlugOnBlur,
-  sanitizeSlugInput,
-  slugify,
-} from "~/lib/slug";
+import { canonicalSlugOnBlur, sanitizeSlugInput, slugify } from "~/lib/slug";
 
 export function DerivedSlugField({
   source,

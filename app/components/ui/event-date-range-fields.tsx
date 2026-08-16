@@ -42,10 +42,14 @@ export function EventDateRangeFields({
   idPrefix?: string;
 }) {
   const generatedId = useId();
-  const resolvedPrefix = idPrefix === "event" ? `event-${generatedId}` : idPrefix;
+  const resolvedPrefix =
+    idPrefix === "event" ? `event-${generatedId}` : idPrefix;
   const startId = `${resolvedPrefix}-startDate`;
   const endId = `${resolvedPrefix}-endDate`;
-  const initialRangeDuration = initialDuration(initialStartDate, initialEndDate);
+  const initialRangeDuration = initialDuration(
+    initialStartDate,
+    initialEndDate,
+  );
   const duration = useRef(initialRangeDuration);
   const [startDate, setStartDate] = useState(initialStartDate);
   const [endDate, setEndDate] = useState(initialEndDate);
@@ -59,6 +63,7 @@ export function EventDateRangeFields({
   const visibleError = error ?? rangeError;
   const errorId = visibleError ? `${endId}-error` : undefined;
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: resetKey deliberately restores a locally edited range when a different record has the same saved dates.
   useEffect(() => {
     setStartDate(initialStartDate);
     setEndDate(initialEndDate);

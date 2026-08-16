@@ -1,9 +1,8 @@
 import { Check, Clipboard, ExternalLink, RotateCcw } from "lucide-react";
 import { useState } from "react";
 import { Form, useActionData } from "react-router";
-
-import { EventDateTime } from "~/components/ui/event-date-time";
 import { DerivedSlugField } from "~/components/ui/derived-slug-field";
+import { EventDateTime } from "~/components/ui/event-date-time";
 import {
   defaultProgrammeEmbedConfiguration,
   managedProgrammeEmbedUrl,

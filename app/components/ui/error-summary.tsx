@@ -36,7 +36,11 @@ export function ErrorSummary({
   const titleId = useId();
   const summaryRef = useRef<HTMLElement>(null);
   const errorSignature = errors
-    .map((error) => (typeof error === "string" ? error : `${error.href ?? ""}:${error.message}`))
+    .map((error) =>
+      typeof error === "string"
+        ? error
+        : `${error.href ?? ""}:${error.message}`,
+    )
     .join("|");
   useEffect(() => {
     if (focusOnMount && errorSignature) summaryRef.current?.focus();

@@ -1,5 +1,5 @@
-import type { SaveFormInput } from "~/modules/submissions/submission-schema";
 import { CharacterCount } from "~/components/ui/character-count";
+import type { SaveFormInput } from "~/modules/submissions/submission-schema";
 
 function suggestedCompletionMinutes(input: SaveFormInput) {
   const fieldMinutes = input.schema.fields.reduce((total, field) => {
@@ -62,10 +62,7 @@ export function PresentationSettingsPanel({
             onChange={(event) => update({ invitationText: event.target.value })}
             placeholder="Explain what the programme team values and what applicants should know."
           />
-          <CharacterCount
-            value={presentation.invitationText}
-            maximum={2_000}
-          />
+          <CharacterCount value={presentation.invitationText} maximum={2_000} />
           <span className="help">
             Leave both invitation fields empty to avoid adding editorial claims
             beyond the event description.
@@ -150,7 +147,9 @@ export function PresentationSettingsPanel({
             </button>
           </p>
         ) : (
-          <p className="help">Matches the estimate from the current questions.</p>
+          <p className="help">
+            Matches the estimate from the current questions.
+          </p>
         )}
         <label className="toggle mt">
           <input

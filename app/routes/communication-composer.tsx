@@ -27,9 +27,9 @@ import {
   communicationErrorMessage,
 } from "~/modules/communications/communication-service.server";
 import {
-  communicationScheduleIssue,
   communicationScheduledEpoch,
   communicationScheduledLocalValue,
+  communicationScheduleIssue,
 } from "~/modules/communications/communication-time";
 import { UnknownMergeVariableError } from "~/modules/communications/merge-template";
 import { RecipientLimitError } from "~/modules/communications/recipient-query.server";
@@ -391,9 +391,7 @@ function DraftFields({
             className="textarea"
             name="manualRecipients"
             value={manualRecipients}
-            onChange={(event) =>
-              setManualRecipients(event.currentTarget.value)
-            }
+            onChange={(event) => setManualRecipients(event.currentTarget.value)}
             placeholder="Alex Morgan <alex@example.com>, priya@example.com"
             required
           />
@@ -447,11 +445,7 @@ function DraftFields({
           ) : null}
         </span>
         {scheduledError ? (
-          <span
-            className="field-error"
-            id={scheduledErrorId}
-            role="alert"
-          >
+          <span className="field-error" id={scheduledErrorId} role="alert">
             {scheduledError}
           </span>
         ) : null}

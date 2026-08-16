@@ -1,10 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import {
-  canonicalSlugOnBlur,
-  sanitizeSlugInput,
-  slugify,
-} from "~/lib/slug";
+import { canonicalSlugOnBlur, sanitizeSlugInput, slugify } from "~/lib/slug";
 
 describe("slugify", () => {
   it("normalises names into lowercase single-hyphen slugs", () => {
@@ -43,9 +39,9 @@ describe("sanitizeSlugInput", () => {
 
   it("can preserve a valid custom identifier without imposing a suggestion limit", () => {
     const customSlug = `custom-${"segment-".repeat(20)}link`;
-    expect(
-      sanitizeSlugInput(customSlug, { maximumLength: null }),
-    ).toBe(customSlug);
+    expect(sanitizeSlugInput(customSlug, { maximumLength: null })).toBe(
+      customSlug,
+    );
     expect(canonicalSlugOnBlur(customSlug, false, { maximumLength: 80 })).toBe(
       customSlug,
     );

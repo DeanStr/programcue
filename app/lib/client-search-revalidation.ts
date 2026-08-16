@@ -30,4 +30,6 @@ export const PUBLIC_PROGRAMME_CLIENT_SEARCH_PARAMETERS = [
   "room",
 ] as const;
 
-export const SCHEDULE_SOURCE_CLIENT_SEARCH_PARAMETERS = ["sourceQuery"] as const;
+export const SCHEDULE_SOURCE_CLIENT_SEARCH_PARAMETERS = [
+  "sourceQuery",
+] as const;

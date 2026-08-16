@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useFetcher, useLocation, useNavigate } from "react-router";
 
 import type { parseProgrammeEmbedSearchParameters } from "~/modules/programme/programme-embed-configuration";
@@ -299,7 +299,7 @@ export function usePublicProgrammeModel(loaderData: PublicProgrammeLoaderData) {
   const speakerProfileReturnFocusRef = useRef<HTMLElement | null>(null);
   const visibleEmbedControls = new Set(embedOptions.controls);
   const visibleEmbedFields = new Set(embedOptions.fields);
-  function publicSearchWithPendingQueries() {
+  const publicSearchWithPendingQueries = useCallback(() => {
     const search = new URLSearchParams(location.search);
     for (const [searchName, pendingValue] of [
       ["query", pendingTextQueries.current.query.trim()],
@@ -310,23 +310,32 @@ export function usePublicProgrammeModel(loaderData: PublicProgrammeLoaderData) {
       else search.delete(searchName);
     }
     return search;
-  }
-  function replacePublicSearchParameter(name: string, value: string) {
-    if (embedded) return;
-    const search = publicSearchWithPendingQueries();
-    if (value) search.set(name, value);
-    else search.delete(name);
-    const nextSearch = search.size ? `?${search}` : "";
-    pendingClientSearches.current.add(nextSearch);
-    void navigate(
-      {
-        pathname: location.pathname,
-        search: nextSearch,
-        hash: location.hash,
-      },
-      { replace: true, preventScrollReset: true },
-    );
-  }
+  }, [location.search]);
+  const replacePublicSearchParameter = useCallback(
+    (name: string, value: string) => {
+      if (embedded) return;
+      const search = publicSearchWithPendingQueries();
+      if (value) search.set(name, value);
+      else search.delete(name);
+      const nextSearch = search.size ? `?${search}` : "";
+      pendingClientSearches.current.add(nextSearch);
+      void navigate(
+        {
+          pathname: location.pathname,
+          search: nextSearch,
+          hash: location.hash,
+        },
+        { replace: true, preventScrollReset: true },
+      );
+    },
+    [
+      embedded,
+      location.hash,
+      location.pathname,
+      navigate,
+      publicSearchWithPendingQueries,
+    ],
+  );
   const setQuery = (value: string) => {
     pendingTextQueries.current.query = value;
     setQueryState(value);
@@ -393,7 +402,7 @@ export function usePublicProgrammeModel(loaderData: PublicProgrammeLoaderData) {
       300,
     );
     return () => window.clearTimeout(timer);
-  }, [embedded, location.search, query]);
+  }, [embedded, location.search, query, replacePublicSearchParameter]);
   useEffect(() => {
     if (embedded) return;
     const nextQuery = standaloneDirectoryQuery.trim();
@@ -405,7 +414,12 @@ export function usePublicProgrammeModel(loaderData: PublicProgrammeLoaderData) {
       300,
     );
     return () => window.clearTimeout(timer);
-  }, [embedded, location.search, standaloneDirectoryQuery]);
+  }, [
+    embedded,
+    location.search,
+    replacePublicSearchParameter,
+    standaloneDirectoryQuery,
+  ]);
   useEffect(() => {
     if (embedded) return;
     const nextQuery = standaloneGalleryQuery.trim();
@@ -417,7 +431,12 @@ export function usePublicProgrammeModel(loaderData: PublicProgrammeLoaderData) {
       300,
     );
     return () => window.clearTimeout(timer);
-  }, [embedded, location.search, standaloneGalleryQuery]);
+  }, [
+    embedded,
+    location.search,
+    replacePublicSearchParameter,
+    standaloneGalleryQuery,
+  ]);
   useEffect(() => {
     if (embedded) return;
     if (pendingClientSearches.current.delete(location.search)) return;

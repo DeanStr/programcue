@@ -33,11 +33,7 @@ describe("published programme and itinerary", () => {
   });
 
   it("keeps embed query configuration and actions on the loader validation path", () => {
-    const revalidation = (
-      current: string,
-      next: string,
-      formMethod?: string,
-    ) =>
+    const revalidation = (current: string, next: string, formMethod?: string) =>
       shouldRevalidate({
         currentUrl: new URL(current),
         nextUrl: new URL(next),

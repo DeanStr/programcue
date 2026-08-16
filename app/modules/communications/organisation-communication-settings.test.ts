@@ -83,9 +83,7 @@ describe("organisation communication settings", () => {
 
     await expect(
       service.save(owner, "Stale owner address", initial.revision),
-    ).rejects.toBeInstanceOf(
-      OrganisationCommunicationSettingsConflictError,
-    );
+    ).rejects.toBeInstanceOf(OrganisationCommunicationSettingsConflictError);
     await expect(service.get(owner)).resolves.toMatchObject({
       physicalAddress: "First owner address",
       revision: initial.revision + 1,

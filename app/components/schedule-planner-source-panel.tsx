@@ -134,6 +134,7 @@ export function ScheduleSourcePanel({
     }, 300);
     return () => window.clearTimeout(timer);
   }, [searchParams, sessionQuery, setSearchParams]);
+  // biome-ignore lint/correctness/useExhaustiveDependencies: Only route navigation should synchronize URL state back into the input; depending on sessionQuery would erase each keystroke before the debounced URL update.
   useEffect(() => {
     const routeQuery = searchParams.get("sourceQuery") ?? "";
     if (routeQuery !== sessionQuery) setSessionQuery(routeQuery);

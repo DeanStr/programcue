@@ -10,8 +10,8 @@ import {
   DraftRecoveryStatus,
 } from "~/components/draft-recovery-feedback";
 import { SessionizeProfileImport } from "~/components/sessionize-profile-import";
-import { useConfirm } from "~/components/ui/confirm-dialog";
 import { CharacterCount } from "~/components/ui/character-count";
+import { useConfirm } from "~/components/ui/confirm-dialog";
 import { DomainStatusBadge } from "~/components/ui/domain-status-badge";
 import { ErrorSummary } from "~/components/ui/error-summary";
 import type { ApplicantDraft } from "~/modules/submissions/submission-repository.server";
@@ -470,9 +470,7 @@ export function DraftEditor({
               <legend className="label">
                 {field.label}
                 {field.required ? (
-                  <span className="pc-required">
-                    Required
-                  </span>
+                  <span className="pc-required">Required</span>
                 ) : null}
               </legend>
               {field.help ? (

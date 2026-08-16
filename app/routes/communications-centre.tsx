@@ -632,7 +632,7 @@ export default function CommunicationsCentre({
   useEffect(() => {
     setTemplateDraft(templateFromServer);
     setTemplateDirty(false);
-  }, [templateFromServer]);
+  }, [selected?.id, templateFromServer]);
   useEffect(() => {
     if (!loaderData.clearedRecoveryRecord) return;
     void clearDraftRecoveryScope({
@@ -809,7 +809,7 @@ export default function CommunicationsCentre({
                       required
                     />
                   </label>
-                  <button className="btn" disabled={working}>
+                  <button type="submit" className="btn" disabled={working}>
                     Save organisation address
                   </button>
                 </Form>

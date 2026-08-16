@@ -2,9 +2,9 @@ import { describe, expect, it } from "vitest";
 
 import {
   assertCommunicationScheduleStillMatchesPreview,
-  communicationScheduleIssue,
   communicationScheduledEpoch,
   communicationScheduledLocalValue,
+  communicationScheduleIssue,
 } from "./communication-time";
 
 describe("event-local communication scheduling", () => {

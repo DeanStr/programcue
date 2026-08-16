@@ -46,8 +46,8 @@ export const formFieldSchema = z
       });
     }
     if (
-      new Set(field.options.map((option) => option.toLocaleLowerCase())).size !==
-      field.options.length
+      new Set(field.options.map((option) => option.toLocaleLowerCase()))
+        .size !== field.options.length
     ) {
       context.addIssue({
         code: "custom",

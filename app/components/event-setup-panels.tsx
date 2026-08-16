@@ -53,7 +53,9 @@ export function EventIdentityPanels({
 }) {
   const [timezone, setTimezone] = useState(event.timezone);
   const [description, setDescription] = useState(event.description);
+  // biome-ignore lint/correctness/useExhaustiveDependencies: Event identity deliberately resets a locally edited timezone even when the next event uses the same timezone.
   useEffect(() => setTimezone(event.timezone), [event.id, event.timezone]);
+  // biome-ignore lint/correctness/useExhaustiveDependencies: Event identity deliberately resets a locally edited description even when the next event has identical saved copy.
   useEffect(
     () => setDescription(event.description),
     [event.description, event.id],

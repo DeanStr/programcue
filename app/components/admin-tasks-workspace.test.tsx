@@ -1,9 +1,8 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { createMemoryRouter, RouterProvider } from "react-router";
 import { describe, expect, it } from "vitest";
-
-import type { AdminTasksData } from "~/routes/admin-tasks";
 import { suggestedTaskEvidenceMode } from "~/modules/tasks/task-schema";
+import type { AdminTasksData } from "~/routes/admin-tasks";
 import { AdminTasksWorkspace } from "./admin-tasks-workspace";
 
 function taskData(overrides: Partial<AdminTasksData> = {}) {

@@ -13,12 +13,12 @@ import { ZodError } from "zod";
 import { DirectMultipartUpload } from "~/components/direct-multipart-upload";
 import { SpeakerActionNotice } from "~/components/speaker-action-notice";
 import { SpeakerProfileHistory } from "~/components/speaker-profile-history";
+import { ConfirmDialog } from "~/components/ui/confirm-dialog";
 import {
   DomainStatusBadge,
   statusPresentation,
 } from "~/components/ui/domain-status-badge";
 import { EmptyState } from "~/components/ui/states";
-import { ConfirmDialog } from "~/components/ui/confirm-dialog";
 import { useUnsavedChanges } from "~/components/ui/use-unsaved-changes";
 import { maximumMegabytes } from "~/modules/files/file-policy";
 import { ensureDemoSpeakerData } from "~/modules/speakers/demo.server";
@@ -240,6 +240,7 @@ export default function AdminSpeakerDetail({
   const busy = navigation.state !== "idle";
   const [profileDirty, setProfileDirty] = useState(false);
   const blocker = useUnsavedChanges(profileDirty);
+  // biome-ignore lint/correctness/useExhaustiveDependencies: These persisted version tokens deliberately clear dirty state after either profile scope is saved, including when normalized values remain unchanged.
   useEffect(
     () => setProfileDirty(false),
     [

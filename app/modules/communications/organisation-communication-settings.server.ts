@@ -63,9 +63,8 @@ export class OrganisationCommunicationSettingsService {
         "Only an organisation owner can change the default postal address.",
         { status: 403 },
       );
-    const expectedRevision = communicationAddressRevisionSchema.parse(
-      rawExpectedRevision,
-    );
+    const expectedRevision =
+      communicationAddressRevisionSchema.parse(rawExpectedRevision);
     if (current.revision !== expectedRevision) {
       throw new OrganisationCommunicationSettingsConflictError();
     }

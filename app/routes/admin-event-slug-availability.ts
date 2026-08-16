@@ -1,8 +1,7 @@
 import { data } from "react-router";
-
-import type { Route } from "./+types/admin-event-slug-availability";
 import { requireCurrentEventRole } from "~/platform/auth/current-event.server";
 import { getCloudflareContext } from "~/platform/cloudflare-context";
+import type { Route } from "./+types/admin-event-slug-availability";
 
 export async function loader({ request, context }: Route.LoaderArgs) {
   const { env } = getCloudflareContext(context);

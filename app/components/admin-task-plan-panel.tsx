@@ -5,9 +5,9 @@ import { Form } from "react-router";
 import { CharacterCount } from "~/components/ui/character-count";
 import {
   suggestedTaskEvidenceMode,
-  taskCompatibleEvidenceModes,
   type TaskEvidenceMode,
   type TaskType,
+  taskCompatibleEvidenceModes,
 } from "~/modules/tasks/task-schema";
 import type { AdminTasksData } from "~/routes/admin-tasks";
 

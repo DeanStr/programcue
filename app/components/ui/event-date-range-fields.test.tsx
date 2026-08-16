@@ -32,6 +32,8 @@ describe("EventDateRangeFields", () => {
           initialEndDate="2027-05-10"
         />,
       ),
-    ).toThrow("Initial event end date cannot be before the initial start date.");
+    ).toThrow(
+      "Initial event end date cannot be before the initial start date.",
+    );
   });
 });

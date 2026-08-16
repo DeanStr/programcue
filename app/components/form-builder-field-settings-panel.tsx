@@ -1,4 +1,4 @@
-import { useEffect, useState, type ReactNode } from "react";
+import { type ReactNode, useEffect, useState } from "react";
 import { Link } from "react-router";
 
 import type {
@@ -31,6 +31,7 @@ export function FieldSettingsPanel({
 }) {
   const [allowIdChange, setAllowIdChange] = useState(false);
   const selectedIndex = selected ? input.schema.fields.indexOf(selected) : -1;
+  // biome-ignore lint/correctness/useExhaustiveDependencies: Changing the selected field deliberately revokes the transient permission to edit its stable ID.
   useEffect(() => setAllowIdChange(false), [selectedIndex]);
   const idReferenced = selected
     ? input.schema.fields.some(

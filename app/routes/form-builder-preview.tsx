@@ -662,7 +662,9 @@ export default function FormBuilder({ loaderData }: Route.ComponentProps) {
               <label className="label">
                 <span className="pc-field-label">
                   <span>Form name</span>
-                  <span className="pc-required" aria-hidden="true">Required</span>
+                  <span className="pc-required" aria-hidden="true">
+                    Required
+                  </span>
                 </span>
                 <input
                   className="field"
@@ -677,9 +679,7 @@ export default function FormBuilder({ loaderData }: Route.ComponentProps) {
               <DerivedSlugField
                 source={input.name}
                 value={input.publicSlug}
-                onChange={(value) =>
-                  change({ ...input, publicSlug: value })
-                }
+                onChange={(value) => change({ ...input, publicSlug: value })}
                 name="publicSlug"
                 label="Public URL slug"
                 maximumLength={120}
