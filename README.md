@@ -121,6 +121,15 @@ project.
 `npm test` runs both projects; focused commands do not replace the complete
 merge or release gate.
 
+The checked-in `Core gate` GitHub Actions workflow runs `check:core` for pull
+requests and `main`. Configure that check as required in branch protection so
+the repository gate cannot be bypassed by a direct merge. The manually
+dispatched `Production release` workflow runs the complete browser gate, applies
+migrations, verifies the exact remote ledger and required schema, deploys the
+unchanged tested build with the checkout's Git revision and confirms that
+production health reports that exact revision. Its `production` environment requires the Cloudflare account
+ID and deployment token and should require operator approval.
+
 ## Production configuration
 
 The checked-in production profile targets `https://app.programcue.com` and is
@@ -209,17 +218,25 @@ wrangler secret put EVALUATION_ACCESS_CODE
 wrangler secret put EVALUATION_SESSION_SECRET
 ```
 
-Before each release, set `SOURCE_REVISION` to that candidate's 7-64 character
-hexadecimal Git revision and verify the production URLs, sender and origin
-allowlists in both Wrangler profiles. `RESOURCE_EMBED_ORIGINS` is a
+Before each release, verify the production URLs, sender and origin allowlists in
+both Wrangler profiles. `RESOURCE_EMBED_ORIGINS` is a
 comma-separated list of exact HTTPS origins; the current explicit value `none`
-rejects every external resource embed. Apply migrations before deploying the
-same stamped revision:
+rejects every external resource embed. Release the tested checkout with the
+single ordered entry point:
 
 ```bash
-npm run db:migrate:remote
 npm run deploy
 ```
+
+The command runs the complete release gate once and retains that build. Before
+any remote mutation it requires a clean checkout, configuration and secret
+preflights, D1 integrity, the immutable deployed migration baseline and an
+applied ledger that is an exact prefix of the local migration order. It then
+applies migrations, requires the exact remote ledger and branding schema,
+deploys the unchanged tested artifact with the checkout's full Git revision and
+confirms production health reports that revision. The protected release
+workflow invokes this same entry point. Lower-level `deploy:*` commands are not
+a substitute for the ordinary release command.
 
 The scanner is deployed separately with `npm run deploy:scanner`; the production
 Worker, Workflow, Container application and `scanner.programcue.com` Custom
@@ -306,10 +323,12 @@ missing. Production fixes `EMAIL_PROVIDER=resend`; runtime validation rejects
 Mailpit and never falls back to local capture, demo identity, stale data or
 simulated provider success.
 
-`npm run deploy` runs configuration and remote secret preflights before build or
-deployment. The application and scanner are live; deployment alone does not
-prove a new migration, evaluator reset or external-provider outcome. Record
-those separately as acceptance evidence.
+`npm run deploy` completes its local release gate before configuration, checkout,
+remote secret and migration-ledger preflights, applies pending migrations,
+verifies the resulting schema, deploys that same tested build and checks live
+health. The application and scanner are live; deployment alone does not prove
+an evaluator reset or external-provider outcome. Record those separately as
+acceptance evidence.
 
 ### Production evaluation fixture
 

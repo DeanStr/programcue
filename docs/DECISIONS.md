@@ -452,6 +452,26 @@ aggregate rather than introducing a second counter model before it is needed.
 
 ## Pre-release hardening decisions
 
+The deployed D1 ledger contains both
+`0032_decision_draft_preview_contract.sql` and
+`0032_event_brand_asset_normalization.sql` as distinct applied rows. Wrangler
+tracks the complete migration filename, so both migration identities remain
+immutable. The repository validator permits only that exact historical numeric
+collision; every other migration number remains unique and the next migration
+is `0033`. Renaming an applied file or rewriting only the current production
+ledger could leave retained rollback data or a restored backup with a divergent
+name history and make Wrangler replay destructive schema work.
+
+The production release entry point builds and tests once, then validates the
+clean checkout, configuration, secrets, D1 integrity, immutable deployed
+migration baseline and ordered applied-ledger prefix before any remote
+mutation. It applies only migrations after that baseline, requires the resulting
+ledger and current schema contract to match exactly, injects the checkout's full
+Git revision while deploying that unchanged tested artifact, and checks the
+reported live revision. Missing or unexpected migration state stops the
+release; the Worker never receives an old-schema compatibility path. A separate
+revision-stamp commit is unnecessary.
+
 | Decision                          | Outcome                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              |
 | --------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Scanner dispatch authority        | The application and scanner share a dedicated dispatch HMAC secret that is independent of the callback HMAC secret. The application signs the exact canonical JSON body plus a five-minute timestamp; the scanner verifies the signature, timestamp and envelope expiry before creating a Workflow. The envelope binds organisation, event, asset, version, object key, ETag and size. The scanner's private R2 binding is the only object transport authority, so no presigned-URL-shaped fallback or bearer credential remains.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
@@ -498,7 +518,8 @@ then its row, retaining bounded attempt/error evidence when storage deletion
 fails. Database triggers prevent retirement or deletion while referenced and
 prevent event deletion from cascading away the only durable cleanup record.
 Existing pre-normalization rows are deliberately detached and retired by
-migration `0032`; there is no raw-byte compatibility serving path.
+migration `0032_event_brand_asset_normalization.sql`; there is no raw-byte
+compatibility serving path.
 
 Existing event accent and participant welcome/support columns are the
 published projection used by established consumers. Deployed external logo and

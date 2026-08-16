@@ -1,6 +1,6 @@
 # Verified implementation status
 
-Last verified: 2026-08-15.
+Last verified: 2026-08-16.
 
 This is the canonical implementation audit and requirements traceability record. The product specification remains authoritative for intended scope; this file records observed code, focused tests and local evidence only.
 
@@ -533,7 +533,7 @@ schedule tests verify this AIA-08 production slice.
 
 ## Event branding workstream evidence
 
-- **Production slice; repository evidence for this hardening is not deployed:** `/admin/branding` owns a server-backed event branding
+- **Production slice; schema deployment verified, live upload acceptance remains external:** `/admin/branding` owns a server-backed event branding
   draft with compare-and-set revision, representative desktop/mobile previews
   for the application, participant workspace, programme and email, and one
   confirmed publication boundary. Publication atomically advances the event
@@ -553,11 +553,14 @@ schedule tests verify this AIA-08 production slice.
   normalizer version, ETag and normalized byte size. Draft reads require
   event-administrator authority; anonymous asset routes resolve only the logo
   or banner referenced by the active event's published snapshot and revalidate
-  that ETag. Migration `0032_event_brand_asset_normalization.sql` adds the
+  that ETag. Migration `0032_event_brand_asset_normalization.sql` added the
   fail-closed readiness and cleanup invariants after the deployed branding
-  baseline; it is repository evidence and is not yet deployed. A publication
-  race returns a non-cacheable 503 retry response rather than stale bytes or a
-  false not-found result.
+  baseline. Production D1 records it as ledger row 33, applied on 16 August
+  2026 at 03:35 UTC; the required columns, cleanup index and integrity triggers
+  are present. No managed branding rows or event asset pointers currently
+  exist, so this verifies schema deployment rather than a live upload/delivery
+  journey. A publication race returns a non-cacheable 503 retry response rather
+  than stale bytes or a false not-found result.
 - **Published surfaces:** The published accent, logo, banner, welcome and
   support link reach the public application, participant workspace, programme,
   embeds and communication email. A deployed external logo or programme hero
@@ -569,7 +572,8 @@ schedule tests verify this AIA-08 production slice.
   Assets unreferenced by both snapshots are tombstoned, then a scheduled worker
   removes R2 bytes and D1 rows while persisting cleanup failures for retry.
   Referenced assets cannot be retired or deleted, and event deletion fails until
-  branding cleanup is drained. Migration `0032` detaches and retires all old
+  branding cleanup is drained. Migration
+  `0032_event_brand_asset_normalization.sql` detaches and retires all old
   raw-byte rows rather than retaining an unsafe compatibility path.
 - **URL validation and scope boundary:** Support URLs require credential-free
   HTTPS with a hostname. Organisation brand defaults, custom fonts, arbitrary
@@ -700,27 +704,51 @@ and persisted contract were exercised directly after migration.
 
 ## Deployment evidence
 
-Application source `ba06796` is deployed at `app.programcue.com` as Worker
-version `6a2dfbd6-3058-428f-8e46-b4373ee4190c`, and scanner source `c9e1287`
-is deployed at `scanner.programcue.com`; release-stamp commits `c4993cd` and
-`a5e1bab` record those sources. The current application version is at 100%
-traffic. Migrations `0030_audit_contract_and_retention.sql` and
-`0031_contextual_revision_evidence.sql` applied before the Worker cutover;
-production-discovered migration `0032_decision_draft_preview_contract.sql`
-then upgraded five legacy decision previews and is recorded in commit
-`58d41d9`. The WNAM D1 ledger retains 32 migrations, `quick_check=ok`, and
-foreign-key inspection returns no rows. The explicit audit provenance columns,
-insert/display contracts, append-only guards, speaker-profile revision table
-and indexes, and exact review-scorecard evidence columns are present. All
-pre-contract audit rows retain explicit historical/version-0 labels. A fresh
-evaluation organiser selection persisted a version-1 object with explicit
-`system` actor kind and `internal` origin, and every retained decision preview
-now has both required fields.
+Application health at `app.programcue.com` reports production source `2cf56fc`;
+the latest recorded scanner deployment evidence is source `c9e1287` at
+`scanner.programcue.com`.
+Migrations `0030_audit_contract_and_retention.sql` and
+`0031_contextual_revision_evidence.sql` applied before the earlier Worker
+cutover. Production-discovered migration
+`0032_decision_draft_preview_contract.sql` then upgraded five legacy decision
+previews, and `0032_event_brand_asset_normalization.sql` applied later as the
+distinct ledger row 33. The WNAM D1 ledger retains both complete filenames;
+`quick_check=ok` and foreign-key inspection returns no rows. The branding
+columns, cleanup index and all integrity triggers are present. The explicit
+audit provenance columns, insert/display contracts, append-only guards,
+speaker-profile revision table and indexes, and exact review-scorecard evidence
+columns are present. All pre-contract audit rows retain explicit
+historical/version-0 labels. A fresh evaluation organiser selection persisted a
+version-1 object with explicit `system` actor kind and `internal` origin, and
+every retained decision preview now has both required fields.
+
+Repository release-control hardening now preserves the two complete deployed
+`0032` filenames while allowing only that exact historical numeric collision;
+all future migration numbers remain unique. Checked-in GitHub workflows provide
+an always-on core gate and a manually confirmed production path that runs the
+complete browser gate, applies migrations, verifies the exact remote ledger and
+branding schema, deploys the unchanged tested build and checks the reported
+source revision. The manual deploy path uses that same entry point and reuses
+its build, failing configuration, checkout, secret, immutable-ledger baseline,
+schema or integrity preflights before applying remote migrations. Deployment
+injects the clean checkout's full Git revision directly; no stamp-only commit is
+required. Local `check:core` passed on 16
+August 2026 with 62 unit files/352 tests, 171 Worker files/1,366 tests, the
+Agent test, production build, 61 configuration tests, migration parity at 99
+application tables, 120 indexes and 114 triggers, the 235-writer audit contract,
+recovery drill, synchronized 33-path OpenAPI and scanner tests. A read-only
+production preflight matched all 33 migration filenames, seven branding columns
+and eleven branding indexes/triggers, with `quick_check=ok` and no foreign-key
+violations.
+GitHub branch protection and production-environment approval remain external
+repository settings and are not claimed configured by these checked-in files.
+
 The separately deployed public website remains live at `programcue.com` and
-`www.programcue.com`. Health returned source `ba06796`; sign-in, evaluation
-access, the canonical published programme and the public programme API returned
-HTTP 200. A fresh production evaluation organiser selection returned the
-expected 303 boundaries; Evaluation administration, Operation Centre and
+`www.programcue.com`. Current health returned source `2cf56fc`; the earlier
+release acceptance verified sign-in, evaluation access, the canonical
+published programme and the public programme API at HTTP 200. A fresh
+production evaluation organiser selection returned the expected 303
+boundaries; Evaluation administration, Operation Centre and
 Submissions rendered their identifying content, and speaker detail returned
 HTTP 200. The first Evaluation-administration smoke detected the legacy draft
 contract failure with HTTP 500; after migration `0032`, the same route rendered

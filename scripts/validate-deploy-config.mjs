@@ -287,7 +287,7 @@ function validateCommonProfile(profile, config, spec, issues) {
       issue(
         profile,
         "provisioning",
-        "SOURCE_REVISION must be replaced with the deployed 7-64 character hexadecimal Git revision.",
+        "SOURCE_REVISION must contain a 7-64 character hexadecimal Git revision; production deployment overrides it with the clean checkout revision.",
       ),
     );
   }
