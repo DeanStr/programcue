@@ -126,10 +126,10 @@ export function CalendarAdministration({
         </Link>
       </div>
       {loaderData.connections.length ? (
-        <div
+        <section
           className="table-wrap mb"
-          role="region"
           aria-label="Calendar connections"
+          // biome-ignore lint/a11y/noNoninteractiveTabindex: Scrollable data regions need keyboard focus so arrow keys can expose overflow content.
           tabIndex={0}
         >
           <table className="data-table">
@@ -243,7 +243,7 @@ export function CalendarAdministration({
               ))}
             </tbody>
           </table>
-        </div>
+        </section>
       ) : (
         <EmptyState
           className="mb comms-empty"
@@ -254,10 +254,10 @@ export function CalendarAdministration({
       )}
       <h3>Published-session invitations</h3>
       {loaderData.calendarTargets.length ? (
-        <div
+        <section
           className="table-wrap pc-responsive-table-wrap"
-          role="region"
           aria-label="Published-session calendar invitations"
+          // biome-ignore lint/a11y/noNoninteractiveTabindex: Scrollable data regions need keyboard focus so arrow keys can expose overflow content.
           tabIndex={0}
         >
           <table className="data-table pc-responsive-table">
@@ -370,7 +370,7 @@ export function CalendarAdministration({
               })}
             </tbody>
           </table>
-        </div>
+        </section>
       ) : (
         <EmptyState
           className="comms-empty"
@@ -398,10 +398,10 @@ export function CalendarLifecycleTable({
         </span>
       </div>
       {loaderData.invitations.length ? (
-        <div
+        <section
           className="table-wrap"
-          role="region"
           aria-label="Calendar invitation activity"
+          // biome-ignore lint/a11y/noNoninteractiveTabindex: Scrollable data regions need keyboard focus so arrow keys can expose overflow content.
           tabIndex={0}
         >
           <table className="data-table">
@@ -449,7 +449,7 @@ export function CalendarLifecycleTable({
               ))}
             </tbody>
           </table>
-        </div>
+        </section>
       ) : (
         <EmptyState
           className="comms-empty"

@@ -186,7 +186,7 @@ export function usePublicProgrammeModel(loaderData: PublicProgrammeLoaderData) {
   const [turnstileResetKey, setTurnstileResetKey] = useState(0);
   const [itineraryVerificationPrompted, setItineraryVerificationPrompted] =
     useState(false);
-  const itineraryVerificationRef = useRef<HTMLDivElement | null>(null);
+  const itineraryVerificationRef = useRef<HTMLFieldSetElement | null>(null);
   const previousFetcherState = useRef(fetcher.state);
   const shareUrl =
     fetcher.data &&

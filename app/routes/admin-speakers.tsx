@@ -194,10 +194,10 @@ export default function AdminSpeakers({ loaderData }: Route.ComponentProps) {
         {actionData?.importPreview ? (
           <div className="stack mt">
             <h3>Import preview</h3>
-            <div
+            <section
               className="table-wrap"
-              role="region"
               aria-label="Speaker import preview"
+              // biome-ignore lint/a11y/noNoninteractiveTabindex: Scrollable data regions need keyboard focus so arrow keys can expose overflow content.
               tabIndex={0}
             >
               <table className="data-table">
@@ -281,7 +281,7 @@ export default function AdminSpeakers({ loaderData }: Route.ComponentProps) {
                   ))}
                 </tbody>
               </table>
-            </div>
+            </section>
             {actionData.importPreview.valid.length &&
             !actionData.importPreview.invalid.length ? (
               <Form method="post">
@@ -482,65 +482,67 @@ export default function AdminSpeakers({ loaderData }: Route.ComponentProps) {
         </section>
       ) : null}
       <section className="card pad mb">
-        <form method="get" className="form-row" role="search">
-          <label className="label">
-            Search
-            <input
-              className="field"
-              name="query"
-              defaultValue={filters.query}
-              placeholder="Name or email"
-            />
-          </label>
-          <label className="label">
-            Profile
-            <select
-              className="select"
-              name="profileStatus"
-              defaultValue={filters.profileStatus}
-            >
-              <option value="">All profiles</option>
-              <option value="published">Published</option>
-              <option value="draft">Draft</option>
-              <option value="archived">Archived</option>
-            </select>
-          </label>
-          <label className="label">
-            Workflow
-            <select
-              className="select"
-              name="workflowStatus"
-              defaultValue={filters.workflowStatus}
-            >
-              <option value="">All workflow states</option>
-              <option value="prospect">Prospect</option>
-              <option value="invited">Invited</option>
-              <option value="confirmed">Confirmed</option>
-              <option value="declined">Declined</option>
-              <option value="withdrawn">Withdrawn</option>
-            </select>
-          </label>
-          <label className="label">
-            Readiness
-            <select
-              className="select"
-              name="readiness"
-              defaultValue={filters.readiness}
-            >
-              <option value="">All readiness</option>
-              <option value="ready">Ready</option>
-              <option value="needs_attention">Needs attention</option>
-            </select>
-          </label>
-          <div className="page-actions" style={{ alignSelf: "end" }}>
-            <button className="btn primary" type="submit">
-              Apply filters
-            </button>
-            <Link className="btn" to="/admin/speakers">
-              Clear
-            </Link>
-          </div>
-        </form>
+        <search>
+          <form method="get" className="form-row">
+            <label className="label">
+              Search
+              <input
+                className="field"
+                name="query"
+                defaultValue={filters.query}
+                placeholder="Name or email"
+              />
+            </label>
+            <label className="label">
+              Profile
+              <select
+                className="select"
+                name="profileStatus"
+                defaultValue={filters.profileStatus}
+              >
+                <option value="">All profiles</option>
+                <option value="published">Published</option>
+                <option value="draft">Draft</option>
+                <option value="archived">Archived</option>
+              </select>
+            </label>
+            <label className="label">
+              Workflow
+              <select
+                className="select"
+                name="workflowStatus"
+                defaultValue={filters.workflowStatus}
+              >
+                <option value="">All workflow states</option>
+                <option value="prospect">Prospect</option>
+                <option value="invited">Invited</option>
+                <option value="confirmed">Confirmed</option>
+                <option value="declined">Declined</option>
+                <option value="withdrawn">Withdrawn</option>
+              </select>
+            </label>
+            <label className="label">
+              Readiness
+              <select
+                className="select"
+                name="readiness"
+                defaultValue={filters.readiness}
+              >
+                <option value="">All readiness</option>
+                <option value="ready">Ready</option>
+                <option value="needs_attention">Needs attention</option>
+              </select>
+            </label>
+            <div className="page-actions" style={{ alignSelf: "end" }}>
+              <button className="btn primary" type="submit">
+                Apply filters
+              </button>
+              <Link className="btn" to="/admin/speakers">
+                Clear
+              </Link>
+            </div>
+          </form>
+        </search>
       </section>
       <section className="card pad" id="speaker-readiness">
         <div className="card-title">
@@ -549,10 +551,10 @@ export default function AdminSpeakers({ loaderData }: Route.ComponentProps) {
             This event only · one row per person
           </span>
         </div>
-        <div
+        <section
           className="table-wrap pc-responsive-table-wrap admin-speaker-roster-table"
-          role="region"
           aria-label="Speaker readiness"
+          // biome-ignore lint/a11y/noNoninteractiveTabindex: Scrollable data regions need keyboard focus so arrow keys can expose overflow content.
           tabIndex={0}
         >
           <table className="data-table pc-responsive-table">
@@ -756,7 +758,7 @@ export default function AdminSpeakers({ loaderData }: Route.ComponentProps) {
               )}
             </tbody>
           </table>
-        </div>
+        </section>
         {page > 1 || hasNext ? (
           <nav className="page-actions mt" aria-label="Speaker pages">
             {page > 1 ? (

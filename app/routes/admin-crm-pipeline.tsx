@@ -171,6 +171,7 @@ export default function AdminCrmPipeline({ loaderData }: Route.ComponentProps) {
       <section
         className="crm-pipeline-board"
         aria-label="Speaker sourcing stages"
+        // biome-ignore lint/a11y/noNoninteractiveTabindex: Scrollable data regions need keyboard focus so arrow keys can expose overflow content.
         tabIndex={0}
       >
         {loaderData.columns.map((column) => (

@@ -223,7 +223,10 @@ export function ScheduleCanvasPanel({
     placedFormatKeys.has(format.key),
   );
   const dayTabs = (
-    <div className="tabs schedule-day-tabs" role="group" aria-label="Event day">
+    <fieldset
+      className="tabs schedule-day-tabs pc-plain-fieldset"
+      aria-label="Event day"
+    >
       {eventDays.map((day) => {
         const date = eventBoundaryCalendarDate(day);
         const entryCount = workspace.entries.filter(
@@ -244,7 +247,7 @@ export function ScheduleCanvasPanel({
           </button>
         );
       })}
-    </div>
+    </fieldset>
   );
   return (
     <section className="card pad schedule-canvas">
@@ -313,11 +316,11 @@ export function ScheduleCanvasPanel({
               <span aria-hidden>↔</span> Scroll sideways to see every room
             </p>
           ) : null}
-          <div
+          <section
             ref={roomScrollRef}
             className="table-wrap schedule-room-scroll"
+            // biome-ignore lint/a11y/noNoninteractiveTabindex: Scrollable data regions need keyboard focus so arrow keys can expose overflow content.
             tabIndex={0}
-            role="region"
             aria-label={`${dateLabel(selectedDay, "UTC")} room schedule. Scroll horizontally to see every room.`}
           >
             <div
@@ -406,7 +409,7 @@ export function ScheduleCanvasPanel({
                 }),
               ])}
             </div>
-          </div>
+          </section>
         </>
       )}
     </section>

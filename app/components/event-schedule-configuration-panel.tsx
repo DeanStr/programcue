@@ -165,12 +165,11 @@ export function EventScheduleConfigurationPanels({
               />
               <div className="event-record-list">
                 {tracks.map((track) => (
-                  <div
-                    className={`event-record-row event-track-columns${focusedTrackId === track.id ? " selected" : ""}`}
+                  <fieldset
+                    className={`event-record-row event-track-columns pc-plain-fieldset${focusedTrackId === track.id ? " selected" : ""}`}
                     id={`event-track-${track.id}`}
                     key={track.id}
                     tabIndex={-1}
-                    role="group"
                     aria-label={`${track.name} track settings`}
                   >
                     <RecordField
@@ -282,7 +281,7 @@ export function EventScheduleConfigurationPanels({
                         <X aria-hidden size={15} />
                       </button>
                     </div>
-                  </div>
+                  </fieldset>
                 ))}
               </div>
             </div>
@@ -367,10 +366,9 @@ export function EventScheduleConfigurationPanels({
             />
             <div className="event-record-list">
               {sessionFormats.map((format) => (
-                <div
-                  className="event-record-row event-format-columns"
+                <fieldset
+                  className="event-record-row event-format-columns pc-plain-fieldset"
                   key={format.key}
-                  role="group"
                   aria-label={`${format.label} format settings`}
                 >
                   <RecordField
@@ -445,7 +443,7 @@ export function EventScheduleConfigurationPanels({
                       <X aria-hidden size={15} />
                     </button>
                   </div>
-                </div>
+                </fieldset>
               ))}
             </div>
           </div>

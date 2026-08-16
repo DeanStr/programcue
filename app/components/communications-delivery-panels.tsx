@@ -164,10 +164,10 @@ export function DeliveryConfiguration({
               an illustrated box 40px below it explaining that form was the
               loudest way this page had of saying nothing was wrong. */}
           {loaderData.senders.length ? (
-            <div
+            <section
               className="table-wrap"
-              role="region"
               aria-label="Sender profiles"
+              // biome-ignore lint/a11y/noNoninteractiveTabindex: Scrollable data regions need keyboard focus so arrow keys can expose overflow content.
               tabIndex={0}
             >
               <table className="data-table">
@@ -307,7 +307,7 @@ export function DeliveryConfiguration({
                   ))}
                 </tbody>
               </table>
-            </div>
+            </section>
           ) : null}
         </div>
         <div className="stack">
@@ -480,10 +480,10 @@ export function CommunicationAutomation({
         </div>
       </Form>
       {loaderData.triggers.length ? (
-        <div
+        <section
           className="table-wrap mt"
-          role="region"
           aria-label="Automatic reminder triggers"
+          // biome-ignore lint/a11y/noNoninteractiveTabindex: Scrollable data regions need keyboard focus so arrow keys can expose overflow content.
           tabIndex={0}
         >
           <table className="data-table">
@@ -534,7 +534,7 @@ export function CommunicationAutomation({
               ))}
             </tbody>
           </table>
-        </div>
+        </section>
       ) : null}
     </section>
   );
@@ -566,9 +566,9 @@ export function SenderDnsRecords({ records }: { records: SenderDnsRecordSet }) {
   return (
     <>
       {records.readable.length ? (
-        <div
+        <section
           className="table-wrap mt"
-          role="region"
+          // biome-ignore lint/a11y/noNoninteractiveTabindex: Scrollable data regions need keyboard focus so arrow keys can expose overflow content.
           tabIndex={0}
           aria-label="DNS records to add"
         >
@@ -596,7 +596,7 @@ export function SenderDnsRecords({ records }: { records: SenderDnsRecordSet }) {
               ))}
             </tbody>
           </table>
-        </div>
+        </section>
       ) : null}
       {records.unreadable.length ? (
         <div className="validation-item warn mt" role="alert">

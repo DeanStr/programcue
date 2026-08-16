@@ -396,10 +396,10 @@ export default function AdminTaskBulk({ loaderData }: Route.ComponentProps) {
               <span>blocked</span>
             </div>
           </div>
-          <div
+          <section
             className="table-wrap pc-responsive-table-wrap"
-            role="region"
             aria-label="Bulk task update preview"
+            // biome-ignore lint/a11y/noNoninteractiveTabindex: Scrollable data regions need keyboard focus so arrow keys can expose overflow content.
             tabIndex={0}
           >
             <table className="data-table pc-responsive-table">
@@ -439,7 +439,7 @@ export default function AdminTaskBulk({ loaderData }: Route.ComponentProps) {
                 ))}
               </tbody>
             </table>
-          </div>
+          </section>
           {operation.status === "received" ? (
             <div className="page-actions mt">
               {canConfirm ? (

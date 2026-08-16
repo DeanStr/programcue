@@ -75,10 +75,10 @@ export function AdminAssignedTasksPanel({
           Dependencies refresh before every read
         </span>
       </div>
-      <div
+      <section
         className="table-wrap pc-responsive-table-wrap"
-        role="region"
         aria-label="Assigned speaker work"
+        // biome-ignore lint/a11y/noNoninteractiveTabindex: Scrollable data regions need keyboard focus so arrow keys can expose overflow content.
         tabIndex={0}
       >
         <table className="data-table pc-responsive-table">
@@ -421,7 +421,7 @@ export function AdminAssignedTasksPanel({
             ) : null}
           </tbody>
         </table>
-      </div>
+      </section>
     </section>
   );
 }

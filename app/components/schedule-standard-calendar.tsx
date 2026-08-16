@@ -132,10 +132,9 @@ export function ScheduleStandardCalendar({
   }
 
   return (
-    <div
+    <section
       className={`schedule-standard-calendar schedule-standard-calendar-${view}`}
       data-schedule-standard-view={view}
-      role="region"
       aria-label={`${view} schedule calendar`}
     >
       <div
@@ -234,6 +233,6 @@ export function ScheduleStandardCalendar({
           alternative, including room changes.
         </p>
       ) : null}
-    </div>
+    </section>
   );
 }

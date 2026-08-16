@@ -348,10 +348,10 @@ export default function AdminContent({ loaderData }: Route.ComponentProps) {
         {loaderData.files.length ? (
           <Form method="post" className="stack">
             <input type="hidden" name="intent" value="preview-zip" />
-            <div
+            <section
               className="table-wrap"
-              role="region"
               aria-label="Private file inventory"
+              // biome-ignore lint/a11y/noNoninteractiveTabindex: Scrollable data regions need keyboard focus so arrow keys can expose overflow content.
               tabIndex={0}
             >
               <table>
@@ -456,7 +456,7 @@ export default function AdminContent({ loaderData }: Route.ComponentProps) {
                   })}
                 </tbody>
               </table>
-            </div>
+            </section>
             <div className="page-actions">
               <label className="label">
                 ZIP grouping

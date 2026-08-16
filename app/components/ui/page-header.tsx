@@ -25,9 +25,12 @@ export function PageHeader({
         {description ? <p>{description}</p> : null}
       </div>
       {actions ? (
-        <div className="page-actions" role="group" aria-label="Page actions">
+        <fieldset
+          className="page-actions pc-plain-fieldset"
+          aria-label="Page actions"
+        >
           {actions}
-        </div>
+        </fieldset>
       ) : null}
     </header>
   );

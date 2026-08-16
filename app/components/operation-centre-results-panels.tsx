@@ -225,10 +225,10 @@ export function OperationsListPanel({
         </span>
       </div>
       {loaderData.operations.length ? (
-        <div
+        <section
           className="table-wrap"
-          role="region"
           aria-label="Background operations"
+          // biome-ignore lint/a11y/noNoninteractiveTabindex: Scrollable data regions need keyboard focus so arrow keys can expose overflow content.
           tabIndex={0}
         >
           <table className="data-table">
@@ -436,7 +436,7 @@ export function OperationsListPanel({
               })}
             </tbody>
           </table>
-        </div>
+        </section>
       ) : (
         <EmptyState
           title="No background operations yet"
@@ -517,10 +517,10 @@ export function OperationDetailPanel({
                 controls; successful records are not resent.
               </p>
             ) : null}
-            <div
+            <section
               className="table-wrap pc-responsive-table-wrap"
-              role="region"
               aria-label="Operation record results"
+              // biome-ignore lint/a11y/noNoninteractiveTabindex: Scrollable data regions need keyboard focus so arrow keys can expose overflow content.
               tabIndex={0}
             >
               <table className="data-table pc-responsive-table operation-record-results-table">
@@ -694,7 +694,7 @@ export function OperationDetailPanel({
                   })}
                 </tbody>
               </table>
-            </div>
+            </section>
           </>
         ) : (
           <EmptyState

@@ -31,10 +31,10 @@ export function RecentCommunications({
         </span>
       </div>
       {loaderData.communications.length ? (
-        <div
+        <section
           className="table-wrap"
-          role="region"
           aria-label="Recent communications"
+          // biome-ignore lint/a11y/noNoninteractiveTabindex: Scrollable data regions need keyboard focus so arrow keys can expose overflow content.
           tabIndex={0}
         >
           <table className="data-table">
@@ -142,7 +142,7 @@ export function RecentCommunications({
               ))}
             </tbody>
           </table>
-        </div>
+        </section>
       ) : (
         <EmptyState
           className="comms-empty"
@@ -272,10 +272,10 @@ export function CommunicationDeliveryHealth({
         <div className="mt">
           <h3>Recipient deliveries</h3>
           {health.deliveryPage.rows.length ? (
-            <div
+            <section
               className="table-wrap"
-              role="region"
               aria-label="Selected communication recipient deliveries"
+              // biome-ignore lint/a11y/noNoninteractiveTabindex: Scrollable data regions need keyboard focus so arrow keys can expose overflow content.
               tabIndex={0}
             >
               <table className="data-table">
@@ -320,7 +320,7 @@ export function CommunicationDeliveryHealth({
                   ))}
                 </tbody>
               </table>
-            </div>
+            </section>
           ) : (
             <p className="subtle">This communication has no delivery rows.</p>
           )}

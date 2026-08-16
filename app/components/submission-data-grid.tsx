@@ -302,10 +302,10 @@ export function SubmissionDataGrid({
         </div>
       ) : null}
 
-      <div
+      <section
         className="table-wrap pc-responsive-table-wrap pc-data-grid-wrap"
+        // biome-ignore lint/a11y/noNoninteractiveTabindex: Scrollable data regions need keyboard focus so arrow keys can expose overflow content.
         tabIndex={0}
-        role="region"
         aria-label="Application queue table; scroll to view more records or columns"
       >
         <table
@@ -371,7 +371,7 @@ export function SubmissionDataGrid({
             )}
           </tbody>
         </table>
-      </div>
+      </section>
     </>
   );
 }

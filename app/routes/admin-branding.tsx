@@ -252,9 +252,8 @@ function BrandingPreview({
         </div>
         <span className="status info">Not public</span>
       </div>
-      <div
-        className="branding-preview-tabs"
-        role="group"
+      <fieldset
+        className="branding-preview-tabs pc-plain-fieldset"
         aria-label="Brand preview surface"
       >
         {surfaces.map((item) => (
@@ -268,7 +267,7 @@ function BrandingPreview({
             <item.icon aria-hidden size={14} /> {item.label}
           </button>
         ))}
-      </div>
+      </fieldset>
       <div
         className={`branding-preview-frame${compact ? " is-mobile" : ""}`}
         style={
@@ -639,9 +638,8 @@ export default function AdminBranding({ loaderData }: Route.ComponentProps) {
         </div>
 
         <div className="branding-preview-stack">
-          <div
-            className="branding-preview-toolbar"
-            role="group"
+          <fieldset
+            className="branding-preview-toolbar pc-plain-fieldset"
             aria-label="Preview viewport"
           >
             <button
@@ -660,7 +658,7 @@ export default function AdminBranding({ loaderData }: Route.ComponentProps) {
             >
               <Smartphone aria-hidden size={14} /> Mobile
             </button>
-          </div>
+          </fieldset>
           <BrandingPreview
             eventName={loaderData.event.name}
             accent={accent}

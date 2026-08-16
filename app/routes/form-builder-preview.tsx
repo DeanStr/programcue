@@ -265,7 +265,10 @@ export default function FormBuilder({ loaderData }: Route.ComponentProps) {
      own header keeps the pane title and the control that replaces it on the
      same line, instead of stacking two rows of chrome above the content. */
   const dockSwitch = (
-    <span className="fb-dock-switch" role="group" aria-label="Inspector pane">
+    <fieldset
+      className="fb-dock-switch pc-plain-fieldset"
+      aria-label="Inspector pane"
+    >
       <button
         className="btn small"
         type="button"
@@ -282,7 +285,7 @@ export default function FormBuilder({ loaderData }: Route.ComponentProps) {
       >
         Preview
       </button>
-    </span>
+    </fieldset>
   );
   const publishedPublicSlug =
     loaderData.workspace?.publishedVersion?.settings.publicSlug;

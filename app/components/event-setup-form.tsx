@@ -865,9 +865,9 @@ export function EventSetupForm({
                   ? ` ${repositoryData.preview.counts.noop} unchanged records are left out of the table below.`
                   : ""}
               </p>
-              <div
+              <section
                 className="table-wrap mt"
-                role="region"
+                // biome-ignore lint/a11y/noNoninteractiveTabindex: Scrollable data regions need keyboard focus so arrow keys can expose overflow content.
                 tabIndex={0}
                 aria-label="Airtable repository migration changes"
               >
@@ -893,7 +893,7 @@ export function EventSetupForm({
                     ))}
                   </tbody>
                 </table>
-              </div>
+              </section>
               <repositoryFetcher.Form method="post">
                 <input
                   type="hidden"

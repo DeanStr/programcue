@@ -312,12 +312,11 @@ export function EventRoomsPanel({
             />
             <div className="event-record-list">
               {rooms.map((room) => (
-                <div
-                  className={`event-record-row event-room-columns${focusedRoomId === room.id ? " selected" : ""}`}
+                <fieldset
+                  className={`event-record-row event-room-columns pc-plain-fieldset${focusedRoomId === room.id ? " selected" : ""}`}
                   id={`event-room-${room.id}`}
                   key={room.id}
                   tabIndex={-1}
-                  role="group"
                   aria-label={`${room.name} room settings`}
                 >
                   <RecordField
@@ -428,7 +427,7 @@ export function EventRoomsPanel({
                       <X aria-hidden size={15} />
                     </button>
                   </div>
-                </div>
+                </fieldset>
               ))}
             </div>
           </div>

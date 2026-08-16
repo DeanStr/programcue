@@ -137,10 +137,10 @@ export function EvaluationUnifiedResults() {
         recommendations are not split.
       </p>
       {loaderData.results.length ? (
-        <div
+        <section
           className="table-wrap pc-responsive-table-wrap"
-          role="region"
           aria-label="Unified evaluation results"
+          // biome-ignore lint/a11y/noNoninteractiveTabindex: Scrollable data regions need keyboard focus so arrow keys can expose overflow content.
           tabIndex={0}
         >
           <table className="data-table pc-responsive-table">
@@ -510,7 +510,7 @@ export function EvaluationUnifiedResults() {
               })}
             </tbody>
           </table>
-        </div>
+        </section>
       ) : (
         <EmptyState
           title="No matching review targets"

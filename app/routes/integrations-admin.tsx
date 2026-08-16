@@ -367,9 +367,9 @@ export default function IntegrationsAdmin({
             </div>
           ) : null}
           {loaderData.preview.items.length ? (
-            <div
+            <section
               className="table-wrap"
-              role="region"
+              // biome-ignore lint/a11y/noNoninteractiveTabindex: Scrollable data regions need keyboard focus so arrow keys can expose overflow content.
               tabIndex={0}
               aria-label="Accelevents export preview"
             >
@@ -434,7 +434,7 @@ export default function IntegrationsAdmin({
                   ))}
                 </tbody>
               </table>
-            </div>
+            </section>
           ) : (
             <EmptyState
               title="No published programme records"
@@ -557,10 +557,10 @@ export default function IntegrationsAdmin({
           <h2>Recent integration runs</h2>
         </div>
         {loaderData.runs.length ? (
-          <div
+          <section
             className="table-wrap"
-            role="region"
             aria-label="Recent integration runs"
+            // biome-ignore lint/a11y/noNoninteractiveTabindex: Scrollable data regions need keyboard focus so arrow keys can expose overflow content.
             tabIndex={0}
           >
             <table className="data-table">
@@ -609,7 +609,7 @@ export default function IntegrationsAdmin({
                 ))}
               </tbody>
             </table>
-          </div>
+          </section>
         ) : (
           <EmptyState
             title="No exports yet"

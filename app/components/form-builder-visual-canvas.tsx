@@ -372,9 +372,8 @@ export function FormBuilderVisualCanvas({
         className="program-cue-form-canvas"
         aria-label="Visual call-for-speakers form editor"
       >
-        <div
-          className="fb-canvas-palette"
-          role="group"
+        <fieldset
+          className="fb-canvas-palette pc-plain-fieldset"
           aria-label="Field palette"
         >
           <strong>Add a field</strong>
@@ -398,7 +397,7 @@ export function FormBuilderVisualCanvas({
               <span>{operationMessage}</span>
             </div>
           ) : null}
-        </div>
+        </fieldset>
         <CanvasPage
           input={input}
           selectedId={selectedId}

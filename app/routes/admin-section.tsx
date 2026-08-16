@@ -211,9 +211,9 @@ export default function AdminSection({ loaderData }: Route.ComponentProps) {
             <p className="programme-scroll-hint">
               <span aria-hidden>↔</span> Swipe horizontally to see all columns
             </p>
-            <div
+            <section
               className="table-wrap programme-table-wrap"
-              role="region"
+              // biome-ignore lint/a11y/noNoninteractiveTabindex: Scrollable data regions need keyboard focus so arrow keys can expose overflow content.
               tabIndex={0}
               aria-label="Programme records. Scroll horizontally to see all columns."
             >
@@ -264,7 +264,7 @@ export default function AdminSection({ loaderData }: Route.ComponentProps) {
                   ))}
                 </tbody>
               </table>
-            </div>
+            </section>
           </>
         ) : (
           <EmptyState

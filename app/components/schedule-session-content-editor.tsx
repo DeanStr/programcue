@@ -673,7 +673,10 @@ function SessionContentPreviewPanel() {
           ))}
         </div>
       </div>
-      <div className="tabs mb" role="group" aria-label="Preview surface">
+      <fieldset
+        className="tabs mb pc-plain-fieldset"
+        aria-label="Preview surface"
+      >
         {(["card", "detail", "calendar"] as const).map((option) => (
           <button
             className={`tab${surface === option ? " active" : ""}`}
@@ -689,7 +692,7 @@ function SessionContentPreviewPanel() {
                 : "Calendar"}
           </button>
         ))}
-      </div>
+      </fieldset>
       <div
         className="card pad"
         style={{

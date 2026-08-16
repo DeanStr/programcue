@@ -22,10 +22,10 @@ export function EvaluationSessionQueue() {
         the session details and speakers at assignment time.
       </p>
       {loaderData.sessions.length ? (
-        <div
+        <section
           className="table-wrap pc-responsive-table-wrap"
-          role="region"
           aria-label="Evaluation session queue"
+          // biome-ignore lint/a11y/noNoninteractiveTabindex: Scrollable data regions need keyboard focus so arrow keys can expose overflow content.
           tabIndex={0}
         >
           <table className="data-table pc-responsive-table">
@@ -148,7 +148,7 @@ export function EvaluationSessionQueue() {
               ))}
             </tbody>
           </table>
-        </div>
+        </section>
       ) : (
         <EmptyState
           title="No direct sessions"

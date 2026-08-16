@@ -630,10 +630,10 @@ export default function AdminSpeakerDetail({
           <CalendarClock aria-hidden className="subtle" />
         </div>
         {sessions.length ? (
-          <div
+          <section
             className="table-wrap pc-responsive-table-wrap"
-            role="region"
             aria-label="Linked speaker sessions"
+            // biome-ignore lint/a11y/noNoninteractiveTabindex: Scrollable data regions need keyboard focus so arrow keys can expose overflow content.
             tabIndex={0}
           >
             <table className="data-table pc-responsive-table">
@@ -751,7 +751,7 @@ export default function AdminSpeakerDetail({
                 ))}
               </tbody>
             </table>
-          </div>
+          </section>
         ) : (
           <EmptyState
             icon={CalendarClock}

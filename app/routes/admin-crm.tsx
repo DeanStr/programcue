@@ -209,11 +209,7 @@ export default function AdminCrm({ loaderData }: Route.ComponentProps) {
         </div>
       </div>
 
-      <div
-        className="grid grid-4 mb"
-        role="region"
-        aria-label="Speaker Network overview"
-      >
+      <section className="grid grid-4 mb" aria-label="Speaker Network overview">
         <section className="card metric">
           <div className="label">Total contacts</div>
           <div className="value">{dashboard.totalContacts}</div>
@@ -230,7 +226,7 @@ export default function AdminCrm({ loaderData }: Route.ComponentProps) {
           <div className="label">Top companies tracked</div>
           <div className="value">{dashboard.companies.length}</div>
         </section>
-      </div>
+      </section>
 
       <section className="card pad mb" aria-labelledby="crm-companies-heading">
         <div className="card-title">
@@ -347,9 +343,8 @@ export default function AdminCrm({ loaderData }: Route.ComponentProps) {
           </div>
         </Form>
         {filtersActive ? (
-          <div
-            className="crm-chip-row mt"
-            role="group"
+          <fieldset
+            className="crm-chip-row mt pc-plain-fieldset"
             aria-label="Active directory filters"
           >
             {Object.entries(directory.filters)
@@ -359,14 +354,14 @@ export default function AdminCrm({ loaderData }: Route.ComponentProps) {
                   {key.replace(/([A-Z])/g, " $1")}: {value}
                 </span>
               ))}
-          </div>
+          </fieldset>
         ) : null}
 
         <Form method="get" action="/admin/crm/outreach" className="mt">
-          <div
+          <section
             className="table-wrap"
-            role="region"
             aria-label="Speaker contact directory"
+            // biome-ignore lint/a11y/noNoninteractiveTabindex: Scrollable data regions need keyboard focus so arrow keys can expose overflow content.
             tabIndex={0}
           >
             <table className="data-table">
@@ -430,7 +425,7 @@ export default function AdminCrm({ loaderData }: Route.ComponentProps) {
                 ))}
               </tbody>
             </table>
-          </div>
+          </section>
           {directory.contacts.length ? (
             <button className="btn primary mt" type="submit">
               <Mail aria-hidden size={15} /> Email selected contacts
@@ -571,10 +566,10 @@ export default function AdminCrm({ loaderData }: Route.ComponentProps) {
                   ),
                 )}
               </div>
-              <div
+              <section
                 className="table-wrap"
-                role="region"
                 aria-label="CRM import preview"
+                // biome-ignore lint/a11y/noNoninteractiveTabindex: Scrollable data regions need keyboard focus so arrow keys can expose overflow content.
                 tabIndex={0}
               >
                 <table className="data-table">
@@ -612,7 +607,7 @@ export default function AdminCrm({ loaderData }: Route.ComponentProps) {
                     ))}
                   </tbody>
                 </table>
-              </div>
+              </section>
               {actionData.importPreview.valid.length &&
               !actionData.importPreview.invalid.length ? (
                 <Form method="post">

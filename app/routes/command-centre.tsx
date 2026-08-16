@@ -438,10 +438,10 @@ export default function CommandCentre({ loaderData }: Route.ComponentProps) {
                 </Link>
               </div>
               {deliveryChannels.length ? (
-                <div
+                <section
                   className="table-wrap"
-                  role="region"
                   aria-label="Delivery health by channel"
+                  // biome-ignore lint/a11y/noNoninteractiveTabindex: Scrollable data regions need keyboard focus so arrow keys can expose overflow content.
                   tabIndex={0}
                 >
                   <table className="jobs command-health-table">
@@ -476,7 +476,7 @@ export default function CommandCentre({ loaderData }: Route.ComponentProps) {
                       ))}
                     </tbody>
                   </table>
-                </div>
+                </section>
               ) : (
                 <p className="command-quiet">
                   No delivery records exist for this event yet.
@@ -579,10 +579,10 @@ export default function CommandCentre({ loaderData }: Route.ComponentProps) {
               </Link>
             </div>
             {loaderData.operations.length ? (
-              <div
+              <section
                 className="table-wrap"
-                role="region"
                 aria-label="Background operations"
+                // biome-ignore lint/a11y/noNoninteractiveTabindex: Scrollable data regions need keyboard focus so arrow keys can expose overflow content.
                 tabIndex={0}
               >
                 <table className="jobs">
@@ -631,16 +631,16 @@ export default function CommandCentre({ loaderData }: Route.ComponentProps) {
                     ))}
                   </tbody>
                 </table>
-              </div>
+              </section>
             ) : (
               /* Nothing running is this panel's healthy state, so it keeps the
                  columns it will fill rather than replacing them with a
                  sentence. The operator learns the shape of the report before
                  the first job rather than during it. */
-              <div
+              <section
                 className="table-wrap"
-                role="region"
                 aria-label="Background operations"
+                // biome-ignore lint/a11y/noNoninteractiveTabindex: Scrollable data regions need keyboard focus so arrow keys can expose overflow content.
                 tabIndex={0}
               >
                 <table className="jobs">
@@ -662,7 +662,7 @@ export default function CommandCentre({ loaderData }: Route.ComponentProps) {
                     </tr>
                   </tbody>
                 </table>
-              </div>
+              </section>
             )}
           </section>
         </div>

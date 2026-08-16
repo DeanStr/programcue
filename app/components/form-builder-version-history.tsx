@@ -24,10 +24,10 @@ export function FormVersionHistory({
           Published submissions retain their original form version.
         </span>
       </div>
-      <div
+      <section
         className="table-wrap"
-        role="region"
         aria-label="Form version history"
+        // biome-ignore lint/a11y/noNoninteractiveTabindex: Scrollable data regions need keyboard focus so arrow keys can expose overflow content.
         tabIndex={0}
       >
         <table className="data-table">
@@ -56,7 +56,7 @@ export function FormVersionHistory({
             ))}
           </tbody>
         </table>
-      </div>
+      </section>
     </section>
   );
 }

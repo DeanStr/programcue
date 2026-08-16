@@ -69,10 +69,10 @@ export function EvaluationSubmissionQueue() {
         </div>
       </div>
       {loaderData.submissions.length ? (
-        <div
+        <section
           className="table-wrap pc-responsive-table-wrap"
-          role="region"
           aria-label="Evaluation proposal queue"
+          // biome-ignore lint/a11y/noNoninteractiveTabindex: Scrollable data regions need keyboard focus so arrow keys can expose overflow content.
           tabIndex={0}
         >
           <table className="data-table pc-responsive-table">
@@ -659,7 +659,7 @@ export function EvaluationSubmissionQueue() {
               })}
             </tbody>
           </table>
-        </div>
+        </section>
       ) : (
         <EmptyState
           title="No submitted proposals"

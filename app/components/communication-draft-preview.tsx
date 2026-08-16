@@ -104,9 +104,8 @@ export function CommunicationDraftPreview({
         <div>
           <div className="card-title">
             <h3>Representative merged email</h3>
-            <span
-              className="preview-viewport-controls right"
-              role="group"
+            <fieldset
+              className="preview-viewport-controls right pc-plain-fieldset"
               aria-label="Email preview size"
             >
               <button
@@ -125,7 +124,7 @@ export function CommunicationDraftPreview({
               >
                 Desktop
               </button>
-            </span>
+            </fieldset>
           </div>
           <div className="email-preview-shell">
             <iframe
@@ -139,10 +138,10 @@ export function CommunicationDraftPreview({
         </div>
         <div>
           <h3>Recipient sample</h3>
-          <div
+          <section
             className="table-wrap pc-responsive-table-wrap"
-            role="region"
             aria-label="Deliverable recipient sample"
+            // biome-ignore lint/a11y/noNoninteractiveTabindex: Scrollable data regions need keyboard focus so arrow keys can expose overflow content.
             tabIndex={0}
           >
             <table
@@ -178,7 +177,7 @@ export function CommunicationDraftPreview({
                   ))}
               </tbody>
             </table>
-          </div>
+          </section>
           {deliveryCount > 20 ? (
             <p className="help">Showing 20 of {deliveryCount} recipients.</p>
           ) : null}

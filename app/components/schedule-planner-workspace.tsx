@@ -376,7 +376,10 @@ export function SchedulePlannerWorkspace({
           </div>
         )}
       </div>
-      <div className="tabs mt" role="group" aria-label="Schedule view">
+      <fieldset
+        className="tabs mt pc-plain-fieldset"
+        aria-label="Schedule view"
+      >
         {(["room", "list", "day", "week", "track"] as const).map((name) => (
           <button
             key={name}
@@ -388,7 +391,7 @@ export function SchedulePlannerWorkspace({
             {name[0].toUpperCase() + name.slice(1)}
           </button>
         ))}
-      </div>
+      </fieldset>
       <DndContext
         id="schedule-planner-dnd-instructions"
         sensors={sensors}

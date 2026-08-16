@@ -950,9 +950,8 @@ function ItineraryVerificationPrompt({
        touched anything, so the panel's first sentence was a warning about a
        list they had not started. The sentence stays in the accessibility tree
        throughout, because every save control describes itself by it. */
-    <div
-      className={`itinerary-verification stack mb${itineraryVerificationPrompted ? " prompted" : ""}${raised ? "" : " latent"}`}
-      role="group"
+    <fieldset
+      className={`itinerary-verification stack mb pc-plain-fieldset${itineraryVerificationPrompted ? " prompted" : ""}${raised ? "" : " latent"}`}
       ref={itineraryVerificationRef}
       tabIndex={-1}
       aria-labelledby="itinerary-verification-help"
@@ -980,7 +979,7 @@ function ItineraryVerificationPrompt({
           resetKey={turnstileResetKey}
         />
       ) : null}
-    </div>
+    </fieldset>
   );
 }
 

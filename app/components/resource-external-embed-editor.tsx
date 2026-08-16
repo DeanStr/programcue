@@ -128,9 +128,8 @@ export function ResourceExternalEmbedEditor({
       />
       <div>
         <span className="label">Video or map</span>
-        <div
-          className="resource-embed-kind"
-          role="group"
+        <fieldset
+          className="resource-embed-kind pc-plain-fieldset"
           aria-label="External content type"
         >
           <button
@@ -163,7 +162,7 @@ export function ResourceExternalEmbedEditor({
           >
             <MapPin aria-hidden size={15} /> Map
           </button>
-        </div>
+        </fieldset>
       </div>
 
       {kind === "video" ? (

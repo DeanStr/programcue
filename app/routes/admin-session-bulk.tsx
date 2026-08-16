@@ -308,10 +308,10 @@ export default function AdminSessionBulk({ loaderData }: Route.ComponentProps) {
             ) : null}
           </div>
 
-          <div
+          <section
             className="table-wrap pc-responsive-table-wrap"
-            role="region"
             aria-label="Sessions available for bulk update"
+            // biome-ignore lint/a11y/noNoninteractiveTabindex: Scrollable data regions need keyboard focus so arrow keys can expose overflow content.
             tabIndex={0}
           >
             <table
@@ -359,7 +359,7 @@ export default function AdminSessionBulk({ loaderData }: Route.ComponentProps) {
                 ))}
               </tbody>
             </table>
-          </div>
+          </section>
           {!loaderData.workspace.sessions.length ? (
             <EmptyState
               title="No sessions to update"
@@ -414,10 +414,10 @@ export default function AdminSessionBulk({ loaderData }: Route.ComponentProps) {
               <strong>{operation.summary.invalidCount}</strong>
             </div>
           </div>
-          <div
+          <section
             className="table-wrap pc-responsive-table-wrap"
-            role="region"
             aria-label="Bulk session update preview"
+            // biome-ignore lint/a11y/noNoninteractiveTabindex: Scrollable data regions need keyboard focus so arrow keys can expose overflow content.
             tabIndex={0}
           >
             <table
@@ -450,7 +450,7 @@ export default function AdminSessionBulk({ loaderData }: Route.ComponentProps) {
                 ))}
               </tbody>
             </table>
-          </div>
+          </section>
           {operation.status === "received" ? (
             <div className="page-actions mt">
               <Form

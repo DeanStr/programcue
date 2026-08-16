@@ -40,10 +40,6 @@
     "rules": {
       "preset": "recommended",
       // Explicit pre-adoption debt. Remove entries in focused, tested batches.
-      "a11y": {
-        "noNoninteractiveTabindex": "off",
-        "useSemanticElements": "off",
-      },
       "complexity": {
         "noImportantStyles": "off",
       },

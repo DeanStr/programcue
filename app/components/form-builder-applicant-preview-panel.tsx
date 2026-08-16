@@ -180,9 +180,8 @@ export function ApplicantPreviewPanel({
         <div className="fb-preview-shell">
           <div className="fb-preview-chrome">
             <span className="pc-num">{PREVIEW_WIDTHS[viewport]} px wide</span>
-            <span
-              className="preview-viewport-controls right"
-              role="group"
+            <fieldset
+              className="preview-viewport-controls right pc-plain-fieldset"
               aria-label="Applicant preview size"
             >
               <button
@@ -201,7 +200,7 @@ export function ApplicantPreviewPanel({
               >
                 Desktop
               </button>
-            </span>
+            </fieldset>
             {onClose ? (
               <button
                 className="btn small fb-preview-close"

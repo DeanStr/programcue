@@ -483,7 +483,10 @@ export function ProgrammeEmbedBuilder({
               <h3>Live preview</h3>
               <p className="help">The iframe uses the exact generated URL.</p>
             </div>
-            <div className="segmented" role="group" aria-label="Preview width">
+            <fieldset
+              className="segmented pc-plain-fieldset"
+              aria-label="Preview width"
+            >
               <button
                 type="button"
                 className={`btn small${previewWidth === "desktop" ? " active" : ""}`}
@@ -500,7 +503,7 @@ export function ProgrammeEmbedBuilder({
               >
                 Mobile
               </button>
-            </div>
+            </fieldset>
           </div>
           <div
             className={`programme-embed-preview ${previewWidth}`}
@@ -802,10 +805,10 @@ export function ProgrammeEmbedBuilder({
         ) : null}
 
         {managedEmbeds.length ? (
-          <div
+          <section
             className="table-wrap"
-            role="region"
             aria-label="Managed programme embeds"
+            // biome-ignore lint/a11y/noNoninteractiveTabindex: Scrollable data regions need keyboard focus so arrow keys can expose overflow content.
             tabIndex={0}
           >
             <table className="data-table">
@@ -967,7 +970,7 @@ export function ProgrammeEmbedBuilder({
                 })}
               </tbody>
             </table>
-          </div>
+          </section>
         ) : (
           <p className="help">No managed embeds have been saved yet.</p>
         )}

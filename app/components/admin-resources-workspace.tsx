@@ -318,9 +318,8 @@ function ResourcePreviewPanel() {
           <span className="pc-section-kicker">Live speaker view</span>
           <h3>Resource preview</h3>
         </div>
-        <span
-          className="preview-viewport-controls right"
-          role="group"
+        <fieldset
+          className="preview-viewport-controls right pc-plain-fieldset"
           aria-label="Resource preview size"
         >
           <button
@@ -339,7 +338,7 @@ function ResourcePreviewPanel() {
           >
             Desktop
           </button>
-        </span>
+        </fieldset>
       </div>
       {resourcePreview.error ? (
         <div className="validation-item error" role="alert">

@@ -46,7 +46,7 @@ function PublicDayTabs({
   }
 
   return (
-    <div className="public-day-tabs" role="group" aria-label={label}>
+    <fieldset className="public-day-tabs pc-plain-fieldset" aria-label={label}>
       {model.days.map((day) => (
         <button
           type="button"
@@ -79,7 +79,7 @@ function PublicDayTabs({
           {day}
         </button>
       ))}
-    </div>
+    </fieldset>
   );
 }
 
@@ -135,7 +135,7 @@ function PublicSessionSpeakers({
 }) {
   const speakers = sessionSpeakerDetails(session, model.speakerById);
   return speakers.length ? (
-    <div className="public-session-speakers" role="group" aria-label="Speakers">
+    <section className="public-session-speakers" aria-label="Speakers">
       {speakers.map((speaker) => (
         <div className="public-session-speaker" key={speaker.id}>
           {model.showEmbedField("images") ? (
@@ -150,7 +150,7 @@ function PublicSessionSpeakers({
           </span>
         </div>
       ))}
-    </div>
+    </section>
   ) : (
     <p className="subtle">Speaker to be announced</p>
   );
@@ -401,16 +401,11 @@ export function PublicAgendaSurface({
                   count={group.sessions.length}
                 />
               ) : null}
-              <div
-                className="agenda-board"
-                role="list"
-                aria-label={`${group.label} agenda`}
-              >
+              <ul className="agenda-board" aria-label={`${group.label} agenda`}>
                 {group.sessions.map((session) => (
-                  <article
+                  <li
                     className={`agenda-card${session.id === selectedSession?.id ? " active" : ""}`}
                     key={session.id}
-                    role="listitem"
                   >
                     {model.showEmbedField("time") ? (
                       <div className="agenda-card-time">
@@ -470,9 +465,9 @@ export function PublicAgendaSurface({
                         model={model}
                       />
                     )}
-                  </article>
+                  </li>
                 ))}
-              </div>
+              </ul>
             </section>
           ))}
         </div>
@@ -906,11 +901,7 @@ export function PublicSpeakerGallerySurface({
         ) : null}
       </SurfaceHeading>
       {model.gallerySpeakers.length ? (
-        <div
-          className="speaker-gallery-grid"
-          role="group"
-          aria-label="Speaker Gallery"
-        >
+        <section className="speaker-gallery-grid" aria-label="Speaker Gallery">
           {model.gallerySpeakers.map((speaker) => (
             <SpeakerGalleryCard
               key={speaker.id}
@@ -918,7 +909,7 @@ export function PublicSpeakerGallerySurface({
               model={model}
             />
           ))}
-        </div>
+        </section>
       ) : (
         <p className="empty">No speakers match this search.</p>
       )}

@@ -382,10 +382,10 @@ export default function ApiSettings({ loaderData }: Route.ComponentProps) {
             <span className="status neutral">{activeKeyCount} active</span>
           </div>
           {loaderData.keys.length ? (
-            <div
+            <section
               className="table-wrap"
-              role="region"
               aria-label="Event API credentials"
+              // biome-ignore lint/a11y/noNoninteractiveTabindex: Scrollable data regions need keyboard focus so arrow keys can expose overflow content.
               tabIndex={0}
             >
               <table className="data-table">
@@ -477,7 +477,7 @@ export default function ApiSettings({ loaderData }: Route.ComponentProps) {
                   })}
                 </tbody>
               </table>
-            </div>
+            </section>
           ) : (
             <EmptyState
               title="No API keys"
@@ -573,10 +573,10 @@ export default function ApiSettings({ loaderData }: Route.ComponentProps) {
           </span>
         </div>
         {loaderData.webhooks.length ? (
-          <div
+          <section
             className="table-wrap"
-            role="region"
             aria-label="Outbound webhook endpoints"
+            // biome-ignore lint/a11y/noNoninteractiveTabindex: Scrollable data regions need keyboard focus so arrow keys can expose overflow content.
             tabIndex={0}
           >
             <table className="data-table">
@@ -710,7 +710,7 @@ export default function ApiSettings({ loaderData }: Route.ComponentProps) {
                 ))}
               </tbody>
             </table>
-          </div>
+          </section>
         ) : (
           <EmptyState
             title="No outbound webhooks"

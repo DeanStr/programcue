@@ -57,9 +57,8 @@ export function RichResourceEditor({
         role="toolbar"
         aria-label="Resource formatting"
       >
-        <span
-          className="resource-editor-toolbar-group"
-          role="group"
+        <fieldset
+          className="resource-editor-toolbar-group pc-plain-fieldset"
           aria-label="Text styles"
         >
           <button
@@ -91,10 +90,9 @@ export function RichResourceEditor({
           >
             H2
           </button>
-        </span>
-        <span
-          className="resource-editor-toolbar-group"
-          role="group"
+        </fieldset>
+        <fieldset
+          className="resource-editor-toolbar-group pc-plain-fieldset"
           aria-label="Block styles"
         >
           <button
@@ -115,10 +113,9 @@ export function RichResourceEditor({
           >
             Quote
           </button>
-        </span>
-        <span
-          className="resource-editor-toolbar-group"
-          role="group"
+        </fieldset>
+        <fieldset
+          className="resource-editor-toolbar-group pc-plain-fieldset"
           aria-label="Edit history"
         >
           <button
@@ -135,7 +132,7 @@ export function RichResourceEditor({
           >
             Redo
           </button>
-        </span>
+        </fieldset>
       </div>
       <EditorContent editor={editor} />
     </div>

@@ -433,10 +433,10 @@ export default function AdminCrmContact({ loaderData }: Route.ComponentProps) {
           <History aria-hidden className="subtle" />
         </div>
         {contact.connections.length ? (
-          <div
+          <section
             className="table-wrap mt"
-            role="region"
             aria-label="Contact event and session history"
+            // biome-ignore lint/a11y/noNoninteractiveTabindex: Scrollable data regions need keyboard focus so arrow keys can expose overflow content.
             tabIndex={0}
           >
             <table className="data-table">
@@ -459,7 +459,7 @@ export default function AdminCrmContact({ loaderData }: Route.ComponentProps) {
                 ))}
               </tbody>
             </table>
-          </div>
+          </section>
         ) : (
           <EmptyState
             icon={History}
