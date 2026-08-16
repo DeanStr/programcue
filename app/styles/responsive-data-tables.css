@@ -1,0 +1,215 @@
+/* Admin record tables keep field boundaries readable and become complete record cards on mobile. */
+.pc-responsive-table .pc-record-stack,
+.pc-responsive-table .pc-record-identity {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+.pc-responsive-table .pc-record-stack > strong,
+.pc-responsive-table .pc-record-stack > small,
+.pc-responsive-table .pc-record-identity > strong,
+.pc-responsive-table .pc-record-identity > small {
+  display: block;
+}
+.pc-responsive-table .pc-record-identity > small {
+  line-height: 1.3;
+}
+.pc-responsive-table .pc-record-email {
+  overflow-wrap: anywhere;
+}
+.pc-record-link {
+  color: var(--blue);
+  text-decoration: underline;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 2px;
+}
+.pc-record-link:hover,
+.pc-record-link:focus-visible {
+  text-decoration-thickness: 2px;
+}
+.pc-responsive-table .pc-record-action-cell {
+  white-space: nowrap;
+}
+.operation-record-results-table {
+  min-width: 0;
+  table-layout: fixed;
+}
+.operation-record-results-table th:nth-child(1) {
+  width: 16%;
+}
+.operation-record-results-table th:nth-child(2) {
+  width: 13%;
+}
+.operation-record-results-table th:nth-child(3) {
+  width: 9%;
+}
+.operation-record-results-table th:nth-child(4) {
+  width: 25%;
+}
+.operation-record-results-table th:nth-child(5) {
+  width: 37%;
+}
+.operation-record-results-table td {
+  overflow-wrap: anywhere;
+}
+.operation-record-results-table .operation-record-actions {
+  white-space: normal;
+}
+.operation-record-results-table .operation-record-actions .field {
+  width: 100%;
+  min-width: 0;
+}
+@media (max-width: 760px) {
+  .admin-speaker-summary {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .pc-data-grid-toolbar {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: end;
+  }
+  .pc-data-grid-selection {
+    grid-column: 1 / -1;
+    flex-wrap: wrap;
+  }
+  .pc-data-grid-density {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+  .pc-data-grid-columns > fieldset {
+    right: 0;
+  }
+  .pc-data-grid-wrap {
+    max-height: none;
+  }
+  .pc-responsive-table-wrap {
+    overflow: visible;
+    border: 0;
+    background: transparent;
+  }
+  .pc-responsive-table {
+    display: block;
+    width: 100%;
+    min-width: 0;
+    border-collapse: separate;
+  }
+  .pc-responsive-table thead {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    clip-path: inset(50%);
+    white-space: nowrap;
+    border: 0;
+  }
+  .pc-responsive-table tbody {
+    display: grid;
+    gap: var(--space-3);
+  }
+  .pc-responsive-table tr {
+    display: grid;
+    overflow: hidden;
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    background: var(--surface);
+    box-shadow: 0 4px 14px rgba(19, 32, 31, 0.06);
+  }
+  .pc-responsive-table td {
+    display: grid;
+    grid-template-columns: minmax(92px, 0.38fr) minmax(0, 1fr);
+    align-items: start;
+    gap: var(--space-3);
+    width: 100%;
+    padding: var(--space-3) var(--space-3);
+    border-bottom: 1px solid var(--line);
+    overflow-wrap: anywhere;
+  }
+  .pc-responsive-table td::before {
+    content: attr(data-label);
+    align-self: center;
+    color: var(--muted);
+    font-size: var(--text-2xs);
+    font-weight: var(--weight-extrabold);
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+  }
+  .pc-responsive-table tr:hover td {
+    background: var(--surface);
+  }
+  .pc-responsive-table.pc-data-grid tr.is-selected td,
+  .pc-responsive-table.pc-data-grid tr.is-selected:hover td {
+    background: var(--brand-50);
+  }
+  .pc-responsive-table td:last-child {
+    border-bottom: 0;
+  }
+  .pc-responsive-table .pc-record-primary-cell {
+    grid-template-columns: minmax(0, 1fr);
+    padding: var(--space-3) var(--space-3);
+    background: var(--soft);
+  }
+  .pc-responsive-table tr:hover .pc-record-primary-cell {
+    background: var(--soft);
+  }
+  .pc-responsive-table.pc-data-grid tr.is-selected .pc-record-primary-cell,
+  .pc-responsive-table.pc-data-grid
+    tr.is-selected:hover
+    .pc-record-primary-cell {
+    background: var(--brand-50);
+  }
+  .pc-responsive-table .pc-record-primary-cell::before,
+  .pc-responsive-table .pc-table-empty-cell::before {
+    display: none;
+  }
+  .pc-responsive-table .pc-record-primary-cell .row-main {
+    align-items: flex-start;
+  }
+  .pc-responsive-table .pc-record-action-cell {
+    align-items: center;
+    white-space: normal;
+  }
+  .pc-responsive-table .operation-record-actions {
+    grid-template-columns: minmax(0, 1fr);
+    align-items: start;
+    gap: var(--space-2);
+  }
+  .pc-responsive-table .operation-record-actions::before {
+    align-self: start;
+  }
+  .pc-responsive-table .operation-record-actions > .stack {
+    width: 100%;
+  }
+  .pc-responsive-table .pc-record-action-cell > .btn {
+    justify-self: start;
+  }
+  .pc-responsive-table .pc-record-select-cell {
+    text-align: left;
+  }
+  .pc-responsive-table.pc-data-grid.is-compact td {
+    padding: var(--space-2) var(--space-3);
+  }
+  .pc-responsive-table .inline-form {
+    width: 100%;
+  }
+  .pc-responsive-table .inline-form > .select,
+  .pc-responsive-table .inline-form > .btn {
+    width: 100%;
+  }
+  .pc-responsive-table .task-admin-actions {
+    justify-content: flex-start;
+  }
+  .pc-responsive-table .pc-table-empty-row {
+    display: block;
+  }
+  .pc-responsive-table .pc-table-empty-cell {
+    display: block;
+    padding: 0;
+    border: 0;
+  }
+  .pc-responsive-table .pc-empty-state {
+    border: 0;
+  }
+}

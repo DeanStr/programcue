@@ -1,4 +1,11 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import {
+  type Dispatch,
+  type SetStateAction,
+  useCallback,
+  useEffect,
+  useMemo,
+  useState,
+} from "react";
 import { Form, Link, useNavigation } from "react-router";
 
 import {
@@ -110,6 +117,658 @@ function FieldControl({
       onChange={(event) => onChange(event.target.value)}
       maxLength={field.id === "title" ? 180 : 5_000}
     />
+  );
+}
+
+type EditableSpeaker = Pick<
+  ApplicantDraft["speakers"][number],
+  "name" | "email" | "biography" | "invitationStatus"
+>;
+type DraftAnswers = ApplicantDraft["answers"];
+type DraftUploads = Record<string, { assetId: string; versionId: string }>;
+
+type ApplicationAnswersProps = {
+  fields: FormField[];
+  errors?: Record<string, string[]>;
+  answers: DraftAnswers;
+  setAnswers: Dispatch<SetStateAction<DraftAnswers>>;
+  setDirty(value: boolean): void;
+  readOnly: boolean;
+  revisionMode: boolean;
+  uploads: DraftUploads;
+  setUploads: Dispatch<SetStateAction<DraftUploads>>;
+  publicSlug: string;
+  draft: ApplicantDraft;
+  currentUpload: ApplicantVideoUploadRecord | null;
+  uploadTurnstileSiteKey: string | null;
+  maximumVideoBytes: number;
+};
+
+function ApplicationAnswers({
+  fields,
+  errors,
+  answers,
+  setAnswers,
+  setDirty,
+  readOnly,
+  revisionMode,
+  uploads,
+  setUploads,
+  publicSlug,
+  draft,
+  currentUpload,
+  uploadTurnstileSiteKey,
+  maximumVideoBytes,
+}: ApplicationAnswersProps) {
+  return (
+    <>
+      {fields.map((field) => {
+        const error = errors?.[field.id]?.[0];
+        const helpId = field.help ? `answer-${field.id}-help` : undefined;
+        const errorId = error ? `answer-${field.id}-error` : undefined;
+        const describedBy =
+          [helpId, errorId].filter(Boolean).join(" ") || undefined;
+        const update = (value: string | string[]) => {
+          setAnswers((current) => ({ ...current, [field.id]: value }));
+          setDirty(true);
+        };
+        if (field.type === "video")
+          return (
+            <fieldset
+              className="application-choice-field"
+              key={field.id}
+              aria-invalid={Boolean(error) || undefined}
+              aria-describedby={describedBy}
+            >
+              <legend className="label">
+                {field.label}
+                {field.required ? (
+                  <span className="pc-required" aria-hidden="true">
+                    Required
+                  </span>
+                ) : null}
+              </legend>
+              {field.help ? (
+                <span className="help" id={helpId}>
+                  {field.help}
+                </span>
+              ) : null}
+              <label className="label" htmlFor={`answer-${field.id}`}>
+                HTTPS video link
+                <FieldControl
+                  field={field}
+                  value={answers[field.id]}
+                  disabled={
+                    readOnly || (revisionMode && Boolean(uploads[field.id]))
+                  }
+                  required={field.required && !uploads[field.id]}
+                  invalid={Boolean(error)}
+                  describedBy={describedBy}
+                  onChange={update}
+                />
+              </label>
+              {!readOnly && !revisionMode ? (
+                <ApplicantVideoUpload
+                  publicSlug={publicSlug}
+                  submissionId={draft.id}
+                  fieldId={field.id}
+                  current={
+                    currentUpload?.fieldId === field.id ? currentUpload : null
+                  }
+                  siteKey={uploadTurnstileSiteKey}
+                  disabled={readOnly}
+                  maximumBytes={maximumVideoBytes}
+                  onReferenceChange={(reference) => {
+                    setUploads((current) => ({
+                      ...current,
+                      [field.id]: reference,
+                    }));
+                    setDirty(true);
+                  }}
+                />
+              ) : uploads[field.id] ? (
+                <div className="validation-item ok mt">
+                  <strong>Private video attached</strong>
+                  <span>
+                    The immutable submission references its scanned file
+                    version.
+                  </span>
+                </div>
+              ) : null}
+              {error ? (
+                <span className="field-error" id={errorId}>
+                  {error}
+                </span>
+              ) : null}
+            </fieldset>
+          );
+        if (field.type === "multi_select")
+          return (
+            <fieldset
+              className="application-choice-field"
+              key={field.id}
+              aria-invalid={Boolean(error) || undefined}
+              aria-describedby={describedBy}
+            >
+              <legend className="label">
+                {field.label}
+                {field.required ? (
+                  <span className="pc-required">Required</span>
+                ) : null}
+              </legend>
+              {field.help ? (
+                <span className="help" id={helpId}>
+                  {field.help}
+                </span>
+              ) : null}
+              <FieldControl
+                field={field}
+                value={answers[field.id]}
+                disabled={readOnly}
+                invalid={Boolean(error)}
+                describedBy={describedBy}
+                onChange={update}
+              />
+              {error ? (
+                <span className="field-error" id={errorId}>
+                  {error}
+                </span>
+              ) : null}
+            </fieldset>
+          );
+        return (
+          <label
+            className="label"
+            key={field.id}
+            htmlFor={`answer-${field.id}`}
+          >
+            {field.label}
+            {field.required ? (
+              <span className="pc-required" aria-hidden="true">
+                Required
+              </span>
+            ) : null}
+            {field.help ? (
+              <span className="help" id={helpId}>
+                {field.help}
+              </span>
+            ) : null}
+            <FieldControl
+              field={field}
+              value={answers[field.id]}
+              disabled={readOnly}
+              invalid={Boolean(error)}
+              describedBy={describedBy}
+              onChange={update}
+            />
+            {field.type === "long_text" ? (
+              <CharacterCount
+                value={String(answers[field.id] ?? "")}
+                maximum={5_000}
+              />
+            ) : null}
+            {error ? (
+              <span className="field-error" id={errorId}>
+                {error}
+              </span>
+            ) : null}
+          </label>
+        );
+      })}
+    </>
+  );
+}
+
+type ApplicationSpeakersProps = {
+  speakers: EditableSpeaker[];
+  setSpeakers: Dispatch<SetStateAction<EditableSpeaker[]>>;
+  setDirty(value: boolean): void;
+  readOnly: boolean;
+  revisionMode: boolean;
+  applicant: { name: string; email: string; verified: boolean };
+  publicSlug: string;
+  originalSpeakerCount: number;
+  effectiveMaximumSpeakers: number;
+  errors?: Record<string, string[]>;
+  duplicateSpeakerEmails: string[];
+};
+
+function ApplicationSpeakers({
+  speakers,
+  setSpeakers,
+  setDirty,
+  readOnly,
+  revisionMode,
+  applicant,
+  publicSlug,
+  originalSpeakerCount,
+  effectiveMaximumSpeakers,
+  errors,
+  duplicateSpeakerEmails,
+}: ApplicationSpeakersProps) {
+  return (
+    <fieldset className="card pad" id="application-speakers">
+      <legend>
+        <strong>Speakers</strong>
+      </legend>
+      <p className="subtle">
+        The first speaker is primary. Additional speakers receive a pending
+        claim relationship and an expiring invitation after final submission.
+      </p>
+      {!readOnly && !revisionMode && applicant.verified ? (
+        <SessionizeProfileImport
+          publicSlug={publicSlug}
+          disabled={readOnly}
+          onImport={(profile) => {
+            setSpeakers((current) => {
+              const primary = current[0] ?? {
+                name: applicant.name,
+                email: applicant.email,
+                biography: "",
+                invitationStatus: "pending",
+              };
+              return [
+                {
+                  ...primary,
+                  name: profile.name,
+                  biography: profile.biography,
+                },
+                ...current.slice(1),
+              ];
+            });
+            setDirty(true);
+          }}
+        />
+      ) : null}
+      {speakers.map((speaker, index) => (
+        // biome-ignore lint/suspicious/noArrayIndexKey: These controlled rows have positional identity; deleting a co-speaker intentionally promotes each following row to the preceding position.
+        <div className="form-row mb" key={index}>
+          <label className="label">
+            Speaker {index + 1} name
+            <input
+              className="field"
+              autoComplete={index === 0 ? "name" : "off"}
+              disabled={
+                readOnly ||
+                (revisionMode && index < originalSpeakerCount) ||
+                (index > 0 && speaker.invitationStatus === "claimed")
+              }
+              required
+              value={speaker.name}
+              onChange={(event) => {
+                const next = [...speakers];
+                next[index] = { ...speaker, name: event.target.value };
+                setSpeakers(next);
+                setDirty(true);
+              }}
+            />
+          </label>
+          <label className="label">
+            Email
+            <div style={{ display: "flex", gap: 6 }}>
+              <input
+                className="field"
+                type="email"
+                autoComplete={index === 0 ? "email" : "off"}
+                disabled={
+                  readOnly ||
+                  (revisionMode && index < originalSpeakerCount) ||
+                  (index === 0 && applicant.verified) ||
+                  (index > 0 && speaker.invitationStatus === "claimed")
+                }
+                required
+                value={speaker.email}
+                onChange={(event) => {
+                  const next = [...speakers];
+                  next[index] = { ...speaker, email: event.target.value };
+                  setSpeakers(next);
+                  setDirty(true);
+                }}
+              />
+              {index > 0 &&
+              !readOnly &&
+              (!revisionMode || index >= originalSpeakerCount) &&
+              speaker.invitationStatus !== "claimed" ? (
+                <button
+                  className="icon-btn"
+                  type="button"
+                  aria-label={`Remove speaker ${index + 1}`}
+                  onClick={() => {
+                    setSpeakers(
+                      speakers.filter((_, itemIndex) => itemIndex !== index),
+                    );
+                    setDirty(true);
+                  }}
+                >
+                  ×
+                </button>
+              ) : null}
+            </div>
+          </label>
+          <label className="label">
+            Biography
+            <textarea
+              className="textarea"
+              disabled={
+                readOnly ||
+                (revisionMode && index < originalSpeakerCount) ||
+                (index > 0 && speaker.invitationStatus === "claimed")
+              }
+              maxLength={5_000}
+              value={speaker.biography}
+              onChange={(event) => {
+                const next = [...speakers];
+                next[index] = {
+                  ...speaker,
+                  biography: event.target.value,
+                };
+                setSpeakers(next);
+                setDirty(true);
+              }}
+            />
+            <CharacterCount value={speaker.biography} maximum={5_000} />
+            {index > 0 && speaker.invitationStatus === "claimed" ? (
+              <span className="help">
+                This co-speaker owns their claimed profile. They can update it
+                below.
+              </span>
+            ) : null}
+          </label>
+        </div>
+      ))}
+      {!readOnly && speakers.length < effectiveMaximumSpeakers ? (
+        <button
+          className="btn small"
+          type="button"
+          onClick={() => {
+            setSpeakers([
+              ...speakers,
+              {
+                name: "",
+                email: "",
+                biography: "",
+                invitationStatus: "pending",
+              },
+            ]);
+            setDirty(true);
+          }}
+        >
+          + Add co-speaker
+        </button>
+      ) : !readOnly ? (
+        <span className="help">
+          This form allows at most {effectiveMaximumSpeakers} speaker
+          {effectiveMaximumSpeakers === 1 ? "" : "s"}.
+        </span>
+      ) : null}
+      {errors?.speakers ? (
+        <span className="field-error">{errors.speakers[0]}</span>
+      ) : null}
+      {duplicateSpeakerEmails.length ? (
+        <span className="field-error" role="alert">
+          Each speaker must use a different email address.
+        </span>
+      ) : null}
+    </fieldset>
+  );
+}
+
+type ApplicationLifecycleProps = {
+  readOnly: boolean;
+  revisionMode: boolean;
+  canSubmit: boolean;
+  dirty: boolean;
+  recovery: ReturnType<typeof useDraftRecovery>;
+  navigation: ReturnType<typeof useNavigation>;
+  conflict: boolean;
+  recoveryPayload: {
+    answers: DraftAnswers;
+    speakers: EditableSpeaker[];
+    uploads: DraftUploads;
+  };
+  draft: ApplicantDraft;
+  confirm: ReturnType<typeof useConfirm>["confirm"];
+  forceReadOnly: boolean;
+  readOnlyNotice?: string;
+  timezone: string;
+  acceptedParticipantsHref?: string | null;
+};
+
+function ApplicationLifecycleActions({
+  readOnly,
+  revisionMode,
+  canSubmit,
+  dirty,
+  recovery,
+  navigation,
+  conflict,
+  recoveryPayload,
+  draft,
+  confirm,
+  forceReadOnly,
+  readOnlyNotice,
+  timezone,
+  acceptedParticipantsHref,
+}: ApplicationLifecycleProps) {
+  return (
+    <>
+      {!readOnly ? (
+        <>
+          <div className="validation-item warn">
+            <strong>Before submitting</strong>
+            <span>
+              {revisionMode
+                ? "Saving creates a new submitted revision. The prior submitted revision stays in the audit history."
+                : "Final submission records an immutable form-version revision. While applications remain open and review has not started, you may submit a newer revision."}
+            </span>
+          </div>
+          <label className="toggle">
+            <input
+              type="checkbox"
+              name={revisionMode ? "confirmRevision" : "confirm"}
+              value="yes"
+              required
+              disabled={revisionMode ? false : !canSubmit}
+            />{" "}
+            {revisionMode
+              ? "I have reviewed these changes and am ready to replace the current submitted version."
+              : "I have reviewed this application and am ready to submit it."}
+          </label>
+          <div className="page-actions">
+            <span className={`status ${dirty ? "warning" : "success"}`}>
+              {dirty ? "Unsaved changes" : "All changes saved"}
+            </span>
+            <DraftRecoveryStatus state={recovery.state} />
+            {!revisionMode ? (
+              <button
+                className="btn"
+                type="submit"
+                name="_intent"
+                value="save_draft"
+                formNoValidate
+                disabled={navigation.state !== "idle"}
+              >
+                {navigation.formData?.get("_intent") === "save_draft"
+                  ? "Saving…"
+                  : "Save draft"}
+              </button>
+            ) : null}
+            <button
+              className="btn primary"
+              type="submit"
+              name="_intent"
+              value={revisionMode ? "revise_submission" : "submit"}
+              disabled={
+                navigation.state !== "idle" || (!revisionMode && !canSubmit)
+              }
+            >
+              {navigation.formData?.get("_intent") === "revise_submission"
+                ? "Saving revision…"
+                : navigation.formData?.get("_intent") === "submit"
+                  ? "Submitting…"
+                  : revisionMode
+                    ? "Save revised application"
+                    : "Submit application"}
+            </button>
+          </div>
+          {conflict ? (
+            <div className="validation-item error" role="alert">
+              <strong>Draft conflict</strong>
+              <span>
+                The browser recovery copy is intact. Export it or explicitly
+                load the newer server revision; nothing was overwritten.
+              </span>
+              <span className="row-actions right">
+                <button
+                  className="btn small"
+                  type="button"
+                  onClick={() => {
+                    const blob = new Blob(
+                      [JSON.stringify(recoveryPayload, null, 2)],
+                      { type: "application/json" },
+                    );
+                    const href = URL.createObjectURL(blob);
+                    const link = document.createElement("a");
+                    link.href = href;
+                    link.download = `${draft.id}-application-recovery.json`;
+                    link.click();
+                    URL.revokeObjectURL(href);
+                  }}
+                >
+                  Export local edits
+                </button>
+                <button
+                  className="btn small"
+                  type="button"
+                  onClick={() =>
+                    confirm(
+                      {
+                        title: "Load the latest server application?",
+                        description:
+                          "The unsaved editor contents and the browser recovery copy are discarded, then this page reloads the newer server revision. Export your local edits first if you still need them.",
+                        records: [draft.title],
+                        confirmLabel: "Discard and reload",
+                      },
+                      () => {
+                        void recovery
+                          .clear()
+                          .then(() => window.location.reload());
+                      },
+                    )
+                  }
+                >
+                  Load server version
+                </button>
+              </span>
+            </div>
+          ) : null}
+          {revisionMode ? (
+            <details className="card pad pc-disclosure">
+              <summary>
+                <strong>Withdraw application</strong>
+              </summary>
+              <p className="help mt">
+                Withdrawal removes this application from the active review
+                queue. The submitted revisions and audit history are retained.
+              </p>
+              <label className="toggle">
+                <input type="checkbox" name="confirmWithdrawal" value="yes" /> I
+                understand this application will be withdrawn.
+              </label>
+              <button
+                className="btn danger mt"
+                type="submit"
+                name="_intent"
+                value="withdraw"
+                formNoValidate
+                disabled={navigation.state !== "idle"}
+              >
+                {navigation.formData?.get("_intent") === "withdraw"
+                  ? "Withdrawing…"
+                  : "Withdraw application"}
+              </button>
+            </details>
+          ) : null}
+        </>
+      ) : (
+        <>
+          <div
+            className={`validation-item ${forceReadOnly || draft.status === "withdrawn" ? "warn" : "ok"}`}
+          >
+            <strong>
+              {forceReadOnly
+                ? "Read-only application"
+                : draft.status === "withdrawn"
+                  ? "△ Withdrawn"
+                  : "✓ Submitted"}
+            </strong>
+            <span>
+              {forceReadOnly
+                ? (readOnlyNotice ??
+                  "This application is available for reference but cannot be changed here.")
+                : draft.status === "withdrawn"
+                  ? "This application is no longer in the review queue. Its immutable submitted snapshot remains in the audit history."
+                  : `This immutable application was received ${
+                      draft.submittedAt
+                        ? `${new Intl.DateTimeFormat("en", {
+                            dateStyle: "medium",
+                            timeStyle: "short",
+                            timeZone: timezone,
+                          }).format(
+                            new Date(draft.submittedAt * 1_000),
+                          )} (${timezone})`
+                        : "successfully"
+                    }.`}
+            </span>
+          </div>
+          {acceptedParticipantsHref ? (
+            <div className="validation-item info">
+              <strong>Accepted proposal participants</strong>
+              <span>
+                Add or review accepted-session speakers in the participant
+                workspace without changing this submitted answer snapshot.
+              </span>
+              <Link className="btn small" to={acceptedParticipantsHref}>
+                Manage participants
+              </Link>
+            </div>
+          ) : null}
+          {!forceReadOnly &&
+          (draft.status === "submitted" || draft.status === "assigned") ? (
+            <details className="card pad pc-disclosure">
+              <summary>
+                <strong>Withdraw application</strong>
+              </summary>
+              <p className="help mt">
+                Withdrawal removes this application from the active review
+                queue. The submitted snapshot and audit history are retained.
+              </p>
+              <label className="toggle">
+                <input
+                  type="checkbox"
+                  name="confirmWithdrawal"
+                  value="yes"
+                  required
+                />{" "}
+                I understand this application will be withdrawn.
+              </label>
+              <button
+                className="btn danger mt"
+                type="submit"
+                name="_intent"
+                value="withdraw"
+                formNoValidate
+                disabled={navigation.state !== "idle"}
+              >
+                {navigation.formData?.get("_intent") === "withdraw"
+                  ? "Withdrawing…"
+                  : "Withdraw application"}
+              </button>
+            </details>
+          ) : null}
+        </>
+      )}
+    </>
   );
 }
 
@@ -379,538 +1038,51 @@ export function DraftEditor({
           )}
         </div>
       ) : null}
-      {fields.map((field) => {
-        const error = errors?.[field.id]?.[0];
-        const helpId = field.help ? `answer-${field.id}-help` : undefined;
-        const errorId = error ? `answer-${field.id}-error` : undefined;
-        const describedBy =
-          [helpId, errorId].filter(Boolean).join(" ") || undefined;
-        const update = (value: string | string[]) => {
-          setAnswers((current) => ({ ...current, [field.id]: value }));
-          setDirty(true);
-        };
-        if (field.type === "video")
-          return (
-            <fieldset
-              className="application-choice-field"
-              key={field.id}
-              aria-invalid={Boolean(error) || undefined}
-              aria-describedby={describedBy}
-            >
-              <legend className="label">
-                {field.label}
-                {field.required ? (
-                  <span className="pc-required" aria-hidden="true">
-                    Required
-                  </span>
-                ) : null}
-              </legend>
-              {field.help ? (
-                <span className="help" id={helpId}>
-                  {field.help}
-                </span>
-              ) : null}
-              <label className="label" htmlFor={`answer-${field.id}`}>
-                HTTPS video link
-                <FieldControl
-                  field={field}
-                  value={answers[field.id]}
-                  disabled={
-                    readOnly || (revisionMode && Boolean(uploads[field.id]))
-                  }
-                  required={field.required && !uploads[field.id]}
-                  invalid={Boolean(error)}
-                  describedBy={describedBy}
-                  onChange={update}
-                />
-              </label>
-              {!readOnly && !revisionMode ? (
-                <ApplicantVideoUpload
-                  publicSlug={publicSlug}
-                  submissionId={draft.id}
-                  fieldId={field.id}
-                  current={
-                    currentUpload?.fieldId === field.id ? currentUpload : null
-                  }
-                  siteKey={uploadTurnstileSiteKey}
-                  disabled={readOnly}
-                  maximumBytes={maximumVideoBytes}
-                  onReferenceChange={(reference) => {
-                    setUploads((current) => ({
-                      ...current,
-                      [field.id]: reference,
-                    }));
-                    setDirty(true);
-                  }}
-                />
-              ) : uploads[field.id] ? (
-                <div className="validation-item ok mt">
-                  <strong>Private video attached</strong>
-                  <span>
-                    The immutable submission references its scanned file
-                    version.
-                  </span>
-                </div>
-              ) : null}
-              {error ? (
-                <span className="field-error" id={errorId}>
-                  {error}
-                </span>
-              ) : null}
-            </fieldset>
-          );
-        if (field.type === "multi_select")
-          return (
-            <fieldset
-              className="application-choice-field"
-              key={field.id}
-              aria-invalid={Boolean(error) || undefined}
-              aria-describedby={describedBy}
-            >
-              <legend className="label">
-                {field.label}
-                {field.required ? (
-                  <span className="pc-required">Required</span>
-                ) : null}
-              </legend>
-              {field.help ? (
-                <span className="help" id={helpId}>
-                  {field.help}
-                </span>
-              ) : null}
-              <FieldControl
-                field={field}
-                value={answers[field.id]}
-                disabled={readOnly}
-                invalid={Boolean(error)}
-                describedBy={describedBy}
-                onChange={update}
-              />
-              {error ? (
-                <span className="field-error" id={errorId}>
-                  {error}
-                </span>
-              ) : null}
-            </fieldset>
-          );
-        return (
-          <label
-            className="label"
-            key={field.id}
-            htmlFor={`answer-${field.id}`}
-          >
-            {field.label}
-            {field.required ? (
-              <span className="pc-required" aria-hidden="true">
-                Required
-              </span>
-            ) : null}
-            {field.help ? (
-              <span className="help" id={helpId}>
-                {field.help}
-              </span>
-            ) : null}
-            <FieldControl
-              field={field}
-              value={answers[field.id]}
-              disabled={readOnly}
-              invalid={Boolean(error)}
-              describedBy={describedBy}
-              onChange={update}
-            />
-            {field.type === "long_text" ? (
-              <CharacterCount
-                value={String(answers[field.id] ?? "")}
-                maximum={5_000}
-              />
-            ) : null}
-            {error ? (
-              <span className="field-error" id={errorId}>
-                {error}
-              </span>
-            ) : null}
-          </label>
-        );
-      })}
-      <fieldset className="card pad" id="application-speakers">
-        <legend>
-          <strong>Speakers</strong>
-        </legend>
-        <p className="subtle">
-          The first speaker is primary. Additional speakers receive a pending
-          claim relationship and an expiring invitation after final submission.
-        </p>
-        {!readOnly && !revisionMode && applicant.verified ? (
-          <SessionizeProfileImport
-            publicSlug={publicSlug}
-            disabled={readOnly}
-            onImport={(profile) => {
-              setSpeakers((current) => {
-                const primary = current[0] ?? {
-                  name: applicant.name,
-                  email: applicant.email,
-                  biography: "",
-                  invitationStatus: "pending",
-                };
-                return [
-                  {
-                    ...primary,
-                    name: profile.name,
-                    biography: profile.biography,
-                  },
-                  ...current.slice(1),
-                ];
-              });
-              setDirty(true);
-            }}
-          />
-        ) : null}
-        {speakers.map((speaker, index) => (
-          // biome-ignore lint/suspicious/noArrayIndexKey: These controlled rows have positional identity; deleting a co-speaker intentionally promotes each following row to the preceding position.
-          <div className="form-row mb" key={index}>
-            <label className="label">
-              Speaker {index + 1} name
-              <input
-                className="field"
-                autoComplete={index === 0 ? "name" : "off"}
-                disabled={
-                  readOnly ||
-                  (revisionMode && index < originalSpeakerCount) ||
-                  (index > 0 && speaker.invitationStatus === "claimed")
-                }
-                required
-                value={speaker.name}
-                onChange={(event) => {
-                  const next = [...speakers];
-                  next[index] = { ...speaker, name: event.target.value };
-                  setSpeakers(next);
-                  setDirty(true);
-                }}
-              />
-            </label>
-            <label className="label">
-              Email
-              <div style={{ display: "flex", gap: 6 }}>
-                <input
-                  className="field"
-                  type="email"
-                  autoComplete={index === 0 ? "email" : "off"}
-                  disabled={
-                    readOnly ||
-                    (revisionMode && index < originalSpeakerCount) ||
-                    (index === 0 && applicant.verified) ||
-                    (index > 0 && speaker.invitationStatus === "claimed")
-                  }
-                  required
-                  value={speaker.email}
-                  onChange={(event) => {
-                    const next = [...speakers];
-                    next[index] = { ...speaker, email: event.target.value };
-                    setSpeakers(next);
-                    setDirty(true);
-                  }}
-                />
-                {index > 0 &&
-                !readOnly &&
-                (!revisionMode || index >= originalSpeakerCount) &&
-                speaker.invitationStatus !== "claimed" ? (
-                  <button
-                    className="icon-btn"
-                    type="button"
-                    aria-label={`Remove speaker ${index + 1}`}
-                    onClick={() => {
-                      setSpeakers(
-                        speakers.filter((_, itemIndex) => itemIndex !== index),
-                      );
-                      setDirty(true);
-                    }}
-                  >
-                    ×
-                  </button>
-                ) : null}
-              </div>
-            </label>
-            <label className="label">
-              Biography
-              <textarea
-                className="textarea"
-                disabled={
-                  readOnly ||
-                  (revisionMode && index < originalSpeakerCount) ||
-                  (index > 0 && speaker.invitationStatus === "claimed")
-                }
-                maxLength={5_000}
-                value={speaker.biography}
-                onChange={(event) => {
-                  const next = [...speakers];
-                  next[index] = {
-                    ...speaker,
-                    biography: event.target.value,
-                  };
-                  setSpeakers(next);
-                  setDirty(true);
-                }}
-              />
-              <CharacterCount value={speaker.biography} maximum={5_000} />
-              {index > 0 && speaker.invitationStatus === "claimed" ? (
-                <span className="help">
-                  This co-speaker owns their claimed profile. They can update it
-                  below.
-                </span>
-              ) : null}
-            </label>
-          </div>
-        ))}
-        {!readOnly && speakers.length < effectiveMaximumSpeakers ? (
-          <button
-            className="btn small"
-            type="button"
-            onClick={() => {
-              setSpeakers([
-                ...speakers,
-                {
-                  name: "",
-                  email: "",
-                  biography: "",
-                  invitationStatus: "pending",
-                },
-              ]);
-              setDirty(true);
-            }}
-          >
-            + Add co-speaker
-          </button>
-        ) : !readOnly ? (
-          <span className="help">
-            This form allows at most {effectiveMaximumSpeakers} speaker
-            {effectiveMaximumSpeakers === 1 ? "" : "s"}.
-          </span>
-        ) : null}
-        {errors?.speakers ? (
-          <span className="field-error">{errors.speakers[0]}</span>
-        ) : null}
-        {duplicateSpeakerEmails.length ? (
-          <span className="field-error" role="alert">
-            Each speaker must use a different email address.
-          </span>
-        ) : null}
-      </fieldset>
-      {!readOnly ? (
-        <>
-          <div className="validation-item warn">
-            <strong>Before submitting</strong>
-            <span>
-              {revisionMode
-                ? "Saving creates a new submitted revision. The prior submitted revision stays in the audit history."
-                : "Final submission records an immutable form-version revision. While applications remain open and review has not started, you may submit a newer revision."}
-            </span>
-          </div>
-          <label className="toggle">
-            <input
-              type="checkbox"
-              name={revisionMode ? "confirmRevision" : "confirm"}
-              value="yes"
-              required
-              disabled={revisionMode ? false : !canSubmit}
-            />{" "}
-            {revisionMode
-              ? "I have reviewed these changes and am ready to replace the current submitted version."
-              : "I have reviewed this application and am ready to submit it."}
-          </label>
-          <div className="page-actions">
-            <span className={`status ${dirty ? "warning" : "success"}`}>
-              {dirty ? "Unsaved changes" : "All changes saved"}
-            </span>
-            <DraftRecoveryStatus state={recovery.state} />
-            {!revisionMode ? (
-              <button
-                className="btn"
-                type="submit"
-                name="_intent"
-                value="save_draft"
-                formNoValidate
-                disabled={navigation.state !== "idle"}
-              >
-                {navigation.formData?.get("_intent") === "save_draft"
-                  ? "Saving…"
-                  : "Save draft"}
-              </button>
-            ) : null}
-            <button
-              className="btn primary"
-              type="submit"
-              name="_intent"
-              value={revisionMode ? "revise_submission" : "submit"}
-              disabled={
-                navigation.state !== "idle" || (!revisionMode && !canSubmit)
-              }
-            >
-              {navigation.formData?.get("_intent") === "revise_submission"
-                ? "Saving revision…"
-                : navigation.formData?.get("_intent") === "submit"
-                  ? "Submitting…"
-                  : revisionMode
-                    ? "Save revised application"
-                    : "Submit application"}
-            </button>
-          </div>
-          {conflict ? (
-            <div className="validation-item error" role="alert">
-              <strong>Draft conflict</strong>
-              <span>
-                The browser recovery copy is intact. Export it or explicitly
-                load the newer server revision; nothing was overwritten.
-              </span>
-              <span className="row-actions right">
-                <button
-                  className="btn small"
-                  type="button"
-                  onClick={() => {
-                    const blob = new Blob(
-                      [JSON.stringify(recoveryPayload, null, 2)],
-                      { type: "application/json" },
-                    );
-                    const href = URL.createObjectURL(blob);
-                    const link = document.createElement("a");
-                    link.href = href;
-                    link.download = `${draft.id}-application-recovery.json`;
-                    link.click();
-                    URL.revokeObjectURL(href);
-                  }}
-                >
-                  Export local edits
-                </button>
-                <button
-                  className="btn small"
-                  type="button"
-                  onClick={() =>
-                    confirm(
-                      {
-                        title: "Load the latest server application?",
-                        description:
-                          "The unsaved editor contents and the browser recovery copy are discarded, then this page reloads the newer server revision. Export your local edits first if you still need them.",
-                        records: [draft.title],
-                        confirmLabel: "Discard and reload",
-                      },
-                      () => {
-                        void recovery
-                          .clear()
-                          .then(() => window.location.reload());
-                      },
-                    )
-                  }
-                >
-                  Load server version
-                </button>
-              </span>
-            </div>
-          ) : null}
-          {revisionMode ? (
-            <details className="card pad pc-disclosure">
-              <summary>
-                <strong>Withdraw application</strong>
-              </summary>
-              <p className="help mt">
-                Withdrawal removes this application from the active review
-                queue. The submitted revisions and audit history are retained.
-              </p>
-              <label className="toggle">
-                <input type="checkbox" name="confirmWithdrawal" value="yes" /> I
-                understand this application will be withdrawn.
-              </label>
-              <button
-                className="btn danger mt"
-                type="submit"
-                name="_intent"
-                value="withdraw"
-                formNoValidate
-                disabled={navigation.state !== "idle"}
-              >
-                {navigation.formData?.get("_intent") === "withdraw"
-                  ? "Withdrawing…"
-                  : "Withdraw application"}
-              </button>
-            </details>
-          ) : null}
-        </>
-      ) : (
-        <>
-          <div
-            className={`validation-item ${forceReadOnly || draft.status === "withdrawn" ? "warn" : "ok"}`}
-          >
-            <strong>
-              {forceReadOnly
-                ? "Read-only application"
-                : draft.status === "withdrawn"
-                  ? "△ Withdrawn"
-                  : "✓ Submitted"}
-            </strong>
-            <span>
-              {forceReadOnly
-                ? (readOnlyNotice ??
-                  "This application is available for reference but cannot be changed here.")
-                : draft.status === "withdrawn"
-                  ? "This application is no longer in the review queue. Its immutable submitted snapshot remains in the audit history."
-                  : `This immutable application was received ${
-                      draft.submittedAt
-                        ? `${new Intl.DateTimeFormat("en", {
-                            dateStyle: "medium",
-                            timeStyle: "short",
-                            timeZone: timezone,
-                          }).format(
-                            new Date(draft.submittedAt * 1_000),
-                          )} (${timezone})`
-                        : "successfully"
-                    }.`}
-            </span>
-          </div>
-          {acceptedParticipantsHref ? (
-            <div className="validation-item info">
-              <strong>Accepted proposal participants</strong>
-              <span>
-                Add or review accepted-session speakers in the participant
-                workspace without changing this submitted answer snapshot.
-              </span>
-              <Link className="btn small" to={acceptedParticipantsHref}>
-                Manage participants
-              </Link>
-            </div>
-          ) : null}
-          {!forceReadOnly &&
-          (draft.status === "submitted" || draft.status === "assigned") ? (
-            <details className="card pad pc-disclosure">
-              <summary>
-                <strong>Withdraw application</strong>
-              </summary>
-              <p className="help mt">
-                Withdrawal removes this application from the active review
-                queue. The submitted snapshot and audit history are retained.
-              </p>
-              <label className="toggle">
-                <input
-                  type="checkbox"
-                  name="confirmWithdrawal"
-                  value="yes"
-                  required
-                />{" "}
-                I understand this application will be withdrawn.
-              </label>
-              <button
-                className="btn danger mt"
-                type="submit"
-                name="_intent"
-                value="withdraw"
-                formNoValidate
-                disabled={navigation.state !== "idle"}
-              >
-                {navigation.formData?.get("_intent") === "withdraw"
-                  ? "Withdrawing…"
-                  : "Withdraw application"}
-              </button>
-            </details>
-          ) : null}
-        </>
-      )}
+      <ApplicationAnswers
+        fields={fields}
+        errors={errors}
+        answers={answers}
+        setAnswers={setAnswers}
+        setDirty={setDirty}
+        readOnly={readOnly}
+        revisionMode={revisionMode}
+        uploads={uploads}
+        setUploads={setUploads}
+        publicSlug={publicSlug}
+        draft={draft}
+        currentUpload={currentUpload}
+        uploadTurnstileSiteKey={uploadTurnstileSiteKey}
+        maximumVideoBytes={maximumVideoBytes}
+      />
+      <ApplicationSpeakers
+        speakers={speakers}
+        setSpeakers={setSpeakers}
+        setDirty={setDirty}
+        readOnly={readOnly}
+        revisionMode={revisionMode}
+        applicant={applicant}
+        publicSlug={publicSlug}
+        originalSpeakerCount={originalSpeakerCount}
+        effectiveMaximumSpeakers={effectiveMaximumSpeakers}
+        errors={errors}
+        duplicateSpeakerEmails={duplicateSpeakerEmails}
+      />
+      <ApplicationLifecycleActions
+        readOnly={readOnly}
+        revisionMode={revisionMode}
+        canSubmit={canSubmit}
+        dirty={dirty}
+        recovery={recovery}
+        navigation={navigation}
+        conflict={conflict}
+        recoveryPayload={recoveryPayload}
+        draft={draft}
+        confirm={confirm}
+        forceReadOnly={forceReadOnly}
+        readOnlyNotice={readOnlyNotice}
+        timezone={timezone}
+        acceptedParticipantsHref={acceptedParticipantsHref}
+      />
     </Form>
   );
 }

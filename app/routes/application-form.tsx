@@ -550,6 +550,331 @@ function ClaimPanel({
   );
 }
 
+type AvailableApplicationLoaderData = Exclude<
+  Route.ComponentProps["loaderData"],
+  { unavailable: string }
+>;
+
+type AuthenticatedApplicationWorkspaceProps = {
+  loaderData: AvailableApplicationLoaderData;
+  actionData: ActionResult | undefined;
+  applicant: NonNullable<AvailableApplicationLoaderData["applicant"]>;
+  claimedSpeakerId: string | null;
+  claimScopedAction: string | undefined;
+  claimScopedPortalPath: string;
+  historicalClaimPortal: boolean;
+  navigation: ReturnType<typeof useNavigation>;
+};
+
+function AuthenticatedApplicationWorkspace({
+  loaderData,
+  actionData,
+  applicant,
+  claimedSpeakerId,
+  claimScopedAction,
+  claimScopedPortalPath,
+  historicalClaimPortal,
+  navigation,
+}: AuthenticatedApplicationWorkspaceProps) {
+  const {
+    form,
+    drafts,
+    invitations,
+    speakerProfile,
+    selected,
+    selectedForm,
+    availability,
+  } = loaderData;
+  return (
+    <>
+      <section
+        className="card pad mb"
+        style={{ borderTop: `4px solid ${form.brandAccent}` }}
+      >
+        <div className="card-title">
+          <div>
+            <span
+              className={`status ${availability.accepting ? "success" : "warning"}`}
+            >
+              {availability.accepting ? "Open" : "Not accepting submissions"} ·
+              version {form.version.versionNumber}
+            </span>
+            <h1 className="mt">{form.name}</h1>
+            <p className="subtle">
+              {form.eventName} · {form.version.schema.introduction}
+            </p>
+          </div>
+          {applicant.verified &&
+          !applicant.claimOnly &&
+          !historicalClaimPortal ? (
+            <Form method="post" action={claimScopedAction}>
+              <input type="hidden" name="_intent" value="create_draft" />
+              <input
+                type="hidden"
+                name="intentId"
+                value={`${loaderData.intentId}:authenticated`}
+              />
+              <button
+                className="btn primary"
+                type="submit"
+                disabled={
+                  navigation.state !== "idle" || !availability.accepting
+                }
+              >
+                + New application
+              </button>
+            </Form>
+          ) : applicant.claimOnly ? (
+            <Link
+              className="btn primary"
+              to={`/sign-in?${new URLSearchParams({
+                returnTo: claimScopedPortalPath,
+              })}`}
+            >
+              {historicalClaimPortal
+                ? "Sign in to view applications"
+                : "Sign in to apply"}
+            </Link>
+          ) : historicalClaimPortal ? (
+            <span className="help right">
+              Application history is read-only.
+            </span>
+          ) : (
+            <span className="help right">
+              Verify your email to start another application.
+            </span>
+          )}
+        </div>
+        {availability.reason ? (
+          <div className="validation-item warn mt">
+            <strong>Notice</strong>
+            <span>
+              {availability.reason}{" "}
+              {historicalClaimPortal
+                ? "Existing applications remain available to view."
+                : "Existing drafts remain available to view and save."}
+            </span>
+          </div>
+        ) : form.closesAt ? (
+          <p className="help">
+            Applications close{" "}
+            {new Date(form.closesAt * 1_000).toLocaleDateString("en", {
+              timeZone: form.eventTimezone,
+            })}{" "}
+            ({form.eventTimezone}).
+          </p>
+        ) : null}
+      </section>
+      {loaderData.notice ? (
+        <div
+          className={`validation-item ${loaderData.noticeWarning ? "warn" : "ok"} card pad mb`}
+          role="status"
+        >
+          <strong>{loaderData.noticeWarning ? "△" : "✓"}</strong>
+          <span>{loaderData.notice}</span>
+        </div>
+      ) : null}
+      {actionData && !actionData.ok ? (
+        <div
+          className={`validation-item ${actionData.committed ? "warn" : "error"} card pad mb`}
+          role={actionData.committed ? "status" : "alert"}
+        >
+          <strong>△</strong>
+          <span>{actionData.message}</span>
+        </div>
+      ) : null}
+      {!applicant.verified ? (
+        <AnonymousVerificationPanel
+          actionData={actionData}
+          turnstileSiteKey={loaderData.turnstileSiteKey}
+        />
+      ) : null}
+      {speakerProfile ? (
+        <SpeakerProfilePanel
+          profile={speakerProfile}
+          action={claimScopedAction}
+        />
+      ) : null}
+      {invitations.length && !historicalClaimPortal ? (
+        <section className="card pad mb">
+          <div className="card-title">
+            <div>
+              <span className="status warning">Co-speaker invitation</span>
+              <h2 className="mt">Applications that include you</h2>
+            </div>
+          </div>
+          {invitations.map((invitation) => (
+            <div className="row-main mt" key={invitation.id}>
+              <span className="avatar sm">
+                {invitation.displayName
+                  .split(/\s+/)
+                  .map((part) => part[0])
+                  .slice(0, 2)
+                  .join("")}
+              </span>
+              <span>
+                <strong>{invitation.submissionTitle}</strong>
+                <small>Invited as {invitation.displayName}</small>
+              </span>
+              <Form method="post" action={claimScopedAction} className="right">
+                <input type="hidden" name="_intent" value="claim_speaker" />
+                <input
+                  type="hidden"
+                  name="invitationId"
+                  value={invitation.id}
+                />
+                <button className="btn small" type="submit">
+                  Claim speaker profile
+                </button>
+              </Form>
+            </div>
+          ))}
+        </section>
+      ) : null}
+      <div className="application-layout">
+        <aside className="card pad application-drafts">
+          <div className="card-title">
+            <h2>Your applications</h2>
+            <span className="pill right">{drafts.length}</span>
+          </div>
+          {drafts.length ? (
+            <div className="stack">
+              {drafts.map((draft) => (
+                <Link
+                  className={`queue-card${selected?.id === draft.id ? " active" : ""}`}
+                  to={applicationDraftHref(draft.id, claimedSpeakerId)}
+                  key={draft.id}
+                >
+                  <DomainStatusBadge
+                    domain="submission"
+                    status={draft.status}
+                  />
+                  <h3>{draft.title}</h3>
+                  <small className="subtle">
+                    v{draft.versionNumber} · {draft.speakers.length} speaker
+                    {draft.speakers.length === 1 ? "" : "s"}
+                  </small>
+                </Link>
+              ))}
+            </div>
+          ) : (
+            <p className="subtle">
+              {applicant.claimOnly
+                ? "Your claim link grants access only to your speaker profile. Sign in to view or manage applications."
+                : historicalClaimPortal
+                  ? "No applications are available for this account on the closed form."
+                  : "Create a draft to begin. You can maintain more than one application."}
+            </p>
+          )}
+        </aside>
+        <section className="card pad">
+          {selected ? (
+            <DraftEditor
+              key={`${selected.id}-${
+                actionData?.committed &&
+                actionData.submissionId === selected.id &&
+                actionData.revision !== undefined
+                  ? actionData.revision
+                  : selected.revision
+              }`}
+              draft={
+                actionData?.committed &&
+                actionData.submissionId === selected.id &&
+                actionData.revision !== undefined
+                  ? { ...selected, revision: actionData.revision }
+                  : selected
+              }
+              schema={selectedForm.version.schema.fields}
+              applicant={applicant}
+              publicSlug={form.publicSlug}
+              currentUpload={loaderData.selectedUpload}
+              uploadTurnstileSiteKey={loaderData.uploadTurnstileSiteKey}
+              maximumVideoBytes={selectedForm.filePolicy.videoMaximumBytes}
+              recoveryPersonId={
+                applicant.personId ??
+                (applicant.anonymousDraftId
+                  ? `anonymous:${applicant.anonymousDraftId}`
+                  : "")
+              }
+              recoveryEventId={form.eventId}
+              revisionIntentId={loaderData.intentId}
+              serverSaved={
+                loaderData.recoverySavedDraftId === selected.id ||
+                (Boolean(actionData?.committed) &&
+                  actionData?.submissionId === selected.id)
+              }
+              conflict={Boolean(actionData?.conflict)}
+              maxSpeakers={selectedForm.maxSpeakers}
+              errors={actionData?.errors}
+              canSubmit={availability.accepting && applicant.verified}
+              canRevise={loaderData.selectedCanRevise}
+              forceReadOnly={historicalClaimPortal}
+              readOnlyNotice="This application belongs to a closed form and is available for reference only."
+              acceptedParticipantsHref={
+                selected.status === "accepted" &&
+                applicant.verified &&
+                !applicant.claimOnly
+                  ? acceptedParticipantManagementHref(form.eventId, selected.id)
+                  : null
+              }
+              action={claimScopedAction}
+              timezone={form.eventTimezone}
+            />
+          ) : (
+            <div style={{ textAlign: "center", padding: "52px 20px" }}>
+              <span className="pc-state-icon" aria-hidden="true">
+                <Plus size={20} />
+              </span>
+              <h2>
+                {applicant.claimOnly
+                  ? "Sign in to manage applications"
+                  : historicalClaimPortal
+                    ? "No applications to show"
+                    : "Create your first application"}
+              </h2>
+              <p className="subtle">
+                {applicant.claimOnly
+                  ? "A co-speaker claim link grants access to your speaker profile only."
+                  : historicalClaimPortal
+                    ? "This closed form remains available only for claim-scoped profile and application history."
+                    : "Drafts are private and saved against the current published form version."}
+              </p>
+              {applicant.claimOnly ? (
+                <Link
+                  className="btn primary"
+                  to={`/sign-in?${new URLSearchParams({
+                    returnTo: claimScopedPortalPath,
+                  })}`}
+                >
+                  Continue to sign in
+                </Link>
+              ) : historicalClaimPortal ? (
+                <p className="help">This form is closed to new applications.</p>
+              ) : (
+                <Form method="post" action={claimScopedAction}>
+                  <input type="hidden" name="_intent" value="create_draft" />
+                  <input
+                    type="hidden"
+                    name="intentId"
+                    value={`${loaderData.intentId}:first`}
+                  />
+                  <button
+                    className="btn primary"
+                    type="submit"
+                    disabled={!availability.accepting}
+                  >
+                    Start application
+                  </button>
+                </Form>
+              )}
+            </div>
+          )}
+        </section>
+      </div>
+    </>
+  );
+}
+
 export default function ApplicationForm({ loaderData }: Route.ComponentProps) {
   const actionData = useActionData<typeof action>() as ActionResult | undefined;
   const navigation = useNavigation();
@@ -570,11 +895,6 @@ export default function ApplicationForm({ loaderData }: Route.ComponentProps) {
   const {
     form,
     applicant,
-    drafts,
-    invitations,
-    speakerProfile,
-    selected,
-    selectedForm,
     availability,
     claim,
     claimRequested,
@@ -720,315 +1040,16 @@ export default function ApplicationForm({ loaderData }: Route.ComponentProps) {
         {claimRequested ? (
           <ClaimPanel claim={claim} actionData={actionData} />
         ) : applicant ? (
-          <>
-            <section
-              className="card pad mb"
-              style={{ borderTop: `4px solid ${form.brandAccent}` }}
-            >
-              <div className="card-title">
-                <div>
-                  <span
-                    className={`status ${availability.accepting ? "success" : "warning"}`}
-                  >
-                    {availability.accepting
-                      ? "Open"
-                      : "Not accepting submissions"}{" "}
-                    · version {form.version.versionNumber}
-                  </span>
-                  <h1 className="mt">{form.name}</h1>
-                  <p className="subtle">
-                    {form.eventName} · {form.version.schema.introduction}
-                  </p>
-                </div>
-                {applicant.verified &&
-                !applicant.claimOnly &&
-                !historicalClaimPortal ? (
-                  <Form method="post" action={claimScopedAction}>
-                    <input type="hidden" name="_intent" value="create_draft" />
-                    <input
-                      type="hidden"
-                      name="intentId"
-                      value={`${loaderData.intentId}:authenticated`}
-                    />
-                    <button
-                      className="btn primary"
-                      type="submit"
-                      disabled={
-                        navigation.state !== "idle" || !availability.accepting
-                      }
-                    >
-                      + New application
-                    </button>
-                  </Form>
-                ) : applicant.claimOnly ? (
-                  <Link
-                    className="btn primary"
-                    to={`/sign-in?${new URLSearchParams({
-                      returnTo: claimScopedPortalPath,
-                    })}`}
-                  >
-                    {historicalClaimPortal
-                      ? "Sign in to view applications"
-                      : "Sign in to apply"}
-                  </Link>
-                ) : historicalClaimPortal ? (
-                  <span className="help right">
-                    Application history is read-only.
-                  </span>
-                ) : (
-                  <span className="help right">
-                    Verify your email to start another application.
-                  </span>
-                )}
-              </div>
-              {availability.reason ? (
-                <div className="validation-item warn mt">
-                  <strong>Notice</strong>
-                  <span>
-                    {availability.reason}{" "}
-                    {historicalClaimPortal
-                      ? "Existing applications remain available to view."
-                      : "Existing drafts remain available to view and save."}
-                  </span>
-                </div>
-              ) : form.closesAt ? (
-                <p className="help">
-                  Applications close{" "}
-                  {new Date(form.closesAt * 1_000).toLocaleDateString("en", {
-                    timeZone: form.eventTimezone,
-                  })}{" "}
-                  ({form.eventTimezone}).
-                </p>
-              ) : null}
-            </section>
-            {loaderData.notice ? (
-              <div
-                className={`validation-item ${loaderData.noticeWarning ? "warn" : "ok"} card pad mb`}
-                role="status"
-              >
-                <strong>{loaderData.noticeWarning ? "△" : "✓"}</strong>
-                <span>{loaderData.notice}</span>
-              </div>
-            ) : null}
-            {actionData && !actionData.ok ? (
-              <div
-                className={`validation-item ${actionData.committed ? "warn" : "error"} card pad mb`}
-                role={actionData.committed ? "status" : "alert"}
-              >
-                <strong>△</strong>
-                <span>{actionData.message}</span>
-              </div>
-            ) : null}
-            {!applicant.verified ? (
-              <AnonymousVerificationPanel
-                actionData={actionData}
-                turnstileSiteKey={loaderData.turnstileSiteKey}
-              />
-            ) : null}
-            {speakerProfile ? (
-              <SpeakerProfilePanel
-                profile={speakerProfile}
-                action={claimScopedAction}
-              />
-            ) : null}
-            {invitations.length && !historicalClaimPortal ? (
-              <section className="card pad mb">
-                <div className="card-title">
-                  <div>
-                    <span className="status warning">
-                      Co-speaker invitation
-                    </span>
-                    <h2 className="mt">Applications that include you</h2>
-                  </div>
-                </div>
-                {invitations.map((invitation) => (
-                  <div className="row-main mt" key={invitation.id}>
-                    <span className="avatar sm">
-                      {invitation.displayName
-                        .split(/\s+/)
-                        .map((part) => part[0])
-                        .slice(0, 2)
-                        .join("")}
-                    </span>
-                    <span>
-                      <strong>{invitation.submissionTitle}</strong>
-                      <small>Invited as {invitation.displayName}</small>
-                    </span>
-                    <Form
-                      method="post"
-                      action={claimScopedAction}
-                      className="right"
-                    >
-                      <input
-                        type="hidden"
-                        name="_intent"
-                        value="claim_speaker"
-                      />
-                      <input
-                        type="hidden"
-                        name="invitationId"
-                        value={invitation.id}
-                      />
-                      <button className="btn small" type="submit">
-                        Claim speaker profile
-                      </button>
-                    </Form>
-                  </div>
-                ))}
-              </section>
-            ) : null}
-            <div className="application-layout">
-              <aside className="card pad application-drafts">
-                <div className="card-title">
-                  <h2>Your applications</h2>
-                  <span className="pill right">{drafts.length}</span>
-                </div>
-                {drafts.length ? (
-                  <div className="stack">
-                    {drafts.map((draft) => (
-                      <Link
-                        className={`queue-card${selected?.id === draft.id ? " active" : ""}`}
-                        to={applicationDraftHref(draft.id, claimedSpeakerId)}
-                        key={draft.id}
-                      >
-                        <DomainStatusBadge
-                          domain="submission"
-                          status={draft.status}
-                        />
-                        <h3>{draft.title}</h3>
-                        <small className="subtle">
-                          v{draft.versionNumber} · {draft.speakers.length}{" "}
-                          speaker{draft.speakers.length === 1 ? "" : "s"}
-                        </small>
-                      </Link>
-                    ))}
-                  </div>
-                ) : (
-                  <p className="subtle">
-                    {applicant.claimOnly
-                      ? "Your claim link grants access only to your speaker profile. Sign in to view or manage applications."
-                      : historicalClaimPortal
-                        ? "No applications are available for this account on the closed form."
-                        : "Create a draft to begin. You can maintain more than one application."}
-                  </p>
-                )}
-              </aside>
-              <section className="card pad">
-                {selected ? (
-                  <DraftEditor
-                    key={`${selected.id}-${
-                      actionData?.committed &&
-                      actionData.submissionId === selected.id &&
-                      actionData.revision !== undefined
-                        ? actionData.revision
-                        : selected.revision
-                    }`}
-                    draft={
-                      actionData?.committed &&
-                      actionData.submissionId === selected.id &&
-                      actionData.revision !== undefined
-                        ? { ...selected, revision: actionData.revision }
-                        : selected
-                    }
-                    schema={selectedForm.version.schema.fields}
-                    applicant={applicant}
-                    publicSlug={form.publicSlug}
-                    currentUpload={loaderData.selectedUpload}
-                    uploadTurnstileSiteKey={loaderData.uploadTurnstileSiteKey}
-                    maximumVideoBytes={
-                      selectedForm.filePolicy.videoMaximumBytes
-                    }
-                    recoveryPersonId={
-                      applicant.personId ??
-                      (applicant.anonymousDraftId
-                        ? `anonymous:${applicant.anonymousDraftId}`
-                        : "")
-                    }
-                    recoveryEventId={form.eventId}
-                    revisionIntentId={loaderData.intentId}
-                    serverSaved={
-                      loaderData.recoverySavedDraftId === selected.id ||
-                      (Boolean(actionData?.committed) &&
-                        actionData?.submissionId === selected.id)
-                    }
-                    conflict={Boolean(actionData?.conflict)}
-                    maxSpeakers={selectedForm.maxSpeakers}
-                    errors={actionData?.errors}
-                    canSubmit={availability.accepting && applicant.verified}
-                    canRevise={loaderData.selectedCanRevise}
-                    forceReadOnly={historicalClaimPortal}
-                    readOnlyNotice="This application belongs to a closed form and is available for reference only."
-                    acceptedParticipantsHref={
-                      selected.status === "accepted" &&
-                      applicant.verified &&
-                      !applicant.claimOnly
-                        ? acceptedParticipantManagementHref(
-                            form.eventId,
-                            selected.id,
-                          )
-                        : null
-                    }
-                    action={claimScopedAction}
-                    timezone={form.eventTimezone}
-                  />
-                ) : (
-                  <div style={{ textAlign: "center", padding: "52px 20px" }}>
-                    <span className="pc-state-icon" aria-hidden="true">
-                      <Plus size={20} />
-                    </span>
-                    <h2>
-                      {applicant.claimOnly
-                        ? "Sign in to manage applications"
-                        : historicalClaimPortal
-                          ? "No applications to show"
-                          : "Create your first application"}
-                    </h2>
-                    <p className="subtle">
-                      {applicant.claimOnly
-                        ? "A co-speaker claim link grants access to your speaker profile only."
-                        : historicalClaimPortal
-                          ? "This closed form remains available only for claim-scoped profile and application history."
-                          : "Drafts are private and saved against the current published form version."}
-                    </p>
-                    {applicant.claimOnly ? (
-                      <Link
-                        className="btn primary"
-                        to={`/sign-in?${new URLSearchParams({
-                          returnTo: claimScopedPortalPath,
-                        })}`}
-                      >
-                        Continue to sign in
-                      </Link>
-                    ) : historicalClaimPortal ? (
-                      <p className="help">
-                        This form is closed to new applications.
-                      </p>
-                    ) : (
-                      <Form method="post" action={claimScopedAction}>
-                        <input
-                          type="hidden"
-                          name="_intent"
-                          value="create_draft"
-                        />
-                        <input
-                          type="hidden"
-                          name="intentId"
-                          value={`${loaderData.intentId}:first`}
-                        />
-                        <button
-                          className="btn primary"
-                          type="submit"
-                          disabled={!availability.accepting}
-                        >
-                          Start application
-                        </button>
-                      </Form>
-                    )}
-                  </div>
-                )}
-              </section>
-            </div>
-          </>
+          <AuthenticatedApplicationWorkspace
+            loaderData={loaderData}
+            actionData={actionData}
+            applicant={applicant}
+            claimedSpeakerId={claimedSpeakerId}
+            claimScopedAction={claimScopedAction}
+            claimScopedPortalPath={claimScopedPortalPath}
+            historicalClaimPortal={historicalClaimPortal}
+            navigation={navigation}
+          />
         ) : null}
       </main>
     </div>

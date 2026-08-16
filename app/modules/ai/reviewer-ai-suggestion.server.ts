@@ -646,7 +646,7 @@ export class ReviewerAiSuggestionService {
     );
   }
 
-  async generate(viewer: Viewer, rawInput: unknown) {
+  private async loadGenerationContext(viewer: Viewer, rawInput: unknown) {
     const input = generationInputSchema.parse(rawInput);
     const assignmentId = input.assignmentId;
     const setting = await this.setting(viewer);
@@ -823,6 +823,35 @@ export class ReviewerAiSuggestionService {
     }
     const provider =
       this.dependencies.provider ?? (await resolveAiProvider(this.env, viewer));
+    return {
+      assignmentId,
+      setting,
+      workspace,
+      criteria,
+      evidenceFields,
+      evidencePayload,
+      binding,
+      sourceSnapshotHash,
+      operationKeyPrefix,
+      retry,
+      provider,
+    };
+  }
+
+  async generate(viewer: Viewer, rawInput: unknown) {
+    const {
+      assignmentId,
+      setting,
+      workspace,
+      criteria,
+      evidenceFields,
+      evidencePayload,
+      binding,
+      sourceSnapshotHash,
+      operationKeyPrefix,
+      retry,
+      provider,
+    } = await this.loadGenerationContext(viewer, rawInput);
     const operationId = crypto.randomUUID();
     const claimToken = crypto.randomUUID();
     const suggestionId = crypto.randomUUID();

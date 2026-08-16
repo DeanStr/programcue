@@ -32,7 +32,7 @@ import { decisionReopenSchema, decisionSchema } from "./evaluation-schema";
 export class EvaluationDecisionService {
   constructor(private readonly env: CloudflareEnvironment) {}
 
-  async reopen(viewer: Viewer, input: unknown) {
+  private async loadReopenContext(viewer: Viewer, input: unknown) {
     await assertDecisionViewerEvent(this.env, viewer);
     if (viewer.role !== "owner" && viewer.role !== "administrator") {
       throw new EvaluationDecisionAuthorityError();
@@ -82,6 +82,11 @@ export class EvaluationDecisionService {
         "The submission no longer matches its released decision. Refresh before reopening it.",
       );
     }
+    return { parsed, released };
+  }
+
+  async reopen(viewer: Viewer, input: unknown) {
+    const { parsed, released } = await this.loadReopenContext(viewer, input);
     const operationId = crypto.randomUUID();
     const auditEventId = crypto.randomUUID();
     const [
@@ -310,16 +315,7 @@ export class EvaluationDecisionService {
     };
   }
 
-  async decide(viewer: Viewer, input: unknown, commandId?: string) {
-    await assertDecisionViewerEvent(this.env, viewer);
-    if (
-      viewer.role !== "owner" &&
-      viewer.role !== "administrator" &&
-      viewer.role !== "committee_chair"
-    ) {
-      throw new EvaluationDecisionAuthorityError();
-    }
-    const parsed = decisionSchema.parse(input);
+  private async recoverDecision(viewer: Viewer, commandId?: string) {
     if (commandId) {
       const recovered = await this.env.DB.prepare(
         `SELECT decision.id AS decisionId,
@@ -385,6 +381,21 @@ export class EvaluationDecisionService {
         };
       }
     }
+    return null;
+  }
+
+  async decide(viewer: Viewer, input: unknown, commandId?: string) {
+    await assertDecisionViewerEvent(this.env, viewer);
+    if (
+      viewer.role !== "owner" &&
+      viewer.role !== "administrator" &&
+      viewer.role !== "committee_chair"
+    ) {
+      throw new EvaluationDecisionAuthorityError();
+    }
+    const parsed = decisionSchema.parse(input);
+    const recovered = await this.recoverDecision(viewer, commandId);
+    if (recovered) return recovered;
     if (
       parsed.release &&
       viewer.role !== "owner" &&

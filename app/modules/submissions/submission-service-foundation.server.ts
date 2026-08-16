@@ -215,6 +215,21 @@ export class SubmissionServiceFoundation {
     return freshness === null ? form : this.getPublicFormD1(publicSlug);
   }
 
+  protected applicationRevisionAvailability(
+    form: Awaited<ReturnType<SubmissionServiceFoundation["getPublicForm"]>>,
+  ) {
+    if (
+      form.status !== "published" ||
+      (form.closesAt !== null && form.closesAt < Math.floor(Date.now() / 1_000))
+    ) {
+      return {
+        accepting: false as const,
+        reason: "Applications for this event are closed.",
+      };
+    }
+    return { accepting: true as const, reason: null };
+  }
+
   protected async getPublicFormD1(publicSlug: string) {
     const form = await this.repository.getPublicForm(publicSlug);
     if (!form)

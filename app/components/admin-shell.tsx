@@ -341,6 +341,411 @@ export function adminCommandRecordSelection(
       } as const);
 }
 
+type AdminNavigationGroups = ReturnType<typeof primaryNavigationGroups>;
+type CopyDeepLinkState = "idle" | "copied" | "unavailable";
+
+function AdminSidebar({
+  navigationGroups,
+  navigationItems,
+  pathname,
+  viewer,
+  demoRoleLabel,
+  collapsed,
+  toggleCollapsed,
+}: {
+  navigationGroups: AdminNavigationGroups;
+  navigationItems: ReadonlyArray<AdminNavigationItem>;
+  pathname: string;
+  viewer: AdminShellViewer;
+  demoRoleLabel: string;
+  collapsed: boolean;
+  toggleCollapsed(): void;
+}) {
+  const location = { pathname };
+  return (
+    <aside className="sidebar" aria-label="Primary navigation">
+      <Link
+        className="brand"
+        to={
+          viewer.role === "committee_chair" ? "/admin/review" : "/admin/command"
+        }
+        aria-label="Program Cue home"
+      >
+        <BrandMark />
+        <span>Program Cue</span>
+      </Link>
+      <nav className="nav">
+        {navigationGroups.map((group) => (
+          <div className="nav-group" key={group.label}>
+            <span className="nav-group-label">{group.label}</span>
+            {group.items.map(([id, Icon, label]) => {
+              const expanded = primaryNavigationItemExpanded(
+                id,
+                location.pathname,
+              );
+              const children = expanded
+                ? primaryNavigationChildren(id, navigationItems)
+                : [];
+              return (
+                <div className="nav-item" key={id}>
+                  <Link
+                    to={`/admin/${id}`}
+                    className={
+                      primaryNavigationItemActive(id, location.pathname)
+                        ? "active"
+                        : undefined
+                    }
+                    /* Icon-only mode hides the children, so the parent has
+                         to answer "which family am I in" on its own or the
+                         collapsed rail states no location at all. */
+                    data-family-current={
+                      expanded &&
+                      !primaryNavigationItemActive(id, location.pathname)
+                        ? ""
+                        : undefined
+                    }
+                    aria-current={
+                      primaryNavigationItemActive(id, location.pathname)
+                        ? "page"
+                        : undefined
+                    }
+                    /* The label span is display:none at and below 1024px,
+                         which leaves the link with no accessible name at all,
+                         and no tooltip for a mouse user either. */
+                    aria-label={label}
+                    title={label}
+                  >
+                    <span className="nav-icon">
+                      <Icon aria-hidden size={16} strokeWidth={1.8} />
+                    </span>
+                    <span className="nav-label">{label}</span>
+                  </Link>
+                  {children.length ? (
+                    <div className="nav-child">
+                      {children.map(([childId, , childLabel]) => (
+                        <Link
+                          key={childId}
+                          to={`/admin/${childId}`}
+                          className={
+                            primaryNavigationItemActive(
+                              childId,
+                              location.pathname,
+                            )
+                              ? "active"
+                              : undefined
+                          }
+                          aria-current={
+                            primaryNavigationItemActive(
+                              childId,
+                              location.pathname,
+                            )
+                              ? "page"
+                              : undefined
+                          }
+                        >
+                          <span className="nav-label">{childLabel}</span>
+                        </Link>
+                      ))}
+                    </div>
+                  ) : null}
+                </div>
+              );
+            })}
+          </div>
+        ))}
+      </nav>
+      <div className="sidebar-bottom">
+        {/* Production had a bordered card here stating that an authenticated
+              user is authenticated. Only the demo state is worth a line: it
+              says the records are disposable. */}
+        {viewer.demo ? (
+          <Link
+            className="sidebar-demo"
+            to="/demo"
+            title="Open evaluator guide and reset controls"
+          >
+            <span>Demo · {demoRoleLabel}</span>
+          </Link>
+        ) : null}
+        <button
+          type="button"
+          className="sidebar-collapse"
+          aria-expanded={!collapsed}
+          aria-label={collapsed ? "Expand navigation" : "Collapse navigation"}
+          onClick={() => toggleCollapsed()}
+        >
+          {collapsed ? (
+            <PanelLeftOpen aria-hidden size={16} strokeWidth={1.8} />
+          ) : (
+            <PanelLeftClose aria-hidden size={16} strokeWidth={1.8} />
+          )}
+          <span className="nav-label">Collapse</span>
+        </button>
+      </div>
+    </aside>
+  );
+}
+
+function AdminTopbar({
+  setMobileNavOpen,
+  setDialog,
+  eventInitials,
+  event,
+  dateLocation,
+  commandTriggerRef,
+  openCommandDialog,
+  viewer,
+  notificationCount,
+  initials,
+}: {
+  setMobileNavOpen(value: boolean): void;
+  setDialog(value: AdminShellDialog): void;
+  eventInitials: string;
+  event: AdminShellEvent;
+  dateLocation: string;
+  commandTriggerRef: React.RefObject<HTMLButtonElement | null>;
+  openCommandDialog(): void;
+  viewer: AdminShellViewer;
+  notificationCount: number;
+  initials: string;
+}) {
+  return (
+    <header className="topbar">
+      {/* The sidebar is display:none below 760px. Without this the whole
+            admin product has no navigation at all on a phone. */}
+      <button
+        type="button"
+        className="icon-btn pc-mobile-nav-trigger"
+        aria-label="Open navigation"
+        onClick={() => setMobileNavOpen(true)}
+      >
+        <Menu aria-hidden size={18} />
+      </button>
+      <button
+        type="button"
+        className="event-switcher"
+        aria-label="Switch event"
+        onClick={() => setDialog("event")}
+      >
+        <span className="event-thumb" aria-hidden>
+          {eventInitials}
+        </span>
+        <span>
+          <strong>{event.name}</strong>
+          <small>{dateLocation}</small>
+        </span>
+        <ChevronDown aria-hidden size={15} />
+      </button>
+      <button
+        ref={commandTriggerRef}
+        type="button"
+        className="command-trigger"
+        aria-label="Search or run a command"
+        onClick={openCommandDialog}
+      >
+        <Search aria-hidden size={14} />
+        {/* One control, one keycap. ? opened the shortcut reference, not
+              this, so it advertised a second way to search that did not
+              search. The shortcut dialog documents it. */}
+        <span>Search or run a command…</span>
+        <kbd>⌘K</kbd>
+      </button>
+      <div className="top-actions">
+        {viewer.role !== "committee_chair" ? (
+          <Button
+            /* The label span is display:none below 760px, which leaves the
+                 only filled primary in the global chrome with no name. */
+            aria-label="New"
+            variant="primary"
+            onClick={() => setDialog("new")}
+          >
+            <Plus aria-hidden size={15} />
+            <span>New</span>
+          </Button>
+        ) : null}
+        <button
+          type="button"
+          className={`icon-btn${notificationCount ? " badge-dot" : ""}`}
+          data-count={notificationCount || undefined}
+          aria-label={`${notificationCount} operational notification${notificationCount === 1 ? "" : "s"}`}
+          onClick={() => setDialog("notifications")}
+        >
+          <Bell aria-hidden size={16} />
+        </button>
+        <button
+          type="button"
+          className="avatar"
+          title={viewer.name}
+          aria-label="Open account menu"
+          onClick={() => setDialog("viewer")}
+        >
+          {initials}
+        </button>
+      </div>
+    </header>
+  );
+}
+
+function AdminMobileNavigation({
+  mobileNavOpen,
+  setMobileNavOpen,
+  navigationGroups,
+  navigationItems,
+  pathname,
+}: {
+  mobileNavOpen: boolean;
+  setMobileNavOpen(value: boolean): void;
+  navigationGroups: AdminNavigationGroups;
+  navigationItems: ReadonlyArray<AdminNavigationItem>;
+  pathname: string;
+}) {
+  const location = { pathname };
+  return (
+    <>
+      {mobileNavOpen ? (
+        <Dialog title="Navigation" onClose={() => setMobileNavOpen(false)}>
+          <nav aria-label="Primary" className="pc-mobile-nav">
+            {navigationGroups.map((group) => (
+              <div className="pc-mobile-nav-group" key={group.label}>
+                <span className="nav-group-label">{group.label}</span>
+                {group.items.map(([id, Icon, label]) => (
+                  <div className="nav-item" key={id}>
+                    <Link
+                      to={`/admin/${id}`}
+                      className={
+                        primaryNavigationItemActive(id, location.pathname)
+                          ? "active"
+                          : undefined
+                      }
+                      aria-current={
+                        primaryNavigationItemActive(id, location.pathname)
+                          ? "page"
+                          : undefined
+                      }
+                      data-dialog-autofocus={
+                        primaryNavigationItemActive(id, location.pathname)
+                          ? ""
+                          : undefined
+                      }
+                      onClick={() => setMobileNavOpen(false)}
+                    >
+                      <span className="nav-icon">
+                        <Icon aria-hidden size={17} strokeWidth={1.8} />
+                      </span>
+                      {label}
+                    </Link>
+                    {primaryNavigationItemExpanded(id, location.pathname)
+                      ? primaryNavigationChildren(id, navigationItems).map(
+                          ([childId, , childLabel]) => (
+                            <Link
+                              key={childId}
+                              className={`pc-mobile-nav-child${
+                                primaryNavigationItemActive(
+                                  childId,
+                                  location.pathname,
+                                )
+                                  ? " active"
+                                  : ""
+                              }`}
+                              to={`/admin/${childId}`}
+                              aria-current={
+                                primaryNavigationItemActive(
+                                  childId,
+                                  location.pathname,
+                                )
+                                  ? "page"
+                                  : undefined
+                              }
+                              onClick={() => setMobileNavOpen(false)}
+                            >
+                              {childLabel}
+                            </Link>
+                          ),
+                        )
+                      : null}
+                  </div>
+                ))}
+              </div>
+            ))}
+          </nav>
+        </Dialog>
+      ) : null}
+    </>
+  );
+}
+
+function AdminPageFrame({
+  currentEventOption,
+  breadcrumbs,
+  event,
+  copyDeepLink,
+  copyState,
+  children,
+}: {
+  currentEventOption: AdminShellEventOption;
+  breadcrumbs: ReturnType<typeof adminPageBreadcrumbs>;
+  event: AdminShellEvent;
+  copyDeepLink(): Promise<void>;
+  copyState: CopyDeepLinkState;
+  children: React.ReactNode;
+}) {
+  return (
+    <main id="main" className="main" tabIndex={-1}>
+      <div className="pc-context-bar">
+        <nav aria-label="Breadcrumb">
+          <ol className="pc-breadcrumbs">
+            <li>
+              <Link to="/events/select">
+                {currentEventOption.organisationName}
+              </Link>
+            </li>
+            <li>
+              {breadcrumbs.length ? (
+                <Link to="/admin/command">{event.name}</Link>
+              ) : (
+                <span aria-current="page">{event.name}</span>
+              )}
+            </li>
+            {breadcrumbs.map((crumb) => (
+              <li key={`${crumb.href ?? "current"}:${crumb.label}`}>
+                {crumb.href ? (
+                  <Link to={crumb.href}>{crumb.label}</Link>
+                ) : (
+                  <span aria-current="page">{crumb.label}</span>
+                )}
+              </li>
+            ))}
+          </ol>
+        </nav>
+        <button
+          /* Ghost, not a bordered button: a rarely-used utility sitting on
+               the same edge and at the same weight as the page's real action
+               left the eye no way to rank the two. */
+          className="btn small ghost pc-copy-deep-link"
+          type="button"
+          onClick={() => void copyDeepLink()}
+          aria-label="Copy a deep link to this page"
+        >
+          <ClipboardCopy aria-hidden size={14} />
+          {copyState === "copied"
+            ? "Link copied"
+            : copyState === "unavailable"
+              ? "Copy unavailable"
+              : "Copy page link"}
+        </button>
+        <span className="sr-only" role="status" aria-live="polite">
+          {copyState === "copied"
+            ? "Page link copied to the clipboard."
+            : copyState === "unavailable"
+              ? "The browser did not allow clipboard access."
+              : ""}
+        </span>
+      </div>
+      {children}
+    </main>
+  );
+}
+
 export function AdminShell({
   event,
   eventOptions,
@@ -542,325 +947,43 @@ export function AdminShell({
         motionReady ? " shell-motion-ready" : ""
       }`}
     >
-      <aside className="sidebar" aria-label="Primary navigation">
-        <Link
-          className="brand"
-          to={
-            viewer.role === "committee_chair"
-              ? "/admin/review"
-              : "/admin/command"
-          }
-          aria-label="Program Cue home"
-        >
-          <BrandMark />
-          <span>Program Cue</span>
-        </Link>
-        <nav className="nav">
-          {navigationGroups.map((group) => (
-            <div className="nav-group" key={group.label}>
-              <span className="nav-group-label">{group.label}</span>
-              {group.items.map(([id, Icon, label]) => {
-                const expanded = primaryNavigationItemExpanded(
-                  id,
-                  location.pathname,
-                );
-                const children = expanded
-                  ? primaryNavigationChildren(id, navigationItems)
-                  : [];
-                return (
-                  <div className="nav-item" key={id}>
-                    <Link
-                      to={`/admin/${id}`}
-                      className={
-                        primaryNavigationItemActive(id, location.pathname)
-                          ? "active"
-                          : undefined
-                      }
-                      /* Icon-only mode hides the children, so the parent has
-                         to answer "which family am I in" on its own or the
-                         collapsed rail states no location at all. */
-                      data-family-current={
-                        expanded &&
-                        !primaryNavigationItemActive(id, location.pathname)
-                          ? ""
-                          : undefined
-                      }
-                      aria-current={
-                        primaryNavigationItemActive(id, location.pathname)
-                          ? "page"
-                          : undefined
-                      }
-                      /* The label span is display:none at and below 1024px,
-                         which leaves the link with no accessible name at all,
-                         and no tooltip for a mouse user either. */
-                      aria-label={label}
-                      title={label}
-                    >
-                      <span className="nav-icon">
-                        <Icon aria-hidden size={16} strokeWidth={1.8} />
-                      </span>
-                      <span className="nav-label">{label}</span>
-                    </Link>
-                    {children.length ? (
-                      <div className="nav-child">
-                        {children.map(([childId, , childLabel]) => (
-                          <Link
-                            key={childId}
-                            to={`/admin/${childId}`}
-                            className={
-                              primaryNavigationItemActive(
-                                childId,
-                                location.pathname,
-                              )
-                                ? "active"
-                                : undefined
-                            }
-                            aria-current={
-                              primaryNavigationItemActive(
-                                childId,
-                                location.pathname,
-                              )
-                                ? "page"
-                                : undefined
-                            }
-                          >
-                            <span className="nav-label">{childLabel}</span>
-                          </Link>
-                        ))}
-                      </div>
-                    ) : null}
-                  </div>
-                );
-              })}
-            </div>
-          ))}
-        </nav>
-        <div className="sidebar-bottom">
-          {/* Production had a bordered card here stating that an authenticated
-              user is authenticated. Only the demo state is worth a line: it
-              says the records are disposable. */}
-          {viewer.demo ? (
-            <Link
-              className="sidebar-demo"
-              to="/demo"
-              title="Open evaluator guide and reset controls"
-            >
-              <span>Demo · {demoRoleLabel}</span>
-            </Link>
-          ) : null}
-          <button
-            type="button"
-            className="sidebar-collapse"
-            aria-expanded={!collapsed}
-            aria-label={collapsed ? "Expand navigation" : "Collapse navigation"}
-            onClick={() => toggleCollapsed()}
-          >
-            {collapsed ? (
-              <PanelLeftOpen aria-hidden size={16} strokeWidth={1.8} />
-            ) : (
-              <PanelLeftClose aria-hidden size={16} strokeWidth={1.8} />
-            )}
-            <span className="nav-label">Collapse</span>
-          </button>
-        </div>
-      </aside>
-
-      <header className="topbar">
-        {/* The sidebar is display:none below 760px. Without this the whole
-            admin product has no navigation at all on a phone. */}
-        <button
-          type="button"
-          className="icon-btn pc-mobile-nav-trigger"
-          aria-label="Open navigation"
-          onClick={() => setMobileNavOpen(true)}
-        >
-          <Menu aria-hidden size={18} />
-        </button>
-        <button
-          type="button"
-          className="event-switcher"
-          aria-label="Switch event"
-          onClick={() => setDialog("event")}
-        >
-          <span className="event-thumb" aria-hidden>
-            {eventInitials}
-          </span>
-          <span>
-            <strong>{event.name}</strong>
-            <small>{dateLocation}</small>
-          </span>
-          <ChevronDown aria-hidden size={15} />
-        </button>
-        <button
-          ref={commandTriggerRef}
-          type="button"
-          className="command-trigger"
-          aria-label="Search or run a command"
-          onClick={openCommandDialog}
-        >
-          <Search aria-hidden size={14} />
-          {/* One control, one keycap. ? opened the shortcut reference, not
-              this, so it advertised a second way to search that did not
-              search. The shortcut dialog documents it. */}
-          <span>Search or run a command…</span>
-          <kbd>⌘K</kbd>
-        </button>
-        <div className="top-actions">
-          {viewer.role !== "committee_chair" ? (
-            <Button
-              /* The label span is display:none below 760px, which leaves the
-                 only filled primary in the global chrome with no name. */
-              aria-label="New"
-              variant="primary"
-              onClick={() => setDialog("new")}
-            >
-              <Plus aria-hidden size={15} />
-              <span>New</span>
-            </Button>
-          ) : null}
-          <button
-            type="button"
-            className={`icon-btn${notificationCount ? " badge-dot" : ""}`}
-            data-count={notificationCount || undefined}
-            aria-label={`${notificationCount} operational notification${notificationCount === 1 ? "" : "s"}`}
-            onClick={() => setDialog("notifications")}
-          >
-            <Bell aria-hidden size={16} />
-          </button>
-          <button
-            type="button"
-            className="avatar"
-            title={viewer.name}
-            aria-label="Open account menu"
-            onClick={() => setDialog("viewer")}
-          >
-            {initials}
-          </button>
-        </div>
-      </header>
-
-      {mobileNavOpen ? (
-        <Dialog title="Navigation" onClose={() => setMobileNavOpen(false)}>
-          <nav aria-label="Primary" className="pc-mobile-nav">
-            {navigationGroups.map((group) => (
-              <div className="pc-mobile-nav-group" key={group.label}>
-                <span className="nav-group-label">{group.label}</span>
-                {group.items.map(([id, Icon, label]) => (
-                  <div className="nav-item" key={id}>
-                    <Link
-                      to={`/admin/${id}`}
-                      className={
-                        primaryNavigationItemActive(id, location.pathname)
-                          ? "active"
-                          : undefined
-                      }
-                      aria-current={
-                        primaryNavigationItemActive(id, location.pathname)
-                          ? "page"
-                          : undefined
-                      }
-                      data-dialog-autofocus={
-                        primaryNavigationItemActive(id, location.pathname)
-                          ? ""
-                          : undefined
-                      }
-                      onClick={() => setMobileNavOpen(false)}
-                    >
-                      <span className="nav-icon">
-                        <Icon aria-hidden size={17} strokeWidth={1.8} />
-                      </span>
-                      {label}
-                    </Link>
-                    {primaryNavigationItemExpanded(id, location.pathname)
-                      ? primaryNavigationChildren(id, navigationItems).map(
-                          ([childId, , childLabel]) => (
-                            <Link
-                              key={childId}
-                              className={`pc-mobile-nav-child${
-                                primaryNavigationItemActive(
-                                  childId,
-                                  location.pathname,
-                                )
-                                  ? " active"
-                                  : ""
-                              }`}
-                              to={`/admin/${childId}`}
-                              aria-current={
-                                primaryNavigationItemActive(
-                                  childId,
-                                  location.pathname,
-                                )
-                                  ? "page"
-                                  : undefined
-                              }
-                              onClick={() => setMobileNavOpen(false)}
-                            >
-                              {childLabel}
-                            </Link>
-                          ),
-                        )
-                      : null}
-                  </div>
-                ))}
-              </div>
-            ))}
-          </nav>
-        </Dialog>
-      ) : null}
-
-      <main id="main" className="main" tabIndex={-1}>
-        <div className="pc-context-bar">
-          <nav aria-label="Breadcrumb">
-            <ol className="pc-breadcrumbs">
-              <li>
-                <Link to="/events/select">
-                  {currentEventOption.organisationName}
-                </Link>
-              </li>
-              <li>
-                {breadcrumbs.length ? (
-                  <Link to="/admin/command">{event.name}</Link>
-                ) : (
-                  <span aria-current="page">{event.name}</span>
-                )}
-              </li>
-              {breadcrumbs.map((crumb) => (
-                <li key={`${crumb.href ?? "current"}:${crumb.label}`}>
-                  {crumb.href ? (
-                    <Link to={crumb.href}>{crumb.label}</Link>
-                  ) : (
-                    <span aria-current="page">{crumb.label}</span>
-                  )}
-                </li>
-              ))}
-            </ol>
-          </nav>
-          <button
-            /* Ghost, not a bordered button: a rarely-used utility sitting on
-               the same edge and at the same weight as the page's real action
-               left the eye no way to rank the two. */
-            className="btn small ghost pc-copy-deep-link"
-            type="button"
-            onClick={() => void copyDeepLink()}
-            aria-label="Copy a deep link to this page"
-          >
-            <ClipboardCopy aria-hidden size={14} />
-            {copyState === "copied"
-              ? "Link copied"
-              : copyState === "unavailable"
-                ? "Copy unavailable"
-                : "Copy page link"}
-          </button>
-          <span className="sr-only" role="status" aria-live="polite">
-            {copyState === "copied"
-              ? "Page link copied to the clipboard."
-              : copyState === "unavailable"
-                ? "The browser did not allow clipboard access."
-                : ""}
-          </span>
-        </div>
+      <AdminSidebar
+        navigationGroups={navigationGroups}
+        navigationItems={navigationItems}
+        pathname={location.pathname}
+        viewer={viewer}
+        demoRoleLabel={demoRoleLabel}
+        collapsed={collapsed}
+        toggleCollapsed={toggleCollapsed}
+      />
+      <AdminTopbar
+        setMobileNavOpen={setMobileNavOpen}
+        setDialog={setDialog}
+        eventInitials={eventInitials}
+        event={event}
+        dateLocation={dateLocation}
+        commandTriggerRef={commandTriggerRef}
+        openCommandDialog={openCommandDialog}
+        viewer={viewer}
+        notificationCount={notificationCount}
+        initials={initials}
+      />
+      <AdminMobileNavigation
+        mobileNavOpen={mobileNavOpen}
+        setMobileNavOpen={setMobileNavOpen}
+        navigationGroups={navigationGroups}
+        navigationItems={navigationItems}
+        pathname={location.pathname}
+      />
+      <AdminPageFrame
+        currentEventOption={currentEventOption}
+        breadcrumbs={breadcrumbs}
+        event={event}
+        copyDeepLink={copyDeepLink}
+        copyState={copyState}
+      >
         {children}
-      </main>
+      </AdminPageFrame>
 
       <AdminCommandDialog
         open={dialog === "command"}

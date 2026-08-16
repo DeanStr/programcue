@@ -1,22 +1,13 @@
+import {
+  EventAdministratorAlreadyActiveError,
+  EventAdministratorNotFoundError,
+} from "./event-repository-contract";
 import type { AdministratorInvitationInput } from "./event-schema";
 
-export class EventAdministratorAlreadyActiveError extends Error {
-  constructor(scope: "event" | "organisation") {
-    super(
-      scope === "organisation"
-        ? "That person already administers this organisation."
-        : "That person already administers this event through an event or organisation role.",
-    );
-    this.name = "EventAdministratorAlreadyActiveError";
-  }
-}
-
-export class EventAdministratorNotFoundError extends Error {
-  constructor() {
-    super("The administrator membership is no longer active in this scope.");
-    this.name = "EventAdministratorNotFoundError";
-  }
-}
+export {
+  EventAdministratorAlreadyActiveError,
+  EventAdministratorNotFoundError,
+} from "./event-repository-contract";
 
 export class EventAdministratorRepository {
   constructor(private readonly env: CloudflareEnvironment) {}

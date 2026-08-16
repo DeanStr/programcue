@@ -288,6 +288,268 @@ export async function loader({ request, context }: Route.LoaderArgs) {
   };
 }
 
+type CommunicationsViewer = Awaited<ReturnType<typeof viewerFor>>;
+
+type CommunicationsIntentContext = {
+  env: CloudflareEnvironment;
+  viewer: CommunicationsViewer;
+  service: CommunicationService;
+  form: FormData;
+  intent: string;
+};
+
+async function handleSenderIntent({
+  env,
+  viewer,
+  service,
+  form,
+  intent,
+}: CommunicationsIntentContext) {
+  if (intent === "save-organisation-physical-address") {
+    await new OrganisationCommunicationSettingsService(env).save(
+      viewer,
+      form.get("physicalAddress"),
+      form.get("physicalAddressRevision"),
+    );
+    return data<ActionResult>({
+      ok: true,
+      intent,
+      message: "The organisation postal address is saved.",
+    });
+  }
+  if (intent === "save-sender") {
+    const saved = await service.saveSenderProfile(viewer, {
+      id: String(form.get("senderProfileId") ?? "") || undefined,
+      name: String(form.get("name") ?? ""),
+      fromName: String(form.get("fromName") ?? ""),
+      fromEmail: String(form.get("fromEmail") ?? ""),
+      replyToEmail: String(form.get("replyToEmail") ?? ""),
+    });
+    return data<ActionResult>({
+      ok: true,
+      intent,
+      message:
+        saved.provider === "mailpit"
+          ? `Sender profile ${saved.id} is verified for the explicitly selected local Mailpit capture service.`
+          : `Sender profile ${saved.id} is saved. Check its Resend domain before using it.`,
+    });
+  }
+  if (intent === "provision-sender") {
+    const result = await service.provisionSenderProfile(
+      viewer,
+      String(form.get("senderProfileId") ?? ""),
+    );
+    const senderRecords =
+      result.status === "verified"
+        ? undefined
+        : senderDnsRecords(result.records);
+    // Only promise records "below" when there are records below. Resend
+    // returns none while a domain is still being created, and pointing the
+    // reader at an empty panel reads as a product fault.
+    const publishedRecordCount = senderRecords
+      ? senderRecords.readable.length + senderRecords.unreadable.length
+      : 0;
+    return data<ActionResult>({
+      ok: result.status === "verified",
+      intent,
+      message:
+        result.status === "verified"
+          ? result.provider === "mailpit"
+            ? "This sender is verified for the explicitly selected local Mailpit capture service."
+            : `${result.domain} is verified by Resend and can send production email.`
+          : publishedRecordCount > 0
+            ? `${result.domain} is not verified yet. Publish the DNS records below with your domain host, then check again.`
+            : `${result.domain} is not verified yet, and Resend has not returned its DNS records. Check the domain in your Resend dashboard, then check again here.`,
+      senderRecords,
+    });
+  }
+  if (intent === "disable-sender" || intent === "enable-sender") {
+    const result = await service.setSenderProfileEnabled(
+      viewer,
+      String(form.get("senderProfileId") ?? ""),
+      intent === "enable-sender",
+    );
+    return data<ActionResult>({
+      ok: true,
+      intent,
+      message:
+        result.status === "disabled"
+          ? "This sender is disabled and can no longer send email."
+          : result.status === "verified"
+            ? "This sender is enabled and verified for sending."
+            : "This sender is enabled, but still needs to be verified before it can send.",
+    });
+  }
+  return null;
+}
+
+async function handleTemplateAutomationIntent({
+  viewer,
+  service,
+  form,
+  intent,
+}: CommunicationsIntentContext) {
+  if (intent === "save-template") {
+    const buttonText = String(form.get("buttonText") ?? "").trim();
+    const buttonUrl = String(form.get("buttonUrl") ?? "").trim();
+    const result = await service.saveTemplate(viewer, {
+      templateId: String(form.get("templateId") ?? "") || undefined,
+      name: String(form.get("name") ?? ""),
+      category: String(form.get("category") ?? "") as CommunicationCategory,
+      subject: String(form.get("subject") ?? ""),
+      content: {
+        body: String(form.get("body") ?? ""),
+        physicalAddress: String(form.get("physicalAddress") ?? ""),
+        ...(buttonText ? { buttonText } : {}),
+        ...(buttonUrl ? { buttonUrl } : {}),
+      },
+    });
+    return redirect(
+      `/admin/communications?template=${encodeURIComponent(result.versionId)}&saved=${result.versionNumber}&recovery=${encodeURIComponent(String(form.get("templateId") ?? "") || "new")}`,
+    );
+  }
+  if (intent === "publish-template") {
+    const published = await service.publishTemplate(
+      viewer,
+      String(form.get("templateVersionId") ?? ""),
+    );
+    return data<ActionResult>({
+      ok: true,
+      intent,
+      message: `Version ${published.versionNumber} is now the published sending version.`,
+    });
+  }
+  if (intent === "test-send") {
+    const result = await service.testSend(viewer, {
+      templateVersionId: String(form.get("templateVersionId") ?? ""),
+      recipient: String(form.get("recipient") ?? ""),
+      idempotencyKey: String(form.get("idempotencyKey") ?? ""),
+    });
+    return data<ActionResult>({
+      ok: true,
+      intent,
+      message:
+        "The real test email is queued with representative merge data. Inspect provider progress in the Operation Centre.",
+      operationId: result.operationId ?? undefined,
+    });
+  }
+  if (intent === "save-trigger") {
+    await service.saveTrigger(viewer, {
+      id: String(form.get("triggerId") ?? "") || undefined,
+      templateId: String(form.get("templateId") ?? ""),
+      triggerType: String(form.get("triggerType") ?? "") as
+        | "task_due"
+        | "task_overdue",
+      audienceType: String(form.get("triggerAudience") ?? "") as
+        | "due_speakers"
+        | "overdue_speakers"
+        | "event_administrators",
+      kind: String(form.get("kind") ?? "") as "transactional" | "optional",
+      sendHourUtc: Number(form.get("sendHourUtc")),
+      enabled: true,
+    });
+    return data<ActionResult>({
+      ok: true,
+      intent,
+      message: "Automatic reminder trigger is active.",
+    });
+  }
+  if (intent === "enable-trigger" || intent === "disable-trigger") {
+    await service.setTriggerEnabled(
+      viewer,
+      String(form.get("triggerId") ?? ""),
+      intent === "enable-trigger",
+    );
+    return data<ActionResult>({
+      ok: true,
+      intent,
+      message: `Automatic reminder trigger ${intent === "enable-trigger" ? "enabled" : "disabled"}.`,
+    });
+  }
+  return null;
+}
+
+async function handleCalendarCommunicationIntent({
+  env,
+  viewer,
+  service,
+  form,
+  intent,
+}: CommunicationsIntentContext) {
+  const calendarService = new CalendarService(env);
+  if (intent === "calendar-lifecycle") {
+    const result = await calendarService.queueLifecycle(viewer, {
+      sessionId: String(form.get("sessionId") ?? ""),
+      personId: String(form.get("personId") ?? ""),
+      method: String(form.get("method") ?? "") as "REQUEST" | "CANCEL",
+      provider: String(form.get("provider") ?? "") as
+        | "email_ics"
+        | "google"
+        | "microsoft",
+      ...(String(form.get("connectionId") ?? "")
+        ? { connectionId: String(form.get("connectionId")) }
+        : {}),
+      idempotencyKey: String(form.get("idempotencyKey") ?? ""),
+    });
+    return data<ActionResult>({
+      ok: true,
+      intent,
+      message: `${String(form.get("method")) === "CANCEL" ? "Cancellation" : "Calendar invitation"} is durable and queued.`,
+      operationId: result.operationId,
+    });
+  }
+  if (intent === "refresh-calendar") {
+    await calendarService.refreshConnection(
+      viewer,
+      String(form.get("connectionId") ?? ""),
+    );
+    return data<ActionResult>({
+      ok: true,
+      intent,
+      message:
+        "Calendar access token refreshed and encrypted credentials rotated.",
+    });
+  }
+  if (intent === "disconnect-calendar") {
+    await calendarService.disconnect(
+      viewer,
+      String(form.get("connectionId") ?? ""),
+    );
+    return data<ActionResult>({
+      ok: true,
+      intent,
+      message: "Calendar account disconnected.",
+    });
+  }
+  if (intent === "reconcile-calendar-rsvp") {
+    const result = await calendarService.reconcileAttendance(
+      viewer,
+      String(form.get("invitationId") ?? ""),
+    );
+    return data<ActionResult>({
+      ok: true,
+      intent,
+      message: `Provider RSVP response is ${result.response.replaceAll("_", " ")}. Accepted invitations are marked confirmed; other responses remain visible in the audit trail without fabricating acceptance.`,
+    });
+  }
+  if (intent === "cancel") {
+    await service.cancel(viewer, String(form.get("communicationId") ?? ""));
+    return data<ActionResult>({
+      ok: true,
+      intent,
+      message: "The unsent communication and queued deliveries were cancelled.",
+    });
+  }
+  return data<ActionResult>(
+    {
+      ok: false,
+      intent,
+      message: "Unsupported Communications Centre action.",
+    },
+    { status: 400 },
+  );
+}
+
 export async function action({ request, context }: Route.ActionArgs) {
   const { env } = getCloudflareContext(context);
   const viewer = await viewerFor(request, context);
@@ -295,231 +557,13 @@ export async function action({ request, context }: Route.ActionArgs) {
   const form = await request.formData();
   const intent = String(form.get("intent") ?? "");
   try {
-    if (intent === "save-organisation-physical-address") {
-      await new OrganisationCommunicationSettingsService(env).save(
-        viewer,
-        form.get("physicalAddress"),
-        form.get("physicalAddressRevision"),
-      );
-      return data<ActionResult>({
-        ok: true,
-        intent,
-        message: "The organisation postal address is saved.",
-      });
-    }
-    if (intent === "save-sender") {
-      const saved = await service.saveSenderProfile(viewer, {
-        id: String(form.get("senderProfileId") ?? "") || undefined,
-        name: String(form.get("name") ?? ""),
-        fromName: String(form.get("fromName") ?? ""),
-        fromEmail: String(form.get("fromEmail") ?? ""),
-        replyToEmail: String(form.get("replyToEmail") ?? ""),
-      });
-      return data<ActionResult>({
-        ok: true,
-        intent,
-        message:
-          saved.provider === "mailpit"
-            ? `Sender profile ${saved.id} is verified for the explicitly selected local Mailpit capture service.`
-            : `Sender profile ${saved.id} is saved. Check its Resend domain before using it.`,
-      });
-    }
-    if (intent === "provision-sender") {
-      const result = await service.provisionSenderProfile(
-        viewer,
-        String(form.get("senderProfileId") ?? ""),
-      );
-      const senderRecords =
-        result.status === "verified"
-          ? undefined
-          : senderDnsRecords(result.records);
-      // Only promise records "below" when there are records below. Resend
-      // returns none while a domain is still being created, and pointing the
-      // reader at an empty panel reads as a product fault.
-      const publishedRecordCount = senderRecords
-        ? senderRecords.readable.length + senderRecords.unreadable.length
-        : 0;
-      return data<ActionResult>({
-        ok: result.status === "verified",
-        intent,
-        message:
-          result.status === "verified"
-            ? result.provider === "mailpit"
-              ? "This sender is verified for the explicitly selected local Mailpit capture service."
-              : `${result.domain} is verified by Resend and can send production email.`
-            : publishedRecordCount > 0
-              ? `${result.domain} is not verified yet. Publish the DNS records below with your domain host, then check again.`
-              : `${result.domain} is not verified yet, and Resend has not returned its DNS records. Check the domain in your Resend dashboard, then check again here.`,
-        senderRecords,
-      });
-    }
-    if (intent === "disable-sender" || intent === "enable-sender") {
-      const result = await service.setSenderProfileEnabled(
-        viewer,
-        String(form.get("senderProfileId") ?? ""),
-        intent === "enable-sender",
-      );
-      return data<ActionResult>({
-        ok: true,
-        intent,
-        message:
-          result.status === "disabled"
-            ? "This sender is disabled and can no longer send email."
-            : result.status === "verified"
-              ? "This sender is enabled and verified for sending."
-              : "This sender is enabled, but still needs to be verified before it can send.",
-      });
-    }
-    if (intent === "save-template") {
-      const buttonText = String(form.get("buttonText") ?? "").trim();
-      const buttonUrl = String(form.get("buttonUrl") ?? "").trim();
-      const result = await service.saveTemplate(viewer, {
-        templateId: String(form.get("templateId") ?? "") || undefined,
-        name: String(form.get("name") ?? ""),
-        category: String(form.get("category") ?? "") as CommunicationCategory,
-        subject: String(form.get("subject") ?? ""),
-        content: {
-          body: String(form.get("body") ?? ""),
-          physicalAddress: String(form.get("physicalAddress") ?? ""),
-          ...(buttonText ? { buttonText } : {}),
-          ...(buttonUrl ? { buttonUrl } : {}),
-        },
-      });
-      return redirect(
-        `/admin/communications?template=${encodeURIComponent(result.versionId)}&saved=${result.versionNumber}&recovery=${encodeURIComponent(String(form.get("templateId") ?? "") || "new")}`,
-      );
-    }
-    if (intent === "publish-template") {
-      const published = await service.publishTemplate(
-        viewer,
-        String(form.get("templateVersionId") ?? ""),
-      );
-      return data<ActionResult>({
-        ok: true,
-        intent,
-        message: `Version ${published.versionNumber} is now the published sending version.`,
-      });
-    }
-    if (intent === "test-send") {
-      const result = await service.testSend(viewer, {
-        templateVersionId: String(form.get("templateVersionId") ?? ""),
-        recipient: String(form.get("recipient") ?? ""),
-        idempotencyKey: String(form.get("idempotencyKey") ?? ""),
-      });
-      return data<ActionResult>({
-        ok: true,
-        intent,
-        message:
-          "The real test email is queued with representative merge data. Inspect provider progress in the Operation Centre.",
-        operationId: result.operationId ?? undefined,
-      });
-    }
-    if (intent === "save-trigger") {
-      await service.saveTrigger(viewer, {
-        id: String(form.get("triggerId") ?? "") || undefined,
-        templateId: String(form.get("templateId") ?? ""),
-        triggerType: String(form.get("triggerType") ?? "") as
-          | "task_due"
-          | "task_overdue",
-        audienceType: String(form.get("triggerAudience") ?? "") as
-          | "due_speakers"
-          | "overdue_speakers"
-          | "event_administrators",
-        kind: String(form.get("kind") ?? "") as "transactional" | "optional",
-        sendHourUtc: Number(form.get("sendHourUtc")),
-        enabled: true,
-      });
-      return data<ActionResult>({
-        ok: true,
-        intent,
-        message: "Automatic reminder trigger is active.",
-      });
-    }
-    if (intent === "enable-trigger" || intent === "disable-trigger") {
-      await service.setTriggerEnabled(
-        viewer,
-        String(form.get("triggerId") ?? ""),
-        intent === "enable-trigger",
-      );
-      return data<ActionResult>({
-        ok: true,
-        intent,
-        message: `Automatic reminder trigger ${intent === "enable-trigger" ? "enabled" : "disabled"}.`,
-      });
-    }
-    const calendarService = new CalendarService(env);
-    if (intent === "calendar-lifecycle") {
-      const result = await calendarService.queueLifecycle(viewer, {
-        sessionId: String(form.get("sessionId") ?? ""),
-        personId: String(form.get("personId") ?? ""),
-        method: String(form.get("method") ?? "") as "REQUEST" | "CANCEL",
-        provider: String(form.get("provider") ?? "") as
-          | "email_ics"
-          | "google"
-          | "microsoft",
-        ...(String(form.get("connectionId") ?? "")
-          ? { connectionId: String(form.get("connectionId")) }
-          : {}),
-        idempotencyKey: String(form.get("idempotencyKey") ?? ""),
-      });
-      return data<ActionResult>({
-        ok: true,
-        intent,
-        message: `${String(form.get("method")) === "CANCEL" ? "Cancellation" : "Calendar invitation"} is durable and queued.`,
-        operationId: result.operationId,
-      });
-    }
-    if (intent === "refresh-calendar") {
-      await calendarService.refreshConnection(
-        viewer,
-        String(form.get("connectionId") ?? ""),
-      );
-      return data<ActionResult>({
-        ok: true,
-        intent,
-        message:
-          "Calendar access token refreshed and encrypted credentials rotated.",
-      });
-    }
-    if (intent === "disconnect-calendar") {
-      await calendarService.disconnect(
-        viewer,
-        String(form.get("connectionId") ?? ""),
-      );
-      return data<ActionResult>({
-        ok: true,
-        intent,
-        message: "Calendar account disconnected.",
-      });
-    }
-    if (intent === "reconcile-calendar-rsvp") {
-      const result = await calendarService.reconcileAttendance(
-        viewer,
-        String(form.get("invitationId") ?? ""),
-      );
-      return data<ActionResult>({
-        ok: true,
-        intent,
-        message: `Provider RSVP response is ${result.response.replaceAll("_", " ")}. Accepted invitations are marked confirmed; other responses remain visible in the audit trail without fabricating acceptance.`,
-      });
-    }
-    if (intent === "cancel") {
-      await service.cancel(viewer, String(form.get("communicationId") ?? ""));
-      return data<ActionResult>({
-        ok: true,
-        intent,
-        message:
-          "The unsent communication and queued deliveries were cancelled.",
-      });
-    }
-    return data<ActionResult>(
-      {
-        ok: false,
-        intent,
-        message: "Unsupported Communications Centre action.",
-      },
-      { status: 400 },
-    );
+    const intentContext = { env, viewer, service, form, intent };
+    const senderResponse = await handleSenderIntent(intentContext);
+    if (senderResponse) return senderResponse;
+    const templateResponse =
+      await handleTemplateAutomationIntent(intentContext);
+    if (templateResponse) return templateResponse;
+    return handleCalendarCommunicationIntent(intentContext);
   } catch (error) {
     if (
       error instanceof ZodError ||
@@ -569,6 +613,171 @@ export async function action({ request, context }: Route.ActionArgs) {
     if (error instanceof Response) throw error;
     throw error;
   }
+}
+
+function CommunicationsSetupView({
+  loaderData,
+  working,
+  pendingIntent,
+}: {
+  loaderData: CommunicationsCentreLoaderData;
+  working: boolean;
+  pendingIntent: FormDataEntryValue | null | undefined;
+}) {
+  return (
+    <>
+      <AdminPageSection
+        id="communications-delivery"
+        label="Delivery configuration"
+        description="Sender profiles the provider will accept, and a real test send"
+        defaultExpandedOnMobile
+      >
+        <section className="card pad mb">
+          <div className="card-title">
+            <div>
+              <h3>Organisation email-footer address</h3>
+              <p className="help">
+                New templates copy this postal address into their editable
+                footer. Program Cue does not substitute an event venue or a
+                fictional address.
+              </p>
+            </div>
+          </div>
+          {loaderData.canManageOrganisationCommunicationSettings ? (
+            <Form method="post" className="stack">
+              <input
+                type="hidden"
+                name="intent"
+                value="save-organisation-physical-address"
+              />
+              <input
+                type="hidden"
+                name="physicalAddressRevision"
+                value={loaderData.organisationPhysicalAddressRevision}
+              />
+              <label className="label">
+                Complete postal address
+                <textarea
+                  className="textarea"
+                  name="physicalAddress"
+                  defaultValue={loaderData.organisationPhysicalAddress}
+                  minLength={5}
+                  maxLength={500}
+                  required
+                />
+              </label>
+              <button type="submit" className="btn" disabled={working}>
+                Save organisation address
+              </button>
+            </Form>
+          ) : (
+            <p className="validation-item info">
+              An organisation owner must configure this address before new
+              templates can be published with a compliant footer.
+            </p>
+          )}
+        </section>
+        <DeliveryConfiguration
+          loaderData={loaderData}
+          working={working}
+          pendingIntent={pendingIntent}
+        />
+      </AdminPageSection>
+      <AdminPageSection
+        id="communications-automation"
+        label="Automatic reminders"
+        description="Scheduled reminder and escalation policy"
+      >
+        <CommunicationAutomation
+          loaderData={loaderData}
+          working={working}
+          pendingIntent={pendingIntent}
+        />
+      </AdminPageSection>
+      <AdminPageSection
+        id="communications-calendars"
+        label="Calendar administration"
+        description="Connections and published-session invitations"
+      >
+        <CalendarAdministration
+          loaderData={loaderData}
+          working={working}
+          pendingIntent={pendingIntent}
+        />
+      </AdminPageSection>
+    </>
+  );
+}
+
+function CommunicationsWorkView({
+  loaderData,
+  selected,
+  working,
+  pendingIntent,
+  recovery,
+  templateDirty,
+  templateDraft,
+  setTemplateDraft,
+  setTemplateDirty,
+}: {
+  loaderData: CommunicationsCentreLoaderData;
+  selected: CommunicationsCentreLoaderData["selected"];
+  working: boolean;
+  pendingIntent: FormDataEntryValue | null | undefined;
+  recovery: ReturnType<typeof useDraftRecovery>;
+  templateDirty: boolean;
+  templateDraft: TemplateDraftFields;
+  setTemplateDraft(value: TemplateDraftFields): void;
+  setTemplateDirty(value: boolean): void;
+}) {
+  return (
+    <>
+      <DeliveryReadiness loaderData={loaderData} />
+
+      <AdminPageSection
+        id="communications-templates"
+        label="Templates"
+        description="Versioned email content, and the published version every send uses"
+        defaultExpandedOnMobile
+      >
+        <div className="comms-workbench">
+          <TemplateVersionList loaderData={loaderData} selected={selected} />
+          <div className="stack comms-workbench-editor">
+            <DraftRecoveryFeedback recovery={recovery} className="" />
+            <TemplateEditor
+              selected={selected}
+              working={working}
+              pendingIntent={pendingIntent}
+              templateDirty={templateDirty}
+              draft={templateDraft}
+              recoveryState={recovery.state}
+              onChange={(draft) => {
+                setTemplateDraft(draft);
+                setTemplateDirty(true);
+              }}
+            />
+          </div>
+          <TemplatePreview draft={templateDraft} />
+        </div>
+      </AdminPageSection>
+
+      <AdminPageSection
+        id="communications-history"
+        label="History"
+        description="Confirmed sends and calendar operations for this event"
+      >
+        <CommunicationDeliveryHealth loaderData={loaderData} />
+        <div className="grid grid-2 comms-history">
+          <RecentCommunications
+            loaderData={loaderData}
+            working={working}
+            pendingIntent={pendingIntent}
+          />
+          <CalendarLifecycleTable loaderData={loaderData} />
+        </div>
+      </AdminPageSection>
+    </>
+  );
 }
 
 export default function CommunicationsCentre({
@@ -768,137 +977,23 @@ export default function CommunicationsCentre({
       ) : null}
 
       {setup ? (
-        <>
-          <AdminPageSection
-            id="communications-delivery"
-            label="Delivery configuration"
-            description="Sender profiles the provider will accept, and a real test send"
-            defaultExpandedOnMobile
-          >
-            <section className="card pad mb">
-              <div className="card-title">
-                <div>
-                  <h3>Organisation email-footer address</h3>
-                  <p className="help">
-                    New templates copy this postal address into their editable
-                    footer. Program Cue does not substitute an event venue or a
-                    fictional address.
-                  </p>
-                </div>
-              </div>
-              {loaderData.canManageOrganisationCommunicationSettings ? (
-                <Form method="post" className="stack">
-                  <input
-                    type="hidden"
-                    name="intent"
-                    value="save-organisation-physical-address"
-                  />
-                  <input
-                    type="hidden"
-                    name="physicalAddressRevision"
-                    value={loaderData.organisationPhysicalAddressRevision}
-                  />
-                  <label className="label">
-                    Complete postal address
-                    <textarea
-                      className="textarea"
-                      name="physicalAddress"
-                      defaultValue={loaderData.organisationPhysicalAddress}
-                      minLength={5}
-                      maxLength={500}
-                      required
-                    />
-                  </label>
-                  <button type="submit" className="btn" disabled={working}>
-                    Save organisation address
-                  </button>
-                </Form>
-              ) : (
-                <p className="validation-item info">
-                  An organisation owner must configure this address before new
-                  templates can be published with a compliant footer.
-                </p>
-              )}
-            </section>
-            <DeliveryConfiguration
-              loaderData={loaderData}
-              working={working}
-              pendingIntent={pendingIntent}
-            />
-          </AdminPageSection>
-          <AdminPageSection
-            id="communications-automation"
-            label="Automatic reminders"
-            description="Scheduled reminder and escalation policy"
-          >
-            <CommunicationAutomation
-              loaderData={loaderData}
-              working={working}
-              pendingIntent={pendingIntent}
-            />
-          </AdminPageSection>
-          <AdminPageSection
-            id="communications-calendars"
-            label="Calendar administration"
-            description="Connections and published-session invitations"
-          >
-            <CalendarAdministration
-              loaderData={loaderData}
-              working={working}
-              pendingIntent={pendingIntent}
-            />
-          </AdminPageSection>
-        </>
+        <CommunicationsSetupView
+          loaderData={loaderData}
+          working={working}
+          pendingIntent={pendingIntent}
+        />
       ) : (
-        <>
-          <DeliveryReadiness loaderData={loaderData} />
-
-          <AdminPageSection
-            id="communications-templates"
-            label="Templates"
-            description="Versioned email content, and the published version every send uses"
-            defaultExpandedOnMobile
-          >
-            <div className="comms-workbench">
-              <TemplateVersionList
-                loaderData={loaderData}
-                selected={selected}
-              />
-              <div className="stack comms-workbench-editor">
-                <DraftRecoveryFeedback recovery={recovery} className="" />
-                <TemplateEditor
-                  selected={selected}
-                  working={working}
-                  pendingIntent={pendingIntent}
-                  templateDirty={templateDirty}
-                  draft={templateDraft}
-                  recoveryState={recovery.state}
-                  onChange={(draft) => {
-                    setTemplateDraft(draft);
-                    setTemplateDirty(true);
-                  }}
-                />
-              </div>
-              <TemplatePreview draft={templateDraft} />
-            </div>
-          </AdminPageSection>
-
-          <AdminPageSection
-            id="communications-history"
-            label="History"
-            description="Confirmed sends and calendar operations for this event"
-          >
-            <CommunicationDeliveryHealth loaderData={loaderData} />
-            <div className="grid grid-2 comms-history">
-              <RecentCommunications
-                loaderData={loaderData}
-                working={working}
-                pendingIntent={pendingIntent}
-              />
-              <CalendarLifecycleTable loaderData={loaderData} />
-            </div>
-          </AdminPageSection>
-        </>
+        <CommunicationsWorkView
+          loaderData={loaderData}
+          selected={selected}
+          working={working}
+          pendingIntent={pendingIntent}
+          recovery={recovery}
+          templateDirty={templateDirty}
+          templateDraft={templateDraft}
+          setTemplateDraft={setTemplateDraft}
+          setTemplateDirty={setTemplateDirty}
+        />
       )}
     </>
   );

@@ -488,6 +488,411 @@ async function translateApplicationActionError(input: {
   throw error;
 }
 
+type ApplicationPublicForm = Awaited<
+  ReturnType<SubmissionService["getPublicForm"]>
+>;
+type ApplicationApplicant = NonNullable<
+  Awaited<ReturnType<SubmissionService["applicants"]["get"]>>
+>;
+type ClaimedSignOutContext = Awaited<
+  ReturnType<SubmissionService["requireClaimedCoSpeakerContext"]>
+> | null;
+
+async function handlePublicApplicationIntent({
+  intent,
+  formData,
+  form,
+  request,
+  service,
+  slug,
+  env,
+  claimedSignOutContext,
+  claimedSpeakerId,
+}: {
+  intent: string;
+  formData: FormData;
+  form: ApplicationPublicForm;
+  request: Request;
+  service: SubmissionService;
+  slug: string;
+  env: CloudflareEnvironment;
+  claimedSignOutContext: ClaimedSignOutContext;
+  claimedSpeakerId: string | null;
+}) {
+  if (intent === "request_code") {
+    const email = String(formData.get("email") ?? "");
+    await enforcePublicAbuseProtection({
+      env,
+      request,
+      action: "application_request_code",
+      tenantId: form.eventId,
+      email,
+      turnstileToken: String(formData.get("turnstile-token") ?? ""),
+    });
+    const result = await service.applicants.requestCode(
+      form,
+      email,
+      String(formData.get("password") ?? ""),
+      request,
+    );
+    return data<ActionResult>({
+      ok: true,
+      stage: "code",
+      email: email.trim().toLowerCase(),
+      demoCode: result.demoCode,
+      message: result.demoCode
+        ? "Demo verification is ready; no email was claimed as sent."
+        : "Check your email for a six-digit verification code.",
+    });
+  }
+  if (intent === "verify_code") {
+    await enforcePublicAbuseProtection({
+      env,
+      request,
+      action: "application_verify_code",
+      tenantId: form.eventId,
+      email: String(formData.get("email") ?? ""),
+      turnstileToken: String(formData.get("turnstile-token") ?? ""),
+    });
+    const result = await service.applicants.verifyCode(
+      form,
+      String(formData.get("email") ?? ""),
+      String(formData.get("code") ?? ""),
+      request,
+    );
+    return redirect(`/apply/${encodeURIComponent(slug)}`, {
+      headers: { "set-cookie": result.cookie },
+    });
+  }
+  if (intent === "sign_out") {
+    if (form.accessMode === "account_required") {
+      const applicantCookie = await service.applicants.signOut(request, form);
+      const result = await signOutSession(env, request);
+      if (!result.ok) return result;
+      const returnTo = claimedSignOutContext
+        ? `/apply/${encodeURIComponent(slug)}?${new URLSearchParams({ claimedSpeaker: claimedSpeakerId! })}`
+        : `/apply/${encodeURIComponent(slug)}`;
+      const headers = new Headers(result.headers);
+      headers.append("set-cookie", applicantCookie);
+      return redirect(`/sign-in?${new URLSearchParams({ returnTo })}`, {
+        status: 303,
+        headers,
+      });
+    }
+    return redirect(
+      claimedSignOutContext ? "/" : `/apply/${encodeURIComponent(slug)}`,
+      {
+        headers: {
+          "set-cookie": await service.applicants.signOut(request, form),
+        },
+      },
+    );
+  }
+  if (intent === "start_anonymous") {
+    await enforcePublicAbuseProtection({
+      env,
+      request,
+      action: "application_start_anonymous",
+      tenantId: form.eventId,
+      email: "anonymous",
+      turnstileToken: String(formData.get("turnstile-token") ?? ""),
+    });
+    const result = await service.startAnonymousDraft(
+      slug,
+      String(formData.get("password") ?? ""),
+      String(formData.get("intentId") ?? ""),
+    );
+    const webhookWarning = await queueDraftCreatedWebhook(
+      env,
+      form.eventId,
+      { personId: null },
+      result.draftId,
+      true,
+    );
+    const query = await applicationNoticeQuery(env, {
+      slug,
+      kind: "created",
+      submissionId: result.draftId,
+      webhookWarning: Boolean(webhookWarning),
+    });
+    return redirect(`/apply/${encodeURIComponent(slug)}?${query}`, {
+      headers: { "set-cookie": result.cookie },
+    });
+  }
+  return null;
+}
+
+async function handleAuthenticatedApplicationIntent({
+  intent,
+  formData,
+  form,
+  applicant,
+  service,
+  slug,
+  env,
+}: {
+  intent: string;
+  formData: FormData;
+  form: ApplicationPublicForm;
+  applicant: ApplicationApplicant;
+  service: SubmissionService;
+  slug: string;
+  env: CloudflareEnvironment;
+}) {
+  if (intent === "create_draft") {
+    const id = await service.createDraft(
+      slug,
+      applicant,
+      String(formData.get("intentId") ?? ""),
+    );
+    const webhookWarning = await queueDraftCreatedWebhook(
+      env,
+      form.eventId,
+      { personId: applicant.personId },
+      id,
+      false,
+    );
+    const query = await applicationNoticeQuery(env, {
+      slug,
+      kind: "created",
+      submissionId: id,
+      webhookWarning: Boolean(webhookWarning),
+    });
+    return redirect(`/apply/${encodeURIComponent(slug)}?${query}`);
+  }
+  if (intent === "claim_speaker") {
+    await service.claimCoSpeaker(
+      slug,
+      applicant,
+      String(formData.get("invitationId") ?? ""),
+    );
+    return redirect(`/apply/${encodeURIComponent(slug)}`);
+  }
+  if (intent === "update_profile") {
+    await service.updateClaimedSpeakerProfile(slug, applicant, {
+      revision: formData.get("revision"),
+      name: formData.get("name"),
+      biography: formData.get("biography"),
+    });
+    const query = await applicationNoticeQuery(env, {
+      slug,
+      kind: "profile_updated",
+      submissionId: null,
+      webhookWarning: false,
+    });
+    return redirect(`/apply/${encodeURIComponent(slug)}?${query}`);
+  }
+  if (intent === "withdraw") {
+    if (formData.get("confirmWithdrawal") !== "yes") {
+      return data<ActionResult>(
+        {
+          ok: false,
+          message: "Confirm that you want to withdraw this application.",
+        },
+        { status: 422 },
+      );
+    }
+    const result = await service.withdrawSubmission(slug, applicant, {
+      submissionId: formData.get("submissionId"),
+      revision: formData.get("revision"),
+    });
+    const [webhookWarning, realtimeFailure] = await Promise.all([
+      queueApplicantWebhook(env, { personId: applicant.personId }, result, {
+        eventType: "submission.withdrawn",
+        entityType: "submission",
+        entityId: result.submissionId,
+        idempotencyKey: `submission.withdrawn:${result.submissionId}`,
+        data: { status: "withdrawn", revision: result.revision },
+      }),
+      recordRouteChange(
+        env,
+        { organisationId: result.organisationId, eventId: result.eventId },
+        {
+          entityType: "submission",
+          entityId: result.submissionId,
+          changeType: "updated",
+        },
+      ),
+    ]);
+    const warnings = [webhookWarning, realtimeFailure?.message].filter(
+      (warning): warning is string => Boolean(warning),
+    );
+    if (warnings.length) {
+      return data<ActionResult>(
+        {
+          ok: false,
+          committed: true,
+          submissionId: result.submissionId,
+          revision: result.revision,
+          message: `Application withdrawn successfully. ${warnings.join(" ")}`,
+        },
+        { status: 207 },
+      );
+    }
+    const query = await applicationNoticeQuery(env, {
+      slug,
+      kind: "withdrawn",
+      submissionId: result.submissionId,
+      webhookWarning: false,
+    });
+    return redirect(`/apply/${encodeURIComponent(slug)}?${query}`);
+  }
+  const payload = parsePayload(formData);
+  if (intent === "save_draft") {
+    await service.saveDraft(slug, applicant, payload);
+    const query = await applicationNoticeQuery(env, {
+      slug,
+      kind: "saved",
+      submissionId: String(payload.submissionId),
+      webhookWarning: false,
+    });
+    return redirect(`/apply/${encodeURIComponent(slug)}?${query}`);
+  }
+  if (intent === "revise_submission") {
+    if (formData.get("confirmRevision") !== "yes") {
+      return data<ActionResult>(
+        {
+          ok: false,
+          message: "Confirm that the revised application is ready to save.",
+        },
+        { status: 422 },
+      );
+    }
+    const result = await service.reviseSubmitted(
+      slug,
+      applicant,
+      payload,
+      String(formData.get("intentId") ?? ""),
+    );
+    const realtimeFailure = await recordRouteChange(
+      env,
+      {
+        organisationId: result.organisationId,
+        eventId: result.eventId,
+      },
+      {
+        entityType: "submission",
+        entityId: result.submissionId,
+        changeType: "updated",
+      },
+    );
+    if (
+      result.invitations.queueFailed > 0 ||
+      result.webhookQueueFailed ||
+      realtimeFailure
+    ) {
+      const warnings = [
+        result.invitations.queueFailed > 0
+          ? `${result.invitations.queueFailed} new co-speaker invitation${result.invitations.queueFailed === 1 ? "" : "s"} could not be queued; the saved operation requires attention.`
+          : null,
+        result.webhookQueueFailed
+          ? "One or more outbound webhooks could not be queued."
+          : null,
+        realtimeFailure?.message ?? null,
+      ].filter((warning): warning is string => Boolean(warning));
+      return data<ActionResult>(
+        {
+          ok: false,
+          committed: true,
+          submissionId: result.submissionId,
+          revision: result.revision,
+          message: `Application revision saved successfully. ${warnings.join(" ")}`,
+        },
+        { status: 207 },
+      );
+    }
+    const query = await applicationNoticeQuery(env, {
+      slug,
+      kind: "revised",
+      submissionId: result.submissionId,
+      webhookWarning: false,
+    });
+    return redirect(`/apply/${encodeURIComponent(slug)}?${query}`);
+  }
+  if (intent === "submit") {
+    if (formData.get("confirm") !== "yes") {
+      return data<ActionResult>(
+        {
+          ok: false,
+          message: "Confirm that the application is ready to submit.",
+        },
+        { status: 422 },
+      );
+    }
+    const result = await service.submitDraft(slug, applicant, payload);
+    const webhookWarnings = await Promise.all([
+      queueApplicantWebhook(env, { personId: applicant.personId }, result, {
+        eventType: "submission.submitted",
+        entityType: "submission",
+        entityId: result.submissionId,
+        idempotencyKey: `submission.submitted:${result.submissionId}`,
+        data: {
+          status: result.status,
+          directSessionId: result.directSessionId,
+        },
+      }),
+      result.directSessionId
+        ? queueApplicantWebhook(env, { personId: applicant.personId }, result, {
+            eventType: "session.created",
+            entityType: "session",
+            entityId: result.directSessionId,
+            idempotencyKey: `session.created:${result.directSessionId}`,
+            data: {
+              source: "public_direct_session_form",
+              intakeReference: result.submissionId,
+            },
+          })
+        : Promise.resolve(null),
+    ]);
+    const realtimeFailure = await recordRouteChange(
+      env,
+      {
+        organisationId: result.organisationId,
+        eventId: result.eventId,
+      },
+      {
+        entityType: "submission",
+        entityId: result.submissionId,
+        changeType: "created",
+      },
+    );
+    if (
+      result.confirmation.status === "queue_failed" ||
+      result.invitations.queueFailed > 0 ||
+      realtimeFailure ||
+      webhookWarnings.some(Boolean)
+    ) {
+      const warnings = [
+        result.confirmation.status === "queue_failed"
+          ? "Its confirmation email could not be queued; the saved operation requires a retry."
+          : null,
+        result.invitations.queueFailed > 0
+          ? `${result.invitations.queueFailed} co-speaker invitation${result.invitations.queueFailed === 1 ? "" : "s"} could not be queued; the saved operations require a retry.`
+          : null,
+        realtimeFailure?.message ?? null,
+        ...webhookWarnings,
+      ].filter((warning): warning is string => Boolean(warning));
+      return data<ActionResult>(
+        {
+          ok: false,
+          committed: true,
+          submissionId: result.submissionId,
+          message: `Application submitted successfully. ${warnings.join(" ")}`,
+        },
+        { status: 207 },
+      );
+    }
+    const query = await applicationNoticeQuery(env, {
+      slug,
+      kind: "submitted",
+      submissionId: String(payload.submissionId),
+      webhookWarning: false,
+    });
+    return redirect(`/apply/${encodeURIComponent(slug)}?${query}`);
+  }
+  throw new Error("Application action dispatch reached an invalid state.");
+}
+
 export async function action({ request, context, params }: Route.ActionArgs) {
   const rejectedOrigin = rejectCrossOriginBrowserMutation(request);
   if (rejectedOrigin) return rejectedOrigin;
@@ -559,368 +964,32 @@ export async function action({ request, context, params }: Route.ActionArgs) {
         : null;
     const form =
       claimedSignOutContext?.form ?? (await service.getPublicForm(slug));
-    if (intent === "request_code") {
-      const email = String(formData.get("email") ?? "");
-      await enforcePublicAbuseProtection({
-        env,
-        request,
-        action: "application_request_code",
-        tenantId: form.eventId,
-        email,
-        turnstileToken: String(formData.get("turnstile-token") ?? ""),
-      });
-      const result = await service.applicants.requestCode(
-        form,
-        email,
-        String(formData.get("password") ?? ""),
-        request,
-      );
-      return data<ActionResult>({
-        ok: true,
-        stage: "code",
-        email: email.trim().toLowerCase(),
-        demoCode: result.demoCode,
-        message: result.demoCode
-          ? "Demo verification is ready; no email was claimed as sent."
-          : "Check your email for a six-digit verification code.",
-      });
-    }
-    if (intent === "verify_code") {
-      await enforcePublicAbuseProtection({
-        env,
-        request,
-        action: "application_verify_code",
-        tenantId: form.eventId,
-        email: String(formData.get("email") ?? ""),
-        turnstileToken: String(formData.get("turnstile-token") ?? ""),
-      });
-      const result = await service.applicants.verifyCode(
-        form,
-        String(formData.get("email") ?? ""),
-        String(formData.get("code") ?? ""),
-        request,
-      );
-      return redirect(`/apply/${encodeURIComponent(slug)}`, {
-        headers: { "set-cookie": result.cookie },
-      });
-    }
-    if (intent === "sign_out") {
-      if (form.accessMode === "account_required") {
-        const applicantCookie = await service.applicants.signOut(request, form);
-        const result = await signOutSession(env, request);
-        if (!result.ok) return result;
-        const returnTo = claimedSignOutContext
-          ? `/apply/${encodeURIComponent(slug)}?${new URLSearchParams({ claimedSpeaker: claimedSpeakerId! })}`
-          : `/apply/${encodeURIComponent(slug)}`;
-        const headers = new Headers(result.headers);
-        headers.append("set-cookie", applicantCookie);
-        return redirect(`/sign-in?${new URLSearchParams({ returnTo })}`, {
-          status: 303,
-          headers,
-        });
-      }
-      return redirect(
-        claimedSignOutContext ? "/" : `/apply/${encodeURIComponent(slug)}`,
-        {
-          headers: {
-            "set-cookie": await service.applicants.signOut(request, form),
-          },
-        },
-      );
-    }
-    if (intent === "start_anonymous") {
-      await enforcePublicAbuseProtection({
-        env,
-        request,
-        action: "application_start_anonymous",
-        tenantId: form.eventId,
-        email: "anonymous",
-        turnstileToken: String(formData.get("turnstile-token") ?? ""),
-      });
-      const result = await service.startAnonymousDraft(
-        slug,
-        String(formData.get("password") ?? ""),
-        String(formData.get("intentId") ?? ""),
-      );
-      const webhookWarning = await queueDraftCreatedWebhook(
-        env,
-        form.eventId,
-        { personId: null },
-        result.draftId,
-        true,
-      );
-      const query = await applicationNoticeQuery(env, {
-        slug,
-        kind: "created",
-        submissionId: result.draftId,
-        webhookWarning: Boolean(webhookWarning),
-      });
-      return redirect(`/apply/${encodeURIComponent(slug)}?${query}`, {
-        headers: { "set-cookie": result.cookie },
-      });
-    }
+    const publicIntentResponse = await handlePublicApplicationIntent({
+      intent,
+      formData,
+      form,
+      request,
+      service,
+      slug,
+      env,
+      claimedSignOutContext,
+      claimedSpeakerId,
+    });
+    if (publicIntentResponse) return publicIntentResponse;
     const applicant = await service.applicants.get(request, form);
     if (!applicant)
       throw new Response("Verify your email before changing an application.", {
         status: 401,
       });
-    if (intent === "create_draft") {
-      const id = await service.createDraft(
-        slug,
-        applicant,
-        String(formData.get("intentId") ?? ""),
-      );
-      const webhookWarning = await queueDraftCreatedWebhook(
-        env,
-        form.eventId,
-        { personId: applicant.personId },
-        id,
-        false,
-      );
-      const query = await applicationNoticeQuery(env, {
-        slug,
-        kind: "created",
-        submissionId: id,
-        webhookWarning: Boolean(webhookWarning),
-      });
-      return redirect(`/apply/${encodeURIComponent(slug)}?${query}`);
-    }
-    if (intent === "claim_speaker") {
-      await service.claimCoSpeaker(
-        slug,
-        applicant,
-        String(formData.get("invitationId") ?? ""),
-      );
-      return redirect(`/apply/${encodeURIComponent(slug)}`);
-    }
-    if (intent === "update_profile") {
-      await service.updateClaimedSpeakerProfile(slug, applicant, {
-        revision: formData.get("revision"),
-        name: formData.get("name"),
-        biography: formData.get("biography"),
-      });
-      const query = await applicationNoticeQuery(env, {
-        slug,
-        kind: "profile_updated",
-        submissionId: null,
-        webhookWarning: false,
-      });
-      return redirect(`/apply/${encodeURIComponent(slug)}?${query}`);
-    }
-    if (intent === "withdraw") {
-      if (formData.get("confirmWithdrawal") !== "yes") {
-        return data<ActionResult>(
-          {
-            ok: false,
-            message: "Confirm that you want to withdraw this application.",
-          },
-          { status: 422 },
-        );
-      }
-      const result = await service.withdrawSubmission(slug, applicant, {
-        submissionId: formData.get("submissionId"),
-        revision: formData.get("revision"),
-      });
-      const [webhookWarning, realtimeFailure] = await Promise.all([
-        queueApplicantWebhook(env, { personId: applicant.personId }, result, {
-          eventType: "submission.withdrawn",
-          entityType: "submission",
-          entityId: result.submissionId,
-          idempotencyKey: `submission.withdrawn:${result.submissionId}`,
-          data: { status: "withdrawn", revision: result.revision },
-        }),
-        recordRouteChange(
-          env,
-          { organisationId: result.organisationId, eventId: result.eventId },
-          {
-            entityType: "submission",
-            entityId: result.submissionId,
-            changeType: "updated",
-          },
-        ),
-      ]);
-      const warnings = [webhookWarning, realtimeFailure?.message].filter(
-        (warning): warning is string => Boolean(warning),
-      );
-      if (warnings.length) {
-        return data<ActionResult>(
-          {
-            ok: false,
-            committed: true,
-            submissionId: result.submissionId,
-            revision: result.revision,
-            message: `Application withdrawn successfully. ${warnings.join(" ")}`,
-          },
-          { status: 207 },
-        );
-      }
-      const query = await applicationNoticeQuery(env, {
-        slug,
-        kind: "withdrawn",
-        submissionId: result.submissionId,
-        webhookWarning: false,
-      });
-      return redirect(`/apply/${encodeURIComponent(slug)}?${query}`);
-    }
-    const payload = parsePayload(formData);
-    if (intent === "save_draft") {
-      await service.saveDraft(slug, applicant, payload);
-      const query = await applicationNoticeQuery(env, {
-        slug,
-        kind: "saved",
-        submissionId: String(payload.submissionId),
-        webhookWarning: false,
-      });
-      return redirect(`/apply/${encodeURIComponent(slug)}?${query}`);
-    }
-    if (intent === "revise_submission") {
-      if (formData.get("confirmRevision") !== "yes") {
-        return data<ActionResult>(
-          {
-            ok: false,
-            message: "Confirm that the revised application is ready to save.",
-          },
-          { status: 422 },
-        );
-      }
-      const result = await service.reviseSubmitted(
-        slug,
-        applicant,
-        payload,
-        String(formData.get("intentId") ?? ""),
-      );
-      const realtimeFailure = await recordRouteChange(
-        env,
-        {
-          organisationId: result.organisationId,
-          eventId: result.eventId,
-        },
-        {
-          entityType: "submission",
-          entityId: result.submissionId,
-          changeType: "updated",
-        },
-      );
-      if (
-        result.invitations.queueFailed > 0 ||
-        result.webhookQueueFailed ||
-        realtimeFailure
-      ) {
-        const warnings = [
-          result.invitations.queueFailed > 0
-            ? `${result.invitations.queueFailed} new co-speaker invitation${result.invitations.queueFailed === 1 ? "" : "s"} could not be queued; the saved operation requires attention.`
-            : null,
-          result.webhookQueueFailed
-            ? "One or more outbound webhooks could not be queued."
-            : null,
-          realtimeFailure?.message ?? null,
-        ].filter((warning): warning is string => Boolean(warning));
-        return data<ActionResult>(
-          {
-            ok: false,
-            committed: true,
-            submissionId: result.submissionId,
-            revision: result.revision,
-            message: `Application revision saved successfully. ${warnings.join(" ")}`,
-          },
-          { status: 207 },
-        );
-      }
-      const query = await applicationNoticeQuery(env, {
-        slug,
-        kind: "revised",
-        submissionId: result.submissionId,
-        webhookWarning: false,
-      });
-      return redirect(`/apply/${encodeURIComponent(slug)}?${query}`);
-    }
-    if (intent === "submit") {
-      if (formData.get("confirm") !== "yes") {
-        return data<ActionResult>(
-          {
-            ok: false,
-            message: "Confirm that the application is ready to submit.",
-          },
-          { status: 422 },
-        );
-      }
-      const result = await service.submitDraft(slug, applicant, payload);
-      const webhookWarnings = await Promise.all([
-        queueApplicantWebhook(env, { personId: applicant.personId }, result, {
-          eventType: "submission.submitted",
-          entityType: "submission",
-          entityId: result.submissionId,
-          idempotencyKey: `submission.submitted:${result.submissionId}`,
-          data: {
-            status: result.status,
-            directSessionId: result.directSessionId,
-          },
-        }),
-        result.directSessionId
-          ? queueApplicantWebhook(
-              env,
-              { personId: applicant.personId },
-              result,
-              {
-                eventType: "session.created",
-                entityType: "session",
-                entityId: result.directSessionId,
-                idempotencyKey: `session.created:${result.directSessionId}`,
-                data: {
-                  source: "public_direct_session_form",
-                  intakeReference: result.submissionId,
-                },
-              },
-            )
-          : Promise.resolve(null),
-      ]);
-      const realtimeFailure = await recordRouteChange(
-        env,
-        {
-          organisationId: result.organisationId,
-          eventId: result.eventId,
-        },
-        {
-          entityType: "submission",
-          entityId: result.submissionId,
-          changeType: "created",
-        },
-      );
-      if (
-        result.confirmation.status === "queue_failed" ||
-        result.invitations.queueFailed > 0 ||
-        realtimeFailure ||
-        webhookWarnings.some(Boolean)
-      ) {
-        const warnings = [
-          result.confirmation.status === "queue_failed"
-            ? "Its confirmation email could not be queued; the saved operation requires a retry."
-            : null,
-          result.invitations.queueFailed > 0
-            ? `${result.invitations.queueFailed} co-speaker invitation${result.invitations.queueFailed === 1 ? "" : "s"} could not be queued; the saved operations require a retry.`
-            : null,
-          realtimeFailure?.message ?? null,
-          ...webhookWarnings,
-        ].filter((warning): warning is string => Boolean(warning));
-        return data<ActionResult>(
-          {
-            ok: false,
-            committed: true,
-            submissionId: result.submissionId,
-            message: `Application submitted successfully. ${warnings.join(" ")}`,
-          },
-          { status: 207 },
-        );
-      }
-      const query = await applicationNoticeQuery(env, {
-        slug,
-        kind: "submitted",
-        submissionId: String(payload.submissionId),
-        webhookWarning: false,
-      });
-      return redirect(`/apply/${encodeURIComponent(slug)}?${query}`);
-    }
-    throw new Error("Application action dispatch reached an invalid state.");
+    return handleAuthenticatedApplicationIntent({
+      intent,
+      formData,
+      form,
+      applicant,
+      service,
+      slug,
+      env,
+    });
   } catch (error) {
     return translateApplicationActionError({
       error,

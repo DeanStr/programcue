@@ -91,7 +91,7 @@ async function confirmPreviewed(
 }
 
 describe("Communications D1 vertical slice", () => {
-  describe("template and draft workflows", () => {
+  describe("template authoring and draft delivery", () => {
     it("persists, revises, previews and confirms one authoritative draft row", async () => {
       const { testEnv, sent } = await communicationEnvironment();
       const service = new CommunicationService(testEnv);
@@ -599,7 +599,7 @@ describe("Communications D1 vertical slice", () => {
     });
   });
 
-  describe("template and draft workflows", () => {
+  describe("task reminder merge data", () => {
     it("uses the most urgent incomplete task as reminder merge data", async () => {
       const { testEnv } = await communicationEnvironment();
       const token = crypto.randomUUID();
@@ -647,7 +647,7 @@ describe("Communications D1 vertical slice", () => {
     });
   });
 
-  describe("template and draft workflows", () => {
+  describe("recipient eligibility", () => {
     it("excludes reserved-domain recipients from production delivery previews", async () => {
       const { testEnv } = await communicationEnvironment();
       const productionEnv = {
@@ -769,7 +769,7 @@ describe("Communications D1 vertical slice", () => {
     });
   });
 
-  describe("template and draft workflows", () => {
+  describe("preview consistency", () => {
     it("requires a new preview when the recipient set changes before confirmation", async () => {
       const { testEnv, sent } = await communicationEnvironment();
       const service = new CommunicationService(testEnv);
@@ -886,7 +886,7 @@ describe("Communications D1 vertical slice", () => {
     });
   });
 
-  describe("template and draft workflows", () => {
+  describe("suppression changes", () => {
     it("honours new suppressions without expanding the previewed audience", async () => {
       const { testEnv } = await communicationEnvironment();
       const service = new CommunicationService(testEnv);
@@ -1086,7 +1086,7 @@ describe("Communications D1 vertical slice", () => {
     });
   });
 
-  describe("template and draft workflows", () => {
+  describe("template version concurrency", () => {
     it("allocates adjacent immutable versions when two template saves race", async () => {
       const { testEnv } = await communicationEnvironment();
       const service = new CommunicationService(testEnv);

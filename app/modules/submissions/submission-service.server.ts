@@ -1,9 +1,11 @@
 import { AirtableProviderBoundary } from "~/modules/airtable/airtable-provider-boundary.server";
+import { AcceptedCoSpeakerWorkflows } from "./submission-accepted-co-speaker-workflows.server";
 import { SubmissionAdministrationWorkflows } from "./submission-administration-workflows.server";
 import { SubmissionApplicantWorkflows } from "./submission-applicant-workflows.server";
 import { SubmissionCoSpeakerWorkflows } from "./submission-co-speaker-workflows.server";
 import { SubmissionFormWorkflows } from "./submission-form-workflows.server";
 import { SubmissionServiceFoundation } from "./submission-service-foundation.server";
+import { SubmissionSubmittedRevisionWorkflows } from "./submission-submitted-revision-workflows.server";
 
 export {
   PublicFormUnavailableError,
@@ -33,7 +35,9 @@ export class SubmissionService {
   private readonly shared: SubmissionServiceFoundation;
   private readonly forms: SubmissionFormWorkflows;
   private readonly coSpeakers: SubmissionCoSpeakerWorkflows;
+  private readonly acceptedCoSpeakers: AcceptedCoSpeakerWorkflows;
   private readonly applicantWorkflows: SubmissionApplicantWorkflows;
+  private readonly submittedRevisions: SubmissionSubmittedRevisionWorkflows;
   private readonly administration: SubmissionAdministrationWorkflows;
   readonly repository: SubmissionServiceFoundation["repository"];
   readonly applicants: SubmissionServiceFoundation["applicants"];
@@ -47,7 +51,15 @@ export class SubmissionService {
     this.shared = new SubmissionServiceFoundation(env, collaborators);
     this.forms = new SubmissionFormWorkflows(env, collaborators);
     this.coSpeakers = new SubmissionCoSpeakerWorkflows(env, collaborators);
+    this.acceptedCoSpeakers = new AcceptedCoSpeakerWorkflows(
+      env,
+      collaborators,
+    );
     this.applicantWorkflows = new SubmissionApplicantWorkflows(
+      env,
+      collaborators,
+    );
+    this.submittedRevisions = new SubmissionSubmittedRevisionWorkflows(
       env,
       collaborators,
     );
@@ -127,16 +139,16 @@ export class SubmissionService {
   }
 
   inviteAcceptedCoSpeaker(
-    ...args: Parameters<SubmissionCoSpeakerWorkflows["inviteAcceptedCoSpeaker"]>
+    ...args: Parameters<AcceptedCoSpeakerWorkflows["inviteAcceptedCoSpeaker"]>
   ) {
-    return this.coSpeakers.inviteAcceptedCoSpeaker(...args);
+    return this.acceptedCoSpeakers.inviteAcceptedCoSpeaker(...args);
   }
   recoverAcceptedCoSpeakerInvitation(
     ...args: Parameters<
-      SubmissionCoSpeakerWorkflows["recoverAcceptedCoSpeakerInvitation"]
+      AcceptedCoSpeakerWorkflows["recoverAcceptedCoSpeakerInvitation"]
     >
   ) {
-    return this.coSpeakers.recoverAcceptedCoSpeakerInvitation(...args);
+    return this.acceptedCoSpeakers.recoverAcceptedCoSpeakerInvitation(...args);
   }
   updateClaimedSpeakerProfile(
     ...args: Parameters<
@@ -220,9 +232,9 @@ export class SubmissionService {
     return this.applicantWorkflows.submitDraftForParticipantApi(...args);
   }
   reviseSubmitted(
-    ...args: Parameters<SubmissionApplicantWorkflows["reviseSubmitted"]>
+    ...args: Parameters<SubmissionSubmittedRevisionWorkflows["reviseSubmitted"]>
   ) {
-    return this.applicantWorkflows.reviseSubmitted(...args);
+    return this.submittedRevisions.reviseSubmitted(...args);
   }
   withdrawSubmission(
     ...args: Parameters<SubmissionApplicantWorkflows["withdrawSubmission"]>

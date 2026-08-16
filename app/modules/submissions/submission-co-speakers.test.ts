@@ -143,7 +143,7 @@ function withNthBatchRace(
 }
 
 describe("Submissions D1 vertical slice", () => {
-  describe("co-speaker workflows", () => {
+  describe("submission-time invitation races", () => {
     it("does not enqueue a stale invitation when a co-speaker claims during submission", async () => {
       const { service, id, slug, queued, testEnv } = await publishedForm();
       await testEnv.DB.batch([
@@ -239,7 +239,7 @@ describe("Submissions D1 vertical slice", () => {
     });
   });
 
-  describe("co-speaker workflows", () => {
+  describe("accepted-session invitations and recovery", () => {
     it("invites an unclaimed co-author after acceptance without rewriting submitted answers", async () => {
       const { service, id, slug, queued, testEnv } = await publishedForm();
       await testEnv.DB.batch([
@@ -1079,7 +1079,7 @@ describe("Submissions D1 vertical slice", () => {
     });
   });
 
-  describe("co-speaker workflows", () => {
+  describe("claim revision guards", () => {
     it("rejects a co-speaker claim without its latest exact speaker revision", async () => {
       const { service, id, slug, testEnv } = await publishedForm();
       await testEnv.DB.batch([
@@ -1186,7 +1186,7 @@ describe("Submissions D1 vertical slice", () => {
     });
   });
 
-  describe("co-speaker workflows", () => {
+  describe("direct-session claim lifecycle", () => {
     it("materialises public direct-session intake and supports expiring co-speaker claims", async () => {
       const { service, id, slug, queued } = await publishedForm({
         kind: "direct_session",
@@ -1405,7 +1405,7 @@ describe("Submissions D1 vertical slice", () => {
     });
   });
 
-  describe("co-speaker workflows", () => {
+  describe("claim concurrency", () => {
     it("does not verify a co-speaker identity when the claim token loses its CAS race", async () => {
       const { service, id, slug, testEnv } = await publishedForm();
       await testEnv.DB.batch([
