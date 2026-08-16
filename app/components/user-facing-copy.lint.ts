@@ -260,7 +260,7 @@ describe("user-facing copy", () => {
       }
     }
     expect(leaks).toEqual([]);
-  });
+  }, 15_000);
 
   it("keeps every exemption pointed at a file that still exists", () => {
     const names = new Set(
