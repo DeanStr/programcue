@@ -50,12 +50,47 @@ export type ReviewRecoveryPayload = {
   confidence: string;
   submitterFeedback: string;
   privateNotes: string;
+  aiSuggestionId: string | null;
+  aiImportedCriterionIds: string[];
   /* "affirmed", "conflict" or "" for unanswered. The answer lives here rather
      than in panel state because the score panel unmounts whenever the workspace
      transiently has no selection, and a declaration that disappears on a
      revalidation is worse than no declaration at all. */
   conflictAffirmed: string;
 };
+
+function isReviewRecoveryPayload(
+  value: unknown,
+): value is ReviewRecoveryPayload {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+  const candidate = value as Record<string, unknown>;
+  const scores = candidate.scores;
+  const importedCriterionIds = candidate.aiImportedCriterionIds;
+  return (
+    Boolean(scores) &&
+    typeof scores === "object" &&
+    !Array.isArray(scores) &&
+    Object.entries(scores as Record<string, unknown>).every(
+      ([criterionId, score]) =>
+        criterionId.length > 0 && typeof score === "string",
+    ) &&
+    typeof candidate.recommendation === "string" &&
+    typeof candidate.confidence === "string" &&
+    typeof candidate.submitterFeedback === "string" &&
+    typeof candidate.privateNotes === "string" &&
+    (candidate.aiSuggestionId === null ||
+      typeof candidate.aiSuggestionId === "string") &&
+    Array.isArray(importedCriterionIds) &&
+    importedCriterionIds.every(
+      (criterionId): criterionId is string =>
+        typeof criterionId === "string" && criterionId.length > 0,
+    ) &&
+    new Set(importedCriterionIds).size === importedCriterionIds.length &&
+    (candidate.conflictAffirmed === "" ||
+      candidate.conflictAffirmed === "affirmed" ||
+      candidate.conflictAffirmed === "conflict")
+  );
+}
 
 export type ReviewWorkbenchModel = {
   viewer: ReviewWorkbenchLoaderData["viewer"];
@@ -91,9 +126,17 @@ export type ReviewWorkbenchModel = {
   nextAssignment: ReviewAssignment | null;
   recoveryPayload: ReviewRecoveryPayload;
   recovery: DraftRecoveryController<ReviewRecoveryPayload>;
+  suggestionImport: {
+    suggestionId: string | null;
+    importedCriterionIds: string[];
+  };
+  unchangedAiCriterionIds: string[];
+  confirmedAiCriterionIds: Set<string>;
+  applyReviewerAiSuggestion(): void;
+  setAiCriterionConfirmed(criterionId: string, confirmed: boolean): void;
   clearAutosaveTimer(): void;
   cancelAutosave(): void;
-  markDirty(): void;
+  markDirty(criterionId?: string): void;
   captureRecoveryPayload(form: HTMLFormElement): void;
   requestAssignmentNavigation(href: string): void;
 };
@@ -251,11 +294,20 @@ export function useReviewWorkbenchState({
       confidence: String(workspace.review?.confidence ?? ""),
       submitterFeedback: workspace.review?.submitterFeedback ?? "",
       privateNotes: workspace.review?.privateNotes ?? "",
+      aiSuggestionId: workspace.review?.aiSuggestionId ?? null,
+      aiImportedCriterionIds: workspace.review?.importedCriterionIds ?? [],
       conflictAffirmed: workspace.review?.conflictAffirmedAt ? "affirmed" : "",
     }),
     [workspace.criteria, workspace.review],
   );
   const [recoveryPayload, setRecoveryPayload] = useState(serverRecoveryPayload);
+  const [suggestionImport, setSuggestionImport] = useState(() => ({
+    suggestionId: workspace.review?.aiSuggestionId ?? null,
+    importedCriterionIds: workspace.review?.importedCriterionIds ?? [],
+  }));
+  const [confirmedAiCriterionIds, setConfirmedAiCriterionIds] = useState<
+    Set<string>
+  >(() => new Set(workspace.review?.confirmedAiCriterionIds ?? []));
   /* The recovery payload already mirrors every score the reviewer has entered,
      on the server copy, on a restore and on every edit. A second copy of the
      same values only existed to count them, and two states for one fact drift. */
@@ -299,6 +351,23 @@ export function useReviewWorkbenchState({
       : recoveryPayload.conflictAffirmed === "conflict"
         ? "conflict"
         : "unanswered";
+  const reviewerSuggestion = workspace.reviewerAiSuggestion;
+  const suggestionByCriterionId = new Map(
+    reviewerSuggestion?.suggestions.map((suggestion) => [
+      suggestion.criterionId,
+      suggestion,
+    ]) ?? [],
+  );
+  const unchangedAiCriterionIds = suggestionImport.suggestionId
+    ? suggestionImport.importedCriterionIds.filter((criterionId) => {
+        const suggestion = suggestionByCriterionId.get(criterionId);
+        return (
+          suggestion?.suggestedValue !== null &&
+          String(recoveryPayload.scores[criterionId] ?? "") ===
+            suggestion?.suggestedValue
+        );
+      })
+    : [];
   const restoreReview = useCallback((payload: ReviewRecoveryPayload) => {
     const form = formRef.current;
     if (!form) return;
@@ -335,6 +404,11 @@ export function useReviewWorkbenchState({
     setValue("submitterFeedback", payload.submitterFeedback);
     setValue("privateNotes", payload.privateNotes);
     setValue("conflictAffirmed", payload.conflictAffirmed);
+    setSuggestionImport({
+      suggestionId: payload.aiSuggestionId,
+      importedCriterionIds: payload.aiImportedCriterionIds,
+    });
+    setConfirmedAiCriterionIds(new Set());
     setRecoveryPayload(payload);
     setDirty(true);
     editGeneration.current += 1;
@@ -353,6 +427,7 @@ export function useReviewWorkbenchState({
     payload: recoveryPayload,
     dirty,
     onRestore: restoreReview,
+    isPayloadCompatible: isReviewRecoveryPayload,
     enabled: Boolean(workspace.selected && !readOnly),
   });
   useEffect(() => {
@@ -458,6 +533,13 @@ export function useReviewWorkbenchState({
       handledSavedRevision.current = null;
       setDirty(false);
       setRecoveryPayload(serverRecoveryPayload);
+      setSuggestionImport({
+        suggestionId: workspace.review?.aiSuggestionId ?? null,
+        importedCriterionIds: workspace.review?.importedCriterionIds ?? [],
+      });
+      setConfirmedAiCriterionIds(
+        new Set(workspace.review?.confirmedAiCriterionIds ?? []),
+      );
       return;
     }
     if (
@@ -467,6 +549,10 @@ export function useReviewWorkbenchState({
       )
     ) {
       setRecoveryPayload(serverRecoveryPayload);
+      setSuggestionImport({
+        suggestionId: workspace.review?.aiSuggestionId ?? null,
+        importedCriterionIds: workspace.review?.importedCriterionIds ?? [],
+      });
     }
   }, [assignmentKey, serverRecoveryPayload]);
   useEffect(() => {
@@ -532,11 +618,45 @@ export function useReviewWorkbenchState({
     void fetcher.submit(values, { method: "post" });
     return true;
   }
-  function markDirty() {
+  function markDirty(criterionId?: string) {
     if (saveFailed) fetcher.reset();
+    if (criterionId) {
+      setConfirmedAiCriterionIds((current) => {
+        if (!current.has(criterionId)) return current;
+        const next = new Set(current);
+        next.delete(criterionId);
+        return next;
+      });
+    }
     editGeneration.current += 1;
     setDirty(true);
     setEditVersion((current) => current + 1);
+  }
+  function applyReviewerAiSuggestion() {
+    if (!reviewerSuggestion || readOnly) return;
+    const suggestedScores = Object.fromEntries(
+      reviewerSuggestion.suggestions
+        .filter((suggestion) => suggestion.suggestedValue !== null)
+        .map((suggestion) => [
+          suggestion.criterionId,
+          suggestion.suggestedValue!,
+        ]),
+    );
+    const importedCriterionIds = Object.keys(suggestedScores);
+    restoreReview({
+      ...recoveryPayload,
+      scores: { ...recoveryPayload.scores, ...suggestedScores },
+      aiSuggestionId: reviewerSuggestion.id,
+      aiImportedCriterionIds: importedCriterionIds,
+    });
+  }
+  function setAiCriterionConfirmed(criterionId: string, confirmed: boolean) {
+    setConfirmedAiCriterionIds((current) => {
+      const next = new Set(current);
+      if (confirmed) next.add(criterionId);
+      else next.delete(criterionId);
+      return next;
+    });
   }
   function captureRecoveryPayload(form: HTMLFormElement) {
     const values = new FormData(form);
@@ -551,6 +671,8 @@ export function useReviewWorkbenchState({
       confidence: String(values.get("confidence") ?? ""),
       submitterFeedback: String(values.get("submitterFeedback") ?? ""),
       privateNotes: String(values.get("privateNotes") ?? ""),
+      aiSuggestionId: suggestionImport.suggestionId,
+      aiImportedCriterionIds: suggestionImport.importedCriterionIds,
       conflictAffirmed: String(values.get("conflictAffirmed") ?? ""),
     });
   }
@@ -686,6 +808,11 @@ export function useReviewWorkbenchState({
     nextAssignment,
     recoveryPayload,
     recovery,
+    suggestionImport,
+    unchangedAiCriterionIds,
+    confirmedAiCriterionIds,
+    applyReviewerAiSuggestion,
+    setAiCriterionConfirmed,
     clearAutosaveTimer,
     cancelAutosave,
     markDirty,

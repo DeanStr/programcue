@@ -472,7 +472,18 @@ omit participant identity, identifying references and attachments server-side.
 One immutable provider-attributed AI first-pass score/rationale may be generated
 for an exact round, rubric and submitted snapshot; a human override is stored
 and audited separately, and missing/invalid provider behavior fails without a
-simulated score. Responses providers now reject explicit non-completed statuses
+simulated score. Separately, an event-opt-in reviewer may request an immutable,
+assignment-specific suggestion only after saving an initial draft. Suggestions
+are bound to the reviewer, assignment revision, scorecard and source snapshot;
+only closed criterion values can be imported through the ordinary autosave
+workflow, free-text criteria receive rationale only, and every unchanged
+imported value requires explicit server-validated confirmation at submission.
+Suggestion provenance is stored on review revisions and the suggestion itself
+never enters aggregates or exposes the administrator first-pass assessment.
+The feature fails closed for Airtable-authoritative events, and a failed
+or lease-expired provider generation requires explicit duplicate-risk
+acknowledgement before another provider request.
+Responses providers now reject explicit non-completed statuses
 before parsing output, and the bounded rationale has a response budget shared
 by model reasoning and final output. A failed generation remains durable and is
 never retried automatically; an explicit acknowledged retry creates a separately
@@ -496,11 +507,15 @@ person's claim remain provider/persona acceptance.
 ### Deterministic auto-placement evidence
 
 The draft Schedule Planner exposes deterministic first-fit auto-placement with
-an exact preview and explicit confirmation. Confirmation revalidates the
-schedule, event, conflict-policy and session revisions, applies the accepted
-placements atomically in D1 with durable idempotency, reports honest unplaced
-reasons and leaves the schedule unpublished. Focused unit, Worker and Chromium
-schedule tests verify this AIA-08 production slice.
+an exact preview and explicit confirmation. All proposed placements start
+selected, and the organiser may apply any non-empty subset. Confirmation
+recomputes and verifies the complete preview against the schedule, event,
+conflict-policy and session revisions, validates and rechecks the selected
+subset, includes its canonically ordered session IDs in the idempotency hash, and applies
+only those placements atomically in D1. Deselected sessions remain unscheduled;
+the result reports them separately from honest unplaced reasons and leaves the
+schedule unpublished. Focused unit, Worker and Chromium schedule tests verify
+this AIA-08 production slice.
 
 ## Audit and revision evidence
 

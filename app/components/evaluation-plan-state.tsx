@@ -55,6 +55,50 @@ const defaultRubric = [
   },
 ] as const;
 
+function ReviewerAiSettingCard() {
+  const { loaderData, navigation } = useEvaluationAdminModel();
+  if (
+    !loaderData.canManageEvaluationAccess ||
+    !loaderData.aiReviewAssessmentsSupported
+  )
+    return null;
+  return (
+    <section className="card pad">
+      <h2>Reviewer AI suggestions</h2>
+      <p className="subtle">
+        Event opt-in. Reviewers must request suggestions after saving an initial
+        rubric response. Suggestions remain advisory and cannot submit a review
+        or enter aggregate scores by themselves.
+      </p>
+      <Form method="post" className="stack">
+        <input type="hidden" name="intent" value="update-reviewer-ai-setting" />
+        <input
+          type="hidden"
+          name="revision"
+          value={loaderData.reviewerAiSetting.revision}
+        />
+        <label className="validation-item">
+          <input
+            type="checkbox"
+            name="enabled"
+            value="true"
+            defaultChecked={loaderData.reviewerAiSetting.enabled}
+          />
+          <span>
+            <strong>Allow reviewer-requested AI suggestions</strong>
+            Sends reviewer-visible fields from the immutable source snapshot
+            and the current scorecard to the organisation’s configured AI
+            provider.
+          </span>
+        </label>
+        <button className="btn" disabled={navigation.state !== "idle"}>
+          Save reviewer AI setting
+        </button>
+      </Form>
+    </section>
+  );
+}
+
 export function EvaluationPlanState() {
   const { loaderData, navigation } = useEvaluationAdminModel();
   return !loaderData.plan ? (
@@ -161,6 +205,7 @@ export function EvaluationPlanState() {
         defaultExpandedOnMobile
       >
         <EvaluationMetrics />
+        <ReviewerAiSettingCard />
         <EvaluationReviewCyclePanel />
       </AdminPageSection>
       <AdminPageSection

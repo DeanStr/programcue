@@ -9,6 +9,10 @@ import {
   AiConfigurationError,
   AiProviderError,
 } from "~/modules/ai/openai-responses-provider.server";
+import {
+  ReviewerAiSuggestionService,
+  ReviewerAiSuggestionStateError,
+} from "~/modules/ai/reviewer-ai-suggestion.server";
 import { communicationScheduledEpoch } from "~/modules/communications/communication-time";
 import {
   parseScorecardSelection,
@@ -95,6 +99,21 @@ export async function action({ request, context }: ActionFunctionArgs) {
   const values = await request.formData();
   const service = new EvaluationService(env);
   try {
+    if (values.get("intent") === "update-reviewer-ai-setting") {
+      const setting = await new ReviewerAiSuggestionService(env).updateSetting(
+        viewer,
+        {
+          enabled: values.get("enabled") === "true",
+          revision: values.get("revision"),
+        },
+      );
+      return {
+        ok: true,
+        message: setting.enabled
+          ? "Reviewer AI suggestions enabled for this event."
+          : "Reviewer AI suggestions disabled for this event.",
+      };
+    }
     if (values.get("intent") === "add-discussion-message") {
       const result = await service.addDiscussionMessage(viewer, {
         roundId: values.get("roundId"),
@@ -817,6 +836,8 @@ export async function action({ request, context }: ActionFunctionArgs) {
     if (error instanceof AiReviewAssessmentConflictError)
       return data({ ok: false, error: error.message }, { status: 409 });
     if (error instanceof AiReviewAssessmentStateError)
+      return data({ ok: false, error: error.message }, { status: 409 });
+    if (error instanceof ReviewerAiSuggestionStateError)
       return data({ ok: false, error: error.message }, { status: 409 });
     if (error instanceof AiConfigurationError)
       return data({ ok: false, error: error.message }, { status: 503 });

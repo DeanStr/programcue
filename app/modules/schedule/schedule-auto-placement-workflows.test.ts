@@ -4,10 +4,16 @@ import type { Viewer } from "~/platform/auth/authorize.server";
 
 import {
   ScheduleNotFoundError,
+  ScheduleIdempotencyConflictError,
   ScheduleRevisionConflictError,
   ScheduleService,
 } from "./schedule-service.server";
 import { eventLocalTimeEpoch } from "./schedule-time";
+import { autoPlacementRequestHash } from "./schedule-auto-placement";
+import {
+  autoPlacementD1StatementCount,
+  MAX_AUTO_PLACEMENT_D1_STATEMENTS,
+} from "./schedule-auto-placement-workflow.server";
 import {
   prepareScheduleServiceTest,
   scheduleTestEnv,
@@ -91,6 +97,66 @@ describe("schedule auto-placement workflow", () => {
     ).toEqual({ count: 0 });
   });
 
+  it("applies only the selected deterministic placements and leaves exclusions unscheduled", async () => {
+    const { service, preview } = await createDraftAndPreview();
+    const selectedSessionId = preview.placements[0]!.sessionId;
+    const excludedSessionId = preview.placements[1]!.sessionId;
+    const subset = { ...preview, selectedSessionIds: [selectedSessionId] };
+
+    const result = await service.confirmAutoPlacement(viewer, subset);
+
+    expect(result).toMatchObject({
+      appliedCount: 1,
+      excludedCount: 1,
+      unplacedCount: 0,
+    });
+    const workspace = await service.getWorkspace(viewer);
+    expect(workspace.entries.map((entry) => entry.sessionId)).toContain(
+      selectedSessionId,
+    );
+    expect(workspace.entries.map((entry) => entry.sessionId)).not.toContain(
+      excludedSessionId,
+    );
+    expect(
+      workspace.sessions.find((session) => session.id === excludedSessionId)
+        ?.status,
+    ).toBe("unscheduled");
+    const audit = await env.DB.prepare(
+      `SELECT metadata_json AS metadataJson FROM audit_events
+        WHERE event_id = ? AND action = 'schedule.auto_place.confirmed'
+          AND entity_id = ? AND json_extract(metadata_json, '$.appliedCount') = 1
+        ORDER BY created_at DESC LIMIT 1`,
+    )
+      .bind(viewer.eventId, preview.scheduleVersionId)
+      .first<{ metadataJson: string }>();
+    expect(JSON.parse(audit!.metadataJson).excludedSessionIds).toEqual([
+      excludedSessionId,
+    ]);
+
+    await expect(
+      service.confirmAutoPlacement(viewer, {
+        ...preview,
+        selectedSessionIds: [excludedSessionId],
+      }),
+    ).rejects.toBeInstanceOf(ScheduleIdempotencyConflictError);
+  });
+
+  it("hashes a selected placement set independently of checkbox order", async () => {
+    const { preview } = await createDraftAndPreview();
+    const selectedSessionIds = preview.placements.map(
+      (placement) => placement.sessionId,
+    );
+
+    await expect(
+      autoPlacementRequestHash({ ...preview, selectedSessionIds }),
+    ).resolves.toBe(
+      await autoPlacementRequestHash({
+        ...preview,
+        selectedSessionIds: [...selectedSessionIds].reverse(),
+      }),
+    );
+  });
+
   it("confirms a larger proposal without exceeding D1 query parameters", async () => {
     await env.DB.prepare(
       `WITH RECURSIVE numbers(n) AS (
@@ -121,6 +187,66 @@ describe("schedule auto-placement workflow", () => {
     } finally {
       await env.DB.prepare(
         "DELETE FROM sessions WHERE event_id = ? AND id LIKE 'auto-parameter-%'",
+      )
+        .bind(viewer.eventId)
+        .run();
+    }
+  });
+
+  it("allows a safe selected subset when the full preview exceeds the atomic statement limit", async () => {
+    await env.DB.batch([
+      env.DB.prepare(
+        `UPDATE schedule_policies
+            SET room_overlap_action = 'warn', speaker_overlap_action = 'warn'
+          WHERE event_id = ?`,
+      ).bind(viewer.eventId),
+      env.DB.prepare(
+        `WITH RECURSIVE numbers(n) AS (
+           SELECT 1
+           UNION ALL
+           SELECT n + 1 FROM numbers WHERE n < 43
+         )
+         INSERT INTO sessions (
+           id, event_id, track_id, title, slug, format, duration_minutes,
+           expected_attendance, status, visibility, revision, created_at, updated_at
+         )
+         SELECT 'auto-subset-limit-' || n, ?, 'schedule-test-track',
+                'Auto subset limit session ' || n, 'auto-subset-limit-' || n,
+                'presentation', 60, 100, 'unscheduled', 'public', 1,
+                unixepoch(), unixepoch()
+           FROM numbers`,
+      ).bind(viewer.eventId),
+      env.DB.prepare(
+        `INSERT INTO session_speakers (
+           session_id, event_id, person_id, position, role_label,
+           participation_status, participation_confirmed_at, visibility
+         )
+         SELECT id, event_id, 'person-demo-speaker', 0, 'Speaker',
+                'confirmed', unixepoch(), 'public'
+           FROM sessions
+          WHERE event_id = ? AND id LIKE 'auto-subset-limit-%'`,
+      ).bind(viewer.eventId),
+    ]);
+
+    try {
+      const { service, preview } = await createDraftAndPreview();
+      expect(autoPlacementD1StatementCount(preview)).toBeGreaterThan(
+        MAX_AUTO_PLACEMENT_D1_STATEMENTS,
+      );
+      const selectedSessionId = preview.placements[0]!.sessionId;
+
+      const result = await service.confirmAutoPlacement(viewer, {
+        ...preview,
+        selectedSessionIds: [selectedSessionId],
+      });
+
+      expect(result).toMatchObject({
+        appliedCount: 1,
+        excludedCount: preview.placements.length - 1,
+      });
+    } finally {
+      await env.DB.prepare(
+        "DELETE FROM sessions WHERE event_id = ? AND id LIKE 'auto-subset-limit-%'",
       )
         .bind(viewer.eventId)
         .run();

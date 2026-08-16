@@ -12,6 +12,7 @@ import {
   canonicalAutoPlacementSessionRevisions,
   computeAutoPlacements,
   plannedAutoEntryId,
+  revalidateSelectedAutoPlacements,
   type AutoPlacementPreview,
   type AutoPlacementProposal,
   type AutoPlacementUnplaced,
@@ -60,6 +61,9 @@ function parseResult(value: unknown): ScheduleAutoPlacementResult {
     typeof result.appliedCount !== "number" ||
     !Number.isSafeInteger(result.appliedCount) ||
     result.appliedCount < 0 ||
+    typeof result.excludedCount !== "number" ||
+    !Number.isSafeInteger(result.excludedCount) ||
+    result.excludedCount < 0 ||
     typeof result.unplacedCount !== "number" ||
     !Number.isSafeInteger(result.unplacedCount) ||
     result.unplacedCount < 0
@@ -114,7 +118,7 @@ function assertSupportedSessionCount(workspace: ScheduleWorkspace) {
 }
 
 function assertAutoPlacementBatchFits(
-  computation: ReturnType<typeof computeAutoPlacements>,
+  computation: Pick<ReturnType<typeof computeAutoPlacements>, "placements">,
 ) {
   const statementCount = autoPlacementD1StatementCount(computation);
   if (statementCount > MAX_AUTO_PLACEMENT_D1_STATEMENTS) {
@@ -166,7 +170,6 @@ export class ScheduleAutoPlacementWorkflow {
     }
     assertSupportedSessionCount(workspace);
     const computation = computeAutoPlacements(workspace);
-    assertAutoPlacementBatchFits(computation);
     return {
       idempotencyKey: crypto.randomUUID(),
       scheduleVersionId: workspace.version.id,
@@ -174,6 +177,9 @@ export class ScheduleAutoPlacementWorkflow {
       eventRevision: workspace.event.revision,
       policyRevision: workspace.policyRevision,
       ...computation,
+      selectedSessionIds: computation.placements.map(
+        (placement) => placement.sessionId,
+      ),
     };
   }
 
@@ -260,7 +266,6 @@ export class ScheduleAutoPlacementWorkflow {
 
     assertSupportedSessionCount(workspace);
     const computation = computeAutoPlacements(workspace);
-    assertAutoPlacementBatchFits(computation);
     if (
       !sameSessionRevisions(
         parsed.sessionRevisions,
@@ -277,16 +282,44 @@ export class ScheduleAutoPlacementWorkflow {
       );
     }
 
+    const proposedSessionIds = new Set(
+      computation.placements.map((placement) => placement.sessionId),
+    );
+    if (
+      parsed.selectedSessionIds.some(
+        (sessionId) => !proposedSessionIds.has(sessionId),
+      )
+    ) {
+      throw previewStale(
+        "The selected sessions are not part of this verified auto-place proposal. Prepare a fresh preview.",
+      );
+    }
+    const selectedIds = new Set(parsed.selectedSessionIds);
+    const selectedPlacements = computation.placements.filter((placement) =>
+      selectedIds.has(placement.sessionId),
+    );
+    const revalidatedPlacements = revalidateSelectedAutoPlacements(
+      workspace,
+      selectedPlacements,
+    );
+    if (!revalidatedPlacements) {
+      throw previewStale(
+        "A selected placement now conflicts with the draft schedule. Prepare a fresh preview.",
+      );
+    }
+    assertAutoPlacementBatchFits({ placements: revalidatedPlacements });
     const result: ScheduleAutoPlacementResult = {
       scheduleVersionId: parsed.scheduleVersionId,
       scheduleRevision:
-        parsed.scheduleRevision + (computation.placements.length ? 1 : 0),
-      appliedCount: computation.placements.length,
+        parsed.scheduleRevision + (revalidatedPlacements.length ? 1 : 0),
+      appliedCount: revalidatedPlacements.length,
+      excludedCount:
+        computation.placements.length - revalidatedPlacements.length,
       unplacedCount: computation.unplaced.length,
     };
 
     const commandId = crypto.randomUUID();
-    if (!computation.placements.length) {
+    if (!revalidatedPlacements.length) {
       const results = await this.env.DB.batch([
         this.env.DB.prepare(
           `DELETE FROM idempotency_records
@@ -344,7 +377,7 @@ export class ScheduleAutoPlacementWorkflow {
     }
 
     const entryIds = new Map(
-      computation.placements.map((placement) => [
+      revalidatedPlacements.map((placement) => [
         placement.sessionId,
         crypto.randomUUID(),
       ]),
@@ -446,7 +479,7 @@ export class ScheduleAutoPlacementWorkflow {
     const appliedPlacements: Array<
       AutoPlacementProposal & { entryId: string }
     > = [];
-    for (const placement of computation.placements) {
+    for (const placement of revalidatedPlacements) {
       const entryId = entryIds.get(placement.sessionId)!;
       const resolvedWarnings = placement.warnings.map((conflict) => {
         const plannedId = conflict.conflictingEntryId;
@@ -552,6 +585,9 @@ export class ScheduleAutoPlacementWorkflow {
             }),
           ),
           unplaced: computation.unplaced,
+          excludedSessionIds: computation.placements
+            .filter((placement) => !selectedIds.has(placement.sessionId))
+            .map((placement) => placement.sessionId),
         }),
         parsed.scheduleVersionId,
         viewer.eventId,

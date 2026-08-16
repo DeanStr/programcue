@@ -169,6 +169,8 @@ test("restored review notes restore their character count", async ({
             confidence: String(values.get("confidence") ?? ""),
             submitterFeedback: recoveredFeedback,
             privateNotes: String(values.get("privateNotes") ?? ""),
+            aiSuggestionId: null,
+            aiImportedCriterionIds: [],
             conflictAffirmed: String(values.get("conflictAffirmed") ?? ""),
           },
           savedAt: Date.now(),

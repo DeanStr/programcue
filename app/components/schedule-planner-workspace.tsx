@@ -36,7 +36,6 @@ export function SchedulePlannerWorkspace({
     allPlacementSlots,
     autoError,
     autoPlacementFetcher,
-    autoPlacementPayload,
     autoPreview,
     autoResult,
     clearAutoError,
@@ -186,7 +185,7 @@ export function SchedulePlannerWorkspace({
       ) : null}
       {autoResult ? (
         <div
-          className={`validation-item schedule-notice ${autoResult.warning || autoResult.unplacedCount ? "warn" : "ok"} mb`}
+          className={`validation-item schedule-notice ${autoResult.warning || autoResult.unplacedCount || autoResult.excludedCount ? "warn" : "ok"} mb`}
           role="status"
         >
           <strong>
@@ -195,6 +194,13 @@ export function SchedulePlannerWorkspace({
           </strong>
           <span>The draft schedule was refreshed and was not published.</span>
           {autoResult.warning ? <span>{autoResult.warning}</span> : null}
+          {autoResult.excludedCount ? (
+            <span>
+              {autoResult.excludedCount} deselected proposal
+              {autoResult.excludedCount === 1 ? " remains" : "s remain"}{" "}
+              unscheduled.
+            </span>
+          ) : null}
           {autoResult.unplacedCount ? (
             <>
               <span>
@@ -491,10 +497,9 @@ export function SchedulePlannerWorkspace({
             : null
         }
       />
-      {autoPreview && autoPlacementPayload ? (
+      {autoPreview ? (
         <AutoPlacementPreviewDialog
           preview={autoPreview}
-          proposal={autoPlacementPayload}
           workspace={workspace}
           sessionById={sessionById}
           fetcher={autoPlacementFetcher}

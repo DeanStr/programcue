@@ -244,6 +244,20 @@ const recommendationSchema = z.enum([
   "reject",
 ]);
 
+export const reviewerAiCriterionSuggestionsSchema = z
+  .array(
+    z
+      .object({
+        criterionId: z.string().trim().min(1).max(200),
+        suggestedValue: z.string().max(500).nullable(),
+        rationale: z.string().trim().min(20).max(800),
+        evidenceFieldIds: z.array(z.string().trim().min(1).max(200)).max(20),
+      })
+      .strict(),
+  )
+  .min(1)
+  .max(30);
+
 export const reviewDraftSchema = z
   .object({
     assignmentId: z.string().trim().min(1),
@@ -263,9 +277,52 @@ export const reviewDraftSchema = z
       .union([z.boolean(), z.enum(["true", "false", ""])])
       .optional()
       .transform((value) => value === true || value === "true"),
+    suggestionId: z.string().trim().min(1).max(200).nullable().default(null),
+    importedCriterionIds: z
+      .array(z.string().trim().min(1).max(200))
+      .max(30)
+      .default([]),
+    confirmedAiCriterionIds: z
+      .array(z.string().trim().min(1).max(200))
+      .max(30)
+      .default([]),
     intent: z.enum(["save", "submit"]),
   })
   .superRefine((review, context) => {
+    if (
+      new Set(review.importedCriterionIds).size !==
+      review.importedCriterionIds.length
+    ) {
+      context.addIssue({
+        code: "custom",
+        path: ["importedCriterionIds"],
+        message: "Each imported AI criterion must appear once.",
+      });
+    }
+    if (
+      new Set(review.confirmedAiCriterionIds).size !==
+      review.confirmedAiCriterionIds.length
+    ) {
+      context.addIssue({
+        code: "custom",
+        path: ["confirmedAiCriterionIds"],
+        message: "Confirm each unchanged AI criterion once.",
+      });
+    }
+    if (!review.suggestionId && review.importedCriterionIds.length) {
+      context.addIssue({
+        code: "custom",
+        path: ["suggestionId"],
+        message: "Imported AI criteria require their suggestion identifier.",
+      });
+    }
+    if (review.intent !== "submit" && review.confirmedAiCriterionIds.length) {
+      context.addIssue({
+        code: "custom",
+        path: ["confirmedAiCriterionIds"],
+        message: "AI-derived criteria are confirmed only when submitting.",
+      });
+    }
     if (review.intent === "submit" && !review.conflictAffirmed) {
       context.addIssue({
         code: "custom",

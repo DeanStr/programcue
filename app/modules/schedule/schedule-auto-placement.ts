@@ -44,6 +44,7 @@ export type AutoPlacementPreview = AutoPlacementComputation & {
   scheduleRevision: number;
   eventRevision: number;
   policyRevision: number;
+  selectedSessionIds: string[];
 };
 
 export function plannedAutoEntryId(sessionId: string) {
@@ -263,6 +264,68 @@ export function computeAutoPlacements(
   return { sessionRevisions, placements, unplaced };
 }
 
+export function revalidateSelectedAutoPlacements(
+  workspace: Pick<
+    ScheduleWorkspace,
+    "event" | "rooms" | "sessions" | "entries" | "policies"
+  >,
+  placements: ReadonlyArray<AutoPlacementProposal>,
+) {
+  const sessionById = new Map(
+    workspace.sessions.map((session) => [session.id, session]),
+  );
+  const rooms = orderedRooms(workspace);
+  const roomIds = new Set(rooms.map((room) => room.id));
+  const working = existingScheduleItems(workspace);
+  const validated: AutoPlacementProposal[] = [];
+
+  for (const placement of placements) {
+    const session = sessionById.get(placement.sessionId);
+    if (!session || !roomIds.has(placement.roomId)) return null;
+    const conflicts = detectScheduleConflicts({
+      candidate: {
+        sessionId: session.id,
+        title: session.title,
+        roomId: placement.roomId,
+        startsAt: placement.startsAt,
+        endsAt: placement.endsAt,
+        trackId: session.trackId,
+        trackExclusive: session.trackExclusive,
+        speakerIds: session.speakerIds,
+        speakerNames: session.speakerNames,
+        requiredResources: session.requiredResources,
+        expectedAttendance: session.expectedAttendance,
+      },
+      existing: working,
+      rooms,
+      eventStartsAt: workspace.event.startsAt,
+      eventEndsAt: workspace.event.endsAt,
+      eventTimezone: workspace.event.timezone,
+      policies: workspace.policies,
+    });
+    if (conflicts.some((conflict) => conflict.severity === "blocking")) {
+      return null;
+    }
+    const validatedPlacement = { ...placement, warnings: conflicts };
+    validated.push(validatedPlacement);
+    working.push({
+      entryId: plannedAutoEntryId(session.id),
+      sessionId: session.id,
+      roomId: placement.roomId,
+      startsAt: placement.startsAt,
+      endsAt: placement.endsAt,
+      trackId: session.trackId,
+      trackExclusive: session.trackExclusive,
+      speakerIds: session.speakerIds,
+      speakerNames: session.speakerNames,
+      requiredResources: session.requiredResources,
+      expectedAttendance: session.expectedAttendance,
+      title: session.title,
+    });
+  }
+  return validated;
+}
+
 export function canonicalAutoPlacementPlan(computation: {
   placements: ReadonlyArray<
     Pick<AutoPlacementProposal, "sessionId" | "roomId" | "startsAt" | "endsAt">
@@ -305,9 +368,26 @@ function stableValue(value: unknown): unknown {
 }
 
 export async function autoPlacementRequestHash(value: unknown) {
+  const canonicalValue =
+    value && typeof value === "object" && !Array.isArray(value)
+      ? (() => {
+          const record = value as Record<string, unknown>;
+          return Array.isArray(record.selectedSessionIds) &&
+            record.selectedSessionIds.every(
+              (sessionId) => typeof sessionId === "string",
+            )
+            ? {
+                ...record,
+                selectedSessionIds: [...record.selectedSessionIds].sort(
+                  compareStable,
+                ),
+              }
+            : value;
+        })()
+      : value;
   const digest = await crypto.subtle.digest(
     "SHA-256",
-    new TextEncoder().encode(JSON.stringify(stableValue(value))),
+    new TextEncoder().encode(JSON.stringify(stableValue(canonicalValue))),
   );
   return Array.from(new Uint8Array(digest), (byte) =>
     byte.toString(16).padStart(2, "0"),

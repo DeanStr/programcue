@@ -1,6 +1,7 @@
 import { type LoaderFunctionArgs } from "react-router";
 import { z } from "zod";
 import { AiReviewAssessmentService } from "~/modules/ai/ai-review-assessment.server";
+import { ReviewerAiSuggestionService } from "~/modules/ai/reviewer-ai-suggestion.server";
 import { ensureDemoEvaluationData } from "~/modules/evaluations/demo.server";
 import { EvaluationService } from "~/modules/evaluations/evaluation-service.server";
 import { decisionDraftEffectPreviewSchema } from "~/modules/evaluations/evaluation-schema";
@@ -139,12 +140,13 @@ export async function loader({ request, context }: LoaderFunctionArgs) {
   const canPrepareReviewerReminders =
     viewer.role === "owner" || viewer.role === "administrator";
   const evaluationService = new EvaluationService(env);
-  const [workspace, event, reviewerReminderTemplateRows] = await Promise.all([
-    evaluationService.getAdminWorkspace(viewer),
-    new EventService(env).getSetup(viewer),
-    canPrepareReviewerReminders
-      ? env.DB.prepare(
-          `SELECT version.id, version.name, version.version_number AS versionNumber,
+  const [workspace, event, reviewerReminderTemplateRows, reviewerAiSetting] =
+    await Promise.all([
+      evaluationService.getAdminWorkspace(viewer),
+      new EventService(env).getSetup(viewer),
+      canPrepareReviewerReminders
+        ? env.DB.prepare(
+            `SELECT version.id, version.name, version.version_number AS versionNumber,
                   version.subject_template AS subject
              FROM communication_template_versions version
              JOIN communication_templates template
@@ -156,16 +158,17 @@ export async function loader({ request, context }: LoaderFunctionArgs) {
               AND version.channel = 'email' AND version.status = 'published'
               AND template.status = 'active'
             ORDER BY template.updated_at DESC, version.version_number DESC`,
-        )
-          .bind(viewer.organisationId, viewer.eventId)
-          .all<{
-            id: string;
-            name: string;
-            versionNumber: number;
-            subject: string;
-          }>()
-      : Promise.resolve({ results: [] }),
-  ]);
+          )
+            .bind(viewer.organisationId, viewer.eventId)
+            .all<{
+              id: string;
+              name: string;
+              versionNumber: number;
+              subject: string;
+            }>()
+        : Promise.resolve({ results: [] }),
+      new ReviewerAiSuggestionService(env).setting(viewer),
+    ]);
   const aiReviewAssessmentsSupported = event.repositoryProvider === "d1";
   const canManageAiAssessments =
     canPrepareReviewerReminders && aiReviewAssessmentsSupported;
@@ -799,6 +802,7 @@ export async function loader({ request, context }: LoaderFunctionArgs) {
       viewer.role === "owner" || viewer.role === "administrator",
     canPrepareReviewerReminders,
     canManageAiAssessments,
+    reviewerAiSetting,
     aiReviewAssessmentsSupported,
     reviewerReminderTemplates: reviewerReminderTemplateRows.results,
     aiReviewAssessments,

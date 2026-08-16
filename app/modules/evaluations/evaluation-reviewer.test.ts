@@ -4,6 +4,8 @@ import { afterAll, beforeEach, describe, expect, it } from "vitest";
 import type { Viewer } from "~/platform/auth/authorize.server";
 import { ensureDemoData } from "~/platform/demo/seed.server";
 import { formSchemaSchema } from "~/modules/submissions/submission-schema";
+import { ReviewerAiSuggestionService } from "~/modules/ai/reviewer-ai-suggestion.server";
+import type { AiModelProvider } from "~/modules/ai/openai-responses-provider.server";
 import { ensureDemoEvaluationData } from "./demo.server";
 import { processCommunicationSend } from "../../../workers/queue/communication-send";
 import { EvaluationDecisionService } from "./evaluation-decision-service.server";
@@ -223,6 +225,9 @@ function withBatchRace(
 
 async function resetEvaluationFixture() {
   await env.DB.batch([
+    env.DB.prepare("DELETE FROM event_ai_review_settings WHERE event_id = ?").bind(
+      admin.eventId,
+    ),
     env.DB.prepare(
       "DELETE FROM submissions WHERE id = 'eval-multi-round-not-advanced'",
     ),
@@ -322,6 +327,366 @@ describe("evaluation vertical slice", () => {
   });
 
   describe("reviewer workflows", () => {
+    it("fails fast for reviewer AI on Airtable-authoritative events", async () => {
+      const testEnv = env as unknown as CloudflareEnvironment;
+      let providerCalls = 0;
+      const provider: AiModelProvider = {
+        providerName: "Workers AI",
+        model: "must-not-run",
+        async create() {
+          providerCalls += 1;
+          throw new Error("Provider must not run for an Airtable event.");
+        },
+      };
+      const ai = new ReviewerAiSuggestionService(testEnv, { provider });
+      await env.DB.prepare(
+        "UPDATE events SET repository_provider = 'airtable' WHERE id = ?",
+      )
+        .bind(admin.eventId)
+        .run();
+      try {
+        await expect(ai.setting(evaluator)).resolves.toMatchObject({
+          enabled: false,
+          supported: false,
+        });
+        await expect(
+          ai.updateSetting(admin, { enabled: true, revision: 0 }),
+        ).rejects.toThrow(/authoritative repository/i);
+        await expect(
+          ai.generate(evaluator, { assignmentId: "unavailable-assignment" }),
+        ).rejects.toThrow(/authoritative repository/i);
+        expect(providerCalls).toBe(0);
+      } finally {
+        await env.DB.prepare(
+          "UPDATE events SET repository_provider = 'd1' WHERE id = ?",
+        )
+          .bind(admin.eventId)
+          .run();
+      }
+    });
+
+    it("generates assignment-specific suggestions and requires confirmation for unchanged imports", async () => {
+      const testEnv = env as unknown as CloudflareEnvironment;
+      const service = new EvaluationService(testEnv);
+      const suggestionCriteria = [
+        ...criteria,
+        {
+          id: "eval-test-evidence-present",
+          name: "Evidence present",
+          description: "Whether the proposal supplies concrete evidence.",
+          inputType: "yes_no" as const,
+          weightPercent: 0,
+          required: true,
+          position: criteria.length,
+        },
+        {
+          id: "eval-test-reviewer-observation",
+          name: "Reviewer observation",
+          description: "A reviewer-authored observation.",
+          inputType: "free_text" as const,
+          weightPercent: 0,
+          required: false,
+          position: criteria.length + 1,
+        },
+      ];
+      await service.savePlan(admin, {
+        revision: 0,
+        name: "AI reviewer suggestion plan",
+        status: "active",
+        rounds: [
+          {
+            id: "eval-ai-suggestion-round",
+            name: "Initial review",
+            anonymous: true,
+            criteria: suggestionCriteria,
+          },
+        ],
+      });
+      await addRoundReviewer("eval-ai-suggestion-round");
+      await service.assign(admin, {
+        roundId: "eval-ai-suggestion-round",
+        targetType: "submission",
+        targetIds: ["eval-test-submission"],
+        evaluatorPersonIds: [evaluator.personId],
+      });
+      let workspace = await service.getReviewerWorkspace(evaluator);
+      const assignmentId = workspace.selected!.id;
+      const initial = await service.saveReview(evaluator, {
+        assignmentId,
+        revision: 0,
+        scores: {
+          "eval-test-relevance": 3,
+          "eval-test-reviewer-observation": "My independent first impression.",
+        },
+        recommendation: null,
+        confidence: null,
+        submitterFeedback: "",
+        privateNotes: "",
+        conflictAffirmed: false,
+        intent: "save",
+      });
+      let releaseProvider!: () => void;
+      let providerStarted!: () => void;
+      const providerRelease = new Promise<void>((resolve) => {
+        releaseProvider = resolve;
+      });
+      const providerStart = new Promise<void>((resolve) => {
+        providerStarted = resolve;
+      });
+      let providerCalls = 0;
+      const provider: AiModelProvider = {
+        providerName: "Workers AI",
+        model: "test-reviewer-suggestion-model",
+        async create(request) {
+          providerCalls += 1;
+          providerStarted();
+          await providerRelease;
+          expect(String(request.input)).toContain("eval-test-relevance");
+          expect(String(request.input)).not.toContain("privateNotes");
+          return {
+            id: "provider-reviewer-suggestion-1",
+            model: "test-reviewer-suggestion-model",
+            status: "completed",
+            output: [],
+            output_text: JSON.stringify({
+              criteria: suggestionCriteria.map((criterion) => ({
+                criterionId: criterion.id,
+                suggestedValue:
+                  criterion.inputType === "free_text"
+                    ? null
+                    : criterion.inputType === "yes_no"
+                      ? "yes"
+                      : "4",
+                rationale:
+                  "The proposal description supplies relevant, concrete evidence for this criterion.",
+                evidenceFieldIds: ["description"],
+              })),
+            }),
+          };
+        },
+      };
+      const ai = new ReviewerAiSuggestionService(testEnv, { provider });
+      await ai.updateSetting(admin, { enabled: true, revision: 0 });
+
+      workspace = await service.getReviewerWorkspace(evaluator, assignmentId);
+      const interruptedOperationId = "test-interrupted-reviewer-ai";
+      await env.DB.prepare(
+        `INSERT INTO operation_jobs (
+           id, organisation_id, event_id, requested_by_person_id, type,
+           idempotency_key, correlation_id, status, payload_json,
+           progress_total, progress_completed, progress_failed, attempt_count,
+           cancellable, claim_token, claim_expires_at, started_at
+         ) VALUES (?, ?, ?, ?, 'ai.reviewer_suggestion.generate', ?, ?,
+                   'running', ?, 1, 0, 0, 1, 0, ?, unixepoch() - 1,
+                   unixepoch() - 301)`,
+      )
+        .bind(
+          interruptedOperationId,
+          evaluator.organisationId,
+          evaluator.eventId,
+          evaluator.personId,
+          interruptedOperationId,
+          interruptedOperationId,
+          JSON.stringify({
+            assignmentId,
+            assignmentRevision: workspace.selected!.revision,
+            roundId: workspace.selected!.roundId,
+            scorecardId: workspace.selected!.scorecardId,
+            scorecardVersion: workspace.selected!.scorecardVersion,
+          }),
+          "expired-reviewer-ai-claim",
+        )
+        .run();
+      const interruptedRetry = await ai.getRetryForAssignment(
+        evaluator,
+        assignmentId,
+      );
+      expect(interruptedRetry).toMatchObject({
+        operationId: interruptedOperationId,
+        providerRequestId: null,
+      });
+      await expect(ai.generate(evaluator, { assignmentId })).rejects.toThrow(
+        /possible duplicate request or charge/i,
+      );
+      expect(providerCalls).toBe(0);
+
+      const generation = ai.generate(evaluator, {
+        assignmentId,
+        retryFailedOperationId: interruptedOperationId,
+        duplicateRiskAcknowledged: true,
+      });
+      await providerStart;
+      await expect(ai.generate(evaluator, { assignmentId })).rejects.toThrow(
+        /already being generated/i,
+      );
+      await env.DB.prepare(
+        `UPDATE evaluation_rounds SET closes_at = unixepoch() - 1
+          WHERE id = ? AND event_id = ?`,
+      )
+        .bind("eval-ai-suggestion-round", evaluator.eventId)
+        .run();
+      releaseProvider();
+      await expect(generation).rejects.toThrow(/assignment changed/i);
+      expect(await ai.getForAssignment(evaluator, assignmentId)).toBeNull();
+      expect(
+        await env.DB.prepare(
+          `SELECT status,
+                  json_extract(result_json, '$.providerRequestId') AS providerRequestId
+             FROM operation_jobs
+            WHERE event_id = ? AND type = 'ai.reviewer_suggestion.generate'
+              AND id <> ?
+            ORDER BY created_at DESC, id DESC LIMIT 1`,
+        )
+          .bind(evaluator.eventId, interruptedOperationId)
+          .first(),
+      ).toEqual({
+        status: "failed",
+        providerRequestId: "provider-reviewer-suggestion-1",
+      });
+      await env.DB.prepare(
+        `UPDATE evaluation_rounds SET closes_at = NULL
+          WHERE id = ? AND event_id = ?`,
+      )
+        .bind("eval-ai-suggestion-round", evaluator.eventId)
+        .run();
+      const retry = await ai.getRetryForAssignment(evaluator, assignmentId);
+      expect(retry).toMatchObject({
+        providerRequestId: "provider-reviewer-suggestion-1",
+      });
+      await expect(ai.generate(evaluator, { assignmentId })).rejects.toThrow(
+        /possible duplicate request or charge/i,
+      );
+      expect(providerCalls).toBe(1);
+      const suggestion = await ai.generate(evaluator, {
+        assignmentId,
+        retryFailedOperationId: retry!.operationId,
+        duplicateRiskAcknowledged: true,
+      });
+
+      expect(suggestion).toMatchObject({
+        assignmentId,
+        status: "offered",
+        providerResponseId: "provider-reviewer-suggestion-1",
+      });
+      expect(providerCalls).toBe(2);
+      expect(suggestion.suggestions).toHaveLength(suggestionCriteria.length);
+      expect(
+        await ai.getForAssignment(
+          { ...evaluator, personId: admin.personId },
+          assignmentId,
+        ),
+      ).toBeNull();
+
+      const suggestedScores = Object.fromEntries(
+        suggestionCriteria.map((criterion) => [
+          criterion.id,
+          criterion.inputType === "free_text"
+            ? "My independent first impression."
+            : criterion.inputType === "yes_no"
+              ? true
+              : 4,
+        ]),
+      );
+      const importedIds = suggestionCriteria
+        .filter((criterion) => criterion.inputType !== "free_text")
+        .map((criterion) => criterion.id);
+      await ai.updateSetting(admin, { enabled: false, revision: 1 });
+      await expect(
+        service.saveReview(evaluator, {
+          assignmentId,
+          revision: initial.revision,
+          scores: suggestedScores,
+          recommendation: "accept",
+          confidence: 4,
+          submitterFeedback: "",
+          privateNotes: "",
+          conflictAffirmed: true,
+          suggestionId: suggestion.id,
+          importedCriterionIds: importedIds,
+          intent: "save",
+        }),
+      ).rejects.toThrow(/suggestion changed/i);
+      expect((await ai.getForAssignment(evaluator, assignmentId))?.status).toBe(
+        "offered",
+      );
+      await ai.updateSetting(admin, { enabled: true, revision: 2 });
+      const imported = await service.saveReview(evaluator, {
+        assignmentId,
+        revision: initial.revision,
+        scores: suggestedScores,
+        recommendation: "accept",
+        confidence: 4,
+        submitterFeedback: "",
+        privateNotes: "",
+        conflictAffirmed: true,
+        suggestionId: suggestion.id,
+        importedCriterionIds: importedIds,
+        intent: "save",
+      });
+      expect((await ai.getForAssignment(evaluator, assignmentId))?.status).toBe(
+        "imported",
+      );
+
+      await expect(
+        service.saveReview(evaluator, {
+          assignmentId,
+          revision: imported.revision,
+          scores: suggestedScores,
+          recommendation: "accept",
+          confidence: 4,
+          submitterFeedback: "",
+          privateNotes: "",
+          conflictAffirmed: true,
+          suggestionId: suggestion.id,
+          importedCriterionIds: importedIds,
+          confirmedAiCriterionIds: [],
+          intent: "submit",
+        }),
+      ).rejects.toThrow(/confirm every unchanged AI-derived criterion/i);
+
+      await service.saveReview(evaluator, {
+        assignmentId,
+        revision: imported.revision,
+        scores: suggestedScores,
+        recommendation: "accept",
+        confidence: 4,
+        submitterFeedback: "",
+        privateNotes: "",
+        conflictAffirmed: true,
+        suggestionId: suggestion.id,
+        importedCriterionIds: importedIds,
+        confirmedAiCriterionIds: importedIds,
+        intent: "submit",
+      });
+      const revision = await env.DB.prepare(
+        `SELECT ai_suggestion_id AS suggestionId,
+                imported_criterion_ids_json AS importedIdsJson,
+                confirmed_ai_criterion_ids_json AS confirmedIdsJson
+           FROM review_revisions
+          WHERE event_id = ? AND review_id = ?
+          ORDER BY revision_number DESC LIMIT 1`,
+      )
+        .bind(evaluator.eventId, imported.reviewId)
+        .first<{
+          suggestionId: string;
+          importedIdsJson: string;
+          confirmedIdsJson: string;
+        }>();
+      expect(revision?.suggestionId).toBe(suggestion.id);
+      expect(JSON.parse(revision!.importedIdsJson)).toEqual(importedIds);
+      expect(JSON.parse(revision!.confirmedIdsJson)).toEqual(importedIds);
+      expect(
+        await env.DB.prepare(
+          `SELECT lifecycle_operation_id IS NOT NULL AS hasLifecycleOperation,
+                  imported_review_id AS importedReviewId
+             FROM reviewer_ai_suggestions WHERE id = ?`,
+        )
+          .bind(suggestion.id)
+          .first(),
+      ).toEqual({ hasLifecycleOperation: 1, importedReviewId: imported.reviewId });
+      await resetEvaluationFixture();
+    });
+
     it("persists blinded review, redacts identities, submits and locks the review", async () => {
       const service = new EvaluationService(
         env as unknown as CloudflareEnvironment,

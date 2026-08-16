@@ -26,7 +26,6 @@ import {
   localHour,
   parseScheduleActionNotices,
   scheduleDateTimeLabel,
-  serializeAutoPlacementPreview,
 } from "./schedule-planner-workspace-helpers";
 
 export function useSchedulePlannerController(
@@ -596,17 +595,12 @@ export function useSchedulePlannerController(
 
   const undoAvailable = useScheduleUndoAvailability(undo);
 
-  const autoPlacementPayload = autoPreview
-    ? serializeAutoPlacementPreview(autoPreview)
-    : undefined;
-
   return {
     actionNotices,
     actionResult,
     allPlacementSlots,
     autoError,
     autoPlacementFetcher,
-    autoPlacementPayload,
     autoPreview,
     autoResult,
     clearAutoError,

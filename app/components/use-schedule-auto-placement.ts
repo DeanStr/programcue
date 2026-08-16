@@ -42,6 +42,7 @@ export function useScheduleAutoPlacement(result: unknown) {
       if (isAutoPlacementConfirmation(result)) {
         setOutcome({
           appliedCount: result.appliedCount,
+          excludedCount: result.excludedCount,
           unplacedCount: result.unplacedCount,
           unplaced: preview?.unplaced ?? [],
           warning: result.warning,

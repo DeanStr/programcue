@@ -28,6 +28,7 @@ export function scheduleDateTimeLabel(epoch: number, timezone: string) {
 
 export type AutoPlacementResultNotice = {
   appliedCount: number;
+  excludedCount: number;
   unplacedCount: number;
   unplaced: AutoPlacementUnplaced[];
   warning: string | null;
@@ -180,6 +181,7 @@ export function isAutoPlacementPreview(
     !isPositiveSafeInteger(value.policyRevision) ||
     !Array.isArray(value.sessionRevisions) ||
     !Array.isArray(value.placements) ||
+    !Array.isArray(value.selectedSessionIds) ||
     !Array.isArray(value.unplaced)
   ) {
     return false;
@@ -196,6 +198,24 @@ export function isAutoPlacementPreview(
     return false;
   }
   if (!value.unplaced.every(isAutoPlacementUnplaced)) return false;
+  if (
+    !value.selectedSessionIds.every(
+      (sessionId) => typeof sessionId === "string" && sessionId.length > 0,
+    )
+  )
+    return false;
+  const selectedSessionIds = new Set(value.selectedSessionIds);
+  const proposedSessionIds = new Set(
+    value.placements
+      .filter(isRecord)
+      .map((placement) => placement.sessionId)
+      .filter((sessionId): sessionId is string => typeof sessionId === "string"),
+  );
+  if (
+    selectedSessionIds.size !== value.selectedSessionIds.length ||
+    [...selectedSessionIds].some((sessionId) => !proposedSessionIds.has(sessionId))
+  )
+    return false;
   return value.placements.every((placement) => {
     if (!isRecord(placement)) return false;
     if (
@@ -225,6 +245,7 @@ export function isAutoPlacementPreview(
 export type AutoPlacementConfirmation = {
   committed: true;
   appliedCount: number;
+  excludedCount: number;
   scheduleRevision: number;
   unplacedCount: number;
   warning: string | null;
@@ -237,6 +258,7 @@ export function isAutoPlacementConfirmation(
     isRecord(value) &&
     value.committed === true &&
     isNonNegativeSafeInteger(value.appliedCount) &&
+    isNonNegativeSafeInteger(value.excludedCount) &&
     isPositiveSafeInteger(value.scheduleRevision) &&
     isNonNegativeSafeInteger(value.unplacedCount) &&
     (value.warning === null ||
@@ -250,9 +272,16 @@ export function autoPlacementResponseError(result: Record<string, unknown>) {
     : "Auto-place returned an invalid response. Refresh and try again.";
 }
 
-export function serializeAutoPlacementPreview(preview: AutoPlacementPreview) {
+export function serializeAutoPlacementPreview(
+  preview: AutoPlacementPreview,
+  selectedSessionIds: string[],
+) {
+  const selectedIds = new Set(selectedSessionIds);
   const payload = JSON.stringify({
     ...preview,
+    selectedSessionIds: preview.placements
+      .map((placement) => placement.sessionId)
+      .filter((sessionId) => selectedIds.has(sessionId)),
     placements: preview.placements.map(
       ({ sessionId, roomId, startsAt, endsAt }) => ({
         sessionId,

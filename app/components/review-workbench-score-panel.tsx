@@ -111,6 +111,10 @@ export function ReviewScorePanel() {
     weightedScore,
     conflictChoice,
     recoveryPayload,
+    suggestionImport,
+    unchangedAiCriterionIds,
+    confirmedAiCriterionIds,
+    setAiCriterionConfirmed,
     readOnly,
     revision,
     markDirty,
@@ -128,13 +132,26 @@ export function ReviewScorePanel() {
       criterion.inputType === "scale_5" || criterion.inputType === "scale_10",
   );
   const scoringLocked = readOnly || conflictChoice === "conflict";
-  const submitAllowed = conflictChoice === "affirmed";
+  const unconfirmedAiCriterionIds = unchangedAiCriterionIds.filter(
+    (criterionId) => !confirmedAiCriterionIds.has(criterionId),
+  );
+  const submitAllowed =
+    conflictChoice === "affirmed" && unconfirmedAiCriterionIds.length === 0;
   const submitBlockedReason =
     conflictChoice === "conflict"
       ? "Declare the conflict to return this assignment. A conflicted review cannot be submitted."
       : conflictChoice === "unanswered"
         ? "Answer the conflict of interest question before submitting."
-        : undefined;
+        : unconfirmedAiCriterionIds.length
+          ? "Confirm every unchanged AI-derived criterion before submitting."
+          : undefined;
+  const reviewerSuggestion = workspace.reviewerAiSuggestion;
+  const suggestionByCriterionId = new Map(
+    reviewerSuggestion?.suggestions.map((suggestion) => [
+      suggestion.criterionId,
+      suggestion,
+    ]) ?? [],
+  );
   return (
     <section className="card review-score" aria-labelledby="review-score-title">
       <fetcher.Form
@@ -144,7 +161,16 @@ export function ReviewScorePanel() {
         ref={formRef}
         onChange={(event) => {
           if (!readOnly) {
-            markDirty();
+            const control = event.target;
+            const criterionId =
+              control instanceof HTMLInputElement ||
+              control instanceof HTMLSelectElement ||
+              control instanceof HTMLTextAreaElement
+                ? control.name.startsWith("score:")
+                  ? control.name.slice("score:".length)
+                  : undefined
+                : undefined;
+            markDirty(criterionId);
             captureRecoveryPayload(event.currentTarget);
           }
         }}
@@ -163,6 +189,33 @@ export function ReviewScorePanel() {
       >
         <input type="hidden" name="assignmentId" value={selected.id} />
         <input type="hidden" name="revision" value={revision} />
+        {suggestionImport.suggestionId ? (
+          <input
+            type="hidden"
+            name="suggestionId"
+            value={suggestionImport.suggestionId}
+          />
+        ) : null}
+        {suggestionImport.importedCriterionIds.map((criterionId) => (
+          <input
+            key={criterionId}
+            type="hidden"
+            name="importedCriterionId"
+            value={criterionId}
+          />
+        ))}
+        {submitMode !== null
+          ? unchangedAiCriterionIds
+              .filter((criterionId) => confirmedAiCriterionIds.has(criterionId))
+              .map((criterionId) => (
+                <input
+                  key={criterionId}
+                  type="hidden"
+                  name="confirmedAiCriterionId"
+                  value={criterionId}
+                />
+              ))
+          : null}
         <input
           type="hidden"
           name="openNext"
@@ -288,6 +341,11 @@ export function ReviewScorePanel() {
                     : "no"
                   : String(currentValue);
               const scale = scaleOptions(criterion.inputType);
+              const aiSuggestion = suggestionByCriterionId.get(criterion.id);
+              const imported = suggestionImport.importedCriterionIds.includes(
+                criterion.id,
+              );
+              const unchanged = unchangedAiCriterionIds.includes(criterion.id);
               return (
                 <div className="review-rubric-row" key={criterion.id}>
                   <div className="review-criterion">
@@ -312,6 +370,26 @@ export function ReviewScorePanel() {
                     <small className="subtle" id={descriptionId}>
                       {criterion.description}
                     </small>
+                    {imported && aiSuggestion ? (
+                      <small className="subtle">
+                        AI rationale: {aiSuggestion.rationale}
+                      </small>
+                    ) : null}
+                    {!readOnly && unchanged ? (
+                      <label className="review-ai-confirmation">
+                        <input
+                          type="checkbox"
+                          checked={confirmedAiCriterionIds.has(criterion.id)}
+                          onChange={(event) =>
+                            setAiCriterionConfirmed(
+                              criterion.id,
+                              event.target.checked,
+                            )
+                          }
+                        />
+                        I reviewed and confirm this unchanged AI-derived value
+                      </label>
+                    ) : null}
                   </div>
                   <span className="review-weight pc-num" id={weightId}>
                     {criterion.weightPercent > 0

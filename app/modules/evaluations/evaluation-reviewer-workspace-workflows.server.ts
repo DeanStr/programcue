@@ -59,6 +59,31 @@ function parseReviewerCriterionOptions(
   return parsed as string[];
 }
 
+function parseReviewAiCriterionIds(
+  value: string,
+  reviewId: string,
+  field: "imported" | "confirmed",
+) {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(value);
+  } catch {
+    throw new Error(`Review ${reviewId} has invalid ${field} AI provenance.`);
+  }
+  if (
+    !Array.isArray(parsed) ||
+    parsed.length > 30 ||
+    parsed.some(
+      (item) =>
+        typeof item !== "string" || item.length === 0 || item.length > 200,
+    ) ||
+    new Set(parsed).size !== parsed.length
+  ) {
+    throw new Error(`Review ${reviewId} has invalid ${field} AI provenance.`);
+  }
+  return parsed as string[];
+}
+
 export class EvaluationReviewerWorkspaceWorkflows extends EvaluationServiceFoundation {
   async getReviewerWorkspace(viewer: Viewer, selectedAssignmentId?: string) {
     return this.readAuthoritative(viewer, () =>
@@ -136,6 +161,8 @@ export class EvaluationReviewerWorkspaceWorkflows extends EvaluationServiceFound
              session.slug AS sessionReference,
              a.session_snapshot_json AS sessionSnapshotJson,
              r.blinded_reviewing AS blindedReviewing,
+             r.scorecard_id AS scorecardId,
+             r.scorecard_version AS scorecardVersion,
              r.opens_at AS opensAt, r.closes_at AS closesAt
         FROM evaluator_assignments a
         LEFT JOIN submissions submission
@@ -187,6 +214,8 @@ export class EvaluationReviewerWorkspaceWorkflows extends EvaluationServiceFound
         sessionReference: string | null;
         sessionSnapshotJson: string | null;
         blindedReviewing: number | boolean;
+        scorecardId: string;
+        scorecardVersion: number;
         opensAt: number | null;
         closesAt: number | null;
       }>();
@@ -347,7 +376,10 @@ export class EvaluationReviewerWorkspaceWorkflows extends EvaluationServiceFound
         SELECT r.id, r.status, r.scores_json AS scoresJson, r.weighted_score AS weightedScore,
                r.recommendation, r.confidence, r.submitter_feedback AS submitterFeedback,
                r.private_notes AS privateNotes,
-               r.conflict_affirmed_at AS conflictAffirmedAt, r.revision
+               r.conflict_affirmed_at AS conflictAffirmedAt, r.revision,
+               r.ai_suggestion_id AS aiSuggestionId,
+               r.imported_criterion_ids_json AS importedCriterionIdsJson,
+               r.confirmed_ai_criterion_ids_json AS confirmedAiCriterionIdsJson
           FROM reviews r
           JOIN evaluator_assignments a
             ON a.id = r.assignment_id AND a.event_id = r.event_id
@@ -381,6 +413,9 @@ export class EvaluationReviewerWorkspaceWorkflows extends EvaluationServiceFound
           privateNotes: string | null;
           conflictAffirmedAt: number | null;
           revision: number;
+          aiSuggestionId: string | null;
+          importedCriterionIdsJson: string;
+          confirmedAiCriterionIdsJson: string;
         }>(),
       this.env.DB.prepare(
         `
@@ -556,6 +591,16 @@ export class EvaluationReviewerWorkspaceWorkflows extends EvaluationServiceFound
               string,
               string | number | boolean
             >,
+            importedCriterionIds: parseReviewAiCriterionIds(
+              review.importedCriterionIdsJson,
+              review.id,
+              "imported",
+            ),
+            confirmedAiCriterionIds: parseReviewAiCriterionIds(
+              review.confirmedAiCriterionIdsJson,
+              review.id,
+              "confirmed",
+            ),
           }
         : null,
       attachments: attachments.results

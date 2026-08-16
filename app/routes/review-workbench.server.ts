@@ -8,6 +8,15 @@ import { ZodError } from "zod";
 
 import { ensureDemoEvaluationData } from "~/modules/evaluations/demo.server";
 import {
+  ReviewerAiSuggestionService,
+  ReviewerAiSuggestionStateError,
+} from "~/modules/ai/reviewer-ai-suggestion.server";
+import { AiContextTooLargeError } from "~/modules/ai/ai-assistant-errors";
+import {
+  AiConfigurationError,
+  AiProviderError,
+} from "~/modules/ai/openai-responses-provider.server";
+import {
   EvaluationRevisionConflictError,
   EvaluationService,
   EvaluationStateError,
@@ -35,6 +44,15 @@ export async function loader({ request, context }: LoaderFunctionArgs) {
   );
   if (result.kind === "selection_recused") throw redirect("/review/workbench");
   const selectedAssignment = result.workspace.selected;
+  const reviewerAi = new ReviewerAiSuggestionService(env);
+  const reviewerAiSetting = await reviewerAi.setting(viewer);
+  const reviewerAiSuggestion = selectedAssignment
+    ? await reviewerAi.getForAssignment(viewer, selectedAssignment.id)
+    : null;
+  const reviewerAiRetry =
+    selectedAssignment && !reviewerAiSuggestion
+      ? await reviewerAi.getRetryForAssignment(viewer, selectedAssignment.id)
+      : null;
   const manager =
     viewer.role === "owner" ||
     viewer.role === "administrator" ||
@@ -66,7 +84,13 @@ export async function loader({ request, context }: LoaderFunctionArgs) {
     viewer,
     eventName: result.eventName,
     eventTimezone: result.eventTimezone,
-    workspace: { ...result.workspace, discussion },
+    workspace: {
+      ...result.workspace,
+      discussion,
+      reviewerAiSetting,
+      reviewerAiSuggestion,
+      reviewerAiRetry,
+    },
   };
 }
 
@@ -87,7 +111,9 @@ export async function action({ request, context }: ActionFunctionArgs) {
     intent !== "conflict" &&
     intent !== "save" &&
     intent !== "submit" &&
-    intent !== "add-discussion-message"
+    intent !== "add-discussion-message" &&
+    intent !== "generate-reviewer-ai-suggestion" &&
+    intent !== "dismiss-reviewer-ai-suggestion"
   ) {
     return data(
       { ok: false, error: "Unsupported review action." },
@@ -95,6 +121,27 @@ export async function action({ request, context }: ActionFunctionArgs) {
     );
   }
   try {
+    if (intent === "generate-reviewer-ai-suggestion") {
+      await new ReviewerAiSuggestionService(env).generate(
+        viewer,
+        {
+          assignmentId: values.get("assignmentId"),
+          retryFailedOperationId: values.get("failedOperationId") || undefined,
+          duplicateRiskAcknowledged:
+            values.get("duplicateRiskAcknowledged") === "true"
+              ? true
+              : undefined,
+        },
+      );
+      return { ok: true, message: "Advisory reviewer suggestions generated." };
+    }
+    if (intent === "dismiss-reviewer-ai-suggestion") {
+      await new ReviewerAiSuggestionService(env).dismiss(
+        viewer,
+        values.get("suggestionId"),
+      );
+      return { ok: true, message: "AI suggestions dismissed." };
+    }
     if (intent === "add-discussion-message") {
       const result = await service.addDiscussionMessage(viewer, {
         roundId: values.get("roundId"),
@@ -147,6 +194,11 @@ export async function action({ request, context }: ActionFunctionArgs) {
       submitterFeedback: values.get("submitterFeedback"),
       privateNotes: values.get("privateNotes"),
       conflictAffirmed: values.get("conflictAffirmed") === "affirmed",
+      suggestionId: values.get("suggestionId") || null,
+      importedCriterionIds: values.getAll("importedCriterionId").map(String),
+      confirmedAiCriterionIds: values
+        .getAll("confirmedAiCriterionId")
+        .map(String),
       intent,
     });
     const realtimeFailure = await recordRouteChange(env, viewer, {
@@ -212,6 +264,14 @@ export async function action({ request, context }: ActionFunctionArgs) {
       return data({ ok: false, error: error.message }, { status: 409 });
     if (error instanceof EvaluationValidationError)
       return data({ ok: false, error: error.message }, { status: 422 });
+    if (error instanceof ReviewerAiSuggestionStateError)
+      return data({ ok: false, error: error.message }, { status: 409 });
+    if (error instanceof AiContextTooLargeError)
+      return data({ ok: false, error: error.message }, { status: 409 });
+    if (error instanceof AiConfigurationError)
+      return data({ ok: false, error: error.message }, { status: 503 });
+    if (error instanceof AiProviderError)
+      return data({ ok: false, error: error.message }, { status: 502 });
     if (error instanceof Response) throw error;
     throw error;
   }

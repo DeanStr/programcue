@@ -213,6 +213,28 @@ export const events = sqliteTable(
   ],
 );
 
+export const eventAiReviewSettings = sqliteTable(
+  "event_ai_review_settings",
+  {
+    eventId: text("event_id")
+      .primaryKey()
+      .references(() => events.id, { onDelete: "cascade" }),
+    enabled: integer("enabled", { mode: "boolean" }).notNull().default(false),
+    revision: integer("revision").notNull().default(1),
+    updatedByPersonId: text("updated_by_person_id")
+      .notNull()
+      .references(() => people.id),
+    lastOperationId: text("last_operation_id").notNull(),
+    createdAt: integer("created_at").notNull().default(epochNow),
+    updatedAt: integer("updated_at").notNull().default(epochNow),
+  },
+  (table) => [
+    uniqueIndex("event_ai_review_settings_operation_unique").on(
+      table.lastOperationId,
+    ),
+  ],
+);
+
 export const eventBrandAssets = sqliteTable(
   "event_brand_assets",
   {

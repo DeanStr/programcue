@@ -1,3 +1,4 @@
+import { z } from "zod";
 import type { Viewer } from "~/platform/auth/authorize.server";
 import { WebhookService } from "~/platform/operations/webhook-service.server";
 import {
@@ -8,10 +9,21 @@ import {
 import { calculateRubricWeightedScore } from "./evaluation-rules";
 import {
   conflictDeclarationSchema,
+  reviewerAiCriterionSuggestionsSchema,
   reviewDraftSchema,
 } from "./evaluation-schema";
 import { reviewableSubmissionSql } from "./evaluation-submission-review-eligibility.server";
 import { EvaluationServiceFoundation } from "./evaluation-service-foundation.server";
+
+async function reviewSourceSnapshotHash(value: string) {
+  const digest = await crypto.subtle.digest(
+    "SHA-256",
+    new TextEncoder().encode(value),
+  );
+  return Array.from(new Uint8Array(digest), (byte) =>
+    byte.toString(16).padStart(2, "0"),
+  ).join("");
+}
 
 export class EvaluationReviewSubmissionWorkflows extends EvaluationServiceFoundation {
   async saveReview(viewer: Viewer, input: unknown) {
@@ -32,7 +44,9 @@ export class EvaluationReviewSubmissionWorkflows extends EvaluationServiceFounda
         SELECT a.id, a.status, a.revision,
              a.submission_id AS submissionId, a.session_id AS sessionId,
              a.round_id AS roundId, r.scorecard_id AS scorecardId,
-             r.scorecard_version AS scorecardVersion
+             r.scorecard_version AS scorecardVersion,
+             COALESCE(submission.submitted_snapshot_json, a.session_snapshot_json)
+               AS sourceSnapshotJson
         FROM evaluator_assignments a
         JOIN evaluation_rounds r ON r.id = a.round_id AND r.event_id = a.event_id
         JOIN evaluation_plans plan
@@ -77,11 +91,20 @@ export class EvaluationReviewSubmissionWorkflows extends EvaluationServiceFounda
         roundId: string;
         scorecardId: string;
         scorecardVersion: number;
+        sourceSnapshotJson: string | null;
       }>();
     if (!assignment)
       throw new EvaluationStateError(
         "This assignment is unavailable or already submitted.",
       );
+    if (!assignment.sourceSnapshotJson) {
+      throw new EvaluationStateError(
+        "This assignment has no immutable source snapshot.",
+      );
+    }
+    const sourceSnapshotHash = await reviewSourceSnapshotHash(
+      assignment.sourceSnapshotJson,
+    );
     const criteria = await this.env.DB.prepare(
       `SELECT criterion.id, criterion.name, criterion.description,
               criterion.input_type AS inputType,
@@ -208,17 +231,206 @@ export class EvaluationReviewSubmissionWorkflows extends EvaluationServiceFounda
         ? calculateRubricWeightedScore(scaledCriteria, responses)
         : null;
     const existing = await this.env.DB.prepare(
-      `SELECT review.id, review.revision, review.status
+      `SELECT review.id, review.revision, review.status,
+              review.ai_suggestion_id AS aiSuggestionId,
+              review.imported_criterion_ids_json AS importedCriterionIdsJson
          FROM reviews review
          JOIN events event
            ON event.id = review.event_id AND event.organisation_id = ?
         WHERE review.event_id = ? AND review.assignment_id = ?`,
     )
       .bind(viewer.organisationId, viewer.eventId, assignment.id)
-      .first<{ id: string; revision: number; status: string }>();
+      .first<{
+        id: string;
+        revision: number;
+        status: string;
+        aiSuggestionId: string | null;
+        importedCriterionIdsJson: string;
+      }>();
     if ((existing?.revision ?? 0) !== parsed.revision)
       throw new EvaluationRevisionConflictError();
     const reviewId = existing?.id ?? crypto.randomUUID();
+    let existingImportedCriterionIds: string[] = [];
+    try {
+      existingImportedCriterionIds = z
+        .array(z.string().min(1).max(200))
+        .max(30)
+        .parse(JSON.parse(existing?.importedCriterionIdsJson ?? "[]"));
+    } catch {
+      throw new EvaluationStateError(
+        `Review ${reviewId} has invalid AI suggestion provenance.`,
+      );
+    }
+    const suggestionId =
+      parsed.suggestionId ?? existing?.aiSuggestionId ?? null;
+    const importedCriterionIds = parsed.suggestionId
+      ? parsed.importedCriterionIds
+      : existingImportedCriterionIds;
+    if (
+      existing?.aiSuggestionId &&
+      parsed.suggestionId &&
+      existing.aiSuggestionId !== parsed.suggestionId
+    ) {
+      throw new EvaluationValidationError(
+        "A review cannot replace its imported AI suggestion with another suggestion.",
+      );
+    }
+    let suggestion: {
+      status: "offered" | "imported";
+      importedReviewId: string | null;
+      assignmentRevision: number;
+      scorecardId: string;
+      scorecardVersion: number;
+      sourceSnapshotHash: string;
+      suggestions: z.infer<typeof reviewerAiCriterionSuggestionsSchema>;
+    } | null = null;
+    if (suggestionId) {
+      const row = await this.env.DB.prepare(
+        `SELECT suggestion.status,
+                suggestion.imported_review_id AS importedReviewId,
+                suggestion.assignment_revision AS assignmentRevision,
+                suggestion.scorecard_id AS scorecardId,
+                suggestion.scorecard_version AS scorecardVersion,
+                suggestion.source_snapshot_hash AS sourceSnapshotHash,
+                suggestion.suggestions_json AS suggestionsJson
+           FROM reviewer_ai_suggestions suggestion
+           JOIN events event
+             ON event.id = suggestion.event_id AND event.organisation_id = ?
+            AND event.repository_provider = 'd1'
+          WHERE suggestion.id = ? AND suggestion.event_id = ?
+            AND suggestion.assignment_id = ?
+            AND suggestion.evaluator_person_id = ?
+            AND suggestion.status IN ('offered','imported')`,
+      )
+        .bind(
+          viewer.organisationId,
+          suggestionId,
+          viewer.eventId,
+          assignment.id,
+          viewer.personId,
+        )
+        .first<{
+          status: "offered" | "imported";
+          importedReviewId: string | null;
+          assignmentRevision: number;
+          scorecardId: string;
+          scorecardVersion: number;
+          sourceSnapshotHash: string;
+          suggestionsJson: string;
+        }>();
+      if (!row) {
+        throw new EvaluationValidationError(
+          "This AI suggestion is unavailable for this review assignment.",
+        );
+      }
+      let suggestions;
+      try {
+        suggestions = reviewerAiCriterionSuggestionsSchema.parse(
+          JSON.parse(row.suggestionsJson),
+        );
+      } catch {
+        throw new EvaluationStateError(
+          `AI suggestion ${suggestionId} has invalid persisted criterion content.`,
+        );
+      }
+      suggestion = { ...row, suggestions };
+      if (
+        (suggestion.status === "offered" &&
+          suggestion.assignmentRevision !== assignment.revision) ||
+        suggestion.scorecardId !== assignment.scorecardId ||
+        suggestion.scorecardVersion !== assignment.scorecardVersion ||
+        suggestion.sourceSnapshotHash !== sourceSnapshotHash
+      ) {
+        throw new EvaluationRevisionConflictError(
+          "The assignment or scorecard changed after AI suggestions were generated. Refresh before saving.",
+        );
+      }
+      if (
+        suggestion.status === "imported" &&
+        suggestion.importedReviewId !== reviewId
+      ) {
+        throw new EvaluationValidationError(
+          "This AI suggestion was imported into a different review.",
+        );
+      }
+      const suggestedClosedIds = suggestion.suggestions
+        .filter((item) => item.suggestedValue !== null)
+        .map((item) => item.criterionId);
+      if (
+        importedCriterionIds.length !== suggestedClosedIds.length ||
+        importedCriterionIds.some((id) => !suggestedClosedIds.includes(id))
+      ) {
+        throw new EvaluationValidationError(
+          "Import every closed AI criterion through the reviewer suggestion action.",
+        );
+      }
+      if (
+        existing?.aiSuggestionId &&
+        (existingImportedCriterionIds.length !== importedCriterionIds.length ||
+          existingImportedCriterionIds.some(
+            (id) => !importedCriterionIds.includes(id),
+          ))
+      ) {
+        throw new EvaluationValidationError(
+          "Imported AI criterion provenance cannot be changed after it is saved.",
+        );
+      }
+    } else if (
+      importedCriterionIds.length ||
+      parsed.confirmedAiCriterionIds.length
+    ) {
+      throw new EvaluationValidationError(
+        "AI criterion provenance requires an available reviewer suggestion.",
+      );
+    }
+    const criterionInputTypeById = new Map(
+      criteria.results.map((criterion) => [criterion.id, criterion.inputType]),
+    );
+    const unchangedImportedCriterionIds = suggestion
+      ? suggestion.suggestions
+          .filter(
+            (item) => {
+              if (
+                item.suggestedValue === null ||
+                !importedCriterionIds.includes(item.criterionId)
+              ) {
+                return false;
+              }
+              const response = responses[item.criterionId];
+              const persistedValue =
+                criterionInputTypeById.get(item.criterionId) === "yes_no"
+                  ? response === true
+                    ? "yes"
+                    : response === false
+                      ? "no"
+                      : ""
+                  : String(response ?? "");
+              return persistedValue === item.suggestedValue;
+            },
+          )
+          .map((item) => item.criterionId)
+      : [];
+    if (
+      parsed.confirmedAiCriterionIds.some(
+        (id) => !unchangedImportedCriterionIds.includes(id),
+      )
+    ) {
+      throw new EvaluationValidationError(
+        "Only unchanged imported AI criteria can be confirmed.",
+      );
+    }
+    if (
+      parsed.intent === "submit" &&
+      unchangedImportedCriterionIds.some(
+        (id) => !parsed.confirmedAiCriterionIds.includes(id),
+      )
+    ) {
+      throw new EvaluationValidationError(
+        "Confirm every unchanged AI-derived criterion before submitting the review.",
+      );
+    }
+    const confirmedAiCriterionIds =
+      parsed.intent === "submit" ? unchangedImportedCriterionIds : [];
     const nextRevision = parsed.revision + 1;
     const operationId = crypto.randomUUID();
     const status = parsed.intent === "submit" ? "submitted" : "draft";
@@ -248,6 +460,8 @@ export class EvaluationReviewSubmissionWorkflows extends EvaluationServiceFounda
           `
       UPDATE reviews SET status = ?, scores_json = ?, weighted_score = ?, recommendation = ?, confidence = ?,
              submitter_feedback = ?, private_notes = ?,
+             ai_suggestion_id = ?, imported_criterion_ids_json = ?,
+             confirmed_ai_criterion_ids_json = ?,
              -- The attestation is stamped the first time it is given and not
              -- refreshed on later saves: it records when the reviewer answered,
              -- not when they last typed.
@@ -264,6 +478,27 @@ export class EvaluationReviewSubmissionWorkflows extends EvaluationServiceFounda
             WHERE review_event.id = reviews.event_id
               AND review_event.organisation_id = ?
          )
+         AND (
+           ? IS NULL
+           OR EXISTS (
+             SELECT 1 FROM reviewer_ai_suggestions suggestion_guard
+              WHERE suggestion_guard.id = ?
+                AND suggestion_guard.event_id = ?
+                AND suggestion_guard.assignment_id = ?
+                AND suggestion_guard.evaluator_person_id = ?
+                AND (
+                  (suggestion_guard.status = 'imported'
+                   AND suggestion_guard.imported_review_id = ?)
+                  OR
+                  (suggestion_guard.status = 'offered'
+                   AND EXISTS (
+                     SELECT 1 FROM event_ai_review_settings setting
+                      WHERE setting.event_id = suggestion_guard.event_id
+                        AND setting.enabled = 1
+                   ))
+                )
+           )
+         )
          AND revision = ? AND status IN ('draft','reopened')
          AND EXISTS (
            SELECT 1 FROM evaluator_assignments assignment
@@ -275,6 +510,8 @@ export class EvaluationReviewSubmissionWorkflows extends EvaluationServiceFounda
             AND active_session.event_id = assignment.event_id
             WHERE assignment.id = ? AND assignment.event_id = ?
               AND assignment.evaluator_person_id = ? AND assignment.revision = ?
+              AND COALESCE(active_submission.submitted_snapshot_json,
+                           assignment.session_snapshot_json) = ?
               AND assignment.status IN ('assigned','in_progress','reopened')
               AND EXISTS (
                 SELECT 1 FROM evaluation_rounds review_round
@@ -285,6 +522,8 @@ export class EvaluationReviewSubmissionWorkflows extends EvaluationServiceFounda
                    AND review_round.event_id = assignment.event_id
                    AND review_plan.status = 'active'
                    AND review_round.status = 'active'
+                   AND review_round.scorecard_id = ?
+                   AND review_round.scorecard_version = ?
                    AND (review_round.opens_at IS NULL OR review_round.opens_at <= unixepoch())
                    AND (review_round.closes_at IS NULL OR review_round.closes_at > unixepoch())
               )
@@ -311,6 +550,9 @@ export class EvaluationReviewSubmissionWorkflows extends EvaluationServiceFounda
           parsed.confidence,
           parsed.submitterFeedback || null,
           parsed.privateNotes || null,
+          suggestionId,
+          JSON.stringify(importedCriterionIds),
+          JSON.stringify(confirmedAiCriterionIds),
           parsed.conflictAffirmed ? 1 : 0,
           operationId,
           status,
@@ -318,16 +560,25 @@ export class EvaluationReviewSubmissionWorkflows extends EvaluationServiceFounda
           reviewId,
           viewer.eventId,
           viewer.organisationId,
+          suggestionId,
+          suggestionId,
+          viewer.eventId,
+          assignment.id,
+          viewer.personId,
+          reviewId,
           parsed.revision,
           assignment.id,
           viewer.eventId,
           viewer.personId,
           assignment.revision,
+          assignment.sourceSnapshotJson,
+          assignment.scorecardId,
+          assignment.scorecardVersion,
         )
       : this.env.DB.prepare(
           `
-      INSERT INTO reviews (id, event_id, assignment_id, status, scores_json, weighted_score, recommendation, confidence, submitter_feedback, private_notes, conflict_affirmed_at, revision, last_operation_id, created_at, updated_at, submitted_at, locked_at)
-      SELECT ?, ?, assignment.id, ?, ?, ?, ?, ?, ?, ?,
+      INSERT INTO reviews (id, event_id, assignment_id, status, scores_json, weighted_score, recommendation, confidence, submitter_feedback, private_notes, ai_suggestion_id, imported_criterion_ids_json, confirmed_ai_criterion_ids_json, conflict_affirmed_at, revision, last_operation_id, created_at, updated_at, submitted_at, locked_at)
+      SELECT ?, ?, assignment.id, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
              CASE WHEN ? = 1 THEN unixepoch() END,
              1, ?, unixepoch(), unixepoch(),
              CASE WHEN ? = 'submitted' THEN unixepoch() END,
@@ -345,7 +596,25 @@ export class EvaluationReviewSubmissionWorkflows extends EvaluationServiceFounda
             WHERE review_event.id = assignment.event_id
               AND review_event.organisation_id = ?
          )
+         AND (
+           ? IS NULL
+           OR EXISTS (
+             SELECT 1 FROM reviewer_ai_suggestions suggestion_guard
+              WHERE suggestion_guard.id = ?
+                AND suggestion_guard.event_id = ?
+                AND suggestion_guard.assignment_id = assignment.id
+                AND suggestion_guard.evaluator_person_id = ?
+                AND suggestion_guard.status = 'offered'
+                AND EXISTS (
+                  SELECT 1 FROM event_ai_review_settings setting
+                   WHERE setting.event_id = suggestion_guard.event_id
+                     AND setting.enabled = 1
+                )
+           )
+         )
          AND assignment.evaluator_person_id = ? AND assignment.revision = ?
+         AND COALESCE(active_submission.submitted_snapshot_json,
+                      assignment.session_snapshot_json) = ?
          AND assignment.status IN ('assigned','in_progress','reopened')
          AND EXISTS (
            SELECT 1 FROM evaluation_rounds review_round
@@ -356,6 +625,8 @@ export class EvaluationReviewSubmissionWorkflows extends EvaluationServiceFounda
               AND review_round.event_id = assignment.event_id
               AND review_plan.status = 'active'
               AND review_round.status = 'active'
+              AND review_round.scorecard_id = ?
+              AND review_round.scorecard_version = ?
               AND (review_round.opens_at IS NULL OR review_round.opens_at <= unixepoch())
               AND (review_round.closes_at IS NULL OR review_round.closes_at > unixepoch())
          )
@@ -383,6 +654,9 @@ export class EvaluationReviewSubmissionWorkflows extends EvaluationServiceFounda
           parsed.confidence,
           parsed.submitterFeedback || null,
           parsed.privateNotes || null,
+          suggestionId,
+          JSON.stringify(importedCriterionIds),
+          JSON.stringify(confirmedAiCriterionIds),
           parsed.conflictAffirmed ? 1 : 0,
           operationId,
           status,
@@ -390,11 +664,52 @@ export class EvaluationReviewSubmissionWorkflows extends EvaluationServiceFounda
           assignment.id,
           viewer.eventId,
           viewer.organisationId,
+          suggestionId,
+          suggestionId,
+          viewer.eventId,
+          viewer.personId,
           viewer.personId,
           assignment.revision,
+          assignment.sourceSnapshotJson,
+          assignment.scorecardId,
+          assignment.scorecardVersion,
         );
-    const [saved, assignmentUpdated] = await this.env.DB.batch([
+    const suggestionImportStatement =
+      suggestion?.status === "offered"
+        ? this.env.DB.prepare(
+            `UPDATE reviewer_ai_suggestions AS suggestion
+                SET status = 'imported', imported_at = unixepoch(),
+                    imported_review_id = ?, lifecycle_operation_id = ?
+              WHERE suggestion.id = ? AND suggestion.event_id = ?
+                AND suggestion.assignment_id = ?
+                AND suggestion.evaluator_person_id = ?
+                AND suggestion.status = 'offered'
+                AND EXISTS (
+                  SELECT 1 FROM events event
+                   WHERE event.id = suggestion.event_id
+                     AND event.organisation_id = ?
+                     AND event.repository_provider = 'd1'
+                )
+                AND EXISTS (
+                  SELECT 1 FROM reviews review
+                   WHERE review.id = ? AND review.event_id = suggestion.event_id
+                     AND review.last_operation_id = ?
+                )`,
+          ).bind(
+            reviewId,
+            operationId,
+            suggestionId,
+            viewer.eventId,
+            assignment.id,
+            viewer.personId,
+            viewer.organisationId,
+            reviewId,
+            operationId,
+          )
+        : null;
+    const batchResults = await this.env.DB.batch([
       reviewMutation,
+      ...(suggestionImportStatement ? [suggestionImportStatement] : []),
       this.env.DB.prepare(
         `
         UPDATE evaluator_assignments
@@ -460,9 +775,11 @@ export class EvaluationReviewSubmissionWorkflows extends EvaluationServiceFounda
         INSERT INTO review_revisions (
           id, event_id, review_id, revision_number, scores_json, content_json,
           save_kind, saved_by_person_id, idempotency_key, scorecard_id,
-          scorecard_version, criteria_snapshot_json, created_at
+          scorecard_version, criteria_snapshot_json, ai_suggestion_id,
+          imported_criterion_ids_json, confirmed_ai_criterion_ids_json,
+          created_at
         )
-        SELECT ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, unixepoch()
+        SELECT ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, unixepoch()
          WHERE EXISTS (
            SELECT 1 FROM reviews review
             JOIN events event
@@ -489,6 +806,9 @@ export class EvaluationReviewSubmissionWorkflows extends EvaluationServiceFounda
         assignment.scorecardId,
         assignment.scorecardVersion,
         criteriaSnapshotJson,
+        suggestionId,
+        JSON.stringify(importedCriterionIds),
+        JSON.stringify(confirmedAiCriterionIds),
         viewer.organisationId,
         reviewId,
         operationId,
@@ -532,7 +852,12 @@ export class EvaluationReviewSubmissionWorkflows extends EvaluationServiceFounda
         viewer.personId,
         parsed.intent === "submit" ? "review.submitted" : "review.saved",
         reviewId,
-        JSON.stringify({ revision: nextRevision }),
+        JSON.stringify({
+          revision: nextRevision,
+          aiSuggestionId: suggestionId,
+          importedCriterionIds,
+          confirmedAiCriterionIds,
+        }),
         viewer.organisationId,
         reviewId,
         operationId,
@@ -541,6 +866,19 @@ export class EvaluationReviewSubmissionWorkflows extends EvaluationServiceFounda
       ),
       ...(preparedWebhook?.statements ?? []),
     ]);
+    const saved = batchResults[0]!;
+    const suggestionImported = suggestionImportStatement
+      ? batchResults[1]
+      : null;
+    const assignmentUpdated = batchResults[suggestionImportStatement ? 2 : 1]!;
+    if (
+      suggestionImportStatement &&
+      (suggestionImported?.meta.changes ?? 0) !== 1
+    ) {
+      throw new EvaluationRevisionConflictError(
+        "The AI suggestion changed before it could be imported. Refresh the review.",
+      );
+    }
     if (
       (saved.meta.changes ?? 0) !== 1 ||
       (assignmentUpdated.meta.changes ?? 0) !== 1

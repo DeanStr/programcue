@@ -157,6 +157,7 @@ export type ScheduleAutoPlacementResult = {
   scheduleVersionId: string;
   scheduleRevision: number;
   appliedCount: number;
+  excludedCount: number;
   unplacedCount: number;
 };
 

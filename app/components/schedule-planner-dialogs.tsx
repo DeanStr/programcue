@@ -2,7 +2,11 @@ import { Dialog } from "~/components/dialog";
 import type { AutoPlacementPreview } from "~/modules/schedule/schedule-auto-placement";
 import type { ScheduleSession } from "~/modules/schedule/schedule-service.server";
 import { Form, Link } from "react-router";
-import { scheduleDateTimeLabel } from "./schedule-planner-workspace-helpers";
+import { useState } from "react";
+import {
+  scheduleDateTimeLabel,
+  serializeAutoPlacementPreview,
+} from "./schedule-planner-workspace-helpers";
 import type {
   ScheduleFetcher,
   SchedulePlannerWorkspaceData,
@@ -62,7 +66,6 @@ export function ScheduleDraftDialog({
 
 export function AutoPlacementPreviewDialog({
   preview,
-  proposal,
   workspace,
   sessionById,
   fetcher,
@@ -70,13 +73,17 @@ export function AutoPlacementPreviewDialog({
   clearError,
 }: {
   preview: AutoPlacementPreview;
-  proposal: string;
   workspace: SchedulePlannerWorkspaceData;
   sessionById: Map<string, ScheduleSession>;
   fetcher: ScheduleFetcher;
   dismiss: () => void;
   clearError: () => void;
 }) {
+  const [selectedSessionIds, setSelectedSessionIds] = useState(
+    () => preview.selectedSessionIds,
+  );
+  const selectedIds = new Set(selectedSessionIds);
+  const proposal = serializeAutoPlacementPreview(preview, selectedSessionIds);
   return (
     <Dialog
       title="Preview auto-placement"
@@ -100,11 +107,11 @@ export function AutoPlacementPreviewDialog({
               className="btn primary"
               type="submit"
               disabled={
-                preview.placements.length === 0 || fetcher.state !== "idle"
+                selectedSessionIds.length === 0 || fetcher.state !== "idle"
               }
             >
               {fetcher.state === "idle"
-                ? "Confirm placements"
+                ? `Apply ${selectedSessionIds.length} selected placement${selectedSessionIds.length === 1 ? "" : "s"}`
                 : "Applying placements…"}
             </button>
           </fetcher.Form>
@@ -123,8 +130,8 @@ export function AutoPlacementPreviewDialog({
             <span className="label">Unscheduled inspected</span>
           </div>
           <div className="metric">
-            <span className="value">{preview.placements.length}</span>
-            <span className="label">Proposed placements</span>
+            <span className="value">{selectedSessionIds.length}</span>
+            <span className="label">Selected to apply</span>
           </div>
           <div className="metric">
             <span className="value">{preview.unplaced.length}</span>
@@ -137,7 +144,28 @@ export function AutoPlacementPreviewDialog({
           will be revalidated on confirmation.
         </p>
         <section aria-labelledby="auto-placement-proposed-heading">
-          <h3 id="auto-placement-proposed-heading">Proposed placements</h3>
+          <div className="card-title">
+            <h3 id="auto-placement-proposed-heading">Proposed placements</h3>
+            {preview.placements.length ? (
+              <button
+                className="btn small right"
+                type="button"
+                onClick={() =>
+                  setSelectedSessionIds(
+                    selectedSessionIds.length === preview.placements.length
+                      ? []
+                      : preview.placements.map(
+                          (placement) => placement.sessionId,
+                        ),
+                  )
+                }
+              >
+                {selectedSessionIds.length === preview.placements.length
+                  ? "Clear selection"
+                  : "Select all"}
+              </button>
+            ) : null}
+          </div>
           {preview.placements.length ? (
             <div className="stack">
               {preview.placements.map((placement) => {
@@ -151,7 +179,22 @@ export function AutoPlacementPreviewDialog({
                     data-testid="auto-placement-proposal"
                     key={placement.sessionId}
                   >
-                    <strong>{session?.title ?? placement.sessionId}</strong>
+                    <label>
+                      <input
+                        type="checkbox"
+                        checked={selectedIds.has(placement.sessionId)}
+                        onChange={(event) =>
+                          setSelectedSessionIds((current) =>
+                            event.target.checked
+                              ? [...current, placement.sessionId]
+                              : current.filter(
+                                  (id) => id !== placement.sessionId,
+                                ),
+                          )
+                        }
+                      />{" "}
+                      <strong>{session?.title ?? placement.sessionId}</strong>
+                    </label>
                     <span>
                       {room?.name ?? placement.roomId} ·{" "}
                       {scheduleDateTimeLabel(

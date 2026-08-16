@@ -407,6 +407,13 @@ export const reviews = sqliteTable(
     confidence: integer("confidence"),
     submitterFeedback: text("submitter_feedback"),
     privateNotes: text("private_notes"),
+    aiSuggestionId: text("ai_suggestion_id"),
+    importedCriterionIdsJson: text("imported_criterion_ids_json")
+      .notNull()
+      .default("[]"),
+    confirmedAiCriterionIdsJson: text("confirmed_ai_criterion_ids_json")
+      .notNull()
+      .default("[]"),
     /* When the reviewer affirmed they hold no conflict on this assignment.
        Null means the question is unanswered, which blocks submission. */
     conflictAffirmedAt: integer("conflict_affirmed_at"),
@@ -552,6 +559,68 @@ export const aiReviewAssessments = sqliteTable(
   ],
 );
 
+export const reviewerAiSuggestions = sqliteTable(
+  "reviewer_ai_suggestions",
+  {
+    id: text("id").primaryKey(),
+    eventId: text("event_id")
+      .notNull()
+      .references(() => events.id, { onDelete: "cascade" }),
+    assignmentId: text("assignment_id").notNull(),
+    evaluatorPersonId: text("evaluator_person_id")
+      .notNull()
+      .references(() => people.id),
+    assignmentRevision: integer("assignment_revision").notNull(),
+    roundId: text("round_id").notNull(),
+    targetType: text("target_type").notNull().$type<"submission" | "session">(),
+    targetId: text("target_id").notNull(),
+    sourceSnapshotHash: text("source_snapshot_hash").notNull(),
+    scorecardId: text("scorecard_id").notNull(),
+    scorecardVersion: integer("scorecard_version").notNull(),
+    suggestionsJson: text("suggestions_json").notNull(),
+    provider: text("provider")
+      .notNull()
+      .$type<"workers_ai" | "openai" | "anthropic">(),
+    model: text("model").notNull(),
+    providerResponseId: text("provider_response_id").notNull(),
+    status: text("status")
+      .notNull()
+      .default("offered")
+      .$type<"offered" | "dismissed" | "imported">(),
+    generatedAt: integer("generated_at").notNull().default(epochNow),
+    dismissedAt: integer("dismissed_at"),
+    importedAt: integer("imported_at"),
+    importedReviewId: text("imported_review_id"),
+    lifecycleOperationId: text("lifecycle_operation_id"),
+    lastOperationId: text("last_operation_id").notNull(),
+  },
+  (table) => [
+    foreignKey({
+      columns: [table.assignmentId, table.eventId],
+      foreignColumns: [evaluatorAssignments.id, evaluatorAssignments.eventId],
+    }).onDelete("cascade"),
+    foreignKey({
+      columns: [table.roundId, table.eventId],
+      foreignColumns: [evaluationRounds.id, evaluationRounds.eventId],
+    }).onDelete("cascade"),
+    uniqueIndex("reviewer_ai_suggestions_operation_unique").on(
+      table.lastOperationId,
+    ),
+    uniqueIndex("reviewer_ai_suggestions_lifecycle_operation_unique").on(
+      table.lifecycleOperationId,
+    ),
+    index("idx_reviewer_ai_suggestions_assignment").on(
+      table.eventId,
+      table.assignmentId,
+      table.evaluatorPersonId,
+      table.generatedAt,
+    ),
+    uniqueIndex("ux_reviewer_ai_suggestions_active")
+      .on(table.eventId, table.assignmentId, table.evaluatorPersonId)
+      .where(sql`${table.status} IN ('offered','imported')`),
+  ],
+);
+
 export const reviewRevisions = sqliteTable(
   "review_revisions",
   {
@@ -576,6 +645,13 @@ export const reviewRevisions = sqliteTable(
     scorecardId: text("scorecard_id"),
     scorecardVersion: integer("scorecard_version"),
     criteriaSnapshotJson: text("criteria_snapshot_json"),
+    aiSuggestionId: text("ai_suggestion_id"),
+    importedCriterionIdsJson: text("imported_criterion_ids_json")
+      .notNull()
+      .default("[]"),
+    confirmedAiCriterionIdsJson: text("confirmed_ai_criterion_ids_json")
+      .notNull()
+      .default("[]"),
     createdAt: integer("created_at").notNull().default(epochNow),
   },
   (table) => [

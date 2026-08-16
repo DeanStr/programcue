@@ -76,6 +76,10 @@ export const scheduleAutoPlacementConfirmSchema = z
     placements: z
       .array(autoPlacementCandidateSchema)
       .max(MAX_AUTO_PLACEMENT_SESSIONS),
+    selectedSessionIds: z
+      .array(z.string().trim().min(1))
+      .min(1, "Select at least one proposed placement.")
+      .max(MAX_AUTO_PLACEMENT_SESSIONS),
     unplaced: z
       .array(autoPlacementUnplacedSchema)
       .max(MAX_AUTO_PLACEMENT_SESSIONS),
@@ -95,6 +99,15 @@ export const scheduleAutoPlacementConfirmSchema = z
         code: "custom",
         path: ["placements"],
         message: "Each proposed session placement must appear once.",
+      });
+    }
+    if (
+      new Set(value.selectedSessionIds).size !== value.selectedSessionIds.length
+    ) {
+      context.addIssue({
+        code: "custom",
+        path: ["selectedSessionIds"],
+        message: "Select each proposed session once.",
       });
     }
     const unplacedIds = value.unplaced.map((item) => item.sessionId);

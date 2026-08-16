@@ -70,6 +70,8 @@ export function buildParticipantRetentionFinalisationStatements(
     guarded(
       `UPDATE reviews
           SET scores_json = ?, submitter_feedback = NULL, private_notes = NULL,
+              ai_suggestion_id = NULL, imported_criterion_ids_json = '[]',
+              confirmed_ai_criterion_ids_json = '[]',
               last_operation_id = NULL, updated_at = unixepoch()
         WHERE event_id = ?`,
       REDACTED_JSON,
@@ -77,7 +79,9 @@ export function buildParticipantRetentionFinalisationStatements(
     ),
     guarded(
       `UPDATE review_revisions
-          SET scores_json = ?, content_json = ?, idempotency_key = NULL
+          SET scores_json = ?, content_json = ?, idempotency_key = NULL,
+              ai_suggestion_id = NULL, imported_criterion_ids_json = '[]',
+              confirmed_ai_criterion_ids_json = '[]'
         WHERE event_id = ?`,
       REDACTED_JSON,
       REDACTED_JSON,
@@ -91,6 +95,10 @@ export function buildParticipantRetentionFinalisationStatements(
     ),
     guarded(
       `UPDATE review_moderations SET notes = NULL WHERE event_id = ?`,
+      viewer.eventId,
+    ),
+    guarded(
+      `DELETE FROM reviewer_ai_suggestions WHERE event_id = ?`,
       viewer.eventId,
     ),
     guarded(
