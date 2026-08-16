@@ -410,8 +410,12 @@ ranges preserve their duration when a start moves, but invalid ranges still
 fail both client and server validation.
 
 Standalone public-programme filters and schedule-source search live in the URL
-so reload, history and shared links preserve the operator's context. Embed
-configuration remains owned by its explicit embed query contract. Person-first
+so reload, history and shared links preserve the operator's context. These
+client-owned parameters do not re-run the route loaders; public speaker shares
+and schedule filter, session and conflict focus remain server-owned and do
+revalidate. Unavailable public facets are removed from old links and disclosed
+instead of remaining visible while being ignored. Embed configuration remains
+owned by its explicit embed query contract. Person-first
 lookup is an authorised, organisation-scoped read over established membership,
 submission and session relationships; it may fill a manual form but never
 links an unrelated global identity or bypasses the mutation's existing server

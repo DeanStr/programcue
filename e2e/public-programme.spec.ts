@@ -93,6 +93,25 @@ test("public programme filters sessions by track, format and room", async ({
   await expect(detailProfileLink).toBeFocused();
 });
 
+test("public programme clears unavailable saved facets honestly", async ({
+  page,
+}) => {
+  await waitForInterface(
+    page,
+    "/public/programme/future-of-events-2027?track=Retired&format=Missing&query=operations",
+  );
+
+  await expect(page).not.toHaveURL(/track=|format=/u);
+  await expect(page).toHaveURL(/query=operations/u);
+  await expect(
+    page.getByText(
+      "Saved track, format filters are no longer available and were cleared.",
+    ),
+  ).toBeVisible();
+  await expect(page.getByLabel("Filter by track")).toHaveValue("");
+  await expect(page.getByLabel("Filter by format")).toHaveValue("");
+});
+
 test("public programme exposes speaker affiliations and a closable profile panel", async ({
   page,
 }) => {

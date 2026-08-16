@@ -341,8 +341,8 @@ The connected production interfaces now derive new event, public-form,
 resource and managed-embed slugs until manual override, show the resulting
 public path and check event-slug availability without weakening the server's
 uniqueness boundary. Event creation, cloning and setup use coupled date ranges,
-searchable human-readable IANA timezones, linked field errors and focused error
-summaries. Existing and published identifiers remain unchanged.
+searchable stable city/IANA timezone labels, linked field errors and focused
+error summaries. Existing and published identifiers remain unchanged.
 
 Application intake reports remaining required answers, labels required fields,
 warns about repeated speaker email addresses and surfaces bounded-text counts.
@@ -362,11 +362,12 @@ feedback and retain the existing server validation. Organisation owners can
 persist an audited real postal address for new communication-template defaults;
 the write revalidates active ownership, rejects stale revisions and rolls back
 unless the update and audit complete together. Missing data remains explicit.
-Schedule source search and public programme
-filters persist in the URL, saved-view names reflect active filters, and long
-content fields expose near-limit counts. Focused unit/Worker and browser
-coverage records these observable contracts; manual assistive-technology
-acceptance remains external.
+Schedule source search and public programme filters persist in the URL without
+rerunning their loaders, while server-owned focus parameters still revalidate;
+stale public facets are cleared with an explicit notice. Saved-view names
+reflect active filters, and long content fields expose near-limit counts.
+Focused unit/Worker and browser coverage records these observable contracts;
+manual assistive-technology acceptance remains external.
 
 ### Evaluation showcase fixture evidence
 

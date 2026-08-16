@@ -2,7 +2,10 @@ import { env } from "cloudflare:test";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { ensureDemoData } from "~/platform/demo/seed.server";
-import { descriptionSnippet } from "~/routes/public-programme";
+import {
+  descriptionSnippet,
+  shouldRevalidate,
+} from "~/routes/public-programme";
 import { PublicProgrammeService } from "./public-programme-service.server";
 
 describe("published programme and itinerary", () => {
@@ -27,6 +30,40 @@ describe("published programme and itinerary", () => {
 
     const unbroken = "x".repeat(400);
     expect(descriptionSnippet(unbroken)).toBe(`${"x".repeat(180)}…`);
+  });
+
+  it("keeps embed query configuration and actions on the loader validation path", () => {
+    const revalidation = (
+      current: string,
+      next: string,
+      formMethod?: string,
+    ) =>
+      shouldRevalidate({
+        currentUrl: new URL(current),
+        nextUrl: new URL(next),
+        defaultShouldRevalidate: true,
+        formMethod,
+      } as Parameters<typeof shouldRevalidate>[0]);
+
+    expect(
+      revalidation(
+        "https://example.test/public/programme/event?track=Current",
+        "https://example.test/public/programme/event?track=Next",
+      ),
+    ).toBe(false);
+    expect(
+      revalidation(
+        "https://example.test/embed/event?track=Current",
+        "https://example.test/embed/event?track=Next",
+      ),
+    ).toBe(true);
+    expect(
+      revalidation(
+        "https://example.test/public/programme/event?track=Current",
+        "https://example.test/public/programme/event?track=Next",
+        "POST",
+      ),
+    ).toBe(true);
   });
 
   it("returns no programme for an unpublished event", async () => {

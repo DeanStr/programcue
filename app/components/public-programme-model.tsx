@@ -11,6 +11,10 @@ import type {
   PublishedProgramme,
   PublishedSpeaker,
 } from "~/modules/programme/public-programme-service.server";
+import {
+  clearedPublicProgrammeFacetMessage,
+  clearUnavailablePublicProgrammeFacets,
+} from "~/modules/programme/public-programme-filter-state";
 
 export type PublicProgrammeLoaderData = {
   programme: PublishedProgramme;
@@ -192,6 +196,7 @@ export function usePublicProgrammeModel(loaderData: PublicProgrammeLoaderData) {
       : null;
   const saved = loaderData.itinerary;
   const initialPublicSearch = useRef(new URLSearchParams(location.search));
+  const pendingClientSearches = useRef(new Set<string>());
   const [query, setQueryState] = useState(
     embedded
       ? embedOptions.query
@@ -261,6 +266,7 @@ export function usePublicProgrammeModel(loaderData: PublicProgrammeLoaderData) {
         ? initialPublicSearch.current.get("room")!
         : "",
   );
+  const [clearedSavedFilterNotice, setClearedSavedFilterNotice] = useState("");
   const [expandedDescriptions, setExpandedDescriptions] = useState<string[]>(
     [],
   );
@@ -301,10 +307,12 @@ export function usePublicProgrammeModel(loaderData: PublicProgrammeLoaderData) {
     }
     if (value) search.set(name, value);
     else search.delete(name);
+    const nextSearch = search.size ? `?${search}` : "";
+    pendingClientSearches.current.add(nextSearch);
     void navigate(
       {
         pathname: location.pathname,
-        search: search.size ? `?${search}` : "",
+        search: nextSearch,
         hash: location.hash,
       },
       { replace: true, preventScrollReset: true },
@@ -392,14 +400,33 @@ export function usePublicProgrammeModel(loaderData: PublicProgrammeLoaderData) {
   }, [embedded, location.search, standaloneGalleryQuery]);
   useEffect(() => {
     if (embedded) return;
+    if (pendingClientSearches.current.delete(location.search)) return;
     const search = new URLSearchParams(location.search);
+    const cleaned = clearUnavailablePublicProgrammeFacets(search, {
+      day: days,
+      track: tracks,
+      format: formats,
+      room: rooms,
+    });
+    if (cleaned.cleared.length) {
+      setClearedSavedFilterNotice(
+        clearedPublicProgrammeFacetMessage(cleaned.cleared),
+      );
+      const nextSearch = cleaned.search.size ? `?${cleaned.search}` : "";
+      pendingClientSearches.current.add(nextSearch);
+      void navigate(
+        {
+          pathname: location.pathname,
+          search: nextSearch,
+          hash: location.hash,
+        },
+        { replace: true, preventScrollReset: true },
+      );
+      return;
+    }
     setQueryState(search.get("query") ?? "");
     setStandaloneDirectoryQueryState(search.get("speakerQuery") ?? "");
     setStandaloneGalleryQueryState(search.get("galleryQuery") ?? "");
-  }, [embedded, location.search]);
-  useEffect(() => {
-    if (embedded) return;
-    const search = new URLSearchParams(location.search);
     const requestedDay = search.get("day") ?? "";
     const requestedTrack = search.get("track") ?? "";
     const requestedFormat = search.get("format") ?? "";
@@ -408,7 +435,17 @@ export function usePublicProgrammeModel(loaderData: PublicProgrammeLoaderData) {
     setTrackState(tracks.includes(requestedTrack) ? requestedTrack : "");
     setFormatState(formats.includes(requestedFormat) ? requestedFormat : "");
     setRoomState(rooms.includes(requestedRoom) ? requestedRoom : "");
-  }, [days, embedded, formats, location.search, rooms, tracks]);
+  }, [
+    days,
+    embedded,
+    formats,
+    location.hash,
+    location.pathname,
+    location.search,
+    navigate,
+    rooms,
+    tracks,
+  ]);
   useEffect(() => {
     if (location.hash.startsWith("#session-")) {
       const slug = location.hash.slice("#session-".length);
@@ -681,10 +718,12 @@ export function usePublicProgrammeModel(loaderData: PublicProgrammeLoaderData) {
       if (showControl("track")) search.delete("track");
       if (showControl("format")) search.delete("format");
       if (showControl("room")) search.delete("room");
+      const nextSearch = search.size ? `?${search}` : "";
+      pendingClientSearches.current.add(nextSearch);
       void navigate(
         {
           pathname: location.pathname,
-          search: search.size ? `?${search}` : "",
+          search: nextSearch,
           hash: location.hash,
         },
         { replace: true, preventScrollReset: true },
@@ -787,6 +826,7 @@ export function usePublicProgrammeModel(loaderData: PublicProgrammeLoaderData) {
     visible,
     filtersActive,
     clearableFiltersActive,
+    clearedSavedFilterNotice,
     selected,
     visibleSpeakers,
     selectedSpeaker,

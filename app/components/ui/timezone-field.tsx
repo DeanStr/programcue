@@ -9,22 +9,10 @@ function timezoneNames() {
   return ["UTC", ...(supportedValuesOf ? supportedValuesOf("timeZone") : [])];
 }
 
-function timezoneLabel(timezone: string) {
+export function timezoneLabel(timezone: string) {
   if (timezone === "UTC") return "Coordinated Universal Time";
   const locality = timezone.split("/").at(-1)?.replaceAll("_", " ") ?? timezone;
-  let shortName = "";
-  try {
-    shortName =
-      new Intl.DateTimeFormat("en", {
-        timeZone: timezone,
-        timeZoneName: "short",
-      })
-        .formatToParts(new Date())
-        .find((part) => part.type === "timeZoneName")?.value ?? "";
-  } catch {
-    // The server schema remains the authority for runtime-supported zones.
-  }
-  return [locality, shortName, timezone].filter(Boolean).join(" · ");
+  return `${locality} · ${timezone}`;
 }
 
 const TIMEZONE_OPTIONS = timezoneNames().map((timezone) => ({

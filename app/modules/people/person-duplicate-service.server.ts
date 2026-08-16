@@ -84,7 +84,10 @@ export class PersonDuplicateService {
   ): Promise<OrganisationPersonMatch[]> {
     const query = organisationPersonSearchSchema.parse(rawQuery);
     const exactEmailSearch = query.length > 120;
-    const pattern = `%${query.replaceAll("%", "\\%").replaceAll("_", "\\_")}%`;
+    const pattern = `%${query
+      .replaceAll("\\", "\\\\")
+      .replaceAll("%", "\\%")
+      .replaceAll("_", "\\_")}%`;
     const rows = await this.env.DB.prepare(
       `WITH organisation_people(person_id) AS (
          SELECT membership.person_id

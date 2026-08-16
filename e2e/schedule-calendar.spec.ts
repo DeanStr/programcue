@@ -43,6 +43,26 @@ test.beforeEach(async ({ page }) => {
   await waitForInterface(page, "/public/programme/future-of-events-2027");
 });
 
+test("schedule source search updates its URL without reloading the workspace", async ({
+  page,
+}) => {
+  await waitForInterface(page, "/admin/schedule?sourceQuery=AI");
+  await createNextScheduleDraft(page);
+  await expect(page.getByLabel("Find session")).toBeVisible();
+  const routeReads: string[] = [];
+  page.on("request", (request) => {
+    const url = new URL(request.url());
+    if (request.method() === "GET" && url.pathname === "/admin/schedule") {
+      routeReads.push(url.href);
+    }
+  });
+
+  await page.getByLabel("Find session").fill("panel");
+  await expect(page).toHaveURL(/sourceQuery=panel/u);
+  await expect(page.getByText(/of \d+ sessions match/u)).toBeVisible();
+  expect(routeReads).toEqual([]);
+});
+
 test("schedule and programme render the event calendar date and timezone", async ({
   page,
 }) => {

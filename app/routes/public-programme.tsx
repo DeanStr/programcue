@@ -1,4 +1,9 @@
-import { data, isRouteErrorResponse, useRouteError } from "react-router";
+import {
+  data,
+  isRouteErrorResponse,
+  useRouteError,
+  type ShouldRevalidateFunctionArgs,
+} from "react-router";
 import type { CSSProperties } from "react";
 
 import type { Route } from "./+types/public-programme";
@@ -42,6 +47,33 @@ import {
   publishedProgrammeCacheHeaders,
   publishedProgrammeNotModified,
 } from "~/platform/api/api-public-programme.server";
+import {
+  onlyClientSearchParametersChanged,
+  PUBLIC_PROGRAMME_CLIENT_SEARCH_PARAMETERS,
+} from "~/lib/client-search-revalidation";
+
+export function shouldRevalidate({
+  currentUrl,
+  nextUrl,
+  defaultShouldRevalidate,
+  formMethod,
+}: ShouldRevalidateFunctionArgs) {
+  if (
+    (formMethod && formMethod.toUpperCase() !== "GET") ||
+    !currentUrl.pathname.startsWith("/public/programme/") ||
+    !nextUrl.pathname.startsWith("/public/programme/")
+  ) {
+    return defaultShouldRevalidate;
+  }
+
+  return onlyClientSearchParametersChanged(
+    currentUrl,
+    nextUrl,
+    PUBLIC_PROGRAMME_CLIENT_SEARCH_PARAMETERS,
+  )
+    ? false
+    : defaultShouldRevalidate;
+}
 
 function isEvaluationFixtureEvent(env: CloudflareEnvironment, eventId: string) {
   return (

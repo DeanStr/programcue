@@ -89,6 +89,37 @@ describe("likely duplicate person checks", () => {
     ]);
   });
 
+  it("treats SQL escape characters in person searches literally", async () => {
+    const suffix = crypto.randomUUID();
+    const personId = `person-backslash-${suffix}`;
+    const email = `backslash-${suffix.slice(0, 8)}@example.com`;
+    await env.DB.batch([
+      env.DB.prepare(
+        `INSERT INTO people (
+           id, email, display_name, email_verified, profile_status,
+           created_at, updated_at
+         ) VALUES (?, ?, ?, 1, 'draft', unixepoch(), unixepoch())`,
+      ).bind(personId, email, "Back\\Slash Person"),
+      env.DB.prepare(
+        `INSERT INTO memberships (
+           id, organisation_id, event_id, person_id, role, accepted_at,
+           created_at
+         ) VALUES (?, ?, NULL, ?, 'administrator', unixepoch(), unixepoch())`,
+      ).bind(`membership-backslash-${suffix}`, viewer.organisationId, personId),
+    ]);
+
+    await expect(
+      new PersonDuplicateService(
+        env as unknown as CloudflareEnvironment,
+      ).searchOrganisationPeople(viewer, "Back\\Slash"),
+    ).resolves.toEqual([
+      expect.objectContaining({
+        personId,
+        name: "Back\\Slash Person",
+      }),
+    ]);
+  });
+
   it("accepts complete email-length searches and rejects oversized queries", async () => {
     const service = new PersonDuplicateService(
       env as unknown as CloudflareEnvironment,

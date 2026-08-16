@@ -359,9 +359,15 @@ function PublicProgrammeFilters({ model }: { model: PublicProgrammeModel }) {
     visible,
     programme,
     filtersActive,
+    clearedSavedFilterNotice,
   } = model;
   return (
     <div className="public-filters-bar">
+      {clearedSavedFilterNotice ? (
+        <p className="validation-item info" role="status">
+          {clearedSavedFilterNotice}
+        </p>
+      ) : null}
       <div className="public-filters">
         {showControl("search") ? (
           <div className="public-search">

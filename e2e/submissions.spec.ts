@@ -434,6 +434,9 @@ test.describe.serial("submissions vertical slice", () => {
     ).toBeVisible();
 
     await page.getByRole("button", { name: "Start application" }).click();
+    await expect(
+      page.getByRole("group", { name: "Tracks Required" }),
+    ).toBeVisible();
     await page.route("**/apply/form/import/sessionize", async (route) => {
       await route.fulfill({
         contentType: "application/json",
@@ -457,17 +460,19 @@ test.describe.serial("submissions vertical slice", () => {
     await expect(page.getByLabel("Biography").last()).toHaveValue(
       "Imported public biography for review.",
     );
-    await page.getByLabel("Session title *").fill(title);
+    await page.getByLabel("Session title").fill(title);
     await page
-      .getByLabel("Session description *")
+      .getByLabel("Session description")
       .fill(
         "A detailed, practical case study about removing ambiguity from event programme delivery.",
       );
     await page.getByLabel("Event Operations").check();
-    await page.getByLabel("Format *").selectOption("Workshop");
-    await expect(page.getByLabel("Materials and room setup *")).toBeVisible();
+    await page.getByLabel("Format").selectOption("Workshop");
+    await expect(
+      page.getByLabel("Materials and room setup"),
+    ).toBeVisible();
     await page
-      .getByLabel("Materials and room setup *")
+      .getByLabel("Materials and room setup")
       .fill("Moveable tables, a projector, and sticky notes.");
     await page.getByLabel("Speaker 1 name").fill("Avery Applicant");
     await page.getByRole("button", { name: "Add co-speaker" }).click();
@@ -503,7 +508,7 @@ test.describe.serial("submissions vertical slice", () => {
       page.getByRole("button", { name: "Withdraw application" }),
     ).toBeVisible();
     const revisionSentence = "Updated: now includes 2026 benchmark data.";
-    const description = page.getByLabel("Session description *");
+    const description = page.getByLabel("Session description");
     await description.fill(
       `${await description.inputValue()} ${revisionSentence}`,
     );
@@ -521,7 +526,9 @@ test.describe.serial("submissions vertical slice", () => {
       }),
     ).toBeVisible();
     await page.reload();
-    await expect(page.getByLabel("Session description *")).toHaveValue(
+    await expect(
+      page.getByLabel("Session description"),
+    ).toHaveValue(
       new RegExp(`${revisionSentence.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}$`),
     );
 
@@ -694,7 +701,9 @@ test.describe.serial("submissions vertical slice", () => {
     await page.getByRole("button", { name: "Verify and open drafts" }).click();
     await page.getByRole("button", { name: "Start application" }).click();
 
-    await expect(page.getByLabel("Key takeaway *")).toBeVisible();
+    await expect(
+      page.getByLabel("Key takeaway"),
+    ).toBeVisible();
     const audienceLevel = page.getByLabel("Audience level");
     await expect(audienceLevel).toBeVisible();
     await expect(page.getByLabel("Workshop prerequisites")).toBeHidden();

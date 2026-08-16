@@ -469,7 +469,7 @@ export function DraftEditor({
               <legend className="label">
                 {field.label}
                 {field.required ? (
-                  <span className="pc-required" aria-hidden="true">
+                  <span className="pc-required">
                     Required
                   </span>
                 ) : null}
