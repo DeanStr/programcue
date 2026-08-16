@@ -436,7 +436,7 @@ schedule tests verify this AIA-08 production slice.
 
 ## Audit and revision evidence
 
-- **Production slice; local repository evidence; not deployed:** Audit writes
+- **Production slice; deployed:** Audit writes
   now require explicit actor kind, ingress origin and metadata contract version
   across every runtime writer. Pre-contract rows remain readable as version 0
   but are labelled historical and cannot produce version-1 display summaries.
@@ -452,9 +452,10 @@ schedule tests verify this AIA-08 production slice.
   facts are rejected at the database write boundary. Invalid filter lengths,
   filter values and internal reader bounds fail instead of being clamped,
   truncated or ignored. Migration, authorization, cursor and focused Worker tests
-  are repository evidence; no deployment or retention-policy acceptance is
-  claimed.
-- **Production slice; local repository evidence; not deployed:** Submission
+  are repository evidence. Migrations `0030_audit_contract_and_retention.sql`
+  and `0031_contextual_revision_evidence.sql` are deployed; retention-policy
+  acceptance is not claimed.
+- **Production slice; deployed:** Submission
   administration shows an inline status timeline and retained submitted-save
   revisions. Chair review results show private saved-review history using the
   exact scorecard ID, version and criterion snapshot stored with each new
@@ -640,31 +641,51 @@ passed draft editing, private logo/banner upload, representative preview,
 confirmed publication and application, participant and programme projection.
 The full browser gate was not rerun because this release used the focused
 observable workflow plus the complete cross-cutting core gate.
+Application candidate `ba06796` passed the complete core gate: 61 unit files
+with 347 tests, 171 Worker files with 1,350 tests, the Agents Durable Object
+test, production builds, 55 configuration tests, migration parity at 99
+application tables, 119 indexes and 104 triggers, the 235-writer audit
+provenance contract, a 161,302-byte clean-room recovery drill, synchronized
+OpenAPI at 33 paths and 459 internal references, and the scanner's 10 tests.
+Its focused desktop-Chromium evaluation run passed all five reviewer,
+administration, chair-resume, waiting-state and invitation-handoff cases. The
+production cutover exposed one evaluator-created decision draft whose deployed
+preview predated two now-required fields. Migration
+`0032_decision_draft_preview_contract.sql` explicitly adds the privacy-safe
+legacy values without replacing existing evidence; its dedicated forward
+migration case and complete migration validator passed. The complete core gate
+was not repeated for that data-only correction; the affected production route
+and persisted contract were exercised directly after migration.
 
 ## Deployment evidence
 
-Application source `fb38329` is deployed at `app.programcue.com` as Worker
-version `a3aff8cb-ce04-47af-8895-fabd39f43933`, and scanner source `c9e1287`
-is deployed at `scanner.programcue.com`; release-stamp commits `90697a4` and
+Application source `ba06796` is deployed at `app.programcue.com` as Worker
+version `6a2dfbd6-3058-428f-8e46-b4373ee4190c`, and scanner source `c9e1287`
+is deployed at `scanner.programcue.com`; release-stamp commits `c4993cd` and
 `a5e1bab` record those sources. The current application version is at 100%
-traffic. Migrations `0026_review_conflict_attestation.sql`,
-`0027_programme_venue_presentation.sql` and
-`0028_operation_failure_alert_acknowledgements.sql` remain applied, and
-`0029_event_branding_publication.sql` applied successfully before this Worker
-cutover. The WNAM D1 ledger retains 29 migrations, `quick_check=ok`, and
-foreign-key inspection returns no rows. The event-brand-assets table and
-bounded event/kind index are present, all ten event branding publication
-columns exist, and every migrated event retains a consistent draft backfill.
-The earlier review attestation, venue presentation and operation
-alert-attribution schema also remains present.
+traffic. Migrations `0030_audit_contract_and_retention.sql` and
+`0031_contextual_revision_evidence.sql` applied before the Worker cutover;
+production-discovered migration `0032_decision_draft_preview_contract.sql`
+then upgraded five legacy decision previews and is recorded in commit
+`58d41d9`. The WNAM D1 ledger retains 32 migrations, `quick_check=ok`, and
+foreign-key inspection returns no rows. The explicit audit provenance columns,
+insert/display contracts, append-only guards, speaker-profile revision table
+and indexes, and exact review-scorecard evidence columns are present. All
+pre-contract audit rows retain explicit historical/version-0 labels. A fresh
+evaluation organiser selection persisted a version-1 object with explicit
+`system` actor kind and `internal` origin, and every retained decision preview
+now has both required fields.
 The separately deployed public website remains live at `programcue.com` and
-`www.programcue.com`. Health returned source `fb38329`; sign-in, evaluation
+`www.programcue.com`. Health returned source `ba06796`; sign-in, evaluation
 access, the canonical published programme and the public programme API returned
 HTTP 200. A fresh production evaluation organiser selection returned the
-expected 303 boundaries; Branding and Programme rendered their identifying
-content and Event Setup returned HTTP 200. Earlier production evaluation
-identity selections rendered organiser Command Centre, Operation Centre and
-tasks, the reviewer workbench and speaker dashboard with HTTP 200. Earlier
+expected 303 boundaries; Evaluation administration, Operation Centre and
+Submissions rendered their identifying content, and speaker detail returned
+HTTP 200. The first Evaluation-administration smoke detected the legacy draft
+contract failure with HTTP 500; after migration `0032`, the same route rendered
+with HTTP 200. Earlier production evaluation identity selections rendered
+organiser Command Centre and tasks, the reviewer workbench and speaker
+dashboard with HTTP 200. Earlier
 production Chromium acceptance of the same fixture rendered
 the native Call for Speakers Form Builder with ten authored fields and all six
 palette controls, while anonymous Chromium rendered and hydrated the published
