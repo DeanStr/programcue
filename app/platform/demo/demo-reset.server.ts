@@ -185,7 +185,7 @@ const DEMO_SUBMISSION_CONFIRMATION_VERSION_ID =
   "7d527639-cf8c-4886-a490-c09d8019310f";
 const DEMO_DECISION_TEMPLATE_ID = "572ae193-24e3-4746-b148-4757f54f83bd";
 const DEMO_DECISION_VERSION_ID = "95e1b191-434c-4be1-acb8-915f435f561f";
-const DEMO_DECISION_SENDER_ID = "sender-demo-decision-notifications";
+export const DEMO_DECISION_SENDER_ID = "sender-demo-decision-notifications";
 const DEMO_COMMUNICATION_TEMPLATE_TIMESTAMP = Math.floor(
   Date.parse("2026-08-01T12:00:00Z") / 1_000,
 );

@@ -13,6 +13,7 @@ import {
   SBEK_SECOND_SPEAKER,
 } from "~/platform/demo/demo-identities";
 import {
+  DEMO_DECISION_SENDER_ID,
   DEMO_RESET_EVENT_TABLES,
   resetDemoEvent,
   type DemoActiveWork,
@@ -706,7 +707,7 @@ async function productionEvidence(
                     THEN json_extract(value, '$.link.userId') END
                IN (${ids.map(() => "?").join(",")})) AS fixtureVerificationTokens,
        (SELECT COUNT(*) FROM sender_profiles
-         WHERE id = ? AND event_id = ? AND provider = 'resend'
+         WHERE event_id = ? AND provider = 'resend'
            AND status = 'verified') AS verifiedSenders,
        (SELECT COUNT(*) FROM organisation_ai_settings
          WHERE organisation_id = ? AND provider = 'workers_ai' AND model = ?) AS workersAiSettings,
@@ -735,7 +736,6 @@ async function productionEvidence(
       ...tokenEmails,
       ...tokenEmails,
       ...ids,
-      EVALUATION_SENDER_ID,
       DEMO_EVENT_ID,
       DEMO_ORGANISATION_ID,
       WORKERS_AI_MODEL,
@@ -997,6 +997,10 @@ async function resetProductionEvaluationFixtureWithAuthority(
         `evaluation-fixture-ai:${crypto.randomUUID()}`,
         DEMO_ORGANISATION_ID,
       ),
+      env.DB.prepare(
+        `DELETE FROM sender_profiles
+          WHERE id = ? AND event_id = ?`,
+      ).bind(DEMO_DECISION_SENDER_ID, DEMO_EVENT_ID),
       env.DB.prepare(
         `INSERT INTO sender_profiles (
          id, event_id, name, from_name, from_email, reply_to_email,

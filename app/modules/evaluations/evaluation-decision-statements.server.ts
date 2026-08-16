@@ -329,6 +329,11 @@ export function buildDecisionStatements(input: {
       "Accepted decision statements require the confirmed submitted track.",
     );
   }
+  if (parsed.decision === "accepted" && !format) {
+    throw new Error(
+      "Accepted decision statements require the confirmed current session format.",
+    );
+  }
   if (parsed.decision !== "accepted" && sessionTrack) {
     throw new Error(
       "Only accepted decision statements may carry a programme track.",
@@ -566,7 +571,7 @@ export function buildDecisionStatements(input: {
         includeReviewerFeedback: parsed.includeReviewerFeedback,
         sessionTrackId: sessionTrack?.id ?? null,
         sessionTrackName: sessionTrack?.name ?? null,
-        sessionFormatKey: sessionId ? format : null,
+        sessionFormatKey: parsed.decision === "accepted" ? format : null,
         sessionDurationMinutes: parsed.sessionDurationMinutes ?? null,
       }),
       `decision:${submission.id}:${revision}`,

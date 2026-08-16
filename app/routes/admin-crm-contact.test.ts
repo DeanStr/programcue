@@ -55,6 +55,10 @@ describe("Speaker Network event handoff", () => {
       ok: true,
       message:
         "Added this contact to the target event as a prospect. The current event was not changed.",
+      handoff: {
+        eventId: "evt-handoff-target",
+        personId: "person-demo-speaker",
+      },
     });
     expect(handoff).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -101,6 +105,10 @@ describe("Speaker Network event handoff", () => {
       ok: true,
       message:
         "This contact is already in the target event. No duplicate was created and the current event was not changed.",
+      handoff: {
+        eventId: "evt-handoff-target",
+        personId: "person-demo-speaker",
+      },
     });
   });
 });

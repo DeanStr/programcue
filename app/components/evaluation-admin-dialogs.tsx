@@ -539,7 +539,7 @@ export function DecisionDialog() {
     );
     setSessionFormatKey(
       draft
-        ? (draft.sessionFormatKey ?? matchingSubmittedFormat?.key ?? "")
+        ? (draft.sessionFormatKey ?? "")
         : (matchingSubmittedFormat?.key ?? ""),
     );
   }, [
@@ -575,6 +575,16 @@ export function DecisionDialog() {
               {selected.decisionDraft.revisionNumber}
             </strong>
             <span>Saving creates the next audited draft revision.</span>
+          </div>
+        ) : null}
+        {selected.decisionDraft?.decision === "accepted" &&
+        selected.decisionDraft.sessionFormatKey === null ? (
+          <div className="validation-item warn" role="alert">
+            <strong>Choose the current session format again</strong>
+            <span>
+              This legacy draft did not record an explicit programme format.
+              Select the current format before saving or releasing it.
+            </span>
           </div>
         ) : null}
         <label className="label">

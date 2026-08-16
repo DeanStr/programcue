@@ -603,10 +603,7 @@ export async function loader({ request, context }: LoaderFunctionArgs) {
     const effectPreview = decisionDraftEffectPreviewSchema.safeParse(
       JSON.parse(row.effectPreviewJson),
     );
-    if (
-      !effectPreview.success ||
-      (row.decision === "accepted" && !effectPreview.data.sessionFormatKey)
-    ) {
+    if (!effectPreview.success) {
       throw new Error(
         `Decision draft ${row.submissionId} has invalid persisted preview data.`,
       );

@@ -336,7 +336,7 @@ test("evaluation administration exposes onboarding and consequential previews", 
   ).toBeFocused();
 });
 
-test("a committee chair stays authorised after saving and can resume a decision draft", async ({
+test("a committee chair can save and resume an accepted decision draft", async ({
   page,
   request,
 }) => {
@@ -369,7 +369,10 @@ test("a committee chair stays authorised after saving and can resume a decision 
     .getByRole("row", { name: /Designing inclusive attendee journeys/u });
   await undecidedProposal.getByRole("button", { name: "Decide" }).click();
   let decision = page.getByRole("dialog", { name: /Decision ·/ });
-  await decision.locator('select[name="decision"]').selectOption("rejected");
+  await decision.locator('select[name="decision"]').selectOption("accepted");
+  const format = decision.getByLabel("Acceptance session format");
+  const sessionFormatKey = await format.inputValue();
+  expect(sessionFormatKey).not.toBe("");
   await decision.getByLabel("Rationale").fill("Keep this chair draft intact.");
   await decision.getByLabel("Acceptance session duration (minutes)").fill("75");
   await decision.getByRole("button", { name: "Save draft" }).click();
@@ -384,7 +387,10 @@ test("a committee chair stays authorised after saving and can resume a decision 
   decision = page.getByRole("dialog", { name: /Decision ·/ });
   await expect(decision).toContainText("Resuming decision draft revision");
   await expect(decision.locator('select[name="decision"]')).toHaveValue(
-    "rejected",
+    "accepted",
+  );
+  await expect(decision.getByLabel("Acceptance session format")).toHaveValue(
+    sessionFormatKey,
   );
   await expect(decision.getByLabel("Rationale")).toHaveValue(
     "Keep this chair draft intact.",

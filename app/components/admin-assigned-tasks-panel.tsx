@@ -326,6 +326,7 @@ export function AdminAssignedTasksPanel({
                     ) : null}
                   </Form>
                   {task.targetType === "speaker" &&
+                  task.dueAt !== null &&
                   !["completed", "waived"].includes(task.status) ? (
                     <details className="mt">
                       <summary className="btn small">Extend deadline</summary>

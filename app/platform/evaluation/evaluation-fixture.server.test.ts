@@ -74,6 +74,18 @@ describe("production evaluation fixture", () => {
       fixtureApplicantMemberships: 0,
       nonDiscardedExtraEvents: 0,
     });
+    const verifiedSenders = await environment.DB.prepare(
+      `SELECT id, from_email AS fromEmail
+         FROM sender_profiles
+        WHERE event_id = 'evt-foe-2025'
+          AND provider = 'resend' AND status = 'verified'`,
+    ).all<{ id: string; fromEmail: string }>();
+    expect(verifiedSenders.results).toEqual([
+      {
+        id: "sender-production-evaluation-fixture",
+        fromEmail: "auth@programcue.com",
+      },
+    ]);
     const organizer = await environment.DB.prepare(
       "SELECT email, email_verified AS emailVerified FROM people WHERE id = ?",
     )

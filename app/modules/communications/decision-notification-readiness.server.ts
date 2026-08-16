@@ -1,6 +1,7 @@
 import { z } from "zod";
 
 import { templateContentSchema } from "./communication-schema";
+import { emailDeliveryIssue } from "./email-deliverability";
 import {
   requireEmailProviderConfiguration,
   type EmailProviderConfiguration,
@@ -84,12 +85,14 @@ export async function inspectDecisionNotificationReadiness(
 
   let error: string | null = null;
   let content: z.infer<typeof templateContentSchema> | null = null;
-  if (
-    !input.recipientAddress ||
-    !z.email().safeParse(input.recipientAddress).success
-  ) {
+  const recipientIssue = input.recipientAddress
+    ? emailDeliveryIssue(input.recipientAddress, env.APP_ENV)
+    : "Invalid email address";
+  if (recipientIssue) {
     error =
-      "The decision recipient does not have a valid verified email address.";
+      recipientIssue === "Reserved or local-only domain"
+        ? "The decision recipient uses a reserved or local-only email domain. Update the recipient before releasing the decision."
+        : "The decision recipient does not have a valid verified email address.";
   } else if (!template) {
     error =
       "Publish and activate a decision email template before releasing decisions.";

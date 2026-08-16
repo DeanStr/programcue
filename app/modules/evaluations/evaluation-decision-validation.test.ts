@@ -273,6 +273,54 @@ describe("evaluation vertical slice", () => {
   });
 
   describe("decision and accepted-speaker workflows", () => {
+    it("rejects a production reserved-domain recipient before any decision mutation", async () => {
+      await env.DB.prepare(
+        `UPDATE people SET email = 'person@example.com'
+          WHERE id = 'person-demo-submitter'`,
+      ).run();
+      const testEnv = evaluationEnvironment({
+        ...(env as unknown as CloudflareEnvironment),
+        APP_ENV: "production",
+        DEMO_MODE: "false",
+        EMAIL_PROVIDER: "resend",
+        RESEND_API_KEY: "test-resend-key",
+      } as CloudflareEnvironment);
+
+      try {
+        await expect(
+          new EvaluationService(testEnv).decide(admin, {
+            submissionId: "eval-test-submission",
+            decision: "rejected",
+            rationale: "This must not commit without a deliverable recipient.",
+            release: true,
+            confirmedWithoutReview: true,
+          }),
+        ).rejects.toThrow(/reserved or local-only email domain/i);
+        await expect(
+          env.DB.prepare(
+            `SELECT status, revision,
+                    (SELECT COUNT(*) FROM submission_decisions decision
+                      WHERE decision.event_id = submissions.event_id
+                        AND decision.submission_id = submissions.id) AS decisionCount,
+                    (SELECT COUNT(*) FROM operation_jobs operation
+                      WHERE operation.event_id = submissions.event_id
+                        AND operation.type = 'decision.notification') AS operationCount
+               FROM submissions WHERE id = 'eval-test-submission'`,
+          ).first(),
+        ).resolves.toEqual({
+          status: "submitted",
+          revision: 1,
+          decisionCount: 0,
+          operationCount: 0,
+        });
+      } finally {
+        await env.DB.prepare(
+          `UPDATE people SET email = 'alex.submitter@example.com'
+            WHERE id = 'person-demo-submitter'`,
+        ).run();
+      }
+    });
+
     it("does not create an assignment when a decision wins after validation", async () => {
       const testEnv = evaluationEnvironment();
       const service = new EvaluationService(testEnv);

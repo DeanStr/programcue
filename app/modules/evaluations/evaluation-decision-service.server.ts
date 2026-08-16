@@ -523,37 +523,6 @@ export class EvaluationDecisionService {
           "Choose one of the tracks submitted with this proposal for the accepted session.",
         );
       }
-    }
-    if (sessionId) {
-      let rawSnapshot: unknown;
-      try {
-        rawSnapshot = JSON.parse(submission.snapshotJson ?? "null");
-      } catch {
-        rawSnapshot = null;
-      }
-      const snapshot = submittedSnapshotSchema.safeParse(rawSnapshot);
-      if (!snapshot.success) {
-        throw new EvaluationStateError(
-          "The accepted submission is missing its valid immutable snapshot.",
-        );
-      }
-      const title = snapshot.data.answers.title;
-      sessionTitle = Array.isArray(title)
-        ? title
-            .map((value) => value.trim())
-            .filter(Boolean)
-            .join(", ")
-        : typeof title === "string"
-          ? title.trim()
-          : "";
-      if (!sessionTitle) {
-        throw new EvaluationStateError(
-          "The accepted submission snapshot is missing its session title.",
-        );
-      }
-      const description = snapshot.data.answers.description;
-      sessionDescription =
-        typeof description === "string" ? description.trim() : "";
       const event = await this.env.DB.prepare(
         `SELECT name, brand_accent AS brandAccent,
                 starts_at AS startsAt, ends_at AS endsAt,
@@ -602,6 +571,37 @@ export class EvaluationDecisionService {
         parsed.sessionDurationMinutes ??
         configuredFormat.defaultDurationMinutes;
       acceptedEvent = event;
+    }
+    if (sessionId) {
+      let rawSnapshot: unknown;
+      try {
+        rawSnapshot = JSON.parse(submission.snapshotJson ?? "null");
+      } catch {
+        rawSnapshot = null;
+      }
+      const snapshot = submittedSnapshotSchema.safeParse(rawSnapshot);
+      if (!snapshot.success) {
+        throw new EvaluationStateError(
+          "The accepted submission is missing its valid immutable snapshot.",
+        );
+      }
+      const title = snapshot.data.answers.title;
+      sessionTitle = Array.isArray(title)
+        ? title
+            .map((value) => value.trim())
+            .filter(Boolean)
+            .join(", ")
+        : typeof title === "string"
+          ? title.trim()
+          : "";
+      if (!sessionTitle) {
+        throw new EvaluationStateError(
+          "The accepted submission snapshot is missing its session title.",
+        );
+      }
+      const description = snapshot.data.answers.description;
+      sessionDescription =
+        typeof description === "string" ? description.trim() : "";
     }
     const notificationOperationId = parsed.release
       ? commandId

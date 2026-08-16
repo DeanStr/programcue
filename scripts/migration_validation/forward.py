@@ -4,6 +4,9 @@ from .forward_audit_contract import validate_audit_contract_forward_migration
 from .forward_decision_draft_preview_contract import (
     validate_decision_draft_preview_contract_forward_migration,
 )
+from .forward_decision_draft_session_format import (
+    validate_decision_draft_session_format_forward_migration,
+)
 from .forward_contextual_revision_evidence import (
     validate_contextual_revision_evidence_forward_migration,
 )
@@ -38,3 +41,4 @@ def validate_forward_migrations(root: Path) -> None:
     validate_audit_contract_forward_migration(root)
     validate_contextual_revision_evidence_forward_migration(root)
     validate_decision_draft_preview_contract_forward_migration(root)
+    validate_decision_draft_session_format_forward_migration(root)

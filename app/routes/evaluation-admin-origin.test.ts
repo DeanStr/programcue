@@ -207,6 +207,130 @@ describe("evaluation administration results", () => {
     });
   });
 
+  it("persists and reloads the explicit current format for an accepted draft", async () => {
+    await action({
+      request: actionRequest(
+        new URLSearchParams({
+          intent: "decide",
+          submissionId: "demo-evaluation-submission-calm",
+          decision: "accepted",
+          rationale: "Retain the organiser's explicit programme mapping.",
+          includeReviewerFeedback: "false",
+          release: "false",
+          sessionTrackId: "demo-track-operations",
+          sessionFormatKey: "workshop",
+          sessionDurationMinutes: "75",
+        }),
+      ),
+      params: {},
+      context: context(),
+    } as never);
+
+    try {
+      const persisted = await workerEnv.DB.prepare(
+        `SELECT json_extract(effect_preview_json, '$.sessionFormatKey') AS sessionFormatKey
+           FROM submission_decisions
+          WHERE event_id = 'evt-foe-2025'
+            AND submission_id = 'demo-evaluation-submission-calm'
+            AND status = 'draft'`,
+      ).first<{ sessionFormatKey: string | null }>();
+      expect(persisted).toEqual({ sessionFormatKey: "workshop" });
+
+      const result = await loader({
+        request: loaderRequest(),
+        params: {},
+        context: context(),
+      } as never);
+      expect(
+        result.submissions.find(
+          (submission) => submission.id === "demo-evaluation-submission-calm",
+        )?.decisionDraft,
+      ).toMatchObject({
+        decision: "accepted",
+        sessionTrackId: "demo-track-operations",
+        sessionFormatKey: "workshop",
+        sessionDurationMinutes: 75,
+      });
+    } finally {
+      await workerEnv.DB.batch([
+        workerEnv.DB.prepare(
+          `DELETE FROM submission_decisions
+            WHERE event_id = 'evt-foe-2025'
+              AND submission_id = 'demo-evaluation-submission-calm'
+              AND status = 'draft'`,
+        ),
+        workerEnv.DB.prepare(
+          `UPDATE submissions
+              SET status = 'assigned', revision = 1, last_operation_id = NULL
+            WHERE id = 'demo-evaluation-submission-calm'
+              AND event_id = 'evt-foe-2025'`,
+        ),
+      ]);
+    }
+  });
+
+  it("loads an explicitly migrated legacy accepted draft for format reselection", async () => {
+    await action({
+      request: actionRequest(
+        new URLSearchParams({
+          intent: "decide",
+          submissionId: "demo-evaluation-submission-calm",
+          decision: "accepted",
+          rationale: "Simulate a deployed draft that predates format evidence.",
+          includeReviewerFeedback: "false",
+          release: "false",
+          sessionTrackId: "demo-track-operations",
+          sessionFormatKey: "workshop",
+          sessionDurationMinutes: "75",
+        }),
+      ),
+      params: {},
+      context: context(),
+    } as never);
+    await workerEnv.DB.prepare(
+      `UPDATE submission_decisions
+          SET effect_preview_json = json_set(
+            effect_preview_json,
+            '$.sessionFormatKey',
+            json('null')
+          )
+        WHERE event_id = 'evt-foe-2025'
+          AND submission_id = 'demo-evaluation-submission-calm'
+          AND status = 'draft'`,
+    ).run();
+
+    try {
+      const result = await loader({
+        request: loaderRequest(),
+        params: {},
+        context: context(),
+      } as never);
+      expect(
+        result.submissions.find(
+          (submission) => submission.id === "demo-evaluation-submission-calm",
+        )?.decisionDraft,
+      ).toMatchObject({
+        decision: "accepted",
+        sessionFormatKey: null,
+      });
+    } finally {
+      await workerEnv.DB.batch([
+        workerEnv.DB.prepare(
+          `DELETE FROM submission_decisions
+            WHERE event_id = 'evt-foe-2025'
+              AND submission_id = 'demo-evaluation-submission-calm'
+              AND status = 'draft'`,
+        ),
+        workerEnv.DB.prepare(
+          `UPDATE submissions
+              SET status = 'assigned', revision = 1, last_operation_id = NULL
+            WHERE id = 'demo-evaluation-submission-calm'
+              AND event_id = 'evt-foe-2025'`,
+        ),
+      ]);
+    }
+  });
+
   it("rejects a decision draft whose persisted effect preview is incomplete", async () => {
     await action({
       request: actionRequest(

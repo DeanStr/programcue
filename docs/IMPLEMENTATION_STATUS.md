@@ -260,21 +260,27 @@ carries the same snapshots into each target batch. Targets remain independently
 atomic, so a multi-target run may honestly finish `partially_failed`.
 
 The current audit-remediation worktree closes the remaining reproduced
-cross-surface defects without claiming deployment. Accepted decisions now
-require an explicit current session-format mapping when a submitted legacy
-label no longer matches Event Setup, and decision release fails before mutation
-unless the recipient, provider, verified sender and published decision template
-are all delivery-ready. Released rejected and waitlisted outcomes have a
+cross-surface defects without claiming deployment. Accepted decisions and their
+drafts now persist an explicit current session-format mapping; pending migration
+`0033_decision_draft_session_format.sql` marks deployed legacy drafts for
+explicit organiser reselection without inferring from their submitted label.
+Decision release fails before mutation unless the recipient is production-
+deliverable and the provider, verified sender and published decision template
+are all ready. The production evaluation reset removes its demo-only sender and
+verifies that exactly one applicable Resend sender remains. Released rejected
+and waitlisted outcomes have a
 confirmed, reasoned and audited reopen path;
 accepted outcomes remain protected because they already own linked programme
 and onboarding records. A failed schedule placement is presented as a rejected
 preflight rather than contradicting the persisted open-conflict count. Overall
 readiness cannot exceed completed setup-phase readiness. Saved CFP closing-date
 changes identify the still-live published date and require republication.
-Speaker-target tasks support one-person deadline extensions with revision,
-reason, audit and webhook evidence. Direct-session entry points are exposed from
-Programme and Schedule, CRM event handoff reports created/no-op results without
-silently switching the current event. Content ZIP preview uses only explicit
+Speaker-target tasks with an existing deadline support one-person extensions
+with revision, reason, audit and webhook evidence; undated tasks fail rather
+than silently acquiring a deadline. Direct-session entry points are exposed
+from Programme and Schedule. CRM event handoff reports created/no-op results
+without silently switching the current event, then offers an explicit
+authorised switch that opens the exact target prospect. Content ZIP preview uses only explicit
 session or submission relationships; speaker-task ownership alone remains
 honestly Unassigned instead of guessing a session. Schedule publication
 names the canonical public programme destination and exposes it as an action
@@ -755,6 +761,9 @@ columns are present. All pre-contract audit rows retain explicit
 historical/version-0 labels. A fresh evaluation organiser selection persisted a
 version-1 object with explicit `system` actor kind and `internal` origin, and
 every retained decision preview now has both required fields.
+Pending migration `0033_decision_draft_session_format.sql` is not included in
+that deployment evidence; it adds explicit null format evidence only to legacy
+draft previews and remains unapplied until the next tested release.
 
 Repository release-control hardening now preserves the two complete deployed
 `0032` filenames while allowing only that exact historical numeric collision;

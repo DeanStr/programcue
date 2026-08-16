@@ -265,6 +265,36 @@ describe("onboarding task service", () => {
         auditCount: 1,
       });
     });
+
+    it("does not turn a missing deadline into an extension", async () => {
+      const testEnv = env as unknown as CloudflareEnvironment;
+      await ensureDemoSpeakerData(testEnv);
+      const service = new TaskService(testEnv);
+      const taskId = await createChecklistTask(
+        testEnv,
+        `No deadline extension ${crypto.randomUUID()}`,
+      );
+
+      await expect(
+        service.extendSpeakerDeadline(admin, {
+          taskId,
+          revision: 1,
+          dueDate: "2035-05-20",
+          reason: "This must remain a distinct template change.",
+        }),
+      ).rejects.toThrow(/no existing deadline to extend/i);
+      await expect(
+        testEnv.DB.prepare(
+          `SELECT due_at AS dueAt, revision,
+                  (SELECT COUNT(*) FROM audit_events audit
+                    WHERE audit.entity_id = task_instances.id
+                      AND audit.action = 'task.deadline.extended') AS auditCount
+             FROM task_instances WHERE id = ? AND event_id = ?`,
+        )
+          .bind(taskId, admin.eventId)
+          .first(),
+      ).resolves.toEqual({ dueAt: null, revision: 1, auditCount: 0 });
+    });
   });
 
   describe("administration workflows", () => {

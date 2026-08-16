@@ -39,7 +39,11 @@ export const meta = ({ loaderData }: Route.MetaArgs) => [
   },
 ];
 
-type ActionResult = { ok: boolean; message: string };
+type ActionResult = {
+  ok: boolean;
+  message: string;
+  handoff?: { eventId: string; personId: string };
+};
 
 export async function loader({ request, context, params }: Route.LoaderArgs) {
   const { env } = getCloudflareContext(context);
@@ -121,6 +125,7 @@ export async function action({ request, context, params }: Route.ActionArgs) {
         message: added.created
           ? "Added this contact to the target event as a prospect. The current event was not changed."
           : "This contact is already in the target event. No duplicate was created and the current event was not changed.",
+        handoff: { eventId: added.eventId, personId: added.personId },
       } satisfies ActionResult;
     }
     return data<ActionResult>(
@@ -207,7 +212,26 @@ export default function AdminCrmContact({ loaderData }: Route.ComponentProps) {
           role={actionData.ok ? "status" : "alert"}
         >
           <strong>{actionData.ok ? "✓" : "△"}</strong>
-          <span>{actionData.message}</span>
+          <div className="stack">
+            <span>{actionData.message}</span>
+            {actionData.ok && actionData.handoff ? (
+              <Form method="post" action="/events/select">
+                <input
+                  type="hidden"
+                  name="eventId"
+                  value={actionData.handoff.eventId}
+                />
+                <input
+                  type="hidden"
+                  name="returnTo"
+                  value={`/admin/speakers?person=${encodeURIComponent(actionData.handoff.personId)}`}
+                />
+                <button className="btn small" type="submit">
+                  Switch to target event and open prospect
+                </button>
+              </Form>
+            ) : null}
+          </div>
         </div>
       ) : null}
 

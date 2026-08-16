@@ -71,7 +71,12 @@ export class TaskAdministrationWorkflows extends TaskServiceFoundation {
         "Completed or waived tasks do not need a deadline extension.",
       );
     }
-    if (task.dueAt !== null && dueAt <= task.dueAt) {
+    if (task.dueAt === null) {
+      throw new TaskStateError(
+        "This task has no existing deadline to extend. Set a deadline on its template instead.",
+      );
+    }
+    if (dueAt <= task.dueAt) {
       throw new TaskStateError(
         "The new deadline must be later than the current deadline.",
       );
@@ -111,7 +116,7 @@ export class TaskAdministrationWorkflows extends TaskServiceFoundation {
              WHERE id = ? AND event_id = ? AND revision = ?
                AND target_type = 'speaker'
                AND status NOT IN ('completed','waived')
-               AND (due_at IS NULL OR due_at < ?)
+               AND due_at IS NOT NULL AND due_at < ?
           )`,
       ).bind(
         auditEventId,
@@ -164,7 +169,7 @@ export class TaskAdministrationWorkflows extends TaskServiceFoundation {
           WHERE id = ? AND event_id = ? AND revision = ?
             AND target_type = 'speaker'
             AND status NOT IN ('completed','waived')
-            AND (due_at IS NULL OR due_at < ?)
+            AND due_at IS NOT NULL AND due_at < ?
             AND EXISTS (
               SELECT 1 FROM audit_events
                WHERE id = ? AND organisation_id = ? AND event_id = ?

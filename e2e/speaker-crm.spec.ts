@@ -16,7 +16,7 @@ test.beforeEach(async ({ request }) => {
   await resetDemoEvent(request);
 });
 
-test.setTimeout(120_000);
+test.setTimeout(180_000);
 
 test("organization CRM covers directory, relationship, pipeline, handoff and outreach workflows", async ({
   page,
@@ -30,7 +30,33 @@ test("organization CRM covers directory, relationship, pipeline, handoff and out
       httpOnly: true,
       sameSite: "Lax",
     },
+    {
+      name: "program_cue_demo_identity",
+      value: "owner",
+      domain: "127.0.0.1",
+      path: "/",
+      httpOnly: true,
+      sameSite: "Lax",
+    },
   ]);
+  const handoffSuffix = Date.now();
+  const handoffEventName = `CRM handoff target ${handoffSuffix}`;
+  await page.goto("/admin/events/new");
+  await page.getByLabel("Event name").fill(handoffEventName);
+  await page
+    .getByLabel("Public slug")
+    .fill(`crm-handoff-target-${handoffSuffix}`);
+  await page.getByRole("button", { name: "Create blank event" }).click();
+  await acceptConfirm(page);
+  const openHandoffEvent = page.getByRole("button", {
+    name: "Open new event",
+  });
+  await expect(openHandoffEvent).toBeVisible();
+  const handoffEventId = await openHandoffEvent
+    .locator("..")
+    .locator('input[name="eventId"]')
+    .inputValue();
+
   await page.goto("/admin/crm");
   await expect(
     page.getByText("Organization workspace · all events"),
@@ -158,13 +184,21 @@ test("organization CRM covers directory, relationship, pipeline, handoff and out
   await expect(page.getByText(/Left voicemail/)).toBeVisible();
   await expect(page.getByText("contacted → interested")).toBeVisible();
 
-  await page.getByLabel("Target event").selectOption("evt-foe-2025");
+  await page.getByLabel("Target event").selectOption(handoffEventId);
   await page.getByRole("button", { name: "Add prospect to event" }).click();
   await expect(page).toHaveURL(/\/admin\/crm\/contacts\//u);
   await expect(page.locator(".validation-item[role='status']")).toContainText(
     "The current event was not changed",
   );
-  await page.goto("/admin/speakers?query=Marcus%20Okafor");
+  await page
+    .getByRole("button", {
+      name: "Switch to target event and open prospect",
+    })
+    .click();
+  await expect(page).toHaveURL(/\/admin\/speakers\?person=/u);
+  await expect(page.locator(".event-switcher strong")).toHaveText(
+    handoffEventName,
+  );
   const focusedSpeaker = page.getByRole("row").filter({
     has: page.getByRole("link", { name: "Marcus Okafor" }),
   });
@@ -191,10 +225,14 @@ test("organization CRM covers directory, relationship, pipeline, handoff and out
     .filter({ hasText: "marcus.speaker@sbek-test.example.com" });
   await expect(pendingMarcusInvitation).toHaveCount(0);
 
-  await page
-    .getByRole("main")
-    .getByRole("link", { name: "Speaker Network" })
-    .click();
+  await page.goto(
+    "/events/select?eventId=evt-foe-2025&returnTo=%2Fadmin%2Fcrm",
+  );
+  const originalEvent = page
+    .locator("form")
+    .filter({ hasText: "Future of Events 2027" });
+  await originalEvent.getByRole("button", { name: "Use this event" }).click();
+
   await expect(
     page.getByRole("heading", { name: "Top companies" }),
   ).toBeVisible();
