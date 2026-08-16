@@ -51,9 +51,7 @@ function mixColour(
 function relativeLuminance(colour: RgbColour) {
   const [red, green, blue] = colour.map((channel) => {
     const value = channel / 255;
-    return value <= 0.04045
-      ? value / 12.92
-      : Math.pow((value + 0.055) / 1.055, 2.4);
+    return value <= 0.04045 ? value / 12.92 : ((value + 0.055) / 1.055) ** 2.4;
   });
   return red! * 0.2126 + green! * 0.7152 + blue! * 0.0722;
 }

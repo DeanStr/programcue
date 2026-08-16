@@ -154,7 +154,7 @@ export class AiReviewAssessmentGenerationService extends AiReviewAssessmentGener
       target.submissionId,
       target.submittedSnapshotJson,
     );
-    const answers = Boolean(target.blindedReviewing)
+    const answers = target.blindedReviewing
       ? blindReviewerVisibleAnswers(snapshot)
       : reviewerVisibleAnswers(snapshot.schema, snapshot.answers);
     const answerFields = snapshot.schema.fields
@@ -225,7 +225,7 @@ Return exactly one overall score from 1 to 5 (decimals are allowed) and a substa
             },
             proposal: {
               id: target.submissionId,
-              reference: Boolean(target.blindedReviewing)
+              reference: target.blindedReviewing
                 ? "Blinded proposal"
                 : target.submissionReference,
               fields: answerFields,

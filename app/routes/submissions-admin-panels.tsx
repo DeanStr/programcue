@@ -204,7 +204,7 @@ export function SubmissionAdminDetailPanel({
                     <li key={route.trackId}>
                       Selected “<strong>{route.trackName}</strong>” →{" "}
                       {route.teamName ? (
-                        <>{route.teamName}</>
+                        route.teamName
                       ) : (
                         <span className="subtle">
                           No automatic review-team route configured

@@ -313,11 +313,9 @@ function AccessPanel({
 }
 
 function AnonymousVerificationPanel({
-  form,
   actionData,
   turnstileSiteKey,
 }: {
-  form: Extract<Awaited<ReturnType<typeof loader>>, { form: unknown }>["form"];
   actionData?: ActionResult;
   turnstileSiteKey: string | null;
 }) {
@@ -825,7 +823,6 @@ export default function ApplicationForm({ loaderData }: Route.ComponentProps) {
             ) : null}
             {!applicant.verified ? (
               <AnonymousVerificationPanel
-                form={form}
                 actionData={actionData}
                 turnstileSiteKey={loaderData.turnstileSiteKey}
               />

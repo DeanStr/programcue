@@ -587,7 +587,7 @@ export class EvaluationResultsExportService extends EvaluationServiceFoundation 
           for (const criterion of criteria) {
             const rawValue = parsedScores[criterion.id];
             if (rawValue === undefined) {
-              if (Boolean(criterion.required)) {
+              if (criterion.required) {
                 throw new Error(
                   `Submitted review for assignment ${assignment.assignmentId} is missing required criterion ${criterion.id}.`,
                 );

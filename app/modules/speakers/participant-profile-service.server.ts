@@ -82,8 +82,7 @@ export class ParticipantProfileService {
       xHandle: patch.xHandle ?? current.xHandle ?? "",
       travelPreferences:
         patch.travelPreferences ?? current.travelPreferences ?? "",
-      publish:
-        patch.publish ?? (current.profileStatus === "published" ? true : false),
+      publish: patch.publish ?? current.profileStatus === "published",
     });
     const nextStatus = publishWasSupplied
       ? merged.publish

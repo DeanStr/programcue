@@ -55,7 +55,7 @@
   if (
     managedEmbed &&
     configurationAttributes.some(function hasConfigurationAttribute(name) {
-      return script.hasAttribute("data-" + name);
+      return script.hasAttribute(`data-${name}`);
     })
   ) {
     throw new Error(
@@ -76,12 +76,12 @@
           encodeURIComponent(slug) +
           "/saved/" +
           encodeURIComponent(managedEmbed)
-      : "/embed/" + encodeURIComponent(slug) + "/" + surface,
+      : `/embed/${encodeURIComponent(slug)}/${surface}`,
     widgetOrigin,
   );
   configurationAttributes.slice(1).forEach(function copyFilter(name) {
     var value = script.dataset[name];
-    if (script.hasAttribute("data-" + name)) {
+    if (script.hasAttribute(`data-${name}`)) {
       frameUrl.searchParams.set(name, value);
     }
   });
@@ -107,7 +107,7 @@
       );
     }
   }
-  frame.style.height = initialHeight + "px";
+  frame.style.height = `${initialHeight}px`;
   frame.style.border = "0";
   frame.style.display = "block";
   target.appendChild(frame);
@@ -125,6 +125,6 @@
       return;
     var height = Math.ceil(message.height);
     if (height < 160 || height > 20000) return;
-    frame.style.height = height + "px";
+    frame.style.height = `${height}px`;
   });
 })();

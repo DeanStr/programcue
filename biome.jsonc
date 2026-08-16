@@ -53,24 +53,17 @@
         "useValidAnchor": "off",
       },
       "complexity": {
-        "noExtraBooleanCast": "off",
         "noImportantStyles": "off",
         "noStaticOnlyClass": "off",
-        "noUselessFragments": "off",
-        "noUselessTernary": "off",
         "useOptionalChain": "off",
       },
       "correctness": {
-        "noUnusedFunctionParameters": "off",
-        "noUnusedPrivateClassMembers": "off",
         "useExhaustiveDependencies": "off",
         "useHookAtTopLevel": "off",
       },
       "style": {
         "noDescendingSpecificity": "off",
         "noNonNullAssertion": "off",
-        "useExponentiationOperator": "off",
-        "useTemplate": "off",
       },
       "suspicious": {
         "noArrayIndexKey": "off",

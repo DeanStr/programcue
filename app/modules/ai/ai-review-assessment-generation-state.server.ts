@@ -259,17 +259,17 @@ export class AiReviewAssessmentGenerationState extends AiReviewAssessmentFoundat
           "Participant retention has completed for this event, so no new AI assessment can be generated.",
         );
       }
-      if (!Boolean(state.targetIsCurrent)) {
+      if (!state.targetIsCurrent) {
         throw new AiReviewAssessmentStateError(
           "The review cycle, rubric or proposal changed before the AI assessment was reserved. Refresh before generating it.",
         );
       }
-      if (Boolean(state.generationInProgress)) {
+      if (state.generationInProgress) {
         throw new AiReviewAssessmentStateError(
           "An AI first-pass assessment attempt is already running for this exact round and submission.",
         );
       }
-      if (Boolean(state.retryAlreadyCreated)) {
+      if (state.retryAlreadyCreated) {
         throw new AiReviewAssessmentStateError(
           "A newer retry already exists for this failed AI assessment attempt. Refresh before retrying the latest failure.",
         );

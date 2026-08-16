@@ -159,7 +159,7 @@ export class EvaluationReviewSubmissionWorkflows extends EvaluationServiceFounda
       const empty =
         raw === undefined || (typeof raw === "string" && raw.trim() === "");
       if (empty) {
-        if (parsed.intent === "submit" && Boolean(criterion.required)) {
+        if (parsed.intent === "submit" && criterion.required) {
           throw new EvaluationValidationError(
             "Complete every required rubric criterion before submitting the review.",
           );

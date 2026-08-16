@@ -1,4 +1,3 @@
-import { SpeakerAdminQueryService } from "./speaker-admin-query-service.server";
 import {
   airtableIntentCommand,
   AirtableProviderBoundary,
@@ -22,7 +21,6 @@ import {
 
 export class SpeakerInvitationCommands {
   private readonly airtable: AirtableProviderBoundary;
-  private readonly adminQueries: SpeakerAdminQueryService;
 
   constructor(
     private readonly env: CloudflareEnvironment,
@@ -30,7 +28,6 @@ export class SpeakerInvitationCommands {
   ) {
     this.airtable =
       dependencies.airtable ?? new AirtableProviderBoundary(this.env);
-    this.adminQueries = new SpeakerAdminQueryService(env, this.airtable);
   }
 
   async inviteSpeakerRecord(viewer: Viewer, rawInput: unknown) {

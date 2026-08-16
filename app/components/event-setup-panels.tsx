@@ -664,115 +664,109 @@ export function EventRepositoryPanel({
 }) {
   const unsavedHelpId = "event-repository-unsaved-help";
   return (
-    <>
-      <section className="card pad">
-        <div className="card-title">
-          <h3>Provider and retention</h3>
-          <span
-            className={`status ${event.repositoryProvider === "airtable" ? "success" : "info"}`}
-          >
-            {event.repositoryProvider === "airtable"
-              ? "Airtable holds event data"
-              : "Program Cue holds event data"}
-          </span>
-        </div>
-        <input
-          type="hidden"
-          name="repositoryProvider"
-          value={event.repositoryProvider}
-        />
-        <p className="help">
+    <section className="card pad">
+      <div className="card-title">
+        <h3>Provider and retention</h3>
+        <span
+          className={`status ${event.repositoryProvider === "airtable" ? "success" : "info"}`}
+        >
           {event.repositoryProvider === "airtable"
-            ? "Airtable is the source of truth for event settings, rooms and resources, tracks and formats, forms and submissions, evaluation workflow, accepted and direct sessions, schedules, onboarding tasks and the published programme. Program Cue keeps accounts, permissions, credentials, history and a matching copy of everything above. Files, communications, calendars and resource pages always stay in Program Cue."
-            : "Program Cue is the source of truth for this event. Airtable can take over event data only through a preview you review and confirm. Files, communications, calendars and resource pages always stay in Program Cue."}
-        </p>
-        <div className="stack-list mt">
-          <div className="validation-item">
-            <div>
-              <strong>Event-data freshness</strong>
-              <div className="help">
-                {event.repositoryFreshness.source === "airtable"
-                  ? `${event.repositoryFreshness.cached ? "Cached" : "Fetched"} from Airtable at ${new Date(event.repositoryFreshness.fetchedAt * 1_000).toLocaleString()}`
-                  : "Live from Program Cue"}
-              </div>
+            ? "Airtable holds event data"
+            : "Program Cue holds event data"}
+        </span>
+      </div>
+      <input
+        type="hidden"
+        name="repositoryProvider"
+        value={event.repositoryProvider}
+      />
+      <p className="help">
+        {event.repositoryProvider === "airtable"
+          ? "Airtable is the source of truth for event settings, rooms and resources, tracks and formats, forms and submissions, evaluation workflow, accepted and direct sessions, schedules, onboarding tasks and the published programme. Program Cue keeps accounts, permissions, credentials, history and a matching copy of everything above. Files, communications, calendars and resource pages always stay in Program Cue."
+          : "Program Cue is the source of truth for this event. Airtable can take over event data only through a preview you review and confirm. Files, communications, calendars and resource pages always stay in Program Cue."}
+      </p>
+      <div className="stack-list mt">
+        <div className="validation-item">
+          <div>
+            <strong>Event-data freshness</strong>
+            <div className="help">
+              {event.repositoryFreshness.source === "airtable"
+                ? `${event.repositoryFreshness.cached ? "Cached" : "Fetched"} from Airtable at ${new Date(event.repositoryFreshness.fetchedAt * 1_000).toLocaleString()}`
+                : "Live from Program Cue"}
             </div>
-          </div>
-          <div className="validation-item">
-            <div>
-              <strong>Airtable connection</strong>
-              <div className="help">
-                {event.repositoryConnection
-                  ? `${event.repositoryConnection.baseId} · ${event.repositoryConnection.tableName} · ${event.repositoryConnection.status.replaceAll("_", " ")}`
-                  : "Not configured"}
-              </div>
-            </div>
-            <button
-              type="button"
-              className="btn small"
-              onClick={onConfigureAirtable}
-              disabled={hasUnsavedChanges}
-              aria-describedby={hasUnsavedChanges ? unsavedHelpId : undefined}
-            >
-              {event.repositoryConnection ? "Revalidate" : "Configure"}
-            </button>
           </div>
         </div>
-        {event.repositoryConnection?.status === "connected" ? (
-          <div className="mt">
-            <button
-              type="button"
-              className="btn"
-              onClick={onMigrateRepository}
-              disabled={hasUnsavedChanges}
-              aria-describedby={hasUnsavedChanges ? unsavedHelpId : undefined}
-            >
-              Preview handover to{" "}
-              {event.repositoryProvider === "d1" ? "Airtable" : "Program Cue"}
-            </button>
-            <p className="help mt">
-              The handover runs while you wait, and stops before changing
-              anything if more than {AIRTABLE_SYNCHRONOUS_MIGRATION_MAX_CHANGES}{" "}
-              records would change. Keep larger events on Program Cue, which is
-              the recommended option.
-            </p>
+        <div className="validation-item">
+          <div>
+            <strong>Airtable connection</strong>
+            <div className="help">
+              {event.repositoryConnection
+                ? `${event.repositoryConnection.baseId} · ${event.repositoryConnection.tableName} · ${event.repositoryConnection.status.replaceAll("_", " ")}`
+                : "Not configured"}
+            </div>
           </div>
-        ) : null}
-        {hasUnsavedChanges ? (
-          <p
-            className="validation-item warn mt"
-            id={unsavedHelpId}
-            role="status"
+          <button
+            type="button"
+            className="btn small"
+            onClick={onConfigureAirtable}
+            disabled={hasUnsavedChanges}
+            aria-describedby={hasUnsavedChanges ? unsavedHelpId : undefined}
           >
-            Save or discard your Event Setup edits before changing where event
-            data is held.
-          </p>
-        ) : null}
-        {event.repositoryLockedAt ? (
+            {event.repositoryConnection ? "Revalidate" : "Configure"}
+          </button>
+        </div>
+      </div>
+      {event.repositoryConnection?.status === "connected" ? (
+        <div className="mt">
+          <button
+            type="button"
+            className="btn"
+            onClick={onMigrateRepository}
+            disabled={hasUnsavedChanges}
+            aria-describedby={hasUnsavedChanges ? unsavedHelpId : undefined}
+          >
+            Preview handover to{" "}
+            {event.repositoryProvider === "d1" ? "Airtable" : "Program Cue"}
+          </button>
           <p className="help mt">
-            Provider choice is locked. Every later change requires a fresh
-            reconciliation preview and explicit confirmation.
+            The handover runs while you wait, and stops before changing anything
+            if more than {AIRTABLE_SYNCHRONOUS_MIGRATION_MAX_CHANGES} records
+            would change. Keep larger events on Program Cue, which is the
+            recommended option.
           </p>
-        ) : null}
-        <label className="label mt">
-          Retention after event
-          <select
-            className="select"
-            name="retentionMonths"
-            defaultValue={String(event.retentionMonths)}
-          >
-            <option value="12">12 months</option>
-            <option value="24">24 months</option>
-            <option value="36">36 months</option>
-          </select>
-        </label>
-        {canManageFileRetention ? (
-          <div className="mt">
-            <Link className="btn small" to="/admin/files/retention">
-              Manage legal hold, erasure and anonymisation
-            </Link>
-          </div>
-        ) : null}
-      </section>
-    </>
+        </div>
+      ) : null}
+      {hasUnsavedChanges ? (
+        <p className="validation-item warn mt" id={unsavedHelpId} role="status">
+          Save or discard your Event Setup edits before changing where event
+          data is held.
+        </p>
+      ) : null}
+      {event.repositoryLockedAt ? (
+        <p className="help mt">
+          Provider choice is locked. Every later change requires a fresh
+          reconciliation preview and explicit confirmation.
+        </p>
+      ) : null}
+      <label className="label mt">
+        Retention after event
+        <select
+          className="select"
+          name="retentionMonths"
+          defaultValue={String(event.retentionMonths)}
+        >
+          <option value="12">12 months</option>
+          <option value="24">24 months</option>
+          <option value="36">36 months</option>
+        </select>
+      </label>
+      {canManageFileRetention ? (
+        <div className="mt">
+          <Link className="btn small" to="/admin/files/retention">
+            Manage legal hold, erasure and anonymisation
+          </Link>
+        </div>
+      ) : null}
+    </section>
   );
 }

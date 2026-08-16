@@ -8,11 +8,11 @@ export function formatCommunicationDate(
   timezone: string,
 ) {
   return epoch
-    ? new Intl.DateTimeFormat("en", {
+    ? `${new Intl.DateTimeFormat("en", {
         dateStyle: "medium",
         timeStyle: "long",
         timeZone: timezone,
-      }).format(new Date(epoch * 1_000)) + ` (${timezone})`
+      }).format(new Date(epoch * 1_000))} (${timezone})`
     : "—";
 }
 

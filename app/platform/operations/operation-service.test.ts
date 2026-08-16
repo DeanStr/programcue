@@ -822,15 +822,9 @@ describe("non-actionable operation failure alerts", () => {
       )
       .run();
 
-    const shellRequest = new Request("http://localhost/admin/operations", {
-      headers: { cookie: selectedEventCookie(testEnv) },
-    });
-    const before = await loadCurrentEventAdminShellContext(
-      shellRequest,
-      testEnv,
-      viewer,
-      ["administrator"],
-    );
+    const before = await loadCurrentEventAdminShellContext(testEnv, viewer, [
+      "administrator",
+    ]);
     const listedBefore = await new OperationService(testEnv).find(
       viewer,
       operationId,
@@ -988,12 +982,9 @@ describe("non-actionable operation failure alerts", () => {
     )
       .bind(viewer.personId, operationId)
       .run();
-    const after = await loadCurrentEventAdminShellContext(
-      shellRequest,
-      testEnv,
-      viewer,
-      ["administrator"],
-    );
+    const after = await loadCurrentEventAdminShellContext(testEnv, viewer, [
+      "administrator",
+    ]);
     expect(after.notificationCounts.failedOperations).toBe(
       before.notificationCounts.failedOperations - 1,
     );

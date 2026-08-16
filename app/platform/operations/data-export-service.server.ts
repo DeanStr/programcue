@@ -47,14 +47,12 @@ function renderCsv(
   columns: string[],
   rows: Array<Record<string, ExportValue>>,
 ) {
-  return (
-    [
-      columns.map(csvCell).join(","),
-      ...rows.map((row) =>
-        columns.map((column) => csvCell(row[column] ?? null)).join(","),
-      ),
-    ].join("\r\n") + "\r\n"
-  );
+  return `${[
+    columns.map(csvCell).join(","),
+    ...rows.map((row) =>
+      columns.map((column) => csvCell(row[column] ?? null)).join(","),
+    ),
+  ].join("\r\n")}\r\n`;
 }
 
 export class EventExportTooLargeError extends Error {

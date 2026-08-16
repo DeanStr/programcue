@@ -177,12 +177,9 @@ describe("current event context", () => {
     const viewer = await requireCurrentEventRole(request, workerEnv, [
       "administrator",
     ]);
-    const context = await loadCurrentEventAdminShellContext(
-      request,
-      workerEnv,
-      viewer,
-      ["administrator"],
-    );
+    const context = await loadCurrentEventAdminShellContext(workerEnv, viewer, [
+      "administrator",
+    ]);
     expect(context.eventOptions.map((event) => event.eventId)).toEqual(
       expect.arrayContaining(["evt-foe-2025", "evt-current-context-two"]),
     );
@@ -194,7 +191,6 @@ describe("current event context", () => {
 
     await expect(
       loadCurrentEventAdminShellContext(
-        request,
         workerEnv,
         { ...viewer, organisationId: "org-current-context-isolated" },
         ["administrator"],
@@ -213,7 +209,6 @@ describe("current event context", () => {
     } as unknown as CloudflareEnvironment;
     await expect(
       loadCurrentEventAdminShellContext(
-        new Request("https://app.programcue.com/admin/event"),
         productionEnv,
         {
           personId: "person-demo-admin",

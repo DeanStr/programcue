@@ -1,5 +1,4 @@
 import type { z } from "zod";
-import { SpeakerAdminQueryService } from "./speaker-admin-query-service.server";
 import {
   airtableIntentCommand,
   AirtableProviderBoundary,
@@ -31,7 +30,6 @@ import {
 
 export class SpeakerRosterRecordCommands {
   private readonly airtable: AirtableProviderBoundary;
-  private readonly adminQueries: SpeakerAdminQueryService;
 
   constructor(
     private readonly env: CloudflareEnvironment,
@@ -39,7 +37,6 @@ export class SpeakerRosterRecordCommands {
   ) {
     this.airtable =
       dependencies.airtable ?? new AirtableProviderBoundary(this.env);
-    this.adminQueries = new SpeakerAdminQueryService(env, this.airtable);
   }
 
   async addManualSpeakerRecord(viewer: Viewer, rawInput: unknown) {

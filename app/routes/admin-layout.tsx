@@ -74,7 +74,7 @@ export async function loader({ request, context }: Route.LoaderArgs) {
     organisationSearchAllowed,
   ] = await Promise.all([
     new EventService(env).getSetup(viewer),
-    loadCurrentEventAdminShellContext(request, env, viewer, allowedRoles),
+    loadCurrentEventAdminShellContext(env, viewer, allowedRoles),
     new SavedViewService(env).list(viewer),
     commandPalette.recent(viewer),
     commandPalette.canSearchOrganisation(viewer),

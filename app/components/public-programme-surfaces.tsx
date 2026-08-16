@@ -221,16 +221,15 @@ export function PublicSessionDetails({
                 "Description not provided."}
             </p>
           ) : null}
-          <>
-            <h3 className="public-surface-detail-subhead">
-              {session.speakerIds.length === 1 ? "Speaker" : "Speakers"}
-            </h3>
-            {model.showSpeakerDetails ? (
-              <PublicSessionSpeakers session={session} model={model} />
-            ) : (
-              <PublicSessionSpeakerNames session={session} model={model} />
-            )}
-          </>
+
+          <h3 className="public-surface-detail-subhead">
+            {session.speakerIds.length === 1 ? "Speaker" : "Speakers"}
+          </h3>
+          {model.showSpeakerDetails ? (
+            <PublicSessionSpeakers session={session} model={model} />
+          ) : (
+            <PublicSessionSpeakerNames session={session} model={model} />
+          )}
         </div>
         <aside className="public-surface-detail-facts">
           <dl className="public-detail-list">

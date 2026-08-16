@@ -387,7 +387,6 @@ export type CurrentEventAdminShellContext = {
  * incorrectly assembled Viewer is ever passed after authorisation.
  */
 export async function loadCurrentEventAdminShellContext(
-  request: Request,
   env: CloudflareEnvironment,
   viewer: Viewer,
   allowedRoles: ReadonlyArray<ViewerRole>,
@@ -452,7 +451,7 @@ export async function loadCurrentEventAdminShellContext(
       }>(),
   ]);
 
-  if (!row || !Boolean(row.eventExists))
+  if (!row || !row.eventExists)
     throw new Error(
       "The authorised current event no longer belongs to its organisation.",
     );
