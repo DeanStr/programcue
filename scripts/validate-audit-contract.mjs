@@ -1,21 +1,36 @@
-import { execFileSync } from "node:child_process";
-import { readFileSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
+import { dirname, extname, join, relative, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 
-const files = execFileSync(
-  "rg",
-  [
-    "-l",
-    "INSERT(?: OR IGNORE)? INTO audit_events",
-    "app",
-    "workers",
-    "scripts/bootstrap-production.mjs",
-    "scripts/verify-recovery.mjs",
-  ],
-  { encoding: "utf8" },
-)
-  .trim()
-  .split("\n")
-  .filter(Boolean);
+const repositoryRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
+const sourceExtensions = new Set([
+  ".cjs",
+  ".js",
+  ".jsx",
+  ".mjs",
+  ".ts",
+  ".tsx",
+]);
+const auditInsertPattern = /INSERT(?: OR IGNORE)? INTO audit_events/u;
+
+function listSourceFiles(directory) {
+  return readdirSync(directory, { withFileTypes: true }).flatMap((entry) => {
+    const path = join(directory, entry.name);
+    if (entry.isDirectory()) return listSourceFiles(path);
+    if (entry.isFile() && sourceExtensions.has(extname(entry.name)))
+      return [path];
+    return [];
+  });
+}
+
+const files = [
+  ...listSourceFiles(join(repositoryRoot, "app")),
+  ...listSourceFiles(join(repositoryRoot, "workers")),
+  join(repositoryRoot, "scripts/bootstrap-production.mjs"),
+  join(repositoryRoot, "scripts/verify-recovery.mjs"),
+]
+  .filter((file) => auditInsertPattern.test(readFileSync(file, "utf8")))
+  .sort();
 
 const insertPattern =
   /INSERT(?: OR IGNORE)? INTO audit_events\s*\(([^)]+)\)\s*(?:VALUES\s*\(|SELECT)/gu;
@@ -41,7 +56,8 @@ for (const file of files) {
     const missing = requiredColumns.filter((column) => !columns.has(column));
     if (missing.length === 0) continue;
     const line = source.slice(0, match.index).split("\n").length;
-    failures.push(`${file}:${line} is missing ${missing.join(", ")}`);
+    const displayFile = relative(repositoryRoot, file).replaceAll("\\", "/");
+    failures.push(`${displayFile}:${line} is missing ${missing.join(", ")}`);
   }
 }
 
