@@ -1,5 +1,8 @@
 import { inspectDecisionNotificationReadiness } from "~/modules/communications/decision-notification-readiness.server";
-import { parseSessionFormatsConfiguration } from "~/modules/events/event-configuration";
+import {
+  parseSessionFormatsConfiguration,
+  type SessionFormatConfiguration,
+} from "~/modules/events/event-configuration";
 import { submittedSnapshotSchema } from "~/modules/submissions/submission-schema";
 import type { Viewer } from "~/platform/auth/authorize.server";
 import { WebhookService } from "~/platform/operations/webhook-service.server";
@@ -7,6 +10,12 @@ import {
   persistAcceptedSpeakerQueueFailure,
   prepareAcceptedSpeakerInvitationPlans,
 } from "./accepted-speaker-invitation.server";
+import {
+  assertAcceptanceTaskPlan,
+  assertAcceptanceTaskPlanMaterialized,
+  assertDecisionViewerEvent,
+} from "./evaluation-decision-acceptance-guard.server";
+import { acceptedSpeakerInvitationOutcome } from "./evaluation-decision-invitation-outcome.server";
 import {
   buildDecisionStatements,
   type DecisionSubmission,
@@ -19,12 +28,6 @@ import {
   EvaluationValidationError,
 } from "./evaluation-errors";
 import { decisionReopenSchema, decisionSchema } from "./evaluation-schema";
-import { acceptedSpeakerInvitationOutcome } from "./evaluation-decision-invitation-outcome.server";
-import {
-  assertAcceptanceTaskPlan,
-  assertAcceptanceTaskPlanMaterialized,
-  assertDecisionViewerEvent,
-} from "./evaluation-decision-acceptance-guard.server";
 
 export class EvaluationDecisionService {
   constructor(private readonly env: CloudflareEnvironment) {}
@@ -545,7 +548,7 @@ export class EvaluationDecisionService {
           "The accepted submission event is unavailable.",
         );
       }
-      let configuredFormat;
+      let configuredFormat: SessionFormatConfiguration | null = null;
       try {
         const configuredFormats = parseSessionFormatsConfiguration(
           event.sessionFormatsJson,

@@ -1,6 +1,6 @@
+import { FileText } from "lucide-react";
 import { useMemo, useRef } from "react";
 import { Form, Link } from "react-router";
-import { FileText } from "lucide-react";
 
 import { DraftRecoveryStatus } from "~/components/draft-recovery-feedback";
 import { EmptyState } from "~/components/ui/states";

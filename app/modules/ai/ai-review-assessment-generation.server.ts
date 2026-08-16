@@ -9,14 +9,9 @@ import {
   generationOperationPayloadSchema,
   parseFailedGenerationResult,
   parseGenerationOperationPayload,
-  stagedGenerationResultSchema,
   type StagedGenerationResult,
+  stagedGenerationResultSchema,
 } from "./ai-review-assessment-durable-state";
-import {
-  AiProviderError,
-  openAiFunctionCalls,
-  openAiOutputText,
-} from "./openai-responses-provider.server";
 import {
   AiReviewAssessmentConflictError,
   AiReviewAssessmentStateError,
@@ -31,6 +26,11 @@ import {
   providerKeys,
   sha256,
 } from "./ai-review-assessment-support.server";
+import {
+  AiProviderError,
+  openAiFunctionCalls,
+  openAiOutputText,
+} from "./openai-responses-provider.server";
 
 export class AiReviewAssessmentGenerationService extends AiReviewAssessmentGenerationState {
   async generate(viewer: Viewer, rawInput: unknown) {

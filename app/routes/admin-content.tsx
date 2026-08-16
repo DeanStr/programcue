@@ -8,20 +8,19 @@ import {
   useNavigation,
 } from "react-router";
 import { ZodError } from "zod";
-
-import type { Route } from "./+types/admin-content";
 import {
   DomainStatusBadge,
   statusPresentation,
 } from "~/components/ui/domain-status-badge";
 import { EventDateTime } from "~/components/ui/event-date-time";
 import {
+  type ContentFileVersion,
   ContentManagementService,
   ContentManagementStateError,
-  type ContentFileVersion,
 } from "~/modules/content/content-management-service.server";
 import { requireCurrentEventRole } from "~/platform/auth/current-event.server";
 import { getCloudflareContext } from "~/platform/cloudflare-context";
+import type { Route } from "./+types/admin-content";
 
 async function administrator(
   request: Request,

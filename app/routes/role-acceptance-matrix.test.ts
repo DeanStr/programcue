@@ -8,10 +8,11 @@ import { SubmissionService } from "~/modules/submissions/submission-service.serv
 import { ApiKeyService } from "~/platform/api/api-key-service.server";
 import { cloudflareContext } from "~/platform/cloudflare-context";
 import { DEMO_IDENTITIES, ensureDemoData } from "~/platform/demo/seed.server";
-import { loader as adminTaskFileLoader } from "./admin-task-file-download";
 import { loader as adminSpeakerFileLoader } from "./admin-speaker-file-download";
-import { loader as administrationApiLoader } from "./api-administration-resources";
+import { loader as adminTaskFileLoader } from "./admin-task-file-download";
+import { action as contextualAiAction } from "./ai-context-action";
 import { action as administrationCommandAction } from "./api-administration-command";
+import { loader as administrationApiLoader } from "./api-administration-resources";
 import {
   action as participantApiAction,
   loader as participantApiLoader,
@@ -21,7 +22,6 @@ import {
   loader as applicationLoader,
 } from "./application-form";
 import { action as assistantAction } from "./assistant";
-import { action as contextualAiAction } from "./ai-context-action";
 import {
   action as communicationComposerAction,
   loader as communicationComposerLoader,
@@ -38,9 +38,9 @@ import {
   loader as reviewLoader,
 } from "./review-workbench";
 import { loader as speakerLoader } from "./speaker-dashboard";
+import { loader as speakerFileLoader } from "./speaker-file-download";
 import { loader as speakerLayoutLoader } from "./speaker-layout";
 import { action as speakerAction } from "./speaker-tasks";
-import { loader as speakerFileLoader } from "./speaker-file-download";
 
 const workerEnv = env as unknown as CloudflareEnvironment;
 const eventId = "evt-foe-2025";

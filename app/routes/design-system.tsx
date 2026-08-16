@@ -6,8 +6,6 @@ import {
   Sparkles,
 } from "lucide-react";
 import { Link } from "react-router";
-
-import type { Route } from "./+types/design-system";
 import { BrandMark } from "~/components/brand-mark";
 import { Button } from "~/components/ui/button";
 import { ErrorSummary } from "~/components/ui/error-summary";
@@ -16,6 +14,7 @@ import { PageHeader } from "~/components/ui/page-header";
 import { EmptyState, PendingState } from "~/components/ui/states";
 import { StatusBadge } from "~/components/ui/status-badge";
 import { StatusNotice } from "~/components/ui/status-notice";
+import type { Route } from "./+types/design-system";
 
 export const meta: Route.MetaFunction = () => [
   { title: "Design System · Program Cue" },

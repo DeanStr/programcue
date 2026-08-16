@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
-import { access } from "node:fs/promises";
 import { constants } from "node:fs";
+import { access } from "node:fs/promises";
 import { test } from "node:test";
 
 import { resolvePackageExecutable } from "./package-executable.mjs";

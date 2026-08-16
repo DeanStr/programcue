@@ -2,21 +2,6 @@ import { env } from "cloudflare:test";
 import { beforeEach, describe, expect, it } from "vitest";
 
 import { DEFAULT_EVENT_BRAND_ACCENT } from "~/lib/brand";
-import type { Viewer } from "~/platform/auth/authorize.server";
-import { ensureDemoData } from "~/platform/demo/seed.server";
-import {
-  EventCreationInProgressError,
-  EventCreationIntentConflictError,
-  EventCreationSenderReuseError,
-  EventCreationService,
-  EventCreationSlugConflictError,
-} from "./event-creation-service.server";
-import { parseSessionFormatsConfiguration } from "./event-configuration";
-import {
-  EventRepositoryProvisioningError,
-  EventRepositoryProvisioningService,
-} from "./event-repository-provisioning.server";
-import { parseEventFilePolicy } from "~/modules/files/file-policy";
 import {
   AIRTABLE_REPOSITORY_PROVIDER,
   AirtableRepositoryConfigurationError,
@@ -24,6 +9,21 @@ import {
   type PreparedAirtableRepositoryConnection,
 } from "~/modules/airtable/airtable-room-repository.server";
 import { AIRTABLE_SCHEMA_VERSION } from "~/modules/airtable/airtable-schema";
+import { parseEventFilePolicy } from "~/modules/files/file-policy";
+import type { Viewer } from "~/platform/auth/authorize.server";
+import { ensureDemoData } from "~/platform/demo/seed.server";
+import { parseSessionFormatsConfiguration } from "./event-configuration";
+import {
+  EventCreationInProgressError,
+  EventCreationIntentConflictError,
+  EventCreationSenderReuseError,
+  EventCreationService,
+  EventCreationSlugConflictError,
+} from "./event-creation-service.server";
+import {
+  EventRepositoryProvisioningError,
+  EventRepositoryProvisioningService,
+} from "./event-repository-provisioning.server";
 
 const viewer: Viewer = {
   personId: "person-demo-admin",

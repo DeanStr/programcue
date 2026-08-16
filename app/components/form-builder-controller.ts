@@ -1,26 +1,26 @@
 import {
+  type BaseSyntheticEvent,
+  type Dispatch,
+  type RefObject,
+  type SetStateAction,
   useCallback,
   useEffect,
   useMemo,
   useRef,
   useState,
-  type BaseSyntheticEvent,
-  type Dispatch,
-  type RefObject,
-  type SetStateAction,
 } from "react";
 import {
-  useForm,
-  useWatch,
   type FieldErrors,
   type Resolver,
+  useForm,
+  useWatch,
 } from "react-hook-form";
 import { useNavigation, useSubmit } from "react-router";
 
 import {
-  saveFormSchema,
   type FormField,
   type SaveFormInput,
+  saveFormSchema,
 } from "~/modules/submissions/submission-schema";
 import {
   clearDraftRecoveryScope,

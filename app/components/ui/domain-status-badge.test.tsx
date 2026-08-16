@@ -4,8 +4,8 @@ import { describe, expect, it } from "vitest";
 import {
   DomainStatusBadge,
   STATUS_PRESENTATIONS,
-  statusPresentation,
   type StatusPresentation,
+  statusPresentation,
 } from "./domain-status-badge";
 
 describe("controlled status presentation", () => {

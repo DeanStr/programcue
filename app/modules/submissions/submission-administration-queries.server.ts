@@ -1,6 +1,6 @@
 import type { Viewer } from "~/platform/auth/authorize.server";
-import { SubmissionServiceFoundation } from "./submission-service-foundation.server";
 import type { AdminSubmissionFilters } from "./submission-repository-shared";
+import { SubmissionServiceFoundation } from "./submission-service-foundation.server";
 
 export class SubmissionAdministrationQueries extends SubmissionServiceFoundation {
   async listAdminSubmissions(viewer: Viewer, filters: AdminSubmissionFilters) {

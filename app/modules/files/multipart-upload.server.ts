@@ -1,15 +1,8 @@
 import { z } from "zod";
-
-import {
-  FileMultipartConflictError,
-  FileMultipartIncompleteError,
-  FileMultipartStateError,
-} from "./multipart-upload-errors";
-import { MultipartR2Provider } from "./multipart-r2-provider.server";
 import {
   type assetKindSchema,
-  detectInspectionContentType,
   DIRECT_MULTIPART_PART_SIZE_BYTES,
+  detectInspectionContentType,
   type FileInspectionSource,
   FilePolicyError,
   parseEventFilePolicy,
@@ -17,28 +10,34 @@ import {
   validateFileSignature,
 } from "./file-policy";
 import {
-  FileAccessError,
-  FileService,
-  isMissingR2MultipartUpload,
-  stableLogicalAssetId,
-  uploadTargetSchema,
-  type UploadTarget,
-} from "./file-service.server";
-import {
   assertFileScanDispatchConfigured,
   enqueueFileScan,
   type FileScanQueueMessage,
 } from "./file-scan-dispatch.server";
-import { requireR2S3Configuration } from "./r2-s3-signing.server";
 import {
-  MultipartUploadAccessRepository,
+  FileAccessError,
+  FileService,
+  isMissingR2MultipartUpload,
+  stableLogicalAssetId,
+  type UploadTarget,
+  uploadTargetSchema,
+} from "./file-service.server";
+import { MultipartR2Provider } from "./multipart-r2-provider.server";
+import {
   isApplicantActor,
+  MultipartUploadAccessRepository,
   multipartIdempotencyKey,
 } from "./multipart-upload-access.server";
 import type {
   MultipartActor,
   MultipartRow,
 } from "./multipart-upload-contracts";
+import {
+  FileMultipartConflictError,
+  FileMultipartIncompleteError,
+  FileMultipartStateError,
+} from "./multipart-upload-errors";
+import { requireR2S3Configuration } from "./r2-s3-signing.server";
 
 export type { ApplicantMultipartActor } from "./multipart-upload-contracts";
 

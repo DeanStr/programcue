@@ -1,20 +1,20 @@
 import {
-  calendarQueueMessageSchema,
-  queueCalendarLifecycleSchema,
-  type CalendarQueueMessage,
-  type QueueCalendarLifecycleInput,
-} from "./calendar-schema";
+  type EmailProviderConfiguration,
+  requireEmailProviderConfiguration,
+} from "~/modules/communications/email-provider.server";
+import type { Viewer } from "~/platform/auth/authorize.server";
 import {
   CalendarQueueUnavailableError,
   CalendarStateError,
 } from "./calendar-errors";
 import type { CalendarQueueActor } from "./calendar-fanout";
-import { hashCalendarLifecyclePayload, stableCalendarUid } from "./ics.server";
-import type { Viewer } from "~/platform/auth/authorize.server";
 import {
-  requireEmailProviderConfiguration,
-  type EmailProviderConfiguration,
-} from "~/modules/communications/email-provider.server";
+  type CalendarQueueMessage,
+  calendarQueueMessageSchema,
+  type QueueCalendarLifecycleInput,
+  queueCalendarLifecycleSchema,
+} from "./calendar-schema";
+import { hashCalendarLifecyclePayload, stableCalendarUid } from "./ics.server";
 
 type SessionCalendarRow = {
   sessionId: string;

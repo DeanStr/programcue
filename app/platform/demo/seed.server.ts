@@ -1,3 +1,6 @@
+import { DEFAULT_EVENT_BRAND_ACCENT } from "~/lib/brand";
+import { INITIAL_EVENT_SESSION_FORMATS_JSON } from "~/modules/events/event-configuration";
+import { CANONICAL_EVENT_FILE_POLICY_JSON } from "~/modules/files/file-policy";
 import {
   DEMO_EVENT_ID,
   DEMO_IDENTITIES,
@@ -7,16 +10,13 @@ import {
   DEMO_VENUE_MAP_URL,
   SBEK_SECOND_SPEAKER,
 } from "./demo-identities";
-import { DEFAULT_EVENT_BRAND_ACCENT } from "~/lib/brand";
-import { CANONICAL_EVENT_FILE_POLICY_JSON } from "~/modules/files/file-policy";
-import { INITIAL_EVENT_SESSION_FORMATS_JSON } from "~/modules/events/event-configuration";
 
 export {
-  DEMO_IDENTITY_COOKIE,
   DEMO_IDENTITIES,
   DEMO_IDENTITY,
-  isDemoIdentityKey,
+  DEMO_IDENTITY_COOKIE,
   type DemoIdentityKey,
+  isDemoIdentityKey,
 } from "./demo-identities";
 
 const DEMO_ADMIN_ID = DEMO_IDENTITY.personId;

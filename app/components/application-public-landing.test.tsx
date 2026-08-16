@@ -1,8 +1,7 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
-
-import { PublicApplicationLanding } from "./application-public-landing";
 import { DEFAULT_FORM_SCHEMA } from "~/modules/submissions/submission-schema";
+import { PublicApplicationLanding } from "./application-public-landing";
 
 describe("public application landing", () => {
   it("renders UTC event-date markers without shifting them in western timezones", () => {

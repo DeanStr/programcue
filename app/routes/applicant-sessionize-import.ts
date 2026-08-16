@@ -1,6 +1,4 @@
-import { z, ZodError } from "zod";
-
-import type { Route } from "./+types/applicant-sessionize-import";
+import { ZodError, z } from "zod";
 import { ensureDemoSubmissionForm } from "~/modules/submissions/demo-submissions.server";
 import {
   importSessionizeProfile,
@@ -14,9 +12,10 @@ import {
   enforcePublicRateLimit,
 } from "~/platform/http/public-abuse-protection.server";
 import {
-  readBoundedText,
   RequestBodyTooLargeError,
+  readBoundedText,
 } from "~/platform/http/read-body";
+import type { Route } from "./+types/applicant-sessionize-import";
 
 const inputSchema = z
   .object({ profile: z.string().trim().min(1).max(2_048) })

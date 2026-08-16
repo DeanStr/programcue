@@ -1,14 +1,13 @@
-import { redirect, type RouterContextProvider } from "react-router";
-
+import { type RouterContextProvider, redirect } from "react-router";
+import {
+  CalendarOAuthService,
+  type DirectCalendarProviderName,
+} from "~/modules/calendars/calendar-oauth.server";
 import {
   CALENDAR_OAUTH_COOKIE,
   calendarOAuthCallbackFailure,
   clearedCalendarOAuthCookie,
 } from "~/modules/calendars/calendar-oauth-callback.server";
-import {
-  CalendarOAuthService,
-  type DirectCalendarProviderName,
-} from "~/modules/calendars/calendar-oauth.server";
 import { requireCurrentEventRole } from "~/platform/auth/current-event.server";
 import { getCloudflareContext } from "~/platform/cloudflare-context";
 

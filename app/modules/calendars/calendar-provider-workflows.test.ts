@@ -1,25 +1,24 @@
 import { env } from "cloudflare:test";
 import { describe, expect, it } from "vitest";
-
+import { ResendEmailProvider } from "~/modules/communications/resend.server";
 import { processCalendarSync } from "../../../workers/communications-queue";
+import {
+  type DirectCalendarProvider,
+  GoogleCalendarProvider,
+  MicrosoftCalendarProvider,
+} from "./calendar-providers.server";
+import {
+  type CalendarQueueMessage,
+  calendarQueueMessageSchema,
+  queueCalendarLifecycleSchema,
+} from "./calendar-schema";
 import {
   CalendarService,
   publishedScheduleCalendarIdempotencyKey,
 } from "./calendar-service.server";
 import {
-  GoogleCalendarProvider,
-  MicrosoftCalendarProvider,
-  type DirectCalendarProvider,
-} from "./calendar-providers.server";
-import {
-  calendarQueueMessageSchema,
-  queueCalendarLifecycleSchema,
-  type CalendarQueueMessage,
-} from "./calendar-schema";
-import { ResendEmailProvider } from "~/modules/communications/resend.server";
-import {
-  calendarTestViewer as viewer,
   scheduledSpeakerEnvironment,
+  calendarTestViewer as viewer,
 } from "./calendar-service-test-fixture";
 
 describe("calendar provider workflows", () => {

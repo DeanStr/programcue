@@ -1,11 +1,9 @@
 import { z } from "zod";
-
-import { optionalCredentialFreeHttpsUrlSchema } from "./https-url";
-
 import {
-  eventFilePolicySchema,
   type EventFilePolicy,
+  eventFilePolicySchema,
 } from "~/modules/files/file-policy";
+import { optionalCredentialFreeHttpsUrlSchema } from "./https-url";
 
 export function isSupportedIanaTimezone(value: string) {
   try {

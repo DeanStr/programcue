@@ -1,13 +1,12 @@
 import { describe, expect, it } from "vitest";
-
-import {
-  previewCommunicationSchema,
-  saveCommunicationTriggerSchema,
-} from "./communication-schema";
 import {
   calculateRecipientCount,
   communicationDraftSchema,
 } from "./communication-rules";
+import {
+  previewCommunicationSchema,
+  saveCommunicationTriggerSchema,
+} from "./communication-schema";
 import { eventEmailLogoUrl } from "./communication-service-shared";
 import { formatEventDateMarkers, formatTaskDueDate } from "./merge-template";
 

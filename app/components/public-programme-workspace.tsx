@@ -1,17 +1,19 @@
-import { useRef, useState, type CSSProperties } from "react";
 import { CalendarDays, Heart, MapPin, Search } from "lucide-react";
+import { type CSSProperties, useRef, useState } from "react";
 import { Link } from "react-router";
-
-import { TurnstileWidget } from "~/components/turnstile-widget";
 import {
-  formatProgrammeDuration,
-  formatProgrammeEventDay,
-  formatProgrammeTimeRange,
-  programmeAccentPalette,
-  publicProgrammeSurfacePath,
-  publicSpeakerProfilePath,
-} from "~/modules/programme/programme-presentation";
-import { PublicProgrammeSurfaceContent } from "~/components/public-programme-surfaces";
+  descriptionSnippet,
+  eventHeroImagePath,
+  formatDay,
+  formatTime,
+  groupSessionsByDay,
+  initials,
+  normaliseDescription,
+  type PublicProgrammeLoaderData,
+  type PublicProgrammeModel,
+  speakerAffiliation,
+  usePublicProgrammeModel,
+} from "~/components/public-programme-model";
 import {
   ProgrammeDayHeading,
   PublicSpeakerAvatar,
@@ -22,19 +24,16 @@ import {
   SessionTags,
   SessionTime,
 } from "~/components/public-programme-parts";
+import { PublicProgrammeSurfaceContent } from "~/components/public-programme-surfaces";
+import { TurnstileWidget } from "~/components/turnstile-widget";
 import {
-  descriptionSnippet,
-  eventHeroImagePath,
-  formatDay,
-  formatTime,
-  groupSessionsByDay,
-  initials,
-  normaliseDescription,
-  speakerAffiliation,
-  type PublicProgrammeLoaderData,
-  type PublicProgrammeModel,
-  usePublicProgrammeModel,
-} from "~/components/public-programme-model";
+  formatProgrammeDuration,
+  formatProgrammeEventDay,
+  formatProgrammeTimeRange,
+  programmeAccentPalette,
+  publicProgrammeSurfacePath,
+  publicSpeakerProfilePath,
+} from "~/modules/programme/programme-presentation";
 
 /**
  * The header, hero and footer wrap every published surface, so they live here

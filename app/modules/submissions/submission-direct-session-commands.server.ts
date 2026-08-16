@@ -9,16 +9,15 @@ import {
 } from "~/modules/speakers/speaker-invitation.server";
 import type { Viewer } from "~/platform/auth/authorize.server";
 import { WebhookService } from "~/platform/operations/webhook-service.server";
+import { SubmissionAdministrationCommandFoundation } from "./submission-administration-command-foundation.server";
 import { SubmissionStateError } from "./submission-repository.server";
 import {
   directSessionSchema,
   isSubmissionApiActor,
-  slugify,
   type SubmissionAdminActor,
   type SubmissionApiActor,
+  slugify,
 } from "./submission-service-foundation.server";
-
-import { SubmissionAdministrationCommandFoundation } from "./submission-administration-command-foundation.server";
 
 export class SubmissionDirectSessionCommands extends SubmissionAdministrationCommandFoundation {
   async createDirectSession(viewer: Viewer, rawInput: unknown) {

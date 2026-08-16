@@ -1,10 +1,10 @@
-import type { Route } from "./+types/admin-content-file-download";
 import {
   ContentManagementService,
   ContentManagementStateError,
 } from "~/modules/content/content-management-service.server";
 import { requireCurrentEventRole } from "~/platform/auth/current-event.server";
 import { getCloudflareContext } from "~/platform/cloudflare-context";
+import type { Route } from "./+types/admin-content-file-download";
 
 export async function loader({ request, context, params }: Route.LoaderArgs) {
   const { env } = getCloudflareContext(context);

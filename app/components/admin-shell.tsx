@@ -1,32 +1,32 @@
-import { useHotkeys } from "react-hotkeys-hook";
+import type { LucideIcon } from "lucide-react";
 import {
+  Activity,
   Bell,
   BookOpen,
+  Cable,
   CalendarCog,
   CalendarDays,
-  Cable,
   ChevronDown,
   ClipboardCheck,
   ClipboardCopy,
-  FolderOpen,
   ContactRound,
   Files,
+  FolderOpen,
   LayoutDashboard,
   ListChecks,
-  Activity,
   Mail,
   Menu,
+  Palette,
   PanelLeftClose,
   PanelLeftOpen,
   PanelTop,
-  Palette,
   Plus,
   Search,
   Settings,
   UsersRound,
 } from "lucide-react";
-import type { LucideIcon } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { useHotkeys } from "react-hotkeys-hook";
 import {
   Link,
   useFetcher,
@@ -43,10 +43,10 @@ import type {
   SavedViewArea,
   SavedViewListItem,
 } from "~/platform/operations/saved-view-service.server";
-import { BrandMark } from "./brand-mark";
+import { AdminCommandDialog } from "./admin-shell-command-dialog";
 
 import { AdminAuxiliaryDialogs } from "./admin-shell-dialogs";
-import { AdminCommandDialog } from "./admin-shell-command-dialog";
+import { BrandMark } from "./brand-mark";
 import { Dialog } from "./dialog";
 import { Button } from "./ui/button";
 

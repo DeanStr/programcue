@@ -1,6 +1,6 @@
-import type { Route } from "./+types/public-headshot";
 import { PublicProgrammeService } from "~/modules/programme/public-programme-service.server";
 import { getCloudflareContext } from "~/platform/cloudflare-context";
+import type { Route } from "./+types/public-headshot";
 
 const unavailableHeaders = {
   "cache-control": "no-store",

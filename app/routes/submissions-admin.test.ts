@@ -1,11 +1,10 @@
 import { env } from "cloudflare:test";
 import { RouterContextProvider } from "react-router";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-
-import { cloudflareContext } from "~/platform/cloudflare-context";
-import { currentEventCookie } from "~/platform/auth/current-event.server";
 import { EvaluationStateError } from "~/modules/evaluations/evaluation-errors";
 import { SubmissionService } from "~/modules/submissions/submission-service.server";
+import { currentEventCookie } from "~/platform/auth/current-event.server";
+import { cloudflareContext } from "~/platform/cloudflare-context";
 import { ensureDemoData } from "~/platform/demo/seed.server";
 import { action } from "./submissions-admin";
 

@@ -1,5 +1,5 @@
-import { serializeSignedCookie } from "better-call";
 import { env } from "cloudflare:test";
+import { serializeSignedCookie } from "better-call";
 import { RouterContextProvider } from "react-router";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -9,12 +9,12 @@ import { evaluationSessionCookie } from "~/platform/evaluation/evaluation-sessio
 import { loader as publicCalendarLoader } from "~/routes/api-public-calendar";
 import { loader as publicProgrammeLoader } from "~/routes/api-public-programme";
 import {
-  loader as publicProgrammePageLoader,
   meta as publicProgrammeMeta,
+  loader as publicProgrammePageLoader,
 } from "~/routes/public-programme";
-import { sortPublishedSpeakers } from "./programme-presentation";
 import { defaultProgrammeEmbedConfiguration } from "./programme-embed-configuration";
 import { ProgrammeEmbedService } from "./programme-embed-service.server";
+import { sortPublishedSpeakers } from "./programme-presentation";
 import {
   itineraryCookie,
   publicItineraryIdentity,

@@ -1,10 +1,3 @@
-import type { Route } from "./+types/api-administration-resources";
-import {
-  ADMIN_RESOURCE_SCOPES,
-  ApiAdministrationService,
-  parseAdminQuery,
-  parseAdminResource,
-} from "~/platform/api/api-administration-service.server";
 import {
   ApiError,
   apiFailure,
@@ -12,7 +5,14 @@ import {
   correlationId,
   requireApiKey,
 } from "~/platform/api/api.server";
+import {
+  ADMIN_RESOURCE_SCOPES,
+  ApiAdministrationService,
+  parseAdminQuery,
+  parseAdminResource,
+} from "~/platform/api/api-administration-service.server";
 import { getCloudflareContext } from "~/platform/cloudflare-context";
+import type { Route } from "./+types/api-administration-resources";
 
 export async function loader({ request, params, context }: Route.LoaderArgs) {
   const { env } = getCloudflareContext(context);

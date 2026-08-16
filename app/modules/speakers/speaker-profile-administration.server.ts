@@ -1,3 +1,12 @@
+import {
+  AirtableProviderBoundary,
+  airtableCommandKey,
+} from "~/modules/airtable/airtable-provider-boundary.server";
+import { ApiError } from "~/platform/api/api.server";
+import { ApiPersonIdempotencyService } from "~/platform/api/api-person-idempotency.server";
+import type { Viewer } from "~/platform/auth/authorize.server";
+import { WebhookService } from "~/platform/operations/webhook-service.server";
+import { ParticipantProfileConflictError } from "./participant-profile-service.server";
 import { SpeakerAdminQueryService } from "./speaker-admin-query-service.server";
 import {
   adminProfileExclusiveSql,
@@ -5,26 +14,16 @@ import {
   adminSpeakerScopeSql,
 } from "./speaker-admin-scope.server";
 import {
-  airtableCommandKey,
-  AirtableProviderBoundary,
-} from "~/modules/airtable/airtable-provider-boundary.server";
-import { ApiPersonIdempotencyService } from "~/platform/api/api-person-idempotency.server";
-import { ApiError } from "~/platform/api/api.server";
-import type { Viewer } from "~/platform/auth/authorize.server";
-import { WebhookService } from "~/platform/operations/webhook-service.server";
-import type { SpeakerWorkflowStatus } from "./speaker-roster-import.server";
-import { ParticipantProfileConflictError } from "./participant-profile-service.server";
-import { SpeakerAdminStateError } from "./speaker-service-errors";
-import {
-  canonicalProfileRevisionStatement,
-  organisationProfileRevisionStatement,
-} from "./speaker-profile-revision.server";
-
-import {
   adminScopedSpeakerProfileSchema,
   adminSpeakerProfileSchema,
   speakerWorkflowSchema,
 } from "./speaker-administration-contracts.server";
+import {
+  canonicalProfileRevisionStatement,
+  organisationProfileRevisionStatement,
+} from "./speaker-profile-revision.server";
+import type { SpeakerWorkflowStatus } from "./speaker-roster-import.server";
+import { SpeakerAdminStateError } from "./speaker-service-errors";
 
 export class SpeakerProfileAdministration {
   private readonly airtable: AirtableProviderBoundary;

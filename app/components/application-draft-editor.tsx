@@ -9,6 +9,7 @@ import {
   DraftRecoveryFeedback,
   DraftRecoveryStatus,
 } from "~/components/draft-recovery-feedback";
+import { SessionizeProfileImport } from "~/components/sessionize-profile-import";
 import { useConfirm } from "~/components/ui/confirm-dialog";
 import { CharacterCount } from "~/components/ui/character-count";
 import { DomainStatusBadge } from "~/components/ui/domain-status-badge";
@@ -16,15 +17,14 @@ import { ErrorSummary } from "~/components/ui/error-summary";
 import type { ApplicantDraft } from "~/modules/submissions/submission-repository.server";
 import {
   DEFAULT_FORM_PRESENTATION,
+  type FormField,
   MAX_SUBMISSION_SPEAKERS,
   visibleFields,
-  type FormField,
 } from "~/modules/submissions/submission-schema";
 import {
   clearDraftRecoveryScope,
   useDraftRecovery,
 } from "~/platform/drafts/draft-recovery";
-import { SessionizeProfileImport } from "~/components/sessionize-profile-import";
 
 function FieldControl({
   field,

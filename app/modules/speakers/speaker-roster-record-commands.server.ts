@@ -1,32 +1,31 @@
 import type { z } from "zod";
 import {
-  airtableIntentCommand,
   AirtableProviderBoundary,
+  airtableIntentCommand,
 } from "~/modules/airtable/airtable-provider-boundary.server";
 import {
   existingPersonOrganisationRelationshipSql,
   organisationRelationshipBindings,
   unavailableExistingEmails,
 } from "~/modules/crm/crm-contact-scope.server";
-import { ApiPersonIdempotencyService } from "~/platform/api/api-person-idempotency.server";
 import { ApiError } from "~/platform/api/api.server";
+import { ApiPersonIdempotencyService } from "~/platform/api/api-person-idempotency.server";
 import type { Viewer } from "~/platform/auth/authorize.server";
 import {
   EvaluatorEmailAliasContextError,
-  resolveEvaluatorEmailAlias,
   type EvaluatorEmailRouting,
+  resolveEvaluatorEmailAlias,
 } from "~/platform/evaluation/evaluator-email-alias.server";
-import type { SpeakerWorkflowStatus } from "./speaker-roster-import.server";
-import {
-  SpeakerAdminIntegrityError,
-  SpeakerAdminStateError,
-} from "./speaker-service-errors";
-
 import {
   existingSpeakerProspectSchema,
   manualSpeakerRecordSchema,
   organisationAdministratorViewer,
 } from "./speaker-administration-contracts.server";
+import type { SpeakerWorkflowStatus } from "./speaker-roster-import.server";
+import {
+  SpeakerAdminIntegrityError,
+  SpeakerAdminStateError,
+} from "./speaker-service-errors";
 
 export class SpeakerRosterRecordCommands {
   private readonly airtable: AirtableProviderBoundary;

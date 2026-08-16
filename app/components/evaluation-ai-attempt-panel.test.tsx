@@ -1,12 +1,11 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { createMemoryRouter, RouterProvider } from "react-router";
 import { describe, expect, it, vi } from "vitest";
-
-import { EvaluationSubmissionQueue } from "./evaluation-admin-queue-panels";
 import {
-  EvaluationAdminModelContext,
   type EvaluationAdminModel,
+  EvaluationAdminModelContext,
 } from "./evaluation-admin-model";
+import { EvaluationSubmissionQueue } from "./evaluation-admin-queue-panels";
 
 const round = {
   id: "round-one",

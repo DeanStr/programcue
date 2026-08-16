@@ -1,12 +1,11 @@
 import { env } from "cloudflare:test";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-
-import type { Viewer } from "~/platform/auth/authorize.server";
-import { ensureDemoData } from "~/platform/demo/seed.server";
 import {
   notifyApiChange,
   recordApiChange,
 } from "~/platform/api/api-realtime.server";
+import type { Viewer } from "~/platform/auth/authorize.server";
+import { ensureDemoData } from "~/platform/demo/seed.server";
 import {
   EventChangeNotFoundError,
   type EventRealtimeDeliveryError,

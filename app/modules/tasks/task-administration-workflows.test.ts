@@ -3,13 +3,13 @@ import { describe, expect, it, vi } from "vitest";
 import { ZodError } from "zod";
 
 import type { AirtableProviderBoundary } from "~/modules/airtable/airtable-provider-boundary.server";
-import type { Viewer } from "~/platform/auth/authorize.server";
 import {
   acceptTestFileScanDispatch,
   completeTestDirectUpload,
 } from "~/modules/files/direct-upload.test-helper";
 import { FileService } from "~/modules/files/file-service.server";
 import { ensureDemoSpeakerData } from "~/modules/speakers/demo.server";
+import type { Viewer } from "~/platform/auth/authorize.server";
 import {
   fixedDateEndEpoch,
   TaskService,

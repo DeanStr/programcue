@@ -14,6 +14,7 @@ import {
   organisationId,
   seedExpiredRetentionEvent,
 } from "./participant-retention-test-fixture";
+
 beforeEach(async () => {
   await ensureDemoData(env as unknown as CloudflareEnvironment);
 });

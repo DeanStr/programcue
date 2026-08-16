@@ -1,19 +1,18 @@
 import { env } from "cloudflare:test";
 import { beforeEach, describe, expect, it } from "vitest";
-import type { Viewer } from "~/platform/auth/authorize.server";
-
-import { PublicProgrammeService } from "~/modules/programme/public-programme-service.server";
 import { ContentManagementService } from "~/modules/content/content-management-service.server";
 import { CANONICAL_EVENT_FILE_POLICY_JSON } from "~/modules/files/file-policy";
+import { PublicProgrammeService } from "~/modules/programme/public-programme-service.server";
+import type { Viewer } from "~/platform/auth/authorize.server";
 import { processScheduleCalendarFanout } from "../../../workers/communications-queue";
 import { ScheduleService } from "./schedule-service.server";
-import { eventLocalTimeEpoch } from "./schedule-time";
 import {
   approveScheduledTestContent,
   prepareScheduleServiceTest,
   scheduleTestEnv,
   scheduleTestViewer as viewer,
 } from "./schedule-service-test-fixture";
+import { eventLocalTimeEpoch } from "./schedule-time";
 
 beforeEach(prepareScheduleServiceTest);
 

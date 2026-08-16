@@ -1,4 +1,3 @@
-import type { Viewer } from "~/platform/auth/authorize.server";
 import {
   AirtableEventDataRepository,
   type AirtableProjectionCommandToken,
@@ -9,19 +8,20 @@ import {
   safeDownloadName,
   validateFileSignature,
 } from "~/modules/files/file-policy";
+import type { Viewer } from "~/platform/auth/authorize.server";
 import {
   EventBrandImageNormalizationError,
-  normalizeEventBrandImage,
   type NormalizedEventBrandImage,
+  normalizeEventBrandImage,
 } from "./event-brand-image-normalizer.server";
 import {
   adminEventBrandAssetPath,
   EVENT_BRAND_ASSET_MAXIMUM_BYTES,
+  type EventBrandAssetKind,
   eventBrandAssetKindSchema,
   eventBrandDraftInputSchema,
   eventBrandPublishInputSchema,
   publicEventBrandAssetPath,
-  type EventBrandAssetKind,
 } from "./event-branding";
 
 type BrandAssetRow = {

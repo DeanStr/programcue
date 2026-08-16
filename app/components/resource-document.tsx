@@ -6,9 +6,9 @@ import {
   type TiptapNode,
 } from "~/modules/resources/resource-content";
 import {
+  type ExternalEmbed,
   externalEmbedPresentation,
   parseExternalEmbed,
-  type ExternalEmbed,
   type ResourceEmbedConfiguration,
 } from "~/modules/resources/resource-embed-policy";
 

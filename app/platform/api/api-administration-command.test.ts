@@ -1,8 +1,6 @@
 import { env } from "cloudflare:test";
-import { beforeEach, describe, expect, it, vi } from "vitest";
 import { RouterContextProvider } from "react-router";
-
-import routeConfig from "~/routes";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { ensureDemoEvaluationData } from "~/modules/evaluations/demo.server";
 import { ensureEvaluationDecisionTemplateFixture } from "~/modules/evaluations/evaluation-test-fixtures";
 import { ScheduleService } from "~/modules/schedule/schedule-service.server";
@@ -14,6 +12,7 @@ import {
   ensureDemoData,
   ensureDemoProgramme,
 } from "~/platform/demo/seed.server";
+import routeConfig from "~/routes";
 import { action as administrationAction } from "~/routes/api-administration-command";
 import { action as participantTaskAction } from "~/routes/api-participant-task-completion";
 

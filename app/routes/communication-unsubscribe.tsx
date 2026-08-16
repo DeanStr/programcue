@@ -5,17 +5,16 @@ import {
   useLoaderData,
   useNavigation,
 } from "react-router";
-
-import type { Route } from "./+types/communication-unsubscribe";
 import { BrandMark } from "~/components/brand-mark";
 import type { CommunicationCategory } from "~/modules/communications/communication-schema";
 import {
   describeCommunicationUnsubscribe,
   InvalidUnsubscribeTokenError,
-  unsubscribeFromOptionalCommunication,
   UnsubscribeConfigurationError,
+  unsubscribeFromOptionalCommunication,
 } from "~/modules/communications/unsubscribe.server";
 import { getCloudflareContext } from "~/platform/cloudflare-context";
+import type { Route } from "./+types/communication-unsubscribe";
 
 const categoryLabels: Record<CommunicationCategory, string> = {
   submission_confirmation: "submission confirmations",

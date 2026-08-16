@@ -1,7 +1,5 @@
 import { data, useActionData, useNavigation } from "react-router";
 import { ZodError } from "zod";
-
-import type { Route } from "./+types/speaker-tasks";
 import { SpeakerActionNotice } from "~/components/speaker-action-notice";
 import { SpeakerTasksPanel } from "~/components/speaker-tasks-panel";
 import { useSpeakerWorkspace } from "~/components/speaker-workspace-context";
@@ -12,6 +10,7 @@ import {
   TaskStateError,
 } from "~/modules/tasks/task-service.server";
 import { recordRouteChange } from "~/platform/realtime/route-realtime.server";
+import type { Route } from "./+types/speaker-tasks";
 
 export const meta = () => [{ title: "Participant Tasks · Program Cue" }];
 

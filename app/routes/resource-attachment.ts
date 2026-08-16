@@ -1,6 +1,4 @@
-import { z, ZodError } from "zod";
-
-import type { Route } from "./+types/resource-attachment";
+import { ZodError, z } from "zod";
 import {
   FileDiscardIncompleteError,
   FileService,
@@ -12,10 +10,11 @@ import {
 import { requireCurrentEventRole } from "~/platform/auth/current-event.server";
 import { getCloudflareContext } from "~/platform/cloudflare-context";
 import {
-  readBoundedText,
   RequestBodyTooLargeError,
+  readBoundedText,
 } from "~/platform/http/read-body";
 import { recordRouteChange } from "~/platform/realtime/route-realtime.server";
+import type { Route } from "./+types/resource-attachment";
 
 const attachmentSchema = z.object({
   pageId: z.string().min(1).max(160),

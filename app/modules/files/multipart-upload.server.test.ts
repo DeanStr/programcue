@@ -1,15 +1,14 @@
 import { env } from "cloudflare:test";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-
-import type { Viewer } from "~/platform/auth/authorize.server";
 import { ensureDemoSpeakerData } from "~/modules/speakers/demo.server";
-import { FileAccessError, FileService } from "./file-service.server";
-import { FileScanDispatchConfigurationError } from "./file-scan-dispatch.server";
+import type { Viewer } from "~/platform/auth/authorize.server";
 import {
   CANONICAL_EVENT_FILE_POLICY,
   FILE_SIZE_MIB,
   FilePolicyError,
 } from "./file-policy";
+import { FileScanDispatchConfigurationError } from "./file-scan-dispatch.server";
+import { FileAccessError, FileService } from "./file-service.server";
 import {
   FileMultipartConflictError,
   FileMultipartIncompleteError,

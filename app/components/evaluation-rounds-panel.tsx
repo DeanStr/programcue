@@ -1,11 +1,10 @@
 import { Form, Link } from "react-router";
 
 import { useEvaluationAdminModel } from "~/components/evaluation-admin-model";
+import { RubricFields } from "~/components/evaluation-rubric-fields";
 import { useConfirm } from "~/components/ui/confirm-dialog";
 import { EventDateTime } from "~/components/ui/event-date-time";
 import { communicationScheduledLocalValue } from "~/modules/communications/communication-time";
-
-import { RubricFields } from "~/components/evaluation-rubric-fields";
 
 export function EvaluationRoundsPanel() {
   const { loaderData, navigation } = useEvaluationAdminModel();

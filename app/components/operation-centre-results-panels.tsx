@@ -11,12 +11,12 @@ import { EmptyState } from "~/components/ui/states";
 import { fieldLabel } from "~/lib/record-labels";
 import { shortReference } from "~/lib/short-reference";
 import {
-  OperationDateTime,
   operationItemLink as itemLink,
   operationMetadataSummary as metadataSummary,
+  type OperationCentreData,
+  OperationDateTime,
   operationTaskStatusLabel as statusLabel,
   taskImportTransitionSummary,
-  type OperationCentreData,
 } from "./operation-centre-shared";
 
 export function ActivityTimelinePanel({

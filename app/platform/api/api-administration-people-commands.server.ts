@@ -1,12 +1,6 @@
 import { EventService } from "~/modules/events/event-service.server";
 import { SubmissionService } from "~/modules/submissions/submission-service.server";
 import type { Viewer } from "~/platform/auth/authorize.server";
-import {
-  apiFormPublishSchema,
-  apiFormSaveSchema,
-  apiMembershipRevocationSchema,
-  apiPersonInvitationSchema,
-} from "./api-command-contract";
 import { ApiError } from "./api.server";
 import {
   ApiAdministrationCommandExecutor,
@@ -15,6 +9,12 @@ import {
   type Command,
   type Family,
 } from "./api-administration-command-foundation.server";
+import {
+  apiFormPublishSchema,
+  apiFormSaveSchema,
+  apiMembershipRevocationSchema,
+  apiPersonInvitationSchema,
+} from "./api-command-contract";
 
 export class ApiAdministrationPeopleCommands extends ApiAdministrationCommandExecutor {
   async executeForms(

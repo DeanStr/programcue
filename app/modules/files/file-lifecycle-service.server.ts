@@ -1,10 +1,9 @@
 import { z } from "zod";
-
-import type { Viewer } from "~/platform/auth/authorize.server";
 import {
   headshotProfileRevisionGuardStatement,
   headshotProfileRevisionStatement,
 } from "~/modules/speakers/speaker-profile-revision.server";
+import type { Viewer } from "~/platform/auth/authorize.server";
 import {
   FileAccessError,
   FileErasureConfirmationError,

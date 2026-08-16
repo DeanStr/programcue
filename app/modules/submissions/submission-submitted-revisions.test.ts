@@ -5,8 +5,8 @@ import type { Viewer } from "~/platform/auth/authorize.server";
 import { SBEK_FIXTURE_PEOPLE } from "~/platform/demo/demo-identities";
 import { ensureDemoData } from "~/platform/demo/seed.server";
 import {
-  SubmissionRevisionConflictError,
   type Applicant,
+  SubmissionRevisionConflictError,
 } from "./submission-repository.server";
 import { DEFAULT_FORM_SCHEMA } from "./submission-schema";
 import { SubmissionService } from "./submission-service.server";

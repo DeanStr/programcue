@@ -4,8 +4,6 @@ import {
   Outlet,
   useRevalidator,
 } from "react-router";
-
-import type { Route } from "./+types/admin-layout";
 import { AdminShell } from "~/components/admin-shell";
 import { routeErrorCopy, routeErrorMessage } from "~/lib/route-error-copy";
 import { EventService } from "~/modules/events/event-service.server";
@@ -16,6 +14,7 @@ import {
 import { getCloudflareContext } from "~/platform/cloudflare-context";
 import { CommandPaletteService } from "~/platform/operations/command-palette-service.server";
 import { SavedViewService } from "~/platform/operations/saved-view-service.server";
+import type { Route } from "./+types/admin-layout";
 
 function formatEventDateRange(startDate: string, endDate: string) {
   const start = new Date(`${startDate}T12:00:00Z`);

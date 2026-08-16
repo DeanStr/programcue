@@ -22,17 +22,17 @@ import { useDraftRecovery } from "~/platform/drafts/draft-recovery";
 import {
   commandId,
   downloadRecovery,
+  type EditorActionData,
   fingerprint,
   formatDate,
   formatTime,
   PersistenceStatus,
-  statusFor,
-  useOnlineState,
-  useScheduleAutosave,
-  type EditorActionData,
   type RecoveryScope,
   type ScheduleCalendarPreview,
   type SessionContentDraft,
+  statusFor,
+  useOnlineState,
+  useScheduleAutosave,
 } from "./schedule-content-editor-shared";
 
 type SessionContentEditorProps = {

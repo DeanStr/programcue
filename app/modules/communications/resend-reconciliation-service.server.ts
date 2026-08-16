@@ -1,10 +1,10 @@
 import { EventRealtimeService } from "~/platform/realtime/event-realtime.server";
 import { resendWebhookEventSchema } from "./communication-schema";
-import { TRACKED_DELIVERY_EMAIL_TAG } from "./email-provider";
 import {
   resendDeliveryEventStates,
   resendDeliveryEventStatesJson,
 } from "./communication-service-shared";
+import { TRACKED_DELIVERY_EMAIL_TAG } from "./email-provider";
 
 export class ResendReconciliationService {
   constructor(private readonly env: CloudflareEnvironment) {}

@@ -1,6 +1,4 @@
 import { ZodError } from "zod";
-
-import type { Route } from "./+types/api-file-scanner-webhook";
 import {
   FileScanConflictError,
   FileScanStateError,
@@ -8,16 +6,17 @@ import {
   FileVersionNotFoundError,
 } from "~/modules/files/file-service.server";
 import {
-  scannerCallbackPayloadSchema,
   ScannerCallbackAuthenticationError,
   ScannerCallbackConfigurationError,
+  scannerCallbackPayloadSchema,
   verifyScannerCallback,
 } from "~/modules/files/scanner-callback.server";
 import { getCloudflareContext } from "~/platform/cloudflare-context";
 import {
-  readBoundedText,
   RequestBodyTooLargeError,
+  readBoundedText,
 } from "~/platform/http/read-body";
+import type { Route } from "./+types/api-file-scanner-webhook";
 
 function logScannerCallbackFailure(error: unknown) {
   const candidate = error instanceof Error ? error.name : "UnknownError";

@@ -1,17 +1,17 @@
 import { z } from "zod";
 
 import type { Viewer } from "~/platform/auth/authorize.server";
+import { AirtableEventDataRepository } from "./airtable-event-data-repository.server";
+import { AirtableProgrammeRepository } from "./airtable-programme-repository.server";
 import {
   AIRTABLE_REPOSITORY_PROVIDER,
   AirtableRepositoryConfigurationError,
   AirtableRoomRepository,
 } from "./airtable-room-repository.server";
-import { AirtableProgrammeRepository } from "./airtable-programme-repository.server";
-import { AirtableEventDataRepository } from "./airtable-event-data-repository.server";
 import {
   AIRTABLE_SYNCHRONOUS_MIGRATION_MAX_CHANGES,
-  airtableRoomSchema,
   type AirtableRoom,
+  airtableRoomSchema,
 } from "./airtable-schema";
 
 const migrationTargetSchema = z.enum(["d1", "airtable"]);

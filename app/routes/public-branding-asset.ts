@@ -1,11 +1,10 @@
 import { ZodError } from "zod";
-
-import type { Route } from "./+types/public-branding-asset";
 import {
   EventBrandingAssetChangedError,
   EventBrandingService,
 } from "~/modules/events/event-branding-service.server";
 import { getCloudflareContext } from "~/platform/cloudflare-context";
+import type { Route } from "./+types/public-branding-asset";
 
 const unavailableHeaders = {
   "cache-control": "no-store",

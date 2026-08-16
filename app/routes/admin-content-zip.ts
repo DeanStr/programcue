@@ -1,12 +1,11 @@
 import { ZodError } from "zod";
-
-import type { Route } from "./+types/admin-content-zip";
 import {
   ContentManagementService,
   ContentManagementStateError,
 } from "~/modules/content/content-management-service.server";
 import { requireCurrentEventRole } from "~/platform/auth/current-event.server";
 import { getCloudflareContext } from "~/platform/cloudflare-context";
+import type { Route } from "./+types/admin-content-zip";
 
 export async function action({ request, context }: Route.ActionArgs) {
   if (request.method !== "POST") {

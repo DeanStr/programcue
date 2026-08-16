@@ -10,8 +10,6 @@ import {
 import { useEffect, useState } from "react";
 import { data, Form, Link, useActionData, useNavigation } from "react-router";
 import { ZodError } from "zod";
-
-import type { Route } from "./+types/admin-speaker-detail";
 import { DirectMultipartUpload } from "~/components/direct-multipart-upload";
 import { SpeakerActionNotice } from "~/components/speaker-action-notice";
 import { SpeakerProfileHistory } from "~/components/speaker-profile-history";
@@ -36,10 +34,11 @@ import {
 import { requireCurrentEventRole } from "~/platform/auth/current-event.server";
 import { getCloudflareContext } from "~/platform/cloudflare-context";
 import {
+  type CommittedRealtimeFailure,
   notifyRouteChange,
   recordRouteChange,
-  type CommittedRealtimeFailure,
 } from "~/platform/realtime/route-realtime.server";
+import type { Route } from "./+types/admin-speaker-detail";
 
 export const meta: Route.MetaFunction = ({ loaderData }) => [
   {

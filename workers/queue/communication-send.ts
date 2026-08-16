@@ -1,8 +1,8 @@
 import { z } from "zod";
 
 import { createEmailProvider } from "../../app/modules/communications/email-provider.server";
-import { WebhookService } from "../../app/platform/operations/webhook-service.server";
 import { sourceRevisionForLog } from "../../app/platform/observability/source-revision.server";
+import { WebhookService } from "../../app/platform/operations/webhook-service.server";
 import {
   assertOperationClaim,
   errorDetails,
@@ -14,11 +14,11 @@ import {
   renewOperationClaim,
   returnedChangeSequence,
 } from "./claim-infrastructure";
-import type { QueueProviderDependencies } from "./handler-types";
 import {
   communicationContentSnapshotSchema,
   deliverCommunicationBatch,
 } from "./communication-delivery-batch";
+import type { QueueProviderDependencies } from "./handler-types";
 
 const communicationQueueMessageSchema = z.object({
   type: z.literal("communication.send"),

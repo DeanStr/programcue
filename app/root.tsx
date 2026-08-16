@@ -1,6 +1,7 @@
+import { useEffect } from "react";
 import {
-  isRouteErrorResponse,
   Form,
+  isRouteErrorResponse,
   Link,
   Links,
   Meta,
@@ -8,30 +9,28 @@ import {
   Scripts,
   ScrollRestoration,
 } from "react-router";
-import { useEffect } from "react";
 import { Toaster } from "sonner";
-
-import type { Route } from "./+types/root";
 import { BrandMark } from "~/components/brand-mark";
+import { RouteProgress } from "~/components/ui/route-progress";
 import {
   routeErrorCopy,
   routeErrorMessage,
   UNKNOWN_ROUTE_ERROR_MESSAGE,
   UNKNOWN_ROUTE_ERROR_TITLE,
 } from "~/lib/route-error-copy";
-import { installDraftRecoverySignOutCleanup } from "~/platform/drafts/draft-recovery";
-import { RouteProgress } from "~/components/ui/route-progress";
 import { getCloudflareContext } from "~/platform/cloudflare-context";
-import {
-  EVALUATION_IDENTITIES,
-  readEvaluationSession,
-} from "~/platform/evaluation/evaluation-session.server";
+import { installDraftRecoverySignOutCleanup } from "~/platform/drafts/draft-recovery";
 import {
   evaluationApplicantGuideLabel,
   evaluationReviewerGuideLabel,
   readEvaluationScenarioGuideState,
 } from "~/platform/evaluation/evaluation-guide-state.server";
+import {
+  EVALUATION_IDENTITIES,
+  readEvaluationSession,
+} from "~/platform/evaluation/evaluation-session.server";
 import { requireRuntimeMode } from "~/platform/runtime-environment.server";
+import type { Route } from "./+types/root";
 import "./styles/index.css";
 
 export const links: Route.LinksFunction = () => [

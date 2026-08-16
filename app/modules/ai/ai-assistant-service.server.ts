@@ -1,5 +1,11 @@
 import { z } from "zod";
-
+import {
+  emailProviderConfigurationIssue,
+  requireEmailProviderConfiguration,
+} from "~/modules/communications/email-provider.server";
+import { EvaluationService } from "~/modules/evaluations/evaluation-service.server";
+import { ReadinessService } from "~/modules/readiness/readiness-service.server";
+import type { Viewer } from "~/platform/auth/authorize.server";
 import {
   AiAssistantCoreService,
   allowedReviewRoles,
@@ -8,30 +14,23 @@ import {
   parseJson,
 } from "./ai-assistant-core-service.server";
 import { AiPermissionError, AiProposalStateError } from "./ai-assistant-errors";
+import type { AiProposalApprovalResult } from "./ai-proposal-lifecycle.server";
+import { AiProviderSettingsService } from "./ai-provider.server";
 import {
   loadReminderCohort,
   prepareReminderSendProposal,
   reminderCohortSchema,
 } from "./ai-tools.server";
 import type { AiEvidence } from "./ai-types";
-import { AiProviderSettingsService } from "./ai-provider.server";
 import { AiProviderError } from "./openai-responses-provider.server";
-import type { AiProposalApprovalResult } from "./ai-proposal-lifecycle.server";
-import {
-  emailProviderConfigurationIssue,
-  requireEmailProviderConfiguration,
-} from "~/modules/communications/email-provider.server";
-import { EvaluationService } from "~/modules/evaluations/evaluation-service.server";
-import { ReadinessService } from "~/modules/readiness/readiness-service.server";
-import type { Viewer } from "~/platform/auth/authorize.server";
 
-export type { AiProposalApprovalResult } from "./ai-proposal-lifecycle.server";
 export {
   AiContextTooLargeError,
   AiPermissionError,
   AiProposalNotFoundError,
   AiProposalStateError,
 } from "./ai-assistant-errors";
+export type { AiProposalApprovalResult } from "./ai-proposal-lifecycle.server";
 
 export class AiAssistantService extends AiAssistantCoreService {
   async generateReviewAid(

@@ -1,8 +1,7 @@
 import { Agent } from "agents";
-
+import type { Viewer } from "~/platform/auth/authorize.server";
 import { AiAssistantService } from "./ai-assistant-service.server";
 import { AiProviderSettingsService } from "./ai-provider.server";
-import type { Viewer } from "~/platform/auth/authorize.server";
 
 export type ProgramCueAgentState = {
   version: 1;

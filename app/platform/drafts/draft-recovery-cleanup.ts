@@ -1,7 +1,7 @@
 import {
   DRAFT_RECOVERY_CHANNEL_NAME,
-  draftRecoveryKey,
   type DraftRecoveryScope,
+  draftRecoveryKey,
   type RecoveryMessage,
 } from "./draft-recovery-core";
 import { indexedDbDraftSnapshotStore } from "./draft-recovery-storage";

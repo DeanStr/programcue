@@ -1,9 +1,9 @@
-import { ensureDemoData } from "~/platform/demo/seed.server";
 import type {
   FormRouting,
   SubmissionFormSchema,
 } from "~/modules/submissions/submission-schema";
 import { DEFAULT_FORM_PRESENTATION } from "~/modules/submissions/submission-schema";
+import { ensureDemoData } from "~/platform/demo/seed.server";
 
 const DEMO_ORGANISATION_ID = "org-future-events";
 const DEMO_EVENT_ID = "evt-foe-2025";

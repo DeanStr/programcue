@@ -1,8 +1,4 @@
-import { z, ZodError } from "zod";
-
-import type { Route } from "./+types/applicant-file-multipart";
-import { ensureDemoSubmissionForm } from "~/modules/submissions/demo-submissions.server";
-import { SubmissionService } from "~/modules/submissions/submission-service.server";
+import { ZodError, z } from "zod";
 import { FilePolicyError } from "~/modules/files/file-policy";
 import {
   FileScanDispatchConfigurationError,
@@ -10,13 +6,15 @@ import {
 } from "~/modules/files/file-scan-dispatch.server";
 import { FileAccessError } from "~/modules/files/file-service.server";
 import {
+  type ApplicantMultipartActor,
   FileMultipartConflictError,
   FileMultipartIncompleteError,
   FileMultipartStateError,
   MultipartUploadService,
-  type ApplicantMultipartActor,
 } from "~/modules/files/multipart-upload.server";
 import { R2S3ConfigurationError } from "~/modules/files/r2-s3-signing.server";
+import { ensureDemoSubmissionForm } from "~/modules/submissions/demo-submissions.server";
+import { SubmissionService } from "~/modules/submissions/submission-service.server";
 import { getCloudflareContext } from "~/platform/cloudflare-context";
 import {
   AbuseProtectionConfigurationError,
@@ -26,9 +24,10 @@ import {
   TurnstileUnavailableError,
 } from "~/platform/http/public-abuse-protection.server";
 import {
-  readBoundedText,
   RequestBodyTooLargeError,
+  readBoundedText,
 } from "~/platform/http/read-body";
+import type { Route } from "./+types/applicant-file-multipart";
 
 const scopeSchema = z.object({
   submissionId: z.string().min(1).max(100),

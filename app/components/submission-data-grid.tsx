@@ -15,9 +15,8 @@ import {
 } from "react";
 import { Link } from "react-router";
 import { toast } from "sonner";
-
-import { DomainStatusBadge } from "~/components/ui/domain-status-badge";
 import { submissionReferenceClipboard } from "~/components/operational-ui-rules";
+import { DomainStatusBadge } from "~/components/ui/domain-status-badge";
 import type { AdminSubmission } from "~/modules/submissions/submission-repository-shared";
 
 const gridFeatures = tableFeatures({

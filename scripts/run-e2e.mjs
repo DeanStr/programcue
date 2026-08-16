@@ -1,8 +1,8 @@
 import { performance } from "node:perf_hooks";
 
-import { resolveE2eShardRuntimes, repositoryRoot } from "./e2e-runtime.mjs";
-import { formatDuration, npmCommand, runProcess } from "./process-runner.mjs";
+import { repositoryRoot, resolveE2eShardRuntimes } from "./e2e-runtime.mjs";
 import { resolvePackageExecutable } from "./package-executable.mjs";
+import { formatDuration, npmCommand, runProcess } from "./process-runner.mjs";
 
 const startedAt = performance.now();
 const rawArguments = process.argv.slice(2);

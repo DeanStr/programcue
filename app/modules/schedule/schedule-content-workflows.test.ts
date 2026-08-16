@@ -6,13 +6,13 @@ import {
   ScheduleConfigurationError,
   ScheduleService,
 } from "./schedule-service.server";
-import { eventLocalTimeEpoch } from "./schedule-time";
 import {
   approveScheduledTestContent,
   prepareScheduleServiceTest,
   scheduleTestEnv,
   scheduleTestViewer as viewer,
 } from "./schedule-service-test-fixture";
+import { eventLocalTimeEpoch } from "./schedule-time";
 
 beforeEach(prepareScheduleServiceTest);
 

@@ -7,7 +7,6 @@ import {
   ScheduleRevisionConflictError,
   ScheduleUndoUnavailableError,
 } from "./schedule-errors";
-import { detectWorkspaceConflicts } from "./schedule-workspace.server";
 import {
   detectScheduleConflicts,
   type ScheduleConflict,
@@ -20,12 +19,13 @@ import {
 } from "./schedule-schema";
 import type {
   ScheduleEntry,
+  ScheduleEventScope,
   SchedulePlacementCommand,
   SchedulePlacementResult,
-  ScheduleEventScope,
   ScheduleUnassignmentResult,
   ScheduleWorkspace,
 } from "./schedule-service.server";
+import { detectWorkspaceConflicts } from "./schedule-workspace.server";
 
 type ScheduleEntrySnapshot = Pick<
   ScheduleEntry,

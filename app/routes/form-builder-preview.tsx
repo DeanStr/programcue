@@ -1,18 +1,15 @@
 import { useEffect, useState } from "react";
 import { data, Form, Link, redirect, useActionData } from "react-router";
 import { ZodError } from "zod";
-
-import type { Route } from "./+types/form-builder-preview";
 import { Dialog } from "~/components/dialog";
 import {
   DraftRecoveryFeedback,
   DraftRecoveryStatus,
 } from "~/components/draft-recovery-feedback";
 import {
-  useFormBuilderController,
   type FormBuilderActionResult,
+  useFormBuilderController,
 } from "~/components/form-builder-controller";
-import { FormBuilderVisualCanvas } from "~/components/form-builder-visual-canvas";
 import {
   ApplicantPreviewPanel,
   FieldSettingsPanel,
@@ -21,18 +18,20 @@ import {
   PresentationSettingsPanel,
   PublicationSettingsFields,
 } from "~/components/form-builder-panels";
+import { FormBuilderVisualCanvas } from "~/components/form-builder-visual-canvas";
 import { useConfirm } from "~/components/ui/confirm-dialog";
 import { DerivedSlugField } from "~/components/ui/derived-slug-field";
 import { ensureDemoSubmissionForm } from "~/modules/submissions/demo-submissions.server";
-import { closeDateFromEpoch } from "~/modules/submissions/submission-repository-shared";
-import type { SaveFormInput } from "~/modules/submissions/submission-schema";
-import { SubmissionService } from "~/modules/submissions/submission-service.server";
 import {
   SubmissionRevisionConflictError,
   SubmissionStateError,
 } from "~/modules/submissions/submission-repository.server";
+import { closeDateFromEpoch } from "~/modules/submissions/submission-repository-shared";
+import type { SaveFormInput } from "~/modules/submissions/submission-schema";
+import { SubmissionService } from "~/modules/submissions/submission-service.server";
 import { requireCurrentEventRole } from "~/platform/auth/current-event.server";
 import { getCloudflareContext } from "~/platform/cloudflare-context";
+import type { Route } from "./+types/form-builder-preview";
 
 export const meta: Route.MetaFunction = () => [
   { title: "Form Builder · Program Cue" },
@@ -302,7 +301,7 @@ export default function FormBuilder({ loaderData }: Route.ComponentProps) {
     : null;
   const publishedClosingDateChanged = Boolean(
     loaderData.workspace?.publishedVersion &&
-    input.closeDate !== publishedCloseDate,
+      input.closeDate !== publishedCloseDate,
   );
   return (
     <Form

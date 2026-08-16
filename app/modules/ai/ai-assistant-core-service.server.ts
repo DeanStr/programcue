@@ -1,9 +1,18 @@
 import { z } from "zod";
-
+import type { CommandCentreSnapshot } from "~/modules/readiness/readiness-service.server";
+import type { Viewer } from "~/platform/auth/authorize.server";
 import {
   AiContextTooLargeError,
   AiPermissionError,
 } from "./ai-assistant-errors";
+import {
+  type AiProposalApprovalResult,
+  AiProposalLifecycleService,
+} from "./ai-proposal-lifecycle.server";
+import {
+  AiProviderSettingsService,
+  resolveAiProvider,
+} from "./ai-provider.server";
 import {
   AiToolExecutor,
   AiToolPermissionError,
@@ -18,21 +27,11 @@ import type {
   ContextualAiResult,
 } from "./ai-types";
 import {
-  AiProviderSettingsService,
-  resolveAiProvider,
-} from "./ai-provider.server";
-import {
+  type AiModelProvider,
   AiProviderError,
   openAiFunctionCalls as aiFunctionCalls,
   openAiOutputText as aiOutputText,
-  type AiModelProvider,
 } from "./openai-responses-provider.server";
-import {
-  AiProposalLifecycleService,
-  type AiProposalApprovalResult,
-} from "./ai-proposal-lifecycle.server";
-import type { CommandCentreSnapshot } from "~/modules/readiness/readiness-service.server";
-import type { Viewer } from "~/platform/auth/authorize.server";
 
 const MAX_TOOL_CALLS = 8;
 const MAX_CONTEXT_CHARACTERS = 60_000;

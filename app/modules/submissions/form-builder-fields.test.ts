@@ -9,8 +9,8 @@ import {
 } from "./form-builder-fields";
 import {
   DEFAULT_FORM_SCHEMA,
-  MAX_FORM_FIELDS,
   type FormField,
+  MAX_FORM_FIELDS,
 } from "./submission-schema";
 
 describe("form builder field rules", () => {

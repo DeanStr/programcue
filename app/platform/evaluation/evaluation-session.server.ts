@@ -4,11 +4,11 @@ import {
   DEMO_ORGANISATION_ID,
   DEMO_RESET_CONFIRMATION,
 } from "~/platform/demo/demo-identities";
+import { currentEvaluationFixtureGeneration } from "~/platform/evaluation/evaluation-fixture-reset-lock.server";
 import {
   assertEvaluationPeopleAreDedicated,
   EvaluationIdentityIsolationError,
 } from "~/platform/evaluation/evaluation-identity-isolation.server";
-import { currentEvaluationFixtureGeneration } from "~/platform/evaluation/evaluation-fixture-reset-lock.server";
 import { requireRuntimeMode } from "~/platform/runtime-environment.server";
 
 export const EVALUATION_SESSION_COOKIE = "__Host-program_cue_evaluation";
@@ -687,6 +687,8 @@ export async function evaluationPersonForSession(
   return resolveEvaluationPerson(env, session.identityKey);
 }
 
-export { DEMO_EVENT_ID as EVALUATION_EVENT_ID };
-export { DEMO_RESET_CONFIRMATION as EVALUATION_EVENT_NAME };
-export { DEMO_ORGANISATION_ID as EVALUATION_ORGANISATION_ID };
+export {
+  DEMO_EVENT_ID as EVALUATION_EVENT_ID,
+  DEMO_ORGANISATION_ID as EVALUATION_ORGANISATION_ID,
+  DEMO_RESET_CONFIRMATION as EVALUATION_EVENT_NAME,
+};

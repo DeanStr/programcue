@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { emailDeliveryIssue } from "~/modules/communications/email-deliverability";
-import { requiresProductionSecurity } from "~/platform/runtime-environment.server";
 import { requireEmailProviderConfiguration } from "~/modules/communications/email-provider.server";
+import { requiresProductionSecurity } from "~/platform/runtime-environment.server";
 import { hashApplicantToken } from "./applicant-session.server";
 import { SubmissionStateError } from "./submission-repository-shared";
 

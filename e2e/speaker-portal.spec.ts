@@ -1,4 +1,4 @@
-import { expect, test, type Page } from "@playwright/test";
+import { expect, type Page, test } from "@playwright/test";
 
 test("speaker profile, sessions and D1 task state render through the production portal", async ({
   page,

@@ -3,8 +3,8 @@ import { RouterContextProvider } from "react-router";
 import { beforeEach, describe, expect, it } from "vitest";
 
 import {
-  publishedHeadshotPath,
   PublicProgrammeService,
+  publishedHeadshotPath,
 } from "~/modules/programme/public-programme-service.server";
 import { cloudflareContext } from "~/platform/cloudflare-context";
 import { loader } from "./public-headshot";

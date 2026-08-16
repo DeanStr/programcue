@@ -1,10 +1,9 @@
 import type { Viewer } from "~/platform/auth/authorize.server";
-import {
-  type TaskRow,
-  structuredTaskForm,
-} from "./task-service-foundation.server";
-
 import { ParticipantTaskWorkflowFoundation } from "./participant-task-workflow-foundation.server";
+import {
+  structuredTaskForm,
+  type TaskRow,
+} from "./task-service-foundation.server";
 
 export class ParticipantTaskQueries extends ParticipantTaskWorkflowFoundation {
   async listParticipantTasks(viewer: Viewer) {

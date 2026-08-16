@@ -1,5 +1,14 @@
 import { calendarQueueMessageSchema } from "../../app/modules/calendars/calendar-schema";
 import { hashCalendarLifecyclePayload } from "../../app/modules/calendars/ics.server";
+import { deliverCalendarProvider } from "./calendar-provider-delivery";
+import {
+  finishCalendarAttemptFailure,
+  finishSupersededCalendarAttempt,
+} from "./calendar-sync-outcomes";
+import {
+  isExactCalendarAttempt,
+  loadCalendarAttempt,
+} from "./calendar-sync-state";
 import {
   assertOperationClaim,
   errorDetails,
@@ -10,16 +19,6 @@ import {
   returnedChangeSequence,
 } from "./claim-infrastructure";
 import type { QueueProviderDependencies } from "./handler-types";
-import { deliverCalendarProvider } from "./calendar-provider-delivery";
-
-import {
-  finishCalendarAttemptFailure,
-  finishSupersededCalendarAttempt,
-} from "./calendar-sync-outcomes";
-import {
-  isExactCalendarAttempt,
-  loadCalendarAttempt,
-} from "./calendar-sync-state";
 export async function processCalendarSync(
   input: unknown,
   env: CloudflareEnvironment,

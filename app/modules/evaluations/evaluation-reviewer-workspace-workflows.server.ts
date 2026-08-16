@@ -2,14 +2,14 @@ import { reviewerVisibleAnswers } from "~/modules/submissions/submission-schema"
 import type { Viewer } from "~/platform/auth/authorize.server";
 import { EvaluationStateError } from "./evaluation-errors";
 import {
-  parseSubmittedSnapshot,
   blindReviewerVisibleAnswers,
+  type Criterion,
   EvaluationServiceFoundation,
+  parseSubmittedSnapshot,
   requireSessionReviewSnapshot,
   requireSubmittedSnapshot,
   reviewerCanSeeSubmissionAttachment,
   summaryAnswer,
-  type Criterion,
 } from "./evaluation-service-foundation.server";
 import { reviewableSubmissionSql } from "./evaluation-submission-review-eligibility.server";
 

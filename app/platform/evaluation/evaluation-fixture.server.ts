@@ -15,10 +15,9 @@ import {
 import {
   DEMO_DECISION_SENDER_ID,
   DEMO_RESET_EVENT_TABLES,
-  resetDemoEvent,
   type DemoActiveWork,
+  resetDemoEvent,
 } from "~/platform/demo/demo-reset.server";
-import { findPersonLinkedOutsideEvaluationOrganisation } from "~/platform/evaluation/evaluation-identity-isolation.server";
 import {
   acquireEvaluationFixtureReset,
   assertEvaluationFixtureResetOwner,
@@ -28,6 +27,7 @@ import {
   EVALUATION_FIXTURE_RESET_OPERATION_TYPE,
   markEvaluationFixtureResetFailed,
 } from "~/platform/evaluation/evaluation-fixture-reset-lock.server";
+import { findPersonLinkedOutsideEvaluationOrganisation } from "~/platform/evaluation/evaluation-identity-isolation.server";
 import { requireRuntimeMode } from "~/platform/runtime-environment.server";
 
 const EVALUATION_SENDER_ID = "sender-production-evaluation-fixture";

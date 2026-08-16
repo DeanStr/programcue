@@ -1,9 +1,9 @@
 import type { z } from "zod";
+import { CommunicationService } from "~/modules/communications/communication-service.server";
 import {
   assertMergeAudienceCompatible,
   type CommunicationPreview,
 } from "~/modules/communications/communication-service-shared";
-import { CommunicationService } from "~/modules/communications/communication-service.server";
 import {
   renderMergeTemplate,
   representativeMergeValues,

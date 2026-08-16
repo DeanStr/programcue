@@ -1,4 +1,3 @@
-import { FileMultipartStateError } from "./multipart-upload-errors";
 import { parseEventFilePolicy } from "./file-policy";
 import { FileAccessError } from "./file-service-errors";
 import type {
@@ -6,6 +5,7 @@ import type {
   MultipartActor,
   MultipartRow,
 } from "./multipart-upload-contracts";
+import { FileMultipartStateError } from "./multipart-upload-errors";
 
 export type { ApplicantMultipartActor } from "./multipart-upload-contracts";
 

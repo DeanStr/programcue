@@ -1,10 +1,10 @@
 import type { Viewer } from "~/platform/auth/authorize.server";
 import {
+  parseTaskEvidenceDetails,
   type TaskRow,
+  TaskServiceFoundation,
   TaskStateError,
   type TemplateRow,
-  parseTaskEvidenceDetails,
-  TaskServiceFoundation,
 } from "./task-service-foundation.server";
 
 export class ParticipantTaskWorkflowFoundation extends TaskServiceFoundation {

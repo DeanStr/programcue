@@ -1,18 +1,17 @@
 import { and, asc, eq } from "drizzle-orm";
-
+import {
+  type EventFilePolicy,
+  parseEventFilePolicy,
+} from "~/modules/files/file-policy";
 import { createDatabase } from "~/platform/database/db.server";
 import { events, rooms, tracks } from "~/platform/database/schema";
-import {
-  parseEventFilePolicy,
-  type EventFilePolicy,
-} from "~/modules/files/file-policy";
+import { EventAdministratorRepository } from "./event-administrator-repository.server";
 import { parseSessionFormatsConfiguration } from "./event-configuration";
-import { eventResourceSchema } from "./event-schema";
 import type {
   AdministratorInvitationInput,
   EventSetupInput,
 } from "./event-schema";
-import { EventAdministratorRepository } from "./event-administrator-repository.server";
+import { eventResourceSchema } from "./event-schema";
 
 export type EventAdministrator = {
   id: string;

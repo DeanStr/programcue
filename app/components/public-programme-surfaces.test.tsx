@@ -7,20 +7,20 @@ import type {
   PublishedSpeaker,
 } from "~/modules/programme/public-programme-service.server";
 import {
-  PublicAgendaSurface,
-  PublicSpeakerGallerySurface,
-} from "./public-programme-surfaces";
+  eventHeroImagePath,
+  type PublicProgrammeModel,
+  sessionSpeakerDetails,
+  speakerAffiliation,
+} from "./public-programme-model";
 import {
   PublicSpeakerAvatar,
   PublicSpeakerShareActions,
   SaveSessionButton,
 } from "./public-programme-parts";
 import {
-  eventHeroImagePath,
-  sessionSpeakerDetails,
-  speakerAffiliation,
-  type PublicProgrammeModel,
-} from "./public-programme-model";
+  PublicAgendaSurface,
+  PublicSpeakerGallerySurface,
+} from "./public-programme-surfaces";
 
 const speaker: PublishedSpeaker = {
   id: "person-priya",

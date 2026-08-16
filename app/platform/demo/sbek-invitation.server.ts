@@ -1,5 +1,5 @@
-import { SBEK_FIXTURE_PEOPLE, isSbekFixturePerson } from "./demo-identities";
 import type { ViewerRole } from "~/platform/auth/authorize.server";
+import { isSbekFixturePerson, SBEK_FIXTURE_PEOPLE } from "./demo-identities";
 
 type DemoInvitationActivation = {
   membershipId: string;

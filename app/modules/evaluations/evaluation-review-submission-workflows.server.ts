@@ -12,8 +12,8 @@ import {
   reviewerAiCriterionSuggestionsSchema,
   reviewDraftSchema,
 } from "./evaluation-schema";
-import { reviewableSubmissionSql } from "./evaluation-submission-review-eligibility.server";
 import { EvaluationServiceFoundation } from "./evaluation-service-foundation.server";
+import { reviewableSubmissionSql } from "./evaluation-submission-review-eligibility.server";
 
 async function reviewSourceSnapshotHash(value: string) {
   const digest = await crypto.subtle.digest(

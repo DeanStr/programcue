@@ -1,7 +1,5 @@
 import { data, redirect } from "react-router";
 import { ZodError } from "zod";
-
-import type { Route } from "./+types/operation-centre";
 import {
   AirtableProjectionRecoveryError,
   AirtableProjectionRecoveryService,
@@ -14,14 +12,15 @@ import {
   DataImportStateError,
 } from "~/platform/operations/data-import-service.server";
 import {
+  activityAreas,
   OperationNotFoundError,
   OperationQueueUnavailableError,
   OperationService,
   OperationStateError,
-  activityAreas,
 } from "~/platform/operations/operation-service.server";
 import { EventRealtimeService } from "~/platform/realtime/event-realtime.server";
 import { notifyRouteChange } from "~/platform/realtime/route-realtime.server";
+import type { Route } from "./+types/operation-centre";
 
 const exportResources = [
   "people",

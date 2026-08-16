@@ -1,13 +1,13 @@
 import type { ScheduleCalendarFanoutMessage } from "~/modules/calendars/calendar-schema";
 import { scheduleCalendarFanoutSnapshotStatements } from "~/modules/calendars/calendar-service.server";
+import type { ScheduleConflict } from "./schedule-rules";
+import type { schedulePublishSchema } from "./schedule-schema";
 import type {
   ScheduleAuditActor,
   ScheduleEventScope,
   SchedulePublicationCommand,
   ScheduleWorkspace,
 } from "./schedule-service.server";
-import type { ScheduleConflict } from "./schedule-rules";
-import type { schedulePublishSchema } from "./schedule-schema";
 
 export function buildSchedulePublicationStatements(input: {
   env: CloudflareEnvironment;

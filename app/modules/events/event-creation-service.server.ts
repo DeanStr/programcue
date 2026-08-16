@@ -13,9 +13,9 @@ import { INITIAL_EVENT_SESSION_FORMATS_JSON } from "~/modules/events/event-confi
 import {
   EVENT_CREATION_STALLED_CODE,
   EVENT_CREATION_STALLED_MESSAGE,
-  eventRepositoryProvisioningFailureMessage,
   EventRepositoryProvisioningError,
   EventRepositoryProvisioningService,
+  eventRepositoryProvisioningFailureMessage,
 } from "~/modules/events/event-repository-provisioning.server";
 import { timezoneSchema } from "~/modules/events/event-schema";
 import { CANONICAL_EVENT_FILE_POLICY_JSON } from "~/modules/files/file-policy";

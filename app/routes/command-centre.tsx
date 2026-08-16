@@ -7,35 +7,34 @@ import {
 } from "lucide-react";
 import { Fragment, useEffect, useState } from "react";
 import { Link, useRevalidator } from "react-router";
-
-import type { Route } from "./+types/command-centre";
-import { DomainStatusBadge } from "~/components/ui/domain-status-badge";
-import { EventDateTime } from "~/components/ui/event-date-time";
-import { PageHeader } from "~/components/ui/page-header";
 import {
   AdminPageSection,
   AdminPageSectionNavigation,
 } from "~/components/ui/admin-page-sections";
-import { EmptyState } from "~/components/ui/states";
+import { DomainStatusBadge } from "~/components/ui/domain-status-badge";
+import { EventDateTime } from "~/components/ui/event-date-time";
+import { PageHeader } from "~/components/ui/page-header";
 import { ReadinessWeightingNote } from "~/components/ui/readiness-weighting";
+import { EmptyState } from "~/components/ui/states";
 import { StatusBadge } from "~/components/ui/status-badge";
+import { AiAssistantService } from "~/modules/ai/ai-assistant-service.server";
 import {
   ReadinessSummaryAction,
   ReminderDraftAction,
 } from "~/modules/ai/contextual-ai-actions";
-import { AiAssistantService } from "~/modules/ai/ai-assistant-service.server";
 import { ensureDemoEvaluationData } from "~/modules/evaluations/demo.server";
-import {
-  ReadinessService,
-  type DeliveryChannel,
-} from "~/modules/readiness/readiness-service.server";
 import { groupProgrammeSetupSteps } from "~/modules/readiness/programme-workflow-phases";
+import {
+  type DeliveryChannel,
+  ReadinessService,
+} from "~/modules/readiness/readiness-service.server";
 import { requireCurrentEventRole } from "~/platform/auth/current-event.server";
 import { getCloudflareContext } from "~/platform/cloudflare-context";
 import {
-  subscribeToEventChanges,
   type RealtimeTransportStatus,
+  subscribeToEventChanges,
 } from "~/platform/realtime/realtime-client";
+import type { Route } from "./+types/command-centre";
 
 export const meta: Route.MetaFunction = () => [
   { title: "Command Centre · Program Cue" },

@@ -1,14 +1,14 @@
 import {
-  SubmissionRevisionConflictError,
-  SubmissionStateError,
   type Applicant,
   type FormSummary,
   type FormVersion,
+  SubmissionRevisionConflictError,
+  SubmissionStateError,
   type SubmittedRevisionCommand,
 } from "./submission-repository-shared";
 import {
-  submittedSnapshotSchema,
   type DraftPayload,
+  submittedSnapshotSchema,
 } from "./submission-schema";
 
 export type PersistedRevisionSpeaker = {

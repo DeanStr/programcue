@@ -3,12 +3,12 @@ import { beforeEach, describe, expect, it } from "vitest";
 
 import type { Viewer } from "~/platform/auth/authorize.server";
 import { ensureDemoData } from "~/platform/demo/seed.server";
+import { requireApiKey } from "./api.server";
 import {
   ApiKeyNameConflictError,
   ApiKeyService,
 } from "./api-key-service.server";
 import { apiKeyLifecycleState } from "./api-key-state";
-import { requireApiKey } from "./api.server";
 
 const viewer: Viewer = {
   personId: "person-demo-admin",

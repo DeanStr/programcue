@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest";
-
+import type { CommandRecord } from "~/platform/operations/command-palette-service.server";
 import {
-  adminCommandRecordsForKey,
   adminCommandRecordSelection,
+  adminCommandRecordsForKey,
   adminCommandSearchKey,
   adminPageBreadcrumbs,
   canOpenAdminAssistant,
@@ -12,7 +12,6 @@ import {
   primaryNavigationItemActive,
   primaryNavigationItemExpanded,
 } from "./admin-shell";
-import type { CommandRecord } from "~/platform/operations/command-palette-service.server";
 
 describe("administrator navigation context", () => {
   it("keeps an event section and current workflow in detail breadcrumbs", () => {

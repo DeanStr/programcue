@@ -1,7 +1,6 @@
 import { Form } from "react-router";
 
 import { useEvaluationAdminModel } from "~/components/evaluation-admin-model";
-import { AdminPageSection } from "~/components/ui/admin-page-sections";
 import {
   AcceptedSpeakerInvitationsPanel,
   EvaluationModerationPanel,
@@ -10,13 +9,15 @@ import {
   EvaluationSubmissionQueue,
   EvaluationUnifiedResults,
 } from "~/components/evaluation-admin-queue-panels";
+import { EvaluationDiscussionPanel } from "~/components/evaluation-discussion-panel";
 
 import { EvaluationMetrics } from "~/components/evaluation-metrics";
-import { EvaluationDiscussionPanel } from "~/components/evaluation-discussion-panel";
 import { EvaluationReviewCyclePanel } from "~/components/evaluation-review-cycle-panel";
 import { EvaluationRoundsPanel } from "~/components/evaluation-rounds-panel";
 import { RubricFields } from "~/components/evaluation-rubric-fields";
 import { EvaluationTeamsPanel } from "~/components/evaluation-teams-panel";
+import { AdminPageSection } from "~/components/ui/admin-page-sections";
+
 const defaultRubric = [
   {
     name: "Relevance",

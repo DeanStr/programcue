@@ -10,9 +10,9 @@ import {
   SpeakerRosterImportService,
 } from "~/modules/speakers/speaker-roster-import.server";
 import {
+  type AdminSpeakerFilters,
   SpeakerAdminStateError,
   SpeakerService,
-  type AdminSpeakerFilters,
 } from "~/modules/speakers/speaker-service.server";
 import { requireCurrentEventRole } from "~/platform/auth/current-event.server";
 import { getCloudflareContext } from "~/platform/cloudflare-context";

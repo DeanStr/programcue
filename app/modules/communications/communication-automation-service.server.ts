@@ -6,13 +6,13 @@ import {
 } from "~/modules/airtable/airtable-provider-boundary.server";
 import type { Viewer } from "~/platform/auth/authorize.server";
 import { sourceRevisionForLog } from "~/platform/observability/source-revision.server";
-import {
-  communicationTriggerConfigurationSchema,
-  saveCommunicationTriggerSchema,
-  type AudienceType,
-  type SaveCommunicationTriggerInput,
-} from "./communication-schema";
 import { CommunicationDeliveryService } from "./communication-delivery-service.server";
+import {
+  type AudienceType,
+  communicationTriggerConfigurationSchema,
+  type SaveCommunicationTriggerInput,
+  saveCommunicationTriggerSchema,
+} from "./communication-schema";
 import {
   assertMergeAudienceCompatible,
   CommunicationQueueUnavailableError,

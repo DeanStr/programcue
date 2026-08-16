@@ -1,13 +1,12 @@
 import { env } from "cloudflare:test";
 import { beforeEach, describe, expect, it } from "vitest";
-
+import { CANONICAL_EVENT_FILE_POLICY_JSON } from "~/modules/files/file-policy";
 import {
   acceptEventInvitation,
   requireEventRole,
   type Viewer,
 } from "~/platform/auth/authorize.server";
 import { ensureDemoData } from "~/platform/demo/seed.server";
-import { CANONICAL_EVENT_FILE_POLICY_JSON } from "~/modules/files/file-policy";
 import { DataImportService } from "~/platform/operations/data-import-service.server";
 
 const viewer: Viewer = {

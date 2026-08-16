@@ -1,8 +1,6 @@
 import { CheckCircle2, History, RotateCcw } from "lucide-react";
 import { data, Form, Link, useActionData } from "react-router";
 import { ZodError } from "zod";
-
-import type { Route } from "./+types/admin-content-session";
 import { DomainStatusBadge } from "~/components/ui/domain-status-badge";
 import { EventDateTime } from "~/components/ui/event-date-time";
 import {
@@ -12,6 +10,7 @@ import {
 import { requireCurrentEventRole } from "~/platform/auth/current-event.server";
 import { getCloudflareContext } from "~/platform/cloudflare-context";
 import { recordRouteChange } from "~/platform/realtime/route-realtime.server";
+import type { Route } from "./+types/admin-content-session";
 
 async function administrator(
   request: Request,

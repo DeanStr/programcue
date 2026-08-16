@@ -2,12 +2,12 @@ import { z } from "zod";
 
 import {
   AiConfigurationError,
+  type AiModelProvider,
   AiProviderError,
   aiProviderResponseSchema,
-  openAiOutputText,
-  type AiModelProvider,
   type OpenAiResponse,
   type OpenAiResponsesRequest,
+  openAiOutputText,
 } from "./openai-responses-provider.server";
 
 export const WORKERS_AI_MODEL =

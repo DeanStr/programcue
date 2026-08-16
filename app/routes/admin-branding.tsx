@@ -6,17 +6,15 @@ import {
   Smartphone,
   UserRound,
 } from "lucide-react";
-import { useEffect, useMemo, useState, type CSSProperties } from "react";
+import { type CSSProperties, useEffect, useMemo, useState } from "react";
 import {
-  Form,
   data,
+  Form,
   useActionData,
   useNavigation,
   useSubmit,
 } from "react-router";
 import { ZodError } from "zod";
-
-import type { Route } from "./+types/admin-branding";
 import { BrandMark } from "~/components/brand-mark";
 import { useConfirm } from "~/components/ui/confirm-dialog";
 import { DEFAULT_EVENT_BRAND_ACCENT } from "~/lib/brand";
@@ -26,8 +24,8 @@ import {
   type EventBrandAssetKind,
 } from "~/modules/events/event-branding";
 import {
-  EventBrandingAuditCommitError,
   EventBrandingAssetError,
+  EventBrandingAuditCommitError,
   EventBrandingChangeCommitError,
   EventBrandingCleanupIntegrityError,
   EventBrandingNotFoundError,
@@ -39,6 +37,7 @@ import { programmeAccentPalette } from "~/modules/programme/programme-presentati
 import { requireCurrentEventRole } from "~/platform/auth/current-event.server";
 import { getCloudflareContext } from "~/platform/cloudflare-context";
 import { notifyRouteChange } from "~/platform/realtime/route-realtime.server";
+import type { Route } from "./+types/admin-branding";
 
 export const meta: Route.MetaFunction = () => [
   { title: "Branding · Program Cue" },

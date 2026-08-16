@@ -1,7 +1,6 @@
 import { describe, expect, it } from "vitest";
-
-import type { SpeakerPortal } from "./speaker-dashboard-panel-shared";
 import { speakerMilestones } from "./speaker-dashboard-overview";
+import type { SpeakerPortal } from "./speaker-dashboard-panel-shared";
 
 function portal(overrides: Partial<SpeakerPortal> = {}) {
   return {

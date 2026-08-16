@@ -1,8 +1,7 @@
 import { env } from "cloudflare:test";
 import { afterAll, describe, expect, it } from "vitest";
-
-import type { Viewer } from "~/platform/auth/authorize.server";
 import { formSchemaSchema } from "~/modules/submissions/submission-schema";
+import type { Viewer } from "~/platform/auth/authorize.server";
 import { ensureDemoEvaluationData } from "./demo.server";
 import { EvaluationService } from "./evaluation-service.server";
 

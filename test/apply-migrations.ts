@@ -1,4 +1,4 @@
-import { applyD1Migrations, env, type D1Migration } from "cloudflare:test";
+import { applyD1Migrations, type D1Migration, env } from "cloudflare:test";
 
 declare global {
   namespace Cloudflare {

@@ -3,8 +3,8 @@ import { useEffect, useState } from "react";
 import { Link, useActionData, useRevalidator } from "react-router";
 
 import {
-  subscribeToEventChanges,
   type RealtimeTransportStatus,
+  subscribeToEventChanges,
 } from "~/platform/realtime/realtime-client";
 import type { action } from "~/routes/operation-centre.server";
 import {

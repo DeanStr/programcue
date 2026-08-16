@@ -1,30 +1,29 @@
 import { Bot, CheckCircle2, ShieldCheck, Sparkles } from "lucide-react";
-import { useState, type FormEvent } from "react";
+import { type FormEvent, useState } from "react";
 import {
+  type ActionFunctionArgs,
   data,
   Form,
   Link,
+  type LoaderFunctionArgs,
+  type MetaFunction,
   useActionData,
   useLoaderData,
   useNavigation,
-  type ActionFunctionArgs,
-  type LoaderFunctionArgs,
-  type MetaFunction,
 } from "react-router";
 import { ZodError } from "zod";
-
+import { PageHeader } from "~/components/ui/page-header";
+import { StatusNotice } from "~/components/ui/status-notice";
 import type { AiAssistantService } from "~/modules/ai/ai-assistant-service.server";
 import { WORKERS_AI_MODEL } from "~/modules/ai/ai-provider.server";
-import { getProgramCueEventAgent } from "~/modules/ai/program-cue-agent-client.server";
+import type { AiAssistantResult } from "~/modules/ai/ai-types";
 import {
   AssistantResultPanel,
   ProposalApproval,
 } from "~/modules/ai/assistant-result-panel";
-import type { AiAssistantResult } from "~/modules/ai/ai-types";
-import { PageHeader } from "~/components/ui/page-header";
-import { StatusNotice } from "~/components/ui/status-notice";
-import { requireCurrentEventRole } from "~/platform/auth/current-event.server";
+import { getProgramCueEventAgent } from "~/modules/ai/program-cue-agent-client.server";
 import { correlationId } from "~/platform/api/api.server";
+import { requireCurrentEventRole } from "~/platform/auth/current-event.server";
 import { getCloudflareContext } from "~/platform/cloudflare-context";
 
 export const meta: MetaFunction = () => [

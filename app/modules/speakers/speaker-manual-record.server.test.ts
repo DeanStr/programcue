@@ -1,10 +1,9 @@
 import { env } from "cloudflare:test";
 import { beforeEach, describe, expect, it } from "vitest";
-
-import type { Viewer } from "~/platform/auth/authorize.server";
-import { ensureDemoData } from "~/platform/demo/seed.server";
-import { SBEK_FIXTURE_PEOPLE } from "~/platform/demo/demo-identities";
 import type { AirtableProviderBoundary } from "~/modules/airtable/airtable-provider-boundary.server";
+import type { Viewer } from "~/platform/auth/authorize.server";
+import { SBEK_FIXTURE_PEOPLE } from "~/platform/demo/demo-identities";
+import { ensureDemoData } from "~/platform/demo/seed.server";
 import { SpeakerService } from "./speaker-service.server";
 
 declare module "cloudflare:test" {

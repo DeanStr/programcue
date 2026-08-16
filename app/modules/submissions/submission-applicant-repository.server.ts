@@ -1,23 +1,23 @@
-import type { PreparedApplicantMutationEvent } from "./submission-applicant-events.server";
 import type { EvaluatorEmailRouting } from "~/platform/evaluation/evaluator-email-alias.server";
+import type { PreparedApplicantMutationEvent } from "./submission-applicant-events.server";
 import { SubmissionCoSpeakerRepository } from "./submission-co-speaker-repository.server";
 import { SubmissionDraftFinalizer } from "./submission-draft-finalizer.server";
-import { SubmissionRevisionFinalizer } from "./submission-revision-finalizer.server";
 import {
-  mapVersion,
-  SubmissionRevisionConflictError,
-  SubmissionStateError,
   type Applicant,
   type ApplicantDraft,
   type FormSummary,
   type FormVersion,
+  mapVersion,
+  SubmissionRevisionConflictError,
+  SubmissionStateError,
   type SubmittedRevisionCommand,
   type VersionRow,
 } from "./submission-repository-shared";
+import { SubmissionRevisionFinalizer } from "./submission-revision-finalizer.server";
 import {
+  type DraftPayload,
   speakerInputSchema,
   submittedSnapshotSchema,
-  type DraftPayload,
 } from "./submission-schema";
 
 export class SubmissionApplicantRepository {

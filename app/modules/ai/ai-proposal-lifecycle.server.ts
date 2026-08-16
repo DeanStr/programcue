@@ -1,17 +1,16 @@
 import { z } from "zod";
-
+import type { Viewer } from "~/platform/auth/authorize.server";
 import {
   AiPermissionError,
   AiProposalNotFoundError,
   AiProposalStateError,
 } from "./ai-assistant-errors";
+import { AiClaimedProposalExecutor } from "./ai-claimed-proposal-executor.server";
 import {
   assistantProposalMetadataSchema,
   prepareReminderSendProposal,
 } from "./ai-tools.server";
-import type { Viewer } from "~/platform/auth/authorize.server";
 import { AiProviderError } from "./openai-responses-provider.server";
-import { AiClaimedProposalExecutor } from "./ai-claimed-proposal-executor.server";
 
 const PROPOSAL_LIFETIME_SECONDS = 24 * 60 * 60;
 const PROPOSAL_EXECUTION_LEASE_SECONDS = 5 * 60;

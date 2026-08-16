@@ -3,7 +3,7 @@ import { readdir, readFile } from "node:fs/promises";
 import { dirname, relative, resolve } from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
-
+import { nodeOnlyTestFiles } from "../vitest.test-files.ts";
 import {
   CHECKED_IN_SECRET_NAMES,
   REQUIRED_PRODUCTION_SECRET_NAMES,
@@ -13,12 +13,11 @@ import {
   readDeploymentConfigs,
   validateDeploymentConfigs,
 } from "./validate-deploy-config.mjs";
+import { missingRequiredSecretNames } from "./validate-deploy-secrets.mjs";
 import {
   readScannerConfig,
   validateScannerConfig,
 } from "./validate-scanner-config.mjs";
-import { missingRequiredSecretNames } from "./validate-deploy-secrets.mjs";
-import { nodeOnlyTestFiles } from "../vitest.test-files.ts";
 
 const repositoryRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const ignoredTestDiscoveryDirectories = new Set([

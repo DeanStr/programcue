@@ -7,9 +7,9 @@ import type {
 import type { Viewer } from "~/platform/auth/authorize.server";
 import {
   AirtableClient,
+  type AirtableRecord,
   airtableAndFormula,
   airtableEqualsFormula,
-  type AirtableRecord,
 } from "./airtable-client.server";
 import {
   AirtableRepositoryReconciliationError,

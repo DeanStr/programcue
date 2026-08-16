@@ -1,37 +1,43 @@
+import type { CSSProperties } from "react";
 import {
   data,
   isRouteErrorResponse,
-  useRouteError,
   type ShouldRevalidateFunctionArgs,
+  useRouteError,
 } from "react-router";
-import type { CSSProperties } from "react";
-
-import type { Route } from "./+types/public-programme";
+import {
+  onlyClientSearchParametersChanged,
+  PUBLIC_PROGRAMME_CLIENT_SEARCH_PARAMETERS,
+} from "~/lib/client-search-revalidation";
 import {
   ProgrammeEmbedConfigurationError,
-  programmeEmbedSearchConfiguration,
-  parseProgrammeEmbedSurface,
   parseProgrammeEmbedSearchParameters,
+  parseProgrammeEmbedSurface,
+  programmeEmbedSearchConfiguration,
 } from "~/modules/programme/programme-embed-configuration";
 import {
   ProgrammeEmbedService,
   ProgrammeEmbedStateError,
 } from "~/modules/programme/programme-embed-service.server";
-import { eventLocalCalendarDate } from "~/modules/schedule/schedule-time";
 import {
   PUBLIC_PROGRAMME_SURFACES,
   type PublicProgrammeSurface,
 } from "~/modules/programme/programme-presentation";
 import {
-  PublishedProgrammeItineraryExpiredError,
-  PublishedProgrammeItineraryNotFoundError,
-  PublishedProgrammeSessionNotFoundError,
-  PublicProgrammeService,
-} from "~/modules/programme/public-programme-service.server";
-import {
   itineraryCookie,
   publicItineraryIdentity,
 } from "~/modules/programme/public-itinerary-identity.server";
+import {
+  PublicProgrammeService,
+  PublishedProgrammeItineraryExpiredError,
+  PublishedProgrammeItineraryNotFoundError,
+  PublishedProgrammeSessionNotFoundError,
+} from "~/modules/programme/public-programme-service.server";
+import { eventLocalCalendarDate } from "~/modules/schedule/schedule-time";
+import {
+  publishedProgrammeCacheHeaders,
+  publishedProgrammeNotModified,
+} from "~/platform/api/api-public-programme.server";
 import { getCloudflareContext } from "~/platform/cloudflare-context";
 import { DEMO_EVENT_ID } from "~/platform/demo/demo-identities";
 import {
@@ -43,14 +49,7 @@ import {
   TurnstileRejectedError,
   TurnstileUnavailableError,
 } from "~/platform/http/public-abuse-protection.server";
-import {
-  publishedProgrammeCacheHeaders,
-  publishedProgrammeNotModified,
-} from "~/platform/api/api-public-programme.server";
-import {
-  onlyClientSearchParametersChanged,
-  PUBLIC_PROGRAMME_CLIENT_SEARCH_PARAMETERS,
-} from "~/lib/client-search-revalidation";
+import type { Route } from "./+types/public-programme";
 
 export function shouldRevalidate({
   currentUrl,

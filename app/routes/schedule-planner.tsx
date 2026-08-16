@@ -1,11 +1,10 @@
 import type { ShouldRevalidateFunctionArgs } from "react-router";
-
-import type { Route } from "./+types/schedule-planner";
 import { SchedulePlannerWorkspace } from "~/components/schedule-planner-workspace";
 import {
   onlyClientSearchParametersChanged,
   SCHEDULE_SOURCE_CLIENT_SEARCH_PARAMETERS,
 } from "~/lib/client-search-revalidation";
+import type { Route } from "./+types/schedule-planner";
 
 export { action, loader } from "./schedule-planner.server";
 

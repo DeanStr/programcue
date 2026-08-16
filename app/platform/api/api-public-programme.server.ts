@@ -6,19 +6,19 @@ import type {
   PublishedSpeaker,
 } from "~/modules/programme/public-programme-service.server";
 import {
+  PublicProgrammeService,
+  PublishedProgrammeSnapshotInvariantError,
   parsePublishedSpeakerArray,
   parsePublishedSpeakerSessionIds,
-  PublishedProgrammeSnapshotInvariantError,
-  PublicProgrammeService,
 } from "~/modules/programme/public-programme-service.server";
-import { ensureDemoProgramme } from "~/platform/demo/seed.server";
 import { PublishedHeadshotService } from "~/modules/programme/published-headshot-service.server";
+import { ensureDemoProgramme } from "~/platform/demo/seed.server";
+import { ApiError } from "./api.server";
 import {
   decodePublicCursor,
   encodePublicCursor,
   isoTimestamp,
 } from "./api-pagination.server";
-import { ApiError } from "./api.server";
 
 const limitSchema = z
   .string()

@@ -1,10 +1,5 @@
-import { z, ZodError } from "zod";
-
-import type { Route } from "./+types/api-participant-submission-command";
-import {
-  PublicFormUnavailableError,
-  SubmissionService,
-} from "~/modules/submissions/submission-service.server";
+import { ZodError, z } from "zod";
+import { acceptedCoSpeakerInvitationSchema } from "~/modules/submissions/submission-co-speaker-workflows.server";
 import {
   SubmissionDraftSavedError,
   SubmissionRevisionConflictError,
@@ -14,8 +9,10 @@ import {
   speakerInputSchema,
   uploadReferenceSchema,
 } from "~/modules/submissions/submission-schema";
-import { acceptedCoSpeakerInvitationSchema } from "~/modules/submissions/submission-co-speaker-workflows.server";
-import { ApiParticipantService } from "~/platform/api/api-participant-service.server";
+import {
+  PublicFormUnavailableError,
+  SubmissionService,
+} from "~/modules/submissions/submission-service.server";
 import {
   ApiError,
   apiFailure,
@@ -25,9 +22,11 @@ import {
   readJson,
   requireIdempotencyKey,
 } from "~/platform/api/api.server";
+import { ApiParticipantService } from "~/platform/api/api-participant-service.server";
 import { requireEventRole } from "~/platform/auth/authorize.server";
 import { getCloudflareContext } from "~/platform/cloudflare-context";
 import { WebhookService } from "~/platform/operations/webhook-service.server";
+import type { Route } from "./+types/api-participant-submission-command";
 
 const commandSchema = z.enum(["submit", "withdraw", "invite-co-speaker"]);
 const answerSchema = z.union([

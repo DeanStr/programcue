@@ -1,12 +1,10 @@
 import { redirect } from "react-router";
-
-import { createAuth } from "./auth.server";
 import {
-  DEMO_IDENTITY_COOKIE,
   DEMO_IDENTITIES,
+  DEMO_IDENTITY_COOKIE,
+  type DemoIdentityKey,
   ensureDemoData,
   isDemoIdentityKey,
-  type DemoIdentityKey,
 } from "~/platform/demo/seed.server";
 import {
   EVALUATION_ORGANISATION_ID,
@@ -14,6 +12,7 @@ import {
   readEvaluationSession,
 } from "~/platform/evaluation/evaluation-session.server";
 import { requireRuntimeMode } from "~/platform/runtime-environment.server";
+import { createAuth } from "./auth.server";
 
 export type ViewerRole =
   | "owner"

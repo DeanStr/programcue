@@ -1,4 +1,4 @@
-import { expect, test, type Page } from "@playwright/test";
+import { expect, type Page, test } from "@playwright/test";
 
 import { e2eOrigin } from "./support/e2e-origin";
 import { openRecordPanel } from "./support/open-record-panel";

@@ -1,9 +1,9 @@
 import {
   EVENT_CHANGE_MAX_POLL_INTERVAL_MS,
   EVENT_CHANGE_POLL_INTERVAL_MS,
-  isEventChangeSummary,
   type EventChangePage,
   type EventChangeSummary,
+  isEventChangeSummary,
 } from "./realtime-types";
 
 export type RealtimeInvalidationOptions = {

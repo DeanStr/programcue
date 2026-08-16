@@ -1,6 +1,4 @@
 import { redirect } from "react-router";
-
-import type { Route } from "./+types/demo-role";
 import { currentEventCookie } from "~/platform/auth/current-event.server";
 import { safeReturnTo } from "~/platform/auth/return-to";
 import { getCloudflareContext } from "~/platform/cloudflare-context";
@@ -10,6 +8,7 @@ import {
   isDemoIdentityKey,
 } from "~/platform/demo/demo-identities";
 import { resolveDemoIdentityState } from "~/platform/demo/demo-identity.server";
+import type { Route } from "./+types/demo-role";
 
 export async function action({ request, context }: Route.ActionArgs) {
   if (request.method !== "POST") {

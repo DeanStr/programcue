@@ -1,4 +1,5 @@
 import { Command } from "cmdk";
+import type { LucideIcon } from "lucide-react";
 import {
   Activity,
   BookOpen,
@@ -16,17 +17,16 @@ import {
   UserRound,
   X,
 } from "lucide-react";
-import type { LucideIcon } from "lucide-react";
 import type { RefObject } from "react";
 
 import type { CommandRecord } from "~/platform/operations/command-palette-service.server";
-import { Dialog } from "./dialog";
 import type {
   AdminCommandSearchScope,
   AdminNavigationItem,
   AdminShellCommandPalette,
   AdminShellDialog,
 } from "./admin-shell";
+import { Dialog } from "./dialog";
 
 function recordIcon(kind: CommandRecord["kind"]) {
   switch (kind) {

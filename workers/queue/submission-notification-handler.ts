@@ -1,8 +1,8 @@
 import { z } from "zod";
 
 import { templateContentSchema } from "../../app/modules/communications/communication-schema";
-import { requireEmailProviderConfiguration } from "../../app/modules/communications/email-provider.server";
 import { communicationDeliveryIdempotencyKey } from "../../app/modules/communications/communication-service-shared";
+import { requireEmailProviderConfiguration } from "../../app/modules/communications/email-provider.server";
 import { processCommunicationSend } from "./communication-send";
 import type { QueueProviderDependencies } from "./handler-types";
 import { markTriggerFailure } from "./notification-failure";

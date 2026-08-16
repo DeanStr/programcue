@@ -1,10 +1,10 @@
-import type { ScheduleWorkspace } from "./schedule-service.server";
 import { ScheduleConfigurationError } from "./schedule-errors";
 import {
   detectScheduleConflicts,
   type ScheduleConflict,
   type ScheduledItem,
 } from "./schedule-rules";
+import type { ScheduleWorkspace } from "./schedule-service.server";
 import {
   eventCalendarDayBoundaries,
   eventDayUsableScheduleSlots,

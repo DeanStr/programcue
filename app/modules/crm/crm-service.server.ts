@@ -1,11 +1,4 @@
 import { z } from "zod";
-
-import {
-  createCrmContactSchema,
-  crmFiltersSchema,
-  crmPersonIdSchema,
-  type CrmFilters,
-} from "./crm-schema";
 import type { OrganisationAdministrator } from "~/platform/auth/organisation.server";
 import {
   CONTACT_IDENTITY_INVARIANT_MESSAGE,
@@ -22,6 +15,12 @@ import { CrmImportService } from "./crm-import-service.server";
 import { CrmMergeService } from "./crm-merge-service.server";
 import { CrmOutreachService } from "./crm-outreach-service.server";
 import { CrmPipelineService } from "./crm-pipeline-service.server";
+import {
+  type CrmFilters,
+  createCrmContactSchema,
+  crmFiltersSchema,
+  crmPersonIdSchema,
+} from "./crm-schema";
 
 const PAGE_SIZE = 100;
 

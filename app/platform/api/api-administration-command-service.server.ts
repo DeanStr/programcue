@@ -1,14 +1,14 @@
 import { z } from "zod";
 
 import type { Viewer } from "~/platform/auth/authorize.server";
+import type { Family } from "./api-administration-command-foundation.server";
+import { ApiAdministrationDomainCommands } from "./api-administration-domain-commands.server";
+import { ApiAdministrationIntegrationCommands } from "./api-administration-integration-commands.server";
+import { ApiAdministrationPeopleCommands } from "./api-administration-people-commands.server";
 import {
   apiAdministrationCommandSchema,
   apiAdministrationFamilySchema,
 } from "./api-command-contract";
-import type { Family } from "./api-administration-command-foundation.server";
-import { ApiAdministrationPeopleCommands } from "./api-administration-people-commands.server";
-import { ApiAdministrationDomainCommands } from "./api-administration-domain-commands.server";
-import { ApiAdministrationIntegrationCommands } from "./api-administration-integration-commands.server";
 
 const identifierSchema = z.string().trim().min(1).max(300);
 

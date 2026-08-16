@@ -1,12 +1,12 @@
 import type { Viewer } from "~/platform/auth/authorize.server";
 import { ScheduleRevisionConflictError } from "./schedule-errors";
+import { ScheduleNotesWorkflow } from "./schedule-notes-workflow.server";
+import type { SchedulePolicies } from "./schedule-rules";
+import { schedulePolicySchema } from "./schedule-schema";
 import {
   detectWorkspaceConflicts,
   schedulePolicyAction,
 } from "./schedule-workspace.server";
-import type { SchedulePolicies } from "./schedule-rules";
-import { schedulePolicySchema } from "./schedule-schema";
-import { ScheduleNotesWorkflow } from "./schedule-notes-workflow.server";
 
 export abstract class SchedulePolicyWorkflow extends ScheduleNotesWorkflow {
   async updatePoliciesD1(viewer: Viewer, input: unknown) {

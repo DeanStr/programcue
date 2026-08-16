@@ -1,5 +1,5 @@
-import type { Viewer } from "~/platform/auth/authorize.server";
 import { AirtableProviderBoundary } from "~/modules/airtable/airtable-provider-boundary.server";
+import type { Viewer } from "~/platform/auth/authorize.server";
 
 export type AdminProgrammeRow = {
   id: string;

@@ -4,12 +4,12 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { AirtableProviderBoundary } from "~/modules/airtable/airtable-provider-boundary.server";
 import { CommunicationService } from "~/modules/communications/communication-service.server";
 import type { Viewer } from "~/platform/auth/authorize.server";
+import { ensureDemoProgramme } from "~/platform/demo/seed.server";
 import { ensureDemoEvaluationData } from "./demo.server";
 import {
   EvaluationService,
   EvaluationStateError,
 } from "./evaluation-service.server";
-import { ensureDemoProgramme } from "~/platform/demo/seed.server";
 
 const admin: Viewer = {
   personId: "person-demo-admin",

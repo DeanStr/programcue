@@ -1,6 +1,4 @@
-import { z, ZodError } from "zod";
-
-import type { Route } from "./+types/api-accelevents-exports";
+import { ZodError, z } from "zod";
 import {
   IntegrationService,
   IntegrationStateError,
@@ -16,6 +14,7 @@ import {
   requireIdempotencyKey,
 } from "~/platform/api/api.server";
 import { getCloudflareContext } from "~/platform/cloudflare-context";
+import type { Route } from "./+types/api-accelevents-exports";
 
 const connectionIdSchema = z.string().trim().min(1).max(200);
 const previewFingerprintSchema = z.string().regex(/^[a-f0-9]{64}$/);

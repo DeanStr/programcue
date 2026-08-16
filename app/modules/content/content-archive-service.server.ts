@@ -2,6 +2,7 @@ import { z } from "zod";
 
 import { safeDownloadName } from "~/modules/files/file-policy";
 import type { Viewer } from "~/platform/auth/authorize.server";
+import { ContentManagementStateError } from "./content-management-errors";
 import {
   contentZipConfirmSchema,
   contentZipPreviewSchema,
@@ -10,8 +11,6 @@ import {
   createStoredZipStream,
   type StoredZipEntry,
 } from "./zip-stream.server";
-
-import { ContentManagementStateError } from "./content-management-errors";
 
 const MAX_ZIP_BYTES = 100 * 1024 * 1024;
 

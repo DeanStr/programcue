@@ -1,8 +1,8 @@
-import type { Viewer } from "~/platform/auth/authorize.server";
 import { eventLocalCalendarDate } from "~/modules/schedule/schedule-time";
+import type { Viewer } from "~/platform/auth/authorize.server";
 import {
-  parsePersistedProgrammeEmbedConfiguration,
   type ProgrammeEmbedConfiguration,
+  parsePersistedProgrammeEmbedConfiguration,
 } from "./programme-embed-configuration";
 import { PublicProgrammeService } from "./public-programme-service.server";
 

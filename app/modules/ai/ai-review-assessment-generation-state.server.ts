@@ -1,10 +1,10 @@
 import { reviewableSubmissionSql } from "~/modules/evaluations/evaluation-submission-review-eligibility.server";
 import type { Viewer } from "~/platform/auth/authorize.server";
 import {
+  type GenerationOperationPayload,
   generationAttemptIdempotencyKey,
   parseFailedGenerationResult,
   parseGenerationOperationPayload,
-  type GenerationOperationPayload,
 } from "./ai-review-assessment-durable-state";
 import {
   AiReviewAssessmentIntentConflictError,
@@ -15,8 +15,8 @@ import {
   assertAssessmentAdministrator,
   epochSeconds,
   GENERATION_LEASE_SECONDS,
-  generationReconciliationInputSchema,
   type GenerationOperationRow,
+  generationReconciliationInputSchema,
 } from "./ai-review-assessment-support.server";
 
 export class AiReviewAssessmentGenerationState extends AiReviewAssessmentFoundation {

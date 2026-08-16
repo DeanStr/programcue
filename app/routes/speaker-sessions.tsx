@@ -1,7 +1,5 @@
 import { data, useActionData, useNavigation } from "react-router";
 import { ZodError } from "zod";
-
-import type { Route } from "./+types/speaker-sessions";
 import { SpeakerActionNotice } from "~/components/speaker-action-notice";
 import { SpeakerSessionsPanel } from "~/components/speaker-dashboard-overview";
 import { useSpeakerWorkspace } from "~/components/speaker-workspace-context";
@@ -11,6 +9,7 @@ import {
 } from "~/modules/speakers/speaker-service.server";
 import { requireSpeakerWorkspace } from "~/modules/speakers/speaker-workspace.server";
 import { recordRouteChange } from "~/platform/realtime/route-realtime.server";
+import type { Route } from "./+types/speaker-sessions";
 
 export const meta = () => [{ title: "My Sessions · Program Cue" }];
 

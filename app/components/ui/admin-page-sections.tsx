@@ -1,10 +1,10 @@
 import { ChevronDown } from "lucide-react";
 import {
+  type ReactNode,
   useEffect,
   useRef,
   useState,
   useSyncExternalStore,
-  type ReactNode,
 } from "react";
 
 const MOBILE_ADMIN_QUERY = "(max-width: 760px)";

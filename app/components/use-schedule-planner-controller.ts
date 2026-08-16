@@ -1,9 +1,9 @@
 import {
+  type DragEndEvent,
   KeyboardSensor,
   PointerSensor,
   useSensor,
   useSensors,
-  type DragEndEvent,
 } from "@dnd-kit/core";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useFetcher, useNavigation } from "react-router";
@@ -17,8 +17,6 @@ import {
 } from "~/modules/schedule/schedule-time";
 import type { action } from "~/routes/schedule-planner.server";
 import type { SchedulePlannerWorkspaceData } from "./schedule-planner-panel-types";
-import { useScheduleAutoPlacement } from "./use-schedule-auto-placement";
-import { useScheduleUndoAvailability } from "./use-schedule-undo-availability";
 import {
   conflictEntryIds,
   containingScheduleSlot,
@@ -27,6 +25,8 @@ import {
   parseScheduleActionNotices,
   scheduleDateTimeLabel,
 } from "./schedule-planner-workspace-helpers";
+import { useScheduleAutoPlacement } from "./use-schedule-auto-placement";
+import { useScheduleUndoAvailability } from "./use-schedule-undo-availability";
 
 export function useSchedulePlannerController(
   workspace: SchedulePlannerWorkspaceData,

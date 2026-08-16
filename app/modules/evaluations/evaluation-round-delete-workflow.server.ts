@@ -3,10 +3,9 @@ import {
   EvaluationRevisionConflictError,
   EvaluationStateError,
 } from "./evaluation-errors";
+import { hasRunningAiAssessmentForRound } from "./evaluation-round-workflow-support.server";
 import { evaluationRoundDeleteSchema } from "./evaluation-schema";
 import { EvaluationServiceFoundation } from "./evaluation-service-foundation.server";
-
-import { hasRunningAiAssessmentForRound } from "./evaluation-round-workflow-support.server";
 
 export class EvaluationRoundDeleteWorkflow extends EvaluationServiceFoundation {
   async deleteDraftRound(viewer: Viewer, input: unknown) {

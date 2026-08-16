@@ -1,24 +1,24 @@
-import type { Route } from "./+types/api-public-programme";
 import { programmeAccentPalette } from "~/modules/programme/programme-presentation";
 import {
   PublicProgrammeService,
   type PublishedProgramme,
 } from "~/modules/programme/public-programme-service.server";
 import {
-  publishedProgrammeCacheHeaders,
-  publishedProgrammeNotModified,
-  publicProgrammeQuerySchema,
-  publicProgrammeResponse,
-  requirePublishedProgramme,
-} from "~/platform/api/api-public-programme.server";
-import { parseStrictQuery } from "~/platform/api/api-pagination.server";
-import {
   ApiError,
   apiFailure,
   apiSuccess,
   correlationId,
 } from "~/platform/api/api.server";
+import { parseStrictQuery } from "~/platform/api/api-pagination.server";
+import {
+  publicProgrammeQuerySchema,
+  publicProgrammeResponse,
+  publishedProgrammeCacheHeaders,
+  publishedProgrammeNotModified,
+  requirePublishedProgramme,
+} from "~/platform/api/api-public-programme.server";
 import { getCloudflareContext } from "~/platform/cloudflare-context";
+import type { Route } from "./+types/api-public-programme";
 
 function escapeHtml(value: string) {
   return value.replace(/[&<>"']/g, (character) => {

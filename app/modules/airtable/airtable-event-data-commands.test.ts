@@ -1,25 +1,24 @@
 import { env } from "cloudflare:test";
 import { beforeEach, describe, expect, it } from "vitest";
-
+import { TaskService } from "~/modules/tasks/task-service.server";
 import type { Viewer } from "~/platform/auth/authorize.server";
 import {
   DEMO_VENUE_ADDRESS,
   DEMO_VENUE_MAP_URL,
 } from "~/platform/demo/demo-identities";
 import { ensureDemoData } from "~/platform/demo/seed.server";
-import { TaskService } from "~/modules/tasks/task-service.server";
 import type { AirtableRecord, AirtableTable } from "./airtable-client.server";
-import { AirtableEventDataRepository } from "./airtable-event-data-repository.server";
 import {
+  AirtableEventDataRepository,
   AirtableEventDataUnsynchronizedError,
   AirtableEventProjectionCommitError,
 } from "./airtable-event-data-repository.server";
 import { AIRTABLE_EVENT_TABLE_SPECS } from "./airtable-event-data-schema";
+import { AirtableProjectionRecoveryService } from "./airtable-projection-recovery-service.server";
 import {
   AirtableProviderBoundary,
   airtableIntentCommand,
 } from "./airtable-provider-boundary.server";
-import { AirtableProjectionRecoveryService } from "./airtable-projection-recovery-service.server";
 import { AirtableRoomRepository } from "./airtable-room-repository.server";
 import { AIRTABLE_EVENT_DATA_TABLE_NAMES } from "./airtable-schema";
 

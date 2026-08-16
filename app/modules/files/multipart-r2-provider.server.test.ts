@@ -1,8 +1,8 @@
 import { describe, expect, it, vi } from "vitest";
 
 import {
-  MultipartR2Provider,
   type MultipartProviderRow,
+  MultipartR2Provider,
 } from "./multipart-r2-provider.server";
 
 const row: MultipartProviderRow = {

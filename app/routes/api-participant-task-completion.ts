@@ -1,13 +1,8 @@
 import { ZodError } from "zod";
-
-import type { Route } from "./+types/api-participant-task-completion";
 import {
   TaskService,
   TaskStateError,
 } from "~/modules/tasks/task-service.server";
-import { apiParticipantTaskCompletionSchema } from "~/platform/api/api-command-contract";
-import { ApiParticipantService } from "~/platform/api/api-participant-service.server";
-import { ApiPersonIdempotencyService } from "~/platform/api/api-person-idempotency.server";
 import {
   ApiError,
   apiFailure,
@@ -16,8 +11,12 @@ import {
   readJson,
   requireIdempotencyKey,
 } from "~/platform/api/api.server";
+import { apiParticipantTaskCompletionSchema } from "~/platform/api/api-command-contract";
+import { ApiParticipantService } from "~/platform/api/api-participant-service.server";
+import { ApiPersonIdempotencyService } from "~/platform/api/api-person-idempotency.server";
 import { requireEventRole } from "~/platform/auth/authorize.server";
 import { getCloudflareContext } from "~/platform/cloudflare-context";
+import type { Route } from "./+types/api-participant-task-completion";
 
 function requireSameOrigin(request: Request) {
   if (request.headers.get("origin") !== new URL(request.url).origin) {

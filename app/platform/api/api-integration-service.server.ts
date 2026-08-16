@@ -1,12 +1,11 @@
 import { z } from "zod";
-
+import { ApiError, type ApiPrincipal } from "./api.server";
 import {
   decodePrivateCursor,
   encodePrivateCursor,
   isoTimestamp,
   parseStrictQuery,
 } from "./api-pagination.server";
-import { ApiError, type ApiPrincipal } from "./api.server";
 
 export const INTEGRATION_API_RESOURCES = [
   "connections",

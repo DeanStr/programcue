@@ -2,15 +2,15 @@ import { env } from "cloudflare:test";
 import { describe, expect, it } from "vitest";
 
 import { DEFAULT_EVENT_BRAND_ACCENT } from "~/lib/brand";
-import type { Viewer } from "~/platform/auth/authorize.server";
 import { ResourceService } from "~/modules/resources/resource-service.server";
+import type { Viewer } from "~/platform/auth/authorize.server";
 import { ensureDemoData } from "~/platform/demo/seed.server";
 import { OperationService } from "~/platform/operations/operation-service.server";
 import { ParticipantApplicationSummaryService } from "./participant-application-summary.server";
 import {
+  type Applicant,
   D1SubmissionRepository,
   SubmissionRevisionConflictError,
-  type Applicant,
 } from "./submission-repository.server";
 import { SubmissionService } from "./submission-service.server";
 

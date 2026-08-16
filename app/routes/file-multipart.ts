@@ -1,6 +1,4 @@
 import { ZodError } from "zod";
-
-import type { Route } from "./+types/file-multipart";
 import { FilePolicyError } from "~/modules/files/file-policy";
 import {
   FileScanDispatchConfigurationError,
@@ -17,9 +15,10 @@ import { R2S3ConfigurationError } from "~/modules/files/r2-s3-signing.server";
 import { requireCurrentEventRole } from "~/platform/auth/current-event.server";
 import { getCloudflareContext } from "~/platform/cloudflare-context";
 import {
-  readBoundedText,
   RequestBodyTooLargeError,
+  readBoundedText,
 } from "~/platform/http/read-body";
+import type { Route } from "./+types/file-multipart";
 
 const OPERATIONS = new Set([
   "initiate",

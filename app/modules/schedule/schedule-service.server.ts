@@ -1,15 +1,22 @@
-import type { Viewer } from "~/platform/auth/authorize.server";
-import {
-  scheduleCalendarFanoutMessageSchema,
-  type ScheduleCalendarFanoutMessage,
-} from "~/modules/calendars/calendar-schema";
 import { AirtableProgrammeRepository } from "~/modules/airtable/airtable-programme-repository.server";
 import {
   AirtableProviderBoundary,
   airtableCommandKey,
   airtableIntentCommand,
 } from "~/modules/airtable/airtable-provider-boundary.server";
+import {
+  type ScheduleCalendarFanoutMessage,
+  scheduleCalendarFanoutMessageSchema,
+} from "~/modules/calendars/calendar-schema";
+import type { Viewer } from "~/platform/auth/authorize.server";
 import { WebhookService } from "~/platform/operations/webhook-service.server";
+import {
+  type AutoPlacementPreview,
+  autoPlacementRequestHash,
+} from "./schedule-auto-placement";
+import { ScheduleAutoPlacementWorkflow } from "./schedule-auto-placement-workflow.server";
+import { scheduleConflictInsert } from "./schedule-conflict-statement.server";
+import { ScheduleContentWorkflow } from "./schedule-content-workflow.server";
 import {
   ScheduleConfigurationError,
   ScheduleIdempotencyConflictError,
@@ -17,27 +24,20 @@ import {
   SchedulePublicationBlockedError,
   ScheduleRevisionConflictError,
 } from "./schedule-errors";
-import { buildSchedulePublicationStatements } from "./schedule-publication-statements.server";
-import { scheduleConflictInsert } from "./schedule-conflict-statement.server";
-import { ScheduleContentWorkflow } from "./schedule-content-workflow.server";
-import {
-  autoPlacementRequestHash,
-  type AutoPlacementPreview,
-} from "./schedule-auto-placement";
-import { ScheduleAutoPlacementWorkflow } from "./schedule-auto-placement-workflow.server";
 import { SchedulePlacementWorkflow } from "./schedule-placement-workflow.server";
-import {
-  detectWorkspaceConflicts,
-  loadScheduleWorkspaceD1,
-} from "./schedule-workspace.server";
+import { buildSchedulePublicationStatements } from "./schedule-publication-statements.server";
 import type { ScheduleConflict, SchedulePolicies } from "./schedule-rules";
 import {
-  scheduleBreakSchema,
   scheduleAutoPlacementConfirmSchema,
+  scheduleBreakSchema,
   scheduleNotesSchema,
   schedulePublishSchema,
   scheduleSessionContentSchema,
 } from "./schedule-schema";
+import {
+  detectWorkspaceConflicts,
+  loadScheduleWorkspaceD1,
+} from "./schedule-workspace.server";
 
 export type WorkspaceEvent = {
   id: string;

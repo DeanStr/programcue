@@ -1,17 +1,17 @@
-import type { Route } from "./+types/api-public-schedule";
-import {
-  getPublicSessionPage,
-  publishedProgrammeCacheHeaders,
-  publishedProgrammeNotModified,
-  publicSessionQuerySchema,
-} from "~/platform/api/api-public-programme.server";
-import { parseStrictQuery } from "~/platform/api/api-pagination.server";
 import {
   apiFailure,
   apiSuccess,
   correlationId,
 } from "~/platform/api/api.server";
+import { parseStrictQuery } from "~/platform/api/api-pagination.server";
+import {
+  getPublicSessionPage,
+  publicSessionQuerySchema,
+  publishedProgrammeCacheHeaders,
+  publishedProgrammeNotModified,
+} from "~/platform/api/api-public-programme.server";
 import { getCloudflareContext } from "~/platform/cloudflare-context";
+import type { Route } from "./+types/api-public-schedule";
 
 export async function loader({ request, params, context }: Route.LoaderArgs) {
   const { env } = getCloudflareContext(context);

@@ -1,13 +1,12 @@
 import { CheckCircle2, Circle, CircleDot, Megaphone, Mic2 } from "lucide-react";
 import { Form, Link } from "react-router";
-
-import { DomainStatusBadge } from "~/components/ui/domain-status-badge";
-import { EventDateTime } from "~/components/ui/event-date-time";
 import {
-  speakerStatusClass,
   type SpeakerPortal,
   type SpeakerTask,
+  speakerStatusClass,
 } from "~/components/speaker-dashboard-panel-shared";
+import { DomainStatusBadge } from "~/components/ui/domain-status-badge";
+import { EventDateTime } from "~/components/ui/event-date-time";
 
 export type SpeakerMilestone = {
   key: string;

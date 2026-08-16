@@ -1,11 +1,11 @@
+import { emailDeliveryIssue } from "~/modules/communications/email-deliverability";
 import {
+  type AcceptedSpeakerInvitationMessage,
   acceptedSpeakerInvitationReadiness,
   magicLink,
   randomToken,
   sha256Base64Url,
-  type AcceptedSpeakerInvitationMessage,
 } from "~/modules/evaluations/accepted-speaker-invitation-plan.server";
-import { emailDeliveryIssue } from "~/modules/communications/email-deliverability";
 import { requireRuntimeMode } from "~/platform/runtime-environment.server";
 
 export type SpeakerInvitationDelivery =

@@ -8,14 +8,13 @@ import {
   useNavigation,
 } from "react-router";
 import { ZodError } from "zod";
-
-import type { Route } from "./+types/admin-crm-pipeline";
 import { statusPresentation } from "~/components/ui/domain-status-badge";
-import { ensureDemoCrmData } from "~/modules/crm/demo.server";
 import { crmStages } from "~/modules/crm/crm-schema";
 import { CrmService, CrmStateError } from "~/modules/crm/crm-service.server";
+import { ensureDemoCrmData } from "~/modules/crm/demo.server";
 import { requireOrganisationAdministrator } from "~/platform/auth/organisation.server";
 import { getCloudflareContext } from "~/platform/cloudflare-context";
+import type { Route } from "./+types/admin-crm-pipeline";
 
 export const meta = () => [
   { title: "Speaker sourcing pipeline · Program Cue" },

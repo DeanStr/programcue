@@ -9,10 +9,10 @@ import { useEffect, useState } from "react";
 import { Form, Link, useSubmit } from "react-router";
 
 import { DirectMultipartUpload } from "~/components/direct-multipart-upload";
-import { SpeakerProfileHistory } from "~/components/speaker-profile-history";
 import type { SpeakerPortal } from "~/components/speaker-dashboard-panel-shared";
-import { ConfirmDialog, useConfirm } from "~/components/ui/confirm-dialog";
+import { SpeakerProfileHistory } from "~/components/speaker-profile-history";
 import { CharacterCount } from "~/components/ui/character-count";
+import { ConfirmDialog, useConfirm } from "~/components/ui/confirm-dialog";
 import { DomainStatusBadge } from "~/components/ui/domain-status-badge";
 import { useUnsavedChanges } from "~/components/ui/use-unsaved-changes";
 import { maximumMegabytes } from "~/modules/files/file-policy";
@@ -271,7 +271,9 @@ export function SpeakerProfilePanel({
         <label className="label">
           <span className="pc-field-label">
             <span>Display name</span>
-            <span className="pc-required" aria-hidden="true">Required</span>
+            <span className="pc-required" aria-hidden="true">
+              Required
+            </span>
           </span>
           <input
             className="field"
@@ -342,7 +344,9 @@ export function SpeakerProfilePanel({
         <label className="label">
           <span className="pc-field-label">
             <span>Biography</span>
-            <span className="pc-required" aria-hidden="true">Required</span>
+            <span className="pc-required" aria-hidden="true">
+              Required
+            </span>
           </span>
           <textarea
             className="textarea"

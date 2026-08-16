@@ -5,13 +5,13 @@ import { representativeSourceSnapshot } from "./communication-delivery-foundatio
 import { CommunicationDeliveryPreview } from "./communication-delivery-preview.server";
 import type { ConfirmCommunicationInput } from "./communication-schema";
 import {
-  communicationDeliveryIdempotencyKey,
   CommunicationQueueUnavailableError,
+  CommunicationStateError,
+  communicationDeliveryIdempotencyKey,
   communicationReplay,
   communicationRequestHash,
-  CommunicationStateError,
-  sourceVariables,
   type ExistingCommunication,
+  sourceVariables,
 } from "./communication-service-shared";
 import { requireEmailProviderConfiguration } from "./email-provider.server";
 

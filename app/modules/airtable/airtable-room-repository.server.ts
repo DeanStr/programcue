@@ -1,16 +1,15 @@
 import { z } from "zod";
-
-import type { Viewer } from "~/platform/auth/authorize.server";
 import {
   decryptIntegrationCredentials,
   encryptIntegrationCredentials,
 } from "~/modules/integrations/integration-credentials.server";
+import type { Viewer } from "~/platform/auth/authorize.server";
 import {
   AirtableClient,
   AirtableProviderError,
-  airtableEqualsFormula,
   type AirtableRecord,
   type AirtableTable,
+  airtableEqualsFormula,
 } from "./airtable-client.server";
 import {
   AIRTABLE_CACHE_TTL_SECONDS,
@@ -24,15 +23,15 @@ import {
   AIRTABLE_SESSIONS_TABLE,
   AIRTABLE_SPEAKER_FIELDS,
   AIRTABLE_SPEAKERS_TABLE,
-  airtableConnectionConfigurationSchema,
-  airtableConnectionInputSchema,
-  airtableCredentialsSchema,
-  airtableRoomSchema,
   type AirtableConnectionConfiguration,
   type AirtableConnectionInput,
   type AirtableCredentials,
   type AirtableEventDataTableKey,
   type AirtableRoom,
+  airtableConnectionConfigurationSchema,
+  airtableConnectionInputSchema,
+  airtableCredentialsSchema,
+  airtableRoomSchema,
 } from "./airtable-schema";
 
 export const AIRTABLE_REPOSITORY_PROVIDER = "airtable_repository";

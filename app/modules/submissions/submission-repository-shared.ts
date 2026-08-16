@@ -1,16 +1,16 @@
 import {
+  type EventFilePolicy,
+  parseEventFilePolicy,
+} from "~/modules/files/file-policy";
+import { eventLocalTimeEpoch } from "~/modules/schedule/schedule-time";
+import {
+  type FormRouting,
   formSchemaSchema,
   routingSchema,
-  type FormRouting,
   type SaveFormInput,
   type SubmissionFormSchema,
   type UploadReference,
 } from "./submission-schema";
-import { eventLocalTimeEpoch } from "~/modules/schedule/schedule-time";
-import {
-  parseEventFilePolicy,
-  type EventFilePolicy,
-} from "~/modules/files/file-policy";
 
 export type FormSummary = {
   id: string;

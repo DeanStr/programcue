@@ -1,14 +1,13 @@
 import { env } from "cloudflare:test";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-
+import { CommunicationService } from "~/modules/communications/communication-service.server";
+import type { Viewer } from "~/platform/auth/authorize.server";
+import { ensureDemoData } from "~/platform/demo/seed.server";
 import {
   AiAssistantService,
   AiPermissionError,
 } from "./ai-assistant-service.server";
 import { AiToolPermissionError } from "./ai-tools.server";
-import { CommunicationService } from "~/modules/communications/communication-service.server";
-import type { Viewer } from "~/platform/auth/authorize.server";
-import { ensureDemoData } from "~/platform/demo/seed.server";
 
 const admin: Viewer = {
   personId: "person-demo-admin",

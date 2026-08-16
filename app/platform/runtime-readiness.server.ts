@@ -1,11 +1,11 @@
 import {
-  requireRuntimeMode,
-  requiresProductionSecurity,
-} from "~/platform/runtime-environment.server";
-import {
   parseResourceEmbedProviders,
   resourceEmbedConfiguration,
 } from "~/modules/resources/resource-embed-policy";
+import {
+  requireRuntimeMode,
+  requiresProductionSecurity,
+} from "~/platform/runtime-environment.server";
 
 const requiredProductionBindings = [
   "DB",

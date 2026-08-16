@@ -1,9 +1,8 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { MemoryRouter } from "react-router";
 import { describe, expect, it } from "vitest";
-
-import { EventRepositoryPanel } from "./event-setup-panels";
 import type { EventSetup } from "~/modules/events/event-repository.server";
+import { EventRepositoryPanel } from "./event-setup-panels";
 
 const event = {
   repositoryProvider: "d1",

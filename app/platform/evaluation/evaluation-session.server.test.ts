@@ -4,8 +4,8 @@ import { describe, expect, it } from "vitest";
 import { ensureDemoData } from "~/platform/demo/seed.server";
 
 import {
-  EVALUATION_SESSION_COOKIE,
   activateEvaluationApplicantAccount,
+  EVALUATION_SESSION_COOKIE,
   evaluationAccessCodeMatches,
   evaluationPersonForSession,
   evaluationSessionCookie,

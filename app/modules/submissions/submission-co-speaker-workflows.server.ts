@@ -3,8 +3,8 @@ import { emailDeliveryIssue } from "~/modules/communications/email-deliverabilit
 import type { Viewer } from "~/platform/auth/authorize.server";
 import {
   EvaluatorEmailAliasContextError,
-  resolveEvaluatorEmailAlias,
   type EvaluatorEmailRouting,
+  resolveEvaluatorEmailAlias,
 } from "~/platform/evaluation/evaluator-email-alias.server";
 import {
   hashApplicantToken,
@@ -16,17 +16,19 @@ import {
   persistCoSpeakerQueueFailure,
   persistQueueFailure,
 } from "./co-speaker-invitation.server";
-import { SubmissionServiceFoundation } from "./submission-service-foundation.server";
 import {
+  type Applicant,
   SubmissionRevisionConflictError,
   SubmissionStateError,
-  type Applicant,
 } from "./submission-repository-shared";
 import {
   draftPayloadSchema,
   MAX_SUBMISSION_SPEAKERS,
 } from "./submission-schema";
-import { SubmissionCommittedStateError } from "./submission-service-foundation.server";
+import {
+  SubmissionCommittedStateError,
+  SubmissionServiceFoundation,
+} from "./submission-service-foundation.server";
 
 export const acceptedCoSpeakerInvitationSchema = z
   .object({

@@ -1,23 +1,22 @@
 import {
-  airtableIntentCommand,
   AirtableProviderBoundary,
+  airtableIntentCommand,
 } from "~/modules/airtable/airtable-provider-boundary.server";
 import { emailDeliveryIssue } from "~/modules/communications/email-deliverability";
-import { ApiPersonIdempotencyService } from "~/platform/api/api-person-idempotency.server";
 import { ApiError } from "~/platform/api/api.server";
+import { ApiPersonIdempotencyService } from "~/platform/api/api-person-idempotency.server";
 import type { Viewer } from "~/platform/auth/authorize.server";
-import {
-  dispatchSpeakerInvitationsForCommand,
-  prepareSpeakerInvitations,
-  SpeakerInvitationDeliveryError,
-  type SpeakerInvitationDelivery,
-} from "./speaker-invitation.server";
-import { SpeakerAdminStateError } from "./speaker-service-errors";
-
 import {
   organisationAdministratorViewer,
   speakerInvitationSchema,
 } from "./speaker-administration-contracts.server";
+import {
+  dispatchSpeakerInvitationsForCommand,
+  prepareSpeakerInvitations,
+  type SpeakerInvitationDelivery,
+  SpeakerInvitationDeliveryError,
+} from "./speaker-invitation.server";
+import { SpeakerAdminStateError } from "./speaker-service-errors";
 
 export class SpeakerInvitationCommands {
   private readonly airtable: AirtableProviderBoundary;

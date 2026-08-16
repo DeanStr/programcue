@@ -1,14 +1,14 @@
 import { AirtableProviderBoundary } from "~/modules/airtable/airtable-provider-boundary.server";
 import type { Viewer } from "~/platform/auth/authorize.server";
 import {
+  groupProgrammeSetupSteps,
+  type ProgrammeSetupStep,
+} from "./programme-workflow-phases";
+import {
   calculateOverallReadiness,
   calculateReadiness,
   type ReadinessTask,
 } from "./readiness-rules";
-import {
-  groupProgrammeSetupSteps,
-  type ProgrammeSetupStep,
-} from "./programme-workflow-phases";
 
 type CountRow = { total: number; complete?: number; failed?: number };
 export type DeliveryChannel = "email" | "sms" | "push" | "calendar";

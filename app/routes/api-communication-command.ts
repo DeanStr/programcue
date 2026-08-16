@@ -1,6 +1,4 @@
-import { z, ZodError } from "zod";
-
-import type { Route } from "./+types/api-communication-command";
+import { ZodError, z } from "zod";
 import { CommunicationDeliveryService } from "~/modules/communications/communication-delivery-service.server";
 import {
   confirmCommunicationSchema,
@@ -23,6 +21,7 @@ import {
 } from "~/platform/api/api.server";
 import { requireEventRole } from "~/platform/auth/authorize.server";
 import { getCloudflareContext } from "~/platform/cloudflare-context";
+import type { Route } from "./+types/api-communication-command";
 
 const commandSchemas = {
   preview: previewCommunicationSchema

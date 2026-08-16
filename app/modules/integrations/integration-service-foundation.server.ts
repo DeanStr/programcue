@@ -3,11 +3,11 @@ import { AirtableProviderBoundary } from "~/modules/airtable/airtable-provider-b
 import type { Viewer } from "~/platform/auth/authorize.server";
 import {
   AcceleventsProvider,
-  acceleventsCredentialsSchema,
   type AcceleventsSessionPayload,
   type AcceleventsSessionSpeakerAssociationPayload,
   type AcceleventsSpeakerPayload,
   type AcceleventsTrackPayload,
+  acceleventsCredentialsSchema,
 } from "./accelevents-provider.server";
 
 export type IntegrationApiActor = {

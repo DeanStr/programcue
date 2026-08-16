@@ -1,13 +1,12 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { createMemoryRouter, RouterProvider } from "react-router";
 import { describe, expect, it } from "vitest";
-
+import type { CommunicationsCentreLoaderData } from "~/routes/communications-centre";
 import {
   CommunicationDraftPreview,
   deliveryActionLabel,
 } from "./communication-draft-preview";
 import { CalendarAdministration } from "./communications-calendar-panels";
-import type { CommunicationsCentreLoaderData } from "~/routes/communications-centre";
 
 describe("communications presentation", () => {
   it("uses grammatically correct delivery labels", () => {

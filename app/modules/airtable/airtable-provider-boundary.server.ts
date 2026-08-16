@@ -2,8 +2,8 @@ import type { Viewer } from "~/platform/auth/authorize.server";
 
 import {
   AirtableEventDataRepository,
-  type AirtableProjectionCommandResult,
   type AirtableEventDataSnapshot,
+  type AirtableProjectionCommandResult,
 } from "./airtable-event-data-repository.server";
 
 type EventScope = Pick<Viewer, "organisationId" | "eventId">;

@@ -6,8 +6,6 @@ import {
   useNavigation,
 } from "react-router";
 import { z } from "zod";
-
-import type { Route } from "./+types/sign-in";
 import { BrandMark } from "~/components/brand-mark";
 import { TurnstileWidget } from "~/components/turnstile-widget";
 import {
@@ -29,6 +27,7 @@ import {
 import { requestCorrelationId } from "~/platform/observability/request-correlation";
 import { sourceRevisionForLog } from "~/platform/observability/source-revision.server";
 import { requireRuntimeMode } from "~/platform/runtime-environment.server";
+import type { Route } from "./+types/sign-in";
 
 const ERROR_NAME_PATTERN = /^[A-Za-z][A-Za-z0-9]{0,63}$/u;
 const MICROSOFT_ACCOUNT_NOT_LINKED = "account_not_linked";

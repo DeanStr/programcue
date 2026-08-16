@@ -1,22 +1,21 @@
 import { env } from "cloudflare:test";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-
-import type { Viewer } from "~/platform/auth/authorize.server";
 import { PublicProgrammeService } from "~/modules/programme/public-programme-service.server";
+import type { Viewer } from "~/platform/auth/authorize.server";
 import {
   ensureDemoData,
   ensureDemoProgramme,
 } from "~/platform/demo/seed.server";
+import { cleanupRetiredEventBrandAssets } from "./event-brand-asset-cleanup.server";
 import {
+  EventBrandingAssetChangedError,
+  EventBrandingAssetError,
   EventBrandingAuditCommitError,
   EventBrandingChangeCommitError,
-  EventBrandingAssetError,
-  EventBrandingAssetChangedError,
   EventBrandingCleanupIntegrityError,
   EventBrandingRevisionConflictError,
   EventBrandingService,
 } from "./event-branding-service.server";
-import { cleanupRetiredEventBrandAssets } from "./event-brand-asset-cleanup.server";
 
 const admin: Viewer = {
   personId: "person-demo-admin",

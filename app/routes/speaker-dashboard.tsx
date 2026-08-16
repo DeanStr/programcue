@@ -1,23 +1,22 @@
 import {
   CalendarDays,
+  CheckSquare,
   ChevronRight,
   ClipboardList,
-  CheckSquare,
   FileStack,
   Mic2,
   UserRound,
 } from "lucide-react";
 import { Link } from "react-router";
-
-import type { Route } from "./+types/speaker-dashboard";
 import {
   SpeakerDashboardOverview,
   SpeakerUpdatesRail,
 } from "~/components/speaker-dashboard-overview";
 import { useSpeakerWorkspace } from "~/components/speaker-workspace-context";
 import { requireSpeakerWorkspace } from "~/modules/speakers/speaker-workspace.server";
-import { TaskService } from "~/modules/tasks/task-service.server";
 import { ParticipantApplicationSummaryService } from "~/modules/submissions/participant-application-summary.server";
+import { TaskService } from "~/modules/tasks/task-service.server";
+import type { Route } from "./+types/speaker-dashboard";
 
 export const meta = () => [{ title: "Participant Overview · Program Cue" }];
 

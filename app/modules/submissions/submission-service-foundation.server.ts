@@ -13,9 +13,9 @@ import {
   type PublicForm,
 } from "./applicant-session.server";
 import {
+  type Applicant,
   D1SubmissionRepository,
   SubmissionStateError,
-  type Applicant,
 } from "./submission-repository.server";
 
 export class PublicFormUnavailableError extends Error {

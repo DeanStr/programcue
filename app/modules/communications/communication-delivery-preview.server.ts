@@ -4,18 +4,18 @@ import {
   representativeSourceSnapshot,
 } from "./communication-delivery-foundation.server";
 import {
-  previewCommunicationSchema,
   type PreviewCommunicationInput,
+  previewCommunicationSchema,
 } from "./communication-schema";
 import {
   assertMergeAudienceCompatible,
+  type CommunicationPreview,
   CommunicationStateError,
   eventEmailLogoUrl,
   mergeValues,
   recipientFingerprint,
   snapshotSourceValues,
   sourceVariables,
-  type CommunicationPreview,
 } from "./communication-service-shared";
 import { emailProviderConfigurationIssue } from "./email-provider.server";
 import { renderProgramCueEmail } from "./email-templates/render-email.server";

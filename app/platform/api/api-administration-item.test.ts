@@ -1,12 +1,10 @@
 import { env } from "cloudflare:test";
-import { beforeEach, describe, expect, it } from "vitest";
 import {
   matchRoutes,
-  RouterContextProvider,
   type RouteObject,
+  RouterContextProvider,
 } from "react-router";
-
-import routeConfig from "~/routes";
+import { beforeEach, describe, expect, it } from "vitest";
 import { ensureDemoSpeakerData } from "~/modules/speakers/demo.server";
 import { ensureDemoSubmissionForm } from "~/modules/submissions/demo-submissions.server";
 import { cloudflareContext } from "~/platform/cloudflare-context";
@@ -14,6 +12,7 @@ import {
   ensureDemoData,
   ensureDemoProgramme,
 } from "~/platform/demo/seed.server";
+import routeConfig from "~/routes";
 import { loader as administrationItemLoader } from "~/routes/api-administration-item";
 import { loader as taskItemLoader } from "~/routes/api-task-item";
 

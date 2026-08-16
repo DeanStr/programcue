@@ -1,9 +1,8 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { MemoryRouter } from "react-router";
 import { describe, expect, it } from "vitest";
-
-import { ContextualAiResultPanel } from "./assistant-result-panel";
 import type { ContextualAiResult } from "./ai-types";
+import { ContextualAiResultPanel } from "./assistant-result-panel";
 
 const attribution = {
   provider: "Workers AI" as const,

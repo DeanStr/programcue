@@ -8,7 +8,6 @@ import {
 import { data, Form, Link, useActionData, useNavigation } from "react-router";
 
 import { ResourceDocument } from "~/components/resource-document";
-import type { Route } from "./+types/speaker-resources";
 import { useSpeakerWorkspace } from "~/components/speaker-workspace-context";
 import {
   ResourceRevisionConflictError,
@@ -16,6 +15,7 @@ import {
 } from "~/modules/resources/resource-service.server";
 import { requireSpeakerWorkspace } from "~/modules/speakers/speaker-workspace.server";
 import { recordRouteChange } from "~/platform/realtime/route-realtime.server";
+import type { Route } from "./+types/speaker-resources";
 
 export const meta = () => [{ title: "Participant Resources · Program Cue" }];
 

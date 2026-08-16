@@ -1,8 +1,8 @@
 import {
   ReviewWorkbenchModelContext,
+  type ReviewWorkbenchWorkspaceProps,
   useReviewWorkbenchModel,
   useReviewWorkbenchState,
-  type ReviewWorkbenchWorkspaceProps,
 } from "~/components/review-workbench-model";
 import { ReviewerShell } from "~/components/reviewer-shell";
 import {

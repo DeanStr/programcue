@@ -1,12 +1,11 @@
 import { expect, test } from "@playwright/test";
-
-import { e2eOrigin } from "./support/e2e-origin";
 import {
   clearDemoCommunicationUnsubscribe,
+  type DemoCommunicationUnsubscribeFixture,
   readDemoCommunicationUnsubscribe,
   seedDemoCommunicationUnsubscribe,
-  type DemoCommunicationUnsubscribeFixture,
 } from "./support/demo-communication-unsubscribe";
+import { e2eOrigin } from "./support/e2e-origin";
 
 test.describe
   .serial("optional email unsubscribe", () => {

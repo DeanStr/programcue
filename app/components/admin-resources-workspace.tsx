@@ -22,9 +22,6 @@ import { DerivedSlugField } from "~/components/ui/derived-slug-field";
 import { maximumMegabytes } from "~/modules/files/file-policy";
 import { emptyResourceExternalEmbedDraft } from "~/modules/resources/resource-recovery";
 import { UserFacingError } from "~/platform/user-facing-error";
-import { RichResourceEditor } from "./rich-resource-editor";
-import { ResourceDocument } from "./resource-document";
-import { ResourceExternalEmbedEditor } from "./resource-external-embed-editor";
 import {
   type AdminResourcesData,
   emptyResourceDocument as emptyDocument,
@@ -32,6 +29,9 @@ import {
   useResourceAdminModel,
   useResourceAdminState,
 } from "./admin-resources-model";
+import { ResourceDocument } from "./resource-document";
+import { ResourceExternalEmbedEditor } from "./resource-external-embed-editor";
+import { RichResourceEditor } from "./rich-resource-editor";
 
 type ResourceAttachmentCompletion = {
   ok?: boolean;

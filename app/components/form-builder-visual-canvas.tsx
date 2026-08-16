@@ -1,20 +1,20 @@
 import {
+  type CollisionDetection,
   closestCenter,
   DndContext,
+  type DragEndEvent,
   DragOverlay,
-  pointerWithin,
+  type DragStartEvent,
   PointerSensor,
+  pointerWithin,
   useDraggable,
   useDroppable,
   useSensor,
   useSensors,
-  type CollisionDetection,
-  type DragEndEvent,
-  type DragStartEvent,
 } from "@dnd-kit/core";
 import { CSS } from "@dnd-kit/utilities";
 import { GripVertical } from "lucide-react";
-import { Fragment, useState, type CSSProperties } from "react";
+import { type CSSProperties, Fragment, useState } from "react";
 
 import {
   conditionalFieldOrderIssue,

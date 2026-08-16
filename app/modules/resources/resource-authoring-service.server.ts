@@ -1,23 +1,23 @@
-import type { Viewer } from "~/platform/auth/authorize.server";
 import { AirtableProviderBoundary } from "~/modules/airtable/airtable-provider-boundary.server";
 import { parseEventFilePolicy } from "~/modules/files/file-policy";
+import type { Viewer } from "~/platform/auth/authorize.server";
+import { ResourceAttachmentAuthoringService } from "./resource-attachment-authoring-service.server";
 import {
   parseResourceDocument,
   renderResourceDocument,
-  validateResourceDocumentEmbedStructure,
   type TiptapNode,
+  validateResourceDocumentEmbedStructure,
 } from "./resource-content";
 import { resourceEmbedConfiguration } from "./resource-embed-policy";
-import { ResourceAttachmentAuthoringService } from "./resource-attachment-authoring-service.server";
 import { ResourcePublicationService } from "./resource-publication-service.server";
 import { ResourceServiceBase } from "./resource-service-base.server";
 import {
-  resourceInputSchema,
+  type PageRow,
   ResourceAudienceError,
   ResourceInvariantError,
   ResourceRevisionConflictError,
   ResourceSlugConflictError,
-  type PageRow,
+  resourceInputSchema,
 } from "./resource-service-shared";
 
 export class ResourceAuthoringService extends ResourceServiceBase {

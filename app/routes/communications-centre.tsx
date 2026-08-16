@@ -8,23 +8,21 @@ import {
   useNavigation,
 } from "react-router";
 import { ZodError } from "zod";
-
-import type { Route } from "./+types/communications-centre";
 import {
-  CalendarLifecycleTable,
   CalendarAdministration,
+  CalendarLifecycleTable,
   CommunicationAutomation,
   CommunicationDeliveryHealth,
   DeliveryConfiguration,
   DeliveryReadiness,
   RecentCommunications,
+  type SenderDnsRecord,
+  type SenderDnsRecordSet,
   SenderDnsRecords,
+  type TemplateDraftFields,
   TemplateEditor,
   TemplatePreview,
   TemplateVersionList,
-  type SenderDnsRecord,
-  type SenderDnsRecordSet,
-  type TemplateDraftFields,
 } from "~/components/communications-centre-panels";
 import { DraftRecoveryFeedback } from "~/components/draft-recovery-feedback";
 import {
@@ -32,7 +30,6 @@ import {
   AdminPageSectionNavigation,
 } from "~/components/ui/admin-page-sections";
 import { statusPresentation } from "~/components/ui/domain-status-badge";
-import { CalendarService } from "~/modules/calendars/calendar-service.server";
 import {
   CalendarQueueUnavailableError,
   CalendarStateError,
@@ -41,6 +38,13 @@ import {
   CalendarProviderConfigurationError,
   CalendarProviderRequestError,
 } from "~/modules/calendars/calendar-providers.server";
+import { CalendarService } from "~/modules/calendars/calendar-service.server";
+import {
+  type AudienceType,
+  audienceTypeSchema,
+  type CommunicationCategory,
+  communicationCategorySchema,
+} from "~/modules/communications/communication-schema";
 import {
   CommunicationNotFoundError,
   CommunicationQueueUnavailableError,
@@ -48,29 +52,24 @@ import {
   CommunicationStateError,
   communicationErrorMessage,
 } from "~/modules/communications/communication-service.server";
-import {
-  audienceTypeSchema,
-  communicationCategorySchema,
-  type AudienceType,
-  type CommunicationCategory,
-} from "~/modules/communications/communication-schema";
 import { UnknownMergeVariableError } from "~/modules/communications/merge-template";
 import {
   OrganisationCommunicationSettingsConflictError,
   OrganisationCommunicationSettingsService,
 } from "~/modules/communications/organisation-communication-settings.server";
 import { RecipientLimitError } from "~/modules/communications/recipient-query.server";
-import { EventService } from "~/modules/events/event-service.server";
 import {
   ResendDomainConfigurationError,
   ResendDomainRequestError,
 } from "~/modules/communications/resend-domain.server";
+import { EventService } from "~/modules/events/event-service.server";
 import { requireCurrentEventRole } from "~/platform/auth/current-event.server";
 import { getCloudflareContext } from "~/platform/cloudflare-context";
 import {
   clearDraftRecoveryScope,
   useDraftRecovery,
 } from "~/platform/drafts/draft-recovery";
+import type { Route } from "./+types/communications-centre";
 
 export const meta = () => [{ title: "Communications Centre · Program Cue" }];
 

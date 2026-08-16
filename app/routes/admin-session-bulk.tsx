@@ -1,4 +1,5 @@
 import { Archive, ArrowRight, RotateCcw, Tags } from "lucide-react";
+import { useState } from "react";
 import {
   data,
   Form,
@@ -8,10 +9,7 @@ import {
   useNavigation,
   useSubmit,
 } from "react-router";
-import { useState } from "react";
 import { ZodError } from "zod";
-
-import type { Route } from "./+types/admin-session-bulk";
 import { useConfirm } from "~/components/ui/confirm-dialog";
 import {
   DomainStatusBadge,
@@ -21,10 +19,11 @@ import { EmptyState } from "~/components/ui/states";
 import { requireCurrentEventRole } from "~/platform/auth/current-event.server";
 import { getCloudflareContext } from "~/platform/cloudflare-context";
 import {
+  type SessionBulkAction,
   SessionBulkService,
   SessionBulkStateError,
-  type SessionBulkAction,
 } from "~/platform/operations/session-bulk-service.server";
+import type { Route } from "./+types/admin-session-bulk";
 
 async function administrator(
   request: Request,

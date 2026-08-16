@@ -9,7 +9,7 @@ import {
   ScheduleService,
 } from "~/modules/schedule/schedule-service.server";
 import { ensureDemoData } from "~/platform/demo/seed.server";
-import { type ApiError, apiRequestHash, type ApiPrincipal } from "./api.server";
+import { type ApiError, type ApiPrincipal, apiRequestHash } from "./api.server";
 import {
   ApiTaskService,
   apiTaskCreateSchema,

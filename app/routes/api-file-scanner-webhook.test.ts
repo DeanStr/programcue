@@ -1,9 +1,6 @@
 import { env } from "cloudflare:test";
 import { RouterContextProvider } from "react-router";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-
-import type { Viewer } from "~/platform/auth/authorize.server";
-import { cloudflareContext } from "~/platform/cloudflare-context";
 import {
   acceptTestFileScanDispatch,
   completeTestDirectUpload,
@@ -11,6 +8,8 @@ import {
 } from "~/modules/files/direct-upload.test-helper";
 import { processFileScanDispatch } from "~/modules/files/file-scan-dispatch.server";
 import { ensureDemoSpeakerData } from "~/modules/speakers/demo.server";
+import type { Viewer } from "~/platform/auth/authorize.server";
+import { cloudflareContext } from "~/platform/cloudflare-context";
 import { OperationService } from "~/platform/operations/operation-service.server";
 import { action } from "./api-file-scanner-webhook";
 

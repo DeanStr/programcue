@@ -1,5 +1,5 @@
-import { createAuth } from "~/platform/auth/auth.server";
 import { createEmailProvider } from "~/modules/communications/email-provider.server";
+import { createAuth } from "~/platform/auth/auth.server";
 import {
   EVALUATION_ORGANISATION_ID,
   evaluationPersonForSession,

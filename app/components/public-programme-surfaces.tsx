@@ -1,14 +1,21 @@
-import { useRef, useState, type ReactNode, type Ref } from "react";
-
+import { type ReactNode, type Ref, useRef, useState } from "react";
+import {
+  formatProgrammeDuration,
+  formatProgrammeTimeRange,
+} from "~/modules/programme/programme-presentation";
+import type {
+  PublishedSession,
+  PublishedSpeaker,
+} from "~/modules/programme/public-programme-service.server";
 import {
   descriptionSnippet,
   formatDay,
   groupSessionsByDay,
   initials,
   normaliseDescription,
+  type PublicProgrammeModel,
   sessionSpeakerDetails,
   speakerAffiliation,
-  type PublicProgrammeModel,
 } from "./public-programme-model";
 import {
   ProgrammeDayHeading,
@@ -19,14 +26,6 @@ import {
   SessionTags,
   SessionTime,
 } from "./public-programme-parts";
-import {
-  formatProgrammeDuration,
-  formatProgrammeTimeRange,
-} from "~/modules/programme/programme-presentation";
-import type {
-  PublishedSession,
-  PublishedSpeaker,
-} from "~/modules/programme/public-programme-service.server";
 
 function PublicDayTabs({
   model,

@@ -1,21 +1,21 @@
 import { AirtableProviderBoundary } from "~/modules/airtable/airtable-provider-boundary.server";
 import type { Viewer } from "~/platform/auth/authorize.server";
 import {
-  SpeakerAdministrationService,
   type AdminSpeakerFilters,
+  SpeakerAdministrationService,
 } from "./speaker-administration-service.server";
 import { SpeakerParticipationService } from "./speaker-participation-service.server";
 
 export { ParticipantProfileConflictError as SpeakerProfileConflictError } from "./participant-profile-service.server";
-export {
-  SpeakerAdminIntegrityError,
-  SpeakerAdminStateError,
-} from "./speaker-service-errors";
 export type {
   AdminSpeakerFileVersion,
   AdminSpeakerFilters,
   AdminSpeakerListItem,
 } from "./speaker-administration-service.server";
+export {
+  SpeakerAdminIntegrityError,
+  SpeakerAdminStateError,
+} from "./speaker-service-errors";
 
 /**
  * Stable speaker-domain façade. Participant-owned profile and participation

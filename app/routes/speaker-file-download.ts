@@ -1,10 +1,10 @@
-import type { Route } from "./+types/speaker-file-download";
 import {
   FileAccessError,
   FileScanPendingError,
   FileService,
 } from "~/modules/files/file-service.server";
 import { requireSpeakerWorkspace } from "~/modules/speakers/speaker-workspace.server";
+import type { Route } from "./+types/speaker-file-download";
 
 export async function loader({ request, context, params }: Route.LoaderArgs) {
   const { env, viewer } = await requireSpeakerWorkspace(request, context);

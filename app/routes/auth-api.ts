@@ -1,4 +1,3 @@
-import type { Route } from "./+types/auth-api";
 import { createAuth } from "~/platform/auth/auth.server";
 import {
   consumeMicrosoftCallbackRelay,
@@ -9,6 +8,7 @@ import {
   stageMicrosoftFormPostCallback,
 } from "~/platform/auth/microsoft-auth-callback.server";
 import { getCloudflareContext } from "~/platform/cloudflare-context";
+import type { Route } from "./+types/auth-api";
 
 function handle(request: Request, context: Route.LoaderArgs["context"]) {
   const { env } = getCloudflareContext(context);

@@ -1,22 +1,21 @@
 import { env } from "cloudflare:test";
 import { beforeEach, describe, expect, it } from "vitest";
-
-import type { Viewer } from "~/platform/auth/authorize.server";
-import { requireEventRole } from "~/platform/auth/authorize.server";
-import { ensureDemoData } from "~/platform/demo/seed.server";
+import type { PreparedAirtableRepositoryConnection } from "~/modules/airtable/airtable-room-repository.server";
+import { AIRTABLE_SCHEMA_VERSION } from "~/modules/airtable/airtable-schema";
 import {
   EventConfigurationDataError,
   INITIAL_EVENT_SESSION_FORMATS_JSON,
   parseSessionFormatsConfiguration,
 } from "~/modules/events/event-configuration";
+import { EventRepositoryProvisioningService } from "~/modules/events/event-repository-provisioning.server";
 import {
   CANONICAL_EVENT_FILE_POLICY,
   parseEventFilePolicy,
 } from "~/modules/files/file-policy";
 import { TaskService } from "~/modules/tasks/task-service.server";
-import type { PreparedAirtableRepositoryConnection } from "~/modules/airtable/airtable-room-repository.server";
-import { AIRTABLE_SCHEMA_VERSION } from "~/modules/airtable/airtable-schema";
-import { EventRepositoryProvisioningService } from "~/modules/events/event-repository-provisioning.server";
+import type { Viewer } from "~/platform/auth/authorize.server";
+import { requireEventRole } from "~/platform/auth/authorize.server";
+import { ensureDemoData } from "~/platform/demo/seed.server";
 import {
   EventCloneConfigurationError,
   EventCloneService,

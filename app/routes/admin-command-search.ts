@@ -1,8 +1,7 @@
 import type { LoaderFunctionArgs } from "react-router";
-
-import { CommandPaletteService } from "~/platform/operations/command-palette-service.server";
 import { requireCurrentEventRole } from "~/platform/auth/current-event.server";
 import { getCloudflareContext } from "~/platform/cloudflare-context";
+import { CommandPaletteService } from "~/platform/operations/command-palette-service.server";
 
 export async function loader({ request, context }: LoaderFunctionArgs) {
   const { env } = getCloudflareContext(context);

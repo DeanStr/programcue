@@ -1,8 +1,7 @@
 import { env } from "cloudflare:test";
 import { describe, expect, it } from "vitest";
-
-import type { Viewer } from "~/platform/auth/authorize.server";
 import { ensureDemoSpeakerData } from "~/modules/speakers/demo.server";
+import type { Viewer } from "~/platform/auth/authorize.server";
 import { fixedDateEndEpoch, TaskService } from "./task-service.server";
 
 const admin: Viewer = {

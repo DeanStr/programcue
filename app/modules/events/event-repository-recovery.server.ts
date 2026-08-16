@@ -1,13 +1,13 @@
-import { airtableConnectionInputSchema } from "~/modules/airtable/airtable-schema";
 import { AIRTABLE_REPOSITORY_PROVIDER } from "~/modules/airtable/airtable-room-repository.server";
+import { airtableConnectionInputSchema } from "~/modules/airtable/airtable-schema";
 import {
   EventCreationLeaseStateError,
   EventCreationService,
 } from "~/modules/events/event-creation-service.server";
 import {
+  type AirtableProvisioningRoom,
   EVENT_CREATION_STALLED_CODE,
   EventRepositoryProvisioningService,
-  type AirtableProvisioningRoom,
 } from "~/modules/events/event-repository-provisioning.server";
 import type { Viewer } from "~/platform/auth/authorize.server";
 

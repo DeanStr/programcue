@@ -7,10 +7,10 @@ import {
   type TiptapNode,
 } from "~/modules/resources/resource-content";
 import {
+  type ExternalEmbed,
   externalGoogleMapFromQuery,
   externalVideoEmbedFromUrl,
   providerLabel,
-  type ExternalEmbed,
   type ResourceEmbedConfiguration,
 } from "~/modules/resources/resource-embed-policy";
 import type { ResourceExternalEmbedDraft } from "~/modules/resources/resource-recovery";

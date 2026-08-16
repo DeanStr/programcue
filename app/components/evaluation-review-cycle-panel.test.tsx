@@ -4,8 +4,8 @@ import { describe, expect, it } from "vitest";
 
 import { EvaluationReviewCyclePanel } from "./evaluation-admin-configuration-panels";
 import {
-  EvaluationAdminModelContext,
   type EvaluationAdminModel,
+  EvaluationAdminModelContext,
 } from "./evaluation-admin-model";
 
 function renderPanel(runningAssessmentOperationCount: number) {

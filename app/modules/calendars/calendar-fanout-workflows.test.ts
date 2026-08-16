@@ -1,25 +1,24 @@
 import { env } from "cloudflare:test";
 import { describe, expect, it } from "vitest";
-
+import { ResendEmailProvider } from "~/modules/communications/resend.server";
+import { OperationService } from "~/platform/operations/operation-service.server";
 import {
   processCalendarSync,
   processScheduleCalendarFanout,
 } from "../../../workers/communications-queue";
 import {
+  type CalendarQueueMessage,
+  calendarQueueMessageSchema,
+} from "./calendar-schema";
+import {
   CalendarService,
   scheduleCalendarFanoutSnapshotStatements,
 } from "./calendar-service.server";
 import {
-  calendarQueueMessageSchema,
-  type CalendarQueueMessage,
-} from "./calendar-schema";
-import { generateInvitationIcs, stableCalendarUid } from "./ics.server";
-import { ResendEmailProvider } from "~/modules/communications/resend.server";
-import { OperationService } from "~/platform/operations/operation-service.server";
-import {
-  calendarTestViewer as viewer,
   scheduledSpeakerEnvironment,
+  calendarTestViewer as viewer,
 } from "./calendar-service-test-fixture";
+import { generateInvitationIcs, stableCalendarUid } from "./ics.server";
 
 describe("calendar fan-out workflows", () => {
   it("heartbeats before every published-schedule fan-out target", async () => {

@@ -2,10 +2,10 @@ import type { Viewer } from "~/platform/auth/authorize.server";
 import { acceleventsCredentialsSchema } from "./accelevents-provider.server";
 import { encryptIntegrationCredentials } from "./integration-credentials.server";
 import {
+  type ConnectionRow,
+  configureIntegrationConnectionSchema,
   IntegrationServiceFoundation,
   IntegrationStateError,
-  configureIntegrationConnectionSchema,
-  type ConnectionRow,
 } from "./integration-service-foundation.server";
 
 export abstract class IntegrationConnectionWorkflows extends IntegrationServiceFoundation {

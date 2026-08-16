@@ -1,6 +1,4 @@
 import { redirect } from "react-router";
-
-import type { Route } from "./+types/sign-out";
 import { signOutSession } from "~/platform/auth/auth.server";
 import { clearCurrentEventCookie } from "~/platform/auth/current-event.server";
 import { safeReturnTo } from "~/platform/auth/return-to";
@@ -11,6 +9,7 @@ import {
   renewedEvaluationSessionCookie,
 } from "~/platform/evaluation/evaluation-session.server";
 import { requireRuntimeMode } from "~/platform/runtime-environment.server";
+import type { Route } from "./+types/sign-out";
 
 export async function action({ request, context }: Route.ActionArgs) {
   if (request.method !== "POST") {

@@ -2,11 +2,11 @@ import { useEffect, useState } from "react";
 
 import type { AutoPlacementPreview } from "~/modules/schedule/schedule-auto-placement";
 import {
+  type AutoPlacementResultNotice,
   autoPlacementResponseError,
   isAutoPlacementConfirmation,
   isAutoPlacementPreview,
   isRecord,
-  type AutoPlacementResultNotice,
 } from "./schedule-planner-workspace-helpers";
 
 export function useScheduleAutoPlacement(result: unknown) {

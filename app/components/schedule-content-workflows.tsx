@@ -11,18 +11,18 @@ import type {
   ScheduleWorkspace,
 } from "~/modules/schedule/schedule-service.server";
 import { useDraftRecovery } from "~/platform/drafts/draft-recovery";
-import { SessionContentEditor } from "./schedule-session-content-editor";
 import {
   commandId,
   downloadRecovery,
+  type EditorActionData,
   PersistenceStatus,
+  type RecoveryScope,
+  type ScheduleCalendarPreview,
   statusFor,
   useOnlineState,
   useScheduleAutosave,
-  type EditorActionData,
-  type RecoveryScope,
-  type ScheduleCalendarPreview,
 } from "./schedule-content-editor-shared";
+import { SessionContentEditor } from "./schedule-session-content-editor";
 
 export type { ScheduleCalendarPreview } from "./schedule-content-editor-shared";
 

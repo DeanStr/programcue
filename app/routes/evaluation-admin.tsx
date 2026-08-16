@@ -1,15 +1,15 @@
-import type { Route } from "./+types/evaluation-admin";
+import { EvaluationAdminPage } from "~/components/evaluation-admin-layout";
 import {
   EvaluationAdminModelContext,
   useEvaluationAdminState,
 } from "~/components/evaluation-admin-model";
-import { EvaluationAdminPage } from "~/components/evaluation-admin-layout";
+import type { Route } from "./+types/evaluation-admin";
 
+export { action, loader } from "./evaluation-admin.server";
 export {
   canReleaseEvaluationDecisions,
   decisionActionOutcome,
 } from "./evaluation-admin-outcomes";
-export { action, loader } from "./evaluation-admin.server";
 
 export const meta = () => [{ title: "Evaluation · Program Cue" }];
 

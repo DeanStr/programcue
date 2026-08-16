@@ -9,10 +9,11 @@ import {
   useState,
 } from "react";
 import { useActionData, useNavigation } from "react-router";
+import type { ResourceAuthoringService } from "~/modules/resources/resource-authoring-service.server";
 import {
   parseResourceDocument,
-  validateResourceDocumentEmbedStructure,
   type TiptapNode,
+  validateResourceDocumentEmbedStructure,
 } from "~/modules/resources/resource-content";
 import {
   emptyResourceExternalEmbedDraft,
@@ -23,10 +24,9 @@ import {
 } from "~/modules/resources/resource-recovery";
 import {
   clearDraftRecoveryScope,
-  useDraftRecovery,
   type DraftRecoveryController,
+  useDraftRecovery,
 } from "~/platform/drafts/draft-recovery";
-import type { ResourceAuthoringService } from "~/modules/resources/resource-authoring-service.server";
 
 type ResourceAdminWorkspaceData = Awaited<
   ReturnType<ResourceAuthoringService["getAdminWorkspace"]>

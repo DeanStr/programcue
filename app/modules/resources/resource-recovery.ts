@@ -2,8 +2,8 @@ import { z } from "zod";
 
 import {
   parseResourceDocument,
-  validateResourceDocumentEmbedStructure,
   type TiptapNode,
+  validateResourceDocumentEmbedStructure,
 } from "./resource-content";
 
 export type ResourceExternalEmbedDraft = {

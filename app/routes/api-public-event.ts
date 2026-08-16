@@ -1,19 +1,19 @@
-import type { Route } from "./+types/api-public-event";
 import { PublicProgrammeService } from "~/modules/programme/public-programme-service.server";
-import {
-  emptyPublicQuerySchema,
-  publishedProgrammeCacheHeaders,
-  publishedProgrammeNotModified,
-  publicEventResponse,
-  requirePublishedProgramme,
-} from "~/platform/api/api-public-programme.server";
-import { parseStrictQuery } from "~/platform/api/api-pagination.server";
 import {
   apiFailure,
   apiSuccess,
   correlationId,
 } from "~/platform/api/api.server";
+import { parseStrictQuery } from "~/platform/api/api-pagination.server";
+import {
+  emptyPublicQuerySchema,
+  publicEventResponse,
+  publishedProgrammeCacheHeaders,
+  publishedProgrammeNotModified,
+  requirePublishedProgramme,
+} from "~/platform/api/api-public-programme.server";
 import { getCloudflareContext } from "~/platform/cloudflare-context";
+import type { Route } from "./+types/api-public-event";
 
 export async function loader({ request, params, context }: Route.LoaderArgs) {
   const { env } = getCloudflareContext(context);

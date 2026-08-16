@@ -1,8 +1,7 @@
 import { env } from "cloudflare:test";
-
+import { CANONICAL_EVENT_FILE_POLICY_JSON } from "~/modules/files/file-policy";
 import type { Viewer } from "~/platform/auth/authorize.server";
 import { ensureDemoData } from "~/platform/demo/seed.server";
-import { CANONICAL_EVENT_FILE_POLICY_JSON } from "~/modules/files/file-policy";
 
 export const organisationId = "org-future-events";
 

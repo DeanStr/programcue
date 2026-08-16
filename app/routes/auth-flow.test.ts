@@ -1,13 +1,13 @@
-import { serializeSignedCookie } from "better-call";
 import { env } from "cloudflare:test";
+import { serializeSignedCookie } from "better-call";
 import { RouterContextProvider } from "react-router";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { ensureDemoSubmissionForm } from "~/modules/submissions/demo-submissions.server";
 import {
   createAuth,
-  participantOAuthConfiguration,
   ParticipantOAuthConfigurationError,
+  participantOAuthConfiguration,
   participantOAuthProviderOptions,
   trustedParticipantOAuthProviders,
 } from "~/platform/auth/auth.server";

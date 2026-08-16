@@ -1,16 +1,16 @@
 import {
-  templateContentSchema,
   type AudienceType,
   type CommunicationCategory,
   type ConfirmCommunicationInput,
   type TemplateContent,
+  templateContentSchema,
 } from "./communication-schema";
 import {
   formatEventDateMarkers,
   formatTaskDueDate,
+  type MergeValues,
   mergeTemplateVariables,
   representativeMergeValues,
-  type MergeValues,
 } from "./merge-template";
 import type { RecipientPreview } from "./recipient-query.server";
 

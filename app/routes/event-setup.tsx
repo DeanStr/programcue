@@ -1,31 +1,28 @@
 import { data } from "react-router";
 import { ZodError } from "zod";
-
-import type { Route } from "./+types/event-setup";
 import { EventSetupForm } from "~/components/event-setup-form";
-import { FILE_SIZE_MIB } from "~/modules/files/file-policy";
 import {
+  type AirtableMigrationPreview,
   AirtableMigrationService,
   AirtableMigrationStateError,
-  type AirtableMigrationPreview,
 } from "~/modules/airtable/airtable-migration-service.server";
 import {
   AirtableRoomRepository,
   isAirtableRepositoryError,
 } from "~/modules/airtable/airtable-room-repository.server";
 import {
-  EventRevisionConflictError,
-  EventSlugConflictError,
-  EventRoomInUseError,
-  EventRoomOwnershipError,
-  EventTrackInUseError,
-  EventTrackOwnershipError,
-  EventSessionFormatInUseError,
-  EventResourceConfigurationError,
-  EventPublishedScheduleConflictError,
-  EventPublishedProgrammeSlugError,
   EventAdministratorAlreadyActiveError,
   EventAdministratorNotFoundError,
+  EventPublishedProgrammeSlugError,
+  EventPublishedScheduleConflictError,
+  EventResourceConfigurationError,
+  EventRevisionConflictError,
+  EventRoomInUseError,
+  EventRoomOwnershipError,
+  EventSessionFormatInUseError,
+  EventSlugConflictError,
+  EventTrackInUseError,
+  EventTrackOwnershipError,
 } from "~/modules/events/event-repository.server";
 import { EventRepositoryRecoveryService } from "~/modules/events/event-repository-recovery.server";
 import {
@@ -37,12 +34,14 @@ import {
   EventRepositoryMigrationRequiredError,
   EventService,
 } from "~/modules/events/event-service.server";
+import { FILE_SIZE_MIB } from "~/modules/files/file-policy";
 import { requireCurrentEventRole } from "~/platform/auth/current-event.server";
 import { getCloudflareContext } from "~/platform/cloudflare-context";
 import {
   notifyRouteChange,
   recordRouteChange,
 } from "~/platform/realtime/route-realtime.server";
+import type { Route } from "./+types/event-setup";
 
 export const meta: Route.MetaFunction = () => [
   { title: "Event Setup · Program Cue" },

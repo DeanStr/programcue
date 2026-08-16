@@ -1,8 +1,7 @@
 import { env } from "cloudflare:test";
 import { describe, expect, it } from "vitest";
-
-import type { Viewer } from "~/platform/auth/authorize.server";
 import type { AirtableProviderBoundary } from "~/modules/airtable/airtable-provider-boundary.server";
+import type { Viewer } from "~/platform/auth/authorize.server";
 import { ensureDemoData } from "~/platform/demo/seed.server";
 import {
   activateEvaluationApplicantAccount,

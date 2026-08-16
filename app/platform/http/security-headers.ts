@@ -1,5 +1,5 @@
-import { requiresProductionSecurity } from "~/platform/runtime-environment.server";
 import { resourceEmbedFrameOrigins } from "~/modules/resources/resource-embed-policy";
+import { requiresProductionSecurity } from "~/platform/runtime-environment.server";
 
 export const SECURITY_HEADERS = {
   "x-content-type-options": "nosniff",

@@ -1,4 +1,4 @@
-import { redirect, type RouterContextProvider } from "react-router";
+import { type RouterContextProvider, redirect } from "react-router";
 import { z } from "zod";
 
 import { CalendarOAuthService } from "~/modules/calendars/calendar-oauth.server";

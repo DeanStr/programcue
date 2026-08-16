@@ -8,8 +8,6 @@ import {
 } from "lucide-react";
 import { data, Form, Link, useActionData, useNavigation } from "react-router";
 import { ZodError } from "zod";
-
-import type { Route } from "./+types/integrations-admin";
 import { useConfirm } from "~/components/ui/confirm-dialog";
 import {
   DomainStatusBadge,
@@ -27,6 +25,7 @@ import {
 } from "~/modules/integrations/integration-service.server";
 import { requireCurrentEventRole } from "~/platform/auth/current-event.server";
 import { getCloudflareContext } from "~/platform/cloudflare-context";
+import type { Route } from "./+types/integrations-admin";
 
 export const meta = () => [{ title: "Integrations · Program Cue" }];
 

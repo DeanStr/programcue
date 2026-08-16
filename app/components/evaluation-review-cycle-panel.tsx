@@ -1,9 +1,8 @@
 import { Form } from "react-router";
 
 import { useEvaluationAdminModel } from "~/components/evaluation-admin-model";
-import { useConfirm } from "~/components/ui/confirm-dialog";
-
 import { RubricFields } from "~/components/evaluation-rubric-fields";
+import { useConfirm } from "~/components/ui/confirm-dialog";
 
 export function EvaluationReviewCyclePanel() {
   const { loaderData, navigation } = useEvaluationAdminModel();

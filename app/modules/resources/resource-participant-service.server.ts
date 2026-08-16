@@ -1,14 +1,14 @@
-import type { Viewer } from "~/platform/auth/authorize.server";
 import {
   AirtableProviderBoundary,
   airtableCommandKey,
 } from "~/modules/airtable/airtable-provider-boundary.server";
-import { ResourceServiceBase } from "./resource-service-base.server";
+import type { Viewer } from "~/platform/auth/authorize.server";
 import {
   parseResourceDocument,
   validateResourceDocumentEmbedStructure,
 } from "./resource-content";
 import { resourceEmbedConfiguration } from "./resource-embed-policy";
+import { ResourceServiceBase } from "./resource-service-base.server";
 import {
   participantAudienceSql,
   participantSpeakerAccessSql,

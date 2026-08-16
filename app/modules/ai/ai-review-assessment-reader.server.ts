@@ -1,10 +1,10 @@
 import type { Viewer } from "~/platform/auth/authorize.server";
 import {
+  type FailedGenerationResult,
   parseCompletedGenerationResult,
   parseFailedGenerationResult,
   parseGenerationOperationPayload,
   parseStagedGenerationResult,
-  type FailedGenerationResult,
 } from "./ai-review-assessment-durable-state";
 import { AiReviewAssessmentStateError } from "./ai-review-assessment-errors";
 import type { AiModelProvider } from "./openai-responses-provider.server";

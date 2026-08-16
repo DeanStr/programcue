@@ -29,8 +29,8 @@ import {
 } from "./form-builder-preview";
 import {
   action as reviewAction,
-  loader as reviewLoader,
   reviewCanAdoptServerPayload,
+  loader as reviewLoader,
   reviewSaveCoversCurrentEdits,
 } from "./review-workbench";
 

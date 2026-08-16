@@ -1,6 +1,4 @@
 import { z } from "zod";
-
-import type { OpenAiFunctionTool } from "./openai-responses-provider.server";
 import { saveTemplateSchema } from "~/modules/communications/communication-schema";
 import {
   assignmentBatchSchema,
@@ -12,6 +10,7 @@ import {
 } from "~/modules/schedule/schedule-schema";
 import { saveFormSchema } from "~/modules/submissions/submission-schema";
 import type { Viewer } from "~/platform/auth/authorize.server";
+import type { OpenAiFunctionTool } from "./openai-responses-provider.server";
 
 export const adminRoles = new Set<Viewer["role"]>(["owner", "administrator"]);
 

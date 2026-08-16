@@ -6,11 +6,11 @@ import {
 } from "~/platform/evaluation/evaluation-session.server";
 import { requireRuntimeMode } from "~/platform/runtime-environment.server";
 import type { ItineraryIdentity } from "./public-itinerary-service.server";
-import { readCookie } from "./public-programme-service.server";
 import {
   signItineraryBrowserCookie,
   verifyItineraryBrowserCookie,
 } from "./public-itinerary-token.server";
+import { readCookie } from "./public-programme-service.server";
 
 export const PUBLIC_ITINERARY_COOKIE = "program_cue_itinerary";
 

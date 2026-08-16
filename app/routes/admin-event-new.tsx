@@ -2,16 +2,14 @@ import { Database, Plus, ShieldCheck } from "lucide-react";
 import { useState } from "react";
 import { data, Form, Link, useActionData, useNavigation } from "react-router";
 import { ZodError } from "zod";
-
-import type { Route } from "./+types/admin-event-new";
-import { shortReference } from "~/lib/short-reference";
-import { zodFieldErrors } from "~/lib/form-errors";
+import { useConfirm } from "~/components/ui/confirm-dialog";
 import { DerivedSlugField } from "~/components/ui/derived-slug-field";
 import { ErrorSummary } from "~/components/ui/error-summary";
 import { EventDateRangeFields } from "~/components/ui/event-date-range-fields";
 import { Field } from "~/components/ui/field";
 import { TimezoneField } from "~/components/ui/timezone-field";
-import { useConfirm } from "~/components/ui/confirm-dialog";
+import { zodFieldErrors } from "~/lib/form-errors";
+import { shortReference } from "~/lib/short-reference";
 import {
   EventCreationInProgressError,
   EventCreationIntentConflictError,
@@ -22,6 +20,7 @@ import {
 import { EventRepositoryProvisioningError } from "~/modules/events/event-repository-provisioning.server";
 import { requireCurrentEventRole } from "~/platform/auth/current-event.server";
 import { getCloudflareContext } from "~/platform/cloudflare-context";
+import type { Route } from "./+types/admin-event-new";
 
 type ActionResponse = {
   ok: boolean;
@@ -296,11 +295,7 @@ export default function AdminEventNew({ loaderData }: Route.ComponentProps) {
               value={loaderData.creationIntentId}
             />
             <ErrorSummary errors={summaryErrors} />
-            <Field
-              label="Event name"
-              required
-              error={fieldErrors.name?.[0]}
-            >
+            <Field label="Event name" required error={fieldErrors.name?.[0]}>
               <input
                 id="event-new-name"
                 className="field"

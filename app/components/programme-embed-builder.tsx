@@ -11,16 +11,16 @@ import {
   PROGRAMME_EMBED_CONTROLS,
   PROGRAMME_EMBED_FIELDS,
   PROGRAMME_EMBED_SURFACES,
-  parseProgrammeEmbedHeight,
+  type ProgrammeEmbedConfiguration,
   ProgrammeEmbedConfigurationError,
+  type ProgrammeEmbedControl,
+  type ProgrammeEmbedField,
+  type ProgrammeEmbedSurface,
+  parseProgrammeEmbedHeight,
   programmeEmbedFilterOptions,
   programmeEmbedUrl,
   programmeIframeSnippet,
   programmeWidgetSnippet,
-  type ProgrammeEmbedConfiguration,
-  type ProgrammeEmbedControl,
-  type ProgrammeEmbedField,
-  type ProgrammeEmbedSurface,
 } from "~/modules/programme/programme-embed-configuration";
 import type { ManagedProgrammeEmbed } from "~/modules/programme/programme-embed-service.server";
 

@@ -2,11 +2,11 @@ import { env } from "cloudflare:test";
 import { describe, expect, it, vi } from "vitest";
 
 import { ensureDemoData } from "~/platform/demo/seed.server";
-import { rejectUnsupportedQueueMessage } from "../../workers/index";
 import {
   handleProgramCueQueueMessage,
   PROGRAM_CUE_QUEUE_MAX_ATTEMPTS,
 } from "../../workers/communications-queue";
+import { rejectUnsupportedQueueMessage } from "../../workers/index";
 
 function failNextPrepare(environment: CloudflareEnvironment) {
   let pending = true;

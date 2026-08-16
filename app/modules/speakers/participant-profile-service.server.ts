@@ -1,12 +1,11 @@
 import type { Viewer } from "~/platform/auth/authorize.server";
-import { notifyRouteChange } from "~/platform/realtime/route-realtime.server";
 import { WebhookService } from "~/platform/operations/webhook-service.server";
-
-import {
-  speakerProfileSchema,
-  type SpeakerProfileInput,
-} from "./speaker-schema";
+import { notifyRouteChange } from "~/platform/realtime/route-realtime.server";
 import { canonicalProfileRevisionStatement } from "./speaker-profile-revision.server";
+import {
+  type SpeakerProfileInput,
+  speakerProfileSchema,
+} from "./speaker-schema";
 
 export class ParticipantProfileConflictError extends Error {
   constructor(

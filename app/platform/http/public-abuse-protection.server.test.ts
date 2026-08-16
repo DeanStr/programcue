@@ -6,10 +6,10 @@ import {
   AbuseRateLimitError,
   enforcePublicAbuseProtection,
   enforcePublicRateLimit,
+  type PublicAbuseAction,
   publicAbuseClientConfiguration,
   TurnstileRejectedError,
   TurnstileUnavailableError,
-  type PublicAbuseAction,
 } from "./public-abuse-protection.server";
 
 type AbuseTestEnvironment = CloudflareEnvironment & {

@@ -1,7 +1,6 @@
 import { z } from "zod";
-
-import { ApiError, apiRequestHash } from "./api.server";
 import type { Viewer } from "~/platform/auth/authorize.server";
+import { ApiError, apiRequestHash } from "./api.server";
 
 type StoredCommand = {
   id: string;

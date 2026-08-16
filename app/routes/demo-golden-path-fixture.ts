@@ -1,19 +1,19 @@
 import {
-  data,
   type ActionFunctionArgs,
+  data,
   type LoaderFunctionArgs,
 } from "react-router";
 
 import { DEFAULT_EVENT_BRAND_ACCENT } from "~/lib/brand";
-import { ensureDemoSpeakerData } from "~/modules/speakers/demo.server";
 import { CANONICAL_EVENT_FILE_POLICY_JSON } from "~/modules/files/file-policy";
+import { ensureDemoSpeakerData } from "~/modules/speakers/demo.server";
+import { getCloudflareContext } from "~/platform/cloudflare-context";
 import {
   DEMO_EVENT_ID,
   DEMO_IDENTITIES,
   DEMO_ORGANISATION_ID,
 } from "~/platform/demo/demo-identities";
 import { ensureDemoProgramme } from "~/platform/demo/seed.server";
-import { getCloudflareContext } from "~/platform/cloudflare-context";
 
 const CONFIRMATION = "seed-golden-path-browser-fixture";
 const ACCELEVENTS_CONNECTION_ID = "demo-accelevents-no-write-connection";

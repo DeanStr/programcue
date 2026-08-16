@@ -5,10 +5,10 @@ import {
   externalGoogleMapFromQuery,
   externalVideoEmbedFromUrl,
   parseResourceEmbedProviders,
-  resourceEmbedConfiguration,
-  resourceEmbedFrameOrigins,
   ResourceEmbedConfigurationError,
   ResourceEmbedInputError,
+  resourceEmbedConfiguration,
+  resourceEmbedFrameOrigins,
 } from "./resource-embed-policy";
 
 describe("resource external embed policy", () => {

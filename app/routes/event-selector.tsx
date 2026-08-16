@@ -1,8 +1,6 @@
 import { CalendarDays, CheckCircle2 } from "lucide-react";
 import { Form, redirect } from "react-router";
 import { z } from "zod";
-
-import type { Route } from "./+types/event-selector";
 import { BrandMark } from "~/components/brand-mark";
 import {
   acceptEventInvitation,
@@ -18,6 +16,7 @@ import {
 } from "~/platform/auth/current-event.server";
 import { safeReturnTo } from "~/platform/auth/return-to";
 import { getCloudflareContext } from "~/platform/cloudflare-context";
+import type { Route } from "./+types/event-selector";
 
 const selectionSchema = z.object({
   eventId: z.string().min(1).max(128),

@@ -1,13 +1,12 @@
 import { describe, expect, it } from "vitest";
-
+import {
+  assertEventBrandImageDimensions,
+  EventBrandImageNormalizationError,
+} from "./event-brand-image-normalizer.server";
 import {
   EVENT_BRAND_ASSET_DIMENSION_POLICY,
   eventBrandDraftInputSchema,
 } from "./event-branding";
-import {
-  EventBrandImageNormalizationError,
-  assertEventBrandImageDimensions,
-} from "./event-brand-image-normalizer.server";
 import { optionalCredentialFreeHttpsUrlSchema } from "./https-url";
 
 describe("event branding rules", () => {

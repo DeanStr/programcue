@@ -1,13 +1,12 @@
 import type { ShouldRevalidateFunctionArgs } from "react-router";
-
-import type { Route } from "./+types/review-workbench";
 import { ReviewWorkbenchWorkspace } from "~/components/review-workbench-workspace";
+import type { Route } from "./+types/review-workbench";
 
-export { action, loader } from "./review-workbench.server";
 export {
   reviewCanAdoptServerPayload,
   reviewSaveCoversCurrentEdits,
 } from "~/components/review-workbench-workspace";
+export { action, loader } from "./review-workbench.server";
 
 export const meta = () => [{ title: "Review Workbench · Program Cue" }];
 

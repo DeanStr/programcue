@@ -1,8 +1,8 @@
 import { z } from "zod";
 
 import {
-  readBoundedResponseText,
   ResponseBodyTooLargeError,
+  readBoundedResponseText,
 } from "~/platform/http/read-response";
 
 const MAX_PROFILE_BYTES = 512_000;

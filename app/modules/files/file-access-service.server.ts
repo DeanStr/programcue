@@ -1,10 +1,9 @@
 import { z } from "zod";
-
-import type { Viewer } from "~/platform/auth/authorize.server";
 import {
   participantAudienceSql,
   participantSpeakerAccessSql,
 } from "~/modules/resources/resource-service-shared";
+import type { Viewer } from "~/platform/auth/authorize.server";
 import { assetKindSchema, safeDownloadName } from "./file-policy";
 import {
   FileAccessError,

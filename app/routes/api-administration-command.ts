@@ -1,13 +1,9 @@
 import { ZodError } from "zod";
-
-import type { Route } from "./+types/api-administration-command";
 import { ResourceContentError } from "~/modules/resources/resource-content";
 import {
   ResourceEmbedConfigurationError,
   ResourceEmbedInputError,
 } from "~/modules/resources/resource-embed-policy";
-import { apiAdministrationFamilySchema } from "~/platform/api/api-command-contract";
-import { ApiAdministrationCommandService } from "~/platform/api/api-administration-command-service.server";
 import {
   ApiError,
   apiFailure,
@@ -16,8 +12,11 @@ import {
   readJson,
   requireIdempotencyKey,
 } from "~/platform/api/api.server";
+import { ApiAdministrationCommandService } from "~/platform/api/api-administration-command-service.server";
+import { apiAdministrationFamilySchema } from "~/platform/api/api-command-contract";
 import { requireEventRole } from "~/platform/auth/authorize.server";
 import { getCloudflareContext } from "~/platform/cloudflare-context";
+import type { Route } from "./+types/api-administration-command";
 
 function requireSameOrigin(request: Request) {
   if (request.headers.get("origin") !== new URL(request.url).origin) {

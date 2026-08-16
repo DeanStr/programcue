@@ -3,8 +3,8 @@ import { z } from "zod";
 import type { Viewer } from "~/platform/auth/authorize.server";
 import {
   AirtableClient,
-  airtableEqualsFormula,
   type AirtableRecord,
+  airtableEqualsFormula,
 } from "./airtable-client.server";
 import {
   AIRTABLE_EVENT_TABLE_SPECS,
@@ -12,9 +12,9 @@ import {
   type AirtableEventTableSpec,
 } from "./airtable-event-data-schema";
 import {
+  type AirtableRepositoryConnection,
   AirtableRepositoryReconciliationError,
   AirtableRoomRepository,
-  type AirtableRepositoryConnection,
 } from "./airtable-room-repository.server";
 import {
   AIRTABLE_CACHE_TTL_SECONDS,

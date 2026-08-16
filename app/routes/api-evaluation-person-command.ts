@@ -1,8 +1,5 @@
 import { z } from "zod";
-
-import type { Route } from "./+types/api-evaluation-person-command";
 import { EvaluationService } from "~/modules/evaluations/evaluation-service.server";
-import { evaluationApiError } from "~/platform/api/api-evaluation-commands.server";
 import {
   ApiError,
   apiFailure,
@@ -10,12 +7,14 @@ import {
   correlationId,
   readJson,
 } from "~/platform/api/api.server";
+import { evaluationApiError } from "~/platform/api/api-evaluation-commands.server";
 import { requireEventRole } from "~/platform/auth/authorize.server";
 import { getCloudflareContext } from "~/platform/cloudflare-context";
 import {
   EventRealtimeService,
   type RecordEventChangeInput,
 } from "~/platform/realtime/event-realtime.server";
+import type { Route } from "./+types/api-evaluation-person-command";
 
 const commandSchema = z.enum(["review", "conflict", "moderation", "reopen"]);
 const recommendationSchema = z.enum([

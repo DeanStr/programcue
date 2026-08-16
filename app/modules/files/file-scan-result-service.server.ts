@@ -1,14 +1,13 @@
 import { z } from "zod";
-
+import {
+  headshotProfileRevisionGuardStatement,
+  headshotProfileRevisionStatement,
+} from "~/modules/speakers/speaker-profile-revision.server";
 import {
   FileScanConflictError,
   FileScanStateError,
   FileVersionNotFoundError,
 } from "./file-service-errors";
-import {
-  headshotProfileRevisionGuardStatement,
-  headshotProfileRevisionStatement,
-} from "~/modules/speakers/speaker-profile-revision.server";
 
 export const scanResultSchema = z
   .object({

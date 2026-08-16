@@ -8,18 +8,17 @@ import {
   useNavigation,
 } from "react-router";
 import { ZodError } from "zod";
-
-import type { Route } from "./+types/admin-crm-outreach";
 import {
   CommunicationNotFoundError,
   CommunicationStateError,
 } from "~/modules/communications/communication-service-shared";
 import { UnknownMergeVariableError } from "~/modules/communications/merge-template";
-import { ensureDemoCrmData } from "~/modules/crm/demo.server";
 import { CrmService, CrmStateError } from "~/modules/crm/crm-service.server";
+import { ensureDemoCrmData } from "~/modules/crm/demo.server";
 import { currentEventCookie } from "~/platform/auth/current-event.server";
 import { requireOrganisationAdministrator } from "~/platform/auth/organisation.server";
 import { getCloudflareContext } from "~/platform/cloudflare-context";
+import type { Route } from "./+types/admin-crm-outreach";
 
 export const meta = () => [{ title: "Speaker invitations · Program Cue" }];
 type ActionResult = { ok: boolean; message: string };

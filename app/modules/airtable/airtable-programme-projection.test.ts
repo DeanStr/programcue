@@ -2,8 +2,10 @@ import { env } from "cloudflare:test";
 import { beforeEach, describe, expect, it } from "vitest";
 
 import type { Viewer } from "~/platform/auth/authorize.server";
-import { ensureDemoData } from "~/platform/demo/seed.server";
-import { ensureDemoProgramme } from "~/platform/demo/seed.server";
+import {
+  ensureDemoData,
+  ensureDemoProgramme,
+} from "~/platform/demo/seed.server";
 import type { AirtableRecord, AirtableTable } from "./airtable-client.server";
 import { AirtableEventDataRepository } from "./airtable-event-data-repository.server";
 import { AirtableMigrationService } from "./airtable-migration-service.server";

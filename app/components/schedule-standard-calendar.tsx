@@ -4,8 +4,8 @@ import FullCalendar, {
 } from "@fullcalendar/react";
 import interactionPlugin from "@fullcalendar/react/interaction";
 import listPlugin from "@fullcalendar/react/list";
-import timeGridPlugin from "@fullcalendar/react/timegrid";
 import breezyTheme from "@fullcalendar/react/themes/breezy";
+import timeGridPlugin from "@fullcalendar/react/timegrid";
 import "@fullcalendar/react/skeleton.css";
 import "@fullcalendar/react/themes/breezy/theme.css";
 import "@fullcalendar/react/themes/breezy/palettes/indigo.css";

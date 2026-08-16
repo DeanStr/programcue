@@ -1,6 +1,6 @@
 import * as DialogPrimitive from "@radix-ui/react-dialog";
 import { X } from "lucide-react";
-import { useCallback, useEffect, useId, useRef, type RefObject } from "react";
+import { type RefObject, useCallback, useEffect, useId, useRef } from "react";
 
 /** Width class. The default stays at the historical 680px. */
 type DialogSize = "sm" | "md" | "lg";

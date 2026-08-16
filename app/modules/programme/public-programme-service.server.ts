@@ -4,8 +4,8 @@ import { eventBoundaryCalendarDate } from "~/modules/schedule/schedule-time";
 import { ensureDemoProgramme } from "~/platform/demo/seed.server";
 import { sortPublishedSpeakers } from "./programme-presentation";
 import {
-  PublicItineraryService,
   type ItineraryIdentity,
+  PublicItineraryService,
 } from "./public-itinerary-service.server";
 import type {
   PublishedProgramme,
@@ -17,12 +17,13 @@ import {
   PublishedHeadshotService,
   publishedHeadshotPath,
 } from "./published-headshot-service.server";
+
+export type { ItineraryIdentity } from "./public-itinerary-service.server";
 export {
   PublishedProgrammeItineraryExpiredError,
   PublishedProgrammeItineraryNotFoundError,
   PublishedProgrammeSessionNotFoundError,
 } from "./public-itinerary-service.server";
-export type { ItineraryIdentity } from "./public-itinerary-service.server";
 export type {
   PublishedProgramme,
   PublishedSession,

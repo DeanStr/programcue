@@ -1,6 +1,6 @@
-import type { Viewer } from "~/platform/auth/authorize.server";
 import type { AirtableProviderBoundary } from "~/modules/airtable/airtable-provider-boundary.server";
 import { parseEventFilePolicy } from "~/modules/files/file-policy";
+import type { Viewer } from "~/platform/auth/authorize.server";
 import { readSpeakerProfileHistory } from "./speaker-profile-revision.server";
 
 export type ProfileRow = {

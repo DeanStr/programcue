@@ -2,7 +2,7 @@ import { z } from "zod";
 
 import { AirtableProviderBoundary } from "~/modules/airtable/airtable-provider-boundary.server";
 import { WebhookService } from "~/platform/operations/webhook-service.server";
-import { ApiError, apiRequestHash, type ApiPrincipal } from "./api.server";
+import { ApiError, type ApiPrincipal, apiRequestHash } from "./api.server";
 
 const taskTypes = [
   "checklist",

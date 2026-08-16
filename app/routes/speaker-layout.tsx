@@ -1,12 +1,11 @@
 import { Outlet } from "react-router";
-
-import type { Route } from "./+types/speaker-layout";
 import { SpeakerShell } from "~/components/speaker-shell";
 import { SpeakerService } from "~/modules/speakers/speaker-service.server";
 import {
   formatSpeakerEvent,
   requireSpeakerWorkspace,
 } from "~/modules/speakers/speaker-workspace.server";
+import type { Route } from "./+types/speaker-layout";
 
 export async function loader({ request, context }: Route.LoaderArgs) {
   const { env, viewer } = await requireSpeakerWorkspace(request, context);

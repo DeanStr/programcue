@@ -1,16 +1,16 @@
-import type { CalendarProviderName } from "./calendar-schema";
 import { CalendarStateError } from "./calendar-errors";
 import {
+  type CalendarQueueActor,
+  type PublishedScheduleCalendarDispatch,
+  type PublishedScheduleCalendarTarget,
   publishedScheduleCalendarIdempotencyKey,
   publishedScheduleCalendarTargetSchema,
   SCHEDULE_CALENDAR_FANOUT_BATCH_SIZE,
   SCHEDULE_CALENDAR_FANOUT_SNAPSHOT_KEY,
   SCHEDULE_CALENDAR_FANOUT_TARGET_TYPE,
-  type CalendarQueueActor,
-  type PublishedScheduleCalendarDispatch,
-  type PublishedScheduleCalendarTarget,
 } from "./calendar-fanout";
 import { CalendarLifecycleService } from "./calendar-lifecycle-service.server";
+import type { CalendarProviderName } from "./calendar-schema";
 
 export class PublishedScheduleCalendarService {
   private readonly lifecycle: CalendarLifecycleService;

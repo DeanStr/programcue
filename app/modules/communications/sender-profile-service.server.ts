@@ -1,14 +1,14 @@
 import type { Viewer } from "~/platform/auth/authorize.server";
 import { CommunicationStateError } from "./communication-service-shared";
 import {
-  requireEmailProviderConfiguration,
   type EmailProviderConfiguration,
+  requireEmailProviderConfiguration,
 } from "./email-provider.server";
 import { ResendDomainProvider } from "./resend-domain.server";
 import {
+  type SaveSenderProfileInput,
   saveSenderProfileSchema,
   senderProfileIdSchema,
-  type SaveSenderProfileInput,
 } from "./sender-profile-schema";
 
 export type SenderProfile = {

@@ -1,4 +1,4 @@
-import { redirect, type ActionFunctionArgs } from "react-router";
+import { type ActionFunctionArgs, redirect } from "react-router";
 import { ZodError } from "zod";
 
 import { requireCurrentEventRole } from "~/platform/auth/current-event.server";

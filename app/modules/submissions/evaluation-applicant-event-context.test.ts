@@ -15,8 +15,8 @@ import {
   evaluationSessionCookie,
 } from "~/platform/evaluation/evaluation-session.server";
 import {
-  action as selectEvent,
   loader as loadEventSelector,
+  action as selectEvent,
 } from "~/routes/event-selector";
 import { SubmissionService } from "./submission-service.server";
 

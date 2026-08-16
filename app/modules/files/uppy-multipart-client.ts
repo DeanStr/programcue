@@ -1,6 +1,6 @@
-import Uppy from "@uppy/core";
-import AwsS3, { type AwsS3Part } from "@uppy/aws-s3";
 import { md5 } from "@noble/hashes/legacy.js";
+import AwsS3, { type AwsS3Part } from "@uppy/aws-s3";
+import Uppy from "@uppy/core";
 
 import { UserFacingError } from "~/platform/user-facing-error";
 

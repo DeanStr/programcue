@@ -2,9 +2,9 @@ import { z } from "zod";
 
 import {
   assertExternalEmbedEnabled,
+  type ExternalEmbed,
   externalEmbedPresentation,
   parseExternalEmbed,
-  type ExternalEmbed,
   type ResourceEmbedConfiguration,
 } from "./resource-embed-policy";
 

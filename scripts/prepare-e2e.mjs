@@ -1,6 +1,6 @@
 import { rm } from "node:fs/promises";
 
-import { resolveE2eRuntime, repositoryRoot } from "./e2e-runtime.mjs";
+import { repositoryRoot, resolveE2eRuntime } from "./e2e-runtime.mjs";
 import { resolvePackageExecutable } from "./package-executable.mjs";
 import { npmCommand, runProcess } from "./process-runner.mjs";
 

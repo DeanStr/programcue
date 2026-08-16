@@ -1,26 +1,26 @@
 import type { Viewer } from "~/platform/auth/authorize.server";
-import { scheduleConflictInsert } from "./schedule-conflict-statement.server";
-import {
-  ScheduleIdempotencyConflictError,
-  ScheduleNotFoundError,
-  ScheduleRevisionConflictError,
-  ScheduleConfigurationError,
-} from "./schedule-errors";
 import {
   AUTO_ENTRY_PREFIX,
+  type AutoPlacementPreview,
+  type AutoPlacementProposal,
+  type AutoPlacementUnplaced,
   canonicalAutoPlacementPlan,
   canonicalAutoPlacementSessionRevisions,
   computeAutoPlacements,
   plannedAutoEntryId,
   revalidateSelectedAutoPlacements,
-  type AutoPlacementPreview,
-  type AutoPlacementProposal,
-  type AutoPlacementUnplaced,
 } from "./schedule-auto-placement";
+import { scheduleConflictInsert } from "./schedule-conflict-statement.server";
+import {
+  ScheduleConfigurationError,
+  ScheduleIdempotencyConflictError,
+  ScheduleNotFoundError,
+  ScheduleRevisionConflictError,
+} from "./schedule-errors";
 import {
   MAX_AUTO_PLACEMENT_SESSIONS,
-  scheduleAutoPlacementConfirmSchema,
   type ScheduleAutoPlacementConfirmInput,
+  scheduleAutoPlacementConfirmSchema,
 } from "./schedule-schema";
 import type {
   ScheduleAutoPlacementResult,

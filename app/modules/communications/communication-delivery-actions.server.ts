@@ -1,19 +1,19 @@
 import type { Viewer } from "~/platform/auth/authorize.server";
 import { CommunicationDeliveryRecorder } from "./communication-delivery-recorder.server";
 import {
-  confirmCommunicationSchema,
-  scheduleCommunicationSchema,
-  testCommunicationSchema,
   type ConfirmCommunicationInput,
+  confirmCommunicationSchema,
   type PreviewCommunicationInput,
   type ScheduleCommunicationInput,
+  scheduleCommunicationSchema,
   type TestCommunicationInput,
+  testCommunicationSchema,
 } from "./communication-schema";
 import {
   CommunicationNotFoundError,
+  CommunicationStateError,
   communicationReplay,
   communicationRequestHash,
-  CommunicationStateError,
   type ExistingCommunication,
 } from "./communication-service-shared";
 

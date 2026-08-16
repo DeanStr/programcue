@@ -1,10 +1,9 @@
 import { z } from "zod";
 import type { Viewer } from "~/platform/auth/authorize.server";
 import { WebhookService } from "~/platform/operations/webhook-service.server";
+import { ParticipantTaskWorkflowFoundation } from "./participant-task-workflow-foundation.server";
 import { participantEvidenceSchema } from "./task-schema";
 import {
-  type TaskCompletionMutationResult,
-  TaskStateError,
   completionUndoResultSchema,
   equalHash,
   hashUndoSecret,
@@ -12,9 +11,9 @@ import {
   randomUndoSecret,
   statusProgress,
   structuredTaskEvidence,
+  type TaskCompletionMutationResult,
+  TaskStateError,
 } from "./task-service-foundation.server";
-
-import { ParticipantTaskWorkflowFoundation } from "./participant-task-workflow-foundation.server";
 
 export class ParticipantTaskCompletionCommands extends ParticipantTaskWorkflowFoundation {
   async completeParticipant(

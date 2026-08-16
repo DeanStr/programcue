@@ -16,30 +16,25 @@ import {
   useNavigation,
   useSubmit,
 } from "react-router";
-
-import type { Route } from "./+types/demo-guide";
 import { useConfirm } from "~/components/ui/confirm-dialog";
 import { PageHeader } from "~/components/ui/page-header";
 import { StatusBadge } from "~/components/ui/status-badge";
 import { AiProviderSettingsService } from "~/modules/ai/ai-provider.server";
 import {
-  PROGRAMME_WORKFLOW_PHASES,
-  type ProgrammeWorkflowPhaseKey,
-} from "~/modules/readiness/programme-workflow-phases";
-import {
   emailProviderConfigurationIssue,
   requireEmailProviderConfiguration,
 } from "~/modules/communications/email-provider.server";
 import {
-  DemoResetBusyError,
-  DemoResetConfirmationError,
-  DemoResetStorageError,
-  DemoResetUnavailableError,
-  clearDemoEvaluationWorkflow,
-  prepareJudgedDemoWorkflow,
-  readDemoActiveWork,
-  resetDemoEvent,
-} from "~/platform/demo/demo-reset.server";
+  PROGRAMME_WORKFLOW_PHASES,
+  type ProgrammeWorkflowPhaseKey,
+} from "~/modules/readiness/programme-workflow-phases";
+import {
+  requireEventRole,
+  selectedDemoIdentity,
+  type Viewer,
+} from "~/platform/auth/authorize.server";
+import { safeReturnTo } from "~/platform/auth/return-to";
+import { getCloudflareContext } from "~/platform/cloudflare-context";
 import {
   DEMO_EVENT_ID,
   DEMO_IDENTITIES,
@@ -48,13 +43,17 @@ import {
 } from "~/platform/demo/demo-identities";
 import { resolveDemoIdentityState } from "~/platform/demo/demo-identity.server";
 import {
-  requireEventRole,
-  selectedDemoIdentity,
-  type Viewer,
-} from "~/platform/auth/authorize.server";
-import { safeReturnTo } from "~/platform/auth/return-to";
-import { getCloudflareContext } from "~/platform/cloudflare-context";
+  clearDemoEvaluationWorkflow,
+  DemoResetBusyError,
+  DemoResetConfirmationError,
+  DemoResetStorageError,
+  DemoResetUnavailableError,
+  prepareJudgedDemoWorkflow,
+  readDemoActiveWork,
+  resetDemoEvent,
+} from "~/platform/demo/demo-reset.server";
 import { EventRealtimeService } from "~/platform/realtime/event-realtime.server";
+import type { Route } from "./+types/demo-guide";
 
 type DemoWalkthroughStep = {
   phase: ProgrammeWorkflowPhaseKey;

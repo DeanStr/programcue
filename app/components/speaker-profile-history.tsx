@@ -1,5 +1,5 @@
-import { EventDateTime } from "~/components/ui/event-date-time";
 import { DomainStatusBadge } from "~/components/ui/domain-status-badge";
+import { EventDateTime } from "~/components/ui/event-date-time";
 import type { SpeakerProfileRevision } from "~/modules/speakers/speaker-profile-revision.server";
 
 export function SpeakerProfileHistory({

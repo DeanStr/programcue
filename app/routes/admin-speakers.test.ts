@@ -1,9 +1,8 @@
 import { env } from "cloudflare:test";
 import { RouterContextProvider } from "react-router";
 import { beforeEach, describe, expect, it } from "vitest";
-
-import { cloudflareContext } from "~/platform/cloudflare-context";
 import { currentEventCookie } from "~/platform/auth/current-event.server";
+import { cloudflareContext } from "~/platform/cloudflare-context";
 import { ensureDemoData } from "~/platform/demo/seed.server";
 import { action } from "./admin-speakers";
 

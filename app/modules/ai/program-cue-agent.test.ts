@@ -1,10 +1,9 @@
 import { env, runInDurableObject } from "cloudflare:test";
 import { describe, expect, it } from "vitest";
-
-import { getProgramCueEventAgent } from "./program-cue-agent-client.server";
-import { programCueAgentInstanceName } from "./program-cue-agent.server";
 import type { Viewer } from "~/platform/auth/authorize.server";
 import { ensureDemoData } from "~/platform/demo/seed.server";
+import { programCueAgentInstanceName } from "./program-cue-agent.server";
+import { getProgramCueEventAgent } from "./program-cue-agent-client.server";
 
 const admin: Viewer = {
   personId: "person-demo-admin",

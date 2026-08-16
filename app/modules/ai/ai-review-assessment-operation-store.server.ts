@@ -1,12 +1,12 @@
 import { reviewableSubmissionSql } from "~/modules/evaluations/evaluation-submission-review-eligibility.server";
 import type { Viewer } from "~/platform/auth/authorize.server";
 import {
+  type GenerationOperationPayload,
   generationAttemptIdempotencyKey,
   parseCompletedGenerationResult,
   parseFailedGenerationResult,
   parseGenerationOperationPayload,
   parseStagedGenerationResult,
-  type GenerationOperationPayload,
   type StagedGenerationResult,
 } from "./ai-review-assessment-durable-state";
 import {

@@ -1,12 +1,11 @@
 import { z } from "zod";
 import type { Viewer } from "~/platform/auth/authorize.server";
 import { WebhookService } from "~/platform/operations/webhook-service.server";
-import {
-  TaskStateError,
-  hashUndoSecret,
-} from "./task-service-foundation.server";
-
 import { ParticipantTaskWorkflowFoundation } from "./participant-task-workflow-foundation.server";
+import {
+  hashUndoSecret,
+  TaskStateError,
+} from "./task-service-foundation.server";
 
 export class ParticipantTaskCommentCommands extends ParticipantTaskWorkflowFoundation {
   async addComment(

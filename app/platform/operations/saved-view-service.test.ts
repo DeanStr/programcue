@@ -2,8 +2,8 @@ import { env } from "cloudflare:test";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { AirtableProviderBoundary } from "~/modules/airtable/airtable-provider-boundary.server";
-import type { Viewer } from "~/platform/auth/authorize.server";
 import { ensureDemoEvaluationData } from "~/modules/evaluations/demo.server";
+import type { Viewer } from "~/platform/auth/authorize.server";
 import { ensureDemoData } from "~/platform/demo/seed.server";
 import { CommandPaletteService } from "~/platform/operations/command-palette-service.server";
 import {

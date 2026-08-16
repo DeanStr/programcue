@@ -1,19 +1,18 @@
 import { env } from "cloudflare:test";
 import { RouterContextProvider } from "react-router";
 import { describe, expect, it } from "vitest";
-
-import type { Viewer } from "~/platform/auth/authorize.server";
-import { cloudflareContext } from "~/platform/cloudflare-context";
 import { ensureDemoSpeakerData } from "~/modules/speakers/demo.server";
 import { headshotProfileRevisionGuardStatement } from "~/modules/speakers/speaker-profile-revision.server";
+import type { Viewer } from "~/platform/auth/authorize.server";
+import { cloudflareContext } from "~/platform/cloudflare-context";
 import { loader as adminSpeakerFileDownload } from "~/routes/admin-speaker-file-download";
 import { loader as speakerFileDownload } from "~/routes/speaker-file-download";
 import { loader as speakerResourceDownload } from "~/routes/speaker-resource-download";
-import { FilePolicyError } from "./file-policy";
 import {
   acceptTestFileScanDispatch,
   completeTestDirectUpload,
 } from "./direct-upload.test-helper";
+import { FilePolicyError } from "./file-policy";
 import {
   FileAccessError,
   FileDiscardIncompleteError,

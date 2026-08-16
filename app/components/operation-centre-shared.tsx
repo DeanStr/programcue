@@ -1,8 +1,8 @@
+import { statusPresentation } from "~/components/ui/domain-status-badge";
 import {
   EventDateTime,
   formatEventDateTime,
 } from "~/components/ui/event-date-time";
-import { statusPresentation } from "~/components/ui/domain-status-badge";
 import { fieldLabel, fieldValue } from "~/lib/record-labels";
 import type { loader } from "~/routes/operation-centre.server";
 

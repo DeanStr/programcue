@@ -1,9 +1,6 @@
 import type { z } from "zod";
-
-import { CsvParseError, parseCsv } from "~/platform/operations/csv";
 import type { OrganisationAdministrator } from "~/platform/auth/organisation.server";
-import { createCrmContactSchema } from "./crm-schema";
-import { CrmStateError } from "./crm-errors";
+import { CsvParseError, parseCsv } from "~/platform/operations/csv";
 import {
   CONTACT_RELATIONSHIP_REQUIRED_MESSAGE,
   existingPersonOrganisationRelationshipSql,
@@ -11,6 +8,8 @@ import {
   organisationRelationshipBindings,
   unavailableExistingEmails,
 } from "./crm-contact-scope.server";
+import { CrmStateError } from "./crm-errors";
+import { createCrmContactSchema } from "./crm-schema";
 
 const IMPORT_BYTES_LIMIT = 512_000;
 

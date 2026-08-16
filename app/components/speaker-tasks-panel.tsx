@@ -5,16 +5,16 @@ import {
   DirectMultipartUpload,
   DirectUploadCompletionConflictError,
 } from "~/components/direct-multipart-upload";
+import {
+  type SpeakerPortal,
+  type SpeakerTask,
+  speakerDueLabel,
+} from "~/components/speaker-dashboard-panel-shared";
 import { DomainStatusBadge } from "~/components/ui/domain-status-badge";
 import { EventDateTime } from "~/components/ui/event-date-time";
 import { maximumMegabytes } from "~/modules/files/file-policy";
-import { UserFacingError } from "~/platform/user-facing-error";
 import type { ParticipantTaskEvidenceVersion } from "~/modules/files/file-service.server";
-import {
-  speakerDueLabel,
-  type SpeakerPortal,
-  type SpeakerTask,
-} from "~/components/speaker-dashboard-panel-shared";
+import { UserFacingError } from "~/platform/user-facing-error";
 
 async function attachTaskEvidence(
   taskId: string,

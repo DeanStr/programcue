@@ -1,13 +1,12 @@
 import type { z } from "zod";
-
-import { AiProposalStateError } from "./ai-assistant-errors";
-import type { assistantProposalMetadataSchema } from "./ai-tool-contracts.server";
 import { CommunicationService } from "~/modules/communications/communication-service.server";
 import { EvaluationService } from "~/modules/evaluations/evaluation-service.server";
 import { IntegrationService } from "~/modules/integrations/integration-service.server";
 import { ScheduleService } from "~/modules/schedule/schedule-service.server";
 import { SubmissionService } from "~/modules/submissions/submission-service.server";
 import type { Viewer } from "~/platform/auth/authorize.server";
+import { AiProposalStateError } from "./ai-assistant-errors";
+import type { assistantProposalMetadataSchema } from "./ai-tool-contracts.server";
 
 type AssistantProposalMetadata = z.infer<
   typeof assistantProposalMetadataSchema

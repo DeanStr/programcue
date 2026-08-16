@@ -1,11 +1,10 @@
 import { Sparkles } from "lucide-react";
 import { useFetcher } from "react-router";
-
+import type { AiProposalPreview, ContextualAiResult } from "./ai-types";
 import {
   ContextualAiResultPanel,
   ProposalApproval,
 } from "./assistant-result-panel";
-import type { AiProposalPreview, ContextualAiResult } from "./ai-types";
 
 type ContextActionResponse =
   | {

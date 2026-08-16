@@ -1,5 +1,5 @@
-import { betterAuth } from "better-auth";
 import type { Logger } from "@better-auth/core/env";
+import { betterAuth } from "better-auth";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
 import { magicLink } from "better-auth/plugins";
 
@@ -7,12 +7,12 @@ import {
   createEmailProvider,
   emailIdempotencyKey,
 } from "~/modules/communications/email-provider.server";
-import { createDatabase } from "~/platform/database/db.server";
-import { authSchema } from "~/platform/database/schema";
 import {
   MICROSOFT_AUTH_CALLBACK_PATH,
   microsoftFormPostPlugin,
 } from "~/platform/auth/microsoft-auth-callback.server";
+import { createDatabase } from "~/platform/database/db.server";
+import { authSchema } from "~/platform/database/schema";
 import { sourceRevisionForLog } from "~/platform/observability/source-revision.server";
 
 type ParticipantOAuthEnvironment = CloudflareEnvironment & {

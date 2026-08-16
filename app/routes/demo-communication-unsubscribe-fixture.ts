@@ -1,9 +1,8 @@
 import { data } from "react-router";
-
-import type { Route } from "./+types/demo-communication-unsubscribe-fixture";
 import { createCommunicationUnsubscribeUrl } from "~/modules/communications/unsubscribe.server";
 import { getCloudflareContext } from "~/platform/cloudflare-context";
 import { ensureDemoData } from "~/platform/demo/seed.server";
+import type { Route } from "./+types/demo-communication-unsubscribe-fixture";
 
 const EVENT_ID = "evt-foe-2025";
 const COMMUNICATION_ID = "communication-demo-unsubscribe-browser";

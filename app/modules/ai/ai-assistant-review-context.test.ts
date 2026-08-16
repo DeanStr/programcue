@@ -1,10 +1,9 @@
 import { env } from "cloudflare:test";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-
-import { AiAssistantService } from "./ai-assistant-service.server";
 import { ensureDemoEvaluationData } from "~/modules/evaluations/demo.server";
 import type { Viewer } from "~/platform/auth/authorize.server";
 import { ensureDemoData } from "~/platform/demo/seed.server";
+import { AiAssistantService } from "./ai-assistant-service.server";
 
 const admin: Viewer = {
   personId: "person-demo-admin",

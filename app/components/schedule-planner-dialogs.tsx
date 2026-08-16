@@ -1,16 +1,16 @@
+import { useState } from "react";
+import { Form, Link } from "react-router";
 import { Dialog } from "~/components/dialog";
 import type { AutoPlacementPreview } from "~/modules/schedule/schedule-auto-placement";
 import type { ScheduleSession } from "~/modules/schedule/schedule-service.server";
-import { Form, Link } from "react-router";
-import { useState } from "react";
-import {
-  scheduleDateTimeLabel,
-  serializeAutoPlacementPreview,
-} from "./schedule-planner-workspace-helpers";
 import type {
   ScheduleFetcher,
   SchedulePlannerWorkspaceData,
 } from "./schedule-planner-panel-types";
+import {
+  scheduleDateTimeLabel,
+  serializeAutoPlacementPreview,
+} from "./schedule-planner-workspace-helpers";
 
 export function ScheduleDraftDialog({
   workspace,

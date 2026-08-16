@@ -5,24 +5,30 @@ import {
   useActionData,
   useNavigation,
 } from "react-router";
-
-import type { Route } from "./+types/evaluation-guide";
 import {
   EvaluationAccessSurface,
   type EvaluationPersonaCard,
 } from "~/components/evaluation-access-surface";
 import {
-  currentEventCookie,
   clearCurrentEventCookie,
+  currentEventCookie,
 } from "~/platform/auth/current-event.server";
 import { getCloudflareContext } from "~/platform/cloudflare-context";
+import { resetProductionEvaluationFixtureForEvaluator } from "~/platform/evaluation/evaluation-fixture.server";
 import {
+  type EvaluationScenarioGuideState,
+  evaluationApplicantGuideLabel,
+  evaluationReviewerGuideLabel,
+  readEvaluationScenarioGuideState,
+} from "~/platform/evaluation/evaluation-guide-state.server";
+import {
+  activateEvaluationApplicantAccount,
+  clearEvaluationSessionCookie,
   EVALUATION_EVENT_ID,
   EVALUATION_EVENT_NAME,
   EVALUATION_IDENTITIES,
   EVALUATION_ORGANISATION_ID,
-  activateEvaluationApplicantAccount,
-  clearEvaluationSessionCookie,
+  type EvaluationIdentityKey,
   evaluationAccessCodeMatches,
   evaluationPersonForSession,
   evaluationSessionCookie,
@@ -31,21 +37,14 @@ import {
   renewedEvaluationSessionCookie,
   requireEvaluationMode,
   resolveEvaluationPerson,
-  type EvaluationIdentityKey,
 } from "~/platform/evaluation/evaluation-session.server";
-import { resetProductionEvaluationFixtureForEvaluator } from "~/platform/evaluation/evaluation-fixture.server";
-import {
-  evaluationApplicantGuideLabel,
-  evaluationReviewerGuideLabel,
-  readEvaluationScenarioGuideState,
-  type EvaluationScenarioGuideState,
-} from "~/platform/evaluation/evaluation-guide-state.server";
+import { rejectCrossOriginBrowserMutation } from "~/platform/http/mutation-origin.server";
 import {
   AbuseProtectionConfigurationError,
   AbuseRateLimitError,
   enforcePublicRateLimit,
 } from "~/platform/http/public-abuse-protection.server";
-import { rejectCrossOriginBrowserMutation } from "~/platform/http/mutation-origin.server";
+import type { Route } from "./+types/evaluation-guide";
 
 type ActionResult =
   | { ok: true; message: string }

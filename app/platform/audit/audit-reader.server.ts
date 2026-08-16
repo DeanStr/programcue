@@ -1,8 +1,8 @@
 import {
-  auditDisplaySummary,
-  auditOperationId,
   type AuditActorKind,
   type AuditOrigin,
+  auditDisplaySummary,
+  auditOperationId,
 } from "./audit-contract";
 
 export type AuditHistoryItem = {

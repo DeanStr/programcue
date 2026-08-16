@@ -1,8 +1,7 @@
 import { env } from "cloudflare:test";
 import { describe, expect, it } from "vitest";
-
-import type { Viewer } from "~/platform/auth/authorize.server";
 import { ResourceService } from "~/modules/resources/resource-service.server";
+import type { Viewer } from "~/platform/auth/authorize.server";
 import { ensureDemoData } from "~/platform/demo/seed.server";
 import { SubmissionService } from "./submission-service.server";
 

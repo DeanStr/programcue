@@ -12,6 +12,7 @@ import {
 } from "react-router";
 
 import { Dialog } from "~/components/dialog";
+import { EventScheduleConfigurationPanels } from "~/components/event-schedule-configuration-panel";
 import {
   EventAccessPanels,
   EventFilePolicyPanel,
@@ -19,7 +20,6 @@ import {
   EventRepositoryPanel,
   EventRoomsPanel,
 } from "~/components/event-setup-panels";
-import { EventScheduleConfigurationPanels } from "~/components/event-schedule-configuration-panel";
 import {
   AdminPageSection,
   AdminPageSectionNavigation,
@@ -28,7 +28,7 @@ import { ConfirmDialog, useConfirm } from "~/components/ui/confirm-dialog";
 import { ErrorSummary } from "~/components/ui/error-summary";
 import type { EventSetup } from "~/modules/events/event-repository.server";
 import type { IncompleteEventSummary } from "~/modules/events/event-repository-recovery.server";
-import type { action, ActionResponse } from "~/routes/event-setup";
+import type { ActionResponse, action } from "~/routes/event-setup";
 
 const eventSetupBaselineExcludedFields = new Set([
   "_intent",

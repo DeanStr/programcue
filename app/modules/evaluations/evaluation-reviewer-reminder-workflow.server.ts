@@ -1,10 +1,9 @@
 import { CommunicationService } from "~/modules/communications/communication-service.server";
 import type { Viewer } from "~/platform/auth/authorize.server";
 import { EvaluationStateError } from "./evaluation-errors";
+import { reviewerReminderSchema } from "./evaluation-plan-workflow-support.server";
 import { EvaluationServiceFoundation } from "./evaluation-service-foundation.server";
 import { reviewableSubmissionSql } from "./evaluation-submission-review-eligibility.server";
-
-import { reviewerReminderSchema } from "./evaluation-plan-workflow-support.server";
 
 export class EvaluationReviewerReminderWorkflow extends EvaluationServiceFoundation {
   async prepareReviewerReminder(viewer: Viewer, input: unknown) {

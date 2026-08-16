@@ -2,13 +2,13 @@ import { EvaluationService } from "~/modules/evaluations/evaluation-service.serv
 import { IntegrationService } from "~/modules/integrations/integration-service.server";
 import { ScheduleService } from "~/modules/schedule/schedule-service.server";
 import type { Viewer } from "~/platform/auth/authorize.server";
+import { parseArguments } from "./ai-read-tool-shared.server";
 import { emptyArgumentsSchema } from "./ai-tool-contracts.server";
 import {
-  AiToolPermissionError,
   type AiToolExecution,
+  AiToolPermissionError,
 } from "./ai-tool-execution";
 import type { AiEvidence } from "./ai-types";
-import { parseArguments } from "./ai-read-tool-shared.server";
 
 export class AiWorkspaceReadTools {
   constructor(

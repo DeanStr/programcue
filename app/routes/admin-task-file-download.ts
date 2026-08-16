@@ -1,4 +1,3 @@
-import type { Route } from "./+types/admin-task-file-download";
 import {
   FileAccessError,
   FileService,
@@ -6,6 +5,7 @@ import {
 import { ensureDemoSpeakerData } from "~/modules/speakers/demo.server";
 import { requireCurrentEventRole } from "~/platform/auth/current-event.server";
 import { getCloudflareContext } from "~/platform/cloudflare-context";
+import type { Route } from "./+types/admin-task-file-download";
 
 export async function loader({ request, context, params }: Route.LoaderArgs) {
   const { env } = getCloudflareContext(context);

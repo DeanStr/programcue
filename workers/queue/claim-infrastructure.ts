@@ -1,5 +1,5 @@
-import { EventRealtimeService } from "../../app/platform/realtime/event-realtime.server";
 import { sourceRevisionForLog } from "../../app/platform/observability/source-revision.server";
+import { EventRealtimeService } from "../../app/platform/realtime/event-realtime.server";
 
 export const QUEUE_CLAIM_LEASE_SECONDS = 60;
 

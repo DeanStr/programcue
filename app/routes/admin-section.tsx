@@ -1,23 +1,22 @@
 import { CalendarDays, ExternalLink } from "lucide-react";
 import { data, Link } from "react-router";
-
-import type { Route } from "./+types/admin-section";
 import { ProgrammeEmbedBuilder } from "~/components/programme-embed-builder";
 import { DomainStatusBadge } from "~/components/ui/domain-status-badge";
 import { EventDateTime } from "~/components/ui/event-date-time";
 import { EmptyState } from "~/components/ui/states";
-import {
-  formatProgrammeDateTime,
-  summarizeProgramme,
-} from "~/modules/programme/programme-presentation";
 import { ProgrammeAdminService } from "~/modules/programme/programme-admin-service.server";
+import { ProgrammeEmbedConfigurationError } from "~/modules/programme/programme-embed-configuration";
 import {
   ProgrammeEmbedService,
   ProgrammeEmbedStateError,
 } from "~/modules/programme/programme-embed-service.server";
-import { ProgrammeEmbedConfigurationError } from "~/modules/programme/programme-embed-configuration";
+import {
+  formatProgrammeDateTime,
+  summarizeProgramme,
+} from "~/modules/programme/programme-presentation";
 import { requireCurrentEventRole } from "~/platform/auth/current-event.server";
 import { getCloudflareContext } from "~/platform/cloudflare-context";
+import type { Route } from "./+types/admin-section";
 
 export async function loader({ request, params, context }: Route.LoaderArgs) {
   if (params.section !== "programme") {

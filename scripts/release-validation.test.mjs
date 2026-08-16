@@ -3,14 +3,13 @@ import { readFile } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
-
+import { validateReleaseStateEvidence } from "./validate-release-state.mjs";
 import {
   lastImmutableMigrationName,
   requiredBrandAssetColumns,
   requiredBrandSchemaObjects,
   validateRemoteSchemaEvidence,
 } from "./validate-remote-schema.mjs";
-import { validateReleaseStateEvidence } from "./validate-release-state.mjs";
 import { validateProductionHealth } from "./verify-production-health.mjs";
 
 const migrations = [

@@ -2,8 +2,8 @@ import { describe, expect, it } from "vitest";
 
 import {
   requireSourceRevision,
-  sourceRevisionForLog,
   SourceRevisionConfigurationError,
+  sourceRevisionForLog,
 } from "./source-revision.server";
 
 describe("source revision", () => {

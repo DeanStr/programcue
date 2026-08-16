@@ -1,10 +1,9 @@
 import { z } from "zod";
-
+import { readBoundedResponseText } from "~/platform/http/read-response";
 import {
   QueueClaimLeaseBusyError,
   QueueClaimLeaseLostError,
 } from "../../../workers/queue/claim-infrastructure";
-import { readBoundedResponseText } from "~/platform/http/read-response";
 
 // Covers the Workflow's roughly three-hour capacity window plus its bounded
 // scan and callback retries without making a healthy in-flight scan retryable.

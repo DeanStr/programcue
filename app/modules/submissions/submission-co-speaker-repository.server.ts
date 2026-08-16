@@ -1,15 +1,15 @@
-import { materializePublishedResourceAcknowledgementsForClaimedSpeaker } from "~/modules/resources/resource-service-shared";
 import {
   acceptanceTaskPlanBindings,
   acceptanceTaskPlanCteSql,
   acceptanceTaskPlanGuardSql,
   buildAcceptanceTaskPlanStatements,
 } from "~/modules/evaluations/evaluation-decision-statements.server";
+import { materializePublishedResourceAcknowledgementsForClaimedSpeaker } from "~/modules/resources/resource-service-shared";
 import type { PreparedApplicantSession } from "./applicant-session.server";
 import {
-  SubmissionStateError,
   type Applicant,
   type CoSpeakerInvitation,
+  SubmissionStateError,
 } from "./submission-repository-shared";
 
 function buildAcceptedClaimPropagationAuditStatement(

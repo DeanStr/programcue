@@ -3,18 +3,18 @@ import { useFetcher, useLocation, useNavigate } from "react-router";
 
 import type { parseProgrammeEmbedSearchParameters } from "~/modules/programme/programme-embed-configuration";
 import {
-  sortPublishedSpeakers,
   type PublicProgrammeSurface,
+  sortPublishedSpeakers,
 } from "~/modules/programme/programme-presentation";
-import { eventLocalCalendarDate } from "~/modules/schedule/schedule-time";
-import type {
-  PublishedProgramme,
-  PublishedSpeaker,
-} from "~/modules/programme/public-programme-service.server";
 import {
   clearedPublicProgrammeFacetMessage,
   clearUnavailablePublicProgrammeFacets,
 } from "~/modules/programme/public-programme-filter-state";
+import type {
+  PublishedProgramme,
+  PublishedSpeaker,
+} from "~/modules/programme/public-programme-service.server";
+import { eventLocalCalendarDate } from "~/modules/schedule/schedule-time";
 
 export type PublicProgrammeLoaderData = {
   programme: PublishedProgramme;

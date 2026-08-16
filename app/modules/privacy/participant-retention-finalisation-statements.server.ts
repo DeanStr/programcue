@@ -1,9 +1,9 @@
 import type { Viewer } from "~/platform/auth/authorize.server";
 import {
-  REDACTED_JSON,
+  type CompletionMetadata,
   completionId,
   eventClaimGuard,
-  type CompletionMetadata,
+  REDACTED_JSON,
 } from "./participant-retention-foundation.server";
 
 export function buildParticipantRetentionFinalisationStatements(

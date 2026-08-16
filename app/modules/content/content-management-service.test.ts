@@ -2,13 +2,13 @@ import { env } from "cloudflare:test";
 import { beforeEach, describe, expect, it } from "vitest";
 
 import { PublicProgrammeService } from "~/modules/programme/public-programme-service.server";
-import { eventLocalTimeEpoch } from "~/modules/schedule/schedule-time";
+import { ScheduleService } from "~/modules/schedule/schedule-service.server";
 import {
   prepareScheduleServiceTest,
   scheduleTestEnv,
   scheduleTestViewer as viewer,
 } from "~/modules/schedule/schedule-service-test-fixture";
-import { ScheduleService } from "~/modules/schedule/schedule-service.server";
+import { eventLocalTimeEpoch } from "~/modules/schedule/schedule-time";
 import {
   assertContentApprovalProvenance,
   ContentManagementService,

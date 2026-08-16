@@ -1,8 +1,7 @@
 import { env } from "cloudflare:test";
 import { describe, expect, it } from "vitest";
-
-import type { Viewer } from "~/platform/auth/authorize.server";
 import { CrmService } from "~/modules/crm/crm-service.server";
+import type { Viewer } from "~/platform/auth/authorize.server";
 import { SBEK_FIXTURE_PEOPLE } from "~/platform/demo/demo-identities";
 import { ensureDemoSpeakerData } from "./demo.server";
 import { SpeakerRosterImportService } from "./speaker-roster-import.server";

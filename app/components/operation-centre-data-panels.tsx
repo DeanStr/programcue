@@ -3,9 +3,9 @@ import { useConfirm } from "~/components/ui/confirm-dialog";
 import { fieldLabel } from "~/lib/record-labels";
 import { shortReference } from "~/lib/short-reference";
 import {
+  type OperationCentreData,
   operationTaskStatusLabel as statusLabel,
   taskImportTransitionSummary,
-  type OperationCentreData,
 } from "./operation-centre-shared";
 
 export function AirtableRecoveryPanel({

@@ -1,14 +1,14 @@
 import type { ComponentProps } from "react";
 
 import { StatusBadge } from "./status-badge";
-import { statusPresentation, type StatusDomain } from "./status-presentation";
+import { type StatusDomain, statusPresentation } from "./status-presentation";
 
 export {
   STATUS_PRESENTATIONS,
-  statusPresentation,
   type StatusDomain,
   type StatusPresentation,
   type StatusTone,
+  statusPresentation,
 } from "./status-presentation";
 
 export type DomainStatusBadgeProps = Omit<

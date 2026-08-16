@@ -14,8 +14,8 @@ import {
   persistDomainProposal,
 } from "./ai-proposal-executor-foundation.server";
 import {
-  AiToolValidationError,
   type AiToolExecution,
+  AiToolValidationError,
 } from "./ai-tool-execution";
 import type { AiEvidence, AiProposalPreview } from "./ai-types";
 

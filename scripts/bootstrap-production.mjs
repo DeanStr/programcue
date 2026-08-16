@@ -1,9 +1,9 @@
 import { spawnSync } from "node:child_process";
+import { randomUUID } from "node:crypto";
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { parseArgs } from "node:util";
-import { randomUUID } from "node:crypto";
 
 import { unstable_readConfig } from "wrangler";
 

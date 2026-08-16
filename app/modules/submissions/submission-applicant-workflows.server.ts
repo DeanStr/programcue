@@ -1,21 +1,20 @@
 import { z } from "zod";
 import {
-  airtableIntentCommand,
   type AirtableCommandIdentity,
+  airtableIntentCommand,
 } from "~/modules/airtable/airtable-provider-boundary.server";
 import { DEMO_ORGANISATION_ID } from "~/platform/demo/demo-identities";
 import {
-  resolveEvaluatorEmailAlias,
   type EvaluatorEmailRouting,
+  resolveEvaluatorEmailAlias,
 } from "~/platform/evaluation/evaluator-email-alias.server";
 import type { PublicForm } from "./applicant-session.server";
-import { SubmissionApplicantEventService } from "./submission-applicant-events.server";
 import { dispatchCoSpeakerInvitationsForSubmissionRevision } from "./co-speaker-invitation.server";
-import { SubmissionServiceFoundation } from "./submission-service-foundation.server";
+import { SubmissionApplicantEventService } from "./submission-applicant-events.server";
 import {
+  type Applicant,
   SubmissionRevisionConflictError,
   SubmissionStateError,
-  type Applicant,
   type SubmittedRevisionCommand,
   type SubmittedRevisionCommit,
 } from "./submission-repository.server";
@@ -27,12 +26,13 @@ import {
   visibleFields,
 } from "./submission-schema";
 import {
-  PublicFormUnavailableError,
+  type ApplicantVideoUploadRow,
   answerValidationError,
   applicantFormView,
   intentBoundDraftId,
+  PublicFormUnavailableError,
+  SubmissionServiceFoundation,
   withdrawSubmissionSchema,
-  type ApplicantVideoUploadRow,
 } from "./submission-service-foundation.server";
 
 const SUBMITTED_REVISION_SCOPE = "submission.submitted.revise" as const;

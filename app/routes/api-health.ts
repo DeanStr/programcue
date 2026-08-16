@@ -1,4 +1,3 @@
-import type { Route } from "./+types/api-health";
 import {
   ApiError,
   apiFailure,
@@ -8,17 +7,18 @@ import {
 import { getCloudflareContext } from "~/platform/cloudflare-context";
 import {
   requireSourceRevision,
-  sourceRevisionForLog,
   SourceRevisionConfigurationError,
+  sourceRevisionForLog,
 } from "~/platform/observability/source-revision.server";
 import {
-  requireRuntimeMode,
   RuntimeEnvironmentConfigurationError,
+  requireRuntimeMode,
 } from "~/platform/runtime-environment.server";
 import {
   ProductionReadinessConfigurationError,
   requireProductionRuntimeReadiness,
 } from "~/platform/runtime-readiness.server";
+import type { Route } from "./+types/api-health";
 
 export async function loader({ request, context }: Route.LoaderArgs) {
   const { env } = getCloudflareContext(context);

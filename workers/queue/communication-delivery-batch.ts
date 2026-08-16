@@ -1,15 +1,15 @@
 import { z } from "zod";
 
 import { templateContentSchema } from "../../app/modules/communications/communication-schema";
+import {
+  type EmailProvider,
+  TRACKED_DELIVERY_EMAIL_TAG,
+} from "../../app/modules/communications/email-provider";
 import { renderProgramCueEmail } from "../../app/modules/communications/email-templates/render-email.server";
 import {
   formatEventDateMarkers,
   renderMergeTemplate,
 } from "../../app/modules/communications/merge-template";
-import {
-  TRACKED_DELIVERY_EMAIL_TAG,
-  type EmailProvider,
-} from "../../app/modules/communications/email-provider";
 import { createCommunicationUnsubscribeUrl } from "../../app/modules/communications/unsubscribe.server";
 import {
   assertOperationClaim,

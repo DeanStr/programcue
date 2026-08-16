@@ -1,13 +1,12 @@
 import { expect, test } from "@playwright/test";
-
-import { e2eOrigin } from "./support/e2e-origin";
-import { resetDemoEvent } from "./support/reset-demo-event";
-import { resetDemoSubmissions } from "./support/reset-demo-submissions";
 import {
   acceptConfirm,
   confirmDialog,
   dismissConfirm,
 } from "./support/confirm-dialog";
+import { e2eOrigin } from "./support/e2e-origin";
+import { resetDemoEvent } from "./support/reset-demo-event";
+import { resetDemoSubmissions } from "./support/reset-demo-submissions";
 
 const FIXTURE_CONFIRMATION = "seed-golden-path-browser-fixture";
 

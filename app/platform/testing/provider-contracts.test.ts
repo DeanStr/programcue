@@ -1,13 +1,13 @@
-import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 import { HttpResponse, http } from "msw";
 import { setupServer } from "msw/node";
+import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 
 import { GoogleCalendarProvider } from "~/modules/calendars/calendar-providers.server";
+import { TRACKED_DELIVERY_EMAIL_TAG } from "~/modules/communications/email-provider";
 import {
   createEmailProvider,
   requireEmailProviderConfiguration,
 } from "~/modules/communications/email-provider.server";
-import { TRACKED_DELIVERY_EMAIL_TAG } from "~/modules/communications/email-provider";
 import { ResendEmailProvider } from "~/modules/communications/resend.server";
 
 const server = setupServer();

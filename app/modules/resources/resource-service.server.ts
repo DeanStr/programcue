@@ -4,8 +4,8 @@ import { ResourceParticipantService } from "./resource-participant-service.serve
 export {
   materializePublishedResourceAcknowledgementsForClaimedSpeaker,
   materializePublishedResourceAcknowledgementsForSession,
-  ResourceInvariantError,
   ResourceAudienceError,
+  ResourceInvariantError,
   ResourceRevisionConflictError,
   ResourceSlugConflictError,
   ResourceTaskDependencyError,

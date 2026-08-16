@@ -1,6 +1,6 @@
 import { data, redirect } from "react-router";
 import { ZodError } from "zod";
-
+import { AdminResourcesWorkspace } from "~/components/admin-resources-workspace";
 import { ResourceContentError } from "~/modules/resources/resource-content";
 import {
   ResourceEmbedConfigurationError,
@@ -17,7 +17,6 @@ import { ensureDemoSpeakerData } from "~/modules/speakers/demo.server";
 import { requireCurrentEventRole } from "~/platform/auth/current-event.server";
 import { getCloudflareContext } from "~/platform/cloudflare-context";
 import { recordRouteChange } from "~/platform/realtime/route-realtime.server";
-import { AdminResourcesWorkspace } from "~/components/admin-resources-workspace";
 import type { Route } from "./+types/admin-resources";
 
 export const meta = () => [{ title: "Speaker Resources · Program Cue" }];

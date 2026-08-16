@@ -1,4 +1,3 @@
-import type { Route } from "./+types/api-resend-webhook";
 import { ZodError } from "zod";
 import { CommunicationService } from "~/modules/communications/communication-service.server";
 import {
@@ -8,9 +7,10 @@ import {
 } from "~/modules/communications/resend-webhook.server";
 import { getCloudflareContext } from "~/platform/cloudflare-context";
 import {
-  readBoundedText,
   RequestBodyTooLargeError,
+  readBoundedText,
 } from "~/platform/http/read-body";
+import type { Route } from "./+types/api-resend-webhook";
 
 function logWebhookConfigurationFailure(error: unknown) {
   console.error(

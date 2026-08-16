@@ -1,7 +1,7 @@
 import {
   EVENT_CHANGE_MAX_POLL_INTERVAL_MS,
-  isEventChangeSummary,
   type EventChangeSummary,
+  isEventChangeSummary,
 } from "../app/platform/realtime/realtime-types";
 
 type ChannelIdentity = { organisationId: string; eventId: string };

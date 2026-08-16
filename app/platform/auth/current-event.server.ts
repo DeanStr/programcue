@@ -1,12 +1,11 @@
 import { redirect } from "react-router";
-
+import { requireRuntimeMode } from "~/platform/runtime-environment.server";
 import {
   requireAuthenticatedPerson,
   requireEventRole,
   type Viewer,
   type ViewerRole,
 } from "./authorize.server";
-import { requireRuntimeMode } from "~/platform/runtime-environment.server";
 
 export const CURRENT_EVENT_COOKIE = "__Host-program_cue_event";
 export const LOCAL_CURRENT_EVENT_COOKIE = "program_cue_event";

@@ -1,12 +1,11 @@
 import { z } from "zod";
-
-import { API_KEY_SCOPES, type ApiKeyScope } from "./api-key-service.server";
 import {
-  readBoundedText,
   RequestBodyTooLargeError,
+  readBoundedText,
 } from "~/platform/http/read-body";
 import { requestCorrelationId } from "~/platform/observability/request-correlation";
 import { mayExposeInternalErrors } from "~/platform/runtime-environment.server";
+import { API_KEY_SCOPES, type ApiKeyScope } from "./api-key-service.server";
 
 const encoder = new TextEncoder();
 

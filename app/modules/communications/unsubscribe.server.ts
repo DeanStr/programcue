@@ -1,8 +1,8 @@
 import { z } from "zod";
 
 import {
-  communicationCategorySchema,
   type CommunicationCategory,
+  communicationCategorySchema,
 } from "./communication-schema";
 
 const tokenLifetimeSeconds = 365 * 24 * 60 * 60;

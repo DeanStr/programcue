@@ -1,16 +1,15 @@
 import { env } from "cloudflare:test";
 import { RouterContextProvider } from "react-router";
 import { afterEach, describe, expect, it, vi } from "vitest";
-
-import {
-  CalendarOAuthUnexpectedError,
-  CalendarProviderRequestError,
-} from "~/modules/calendars/calendar-providers.server";
+import { CalendarOAuthService } from "~/modules/calendars/calendar-oauth.server";
 import {
   CALENDAR_OAUTH_COOKIE,
   calendarOAuthCallbackFailure,
 } from "~/modules/calendars/calendar-oauth-callback.server";
-import { CalendarOAuthService } from "~/modules/calendars/calendar-oauth.server";
+import {
+  CalendarOAuthUnexpectedError,
+  CalendarProviderRequestError,
+} from "~/modules/calendars/calendar-providers.server";
 import { cloudflareContext } from "~/platform/cloudflare-context";
 import { ensureDemoData } from "~/platform/demo/seed.server";
 import { loader as callbackLoader } from "./calendar-oauth-callback";

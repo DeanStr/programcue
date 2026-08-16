@@ -1,7 +1,7 @@
 import { env } from "cloudflare:test";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-
-import { AI_PROVIDER_RESPONSE_MAX_BYTES } from "./openai-responses-provider.server";
+import type { Viewer } from "~/platform/auth/authorize.server";
+import { ensureDemoData } from "~/platform/demo/seed.server";
 import {
   AiProviderSettingsConflictError,
   AiProviderSettingsService,
@@ -9,8 +9,7 @@ import {
   WORKERS_AI_MODEL,
   WorkersAiProvider,
 } from "./ai-provider.server";
-import type { Viewer } from "~/platform/auth/authorize.server";
-import { ensureDemoData } from "~/platform/demo/seed.server";
+import { AI_PROVIDER_RESPONSE_MAX_BYTES } from "./openai-responses-provider.server";
 
 const admin: Viewer = {
   personId: "person-demo-admin",

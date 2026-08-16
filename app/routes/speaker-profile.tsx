@@ -1,7 +1,5 @@
 import { data, useActionData, useNavigation } from "react-router";
 import { ZodError } from "zod";
-
-import type { Route } from "./+types/speaker-profile";
 import { SpeakerActionNotice } from "~/components/speaker-action-notice";
 import { SpeakerProfilePanel } from "~/components/speaker-files-profile-panels";
 import { useSpeakerWorkspace } from "~/components/speaker-workspace-context";
@@ -10,6 +8,7 @@ import {
   SpeakerService,
 } from "~/modules/speakers/speaker-service.server";
 import { requireSpeakerWorkspace } from "~/modules/speakers/speaker-workspace.server";
+import type { Route } from "./+types/speaker-profile";
 
 export const meta = () => [{ title: "Participant Profile · Program Cue" }];
 

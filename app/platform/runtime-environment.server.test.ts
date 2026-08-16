@@ -2,9 +2,9 @@ import { describe, expect, it } from "vitest";
 
 import {
   mayExposeInternalErrors,
+  RuntimeEnvironmentConfigurationError,
   requireRuntimeMode,
   requiresProductionSecurity,
-  RuntimeEnvironmentConfigurationError,
 } from "./runtime-environment.server";
 
 describe("runtime environment mode", () => {

@@ -1,12 +1,12 @@
 import ical, { ICalCalendarMethod } from "ical-generator";
-
-import type { Route } from "./+types/api-public-calendar";
 import { publicProgrammeSessionUrl } from "~/modules/programme/programme-presentation";
 import { publicItineraryIdentity } from "~/modules/programme/public-itinerary-identity.server";
 import {
-  PublishedProgrammeItineraryNotFoundError,
   PublicProgrammeService,
+  PublishedProgrammeItineraryNotFoundError,
 } from "~/modules/programme/public-programme-service.server";
+import { ApiError, apiFailure, correlationId } from "~/platform/api/api.server";
+import { parseStrictQuery } from "~/platform/api/api-pagination.server";
 import {
   PUBLIC_CALENDAR_SESSION_ID_LIMIT,
   PUBLIC_CALENDAR_SESSION_LIMIT,
@@ -15,9 +15,8 @@ import {
   publishedProgrammeNotModified,
   requirePublishedProgramme,
 } from "~/platform/api/api-public-programme.server";
-import { parseStrictQuery } from "~/platform/api/api-pagination.server";
-import { ApiError, apiFailure, correlationId } from "~/platform/api/api.server";
 import { getCloudflareContext } from "~/platform/cloudflare-context";
+import type { Route } from "./+types/api-public-calendar";
 
 export async function loader({ request, params, context }: Route.LoaderArgs) {
   const { env } = getCloudflareContext(context);

@@ -1,15 +1,15 @@
 import type { Viewer } from "~/platform/auth/authorize.server";
 import { WebhookService } from "~/platform/operations/webhook-service.server";
+import { ScheduleContentWorkflowFoundation } from "./schedule-content-workflow-foundation.server";
 import {
   ScheduleConfigurationError,
   ScheduleNotFoundError,
   SchedulePlacementBlockedError,
   ScheduleRevisionConflictError,
 } from "./schedule-errors";
-import { detectWorkspaceConflicts } from "./schedule-workspace.server";
 import { scheduleSessionResourcesSchema } from "./schedule-schema";
 import type { ScheduleWorkspace } from "./schedule-service.server";
-import { ScheduleContentWorkflowFoundation } from "./schedule-content-workflow-foundation.server";
+import { detectWorkspaceConflicts } from "./schedule-workspace.server";
 
 export abstract class ScheduleSessionResourcesWorkflow extends ScheduleContentWorkflowFoundation {
   async updateSessionResourcesD1(viewer: Viewer, input: unknown) {

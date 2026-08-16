@@ -1,13 +1,13 @@
-import { useEffect, useState, type CSSProperties, type ReactNode } from "react";
+import { type CSSProperties, type ReactNode, useEffect, useState } from "react";
 import { BrandMark } from "~/components/brand-mark";
 import { programmeAccentPalette } from "~/modules/programme/programme-presentation";
 import {
+  type FormField,
   heroImagePathSchema,
+  type SaveFormInput,
   validateAnswerShapes,
   validateFinalAnswers,
   visibleFields,
-  type FormField,
-  type SaveFormInput,
 } from "~/modules/submissions/submission-schema";
 
 const PREVIEW_WIDTHS = { mobile: 390, desktop: 960 } as const;

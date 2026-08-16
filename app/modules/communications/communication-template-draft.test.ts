@@ -1,16 +1,15 @@
 import { env } from "cloudflare:test";
 import { afterEach, describe, expect, it, vi } from "vitest";
-
+import type { AirtableProviderBoundary } from "~/modules/airtable/airtable-provider-boundary.server";
 import type { Viewer } from "~/platform/auth/authorize.server";
 import { ensureDemoData } from "~/platform/demo/seed.server";
 import { processCommunicationSend } from "../../../workers/communications-queue";
-import { CommunicationService } from "./communication-service.server";
 import { CommunicationDeliveryService } from "./communication-delivery-service.server";
-import type { AirtableProviderBoundary } from "~/modules/airtable/airtable-provider-boundary.server";
+import { CommunicationService } from "./communication-service.server";
 import { CommunicationTemplateService } from "./communication-template-service.server";
+import { formatTaskDueDate } from "./merge-template";
 import { RecipientQuery } from "./recipient-query.server";
 import { ResendEmailProvider } from "./resend.server";
-import { formatTaskDueDate } from "./merge-template";
 
 const viewer: Viewer = {
   personId: "person-demo-admin",

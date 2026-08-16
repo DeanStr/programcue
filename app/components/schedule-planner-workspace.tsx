@@ -1,6 +1,6 @@
 import { DndContext, DragOverlay, type DragStartEvent } from "@dnd-kit/core";
-import { Form, Link } from "react-router";
 import { useState } from "react";
+import { Form, Link } from "react-router";
 import { ScheduleContentWorkflows } from "~/components/schedule-content-workflows";
 import { statusPresentation } from "~/components/ui/domain-status-badge";
 import { ScheduleCanvasPanel } from "./schedule-planner-canvas-panel";

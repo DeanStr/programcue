@@ -1,7 +1,6 @@
 import { env } from "cloudflare:test";
-
-import { ensureDemoData } from "~/platform/demo/seed.server";
 import type { Viewer } from "~/platform/auth/authorize.server";
+import { ensureDemoData } from "~/platform/demo/seed.server";
 
 export const scheduleTestViewer: Viewer = {
   personId: "person-demo-admin",

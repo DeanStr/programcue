@@ -1,14 +1,14 @@
 import { env } from "cloudflare:test";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { RouterContextProvider } from "react-router";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { AirtableProviderBoundary } from "~/modules/airtable/airtable-provider-boundary.server";
 import { ensureDemoSpeakerData } from "~/modules/speakers/demo.server";
+import { apiRequestHash } from "~/platform/api/api.server";
 import {
   ApiParticipantService,
   participantProfilePatchSchema,
 } from "~/platform/api/api-participant-service.server";
-import { apiRequestHash } from "~/platform/api/api.server";
 import type { Viewer } from "~/platform/auth/authorize.server";
 import { cloudflareContext } from "~/platform/cloudflare-context";
 import {

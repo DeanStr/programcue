@@ -1,5 +1,5 @@
-import { useState, type CSSProperties } from "react";
 import { Plus } from "lucide-react";
+import { type CSSProperties, useState } from "react";
 import {
   Form,
   Link,
@@ -7,19 +7,18 @@ import {
   useLocation,
   useNavigation,
 } from "react-router";
-
-import type { Route } from "./+types/application-form";
-import type { action, loader, ActionResult } from "./application-form.server";
 import { claimApplicantVideoUploadOperation } from "~/components/applicant-video-upload";
-import { BrandMark } from "~/components/brand-mark";
 import { DraftEditor } from "~/components/application-draft-editor";
 import { PublicApplicationLanding } from "~/components/application-public-landing";
+import { BrandMark } from "~/components/brand-mark";
 import {
-  TurnstileWidget,
   type TurnstileStatus,
+  TurnstileWidget,
 } from "~/components/turnstile-widget";
 import { DomainStatusBadge } from "~/components/ui/domain-status-badge";
 import { programmeAccentPalette } from "~/modules/programme/programme-presentation";
+import type { Route } from "./+types/application-form";
+import type { ActionResult, action, loader } from "./application-form.server";
 
 export { action, loader } from "./application-form.server";
 export { claimApplicantVideoUploadOperation };

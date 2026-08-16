@@ -1,18 +1,17 @@
 import { env } from "cloudflare:test";
 import { describe, expect, it } from "vitest";
-
-import { ensureDemoData } from "~/platform/demo/seed.server";
+import { SubmissionService } from "~/modules/submissions/submission-service.server";
 import {
   acceptEventInvitation,
   requireEventRole,
   type Viewer,
 } from "~/platform/auth/authorize.server";
 import { DEMO_IDENTITIES } from "~/platform/demo/demo-identities";
-import { SubmissionService } from "~/modules/submissions/submission-service.server";
+import { ensureDemoData } from "~/platform/demo/seed.server";
 import {
   D1EventRepository,
-  EventPublishedScheduleConflictError,
   EventPublishedProgrammeSlugError,
+  EventPublishedScheduleConflictError,
   EventResourceConfigurationError,
   EventRevisionConflictError,
   EventRoomOwnershipError,

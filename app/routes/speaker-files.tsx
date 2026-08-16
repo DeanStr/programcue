@@ -1,6 +1,4 @@
 import { data, useActionData, useNavigation } from "react-router";
-
-import type { Route } from "./+types/speaker-files";
 import { SpeakerActionNotice } from "~/components/speaker-action-notice";
 import { SpeakerFilesPanel } from "~/components/speaker-files-profile-panels";
 import { useSpeakerWorkspace } from "~/components/speaker-workspace-context";
@@ -12,6 +10,7 @@ import {
 } from "~/modules/files/file-service.server";
 import { requireSpeakerWorkspace } from "~/modules/speakers/speaker-workspace.server";
 import { notifyRouteChange } from "~/platform/realtime/route-realtime.server";
+import type { Route } from "./+types/speaker-files";
 
 export const meta = () => [{ title: "Participant Files · Program Cue" }];
 

@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 
-import { expect, test, type Route } from "@playwright/test";
+import { expect, type Route, test } from "@playwright/test";
 
 const partSize = 10 * 1_048_576;
 const fileSize = 12 * 1_048_576;

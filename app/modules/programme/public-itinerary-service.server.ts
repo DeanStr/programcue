@@ -1,7 +1,7 @@
 import { eventLocalEndOfDayEpoch } from "~/modules/schedule/schedule-time";
 import { DEMO_EVENT_ID } from "~/platform/demo/demo-identities";
-import type { PublishedProgramme } from "./public-programme-service.server";
 import { eventVisitorKeyHash } from "./public-itinerary-token.server";
+import type { PublishedProgramme } from "./public-programme-service.server";
 
 const encoder = new TextEncoder();
 const EXPIRED_ITINERARY_CLEANUP_LIMIT = 100;

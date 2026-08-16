@@ -3,11 +3,6 @@ import { SubmissionApplicantRepository } from "./submission-applicant-repository
 import { SubmissionFormRepository } from "./submission-form-repository.server";
 import { closeDateFromEpoch } from "./submission-repository-shared";
 
-export {
-  SubmissionDraftSavedError,
-  SubmissionRevisionConflictError,
-  SubmissionStateError,
-} from "./submission-repository-shared";
 export type {
   AdminSubmission,
   Applicant,
@@ -18,6 +13,11 @@ export type {
   FormWorkspace,
   SubmittedRevisionCommand,
   SubmittedRevisionCommit,
+} from "./submission-repository-shared";
+export {
+  SubmissionDraftSavedError,
+  SubmissionRevisionConflictError,
+  SubmissionStateError,
 } from "./submission-repository-shared";
 
 /**

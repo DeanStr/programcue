@@ -1,7 +1,7 @@
-import type { Route } from "./+types/event-changes";
 import { requireEventRole } from "~/platform/auth/authorize.server";
 import { getCloudflareContext } from "~/platform/cloudflare-context";
 import { EventRealtimeService } from "~/platform/realtime/event-realtime.server";
+import type { Route } from "./+types/event-changes";
 
 function cursorValue(url: URL) {
   const raw = url.searchParams.get("cursor") ?? "0";

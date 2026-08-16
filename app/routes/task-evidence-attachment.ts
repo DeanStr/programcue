@@ -1,23 +1,22 @@
-import { z, ZodError } from "zod";
-
-import type { Route } from "./+types/task-evidence-attachment";
+import { ZodError, z } from "zod";
+import {
+  FileDiscardIncompleteError,
+  FileService,
+} from "~/modules/files/file-service.server";
 import { ensureDemoSpeakerData } from "~/modules/speakers/demo.server";
 import {
   TaskEvidenceAttachmentConflictError,
   TaskService,
   TaskStateError,
 } from "~/modules/tasks/task-service.server";
-import {
-  FileDiscardIncompleteError,
-  FileService,
-} from "~/modules/files/file-service.server";
 import { requireCurrentEventRole } from "~/platform/auth/current-event.server";
 import { getCloudflareContext } from "~/platform/cloudflare-context";
 import {
-  readBoundedText,
   RequestBodyTooLargeError,
+  readBoundedText,
 } from "~/platform/http/read-body";
 import { recordRouteChange } from "~/platform/realtime/route-realtime.server";
+import type { Route } from "./+types/task-evidence-attachment";
 
 const attachmentSchema = z.object({
   taskId: z.string().min(1).max(160),

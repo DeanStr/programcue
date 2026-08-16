@@ -1,12 +1,10 @@
-import { z, ZodError } from "zod";
-
-import type { Route } from "./+types/api-direct-sessions";
+import { ZodError, z } from "zod";
 import { sessionFormatInputSchema } from "~/modules/events/event-schema";
-import {
-  SubmissionService,
-  type SubmissionApiActor,
-} from "~/modules/submissions/submission-service.server";
 import { SubmissionStateError } from "~/modules/submissions/submission-repository.server";
+import {
+  type SubmissionApiActor,
+  SubmissionService,
+} from "~/modules/submissions/submission-service.server";
 import {
   ApiError,
   apiFailure,
@@ -19,6 +17,7 @@ import {
 } from "~/platform/api/api.server";
 import { recordIdempotentApiChange } from "~/platform/api/api-realtime.server";
 import { getCloudflareContext } from "~/platform/cloudflare-context";
+import type { Route } from "./+types/api-direct-sessions";
 
 const speakerSchema = z
   .object({

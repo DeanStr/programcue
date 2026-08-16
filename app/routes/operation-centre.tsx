@@ -1,8 +1,8 @@
-import type { Route } from "./+types/operation-centre";
 import {
   OperationCentreWorkspace,
   taskImportTransitionSummary,
 } from "~/components/operation-centre-workspace";
+import type { Route } from "./+types/operation-centre";
 
 export { action, loader } from "./operation-centre.server";
 export { taskImportTransitionSummary };

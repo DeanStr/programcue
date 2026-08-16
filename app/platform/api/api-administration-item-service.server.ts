@@ -1,11 +1,11 @@
-import { AirtableProviderBoundary } from "~/modules/airtable/airtable-provider-boundary.server";
 import { z } from "zod";
+import { AirtableProviderBoundary } from "~/modules/airtable/airtable-provider-boundary.server";
+import { ApiError, type ApiPrincipal } from "./api.server";
 import {
-  isAirtableManagedAdminResource,
   type AdminApiResource,
+  isAirtableManagedAdminResource,
 } from "./api-administration-service.server";
 import { isoTimestamp } from "./api-pagination.server";
-import { ApiError, type ApiPrincipal } from "./api.server";
 
 type EventPrincipal = ApiPrincipal & { eventId: string };
 type ApiRecord = Record<string, unknown> & { id: string };

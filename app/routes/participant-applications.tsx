@@ -1,10 +1,9 @@
 import { ClipboardList, ExternalLink } from "lucide-react";
 import { data, Form, Link, useActionData, useNavigation } from "react-router";
-import { z, ZodError } from "zod";
-
-import type { Route } from "./+types/participant-applications";
+import { ZodError, z } from "zod";
 import { useConfirm } from "~/components/ui/confirm-dialog";
 import { DomainStatusBadge } from "~/components/ui/domain-status-badge";
+import { requireSpeakerWorkspace } from "~/modules/speakers/speaker-workspace.server";
 import { ParticipantApplicationSummaryService } from "~/modules/submissions/participant-application-summary.server";
 import {
   SubmissionRevisionConflictError,
@@ -14,11 +13,11 @@ import {
   MAX_SUBMISSION_SPEAKERS,
   visibleFields,
 } from "~/modules/submissions/submission-schema";
-import { ApiParticipantService } from "~/platform/api/api-participant-service.server";
 import { ApiError } from "~/platform/api/api.server";
+import { ApiParticipantService } from "~/platform/api/api-participant-service.server";
 import { evaluatorEmailRoutingMessage } from "~/platform/evaluation/evaluator-email-alias.server";
 import { rejectCrossOriginBrowserMutation } from "~/platform/http/mutation-origin.server";
-import { requireSpeakerWorkspace } from "~/modules/speakers/speaker-workspace.server";
+import type { Route } from "./+types/participant-applications";
 
 export const meta = () => [{ title: "Applications · Program Cue" }];
 

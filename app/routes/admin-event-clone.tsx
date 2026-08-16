@@ -2,17 +2,15 @@ import { Copy, ShieldCheck } from "lucide-react";
 import { useState } from "react";
 import { data, Form, Link, useActionData, useNavigation } from "react-router";
 import { ZodError } from "zod";
-
-import type { Route } from "./+types/admin-event-clone";
+import { useConfirm } from "~/components/ui/confirm-dialog";
 import { DerivedSlugField } from "~/components/ui/derived-slug-field";
 import { ErrorSummary } from "~/components/ui/error-summary";
 import { EventDateRangeFields } from "~/components/ui/event-date-range-fields";
 import { Field } from "~/components/ui/field";
 import { TimezoneField } from "~/components/ui/timezone-field";
 import { zodFieldErrors } from "~/lib/form-errors";
-import { slugify } from "~/lib/slug";
 import { shortReference } from "~/lib/short-reference";
-import { useConfirm } from "~/components/ui/confirm-dialog";
+import { slugify } from "~/lib/slug";
 import { isAirtableRepositoryError } from "~/modules/airtable/airtable-room-repository.server";
 import { EventRepositoryProvisioningError } from "~/modules/events/event-repository-provisioning.server";
 import { requireCurrentEventRole } from "~/platform/auth/current-event.server";
@@ -22,6 +20,7 @@ import {
   EventCloneService,
   EventCloneSlugConflictError,
 } from "~/platform/operations/event-clone-service.server";
+import type { Route } from "./+types/admin-event-clone";
 
 async function administrator(
   request: Request,

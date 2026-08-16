@@ -1,24 +1,24 @@
-import { Container, ContainerProxy } from "@cloudflare/containers";
 import {
   WorkflowEntrypoint,
   type WorkflowEvent,
   type WorkflowStep,
 } from "cloudflare:workers";
+import { Container, ContainerProxy } from "@cloudflare/containers";
 import { z } from "zod";
 
 import {
   classifyScannerContainerFailure,
   MAX_SCANNER_REQUEST_BYTES,
   SCANNER_BUSY_ATTEMPT_LIMIT,
+  SCANNER_PROVIDER,
+  type ScannerContainerFailure,
+  type ScannerContractConfiguration,
+  type ScannerJob,
   scannerCapacityDelaySeconds,
   scannerCapacityShouldWait,
   scannerContainerInstanceName,
-  SCANNER_PROVIDER,
   scannerWorkflowDuplicateStatusIsAcceptable,
   signScannerCallback,
-  type ScannerContractConfiguration,
-  type ScannerContainerFailure,
-  type ScannerJob,
   validateScannerJob,
   verifyScannerDispatch,
   workflowInstanceId,

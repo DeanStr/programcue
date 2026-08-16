@@ -5,16 +5,16 @@ import {
   formatProgrammeDuration,
   formatProgrammeTimeRange,
 } from "~/modules/programme/programme-presentation";
-import {
-  initials,
-  sessionSpeakerDetails,
-  speakerAffiliation,
-  type PublicProgrammeModel,
-} from "./public-programme-model";
 import type {
   PublishedSession,
   PublishedSpeaker,
 } from "~/modules/programme/public-programme-service.server";
+import {
+  initials,
+  type PublicProgrammeModel,
+  sessionSpeakerDetails,
+  speakerAffiliation,
+} from "./public-programme-model";
 
 function legacyCopy(value: string) {
   const input = document.createElement("textarea");

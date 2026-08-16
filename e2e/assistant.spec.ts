@@ -1,7 +1,6 @@
 import { expect, test } from "@playwright/test";
-
-import { e2eOrigin } from "./support/e2e-origin";
 import { acceptConfirm, confirmDialog } from "./support/confirm-dialog";
+import { e2eOrigin } from "./support/e2e-origin";
 import { resetDemoEvent } from "./support/reset-demo-event";
 
 const FIXTURE_CONFIRMATION = "seed-assistant-approval-browser-fixture";
@@ -244,9 +243,7 @@ test("reviewer AI is event-opt-in, follows an initial draft, and fails fast with
     const setting = page.locator("section.card").filter({
       has: page.getByRole("heading", { name: "Reviewer AI suggestions" }),
     });
-    await setting
-      .getByLabel("Allow reviewer-requested AI suggestions")
-      .check();
+    await setting.getByLabel("Allow reviewer-requested AI suggestions").check();
     await setting
       .getByRole("button", { name: "Save reviewer AI setting" })
       .click();
@@ -272,7 +269,9 @@ test("reviewer AI is event-opt-in, follows an initial draft, and fails fast with
       name: "Generate criterion suggestions",
     });
     if (!(await generate.isVisible())) {
-      await expect(page.getByText("Start with your own assessment")).toBeVisible();
+      await expect(
+        page.getByText("Start with your own assessment"),
+      ).toBeVisible();
       await page
         .locator("[data-review-scale]")
         .first()
@@ -285,7 +284,9 @@ test("reviewer AI is event-opt-in, follows an initial draft, and fails fast with
     await expect(generate).toBeEnabled();
     await generate.click();
     await expect(
-      page.getByRole("alert").filter({ hasText: /credentials are not configured/i }),
+      page
+        .getByRole("alert")
+        .filter({ hasText: /credentials are not configured/i }),
     ).toBeVisible();
   } finally {
     await resetDemoEvent(request);

@@ -16,7 +16,6 @@ import {
   DEMO_VENUE_MAP_URL,
   SBEK_FIXTURE_PEOPLE,
 } from "~/platform/demo/demo-identities";
-import { ensureDemoData } from "./seed.server";
 import {
   DEMO_EVENT_ID,
   DEMO_ORGANISATION_ID,
@@ -30,6 +29,7 @@ import {
   prepareJudgedDemoWorkflow,
   resetDemoEvent,
 } from "./demo-reset.server";
+import { ensureDemoData } from "./seed.server";
 
 function demoEnvironment(overrides: Partial<CloudflareEnvironment> = {}) {
   return {

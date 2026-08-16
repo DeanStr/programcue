@@ -8,8 +8,8 @@ import {
   assertFileScanDispatchConfigured,
   FileScanDispatchConfigurationError,
   FileScanDispatchIntegrityError,
-  processFileScanDispatch,
   type FileScanQueueMessage,
+  processFileScanDispatch,
 } from "./file-scan-dispatch.server";
 import { FileService } from "./file-service.server";
 

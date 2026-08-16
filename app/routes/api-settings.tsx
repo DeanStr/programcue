@@ -3,28 +3,26 @@ import {
   CheckCircle2,
   Copy,
   KeyRound,
-  ShieldCheck,
   Send,
+  ShieldCheck,
   Trash2,
   Webhook,
 } from "lucide-react";
 import { useState } from "react";
 import { data, Form, Link, useActionData, useNavigation } from "react-router";
 import { ZodError } from "zod";
-
-import type { Route } from "./+types/api-settings";
 import { useConfirm } from "~/components/ui/confirm-dialog";
 import {
   DomainStatusBadge,
   statusPresentation,
 } from "~/components/ui/domain-status-badge";
 import { EmptyState } from "~/components/ui/states";
-import { apiKeyLifecycleState } from "~/platform/api/api-key-state";
 import {
   API_KEY_SCOPES,
   ApiKeyNameConflictError,
   ApiKeyService,
 } from "~/platform/api/api-key-service.server";
+import { apiKeyLifecycleState } from "~/platform/api/api-key-state";
 import { requireCurrentEventRole } from "~/platform/auth/current-event.server";
 import { getCloudflareContext } from "~/platform/cloudflare-context";
 import { outboundWebhookEventTypes } from "~/platform/operations/webhook-schema";
@@ -33,6 +31,7 @@ import {
   WebhookQueueUnavailableError,
   WebhookService,
 } from "~/platform/operations/webhook-service.server";
+import type { Route } from "./+types/api-settings";
 
 export const meta = () => [{ title: "API & Settings · Program Cue" }];
 

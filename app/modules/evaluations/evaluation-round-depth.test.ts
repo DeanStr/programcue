@@ -3,11 +3,11 @@ import { beforeEach, describe, expect, it } from "vitest";
 
 import type { Viewer } from "~/platform/auth/authorize.server";
 import { ensureDemoData } from "~/platform/demo/seed.server";
-import { EvaluationService } from "./evaluation-service.server";
 import {
   encodeScorecardSelection,
   parseScorecardSelection,
 } from "./evaluation-scorecard-selection";
+import { EvaluationService } from "./evaluation-service.server";
 
 const admin: Viewer = {
   personId: "person-demo-admin",

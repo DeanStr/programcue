@@ -1,6 +1,4 @@
 import { data, Form, useActionData, useNavigation } from "react-router";
-
-import type { Route } from "./+types/admin-file-retention";
 import {
   FileAccessError,
   FileErasureConfirmationError,
@@ -16,6 +14,7 @@ import {
 } from "~/modules/privacy/participant-retention-service.server";
 import { requireCurrentEventRole } from "~/platform/auth/current-event.server";
 import { getCloudflareContext } from "~/platform/cloudflare-context";
+import type { Route } from "./+types/admin-file-retention";
 
 export const meta = () => [{ title: "Data retention · Program Cue" }];
 

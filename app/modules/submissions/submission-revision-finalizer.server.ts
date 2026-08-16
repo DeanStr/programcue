@@ -1,23 +1,23 @@
+import type { EvaluatorEmailRouting } from "~/platform/evaluation/evaluator-email-alias.server";
 import { buildCoSpeakerInvitationPlan } from "./co-speaker-invitation.server";
 import type { PreparedApplicantMutationEvent } from "./submission-applicant-events.server";
-import type { EvaluatorEmailRouting } from "~/platform/evaluation/evaluator-email-alias.server";
 import {
-  SubmissionRevisionConflictError,
-  SubmissionStateError,
   type Applicant,
   type FormSummary,
   type FormVersion,
+  SubmissionRevisionConflictError,
+  SubmissionStateError,
   type SubmittedRevisionCommand,
   type SubmittedRevisionCommit,
 } from "./submission-repository-shared";
-import type { DraftPayload } from "./submission-schema";
 import {
   assertCurrentRevisionState,
   assertSubmittedRevisionRequest,
+  type PersistedRevisionSpeaker,
   parseCurrentSubmittedSnapshot,
   planSubmittedRevisionSpeakers,
-  type PersistedRevisionSpeaker,
 } from "./submission-revision-plan";
+import type { DraftPayload } from "./submission-schema";
 
 type RevisionOptions = {
   trackSelections: Array<{ trackId: string; trackName: string }>;

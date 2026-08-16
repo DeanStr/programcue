@@ -1,14 +1,25 @@
 import { env } from "cloudflare:test";
-import { beforeEach, describe, expect, it, vi } from "vitest";
 import { RouterContextProvider } from "react-router";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { EventService } from "~/modules/events/event-service.server";
 import { FileService } from "~/modules/files/file-service.server";
 import { PublicProgrammeService } from "~/modules/programme/public-programme-service.server";
+import { cloudflareContext } from "~/platform/cloudflare-context";
 import {
   ensureDemoData,
   ensureDemoProgramme,
 } from "~/platform/demo/seed.server";
+import { loader as publicCalendarLoader } from "~/routes/api-public-calendar";
+import { loader as publicEventLoader } from "~/routes/api-public-event";
+import { loader as publicScheduleLoader } from "~/routes/api-public-schedule";
+import { loader as publicSessionsLoader } from "~/routes/api-public-sessions";
+import { loader as publicSpeakersLoader } from "~/routes/api-public-speakers";
+import {
+  decodePrivateCursor,
+  encodePrivateCursor,
+  parseStrictQuery,
+} from "./api-pagination.server";
 import {
   PUBLIC_CALENDAR_SESSION_ID_LIMIT,
   PUBLIC_CALENDAR_SESSION_LIMIT,
@@ -17,17 +28,6 @@ import {
   publicSessionPage,
   publicSessionQuerySchema,
 } from "./api-public-programme.server";
-import {
-  decodePrivateCursor,
-  encodePrivateCursor,
-  parseStrictQuery,
-} from "./api-pagination.server";
-import { cloudflareContext } from "~/platform/cloudflare-context";
-import { loader as publicCalendarLoader } from "~/routes/api-public-calendar";
-import { loader as publicEventLoader } from "~/routes/api-public-event";
-import { loader as publicScheduleLoader } from "~/routes/api-public-schedule";
-import { loader as publicSessionsLoader } from "~/routes/api-public-sessions";
-import { loader as publicSpeakersLoader } from "~/routes/api-public-speakers";
 
 const testEnv = env as unknown as CloudflareEnvironment;
 

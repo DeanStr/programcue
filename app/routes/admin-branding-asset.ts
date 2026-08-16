@@ -1,7 +1,7 @@
-import type { Route } from "./+types/admin-branding-asset";
 import { EventBrandingService } from "~/modules/events/event-branding-service.server";
 import { requireCurrentEventRole } from "~/platform/auth/current-event.server";
 import { getCloudflareContext } from "~/platform/cloudflare-context";
+import type { Route } from "./+types/admin-branding-asset";
 
 export async function loader({ request, context, params }: Route.LoaderArgs) {
   const { env } = getCloudflareContext(context);

@@ -1,10 +1,9 @@
 import { env } from "cloudflare:test";
 import { RouterContextProvider } from "react-router";
 import { beforeEach, describe, expect, it } from "vitest";
-
+import { ensureDemoSpeakerData } from "~/modules/speakers/demo.server";
 import { ensureDemoSubmissionForm } from "~/modules/submissions/demo-submissions.server";
 import { SubmissionService } from "~/modules/submissions/submission-service.server";
-import { ensureDemoSpeakerData } from "~/modules/speakers/demo.server";
 import { cloudflareContext } from "~/platform/cloudflare-context";
 import { action } from "./demo-reset-submissions";
 

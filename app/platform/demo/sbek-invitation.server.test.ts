@@ -1,8 +1,7 @@
 import { env } from "cloudflare:test";
 import { beforeEach, describe, expect, it } from "vitest";
-
-import { ensureDemoData } from "./seed.server";
 import { activateSbekDemoInvitation } from "./sbek-invitation.server";
+import { ensureDemoData } from "./seed.server";
 
 const testEnv = env as unknown as CloudflareEnvironment;
 

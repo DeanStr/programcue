@@ -4,13 +4,13 @@ import type { Viewer } from "~/platform/auth/authorize.server";
 import { safeReturnTo } from "~/platform/auth/return-to";
 import { readBoundedResponseJson } from "~/platform/http/read-response";
 import {
+  type CalendarCredentials,
+  type CalendarOAuthCallbackPhase,
+  CalendarOAuthUnexpectedError,
   CalendarProviderConfigurationError,
   CalendarProviderRequestError,
-  CalendarOAuthUnexpectedError,
-  type CalendarOAuthCallbackPhase,
   decryptCalendarCredentials,
   encryptCalendarCredentials,
-  type CalendarCredentials,
 } from "./calendar-providers.server";
 
 export type DirectCalendarProviderName = "google" | "microsoft";

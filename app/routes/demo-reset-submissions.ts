@@ -1,11 +1,10 @@
 import { data } from "react-router";
-
-import type { Route } from "./+types/demo-reset-submissions";
 import { requireEmailProviderConfiguration } from "~/modules/communications/email-provider.server";
 import { ensureDemoSubmissionForm } from "~/modules/submissions/demo-submissions.server";
 import { getCloudflareContext } from "~/platform/cloudflare-context";
 import { DEMO_EVENT_ID } from "~/platform/demo/demo-identities";
 import { requireRuntimeMode } from "~/platform/runtime-environment.server";
+import type { Route } from "./+types/demo-reset-submissions";
 
 const DEMO_FORM_SLUG = "form";
 const VERIFIED_LOCAL_SENDER_FIXTURE = "verified_local_capture";

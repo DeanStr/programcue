@@ -8,9 +8,9 @@ import {
   acceleventsSpeakerPayloadSchema,
   acceleventsTrackPayloadSchema,
 } from "../../app/modules/integrations/accelevents-provider.server";
+import { acceleventsRunItemDiffSchema } from "../../app/modules/integrations/accelevents-run-contract";
 import { decryptIntegrationCredentials } from "../../app/modules/integrations/integration-credentials.server";
 import { integrationRunMessageSchema } from "../../app/modules/integrations/integration-service.server";
-import { acceleventsRunItemDiffSchema } from "../../app/modules/integrations/accelevents-run-contract";
 import {
   assertOperationClaim,
   errorDetails,

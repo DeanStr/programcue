@@ -1,8 +1,8 @@
 import { z } from "zod";
 
 import {
-  readBoundedResponseJson,
   ResponseBodyTooLargeError,
+  readBoundedResponseJson,
 } from "~/platform/http/read-response";
 
 export const AI_PROVIDER_REQUEST_TIMEOUT_MS = 120_000;

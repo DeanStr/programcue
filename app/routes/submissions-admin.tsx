@@ -1,23 +1,22 @@
 import { data, Form, Link, useActionData } from "react-router";
 import { ZodError } from "zod";
-
-import type { Route } from "./+types/submissions-admin";
+import { SubmissionDataGrid } from "~/components/submission-data-grid";
 import { statusPresentation } from "~/components/ui/domain-status-badge";
 import { EvaluationStateError } from "~/modules/evaluations/evaluation-errors";
 import { PersonDuplicateService } from "~/modules/people/person-duplicate-service.server";
-import { SubmissionDataGrid } from "~/components/submission-data-grid";
-import { SubmissionService } from "~/modules/submissions/submission-service.server";
-import type {
-  AdminSubmissionFilters,
-  AdminSubmissionRoutingFilter,
-} from "~/modules/submissions/submission-repository-shared";
 import {
   SubmissionRevisionConflictError,
   SubmissionStateError,
 } from "~/modules/submissions/submission-repository.server";
+import type {
+  AdminSubmissionFilters,
+  AdminSubmissionRoutingFilter,
+} from "~/modules/submissions/submission-repository-shared";
+import { SubmissionService } from "~/modules/submissions/submission-service.server";
 import { requireCurrentEventRole } from "~/platform/auth/current-event.server";
 import { getCloudflareContext } from "~/platform/cloudflare-context";
 import { WebhookService } from "~/platform/operations/webhook-service.server";
+import type { Route } from "./+types/submissions-admin";
 import {
   ActionNotice,
   ManualEntryPanels,

@@ -1,7 +1,5 @@
 import { data } from "react-router";
 import { ZodError } from "zod";
-
-import type { Route } from "./+types/schedule-planner";
 import {
   generateInvitationIcs,
   stableCalendarUid,
@@ -23,6 +21,7 @@ import {
   notifyRouteChange,
   recordRouteChange,
 } from "~/platform/realtime/route-realtime.server";
+import type { Route } from "./+types/schedule-planner";
 
 async function queueScheduleWebhook(
   env: CloudflareEnvironment,

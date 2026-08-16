@@ -1,9 +1,8 @@
 import { env } from "cloudflare:test";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-
-import type { Viewer } from "~/platform/auth/authorize.server";
 import type { AirtableProviderBoundary } from "~/modules/airtable/airtable-provider-boundary.server";
 import { PublicProgrammeService } from "~/modules/programme/public-programme-service.server";
+import type { Viewer } from "~/platform/auth/authorize.server";
 import { OperationService } from "~/platform/operations/operation-service.server";
 import { processAcceleventsExport } from "../../../workers/queue/accelevents-export-handler";
 import { IntegrationService } from "./integration-service.server";

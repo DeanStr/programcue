@@ -1,33 +1,30 @@
 import { data, redirect } from "react-router";
 import { ZodError } from "zod";
-
-import type { Route } from "./+types/application-form";
+import { PublicProgrammeService } from "~/modules/programme/public-programme-service.server";
 import {
   ApplicantConfigurationError,
   ApplicantDeliveryError,
   ApplicantInputError,
 } from "~/modules/submissions/applicant-session.server";
-import { ensureDemoSubmissionForm } from "~/modules/submissions/demo-submissions.server";
 import {
+  type ApplicationNotice,
   assertApplicationNoticeConfiguration,
   createApplicationNotice,
   verifyApplicationNotice,
-  type ApplicationNotice,
 } from "~/modules/submissions/application-notice.server";
-import {
-  PublicFormUnavailableError,
-  SubmissionService,
-} from "~/modules/submissions/submission-service.server";
+import { ensureDemoSubmissionForm } from "~/modules/submissions/demo-submissions.server";
 import {
   SubmissionDraftSavedError,
   SubmissionRevisionConflictError,
   SubmissionStateError,
 } from "~/modules/submissions/submission-repository.server";
+import {
+  PublicFormUnavailableError,
+  SubmissionService,
+} from "~/modules/submissions/submission-service.server";
 import { signOutSession } from "~/platform/auth/auth.server";
 import { getCloudflareContext } from "~/platform/cloudflare-context";
-import { WebhookService } from "~/platform/operations/webhook-service.server";
-import { recordRouteChange } from "~/platform/realtime/route-realtime.server";
-import { PublicProgrammeService } from "~/modules/programme/public-programme-service.server";
+import { rejectCrossOriginBrowserMutation } from "~/platform/http/mutation-origin.server";
 import {
   AbuseProtectionConfigurationError,
   AbuseRateLimitError,
@@ -36,7 +33,9 @@ import {
   TurnstileRejectedError,
   TurnstileUnavailableError,
 } from "~/platform/http/public-abuse-protection.server";
-import { rejectCrossOriginBrowserMutation } from "~/platform/http/mutation-origin.server";
+import { WebhookService } from "~/platform/operations/webhook-service.server";
+import { recordRouteChange } from "~/platform/realtime/route-realtime.server";
+import type { Route } from "./+types/application-form";
 
 export type ActionResult = {
   ok: boolean;

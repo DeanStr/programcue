@@ -19,7 +19,6 @@ import {
 import { Form, Link } from "react-router";
 
 import type { SavedViewArea } from "~/platform/operations/saved-view-service.server";
-import { Dialog } from "./dialog";
 import type {
   AdminShellCommandPalette,
   AdminShellDialog,
@@ -28,6 +27,7 @@ import type {
   AdminShellNotification,
   AdminShellViewer,
 } from "./admin-shell";
+import { Dialog } from "./dialog";
 
 /** Initials for an event or a person, from whatever the name actually is. */
 function initialsOf(name: string) {

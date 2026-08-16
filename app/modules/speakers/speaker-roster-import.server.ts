@@ -5,13 +5,13 @@ import {
   organisationRelationshipBindings,
   unavailableExistingEmails,
 } from "~/modules/crm/crm-contact-scope.server";
-import type { Viewer } from "~/platform/auth/authorize.server";
-import { ApiPersonIdempotencyService } from "~/platform/api/api-person-idempotency.server";
 import { ApiError, apiRequestHash } from "~/platform/api/api.server";
+import { ApiPersonIdempotencyService } from "~/platform/api/api-person-idempotency.server";
+import type { Viewer } from "~/platform/auth/authorize.server";
 import {
   EvaluatorEmailAliasContextError,
-  resolveEvaluatorEmailAlias,
   type EvaluatorEmailRouting,
+  resolveEvaluatorEmailAlias,
 } from "~/platform/evaluation/evaluator-email-alias.server";
 import { CsvParseError, parseCsv } from "~/platform/operations/csv";
 

@@ -1,13 +1,12 @@
 import { env } from "cloudflare:test";
 import { describe, expect, it } from "vitest";
-
-import { processCalendarSync } from "../../../workers/communications-queue";
-import { CalendarService } from "./calendar-service.server";
-import { calendarQueueMessageSchema } from "./calendar-schema";
 import { ResendEmailProvider } from "~/modules/communications/resend.server";
+import { processCalendarSync } from "../../../workers/communications-queue";
+import { calendarQueueMessageSchema } from "./calendar-schema";
+import { CalendarService } from "./calendar-service.server";
 import {
-  calendarTestViewer as viewer,
   scheduledSpeakerEnvironment,
+  calendarTestViewer as viewer,
 } from "./calendar-service-test-fixture";
 
 describe("calendar delivery workflows", () => {

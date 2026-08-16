@@ -1,11 +1,11 @@
+import { CommunicationService } from "~/modules/communications/communication-service.server";
+import { ApiTaskService } from "~/platform/api/api-task-service.server";
+import type { Viewer } from "~/platform/auth/authorize.server";
 import { AiProposalStateError } from "./ai-assistant-errors";
 import {
   AiDomainProposalExecutor,
   type DomainProposalMetadata,
 } from "./ai-domain-proposal-executor.server";
-import { CommunicationService } from "~/modules/communications/communication-service.server";
-import type { Viewer } from "~/platform/auth/authorize.server";
-import { ApiTaskService } from "~/platform/api/api-task-service.server";
 import type {
   AiProposalApprovalResult,
   AssistantProposalMetadata,

@@ -1,10 +1,9 @@
 import { env } from "cloudflare:test";
 import { describe, expect, it } from "vitest";
-
-import { CrmService, CrmStateError } from "./crm-service.server";
 import { ensureDemoSpeakerData } from "~/modules/speakers/demo.server";
 import { SpeakerService } from "~/modules/speakers/speaker-service.server";
 import type { OrganisationAdministrator } from "~/platform/auth/organisation.server";
+import { CrmService, CrmStateError } from "./crm-service.server";
 
 declare module "cloudflare:test" {
   interface ProvidedEnv {

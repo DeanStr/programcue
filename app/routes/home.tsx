@@ -1,6 +1,4 @@
 import { Form, redirect } from "react-router";
-
-import type { Route } from "./+types/home";
 import { BrandMark } from "~/components/brand-mark";
 import type { ViewerRole } from "~/platform/auth/authorize.server";
 import {
@@ -11,6 +9,7 @@ import {
   selectedEventId,
 } from "~/platform/auth/current-event.server";
 import { getCloudflareContext } from "~/platform/cloudflare-context";
+import type { Route } from "./+types/home";
 
 const landingPage: Record<ViewerRole, string> = {
   owner: "/admin/event",

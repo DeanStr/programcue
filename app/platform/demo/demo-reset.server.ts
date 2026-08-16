@@ -1,18 +1,14 @@
-import { ensureDemoEvaluationData } from "~/modules/evaluations/demo.server";
 import { DEFAULT_EVENT_BRAND_ACCENT } from "~/lib/brand";
 import { requireEmailProviderConfiguration } from "~/modules/communications/email-provider.server";
+import { ensureDemoEvaluationData } from "~/modules/evaluations/demo.server";
 import { INITIAL_EVENT_SESSION_FORMATS_JSON } from "~/modules/events/event-configuration";
 import { CANONICAL_EVENT_FILE_POLICY_JSON } from "~/modules/files/file-policy";
 import { defaultProgrammeEmbedConfiguration } from "~/modules/programme/programme-embed-configuration";
 import { ensureDemoSpeakerData } from "~/modules/speakers/demo.server";
 import { ensureDemoSubmissionForm } from "~/modules/submissions/demo-submissions.server";
 import {
-  ensureDemoData,
-  ensureDemoProgramme,
-} from "~/platform/demo/seed.server";
-import {
-  DEMO_EVENT_ID,
   DEMO_ASSISTANT_FIXTURE_MODEL,
+  DEMO_EVENT_ID,
   DEMO_IDENTITIES,
   DEMO_ORGANISATION_ID,
   DEMO_R2_PREFIX,
@@ -22,6 +18,10 @@ import {
   SBEK_FIXTURE_PEOPLE,
   SBEK_SECOND_SPEAKER,
 } from "~/platform/demo/demo-identities";
+import {
+  ensureDemoData,
+  ensureDemoProgramme,
+} from "~/platform/demo/seed.server";
 import { requireRuntimeMode } from "~/platform/runtime-environment.server";
 
 export {

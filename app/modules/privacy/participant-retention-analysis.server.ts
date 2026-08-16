@@ -1,18 +1,18 @@
 import type { Viewer } from "~/platform/auth/authorize.server";
 import {
-  ParticipantRetentionAccessError,
-  ParticipantRetentionFoundation,
-  ParticipantRetentionStateError,
-  RETAINED_PERSON_PREFIX,
   candidateBindings,
   candidateSql,
   completionId,
   count,
-  parseCompletionMetadata,
-  requireOwner,
-  sha256Hex,
   type InternalMapping,
   type ParticipantCandidate,
+  ParticipantRetentionAccessError,
+  ParticipantRetentionFoundation,
+  ParticipantRetentionStateError,
+  parseCompletionMetadata,
+  RETAINED_PERSON_PREFIX,
+  requireOwner,
+  sha256Hex,
 } from "./participant-retention-foundation.server";
 
 export abstract class ParticipantRetentionAnalysis extends ParticipantRetentionFoundation {

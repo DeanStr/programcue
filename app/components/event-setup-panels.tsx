@@ -1,5 +1,5 @@
 import { Plus, X } from "lucide-react";
-import { useEffect, useState, type Dispatch, type SetStateAction } from "react";
+import { type Dispatch, type SetStateAction, useEffect, useState } from "react";
 import { Link } from "react-router";
 
 import {
@@ -7,17 +7,17 @@ import {
   RecordField,
   RecordHead,
 } from "~/components/event-record-row";
-import type { ActionResponse } from "~/routes/event-setup";
-import type { EventSetup } from "~/modules/events/event-repository.server";
-import { AIRTABLE_SYNCHRONOUS_MIGRATION_MAX_CHANGES } from "~/modules/airtable/airtable-schema";
-import {
-  CANONICAL_EVENT_FILE_POLICY,
-  maximumMegabytes,
-} from "~/modules/files/file-policy";
 import { CharacterCount } from "~/components/ui/character-count";
 import { EventDateRangeFields } from "~/components/ui/event-date-range-fields";
 import { Field } from "~/components/ui/field";
 import { TimezoneField } from "~/components/ui/timezone-field";
+import { AIRTABLE_SYNCHRONOUS_MIGRATION_MAX_CHANGES } from "~/modules/airtable/airtable-schema";
+import type { EventSetup } from "~/modules/events/event-repository.server";
+import {
+  CANONICAL_EVENT_FILE_POLICY,
+  maximumMegabytes,
+} from "~/modules/files/file-policy";
+import type { ActionResponse } from "~/routes/event-setup";
 
 function FieldError({
   actionData,

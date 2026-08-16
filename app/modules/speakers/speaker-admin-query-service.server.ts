@@ -15,8 +15,8 @@ import type {
   ProfileRow,
   SessionRow,
 } from "./speaker-portal-service.server";
-import { SpeakerAdminIntegrityError } from "./speaker-service-errors";
 import { readSpeakerProfileHistory } from "./speaker-profile-revision.server";
+import { SpeakerAdminIntegrityError } from "./speaker-service-errors";
 
 export class SpeakerAdminQueryService {
   constructor(

@@ -4,8 +4,8 @@ import {
   sessionFormatInputSchema,
 } from "~/modules/events/event-schema";
 import {
-  eventExportResources,
   type EventExportResource,
+  eventExportResources,
 } from "~/platform/operations/data-export-service.server";
 
 const importResources = eventExportResources.filter(

@@ -7,22 +7,22 @@ import {
   type UploadTarget,
 } from "./file-access-service.server";
 import {
-  FileLifecycleService,
   type FileErasureInput,
+  FileLifecycleService,
 } from "./file-lifecycle-service.server";
 import {
   FileScanResultService,
   type scanResultSchema,
 } from "./file-scan-result-service.server";
 
-export {
-  stableLogicalAssetId,
-  uploadTargetSchema,
-} from "./file-access-service.server";
 export type {
   ParticipantTaskEvidenceVersion,
   StoredUpload,
   UploadTarget,
+} from "./file-access-service.server";
+export {
+  stableLogicalAssetId,
+  uploadTargetSchema,
 } from "./file-access-service.server";
 export {
   FileAccessError,

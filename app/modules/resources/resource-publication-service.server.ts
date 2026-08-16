@@ -1,22 +1,22 @@
-import type { Viewer } from "~/platform/auth/authorize.server";
 import {
   AirtableProviderBoundary,
   airtableCommandKey,
 } from "~/modules/airtable/airtable-provider-boundary.server";
-import { ResourceServiceBase } from "./resource-service-base.server";
+import type { Viewer } from "~/platform/auth/authorize.server";
 import {
   parseResourceDocument,
   validateResourceDocumentEmbeds,
 } from "./resource-content";
 import { resourceEmbedConfiguration } from "./resource-embed-policy";
+import { ResourceServiceBase } from "./resource-service-base.server";
 import {
   participantAudienceSql,
   ResourceAudienceError,
+  type ResourcePublishPage,
   ResourceRevisionConflictError,
   ResourceSlugConflictError,
   ResourceTaskDependencyError,
   successfulResourcePublishAttemptSql,
-  type ResourcePublishPage,
 } from "./resource-service-shared";
 
 const publicationCandidateAudienceSql = `(

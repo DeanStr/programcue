@@ -1,28 +1,27 @@
 import { env } from "cloudflare:test";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-
-import type { Viewer } from "~/platform/auth/authorize.server";
-import { ensureDemoData } from "~/platform/demo/seed.server";
-import { ensureJudgedDemoWorkflow } from "~/platform/demo/demo-reset.server";
 import { ensureDemoEvaluationData } from "~/modules/evaluations/demo.server";
-import { EventService } from "~/modules/events/event-service.server";
-import { EventTrackInUseError } from "~/modules/events/event-repository.server";
 import { EvaluationService } from "~/modules/evaluations/evaluation-service.server";
+import { EventTrackInUseError } from "~/modules/events/event-repository.server";
+import { EventService } from "~/modules/events/event-service.server";
 import { ScheduleService } from "~/modules/schedule/schedule-service.server";
 import { SubmissionService } from "~/modules/submissions/submission-service.server";
 import { TaskService } from "~/modules/tasks/task-service.server";
+import type { Viewer } from "~/platform/auth/authorize.server";
+import { ensureJudgedDemoWorkflow } from "~/platform/demo/demo-reset.server";
+import { ensureDemoData } from "~/platform/demo/seed.server";
 import {
   AirtableProviderError,
   type AirtableRecord,
   type AirtableTable,
 } from "./airtable-client.server";
 import { AirtableEventDataRepository } from "./airtable-event-data-repository.server";
+import { AirtableMigrationService } from "./airtable-migration-service.server";
+import { AirtableProgrammeRepository } from "./airtable-programme-repository.server";
 import {
   AirtableProviderBoundary,
   airtableIntentCommand,
 } from "./airtable-provider-boundary.server";
-import { AirtableMigrationService } from "./airtable-migration-service.server";
-import { AirtableProgrammeRepository } from "./airtable-programme-repository.server";
 import {
   AirtableRepositorySchemaError,
   AirtableRoomRepository,

@@ -1,4 +1,4 @@
-import { MAX_FORM_FIELDS, type FormField } from "./submission-schema";
+import { type FormField, MAX_FORM_FIELDS } from "./submission-schema";
 
 function fieldIdFromLabel(fields: FormField[], label: string) {
   const existing = new Set(fields.map((field) => field.id));

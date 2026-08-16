@@ -1,4 +1,4 @@
-import { expect, test, type Page } from "@playwright/test";
+import { expect, type Page, test } from "@playwright/test";
 
 import { acceptConfirm } from "./support/confirm-dialog";
 import { e2eOrigin } from "./support/e2e-origin";

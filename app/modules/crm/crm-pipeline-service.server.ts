@@ -1,13 +1,13 @@
 import { z } from "zod";
 
 import type { OrganisationAdministrator } from "~/platform/auth/organisation.server";
+import { CrmStateError } from "./crm-errors";
 import {
+  type CrmStage,
   crmPersonIdSchema,
   crmStageSchema,
   crmStages,
-  type CrmStage,
 } from "./crm-schema";
-import { CrmStateError } from "./crm-errors";
 
 export class CrmPipelineService {
   constructor(

@@ -6,7 +6,6 @@ import {
   SchedulePlacementBlockedError,
   ScheduleRevisionConflictError,
 } from "./schedule-errors";
-import { detectWorkspaceConflicts } from "./schedule-workspace.server";
 import type { ScheduleConflict } from "./schedule-rules";
 import type { scheduleSessionContentSchema } from "./schedule-schema";
 import type {
@@ -14,6 +13,7 @@ import type {
   ScheduleWorkspace,
 } from "./schedule-service.server";
 import { ScheduleSessionResourcesWorkflow } from "./schedule-session-resources-workflow.server";
+import { detectWorkspaceConflicts } from "./schedule-workspace.server";
 
 export abstract class ScheduleSessionEditorWorkflow extends ScheduleSessionResourcesWorkflow {
   async updateSessionContentD1(

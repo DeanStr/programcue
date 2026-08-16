@@ -4,18 +4,18 @@ import type { Viewer } from "~/platform/auth/authorize.server";
 import { ParticipantRetentionAnalysis } from "./participant-retention-analysis.server";
 import { buildParticipantRetentionFinalisationStatements } from "./participant-retention-finalisation-statements.server";
 import {
-  MAX_PARTICIPANTS_PER_BATCH,
-  ParticipantRetentionConfirmationError,
-  ParticipantRetentionStateError,
-  RETAINED_PERSON_PREFIX,
+  type CompletionMetadata,
   completionId,
   eventClaimGuard,
+  MAX_PARTICIPANTS_PER_BATCH,
   mapStatement,
+  type ParticipantCandidate,
+  ParticipantRetentionConfirmationError,
+  ParticipantRetentionStateError,
   participantIdBindings,
   participantPredicateSql,
+  RETAINED_PERSON_PREFIX,
   requireOwner,
-  type CompletionMetadata,
-  type ParticipantCandidate,
 } from "./participant-retention-foundation.server";
 
 export abstract class ParticipantRetentionExecution extends ParticipantRetentionAnalysis {
