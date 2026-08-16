@@ -544,6 +544,7 @@ export function DecisionDialog() {
       footer={null}
     >
       <Form
+        key={`${selected.id}:${selected.decisionDraft?.revisionNumber ?? "new"}`}
         method="post"
         onSubmit={() => setDecisionId(null)}
         className="stack"
