@@ -18,6 +18,7 @@ export const organisations = sqliteTable(
     id: text("id").primaryKey(),
     name: text("name").notNull(),
     slug: text("slug").notNull(),
+    communicationPhysicalAddress: text("communication_physical_address"),
     createdAt: integer("created_at").notNull().default(epochNow),
     updatedAt: integer("updated_at").notNull().default(epochNow),
   },

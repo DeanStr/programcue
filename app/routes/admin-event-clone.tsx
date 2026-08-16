@@ -4,6 +4,13 @@ import { data, Form, Link, useActionData, useNavigation } from "react-router";
 import { ZodError } from "zod";
 
 import type { Route } from "./+types/admin-event-clone";
+import { DerivedSlugField } from "~/components/ui/derived-slug-field";
+import { ErrorSummary } from "~/components/ui/error-summary";
+import { EventDateRangeFields } from "~/components/ui/event-date-range-fields";
+import { Field } from "~/components/ui/field";
+import { TimezoneField } from "~/components/ui/timezone-field";
+import { zodFieldErrors } from "~/lib/form-errors";
+import { slugify } from "~/lib/slug";
 import { shortReference } from "~/lib/short-reference";
 import { useConfirm } from "~/components/ui/confirm-dialog";
 import { isAirtableRepositoryError } from "~/modules/airtable/airtable-room-repository.server";
@@ -93,7 +100,12 @@ export async function action({ request, context }: Route.ActionArgs) {
     }
     if (error instanceof EventCloneSlugConflictError) {
       return data(
-        { ok: false as const, message: error.message, result: null },
+        {
+          ok: false as const,
+          message: error.message,
+          result: null,
+          fieldErrors: { slug: [error.message] },
+        },
         { status: 409 },
       );
     }
@@ -103,6 +115,7 @@ export async function action({ request, context }: Route.ActionArgs) {
           ok: false as const,
           message: error.issues[0]?.message ?? "Review the clone settings.",
           result: null,
+          fieldErrors: zodFieldErrors(error),
         },
         { status: 422 },
       );
@@ -126,6 +139,27 @@ export default function AdminEventClone({ loaderData }: Route.ComponentProps) {
   const [repositoryProvider, setRepositoryProvider] = useState<
     "d1" | "airtable"
   >("d1");
+  const [name, setName] = useState(loaderData.defaults.name);
+  const [slug, setSlug] = useState(loaderData.defaults.slug);
+  const [timezone, setTimezone] = useState(loaderData.defaults.timezone);
+  const fieldErrors: Record<string, string[]> =
+    actionData && "fieldErrors" in actionData && actionData.fieldErrors
+      ? (actionData.fieldErrors as Record<string, string[]>)
+      : {};
+  const linkedFieldIds = new Set([
+    "name",
+    "slug",
+    "timezone",
+    "startDate",
+    "endDate",
+  ]);
+  const summaryErrors = Object.entries(fieldErrors).flatMap(
+    ([field, messages]) =>
+      messages.map((message) => ({
+        message,
+        href: linkedFieldIds.has(field) ? `#event-clone-${field}` : undefined,
+      })),
+  );
   return (
     <>
       {dialog}
@@ -202,58 +236,46 @@ export default function AdminEventClone({ loaderData }: Route.ComponentProps) {
           </div>
           <Form method="post" className="stack">
             <input type="hidden" name="intent" value="clone" />
-            <label className="label">
-              Event name
+            <ErrorSummary errors={summaryErrors} />
+            <Field label="Event name" required error={fieldErrors.name?.[0]}>
               <input
+                id="event-clone-name"
                 className="field"
                 name="name"
-                defaultValue={loaderData.defaults.name}
+                value={name}
+                onChange={(event) => setName(event.currentTarget.value)}
                 required
                 maxLength={160}
               />
-            </label>
-            <label className="label">
-              Public slug
-              <input
-                className="field"
-                name="slug"
-                defaultValue={loaderData.defaults.slug}
-                required
-                pattern="[a-z0-9]+(?:-[a-z0-9]+)*"
-                maxLength={120}
-              />
-            </label>
-            <label className="label">
-              IANA timezone
-              <input
-                className="field"
-                name="timezone"
-                defaultValue={loaderData.defaults.timezone}
-                required
-              />
-            </label>
-            <div className="grid grid-2">
-              <label className="label">
-                Start date
-                <input
-                  className="field"
-                  type="date"
-                  name="startDate"
-                  defaultValue={loaderData.defaults.startDate}
-                  required
-                />
-              </label>
-              <label className="label">
-                End date
-                <input
-                  className="field"
-                  type="date"
-                  name="endDate"
-                  defaultValue={loaderData.defaults.endDate}
-                  required
-                />
-              </label>
-            </div>
+            </Field>
+            <DerivedSlugField
+              id="event-clone-slug"
+              source={name}
+              value={slug}
+              onChange={setSlug}
+              name="slug"
+              label="Public slug"
+              maximumLength={120}
+              initiallyDerived={
+                loaderData.defaults.slug ===
+                slugify(loaderData.defaults.name, { maximumLength: 120 })
+              }
+              publicPathPrefix="/public/programme/"
+              availabilityUrl="/admin/events/slug-availability"
+              error={fieldErrors.slug?.[0]}
+            />
+            <TimezoneField
+              id="event-clone-timezone"
+              value={timezone}
+              onChange={setTimezone}
+              error={fieldErrors.timezone?.[0]}
+            />
+            <EventDateRangeFields
+              idPrefix="event-clone"
+              initialStartDate={loaderData.defaults.startDate}
+              initialEndDate={loaderData.defaults.endDate}
+              error={fieldErrors.endDate?.[0] ?? fieldErrors.startDate?.[0]}
+            />
             <fieldset className="card pad">
               <legend className="label">Event-data repository</legend>
               <label className="pc-repository-choice">

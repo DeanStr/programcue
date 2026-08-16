@@ -1,4 +1,4 @@
-import type { ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { Link } from "react-router";
 
 import type {
@@ -29,6 +29,25 @@ export function FieldSettingsPanel({
   paneSwitch?: ReactNode;
   hidden?: boolean;
 }) {
+  const [allowIdChange, setAllowIdChange] = useState(false);
+  const selectedIndex = selected ? input.schema.fields.indexOf(selected) : -1;
+  useEffect(() => setAllowIdChange(false), [selectedIndex]);
+  const idReferenced = selected
+    ? input.schema.fields.some(
+        (field) => field.condition?.fieldId === selected.id,
+      )
+    : false;
+  const idProtected = Boolean(input.id || idReferenced);
+  const duplicateOptions = selected
+    ? selected.options.filter(
+        (option, index, options) =>
+          options.findIndex(
+            (candidate) =>
+              candidate.trim().toLocaleLowerCase() ===
+              option.trim().toLocaleLowerCase(),
+          ) !== index,
+      )
+    : [];
   return (
     <section
       className="fb-dock-panel fb-inspector"
@@ -54,32 +73,65 @@ export function FieldSettingsPanel({
                 onChange={(event) => patchField({ label: event.target.value })}
               />
             </label>
-            <label className="label mt">
-              Stable field ID
-              <input
-                className="field"
-                value={selected.id}
-                onChange={(event) => {
-                  const oldId = selected.id;
-                  const nextId = event.target.value;
-                  setSelectedId(nextId);
-                  change({
-                    ...input,
-                    schema: {
-                      ...input.schema,
-                      fields: input.schema.fields.map((field) => ({
-                        ...field,
-                        id: field.id === oldId ? nextId : field.id,
-                        condition:
-                          field.condition?.fieldId === oldId
-                            ? { ...field.condition, fieldId: nextId }
-                            : field.condition,
-                      })),
-                    },
-                  });
-                }}
-              />
-            </label>
+            <details className="pc-disclosure mt">
+              <summary>
+                <strong>Advanced identity</strong>
+                <span className="help">Stable field ID: {selected.id}</span>
+              </summary>
+              <div className="stack mt">
+                {idProtected ? (
+                  <div className="validation-item warn">
+                    <strong>References may be affected</strong>
+                    <span>
+                      This field belongs to a saved form or is used by
+                      conditional logic. Program Cue will update in-form
+                      conditions, but external exports may still use the current
+                      ID.
+                    </span>
+                  </div>
+                ) : null}
+                {idProtected ? (
+                  <label className="toggle">
+                    <input
+                      type="checkbox"
+                      checked={allowIdChange}
+                      onChange={(event) =>
+                        setAllowIdChange(event.currentTarget.checked)
+                      }
+                    />{" "}
+                    Allow this stable ID to change
+                  </label>
+                ) : null}
+                <label className="label">
+                  Stable field ID
+                  <input
+                    className="field"
+                    value={selected.id}
+                    disabled={idProtected && !allowIdChange}
+                    pattern="[a-z][a-z0-9_]{1,39}"
+                    onChange={(event) => {
+                      const oldId = selected.id;
+                      const nextId = event.target.value;
+                      setSelectedId(nextId);
+                      change({
+                        ...input,
+                        schema: {
+                          ...input.schema,
+                          fields: input.schema.fields.map((field) => ({
+                            ...field,
+                            id: field.id === oldId ? nextId : field.id,
+                            condition:
+                              field.condition?.fieldId === oldId
+                                ? { ...field.condition, fieldId: nextId }
+                                : field.condition,
+                          })),
+                        },
+                      });
+                    }}
+                  />
+                </label>
+              </div>
+            </details>
             <label className="label mt">
               Help text
               <textarea
@@ -118,13 +170,22 @@ export function FieldSettingsPanel({
                   value={selected.options.join("\n")}
                   onChange={(event) =>
                     patchField({
-                      options: event.target.value
-                        .split("\n")
+                      options: event.target.value.split("\n"),
+                    })
+                  }
+                  onBlur={() =>
+                    patchField({
+                      options: selected.options
                         .map((value) => value.trim())
                         .filter(Boolean),
                     })
                   }
                 />
+                {duplicateOptions.length ? (
+                  <span className="field-error" role="alert">
+                    Remove duplicate option “{duplicateOptions[0]}”.
+                  </span>
+                ) : null}
               </label>
             ) : selected.id === "category" || selected.id === "format" ? (
               <fieldset className="stack mt">

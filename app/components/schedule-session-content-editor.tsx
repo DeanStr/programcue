@@ -13,6 +13,7 @@ import {
   DraftRecoveryFeedback,
   DraftRecoveryStatus,
 } from "~/components/draft-recovery-feedback";
+import { CharacterCount } from "~/components/ui/character-count";
 import type {
   ScheduleSession,
   ScheduleWorkspace,
@@ -535,6 +536,7 @@ function SessionContentFieldsPanel() {
               setSaved(false);
             }}
           />
+          <CharacterCount value={draft.description} maximum={12_000} />
         </label>
         <label className="label">
           Duration (minutes)

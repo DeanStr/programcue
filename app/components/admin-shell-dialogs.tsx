@@ -53,6 +53,26 @@ const VIEW_AREA_LABELS: Record<SavedViewArea, string> = {
   operations: "Operations",
 };
 
+export function suggestedSavedViewName(
+  area: SavedViewArea,
+  currentHref: string,
+) {
+  const url = new URL(currentHref, "https://programcue.invalid");
+  const parts = [...url.searchParams.entries()]
+    .filter(([key, value]) => key !== "page" && value.trim())
+    .slice(0, 3)
+    .map(([key, value]) => {
+      const spacedKey = key.replaceAll(/([a-z])([A-Z])/gu, "$1 $2");
+      const readableKey = `${spacedKey[0]?.toLocaleUpperCase() ?? ""}${spacedKey.slice(1).toLocaleLowerCase()}`;
+      const readableValue = value.replaceAll(/[_-]+/gu, " ");
+      return `${readableKey}: ${readableValue}`;
+    });
+  const suggestion = parts.length
+    ? parts.join(" · ")
+    : `${VIEW_AREA_LABELS[area]} view`;
+  return suggestion.slice(0, 80).trim();
+}
+
 export function AdminAuxiliaryDialogs({
   dialog,
   viewArea,
@@ -114,6 +134,7 @@ export function AdminAuxiliaryDialogs({
                 required
                 minLength={2}
                 maxLength={80}
+                defaultValue={suggestedSavedViewName(viewArea, currentHref)}
                 placeholder="Unassigned, newest first"
                 autoFocus
               />

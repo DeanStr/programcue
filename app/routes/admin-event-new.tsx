@@ -5,6 +5,12 @@ import { ZodError } from "zod";
 
 import type { Route } from "./+types/admin-event-new";
 import { shortReference } from "~/lib/short-reference";
+import { zodFieldErrors } from "~/lib/form-errors";
+import { DerivedSlugField } from "~/components/ui/derived-slug-field";
+import { ErrorSummary } from "~/components/ui/error-summary";
+import { EventDateRangeFields } from "~/components/ui/event-date-range-fields";
+import { Field } from "~/components/ui/field";
+import { TimezoneField } from "~/components/ui/timezone-field";
 import { useConfirm } from "~/components/ui/confirm-dialog";
 import {
   EventCreationInProgressError,
@@ -27,6 +33,7 @@ type ActionResponse = {
     operationId: string;
     repositoryProvider: "d1" | "airtable";
   } | null;
+  fieldErrors?: Record<string, string[]>;
 };
 
 async function organisationAdministrator(
@@ -129,6 +136,10 @@ export async function action({ request, context }: Route.ActionArgs) {
           committed: false,
           message: error.message,
           result: null,
+          fieldErrors:
+            error instanceof EventCreationSlugConflictError
+              ? { slug: [error.message] }
+              : undefined,
         },
         { status: 409 },
       );
@@ -139,6 +150,7 @@ export async function action({ request, context }: Route.ActionArgs) {
           committed: false,
           message: error.issues[0]?.message ?? "Review the event settings.",
           result: null,
+          fieldErrors: zodFieldErrors(error),
         },
         { status: 422 },
       );
@@ -156,6 +168,24 @@ export default function AdminEventNew({ loaderData }: Route.ComponentProps) {
     "d1" | "airtable"
   >("d1");
   const [reuseSenderProfileId, setReuseSenderProfileId] = useState("");
+  const [name, setName] = useState("");
+  const [slug, setSlug] = useState("");
+  const [timezone, setTimezone] = useState(loaderData.timezone);
+  const fieldErrors = actionData?.fieldErrors ?? {};
+  const linkedFieldIds = new Set([
+    "name",
+    "slug",
+    "timezone",
+    "startDate",
+    "endDate",
+  ]);
+  const summaryErrors = Object.entries(fieldErrors).flatMap(
+    ([field, messages]) =>
+      messages.map((message) => ({
+        message,
+        href: linkedFieldIds.has(field) ? `#event-new-${field}` : undefined,
+      })),
+  );
   const selectedSender = loaderData.reusableSenderProfiles.find(
     (profile) => profile.id === reuseSenderProfileId,
   );
@@ -265,51 +295,46 @@ export default function AdminEventNew({ loaderData }: Route.ComponentProps) {
               name="creationIntentId"
               value={loaderData.creationIntentId}
             />
-            <label className="label">
-              Event name
-              <input className="field" name="name" required maxLength={160} />
-            </label>
-            <label className="label">
-              Public slug
+            <ErrorSummary errors={summaryErrors} />
+            <Field
+              label="Event name"
+              required
+              error={fieldErrors.name?.[0]}
+            >
               <input
+                id="event-new-name"
                 className="field"
-                name="slug"
+                name="name"
+                value={name}
+                onChange={(event) => setName(event.currentTarget.value)}
                 required
-                pattern="[a-z0-9]+(?:-[a-z0-9]+)*"
-                maxLength={120}
+                maxLength={160}
               />
-            </label>
-            <label className="label">
-              IANA timezone
-              <input
-                className="field"
-                name="timezone"
-                defaultValue={loaderData.timezone}
-                required
-              />
-            </label>
-            <div className="grid grid-2">
-              <label className="label">
-                Start date
-                <input
-                  className="field"
-                  type="date"
-                  name="startDate"
-                  defaultValue={loaderData.startDate}
-                  required
-                />
-              </label>
-              <label className="label">
-                End date
-                <input
-                  className="field"
-                  type="date"
-                  name="endDate"
-                  defaultValue={loaderData.endDate}
-                  required
-                />
-              </label>
-            </div>
+            </Field>
+            <DerivedSlugField
+              id="event-new-slug"
+              source={name}
+              value={slug}
+              onChange={setSlug}
+              name="slug"
+              label="Public slug"
+              maximumLength={120}
+              publicPathPrefix="/public/programme/"
+              availabilityUrl="/admin/events/slug-availability"
+              error={fieldErrors.slug?.[0]}
+            />
+            <TimezoneField
+              id="event-new-timezone"
+              value={timezone}
+              onChange={setTimezone}
+              error={fieldErrors.timezone?.[0]}
+            />
+            <EventDateRangeFields
+              idPrefix="event-new"
+              initialStartDate={loaderData.startDate}
+              initialEndDate={loaderData.endDate}
+              error={fieldErrors.endDate?.[0] ?? fieldErrors.startDate?.[0]}
+            />
             <fieldset className="card pad">
               <legend className="label">Event-data repository</legend>
               <label className="pc-repository-choice">

@@ -25,6 +25,7 @@ import {
   AdminPageSectionNavigation,
 } from "~/components/ui/admin-page-sections";
 import { ConfirmDialog, useConfirm } from "~/components/ui/confirm-dialog";
+import { ErrorSummary } from "~/components/ui/error-summary";
 import type { EventSetup } from "~/modules/events/event-repository.server";
 import type { IncompleteEventSummary } from "~/modules/events/event-repository-recovery.server";
 import type { action, ActionResponse } from "~/routes/event-setup";
@@ -197,6 +198,21 @@ export function EventSetupForm({
   );
   const inviteData = inviteFetcher.data as ActionResponse | undefined;
   const repositoryData = repositoryFetcher.data as ActionResponse | undefined;
+  const errorFieldIds: Record<string, string> = {
+    name: "event-setup-name",
+    timezone: "event-setup-timezone",
+    startDate: "event-setup-startDate",
+    endDate: "event-setup-endDate",
+    publicSlug: "event-setup-publicSlug",
+    description: "event-setup-description",
+  };
+  const summaryErrors = Object.entries(actionData?.errors ?? {}).flatMap(
+    ([field, messages]) =>
+      messages.map((message) => ({
+        message,
+        href: errorFieldIds[field] ? `#${errorFieldIds[field]}` : undefined,
+      })),
+  );
 
   // Rooms, tracks and formats live in client state and reach the server only
   // through the serialised hidden inputs above, so leaving the page discarded
@@ -413,6 +429,8 @@ export function EventSetupForm({
           name="sessionFormats"
           value={JSON.stringify(orderedSessionFormats)}
         />
+
+        <ErrorSummary errors={summaryErrors} />
 
         <div className="page-head">
           <div>

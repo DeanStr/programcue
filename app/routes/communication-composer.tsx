@@ -1,5 +1,5 @@
 import { Eye, FilePenLine, Trash2 } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useId, useState } from "react";
 import {
   data,
   Form,
@@ -29,6 +29,7 @@ import {
   type CommunicationPreview,
 } from "~/modules/communications/communication-service.server";
 import {
+  communicationScheduleIssue,
   communicationScheduledEpoch,
   communicationScheduledLocalValue,
 } from "~/modules/communications/communication-time";
@@ -114,6 +115,7 @@ export async function loader({ request, context, params }: Route.LoaderArgs) {
     draft,
     templates,
     eventTimezone: event.timezone,
+    eventStartDate: event.startDate,
     defaults: {
       templateVersionId: defaultTemplate?.id ?? "",
       audienceType: audiencePreset ?? "incomplete_speakers",
@@ -262,6 +264,7 @@ function DraftFields({
   templates,
   defaults,
   eventTimezone,
+  eventStartDate,
 }: {
   templates: Route.ComponentProps["loaderData"]["templates"];
   defaults: {
@@ -272,11 +275,66 @@ function DraftFields({
     scheduledAt?: number | null;
   };
   eventTimezone: string;
+  eventStartDate: string;
 }) {
+  const scheduledErrorId = useId();
+  const [audienceType, setAudienceType] = useState(defaults.audienceType);
+  const [manualRecipients, setManualRecipients] = useState(
+    defaults.manualRecipients ?? "",
+  );
+  const [scheduledLocal, setScheduledLocal] = useState(
+    communicationScheduledLocalValue(
+      defaults.scheduledAt ?? null,
+      eventTimezone,
+    ),
+  );
+  useEffect(() => {
+    setAudienceType(defaults.audienceType);
+    setManualRecipients(defaults.manualRecipients ?? "");
+    setScheduledLocal(
+      communicationScheduledLocalValue(
+        defaults.scheduledAt ?? null,
+        eventTimezone,
+      ),
+    );
+  }, [
+    defaults.audienceType,
+    defaults.manualRecipients,
+    defaults.scheduledAt,
+    eventTimezone,
+  ]);
+  const nowLocal = communicationScheduledLocalValue(
+    Math.floor(Date.now() / 1_000),
+    eventTimezone,
+  );
+  const scheduledError = communicationScheduleIssue(
+    scheduledLocal,
+    eventTimezone,
+    Math.floor(Date.now() / 1_000),
+  );
+  const tomorrowMorning = (() => {
+    const localDate = nowLocal.slice(0, 10);
+    const next = new Date(`${localDate}T00:00:00Z`);
+    next.setUTCDate(next.getUTCDate() + 1);
+    return `${next.toISOString().slice(0, 10)}T09:00`;
+  })();
+  const weekBeforeEvent = (() => {
+    const next = new Date(`${eventStartDate}T00:00:00Z`);
+    next.setUTCDate(next.getUTCDate() - 7);
+    return `${next.toISOString().slice(0, 10)}T09:00`;
+  })();
+  const weekBeforeEventIsFuture =
+    communicationScheduledEpoch(weekBeforeEvent, eventTimezone) * 1_000 >
+    Date.now();
   return (
     <>
       <label className="label">
-        Published template
+        <span className="pc-field-label">
+          <span>Published template</span>
+          <span className="pc-required" aria-hidden="true">
+            Required
+          </span>
+        </span>
         <select
           className="select"
           name="templateVersionId"
@@ -299,7 +357,10 @@ function DraftFields({
           <select
             className="select"
             name="audienceType"
-            defaultValue={defaults.audienceType}
+            value={audienceType}
+            onChange={(event) =>
+              setAudienceType(event.currentTarget.value as AudienceType)
+            }
           >
             {audienceOptions.map(([value, label]) => (
               <option key={value} value={value}>
@@ -324,32 +385,77 @@ function DraftFields({
           </select>
         </label>
       </div>
-      <label className="label">
-        Manual addresses
-        <textarea
-          className="textarea"
-          name="manualRecipients"
-          defaultValue={defaults.manualRecipients ?? ""}
-          placeholder="Alex Morgan <alex@example.com>, priya@example.com"
-        />
-        <span className="help">
-          Only used for the Manual addresses audience.
-        </span>
-      </label>
+      {audienceType === "manual" ? (
+        <label className="label">
+          Manual addresses
+          <textarea
+            className="textarea"
+            name="manualRecipients"
+            value={manualRecipients}
+            onChange={(event) =>
+              setManualRecipients(event.currentTarget.value)
+            }
+            placeholder="Alex Morgan <alex@example.com>, priya@example.com"
+            required
+          />
+          <span className="help">
+            Separate addresses with commas. Named addresses are supported.
+          </span>
+        </label>
+      ) : (
+        <input type="hidden" name="manualRecipients" value="" />
+      )}
       <label className="label">
         Schedule for later (optional, {eventTimezone})
         <input
           className="field"
           name="scheduledAt"
           type="datetime-local"
-          defaultValue={communicationScheduledLocalValue(
-            defaults.scheduledAt ?? null,
-            eventTimezone,
-          )}
+          value={scheduledLocal}
+          min={nowLocal}
+          onChange={(event) => setScheduledLocal(event.currentTarget.value)}
+          aria-invalid={scheduledError ? true : undefined}
+          aria-describedby={scheduledError ? scheduledErrorId : undefined}
         />
         <span className="help">
           Leave blank to queue immediately after confirmation.
         </span>
+        <span className="row-actions mt">
+          <button
+            className="btn small"
+            type="button"
+            onClick={() => setScheduledLocal(tomorrowMorning)}
+          >
+            Tomorrow at 9:00 AM
+          </button>
+          {weekBeforeEventIsFuture ? (
+            <button
+              className="btn small"
+              type="button"
+              onClick={() => setScheduledLocal(weekBeforeEvent)}
+            >
+              One week before event
+            </button>
+          ) : null}
+          {scheduledLocal ? (
+            <button
+              className="btn small"
+              type="button"
+              onClick={() => setScheduledLocal("")}
+            >
+              Queue immediately
+            </button>
+          ) : null}
+        </span>
+        {scheduledError ? (
+          <span
+            className="field-error"
+            id={scheduledErrorId}
+            role="alert"
+          >
+            {scheduledError}
+          </span>
+        ) : null}
       </label>
     </>
   );
@@ -451,6 +557,7 @@ export default function CommunicationComposer({
                 templates={loaderData.templates}
                 defaults={loaderData.defaults}
                 eventTimezone={loaderData.eventTimezone}
+                eventStartDate={loaderData.eventStartDate}
               />
               <button className="btn primary" disabled={working}>
                 <FilePenLine aria-hidden size={16} />
@@ -493,6 +600,7 @@ export default function CommunicationComposer({
                 templates={loaderData.templates}
                 defaults={draft}
                 eventTimezone={loaderData.eventTimezone}
+                eventStartDate={loaderData.eventStartDate}
               />
               <div className="row-actions">
                 <button className="btn" disabled={working}>

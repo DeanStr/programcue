@@ -1,5 +1,5 @@
 import { Plus, X } from "lucide-react";
-import { useState, type Dispatch, type SetStateAction } from "react";
+import { useEffect, useState, type Dispatch, type SetStateAction } from "react";
 import { Link } from "react-router";
 
 import {
@@ -14,15 +14,10 @@ import {
   CANONICAL_EVENT_FILE_POLICY,
   maximumMegabytes,
 } from "~/modules/files/file-policy";
-
-const timezoneNames = (() => {
-  const supportedValuesOf = (
-    Intl as typeof Intl & {
-      supportedValuesOf?: (key: "timeZone") => string[];
-    }
-  ).supportedValuesOf;
-  return ["UTC", ...(supportedValuesOf ? supportedValuesOf("timeZone") : [])];
-})();
+import { CharacterCount } from "~/components/ui/character-count";
+import { EventDateRangeFields } from "~/components/ui/event-date-range-fields";
+import { Field } from "~/components/ui/field";
+import { TimezoneField } from "~/components/ui/timezone-field";
 
 function FieldError({
   actionData,
@@ -56,6 +51,13 @@ export function EventIdentityPanels({
   event: EventSetup;
   actionData?: ActionResponse;
 }) {
+  const [timezone, setTimezone] = useState(event.timezone);
+  const [description, setDescription] = useState(event.description);
+  useEffect(() => setTimezone(event.timezone), [event.id, event.timezone]);
+  useEffect(
+    () => setDescription(event.description),
+    [event.description, event.id],
+  );
   return (
     <>
       <section className="card pad">
@@ -63,36 +65,26 @@ export function EventIdentityPanels({
           <h3>Event identity</h3>
         </div>
         <div className="form-row event-identity-fields">
-          <label className="label">
-            Event name
+          <Field
+            label="Event name"
+            required
+            error={actionData?.errors?.name?.[0]}
+          >
             <input
+              id="event-setup-name"
               className="field"
               name="name"
               defaultValue={event.name}
               required
               maxLength={160}
             />
-            <FieldError actionData={actionData} name="name" />
-          </label>
-          <label className="label">
-            Timezone
-            <input
-              className="field"
-              name="timezone"
-              defaultValue={event.timezone}
-              list="iana-timezones"
-              required
-              autoComplete="off"
-              placeholder="Australia/Melbourne"
-            />
-            <datalist id="iana-timezones">
-              {timezoneNames.map((timezone) => (
-                <option key={timezone} value={timezone} />
-              ))}
-            </datalist>
-            <span className="help">An IANA name, such as America/Toronto.</span>
-            <FieldError actionData={actionData} name="timezone" />
-          </label>
+          </Field>
+          <TimezoneField
+            id="event-setup-timezone"
+            value={timezone}
+            onChange={setTimezone}
+            error={actionData?.errors?.timezone?.[0]}
+          />
           <label className="label">
             Venue
             <input
@@ -102,27 +94,15 @@ export function EventIdentityPanels({
               maxLength={200}
             />
           </label>
-          <label className="label">
-            Start date
-            <input
-              className="field"
-              name="startDate"
-              type="date"
-              defaultValue={event.startDate}
-              required
-            />
-          </label>
-          <label className="label">
-            End date
-            <input
-              className="field"
-              name="endDate"
-              type="date"
-              defaultValue={event.endDate}
-              required
-            />
-            <FieldError actionData={actionData} name="endDate" />
-          </label>
+          <EventDateRangeFields
+            idPrefix="event-setup"
+            initialStartDate={event.startDate}
+            initialEndDate={event.endDate}
+            error={
+              actionData?.errors?.endDate?.[0] ??
+              actionData?.errors?.startDate?.[0]
+            }
+          />
           <label className="label">
             City
             <input
@@ -179,6 +159,7 @@ export function EventIdentityPanels({
               <input type="hidden" name="publicSlug" value={event.publicSlug} />
             ) : null}
             <input
+              id="event-setup-publicSlug"
               className="field"
               name={event.programmePublished ? undefined : "publicSlug"}
               defaultValue={event.publicSlug}
@@ -197,10 +178,20 @@ export function EventIdentityPanels({
           <label className="label">
             Programme description
             <textarea
+              id="event-setup-description"
               className="textarea"
               name="description"
-              defaultValue={event.description}
+              value={description}
+              onChange={(inputEvent) =>
+                setDescription(inputEvent.currentTarget.value)
+              }
               maxLength={2000}
+              aria-describedby="event-setup-description-count"
+            />
+            <CharacterCount
+              id="event-setup-description-count"
+              value={description}
+              maximum={2000}
             />
           </label>
         </div>

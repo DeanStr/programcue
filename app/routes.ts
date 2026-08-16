@@ -138,6 +138,10 @@ export default [
     route("admin/events/new", "routes/admin-event-new.tsx"),
     route("admin/events/clone", "routes/admin-event-clone.tsx"),
     route(
+      "admin/events/slug-availability",
+      "routes/admin-event-slug-availability.ts",
+    ),
+    route(
       "admin/events/:eventId/repository-recovery",
       "routes/admin-event-repository-recovery.tsx",
     ),
@@ -155,6 +159,7 @@ export default [
     route("admin/review", "routes/evaluation-admin.tsx"),
     route("admin/review/results.csv", "routes/evaluation-results-export.ts"),
     route("admin/speakers", "routes/admin-speakers.tsx"),
+    route("admin/people/search", "routes/admin-person-search.ts"),
     route(
       "admin/speakers/:personId/files/:assetId",
       "routes/admin-speaker-file-download.ts",

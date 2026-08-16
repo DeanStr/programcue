@@ -1,5 +1,22 @@
 import { z } from "zod";
 
+export const taskCompatibleEvidenceModes = {
+  checklist: ["checkbox", "admin_approval"],
+  acknowledgement: ["checkbox", "admin_approval"],
+  short_form: ["text", "admin_approval"],
+  file_upload: ["file"],
+  link_visit: ["link", "admin_approval"],
+  administrator_only: ["none"],
+} as const;
+
+export type TaskType = keyof typeof taskCompatibleEvidenceModes;
+export type TaskEvidenceMode =
+  (typeof taskCompatibleEvidenceModes)[TaskType][number];
+
+export function suggestedTaskEvidenceMode(taskType: TaskType) {
+  return taskCompatibleEvidenceModes[taskType][0];
+}
+
 export const taskFormFieldSchema = z
   .object({
     id: z.string().regex(/^[a-z][a-z0-9_]{1,39}$/),
@@ -143,18 +160,7 @@ export const taskTemplateInputSchema = z
         });
       }
     });
-    const compatibleEvidenceModes = {
-      checklist: ["checkbox", "admin_approval"],
-      acknowledgement: ["checkbox", "admin_approval"],
-      short_form: ["text", "admin_approval"],
-      file_upload: ["file"],
-      link_visit: ["link", "admin_approval"],
-      administrator_only: ["none"],
-    } satisfies Record<
-      typeof input.taskType,
-      ReadonlyArray<typeof input.evidenceMode>
-    >;
-    const allowedEvidenceModes = compatibleEvidenceModes[
+    const allowedEvidenceModes = taskCompatibleEvidenceModes[
       input.taskType
     ] as ReadonlyArray<typeof input.evidenceMode>;
     if (!allowedEvidenceModes.includes(input.evidenceMode)) {

@@ -18,6 +18,7 @@ import {
   DraftRecoveryStatus,
 } from "~/components/draft-recovery-feedback";
 import { useConfirm } from "~/components/ui/confirm-dialog";
+import { DerivedSlugField } from "~/components/ui/derived-slug-field";
 import { maximumMegabytes } from "~/modules/files/file-policy";
 import { emptyResourceExternalEmbedDraft } from "~/modules/resources/resource-recovery";
 import { UserFacingError } from "~/platform/user-facing-error";
@@ -122,6 +123,8 @@ function ResourceSettingsPanel() {
     category,
     setCategory,
     setDirty,
+    editing,
+    editorKey,
   } = useResourceAdminModel();
   return (
     <div className="resource-settings-grid">
@@ -139,20 +142,17 @@ function ResourceSettingsPanel() {
           maxLength={180}
         />
       </label>
-      <label className="label">
-        URL slug
-        <input
-          className="field"
-          name="slug"
-          value={slug}
-          onChange={(event) => {
-            setSlug(event.target.value);
-            setDirty(true);
-          }}
-          required
-          pattern="[a-z0-9]+(?:-[a-z0-9]+)*"
-        />
-      </label>
+      <DerivedSlugField
+        source={title}
+        value={slug}
+        onChange={(value) => {
+          setSlug(value);
+          setDirty(true);
+        }}
+        initiallyDerived={!editing}
+        resetKey={editorKey}
+        maximumLength={100}
+      />
       <label className="label">
         Category
         <input

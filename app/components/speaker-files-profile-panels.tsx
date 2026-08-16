@@ -5,13 +5,16 @@ import {
   Trash2,
   UserRound,
 } from "lucide-react";
+import { useEffect, useState } from "react";
 import { Form, Link, useSubmit } from "react-router";
 
 import { DirectMultipartUpload } from "~/components/direct-multipart-upload";
 import { SpeakerProfileHistory } from "~/components/speaker-profile-history";
 import type { SpeakerPortal } from "~/components/speaker-dashboard-panel-shared";
-import { useConfirm } from "~/components/ui/confirm-dialog";
+import { ConfirmDialog, useConfirm } from "~/components/ui/confirm-dialog";
+import { CharacterCount } from "~/components/ui/character-count";
 import { DomainStatusBadge } from "~/components/ui/domain-status-badge";
+import { useUnsavedChanges } from "~/components/ui/use-unsaved-changes";
 import { maximumMegabytes } from "~/modules/files/file-policy";
 
 function formatUploadTimestamp(epoch: number, timezone: string) {
@@ -176,6 +179,25 @@ export function SpeakerProfilePanel({
   portal: SpeakerPortal;
   busy: boolean;
 }) {
+  const [dirty, setDirty] = useState(false);
+  const [linkedinUrl, setLinkedinUrl] = useState(
+    portal.profile.linkedinUrl ?? "",
+  );
+  const [xHandle, setXHandle] = useState(
+    portal.profile.xHandle ? `@${portal.profile.xHandle}` : "",
+  );
+  const [biography, setBiography] = useState(portal.profile.biography ?? "");
+  const [travelPreferences, setTravelPreferences] = useState(
+    portal.profile.travelPreferences ?? "",
+  );
+  const blocker = useUnsavedChanges(dirty);
+  useEffect(() => {
+    setLinkedinUrl(portal.profile.linkedinUrl ?? "");
+    setXHandle(portal.profile.xHandle ? `@${portal.profile.xHandle}` : "");
+    setBiography(portal.profile.biography ?? "");
+    setTravelPreferences(portal.profile.travelPreferences ?? "");
+    setDirty(false);
+  }, [portal.profile.revision]);
   const headshot = portal.files.find(
     (file) =>
       file.kind === "headshot" &&
@@ -189,6 +211,16 @@ export function SpeakerProfilePanel({
   );
   return (
     <section className="card pad mt" id="profile">
+      {blocker.state === "blocked" ? (
+        <ConfirmDialog
+          title="Leave without saving your profile?"
+          description="Your profile changes have not been saved. Leaving discards them."
+          confirmLabel="Leave and discard"
+          cancelLabel="Keep editing"
+          onCancel={() => blocker.reset()}
+          onConfirm={() => blocker.proceed()}
+        />
+      ) : null}
       <div className="card-title">
         <div>
           <span className="pc-section-kicker">Public identity</span>
@@ -224,15 +256,24 @@ export function SpeakerProfilePanel({
           </Link>
         </div>
       </div>
-      <Form method="post" className="stack">
+      <Form
+        method="post"
+        className="stack"
+        key={portal.profile.revision}
+        onChange={() => setDirty(true)}
+      >
         <input type="hidden" name="intent" value="save-profile" />
         <input type="hidden" name="revision" value={portal.profile.revision} />
         <label className="label">
-          Display name
+          <span className="pc-field-label">
+            <span>Display name</span>
+            <span className="pc-required" aria-hidden="true">Required</span>
+          </span>
           <input
             className="field"
             name="name"
             defaultValue={portal.profile.name}
+            autoComplete="name"
             required
           />
         </label>
@@ -243,6 +284,7 @@ export function SpeakerProfilePanel({
               className="field"
               name="jobTitle"
               defaultValue={portal.profile.jobTitle ?? ""}
+              autoComplete="organization-title"
             />
           </label>
           <label className="label">
@@ -251,6 +293,7 @@ export function SpeakerProfilePanel({
               className="field"
               name="organisationName"
               defaultValue={portal.profile.organisationName ?? ""}
+              autoComplete="organization"
             />
           </label>
         </div>
@@ -271,7 +314,16 @@ export function SpeakerProfilePanel({
               type="url"
               inputMode="url"
               placeholder="https://www.linkedin.com/in/your-name"
-              defaultValue={portal.profile.linkedinUrl ?? ""}
+              value={linkedinUrl}
+              onChange={(event) => setLinkedinUrl(event.currentTarget.value)}
+              onBlur={() => {
+                const trimmed = linkedinUrl.trim();
+                setLinkedinUrl(
+                  trimmed && !/^https:\/\//iu.test(trimmed)
+                    ? `https://${trimmed.replace(/^www\./iu, "")}`
+                    : trimmed,
+                );
+              }}
               maxLength={500}
             />
           </label>
@@ -281,35 +333,50 @@ export function SpeakerProfilePanel({
               className="field"
               name="xHandle"
               placeholder="@your_handle"
-              defaultValue={
-                portal.profile.xHandle ? `@${portal.profile.xHandle}` : ""
-              }
+              value={xHandle}
+              onChange={(event) => setXHandle(event.currentTarget.value)}
+              onBlur={() => {
+                const normalised = xHandle
+                  .trim()
+                  .replace(/^https?:\/\/(?:www\.)?(?:x|twitter)\.com\//iu, "")
+                  .replace(/^@/u, "");
+                setXHandle(normalised ? `@${normalised}` : "");
+              }}
               maxLength={16}
             />
           </label>
         </div>
         <label className="label">
-          Biography
+          <span className="pc-field-label">
+            <span>Biography</span>
+            <span className="pc-required" aria-hidden="true">Required</span>
+          </span>
           <textarea
             className="textarea"
             name="biography"
-            defaultValue={portal.profile.biography ?? ""}
+            value={biography}
+            onChange={(event) => setBiography(event.currentTarget.value)}
             minLength={40}
             maxLength={5_000}
             required
             rows={7}
           />
+          <CharacterCount value={biography} maximum={5_000} />
         </label>
         <label className="label">
           Travel and logistics preferences
           <textarea
             className="textarea"
             name="travelPreferences"
-            defaultValue={portal.profile.travelPreferences ?? ""}
+            value={travelPreferences}
+            onChange={(event) =>
+              setTravelPreferences(event.currentTarget.value)
+            }
             maxLength={2_000}
             rows={4}
             placeholder="Arrival timing, accessibility, ground transport, dietary or other event logistics preferences"
           />
+          <CharacterCount value={travelPreferences} maximum={2_000} />
           <span className="help">
             Private to you and authorised organisers; never shown on the public
             programme.
@@ -326,6 +393,9 @@ export function SpeakerProfilePanel({
         <button className="btn primary" disabled={busy}>
           Save profile
         </button>
+        <span className={`status ${dirty ? "warning" : "success"}`}>
+          {dirty ? "Unsaved changes" : "Saved"}
+        </span>
       </Form>
       <SpeakerProfileHistory
         revisions={portal.profileHistory}

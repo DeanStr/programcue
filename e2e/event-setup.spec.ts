@@ -131,7 +131,9 @@ test("programme validation opens the affected disclosure and retains record cont
   await expect(trackPanel).not.toHaveAttribute("open", "");
   await page.getByRole("button", { name: "Save event" }).click();
 
-  await expect(page.getByRole("alert")).toBeVisible();
+  await expect(
+    page.getByRole("alert", { name: "There is a problem" }),
+  ).toBeVisible();
   await expect(trackPanel).toHaveAttribute("open", "");
   await expect(trackPanel.locator(".help").last()).toBeVisible();
 });

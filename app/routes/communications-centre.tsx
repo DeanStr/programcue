@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   data,
+  Form,
   Link,
   redirect,
   useActionData,
@@ -54,6 +55,7 @@ import {
   type CommunicationCategory,
 } from "~/modules/communications/communication-schema";
 import { UnknownMergeVariableError } from "~/modules/communications/merge-template";
+import { OrganisationCommunicationSettingsService } from "~/modules/communications/organisation-communication-settings.server";
 import { RecipientLimitError } from "~/modules/communications/recipient-query.server";
 import { EventService } from "~/modules/events/event-service.server";
 import {
@@ -88,9 +90,7 @@ export type CommunicationsCentreLoaderData = Route.ComponentProps["loaderData"];
  * required, and the domain then never verifies for a reason nothing on screen
  * explains.
  */
-function senderDnsRecords(
-  records: ReadonlyArray<unknown>,
-): SenderDnsRecordSet {
+function senderDnsRecords(records: ReadonlyArray<unknown>): SenderDnsRecordSet {
   const text = (value: unknown) =>
     typeof value === "string"
       ? value
@@ -175,6 +175,7 @@ export async function loader({ request, context }: Route.LoaderArgs) {
     calendarTargets,
     event,
     deliveryHealth,
+    organisationCommunicationSettings,
   ] = await Promise.all([
     communicationService.listCentre(viewer, {
       filter: activeFilter ?? undefined,
@@ -190,6 +191,7 @@ export async function loader({ request, context }: Route.LoaderArgs) {
       offset: deliveryOffset,
       period: requestedDeliveryPeriod === "lifetime" ? "lifetime" : "recent",
     }),
+    new OrganisationCommunicationSettingsService(env).get(viewer),
   ]);
   const requestedTemplate = search.get("template");
   const selected =
@@ -247,7 +249,8 @@ export async function loader({ request, context }: Route.LoaderArgs) {
     // Sender profiles, reminder triggers and calendar connections are set up
     // once and then left alone, so they are a destination rather than eight
     // more cards between the reader and the work they came here to do.
-    view: search.get("view") === "setup" ? ("setup" as const) : ("centre" as const),
+    view:
+      search.get("view") === "setup" ? ("setup" as const) : ("centre" as const),
     invitations,
     senders,
     triggers,
@@ -265,6 +268,10 @@ export async function loader({ request, context }: Route.LoaderArgs) {
       ? (categoryPreset.data satisfies CommunicationCategory)
       : null,
     eventTimezone: event.timezone,
+    organisationPhysicalAddress:
+      organisationCommunicationSettings.physicalAddress,
+    canManageOrganisationCommunicationSettings:
+      organisationCommunicationSettings.canManage,
     deliveryHealth,
     notice: persistedSave
       ? `Draft version ${selected.versionNumber} saved.`
@@ -284,6 +291,17 @@ export async function action({ request, context }: Route.ActionArgs) {
   const form = await request.formData();
   const intent = String(form.get("intent") ?? "");
   try {
+    if (intent === "save-organisation-physical-address") {
+      await new OrganisationCommunicationSettingsService(env).save(
+        viewer,
+        form.get("physicalAddress"),
+      );
+      return data<ActionResult>({
+        ok: true,
+        intent,
+        message: "The organisation postal address is saved.",
+      });
+    }
     if (intent === "save-sender") {
       const saved = await service.saveSenderProfile(viewer, {
         id: String(form.get("senderProfileId") ?? "") || undefined,
@@ -557,11 +575,12 @@ export default function CommunicationsCentre({
         selected?.content.body ??
         "Hi {{recipient.firstName}},\n\nHere is an update from {{event.name}}.",
       physicalAddress:
-        selected?.content.physicalAddress ?? "Program Cue event operations",
+        selected?.content.physicalAddress ??
+        loaderData.organisationPhysicalAddress,
       buttonText: selected?.content.buttonText ?? "",
       buttonUrl: selected?.content.buttonUrl ?? "",
     }),
-    [selected?.id],
+    [loaderData.organisationPhysicalAddress, selected?.id],
   );
   const [templateDraft, setTemplateDraft] = useState(templateFromServer);
   const restoreTemplate = useCallback((draft: TemplateDraftFields) => {
@@ -582,7 +601,7 @@ export default function CommunicationsCentre({
   useEffect(() => {
     setTemplateDraft(templateFromServer);
     setTemplateDirty(false);
-  }, [selected?.id]);
+  }, [templateFromServer]);
   useEffect(() => {
     if (!loaderData.clearedRecoveryRecord) return;
     void clearDraftRecoveryScope({
@@ -725,6 +744,46 @@ export default function CommunicationsCentre({
             description="Sender profiles the provider will accept, and a real test send"
             defaultExpandedOnMobile
           >
+            <section className="card pad mb">
+              <div className="card-title">
+                <div>
+                  <h3>Organisation email-footer address</h3>
+                  <p className="help">
+                    New templates copy this postal address into their editable
+                    footer. Program Cue does not substitute an event venue or a
+                    fictional address.
+                  </p>
+                </div>
+              </div>
+              {loaderData.canManageOrganisationCommunicationSettings ? (
+                <Form method="post" className="stack">
+                  <input
+                    type="hidden"
+                    name="intent"
+                    value="save-organisation-physical-address"
+                  />
+                  <label className="label">
+                    Complete postal address
+                    <textarea
+                      className="textarea"
+                      name="physicalAddress"
+                      defaultValue={loaderData.organisationPhysicalAddress}
+                      minLength={5}
+                      maxLength={500}
+                      required
+                    />
+                  </label>
+                  <button className="btn" disabled={working}>
+                    Save organisation address
+                  </button>
+                </Form>
+              ) : (
+                <p className="validation-item info">
+                  An organisation owner must configure this address before new
+                  templates can be published with a compliant footer.
+                </p>
+              )}
+            </section>
             <DeliveryConfiguration
               loaderData={loaderData}
               working={working}

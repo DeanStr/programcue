@@ -6,10 +6,12 @@ import {
   ListChecks,
   UserRound,
 } from "lucide-react";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { Form, Link, useActionData, useNavigation } from "react-router";
 
 import { PersonDuplicateWarning } from "~/components/person-duplicate-warning";
+import { PersonLookup } from "~/components/person-lookup";
+import { CharacterCount } from "~/components/ui/character-count";
 import { DomainStatusBadge } from "~/components/ui/domain-status-badge";
 import { EventDateTime } from "~/components/ui/event-date-time";
 import type { SpeakerRosterProfileAction } from "~/modules/speakers/speaker-roster-import.server";
@@ -47,6 +49,17 @@ export { action, loader } from "./admin-speakers.server";
 export default function AdminSpeakers({ loaderData }: Route.ComponentProps) {
   const actionData = useActionData<ActionResult>();
   const navigation = useNavigation();
+  const [manualName, setManualName] = useState("");
+  const [manualEmail, setManualEmail] = useState("");
+  const [manualBiography, setManualBiography] = useState("");
+  const [manualLookupQuery, setManualLookupQuery] = useState("");
+  useEffect(() => {
+    if (!actionData?.ok || actionData.intent !== "add_manual_speaker") return;
+    setManualName("");
+    setManualEmail("");
+    setManualBiography("");
+    setManualLookupQuery("");
+  }, [actionData]);
   useEffect(() => {
     if (!loaderData.focusedPersonId) return;
     const target = document.getElementById(
@@ -318,14 +331,30 @@ export default function AdminSpeakers({ loaderData }: Route.ComponentProps) {
             name="idempotencyKey"
             value={loaderData.manualSpeakerIdempotencyKey}
           />
+          <PersonLookup
+            suggestedQuery={manualLookupQuery}
+            onSelect={(person) => {
+              setManualName(person.name);
+              setManualEmail(person.email);
+            }}
+          />
           <div className="form-row">
             <div className="label">
-              <label htmlFor="manual-speaker-name">Name</label>
+              <label htmlFor="manual-speaker-name">
+                <span className="pc-field-label">
+                  <span>Name</span>
+                  <span className="pc-required" aria-hidden="true">
+                    Required
+                  </span>
+                </span>
+              </label>
               <input
                 aria-describedby="manual-speaker-name-help"
                 className="field"
                 id="manual-speaker-name"
                 name="name"
+                value={manualName}
+                onChange={(event) => setManualName(event.currentTarget.value)}
                 required
                 minLength={2}
                 maxLength={120}
@@ -336,11 +365,22 @@ export default function AdminSpeakers({ loaderData }: Route.ComponentProps) {
               </small>
             </div>
             <label className="label">
-              Email
+              <span className="pc-field-label">
+                <span>Email</span>
+                <span className="pc-required" aria-hidden="true">
+                  Required
+                </span>
+              </span>
               <input
                 className="field"
                 name="email"
                 type="email"
+                value={manualEmail}
+                onChange={(event) => setManualEmail(event.currentTarget.value)}
+                onBlur={(event) =>
+                  setManualLookupQuery(event.currentTarget.value)
+                }
+                autoComplete="off"
                 required
                 maxLength={254}
               />
@@ -362,7 +402,16 @@ export default function AdminSpeakers({ loaderData }: Route.ComponentProps) {
           </div>
           <label className="label">
             Biography <span className="subtle">Optional</span>
-            <textarea className="field" name="biography" maxLength={5000} />
+            <textarea
+              className="field"
+              name="biography"
+              maxLength={5000}
+              value={manualBiography}
+              onChange={(event) =>
+                setManualBiography(event.currentTarget.value)
+              }
+            />
+            <CharacterCount value={manualBiography} maximum={5_000} />
           </label>
           <p className="help">
             This creates an event roster record only. Send portal access later

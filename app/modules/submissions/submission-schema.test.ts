@@ -110,7 +110,7 @@ describe("submission form rules", () => {
 
   it("rejects ambiguous options and invalid conditional values", () => {
     const duplicateOptions = structuredClone(chainedSchema);
-    duplicateOptions.fields[1].options = ["Technical", "Technical"];
+    duplicateOptions.fields[1].options = ["Technical", " technical "];
     expect(formSchemaSchema.safeParse(duplicateOptions).success).toBe(false);
 
     const invalidCondition = structuredClone(chainedSchema);

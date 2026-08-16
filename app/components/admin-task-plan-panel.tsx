@@ -2,6 +2,13 @@ import { GitBranch, Plus } from "lucide-react";
 import { useState } from "react";
 import { Form } from "react-router";
 
+import { CharacterCount } from "~/components/ui/character-count";
+import {
+  suggestedTaskEvidenceMode,
+  taskCompatibleEvidenceModes,
+  type TaskEvidenceMode,
+  type TaskType,
+} from "~/modules/tasks/task-schema";
 import type { AdminTasksData } from "~/routes/admin-tasks";
 
 export function AdminTaskPlanPanel({
@@ -22,6 +29,12 @@ export function AdminTaskPlanPanel({
   );
   const [dueAnchor, setDueAnchor] = useState("none");
   const [autoAssignOnAcceptance, setAutoAssignOnAcceptance] = useState(false);
+  const [taskType, setTaskType] = useState<TaskType>("checklist");
+  const [evidenceMode, setEvidenceMode] =
+    useState<TaskEvidenceMode>("checkbox");
+  const [dueOffsetDays, setDueOffsetDays] = useState("");
+  const [fixedDueDate, setFixedDueDate] = useState("");
+  const [description, setDescription] = useState("");
   const selectedTemplate =
     assignableTemplates.find(
       (template) => template.id === selectedTemplateId,
@@ -133,12 +146,24 @@ export function AdminTaskPlanPanel({
           <input type="hidden" name="intent" value="create-template" />
           <input type="hidden" name="intentId" value={data.intentId} />
           <label className="label">
-            Name
+            <span className="pc-field-label">
+              <span>Name</span>
+              <span className="pc-required" aria-hidden="true">
+                Required
+              </span>
+            </span>
             <input className="field" name="name" required />
           </label>
           <label className="label">
             Description
-            <textarea className="textarea" name="description" />
+            <textarea
+              className="textarea"
+              name="description"
+              maxLength={1_000}
+              value={description}
+              onChange={(event) => setDescription(event.currentTarget.value)}
+            />
+            <CharacterCount value={description} maximum={1_000} />
           </label>
           <div className="form-row">
             <label className="label">
@@ -163,7 +188,12 @@ export function AdminTaskPlanPanel({
               <select
                 className="select"
                 name="taskType"
-                defaultValue="checklist"
+                value={taskType}
+                onChange={(event) => {
+                  const next = event.currentTarget.value as TaskType;
+                  setTaskType(next);
+                  setEvidenceMode(suggestedTaskEvidenceMode(next));
+                }}
               >
                 <option value="checklist">Checklist</option>
                 <option value="acknowledgement">Acknowledgement</option>
@@ -189,15 +219,31 @@ export function AdminTaskPlanPanel({
               <select
                 className="select"
                 name="evidenceMode"
-                defaultValue="checkbox"
+                value={evidenceMode}
+                onChange={(event) =>
+                  setEvidenceMode(event.currentTarget.value as TaskEvidenceMode)
+                }
               >
-                <option value="none">None</option>
-                <option value="checkbox">Checkbox</option>
-                <option value="file">File</option>
-                <option value="text">Text</option>
-                <option value="link">Link</option>
-                <option value="admin_approval">Administrator approval</option>
+                {taskCompatibleEvidenceModes[taskType].map((mode) => (
+                  <option value={mode} key={mode}>
+                    {
+                      {
+                        none: "None",
+                        checkbox: "Checkbox",
+                        file: "File",
+                        text: "Text",
+                        link: "Link",
+                        admin_approval: "Administrator approval",
+                      }[mode]
+                    }
+                  </option>
+                ))}
               </select>
+              <span className="help">
+                {taskCompatibleEvidenceModes[taskType].length > 1
+                  ? `Choose an accepted evidence type for ${taskType.replaceAll("_", " ")} tasks.`
+                  : `Required evidence type for ${taskType.replaceAll("_", " ")} tasks.`}
+              </span>
             </label>
           </div>
           <label className="label">
@@ -219,24 +265,61 @@ export function AdminTaskPlanPanel({
               <option value="fixed">Fixed date</option>
             </select>
           </label>
-          <div className="form-row">
+          {dueAnchor === "acceptance" || dueAnchor === "session_start" ? (
             <label className="label">
               Offset days
               <input
                 className="field"
                 type="number"
                 name="dueOffsetDays"
+                min={-365}
+                max={365}
+                value={dueOffsetDays}
+                onChange={(event) =>
+                  setDueOffsetDays(event.currentTarget.value)
+                }
                 placeholder="e.g. 14 or -7"
+                required
               />
+              <span className="help">
+                Negative is before the anchor; positive is after it.
+              </span>
             </label>
+          ) : (
+            <input type="hidden" name="dueOffsetDays" value="" />
+          )}
+          {dueAnchor === "fixed" ? (
             <label className="label">
               Fixed due date
-              <input className="field" type="date" name="fixedDueDate" />
+              <input
+                className="field"
+                type="date"
+                name="fixedDueDate"
+                value={fixedDueDate}
+                onChange={(event) => setFixedDueDate(event.currentTarget.value)}
+                required
+              />
               <span className="help">
                 Ends at 11:59 PM in {data.eventTimezone}.
               </span>
             </label>
-          </div>
+          ) : (
+            <input type="hidden" name="fixedDueDate" value="" />
+          )}
+          {dueAnchor !== "none" ? (
+            <div className="validation-item info" role="status">
+              <strong>Deadline preview</strong>
+              <span>
+                {dueAnchor === "fixed"
+                  ? fixedDueDate
+                    ? `Due ${fixedDueDate} at 11:59 PM (${data.eventTimezone}).`
+                    : "Choose the fixed due date."
+                  : dueOffsetDays
+                    ? `Due ${Math.abs(Number(dueOffsetDays))} day${Math.abs(Number(dueOffsetDays)) === 1 ? "" : "s"} ${Number(dueOffsetDays) < 0 ? "before" : "after"} ${dueAnchor === "acceptance" ? "acceptance" : "session start"}.`
+                    : "Enter the number of days from the selected anchor."}
+              </span>
+            </div>
+          ) : null}
           <label className="speaker-confirm">
             <input
               type="checkbox"

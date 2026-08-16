@@ -7,6 +7,7 @@ import {
   LockKeyhole,
   UserRound,
 } from "lucide-react";
+import { useEffect, useState } from "react";
 import { data, Form, Link, useActionData, useNavigation } from "react-router";
 import { ZodError } from "zod";
 
@@ -19,6 +20,8 @@ import {
   statusPresentation,
 } from "~/components/ui/domain-status-badge";
 import { EmptyState } from "~/components/ui/states";
+import { ConfirmDialog } from "~/components/ui/confirm-dialog";
+import { useUnsavedChanges } from "~/components/ui/use-unsaved-changes";
 import { maximumMegabytes } from "~/modules/files/file-policy";
 import { ensureDemoSpeakerData } from "~/modules/speakers/demo.server";
 import {
@@ -232,8 +235,28 @@ export default function AdminSpeakerDetail({
   const actionData = useActionData<typeof action>();
   const navigation = useNavigation();
   const busy = navigation.state !== "idle";
+  const [profileDirty, setProfileDirty] = useState(false);
+  const blocker = useUnsavedChanges(profileDirty);
+  useEffect(
+    () => setProfileDirty(false),
+    [
+      profile.organisationProfileOperationId,
+      profile.revision,
+      profile.travelProfileOperationId,
+    ],
+  );
   return (
     <>
+      {blocker.state === "blocked" ? (
+        <ConfirmDialog
+          title="Leave without saving this speaker profile?"
+          description="The profile changes on this page have not been saved."
+          confirmLabel="Leave and discard"
+          cancelLabel="Keep editing"
+          onCancel={() => blocker.reset()}
+          onConfirm={() => blocker.proceed()}
+        />
+      ) : null}
       <div className="page-head pc-page-header">
         <div>
           <span className="pc-page-eyebrow">Participant operations</span>
@@ -363,7 +386,12 @@ export default function AdminSpeakerDetail({
           description="The image uploads straight from this browser to private storage. The current published image stays available until the replacement passes format and malware checks."
         />
         {profileScoped ? (
-          <Form method="post" className="stack">
+          <Form
+            key={`${profile.revision}:${profile.organisationProfileOperationId}:${profile.travelProfileOperationId}`}
+            method="post"
+            className="stack"
+            onChange={() => setProfileDirty(true)}
+          >
             <input
               type="hidden"
               name="_intent"
@@ -451,7 +479,12 @@ export default function AdminSpeakerDetail({
             </fieldset>
           </Form>
         ) : (
-          <Form method="post" className="stack">
+          <Form
+            key={profile.revision}
+            method="post"
+            className="stack"
+            onChange={() => setProfileDirty(true)}
+          >
             <input type="hidden" name="_intent" value="save_speaker_profile" />
             <input type="hidden" name="revision" value={profile.revision} />
             <fieldset className="stack pc-plain-fieldset">

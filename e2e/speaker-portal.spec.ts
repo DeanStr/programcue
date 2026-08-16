@@ -182,8 +182,8 @@ async function addEventOwnedSpeaker(page: Page, name: string, email: string) {
     has: page.getByText("Add speaker record", { exact: true }),
   });
   await addSpeaker.locator("summary").click();
-  await addSpeaker.getByLabel("Name", { exact: true }).fill(name);
-  await addSpeaker.getByLabel("Email", { exact: true }).fill(email);
+  await page.getByRole("textbox", { name: "Name", exact: true }).fill(name);
+  await page.getByRole("textbox", { name: "Email", exact: true }).fill(email);
   await addSpeaker.getByRole("button", { name: "Add speaker record" }).click();
   // A new address matches no existing identity, so the duplicate confirmation
   // usually does not appear; accept it when it does rather than assume.

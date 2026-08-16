@@ -22,6 +22,7 @@ import {
   PublicationSettingsFields,
 } from "~/components/form-builder-panels";
 import { useConfirm } from "~/components/ui/confirm-dialog";
+import { DerivedSlugField } from "~/components/ui/derived-slug-field";
 import { ensureDemoSubmissionForm } from "~/modules/submissions/demo-submissions.server";
 import { closeDateFromEpoch } from "~/modules/submissions/submission-repository-shared";
 import type { SaveFormInput } from "~/modules/submissions/submission-schema";
@@ -656,7 +657,10 @@ export default function FormBuilder({ loaderData }: Route.ComponentProps) {
             <h3 className="fb-subhead">Form settings</h3>
             <div className="fb-form-settings mb">
               <label className="label">
-                Form name
+                <span className="pc-field-label">
+                  <span>Form name</span>
+                  <span className="pc-required" aria-hidden="true">Required</span>
+                </span>
                 <input
                   className="field"
                   name="name"
@@ -667,21 +671,20 @@ export default function FormBuilder({ loaderData }: Route.ComponentProps) {
                   required
                 />
               </label>
-              <label className="label">
-                Public URL
-                <span className="fb-slug-field">
-                  <span className="field fb-slug-prefix">/apply/</span>
-                  <input
-                    className="field"
-                    name="publicSlug"
-                    value={input.publicSlug}
-                    onChange={(event) =>
-                      change({ ...input, publicSlug: event.target.value })
-                    }
-                    required
-                  />
-                </span>
-              </label>
+              <DerivedSlugField
+                source={input.name}
+                value={input.publicSlug}
+                onChange={(value) =>
+                  change({ ...input, publicSlug: value })
+                }
+                name="publicSlug"
+                label="Public URL slug"
+                maximumLength={120}
+                customMaximumLength={null}
+                initiallyDerived={!input.id}
+                resetKey={input.id ?? "new"}
+                publicPathPrefix="/apply/"
+              />
               <label className="label">
                 Record type
                 <select
@@ -723,6 +726,7 @@ export default function FormBuilder({ loaderData }: Route.ComponentProps) {
               input={input}
               passwordConfigured={loaderData.passwordConfigured}
               change={change}
+              eventTimezone={eventTimezone}
             />
             <div className="mt">
               <PresentationSettingsPanel input={input} change={change} />

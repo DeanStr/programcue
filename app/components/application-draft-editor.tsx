@@ -10,7 +10,9 @@ import {
   DraftRecoveryStatus,
 } from "~/components/draft-recovery-feedback";
 import { useConfirm } from "~/components/ui/confirm-dialog";
+import { CharacterCount } from "~/components/ui/character-count";
 import { DomainStatusBadge } from "~/components/ui/domain-status-badge";
+import { ErrorSummary } from "~/components/ui/error-summary";
 import type { ApplicantDraft } from "~/modules/submissions/submission-repository.server";
 import {
   DEFAULT_FORM_PRESENTATION,
@@ -281,6 +283,34 @@ export function DraftEditor({
     },
     answers,
   );
+  const incompleteRequiredFields = fields.filter((field) => {
+    if (!field.required) return false;
+    if (field.type === "video" && uploads[field.id]) return false;
+    const value = answers[field.id];
+    return Array.isArray(value)
+      ? value.length === 0
+      : !String(value ?? "").trim();
+  });
+  const duplicateSpeakerEmails = speakers
+    .map((speaker) => speaker.email.trim().toLocaleLowerCase())
+    .filter((email, index, all) => email && all.indexOf(email) !== index);
+  const serverSummaryErrors = Object.entries(errors ?? {}).flatMap(
+    ([field, messages]) =>
+      messages.map((message) => ({
+        message,
+        href:
+          field === "speakers" ? "#application-speakers" : `#answer-${field}`,
+      })),
+  );
+  const clientSummaryErrors = clientValidationMessage
+    ? [
+        clientValidationMessage,
+        ...incompleteRequiredFields.map((field) => ({
+          message: `${field.label} is required.`,
+          href: `#answer-${field.id}`,
+        })),
+      ]
+    : [];
 
   return (
     <Form
@@ -318,16 +348,34 @@ export function DraftEditor({
         <span className="subtle right">Form version {draft.versionNumber}</span>
       </div>
       <DraftRecoveryFeedback recovery={recovery} className="" />
-      {clientValidationMessage ? (
-        <div className="validation-item error" role="alert">
-          <strong>Review required</strong>
-          <span>{clientValidationMessage}</span>
-        </div>
-      ) : null}
-      {errors && Object.keys(errors).length ? (
-        <div className="validation-item error" role="alert">
-          <strong>Review required</strong>
-          <span>{Object.values(errors).flat()[0]}</span>
+      <ErrorSummary
+        title="Review the application"
+        errors={[...serverSummaryErrors, ...clientSummaryErrors]}
+      />
+      {!readOnly ? (
+        <div
+          className={`validation-item ${incompleteRequiredFields.length ? "info" : "ok"}`}
+          role="status"
+        >
+          <strong>
+            {incompleteRequiredFields.length
+              ? `${incompleteRequiredFields.length} required ${incompleteRequiredFields.length === 1 ? "answer" : "answers"} remaining`
+              : "All required answers complete"}
+          </strong>
+          {incompleteRequiredFields.length ? (
+            <span>
+              {incompleteRequiredFields.map((field, index) => (
+                <span key={field.id}>
+                  {index ? ", " : ""}
+                  <a href={`#answer-${field.id}`}>{field.label}</a>
+                </span>
+              ))}
+            </span>
+          ) : (
+            <span>
+              You can still review optional answers before submitting.
+            </span>
+          )}
         </div>
       ) : null}
       {fields.map((field) => {
@@ -350,7 +398,11 @@ export function DraftEditor({
             >
               <legend className="label">
                 {field.label}
-                {field.required ? " *" : ""}
+                {field.required ? (
+                  <span className="pc-required" aria-hidden="true">
+                    Required
+                  </span>
+                ) : null}
               </legend>
               {field.help ? (
                 <span className="help" id={helpId}>
@@ -416,7 +468,11 @@ export function DraftEditor({
             >
               <legend className="label">
                 {field.label}
-                {field.required ? " *" : ""}
+                {field.required ? (
+                  <span className="pc-required" aria-hidden="true">
+                    Required
+                  </span>
+                ) : null}
               </legend>
               {field.help ? (
                 <span className="help" id={helpId}>
@@ -445,7 +501,11 @@ export function DraftEditor({
             htmlFor={`answer-${field.id}`}
           >
             {field.label}
-            {field.required ? " *" : ""}
+            {field.required ? (
+              <span className="pc-required" aria-hidden="true">
+                Required
+              </span>
+            ) : null}
             {field.help ? (
               <span className="help" id={helpId}>
                 {field.help}
@@ -459,6 +519,12 @@ export function DraftEditor({
               describedBy={describedBy}
               onChange={update}
             />
+            {field.type === "long_text" ? (
+              <CharacterCount
+                value={String(answers[field.id] ?? "")}
+                maximum={5_000}
+              />
+            ) : null}
             {error ? (
               <span className="field-error" id={errorId}>
                 {error}
@@ -467,7 +533,7 @@ export function DraftEditor({
           </label>
         );
       })}
-      <fieldset className="card pad">
+      <fieldset className="card pad" id="application-speakers">
         <legend>
           <strong>Speakers</strong>
         </legend>
@@ -506,6 +572,7 @@ export function DraftEditor({
               Speaker {index + 1} name
               <input
                 className="field"
+                autoComplete={index === 0 ? "name" : "off"}
                 disabled={
                   readOnly ||
                   (revisionMode && index < originalSpeakerCount) ||
@@ -527,6 +594,7 @@ export function DraftEditor({
                 <input
                   className="field"
                   type="email"
+                  autoComplete={index === 0 ? "email" : "off"}
                   disabled={
                     readOnly ||
                     (revisionMode && index < originalSpeakerCount) ||
@@ -583,6 +651,7 @@ export function DraftEditor({
                   setDirty(true);
                 }}
               />
+              <CharacterCount value={speaker.biography} maximum={5_000} />
               {index > 0 && speaker.invitationStatus === "claimed" ? (
                 <span className="help">
                   This co-speaker owns their claimed profile. They can update it
@@ -619,6 +688,11 @@ export function DraftEditor({
         ) : null}
         {errors?.speakers ? (
           <span className="field-error">{errors.speakers[0]}</span>
+        ) : null}
+        {duplicateSpeakerEmails.length ? (
+          <span className="field-error" role="alert">
+            Each speaker must use a different email address.
+          </span>
         ) : null}
       </fieldset>
       {!readOnly ? (

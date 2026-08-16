@@ -1,4 +1,14 @@
 import type { SaveFormInput } from "~/modules/submissions/submission-schema";
+import { CharacterCount } from "~/components/ui/character-count";
+
+function suggestedCompletionMinutes(input: SaveFormInput) {
+  const fieldMinutes = input.schema.fields.reduce((total, field) => {
+    if (field.type === "long_text") return total + 3;
+    if (field.type === "video") return total + 5;
+    return total + 1;
+  }, 2);
+  return Math.min(120, Math.max(1, fieldMinutes));
+}
 
 export function PresentationSettingsPanel({
   input,
@@ -8,6 +18,7 @@ export function PresentationSettingsPanel({
   change: (next: SaveFormInput) => void;
 }) {
   const presentation = input.schema.presentation;
+  const suggestedMinutes = suggestedCompletionMinutes(input);
   const update = (patch: Partial<SaveFormInput["schema"]["presentation"]>) =>
     change({
       ...input,
@@ -50,6 +61,10 @@ export function PresentationSettingsPanel({
             maxLength={2_000}
             onChange={(event) => update({ invitationText: event.target.value })}
             placeholder="Explain what the programme team values and what applicants should know."
+          />
+          <CharacterCount
+            value={presentation.invitationText}
+            maximum={2_000}
           />
           <span className="help">
             Leave both invitation fields empty to avoid adding editorial claims
@@ -122,6 +137,21 @@ export function PresentationSettingsPanel({
             </span>
           </span>
         </label>
+        {presentation.estimatedMinutes !== suggestedMinutes ? (
+          <p className="help">
+            Based on the current question types, Program Cue suggests about{" "}
+            {suggestedMinutes} minutes.{" "}
+            <button
+              className="btn small"
+              type="button"
+              onClick={() => update({ estimatedMinutes: suggestedMinutes })}
+            >
+              Use {suggestedMinutes} minutes
+            </button>
+          </p>
+        ) : (
+          <p className="help">Matches the estimate from the current questions.</p>
+        )}
         <label className="toggle mt">
           <input
             type="checkbox"

@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   assertCommunicationScheduleStillMatchesPreview,
+  communicationScheduleIssue,
   communicationScheduledEpoch,
   communicationScheduledLocalValue,
 } from "./communication-time";
@@ -28,6 +29,30 @@ describe("event-local communication scheduling", () => {
     expect(() =>
       communicationScheduledEpoch("2027-03-14T02:30", "America/Toronto"),
     ).toThrow(/does not exist in America\/Toronto/);
+    expect(
+      communicationScheduleIssue(
+        "2027-03-14T02:30",
+        "America/Toronto",
+        Date.parse("2027-03-01T00:00:00Z") / 1_000,
+      ),
+    ).toMatch(/does not exist in America\/Toronto/);
+  });
+
+  it("applies the authoritative one-minute scheduling lead time", () => {
+    expect(
+      communicationScheduleIssue(
+        "2027-07-10T09:30",
+        "America/Toronto",
+        Date.parse("2027-07-10T13:29:00Z") / 1_000,
+      ),
+    ).toBe("Scheduled delivery must be at least one minute in the future.");
+    expect(
+      communicationScheduleIssue(
+        "2027-07-10T09:30",
+        "America/Toronto",
+        Date.parse("2027-07-10T13:28:59Z") / 1_000,
+      ),
+    ).toBeNull();
   });
 
   it("rejects incomplete values instead of guessing a timezone", () => {

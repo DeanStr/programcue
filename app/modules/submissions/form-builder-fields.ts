@@ -1,5 +1,29 @@
 import { MAX_FORM_FIELDS, type FormField } from "./submission-schema";
 
+function fieldIdFromLabel(fields: FormField[], label: string) {
+  const existing = new Set(fields.map((field) => field.id));
+  const base = label
+    .normalize("NFKD")
+    .replace(/[\u0300-\u036f]/gu, "")
+    .toLocaleLowerCase("en")
+    .replace(/[^a-z0-9]+/gu, "_")
+    .replace(/^_+|_+$/gu, "")
+    .slice(0, 36)
+    .replace(/_+$/gu, "");
+  if (!base) {
+    throw new Error(
+      `Form field label “${label}” cannot produce a stable identifier.`,
+    );
+  }
+  let candidate = /^[a-z]/u.test(base) ? base : `field_${base}`;
+  let suffix = 2;
+  while (existing.has(candidate)) {
+    candidate = `${base.slice(0, 36 - String(suffix).length)}_${suffix}`;
+    suffix += 1;
+  }
+  return candidate;
+}
+
 const FORM_FIELD_TYPE_LABELS = {
   short_text: "Short text",
   long_text: "Long text",
@@ -57,13 +81,11 @@ export function createFormField(
   fields: FormField[],
   type: FormField["type"],
 ): FormField {
-  const ids = new Set(fields.map((field) => field.id));
-  let index = fields.length + 1;
-  while (ids.has(`field_${index}`)) index += 1;
+  const label = formFieldTypeLabel(type);
 
   return {
-    id: `field_${index}`,
-    label: formFieldTypeLabel(type),
+    id: fieldIdFromLabel(fields, label),
+    label,
     type,
     required: false,
     help: "",

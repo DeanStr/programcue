@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   conditionalFieldOrderIssue,
+  createFormField,
   formConditionSourceLabel,
   formFieldCreationIssue,
   formFieldTypeLabel,
@@ -33,6 +34,23 @@ describe("form builder field rules", () => {
     expect(
       formConditionSourceLabel(DEFAULT_FORM_SCHEMA.fields, "missing_field"),
     ).toBe("Missing field “missing_field”");
+  });
+
+  it("generates meaningful stable IDs once and resolves collisions", () => {
+    const first = createFormField([], "short_text");
+    const second = createFormField([first], "short_text");
+    expect(first).toMatchObject({ id: "short_text", label: "Short text" });
+    expect(second).toMatchObject({ id: "short_text_2", label: "Short text" });
+    for (const type of [
+      "short_text",
+      "long_text",
+      "select",
+      "multi_select",
+      "url",
+      "video",
+    ] as const) {
+      expect(createFormField([], type).id).toMatch(/^[a-z][a-z0-9_]*$/u);
+    }
   });
 
   it("rejects field creation as soon as a form limit would be exceeded", () => {

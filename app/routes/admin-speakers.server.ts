@@ -27,6 +27,7 @@ export const meta = () => [{ title: "Speakers · Program Cue" }];
 export type ActionResult = {
   ok: boolean;
   message: string;
+  intent?: string;
   duplicateCheck?: {
     matches: Awaited<
       ReturnType<PersonDuplicateService["findLikelyDuplicates"]>
@@ -308,6 +309,7 @@ export async function action({ request, context }: Route.ActionArgs) {
     const routingDisclosure = evaluatorEmailRoutingMessage(result.routing);
     return data<ActionResult>({
       ok: true,
+      intent: "add_manual_speaker",
       message: `${
         !result.createdRosterAssociation
           ? "This identity is already on this event roster. Nothing was changed and no invitation email was sent."

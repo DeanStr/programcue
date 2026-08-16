@@ -1,4 +1,5 @@
 import { ChevronDown, ChevronUp } from "lucide-react";
+import { CharacterCount } from "~/components/ui/character-count";
 
 import {
   conditionalFieldOrderIssue,
@@ -57,12 +58,17 @@ export function FormStructurePanel({
           <textarea
             className="textarea fb-introduction"
             value={input.schema.introduction}
+            maxLength={2_000}
             onChange={(event) =>
               change({
                 ...input,
                 schema: { ...input.schema, introduction: event.target.value },
               })
             }
+          />
+          <CharacterCount
+            value={input.schema.introduction}
+            maximum={2_000}
           />
         </label>
         {operationMessage ? (
@@ -141,10 +147,12 @@ export function PublicationSettingsFields({
   input,
   passwordConfigured,
   change,
+  eventTimezone,
 }: {
   input: SaveFormInput;
   passwordConfigured: boolean;
   change: (next: SaveFormInput) => void;
+  eventTimezone: string;
 }) {
   return (
     <div className="fb-form-settings">
@@ -159,6 +167,9 @@ export function PublicationSettingsFields({
             change({ ...input, closeDate: event.currentTarget.value || null })
           }
         />
+        <span className="help">
+          Applications close at 11:59 PM in {eventTimezone}.
+        </span>
       </label>
       <label className="label">
         Overall limit
@@ -189,7 +200,15 @@ export function PublicationSettingsFields({
           max={20}
           value={input.minSpeakers}
           onChange={(event) =>
-            change({ ...input, minSpeakers: Number(event.target.value) })
+            change({
+              ...input,
+              minSpeakers: Number(event.target.value),
+              maxSpeakers:
+                input.maxSpeakers !== null &&
+                input.maxSpeakers < Number(event.target.value)
+                  ? Number(event.target.value)
+                  : input.maxSpeakers,
+            })
           }
         />
       </label>
@@ -199,7 +218,7 @@ export function PublicationSettingsFields({
           className="field"
           name="maxSpeakers"
           type="number"
-          min={1}
+          min={input.minSpeakers}
           max={20}
           value={input.maxSpeakers ?? ""}
           onChange={(event) =>
@@ -212,6 +231,15 @@ export function PublicationSettingsFields({
           }
         />
       </label>
+      <p className="help">
+        Speaker range: {input.minSpeakers}
+        {input.maxSpeakers === null || input.maxSpeakers === input.minSpeakers
+          ? input.maxSpeakers === null
+            ? "+"
+            : ""
+          : `–${input.maxSpeakers}`} speaker
+        {input.maxSpeakers === 1 ? "" : "s"}.
+      </p>
       <label className="label">
         Applicant access
         <select

@@ -1,5 +1,5 @@
 import { CircleAlert } from "lucide-react";
-import { type MouseEvent, useId } from "react";
+import { type MouseEvent, useEffect, useId, useRef } from "react";
 import { Link } from "react-router";
 
 import { cn } from "~/lib/cn";
@@ -29,16 +29,26 @@ export function ErrorSummary({
   errors,
   title = "There is a problem",
   className,
+  focusOnMount = true,
 }: {
   errors: readonly SummaryError[];
   title?: string;
   className?: string;
+  focusOnMount?: boolean;
 }) {
   const titleId = useId();
+  const summaryRef = useRef<HTMLElement>(null);
+  const errorSignature = errors
+    .map((error) => (typeof error === "string" ? error : `${error.href ?? ""}:${error.message}`))
+    .join("|");
+  useEffect(() => {
+    if (focusOnMount && errorSignature) summaryRef.current?.focus();
+  }, [errorSignature, focusOnMount]);
   if (!errors.length) return null;
 
   return (
     <section
+      ref={summaryRef}
       className={cn("pc-error-summary", className)}
       role="alert"
       aria-labelledby={titleId}

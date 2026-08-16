@@ -34,6 +34,7 @@ test("public programme filters sessions by track, format and room", async ({
   ).toBeVisible();
 
   await page.getByLabel("Filter by track").selectOption("AI & Innovation");
+  await expect(page).toHaveURL(/track=AI(?:\+|%20)%26(?:\+|%20)Innovation/u);
   await expect(rows).toHaveCount(2);
   await expect(rows.first()).toHaveAttribute("aria-pressed", "true");
   await expect(page.locator(".session-detail-panel h2")).toHaveText(
@@ -63,12 +64,22 @@ test("public programme filters sessions by track, format and room", async ({
   await expect(
     page.getByRole("button", { name: "Clear filters" }),
   ).toBeDisabled();
+  await expect(page).not.toHaveURL(/track=|format=|room=/u);
+
+  // Facet navigation carries a just-entered search atomically instead of
+  // replacing it with the URL's still-debouncing value.
+  const search = page.getByLabel("Search sessions, speakers, or topics");
+  await search.fill("event operations");
+  await page.getByLabel("Filter by track").selectOption("AI & Innovation");
+  await expect(search).toHaveValue("event operations");
+  await expect(page).toHaveURL(/query=event(?:\+|%20)operations/u);
+  await expect(page).toHaveURL(/track=AI(?:\+|%20)%26(?:\+|%20)Innovation/u);
+  await page.getByRole("button", { name: "Clear filters" }).first().click();
 
   // A query that matches session content keeps that session's speaker and
   // profile route available even when the profile text does not match itself.
-  await page
-    .getByLabel("Search sessions, speakers, or topics")
-    .fill("future of attendee");
+  await search.fill("future of attendee");
+  await expect(page).toHaveURL(/query=future(?:\+|%20)of(?:\+|%20)attendee/u);
   await expect(rows).toHaveCount(1);
   await expect(page.locator("#speakers > .grid article")).toHaveCount(1);
   const detailProfileLink = page

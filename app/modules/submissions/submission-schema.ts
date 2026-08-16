@@ -45,7 +45,10 @@ export const formFieldSchema = z
         message: "Choice fields need at least one option",
       });
     }
-    if (new Set(field.options).size !== field.options.length) {
+    if (
+      new Set(field.options.map((option) => option.toLocaleLowerCase())).size !==
+      field.options.length
+    ) {
       context.addIssue({
         code: "custom",
         path: ["options"],

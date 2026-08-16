@@ -29,6 +29,26 @@ export function communicationScheduledEpoch(
   );
 }
 
+export function communicationScheduleIssue(
+  localDateTime: string,
+  eventTimezone: string,
+  nowEpochSeconds: number,
+) {
+  if (!localDateTime) return null;
+  try {
+    const scheduledEpoch = communicationScheduledEpoch(
+      localDateTime,
+      eventTimezone,
+    );
+    return scheduledEpoch <= nowEpochSeconds + 60
+      ? "Scheduled delivery must be at least one minute in the future."
+      : null;
+  } catch (error) {
+    if (!(error instanceof Error)) throw error;
+    return error.message;
+  }
+}
+
 export function assertCommunicationScheduleStillMatchesPreview(
   previewedEpoch: unknown,
   authoritativeEpoch: number,

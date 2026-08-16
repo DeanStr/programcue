@@ -1,7 +1,7 @@
 import { useDraggable } from "@dnd-kit/core";
 import { CSS } from "@dnd-kit/utilities";
-import { useState } from "react";
-import { Link } from "react-router";
+import { useEffect, useState } from "react";
+import { Link, useSearchParams } from "react-router";
 import { EmptyState } from "~/components/ui/states";
 import { SessionCopyAction } from "~/modules/ai/contextual-ai-actions";
 import type { ScheduleSession } from "~/modules/schedule/schedule-service.server";
@@ -120,6 +120,47 @@ export function ScheduleSourcePanel({
   unassign(entry: ScheduleEntry): void;
 }) {
   const [placementFormOpen, setPlacementFormOpen] = useState(true);
+  const [searchParams, setSearchParams] = useSearchParams();
+  const [sessionQuery, setSessionQuery] = useState(
+    searchParams.get("sourceQuery") ?? "",
+  );
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      const next = new URLSearchParams(searchParams);
+      if (sessionQuery.trim()) next.set("sourceQuery", sessionQuery.trim());
+      else next.delete("sourceQuery");
+      if (next.toString() !== searchParams.toString())
+        setSearchParams(next, { replace: true, preventScrollReset: true });
+    }, 300);
+    return () => window.clearTimeout(timer);
+  }, [searchParams, sessionQuery, setSearchParams]);
+  useEffect(() => {
+    const routeQuery = searchParams.get("sourceQuery") ?? "";
+    if (routeQuery !== sessionQuery) setSessionQuery(routeQuery);
+  }, [searchParams]);
+  const normalisedSessionQuery = sessionQuery.trim().toLocaleLowerCase();
+  const matchesSessionQuery = (session: ScheduleSession) =>
+    !normalisedSessionQuery ||
+    [
+      session.title,
+      session.speakerNames.join(" "),
+      session.trackName,
+      session.format,
+      session.status,
+    ]
+      .filter(Boolean)
+      .join(" ")
+      .toLocaleLowerCase()
+      .includes(normalisedSessionQuery);
+  const matchingWorkspaceSessions =
+    workspace.sessions.filter(matchesSessionQuery);
+  const selectedOutsideQuery = workspace.sessions.find(
+    (session) => session.id === quickSessionId && !matchesSessionQuery(session),
+  );
+  const sessionOptions = selectedOutsideQuery
+    ? [selectedOutsideQuery, ...matchingWorkspaceSessions]
+    : matchingWorkspaceSessions;
+  const matchingVisibleSessions = visibleSessions.filter(matchesSessionQuery);
   return (
     <aside className="card pad schedule-source">
       <div className="card-title">
@@ -151,6 +192,25 @@ export function ScheduleSourcePanel({
               name="scheduleRevision"
               value={workspace.version!.revision}
             />
+            {workspace.sessions.length > 15 || sessionQuery.trim() ? (
+              <label className="label">
+                Find session
+                <input
+                  className="field"
+                  type="search"
+                  value={sessionQuery}
+                  onChange={(event) =>
+                    setSessionQuery(event.currentTarget.value)
+                  }
+                  placeholder="Title, speaker, track, format or status"
+                  autoComplete="off"
+                />
+                <span className="help" role="status">
+                  {matchingWorkspaceSessions.length} of{" "}
+                  {workspace.sessions.length} sessions match.
+                </span>
+              </label>
+            ) : null}
             <input
               type="hidden"
               name="endsAt"
@@ -166,9 +226,11 @@ export function ScheduleSourcePanel({
                 value={quickSessionId}
                 onChange={(event) => selectQuickSession(event.target.value)}
               >
-                {workspace.sessions.map((session) => (
+                {sessionOptions.map((session) => (
                   <option key={session.id} value={session.id}>
-                    {session.title}
+                    {session.title} ·{" "}
+                    {session.speakerNames.join(", ") || "No speaker"} ·{" "}
+                    {session.trackName ?? "No track"}
                     {scheduledSessionIds.has(session.id) ? " · scheduled" : ""}
                   </option>
                 ))}
@@ -387,7 +449,7 @@ export function ScheduleSourcePanel({
         </fetcher.Form>
       </details>
       <div className="stack">
-        {visibleSessions.map((session) => (
+        {matchingVisibleSessions.map((session) => (
           <DraggableSession
             key={session.id}
             session={session}
@@ -396,16 +458,16 @@ export function ScheduleSourcePanel({
             readOnlyMessage={readOnlyPlacementMessage}
           />
         ))}
-        {visibleSessions.length === 0 ? (
+        {matchingVisibleSessions.length === 0 ? (
           <EmptyState
             title={
-              workspace.activeFilter
+              workspace.activeFilter || normalisedSessionQuery
                 ? "No matching sessions"
                 : "No sessions yet"
             }
             description={
-              workspace.activeFilter
-                ? "No sessions match this operational filter."
+              workspace.activeFilter || normalisedSessionQuery
+                ? "No sessions match the current source filters."
                 : "Accepted and direct sessions will appear here."
             }
           />

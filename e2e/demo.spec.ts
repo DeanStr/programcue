@@ -123,9 +123,17 @@ test("the evaluator guide exposes honest identities, a walkthrough and a complet
   const savedConfiguration = page.locator("section").filter({
     has: page.getByRole("heading", { name: "1. Saved draft configuration" }),
   });
+  await savedConfiguration.getByLabel("Audience").selectOption("manual");
+  const manualRecipients = savedConfiguration.getByRole("textbox", {
+    name: /Manual addresses/,
+  });
+  await manualRecipients.fill("unsaved@example.com");
   await savedConfiguration
-    .getByRole("textbox", { name: /Manual addresses/ })
-    .fill("unsaved@example.com");
+    .getByLabel("Audience")
+    .selectOption("incomplete_speakers");
+  await expect(manualRecipients).toHaveCount(0);
+  await savedConfiguration.getByLabel("Audience").selectOption("manual");
+  await expect(manualRecipients).toHaveValue("unsaved@example.com");
   await expect(
     page.getByText(/visible configuration has unsaved changes/i),
   ).toBeVisible();

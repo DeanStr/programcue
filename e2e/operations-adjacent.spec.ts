@@ -109,7 +109,14 @@ test("blank event creation keeps templates empty and makes repository authority 
   await expect(page.getByLabel("Base ID")).toBeVisible();
   await page.getByRole("radio", { name: /Program Cue — recommended/ }).check();
   await page.getByLabel("Event name").fill(`Browser blank event ${unique}`);
-  await page.getByLabel("Public slug").fill(`browser-blank-event-${unique}`);
+  await expect(page.getByLabel("Public slug")).toHaveValue(
+    `browser-blank-event-${unique}`,
+  );
+  await page.getByLabel("Public slug").fill("");
+  await page.getByLabel("Public slug").pressSequentially("custom-event-");
+  await expect(page.getByLabel("Public slug")).toHaveValue("custom-event-");
+  await page.getByLabel("Public slug").pressSequentially(String(unique));
+  await expect(page.getByText("Public slug is available.")).toBeVisible();
   await page.getByRole("button", { name: "Create blank event" }).click();
   await acceptConfirm(page);
   await expect(page.getByText("Event created", { exact: true })).toBeVisible();

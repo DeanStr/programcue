@@ -2,6 +2,8 @@ import { useState } from "react";
 import { Form, Link, useLocation, useNavigation } from "react-router";
 
 import { PersonDuplicateWarning } from "~/components/person-duplicate-warning";
+import { PersonLookup } from "~/components/person-lookup";
+import { CharacterCount } from "~/components/ui/character-count";
 import { DomainStatusBadge } from "~/components/ui/domain-status-badge";
 import { EventDateTime } from "~/components/ui/event-date-time";
 import type { SubmissionService } from "~/modules/submissions/submission-service.server";
@@ -381,6 +383,18 @@ function SpeakerFields({
       </legend>
       {speakers.map((speaker, index) => (
         <div className="grid grid-3 mb" key={index}>
+          <PersonLookup
+            label={`Find existing speaker ${index + 1}`}
+            onSelect={(person) => {
+              const next = [...speakers];
+              next[index] = {
+                ...speaker,
+                name: person.name,
+                email: person.email,
+              };
+              setSpeakers(next);
+            }}
+          />
           <label className="label">
             Speaker {index + 1} name
             <input
@@ -420,6 +434,7 @@ function SpeakerFields({
                 setSpeakers(next);
               }}
             />
+            <CharacterCount value={speaker.biography} maximum={5_000} />
           </label>
           {index > 0 ? (
             <button

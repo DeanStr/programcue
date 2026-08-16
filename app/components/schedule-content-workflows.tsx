@@ -5,6 +5,7 @@ import {
   DraftRecoveryFeedback,
   DraftRecoveryStatus,
 } from "~/components/draft-recovery-feedback";
+import { CharacterCount } from "~/components/ui/character-count";
 import type {
   ScheduleSession,
   ScheduleWorkspace,
@@ -263,6 +264,7 @@ function ScheduleNotesEditor({
           setSaved(false);
         }}
       />
+      <CharacterCount value={notes} maximum={12_000} />
     </section>
   );
 }

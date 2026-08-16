@@ -3,6 +3,7 @@ import { createMemoryRouter, RouterProvider } from "react-router";
 import { describe, expect, it } from "vitest";
 
 import type { AdminTasksData } from "~/routes/admin-tasks";
+import { suggestedTaskEvidenceMode } from "~/modules/tasks/task-schema";
 import { AdminTasksWorkspace } from "./admin-tasks-workspace";
 
 function taskData(overrides: Partial<AdminTasksData> = {}) {
@@ -67,6 +68,11 @@ function renderWorkspace(data = taskData()) {
 }
 
 describe("administrator task discoverability", () => {
+  it("suggests evidence accepted by each task type", () => {
+    expect(suggestedTaskEvidenceMode("administrator_only")).toBe("none");
+    expect(suggestedTaskEvidenceMode("file_upload")).toBe("file");
+  });
+
   it("renders shareable task filters with the active values selected", () => {
     const markup = renderWorkspace(
       taskData({

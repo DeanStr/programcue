@@ -399,6 +399,37 @@ detail overlays those scoped values without rewriting the canonical person;
 both scoped rows, the audit and webhook intent commit in one compare-and-set D1
 batch.
 
+## Cross-surface micro-UX decisions
+
+Derived values remain suggestions, not hidden authority. New event, form,
+resource and managed-embed slugs follow the source name only until the operator
+edits the slug; an explicit “Use suggested” action restores derivation. Existing
+identifiers are never silently rewritten, and event availability feedback is
+advisory while the server mutation remains the uniqueness authority. Date
+ranges preserve their duration when a start moves, but invalid ranges still
+fail both client and server validation.
+
+Standalone public-programme filters and schedule-source search live in the URL
+so reload, history and shared links preserve the operator's context. Embed
+configuration remains owned by its explicit embed query contract. Person-first
+lookup is an authorised, organisation-scoped read over established membership,
+submission and session relationships; it may fill a manual form but never
+links an unrelated global identity or bypasses the mutation's existing server
+checks.
+
+Communication footer defaults come only from an owner-managed organisation
+postal address. The setting is organisation scoped and audited without copying
+the address into audit metadata. A new template may copy that value into its
+editable versioned content; no venue, product-office or fictitious fallback is
+substituted when it is absent. Progressive task and communication controls omit
+irrelevant values rather than persisting hidden defaults.
+
+Error summaries focus when a new failed submission is rendered and link to the
+corresponding field. Character counts appear near bounded limits instead of
+adding permanent visual noise. Participant and organiser profile editors warn
+before discarding unsaved changes, while the server revision remains the
+durable source of truth.
+
 ## TypeScript validation decision
 
 The Node/tooling and Cloudflare application graphs are independent no-emit

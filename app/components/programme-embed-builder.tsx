@@ -3,6 +3,7 @@ import { useState } from "react";
 import { Form, useActionData } from "react-router";
 
 import { EventDateTime } from "~/components/ui/event-date-time";
+import { DerivedSlugField } from "~/components/ui/derived-slug-field";
 import {
   defaultProgrammeEmbedConfiguration,
   managedProgrammeEmbedUrl,
@@ -684,20 +685,21 @@ export function ProgrammeEmbedBuilder({
                 }}
               />
             </label>
-            <label className="label">
-              Stable slug
-              <input
-                className="field"
-                name="slug"
-                required={!selectedEmbed}
-                disabled={Boolean(selectedEmbed)}
-                maxLength={80}
-                pattern="[a-z0-9]+(?:-[a-z0-9]+)*"
-                value={managedSlug}
-                onChange={(event) => setManagedSlug(event.target.value)}
-                placeholder="conference-homepage"
-              />
-            </label>
+            <DerivedSlugField
+              source={managedName}
+              value={managedSlug}
+              onChange={(value) => {
+                setManagedSlug(value);
+                setManagedConfirmed(false);
+              }}
+              name="slug"
+              label="Stable slug"
+              maximumLength={80}
+              initiallyDerived={!selectedEmbed}
+              resetKey={selectedEmbed?.id ?? "new"}
+              publicPathPrefix={`/embed/${publicSlug}/saved/`}
+              disabled={Boolean(selectedEmbed)}
+            />
           </div>
           <label className="label">
             Installation note (optional)

@@ -2,6 +2,21 @@ import { z } from "zod";
 
 import type { Viewer } from "~/platform/auth/authorize.server";
 
+const organisationPersonSearchSchema = z
+  .string()
+  .trim()
+  .min(2, "Enter at least two characters to search for a person.")
+  .max(254, "Search terms cannot exceed 254 characters.")
+  .superRefine((value, context) => {
+    if (value.length <= 120 || z.string().email().safeParse(value).success)
+      return;
+    context.addIssue({
+      code: "custom",
+      message:
+        "Search terms longer than 120 characters must be a complete email address.",
+    });
+  });
+
 const duplicateCandidateSchema = z
   .array(
     z.object({
@@ -27,6 +42,13 @@ export type DuplicatePersonCheck = {
   truncated: boolean;
 };
 
+export type OrganisationPersonMatch = {
+  personId: string;
+  name: string;
+  email: string;
+  currentEvent: boolean;
+};
+
 function placeholders(values: readonly unknown[]) {
   return values.map(() => "?").join(", ");
 }
@@ -50,6 +72,76 @@ type PersonRow = {
 export class PersonDuplicateService {
   constructor(private readonly env: CloudflareEnvironment) {}
 
+  async searchOrganisationPeople(
+    viewer: Viewer,
+    rawQuery: unknown,
+  ): Promise<OrganisationPersonMatch[]> {
+    const query = organisationPersonSearchSchema.parse(rawQuery);
+    const exactEmailSearch = query.length > 120;
+    const pattern = `%${query.replaceAll("%", "\\%").replaceAll("_", "\\_")}%`;
+    const rows = await this.env.DB.prepare(
+      `WITH organisation_people(person_id, event_id, is_speaker) AS (
+         SELECT membership.person_id, membership.event_id,
+                CASE WHEN membership.role = 'speaker'
+                           AND membership.accepted_at IS NOT NULL
+                           AND membership.revoked_at IS NULL
+                     THEN 1 ELSE 0 END
+           FROM memberships membership
+          WHERE membership.organisation_id = ?
+         UNION
+         SELECT submission.submitter_person_id, submission.event_id, 0
+           FROM submissions submission
+           JOIN events event ON event.id = submission.event_id
+          WHERE event.organisation_id = ?
+            AND submission.submitter_person_id IS NOT NULL
+         UNION
+         SELECT speaker.person_id, speaker.event_id, 0
+           FROM submission_speakers speaker
+           JOIN events event ON event.id = speaker.event_id
+          WHERE event.organisation_id = ? AND speaker.person_id IS NOT NULL
+         UNION
+         SELECT session_speaker.person_id, session_speaker.event_id, 1
+           FROM session_speakers session_speaker
+           JOIN events event ON event.id = session_speaker.event_id
+          WHERE event.organisation_id = ?
+         UNION
+         SELECT workflow.person_id, workflow.event_id, 1
+           FROM event_speaker_workflows workflow
+           JOIN events event ON event.id = workflow.event_id
+          WHERE event.organisation_id = ?
+       )
+       SELECT person.id AS personId, person.display_name AS name, person.email,
+              MAX(CASE WHEN scoped.event_id = ? AND scoped.is_speaker = 1
+                       THEN 1 ELSE 0 END) AS currentEvent
+         FROM organisation_people scoped
+         JOIN people person ON person.id = scoped.person_id
+        WHERE ${
+          exactEmailSearch
+            ? "lower(person.email) = lower(?)"
+            : "(person.display_name LIKE ? ESCAPE '\\' COLLATE NOCASE OR person.email LIKE ? ESCAPE '\\' COLLATE NOCASE)"
+        }
+        GROUP BY person.id, person.display_name, person.email
+        ORDER BY currentEvent DESC, person.display_name COLLATE NOCASE, person.id
+        LIMIT 10`,
+    )
+      .bind(
+        viewer.organisationId,
+        viewer.organisationId,
+        viewer.organisationId,
+        viewer.organisationId,
+        viewer.organisationId,
+        viewer.eventId,
+        ...(exactEmailSearch ? [query] : [pattern, pattern]),
+      )
+      .all<
+        Omit<OrganisationPersonMatch, "currentEvent"> & { currentEvent: number }
+      >();
+    return rows.results.map((row) => ({
+      ...row,
+      currentEvent: Boolean(row.currentEvent),
+    }));
+  }
+
   async findLikelyDuplicates(
     viewer: Viewer,
     rawCandidates: unknown,
@@ -62,7 +154,8 @@ export class PersonDuplicateService {
     )
       .bind(viewer.eventId, viewer.organisationId)
       .first<{ duplicatePersonWarnings: number }>();
-    if (!event) throw new Response("This event could not be found.", { status: 404 });
+    if (!event)
+      throw new Response("This event could not be found.", { status: 404 });
     if (!event.duplicatePersonWarnings) {
       return { enabled: false, matches: [], truncated: false };
     }

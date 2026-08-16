@@ -113,7 +113,9 @@ test("configures, previews and copies a constrained programme embed", async ({
   await expect(page.getByRole("button", { name: "Copy code" })).toBeEnabled();
 });
 
-test("saves and controls a stable managed embed lifecycle", async ({ page }) => {
+test("saves and controls a stable managed embed lifecycle", async ({
+  page,
+}) => {
   await waitForInterface(page, "/admin/programme");
   await expect(
     page.getByRole("heading", { name: "Managed embeds" }),
@@ -124,14 +126,13 @@ test("saves and controls a stable managed embed lifecycle", async ({ page }) => 
     .getByLabel("Installation note (optional)")
     .fill("Homepage below the hero");
   await page.getByRole("button", { name: "Save draft" }).click();
-  await expect(
-    page.getByText("Managed embed saved as a draft."),
-  ).toBeVisible();
+  await expect(page.getByText("Managed embed saved as a draft.")).toBeVisible();
 
   const row = page.getByRole("row").filter({ hasText: "Conference homepage" });
   await expect(row).toContainText("draft");
   await row.getByRole("button", { name: "Load and preview" }).click();
   await expect(page.getByText(/Current revision 1/)).toBeVisible();
+  await expect(page.getByLabel("Stable slug")).toHaveValue("e2e-homepage");
   await row.getByLabel("I previewed this configuration.").check();
   await row.getByRole("button", { name: "Activate" }).click();
   await expect(page.getByText("Managed embed activated.")).toBeVisible();
@@ -140,7 +141,9 @@ test("saves and controls a stable managed embed lifecycle", async ({ page }) => 
     "/embed/future-of-events-2027/saved/e2e-homepage",
   );
   expect(active.status()).toBe(200);
-  const activeRow = page.getByRole("row").filter({ hasText: "Conference homepage" });
+  const activeRow = page
+    .getByRole("row")
+    .filter({ hasText: "Conference homepage" });
   await activeRow
     .getByLabel("I confirm visitors will see an unavailable response.")
     .check();
@@ -154,7 +157,9 @@ test("saves and controls a stable managed embed lifecycle", async ({ page }) => 
   expect(paused.status()).toBe(503);
   expect(paused.headers()["retry-after"]).toBe("300");
 
-  const pausedRow = page.getByRole("row").filter({ hasText: "Conference homepage" });
+  const pausedRow = page
+    .getByRole("row")
+    .filter({ hasText: "Conference homepage" });
   await pausedRow
     .getByLabel("I understand this URL will permanently return 410.")
     .check();
@@ -450,10 +455,12 @@ test("widget preserves invalid options for rejection and fails before mounting",
   );
   await expect(page.locator("#programme-widget iframe")).toHaveCount(0);
 
-  await page.route(`${e2eOrigin}/__programcue-managed-widget-conflict`, (route) =>
-    route.fulfill({
-      contentType: "text/html",
-      body: `
+  await page.route(
+    `${e2eOrigin}/__programcue-managed-widget-conflict`,
+    (route) =>
+      route.fulfill({
+        contentType: "text/html",
+        body: `
         <div id="programme-widget"></div>
         <script src="${e2eOrigin}/programcue-widget.js"
           data-programcue-event="future-of-events-2027"
@@ -461,7 +468,7 @@ test("widget preserves invalid options for rejection and fails before mounting",
           data-target="#programme-widget"
           data-density="compact"></script>
       `,
-    }),
+      }),
   );
   const managedConflictError = page.waitForEvent("pageerror");
   await page.goto(`${e2eOrigin}/__programcue-managed-widget-conflict`);

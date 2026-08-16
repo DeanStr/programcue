@@ -191,9 +191,18 @@ export function usePublicProgrammeModel(loaderData: PublicProgrammeLoaderData) {
       ? fetcher.data.shareUrl
       : null;
   const saved = loaderData.itinerary;
-  const [query, setQuery] = useState(embedOptions.query);
-  const [standaloneDirectoryQuery, setStandaloneDirectoryQuery] = useState("");
-  const [standaloneGalleryQuery, setStandaloneGalleryQuery] = useState("");
+  const initialPublicSearch = useRef(new URLSearchParams(location.search));
+  const [query, setQueryState] = useState(
+    embedded
+      ? embedOptions.query
+      : (initialPublicSearch.current.get("query") ?? ""),
+  );
+  const [standaloneDirectoryQuery, setStandaloneDirectoryQueryState] = useState(
+    initialPublicSearch.current.get("speakerQuery") ?? "",
+  );
+  const [standaloneGalleryQuery, setStandaloneGalleryQueryState] = useState(
+    initialPublicSearch.current.get("galleryQuery") ?? "",
+  );
   const days = useMemo(
     () => [
       ...new Set(
@@ -211,17 +220,6 @@ export function usePublicProgrammeModel(loaderData: PublicProgrammeLoaderData) {
           embedOptions.day,
       )
     : null;
-  const [day, setDay] = useState(
-    initialEmbedDay
-      ? formatDay(initialEmbedDay.startsAt, programme.event.timezone)
-      : "All days",
-  );
-  const [track, setTrack] = useState(embedOptions.track ?? "");
-  const [format, setFormat] = useState(embedOptions.format ?? "");
-  const [room, setRoom] = useState(embedOptions.room ?? "");
-  const [expandedDescriptions, setExpandedDescriptions] = useState<string[]>(
-    [],
-  );
   const tracks = useMemo(
     () => distinctSorted(programme.sessions.map((session) => session.track)),
     [programme.sessions],
@@ -233,6 +231,38 @@ export function usePublicProgrammeModel(loaderData: PublicProgrammeLoaderData) {
   const rooms = useMemo(
     () => distinctSorted(programme.sessions.map((session) => session.room)),
     [programme.sessions],
+  );
+  const requestedInitialDay = initialPublicSearch.current.get("day") ?? "";
+  const [day, setDay] = useState(
+    !embedded && days.includes(requestedInitialDay)
+      ? requestedInitialDay
+      : initialEmbedDay
+        ? formatDay(initialEmbedDay.startsAt, programme.event.timezone)
+        : "All days",
+  );
+  const [track, setTrackState] = useState(
+    embedded
+      ? (embedOptions.track ?? "")
+      : tracks.includes(initialPublicSearch.current.get("track") ?? "")
+        ? initialPublicSearch.current.get("track")!
+        : "",
+  );
+  const [format, setFormatState] = useState(
+    embedded
+      ? (embedOptions.format ?? "")
+      : formats.includes(initialPublicSearch.current.get("format") ?? "")
+        ? initialPublicSearch.current.get("format")!
+        : "",
+  );
+  const [room, setRoomState] = useState(
+    embedded
+      ? (embedOptions.room ?? "")
+      : rooms.includes(initialPublicSearch.current.get("room") ?? "")
+        ? initialPublicSearch.current.get("room")!
+        : "",
+  );
+  const [expandedDescriptions, setExpandedDescriptions] = useState<string[]>(
+    [],
   );
   const speakerById = useMemo(
     () =>
@@ -258,6 +288,45 @@ export function usePublicProgrammeModel(loaderData: PublicProgrammeLoaderData) {
   const speakerProfileReturnFocusRef = useRef<HTMLElement | null>(null);
   const visibleEmbedControls = new Set(embedOptions.controls);
   const visibleEmbedFields = new Set(embedOptions.fields);
+  function replacePublicSearchParameter(name: string, value: string) {
+    if (embedded) return;
+    const search = new URLSearchParams(location.search);
+    for (const [searchName, pendingValue] of [
+      ["query", query.trim()],
+      ["speakerQuery", standaloneDirectoryQuery.trim()],
+      ["galleryQuery", standaloneGalleryQuery.trim()],
+    ] as const) {
+      if (pendingValue) search.set(searchName, pendingValue);
+      else search.delete(searchName);
+    }
+    if (value) search.set(name, value);
+    else search.delete(name);
+    void navigate(
+      {
+        pathname: location.pathname,
+        search: search.size ? `?${search}` : "",
+        hash: location.hash,
+      },
+      { replace: true, preventScrollReset: true },
+    );
+  }
+  const setQuery = (value: string) => setQueryState(value);
+  const setTrack = (value: string) => {
+    setTrackState(value);
+    replacePublicSearchParameter("track", value);
+  };
+  const setFormat = (value: string) => {
+    setFormatState(value);
+    replacePublicSearchParameter("format", value);
+  };
+  const setRoom = (value: string) => {
+    setRoomState(value);
+    replacePublicSearchParameter("room", value);
+  };
+  const setPublicDay = (value: string) => {
+    setDay(value);
+    replacePublicSearchParameter("day", value === "All days" ? "" : value);
+  };
   const showControl = (control: (typeof embedOptions.controls)[number]) =>
     !embedded || visibleEmbedControls.has(control);
   const showEmbedField = (field: (typeof embedOptions.fields)[number]) =>
@@ -285,6 +354,61 @@ export function usePublicProgrammeModel(loaderData: PublicProgrammeLoaderData) {
       window.removeEventListener("load", publishHeight);
     };
   }, [embedded, programme.event.slug]);
+  useEffect(() => {
+    if (embedded) return;
+    const nextQuery = query.trim();
+    const currentQuery =
+      new URLSearchParams(location.search).get("query") ?? "";
+    if (nextQuery === currentQuery) return;
+    const timer = window.setTimeout(
+      () => replacePublicSearchParameter("query", nextQuery),
+      300,
+    );
+    return () => window.clearTimeout(timer);
+  }, [embedded, location.search, query]);
+  useEffect(() => {
+    if (embedded) return;
+    const nextQuery = standaloneDirectoryQuery.trim();
+    const currentQuery =
+      new URLSearchParams(location.search).get("speakerQuery") ?? "";
+    if (nextQuery === currentQuery) return;
+    const timer = window.setTimeout(
+      () => replacePublicSearchParameter("speakerQuery", nextQuery),
+      300,
+    );
+    return () => window.clearTimeout(timer);
+  }, [embedded, location.search, standaloneDirectoryQuery]);
+  useEffect(() => {
+    if (embedded) return;
+    const nextQuery = standaloneGalleryQuery.trim();
+    const currentQuery =
+      new URLSearchParams(location.search).get("galleryQuery") ?? "";
+    if (nextQuery === currentQuery) return;
+    const timer = window.setTimeout(
+      () => replacePublicSearchParameter("galleryQuery", nextQuery),
+      300,
+    );
+    return () => window.clearTimeout(timer);
+  }, [embedded, location.search, standaloneGalleryQuery]);
+  useEffect(() => {
+    if (embedded) return;
+    const search = new URLSearchParams(location.search);
+    setQueryState(search.get("query") ?? "");
+    setStandaloneDirectoryQueryState(search.get("speakerQuery") ?? "");
+    setStandaloneGalleryQueryState(search.get("galleryQuery") ?? "");
+  }, [embedded, location.search]);
+  useEffect(() => {
+    if (embedded) return;
+    const search = new URLSearchParams(location.search);
+    const requestedDay = search.get("day") ?? "";
+    const requestedTrack = search.get("track") ?? "";
+    const requestedFormat = search.get("format") ?? "";
+    const requestedRoom = search.get("room") ?? "";
+    setDay(days.includes(requestedDay) ? requestedDay : "All days");
+    setTrackState(tracks.includes(requestedTrack) ? requestedTrack : "");
+    setFormatState(formats.includes(requestedFormat) ? requestedFormat : "");
+    setRoomState(rooms.includes(requestedRoom) ? requestedRoom : "");
+  }, [days, embedded, formats, location.search, rooms, tracks]);
   useEffect(() => {
     if (location.hash.startsWith("#session-")) {
       const slug = location.hash.slice("#session-".length);
@@ -361,9 +485,11 @@ export function usePublicProgrammeModel(loaderData: PublicProgrammeLoaderData) {
     return matchesFacets && matchesQuery;
   });
   const directoryQuery = embedded ? query : standaloneDirectoryQuery;
-  const setDirectoryQuery = embedded ? setQuery : setStandaloneDirectoryQuery;
+  const setDirectoryQuery = embedded
+    ? setQuery
+    : setStandaloneDirectoryQueryState;
   const galleryQuery = embedded ? query : standaloneGalleryQuery;
-  const setGalleryQuery = embedded ? setQuery : setStandaloneGalleryQuery;
+  const setGalleryQuery = embedded ? setQuery : setStandaloneGalleryQueryState;
   const speakerSurfaceSource = embedded ? visibleSpeakers : orderedSpeakers;
   const directorySpeakers = useMemo(() => {
     const normalisedDirectoryQuery = embedded
@@ -543,11 +669,27 @@ export function usePublicProgrammeModel(loaderData: PublicProgrammeLoaderData) {
   }
 
   function clearFilters() {
-    if (showControl("search")) setQuery("");
+    if (showControl("search")) setQueryState("");
     if (showControl("day")) setDay("All days");
-    if (showControl("track")) setTrack("");
-    if (showControl("format")) setFormat("");
-    if (showControl("room")) setRoom("");
+    if (showControl("track")) setTrackState("");
+    if (showControl("format")) setFormatState("");
+    if (showControl("room")) setRoomState("");
+    if (!embedded) {
+      const search = new URLSearchParams(location.search);
+      if (showControl("search")) search.delete("query");
+      if (showControl("day")) search.delete("day");
+      if (showControl("track")) search.delete("track");
+      if (showControl("format")) search.delete("format");
+      if (showControl("room")) search.delete("room");
+      void navigate(
+        {
+          pathname: location.pathname,
+          search: search.size ? `?${search}` : "",
+          hash: location.hash,
+        },
+        { replace: true, preventScrollReset: true },
+      );
+    }
   }
 
   function selectSavedSession(sessionId: string) {
@@ -620,7 +762,7 @@ export function usePublicProgrammeModel(loaderData: PublicProgrammeLoaderData) {
     gallerySpeakers,
     days,
     day,
-    setDay,
+    setDay: setPublicDay,
     track,
     setTrack,
     format,
