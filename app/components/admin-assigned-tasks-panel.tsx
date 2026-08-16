@@ -270,6 +270,7 @@ export function AdminAssignedTasksPanel({
                     />
                     {task.status === "submitted" ? (
                       <button
+                        type="submit"
                         className="btn small primary"
                         name="intent"
                         value="approve"
@@ -283,6 +284,7 @@ export function AdminAssignedTasksPanel({
                       task.status,
                     ) ? (
                       <button
+                        type="submit"
                         className="btn small"
                         name="intent"
                         value="complete"
@@ -293,6 +295,7 @@ export function AdminAssignedTasksPanel({
                       </button>
                     ) : ["completed", "waived"].includes(task.status) ? (
                       <button
+                        type="submit"
                         className="btn small"
                         name="intent"
                         value="reopen"
@@ -315,6 +318,7 @@ export function AdminAssignedTasksPanel({
                           />
                         </label>
                         <button
+                          type="submit"
                           className="btn small danger"
                           name="intent"
                           value="waive"
@@ -390,7 +394,11 @@ export function AdminAssignedTasksPanel({
                         <input type="checkbox" name="administratorOnly" /> Keep
                         this note administrator-only
                       </label>
-                      <button className="btn small" disabled={busy}>
+                      <button
+                        type="submit"
+                        className="btn small"
+                        disabled={busy}
+                      >
                         Send comment
                       </button>
                     </Form>

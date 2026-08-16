@@ -383,7 +383,7 @@ export function SpeakerProfilePanel({
           />{" "}
           Publish this profile when saved
         </label>
-        <button className="btn primary" disabled={busy}>
+        <button type="submit" className="btn primary" disabled={busy}>
           Save profile
         </button>
         <span className={`status ${dirty ? "warning" : "success"}`}>

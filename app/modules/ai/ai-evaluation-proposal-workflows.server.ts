@@ -149,7 +149,7 @@ export abstract class AiEvaluationProposalWorkflows extends AiFormProposalWorkfl
     const round = workspace.plan?.rounds.find(
       (candidate) => candidate.id === args.roundId,
     );
-    if (!round || round.status !== "active") {
+    if (round?.status !== "active") {
       throw new AiToolValidationError(
         "Reviewer assignments require an active round in the current event.",
       );

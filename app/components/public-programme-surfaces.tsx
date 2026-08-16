@@ -136,7 +136,7 @@ function PublicSessionSpeakers({
 }) {
   const speakers = sessionSpeakerDetails(session, model.speakerById);
   return speakers.length ? (
-    <div className="public-session-speakers" aria-label="Speakers">
+    <div className="public-session-speakers" role="group" aria-label="Speakers">
       {speakers.map((speaker) => (
         <div className="public-session-speaker" key={speaker.id}>
           {model.showEmbedField("images") ? (
@@ -907,7 +907,11 @@ export function PublicSpeakerGallerySurface({
         ) : null}
       </SurfaceHeading>
       {model.gallerySpeakers.length ? (
-        <div className="speaker-gallery-grid" aria-label="Speaker Gallery">
+        <div
+          className="speaker-gallery-grid"
+          role="group"
+          aria-label="Speaker Gallery"
+        >
           {model.gallerySpeakers.map((speaker) => (
             <SpeakerGalleryCard
               key={speaker.id}

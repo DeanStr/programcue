@@ -214,6 +214,7 @@ export default function SpeakerResources({ loaderData }: Route.ComponentProps) {
                   read and understood this published resource
                 </label>
                 <button
+                  type="submit"
                   className="btn primary"
                   disabled={navigation.state !== "idle"}
                 >

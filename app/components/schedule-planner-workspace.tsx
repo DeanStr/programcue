@@ -165,6 +165,7 @@ export function SchedulePlannerWorkspace({
               <input type="hidden" name="intent" value="create-draft" />
               <input type="hidden" name="intentId" value={workspace.intentId} />
               <button
+                type="submit"
                 className="btn primary"
                 disabled={navigation.state !== "idle"}
               >

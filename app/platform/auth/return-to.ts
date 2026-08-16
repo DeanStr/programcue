@@ -4,6 +4,7 @@ export function safeReturnTo(value: unknown) {
     !value.startsWith("/") ||
     value.startsWith("//") ||
     value.includes("\\") ||
+    // biome-ignore lint/suspicious/noControlCharactersInRegex: Return targets explicitly reject ASCII control characters.
     /[\u0000-\u001f\u007f]/.test(value)
   )
     return "/";

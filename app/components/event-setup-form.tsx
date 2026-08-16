@@ -864,6 +864,7 @@ export function EventSetupForm({
               </p>
               <div
                 className="table-wrap mt"
+                role="region"
                 tabIndex={0}
                 aria-label="Airtable repository migration changes"
               >

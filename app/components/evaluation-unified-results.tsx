@@ -96,7 +96,9 @@ export function EvaluationUnifiedResults() {
                 <option value="title_asc">Title</option>
               </select>
             </label>
-            <button className="btn small">Apply</button>
+            <button type="submit" className="btn small">
+              Apply
+            </button>
           </Form>
           {loaderData.resultsRoundId ? (
             <Form
@@ -120,7 +122,7 @@ export function EvaluationUnifiedResults() {
                 name="idempotencyKey"
                 defaultValue={loaderData.resultsExportIntent}
               />
-              <button className="btn small">
+              <button type="submit" className="btn small">
                 Download proposal results CSV
               </button>
             </Form>

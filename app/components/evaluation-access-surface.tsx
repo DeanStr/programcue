@@ -422,7 +422,6 @@ function AccessGate({
                 autoCapitalize="none"
                 autoComplete="off"
                 autoCorrect="off"
-                autoFocus
                 className="field"
                 id="evaluation-access-code"
                 name="accessCode"

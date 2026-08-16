@@ -104,7 +104,11 @@ export function RecentCommunications({
                             name="communicationId"
                             value={item.id}
                           />
-                          <button className="btn small" disabled={working}>
+                          <button
+                            type="submit"
+                            className="btn small"
+                            disabled={working}
+                          >
                             {working && pendingIntent === "cancel"
                               ? "Cancelling…"
                               : "Cancel"}

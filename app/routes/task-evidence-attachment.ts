@@ -62,7 +62,7 @@ export async function action({ request, context }: Route.ActionArgs) {
       );
     }
     const input = attachmentSchema.parse(body);
-    let result;
+    let result: Awaited<ReturnType<TaskService["attachCompletedFileEvidence"]>>;
     try {
       result = await new TaskService(env).attachCompletedFileEvidence(
         viewer,

@@ -369,6 +369,7 @@ export default function ApiSettings({ loaderData }: Route.ComponentProps) {
               </select>
             </label>
             <button
+              type="submit"
               className="btn primary"
               disabled={navigation.state !== "idle"}
             >

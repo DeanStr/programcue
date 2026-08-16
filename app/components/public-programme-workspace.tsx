@@ -953,6 +953,7 @@ function ItineraryVerificationPrompt({
        throughout, because every save control describes itself by it. */
     <div
       className={`itinerary-verification stack mb${itineraryVerificationPrompted ? " prompted" : ""}${raised ? "" : " latent"}`}
+      role="group"
       ref={itineraryVerificationRef}
       tabIndex={-1}
       aria-labelledby="itinerary-verification-help"

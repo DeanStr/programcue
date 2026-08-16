@@ -246,7 +246,7 @@ export function ReviewScorePanel() {
               aria-label="Keyboard shortcuts"
               onClick={() => setShortcutsOpen(true)}
             >
-              <kbd aria-hidden="true">?</kbd>
+              <kbd>?</kbd>
             </button>
           </div>
           {!readOnly ? (
@@ -402,7 +402,7 @@ export function ReviewScorePanel() {
                     ) : null}
                   </span>
                   {scale ? (
-                    <fieldset
+                    <div
                       className="review-scale"
                       data-review-scale=""
                       role="radiogroup"
@@ -445,7 +445,7 @@ export function ReviewScorePanel() {
                           <span className="pc-num">{option.label}</span>
                         </label>
                       ))}
-                    </fieldset>
+                    </div>
                   ) : criterion.inputType === "free_text" ? (
                     <textarea
                       className="textarea"

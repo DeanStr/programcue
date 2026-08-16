@@ -311,7 +311,7 @@ export async function loader({ request, params, context }: Route.LoaderArgs) {
         : null,
     };
   }
-  let embedOptions;
+  let embedOptions: ReturnType<typeof parseProgrammeEmbedSearchParameters>;
   try {
     embedOptions = managedEmbed
       ? programmeEmbedSearchConfiguration(managedEmbed.configuration)

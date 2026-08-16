@@ -415,7 +415,7 @@ export async function action({ request, context }: ActionFunctionArgs) {
     }
     if (values.get("intent") === "add-next-round") {
       const event = await new EventService(env).getSetup(viewer);
-      let scorecardSelection;
+      let scorecardSelection: ReturnType<typeof parseScorecardSelection>;
       try {
         scorecardSelection = parseScorecardSelection(
           values.get("scorecardSelection"),

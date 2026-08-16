@@ -761,6 +761,7 @@ export function ProgrammeEmbedBuilder({
           ) : null}
           <div className="page-actions">
             <button
+              type="submit"
               className="btn primary"
               disabled={
                 outputConfiguration === null ||
@@ -895,6 +896,7 @@ export function ProgrammeEmbedBuilder({
                                   : "I confirm visitors will see an unavailable response."}
                               </label>
                               <button
+                                type="submit"
                                 className="btn small"
                                 disabled={
                                   nextStatus === "active" &&
@@ -946,7 +948,10 @@ export function ProgrammeEmbedBuilder({
                                 I understand this URL will permanently return
                                 410.
                               </label>
-                              <button className="btn small danger">
+                              <button
+                                type="submit"
+                                className="btn small danger"
+                              >
                                 Revoke
                               </button>
                             </Form>

@@ -188,6 +188,7 @@ export function EvaluationPlanState() {
             }))}
           />
           <button
+            type="submit"
             className="btn primary"
             disabled={navigation.state !== "idle"}
           >

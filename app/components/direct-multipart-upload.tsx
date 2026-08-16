@@ -376,6 +376,7 @@ export function DirectMultipartUpload({
       ) : null}
       <div className="page-actions">
         <button
+          type="submit"
           className="btn primary"
           disabled={
             disabled ||

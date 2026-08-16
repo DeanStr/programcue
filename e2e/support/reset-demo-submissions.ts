@@ -68,7 +68,7 @@ export async function resetDemoSubmissions(
       throw lastTransportError;
     }
 
-    let response;
+    let response: Awaited<ReturnType<APIRequestContext["post"]>>;
     try {
       response = await request.post("/demo/reset/submissions", {
         form: {

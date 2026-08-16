@@ -231,7 +231,11 @@ export function CommunicationDraftPreview({
           Confirmation recomputes the audience and atomically transitions this
           draft.
         </span>
-        <button className="btn primary" disabled={confirmationBlocked}>
+        <button
+          type="submit"
+          className="btn primary"
+          disabled={confirmationBlocked}
+        >
           <Send aria-hidden size={16} />
           {working && pendingIntent === "confirm-draft"
             ? "Recording…"

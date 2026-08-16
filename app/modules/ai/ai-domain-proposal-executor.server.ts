@@ -169,7 +169,7 @@ export class AiDomainProposalExecutor {
         operationId,
       )
       .first<{ status: string; requestHash: string }>();
-    if (!recordedAssignment || recordedAssignment.status !== "completed") {
+    if (recordedAssignment?.status !== "completed") {
       const workspace = await evaluation.getAdminWorkspace(viewer);
       const currentEvaluatorIds = assignmentInput.teamId
         ? (workspace.teams
@@ -374,7 +374,7 @@ export class AiDomainProposalExecutor {
     )
       .bind(viewer.organisationId, viewer.eventId, scheduleActorId, operationId)
       .first<{ status: string; requestHash: string }>();
-    if (!recordedPublication || recordedPublication.status !== "completed") {
+    if (recordedPublication?.status !== "completed") {
       const current = await schedules.getWorkspace(viewer);
       const currentEntriesHash = await sha256(
         JSON.stringify(

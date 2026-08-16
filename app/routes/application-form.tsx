@@ -159,7 +159,6 @@ function AccessPanel({
               inputMode="numeric"
               pattern="[0-9]{6}"
               autoComplete="one-time-code"
-              autoFocus
               required
             />
           </label>

@@ -41,6 +41,7 @@ function safeZipSegment(value: string) {
   return (
     value
       .normalize("NFKC")
+      // biome-ignore lint/suspicious/noControlCharactersInRegex: Archive filenames intentionally reject ASCII control characters.
       .replace(/[\u0000-\u001f\u007f<>:"/\\|?*]/g, "_")
       .replace(/\.{2,}/g, ".")
       .trim()

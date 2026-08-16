@@ -415,7 +415,7 @@ export class EvaluationDiscussionWorkflows extends EvaluationServiceFoundation {
         targetExists: number;
         reviewerEligible: number;
       }>();
-    if (!round || !round.targetExists) {
+    if (!round?.targetExists) {
       throw new Response("Evaluation discussion target not found.", {
         status: 404,
       });

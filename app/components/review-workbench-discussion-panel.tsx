@@ -129,6 +129,7 @@ export function ReviewDiscussionPanel() {
               </label>
               <div>
                 <button
+                  type="submit"
                   className="btn primary"
                   disabled={fetcher.state !== "idle"}
                 >

@@ -97,6 +97,7 @@ export function BulkAssignmentDialog() {
               Back
             </button>
             <button
+              type="submit"
               className="btn primary"
               disabled={navigation.state !== "idle"}
             >
@@ -306,7 +307,11 @@ export function RoundAdvancementDialog() {
             for a final outcome. This is not an undo action.
           </span>
         </div>
-        <button className="btn primary" disabled={navigation.state !== "idle"}>
+        <button
+          type="submit"
+          className="btn primary"
+          disabled={navigation.state !== "idle"}
+        >
           Close round and advance shortlist
         </button>
       </Form>
@@ -433,6 +438,7 @@ export function ModerationDialog() {
         <div className="page-actions">
           {currentModeration?.status === "confirmed" ? null : (
             <button
+              type="submit"
               className="btn"
               name="moderationStatus"
               value="draft"
@@ -442,6 +448,7 @@ export function ModerationDialog() {
             </button>
           )}
           <button
+            type="submit"
             className="btn primary"
             name="moderationStatus"
             value="confirmed"
@@ -490,7 +497,11 @@ export function ReviewReopenDialog() {
               : ". The frozen session source remains unchanged."}
           </span>
         </div>
-        <button className="btn danger" disabled={navigation.state !== "idle"}>
+        <button
+          type="submit"
+          className="btn danger"
+          disabled={navigation.state !== "idle"}
+        >
           Reopen review
         </button>
       </Form>
@@ -788,6 +799,7 @@ export function DecisionDialog() {
         )}
         <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
           <button
+            type="submit"
             className="btn"
             name="release"
             value="false"
@@ -797,6 +809,7 @@ export function DecisionDialog() {
           </button>
           {loaderData.canReleaseDecisions ? (
             <button
+              type="submit"
               className="btn primary"
               name="release"
               value="true"

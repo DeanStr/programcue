@@ -25,7 +25,7 @@ export function PageHeader({
         {description ? <p>{description}</p> : null}
       </div>
       {actions ? (
-        <div className="page-actions" aria-label="Page actions">
+        <div className="page-actions" role="group" aria-label="Page actions">
           {actions}
         </div>
       ) : null}

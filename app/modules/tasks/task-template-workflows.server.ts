@@ -349,7 +349,7 @@ export class TaskTemplateWorkflows extends TaskServiceFoundation {
           "A travel onboarding preset is archived. Restore it before creating the preset forms again.",
         );
       }
-      let storedInput;
+      let storedInput: ReturnType<typeof taskTemplateInputSchema.parse>;
       try {
         storedInput = taskTemplateInputSchema.parse({
           name: existing.name,
@@ -746,7 +746,7 @@ export class TaskTemplateWorkflows extends TaskServiceFoundation {
       if (planned.has(templateId)) return;
       visiting.add(templateId);
       const template = await this.getTemplate(viewer.eventId, templateId);
-      if (!template || template.status !== "active") {
+      if (template?.status !== "active") {
         throw new TaskStateError("Task template not found or archived.");
       }
       rootTargetType ??= template.targetType;
@@ -1350,7 +1350,7 @@ export class TaskTemplateWorkflows extends TaskServiceFoundation {
     const parsedTemplateId = z.string().min(1).parse(templateId);
     const parsedTargetId = z.string().min(1).parse(targetId);
     const template = await this.getTemplate(viewer.eventId, parsedTemplateId);
-    if (!template || template.status !== "active")
+    if (template?.status !== "active")
       throw new TaskStateError("Task template not found or archived.");
     const targetRevision = await this.assertTaskTarget(
       viewer.eventId,

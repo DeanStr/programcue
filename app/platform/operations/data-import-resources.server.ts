@@ -216,7 +216,7 @@ export function normalizeImportRow(
       ? String(values.submitterEmail).toLowerCase()
       : null;
     const submitter = submitterEmail ? context.people?.[submitterEmail] : null;
-    if (submitterEmail && (!submitter || !submitter.linked)) {
+    if (submitterEmail && !submitter?.linked) {
       return {
         errors: [
           "submitterEmail must identify a person already linked to this event",
@@ -342,7 +342,7 @@ export function normalizeImportRow(
     ? String(values.ownerEmail).toLowerCase()
     : null;
   const owner = ownerEmail ? context.people?.[ownerEmail] : null;
-  if (ownerEmail && (!owner || !owner.linked)) {
+  if (ownerEmail && !owner?.linked) {
     return {
       errors: [
         "ownerEmail must identify a person already linked to this event",

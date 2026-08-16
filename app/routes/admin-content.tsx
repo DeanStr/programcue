@@ -471,6 +471,7 @@ export default function AdminContent({ loaderData }: Route.ComponentProps) {
                 </select>
               </label>
               <button
+                type="submit"
                 className="btn primary"
                 disabled={navigation.state !== "idle"}
               >
@@ -555,7 +556,7 @@ export default function AdminContent({ loaderData }: Route.ComponentProps) {
               <input type="checkbox" name="confirmed" value="true" required />
               Download exactly these current released versions
             </label>
-            <button className="btn primary">
+            <button type="submit" className="btn primary">
               <Download aria-hidden size={15} /> Generate ZIP
             </button>
           </Form>

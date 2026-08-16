@@ -274,7 +274,11 @@ export default function AdminCrmContact({ loaderData }: Route.ComponentProps) {
                       name="secondaryId"
                       value={duplicate.personId}
                     />
-                    <button className="btn danger" disabled={busy}>
+                    <button
+                      type="submit"
+                      className="btn danger"
+                      disabled={busy}
+                    >
                       Keep {contact.email} as primary
                     </button>
                   </Form>
@@ -295,7 +299,11 @@ export default function AdminCrmContact({ loaderData }: Route.ComponentProps) {
                       name="secondaryId"
                       value={contact.personId}
                     />
-                    <button className="btn danger" disabled={busy}>
+                    <button
+                      type="submit"
+                      className="btn danger"
+                      disabled={busy}
+                    >
                       Keep {duplicate.email} as primary
                     </button>
                   </Form>
@@ -349,7 +357,11 @@ export default function AdminCrmContact({ loaderData }: Route.ComponentProps) {
               <Form method="post" key={tag}>
                 <input type="hidden" name="_intent" value="remove_tag" />
                 <input type="hidden" name="tag" value={tag} />
-                <button className="crm-chip" aria-label={`Remove ${tag} tag`}>
+                <button
+                  type="submit"
+                  className="crm-chip"
+                  aria-label={`Remove ${tag} tag`}
+                >
                   {tag} ×
                 </button>
               </Form>
@@ -364,7 +376,7 @@ export default function AdminCrmContact({ loaderData }: Route.ComponentProps) {
               Add tag
               <input className="field" name="tag" placeholder="AI" required />
             </label>
-            <button className="btn" disabled={busy}>
+            <button type="submit" className="btn" disabled={busy}>
               Add tag
             </button>
           </Form>
@@ -390,7 +402,7 @@ export default function AdminCrmContact({ loaderData }: Route.ComponentProps) {
               placeholder="Met at DevFlow 2026…"
             />
           </label>
-          <button className="btn primary" disabled={busy}>
+          <button type="submit" className="btn primary" disabled={busy}>
             Save note
           </button>
         </Form>
@@ -492,7 +504,7 @@ export default function AdminCrmContact({ loaderData }: Route.ComponentProps) {
                 ))}
               </select>
             </label>
-            <button className="btn primary" disabled={busy}>
+            <button type="submit" className="btn primary" disabled={busy}>
               Add prospect to event
             </button>
           </Form>
@@ -533,7 +545,7 @@ export default function AdminCrmContact({ loaderData }: Route.ComponentProps) {
                   Pipeline note
                   <textarea className="textarea" name="body" required />
                 </label>
-                <button className="btn" disabled={busy}>
+                <button type="submit" className="btn" disabled={busy}>
                   Save pipeline note
                 </button>
               </Form>
@@ -583,7 +595,7 @@ export default function AdminCrmContact({ loaderData }: Route.ComponentProps) {
                 Fit rationale
                 <textarea className="textarea" name="rationale" />
               </label>
-              <button className="btn primary" disabled={busy}>
+              <button type="submit" className="btn primary" disabled={busy}>
                 Enroll contact
               </button>
             </Form>

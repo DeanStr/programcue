@@ -199,6 +199,7 @@ function CanvasField({
         </small>
       ) : null}
       {selected ? (
+        // biome-ignore lint/a11y/useValidAnchor: This control both reveals the settings panel and navigates to its fragment.
         <a
           className="fb-canvas-edit-link"
           href="#form-builder-field-settings"

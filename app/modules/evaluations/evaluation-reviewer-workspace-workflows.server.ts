@@ -81,7 +81,7 @@ export class EvaluationReviewerWorkspaceWorkflows extends EvaluationServiceFound
 
   async getReviewerWorkbench(viewer: Viewer, selectedAssignmentId?: string) {
     return this.readAuthoritative(viewer, async () => {
-      let workspace;
+      let workspace: Awaited<ReturnType<typeof this.getReviewerWorkspaceD1>>;
       try {
         workspace = await this.getReviewerWorkspaceD1(
           viewer,
@@ -473,92 +473,93 @@ export class EvaluationReviewerWorkspaceWorkflows extends EvaluationServiceFound
         `Evaluation assignment ${selected.id} lost its source target.`,
       );
     }
-    let submissionView;
     let selectedSubmissionSnapshot: ReturnType<
       typeof requireSubmittedSnapshot
     > | null = null;
-    if (source.submissionId) {
-      const snapshot = requireSubmittedSnapshot(
-        source.submissionId,
-        source.submissionSnapshotJson,
-      );
-      selectedSubmissionSnapshot = snapshot;
-      const answers = selected.blindedReviewing
-        ? blindReviewerVisibleAnswers(snapshot)
-        : reviewerVisibleAnswers(snapshot.schema, snapshot.answers);
-      submissionView = {
-        sourceType: "submission" as const,
-        id: source.submissionId,
-        title:
-          summaryAnswer(answers.title) ??
-          (selected.blindedReviewing
-            ? "Blinded proposal"
-            : "Proposal title restricted"),
-        category: summaryAnswer(answers.category),
-        format: summaryAnswer(answers.format),
-        answers,
-        answerFields: snapshot.schema.fields
-          .filter((field) => Object.hasOwn(answers, field.id))
-          .map((field) => ({
-            id: field.id,
-            label: field.label,
-            value: answers[field.id],
-          })),
-        blindedReviewing: Boolean(selected.blindedReviewing),
-        submitterEmail: selected.blindedReviewing
-          ? null
-          : (snapshot.speakers[0]?.email ?? null),
-        speakerNames: selected.blindedReviewing
-          ? []
-          : snapshot.speakers.map((speaker) => speaker.name),
-      };
-    } else if (source.sessionId) {
-      const snapshot = requireSessionReviewSnapshot(
-        selected.id,
-        source.sessionSnapshotJson,
-      );
-      const sessionAnswers = {
-        description: selected.blindedReviewing
-          ? ""
-          : (snapshot.description ?? ""),
-        format: snapshot.format,
-        durationMinutes: snapshot.durationMinutes,
-        track: selected.blindedReviewing
-          ? "Unassigned"
-          : (snapshot.trackName ?? "Unassigned"),
-      };
-      submissionView = {
-        sourceType: "session" as const,
-        id: source.sessionId,
-        title: selected.blindedReviewing ? "Blinded session" : snapshot.title,
-        category: selected.blindedReviewing ? null : snapshot.trackName,
-        format: snapshot.format,
-        answers: sessionAnswers,
-        answerFields: [
-          {
-            id: "description",
-            label: "Description",
-            value: sessionAnswers.description,
-          },
-          { id: "format", label: "Format", value: sessionAnswers.format },
-          {
-            id: "durationMinutes",
-            label: "Duration",
-            value: `${sessionAnswers.durationMinutes} minutes`,
-          },
-          { id: "track", label: "Track", value: sessionAnswers.track },
-        ],
-        blindedReviewing: Boolean(selected.blindedReviewing),
-        submitterEmail: null,
-        speakerNames: selected.blindedReviewing
-          ? []
-          : snapshot.speakers.map((speaker) => speaker.name),
-      };
-    } else {
+    const submissionView = (() => {
+      if (source.submissionId) {
+        const snapshot = requireSubmittedSnapshot(
+          source.submissionId,
+          source.submissionSnapshotJson,
+        );
+        selectedSubmissionSnapshot = snapshot;
+        const answers = selected.blindedReviewing
+          ? blindReviewerVisibleAnswers(snapshot)
+          : reviewerVisibleAnswers(snapshot.schema, snapshot.answers);
+        return {
+          sourceType: "submission" as const,
+          id: source.submissionId,
+          title:
+            summaryAnswer(answers.title) ??
+            (selected.blindedReviewing
+              ? "Blinded proposal"
+              : "Proposal title restricted"),
+          category: summaryAnswer(answers.category),
+          format: summaryAnswer(answers.format),
+          answers,
+          answerFields: snapshot.schema.fields
+            .filter((field) => Object.hasOwn(answers, field.id))
+            .map((field) => ({
+              id: field.id,
+              label: field.label,
+              value: answers[field.id],
+            })),
+          blindedReviewing: Boolean(selected.blindedReviewing),
+          submitterEmail: selected.blindedReviewing
+            ? null
+            : (snapshot.speakers[0]?.email ?? null),
+          speakerNames: selected.blindedReviewing
+            ? []
+            : snapshot.speakers.map((speaker) => speaker.name),
+        };
+      }
+      if (source.sessionId) {
+        const snapshot = requireSessionReviewSnapshot(
+          selected.id,
+          source.sessionSnapshotJson,
+        );
+        const sessionAnswers = {
+          description: selected.blindedReviewing
+            ? ""
+            : (snapshot.description ?? ""),
+          format: snapshot.format,
+          durationMinutes: snapshot.durationMinutes,
+          track: selected.blindedReviewing
+            ? "Unassigned"
+            : (snapshot.trackName ?? "Unassigned"),
+        };
+        return {
+          sourceType: "session" as const,
+          id: source.sessionId,
+          title: selected.blindedReviewing ? "Blinded session" : snapshot.title,
+          category: selected.blindedReviewing ? null : snapshot.trackName,
+          format: snapshot.format,
+          answers: sessionAnswers,
+          answerFields: [
+            {
+              id: "description",
+              label: "Description",
+              value: sessionAnswers.description,
+            },
+            { id: "format", label: "Format", value: sessionAnswers.format },
+            {
+              id: "durationMinutes",
+              label: "Duration",
+              value: `${sessionAnswers.durationMinutes} minutes`,
+            },
+            { id: "track", label: "Track", value: sessionAnswers.track },
+          ],
+          blindedReviewing: Boolean(selected.blindedReviewing),
+          submitterEmail: null,
+          speakerNames: selected.blindedReviewing
+            ? []
+            : snapshot.speakers.map((speaker) => speaker.name),
+        };
+      }
       throw new Error(
         `Evaluation assignment ${selected.id} has no source target.`,
       );
-    }
+    })();
     return {
       assignments: reviewerAssignments,
       selected,

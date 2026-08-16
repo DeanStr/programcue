@@ -36,7 +36,7 @@ export function ScheduleDraftDialog({
           <Form method="post" onSubmit={close}>
             <input type="hidden" name="intent" value="create-draft" />
             <input type="hidden" name="intentId" value={workspace.intentId} />
-            <button className="btn primary" disabled={busy}>
+            <button type="submit" className="btn primary" disabled={busy}>
               {busy ? "Creating draft…" : "Confirm new draft"}
             </button>
           </Form>
@@ -290,6 +290,7 @@ export function SchedulePublicationDialog({
               value={workspace.version.revision}
             />
             <button
+              type="submit"
               className="btn primary"
               disabled={
                 publicContentVisibilityBlockers.length > 0 ||

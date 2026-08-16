@@ -778,7 +778,7 @@ export class SubmissionRevisionFinalizer {
       if (latest && latest.revision !== payload.revision) {
         throw new SubmissionRevisionConflictError();
       }
-      if (!latest || latest.status !== "submitted" || latest.hasAssignments) {
+      if (latest?.status !== "submitted" || latest.hasAssignments) {
         throw new SubmissionStateError(
           "Only a submitted application with no review in progress can be revised.",
         );

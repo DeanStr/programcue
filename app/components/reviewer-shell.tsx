@@ -50,7 +50,9 @@ export function ReviewerShell({
               className="review-demo-return"
             >
               <input type="hidden" name="identity" value="administrator" />
-              <button className="btn small">Return to organizer demo</button>
+              <button type="submit" className="btn small">
+                Return to organizer demo
+              </button>
             </form>
           ) : null}
         </div>

@@ -183,6 +183,7 @@ async function exportSnapshotHash(csvBytes: Uint8Array<ArrayBuffer>) {
 
 function spreadsheetSafe(value: CsvValue) {
   const text = value === null ? "" : String(value);
+  // biome-ignore lint/suspicious/noControlCharactersInRegex: Leading ASCII controls must not bypass spreadsheet-formula neutralization.
   return /^[\u0000-\u0020]*[=+\-@]/u.test(text) ? `'${text}` : text;
 }
 

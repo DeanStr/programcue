@@ -128,7 +128,7 @@ export async function loader({ request, context, params }: Route.LoaderArgs) {
       : null;
     const needsAccessChallenge =
       portal.form.accessMode !== "account_required" &&
-      (!portal.applicant || !portal.applicant.verified);
+      !portal.applicant?.verified;
     const needsUploadChallenge =
       portal.selected?.status === "draft" &&
       portal.selectedForm.version.schema.fields.some(

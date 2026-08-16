@@ -275,6 +275,7 @@ export function TemplateEditor({
         <div className="row-actions">
           <DraftRecoveryStatus state={recoveryState} />
           <button
+            type="submit"
             className="btn"
             name="intent"
             value="save-template"
@@ -286,6 +287,7 @@ export function TemplateEditor({
           </button>
           {selected?.versionStatus === "draft" ? (
             <button
+              type="submit"
               className="btn primary"
               name="intent"
               value="publish-template"

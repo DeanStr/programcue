@@ -38,7 +38,7 @@ export const requiredBrandSchemaObjects = new Map([
 ]);
 
 function successfulResults(result, label) {
-  if (!result || result.success !== true || !Array.isArray(result.results)) {
+  if (result?.success !== true || !Array.isArray(result.results)) {
     throw new Error(`Remote D1 ${label} query did not succeed.`);
   }
   return result.results;

@@ -231,7 +231,7 @@ export default function AdminCrmOutreach({ loaderData }: Route.ComponentProps) {
             The next screen resolves the exact per-recipient preview before
             anything is queued.
           </p>
-          <button className="btn primary" disabled={busy}>
+          <button type="submit" className="btn primary" disabled={busy}>
             {busy
               ? "Creating durable draft…"
               : "Create draft and preview recipients"}

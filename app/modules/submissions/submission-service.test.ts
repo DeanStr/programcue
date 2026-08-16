@@ -138,15 +138,18 @@ it("supports every protected Event Setup choice in a form", async () => {
   await ensureDemoData(testEnv);
   const service = new SubmissionService(testEnv);
   const input = await service.getDefaultFormInput(viewer);
+  const formatKeys = input.routing.formatKeys;
+  if (!formatKeys) throw new Error("Default form format routing is missing.");
   const existingTracks = input.schema.fields
     .find((field) => field.id === "category")!
     .options.map((name) => ({ id: input.routing.trackIds[name]!, name }));
   const existingFormats = input.schema.fields
     .find((field) => field.id === "format")!
-    .options.map((label) => ({
-      key: input.routing.formatKeys?.[label]!,
-      label,
-    }));
+    .options.map((label) => {
+      const key = formatKeys[label];
+      if (!key) throw new Error(`Default format ${label} has no routing key.`);
+      return { key, label };
+    });
   const tracks = [
     ...existingTracks,
     ...Array.from({ length: 100 - existingTracks.length }, (_, index) => ({

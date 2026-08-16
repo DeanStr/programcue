@@ -45,7 +45,7 @@ export class ParticipantTaskWorkflowFoundation extends TaskServiceFoundation {
   async assertFileEvidenceUploadAllowed(viewer: Viewer, taskId: string) {
     await this.airtable.assertReadable(viewer);
     const task = await this.participantTask(viewer, taskId);
-    if (!task || task.taskType !== "file_upload")
+    if (task?.taskType !== "file_upload")
       throw new TaskStateError(
         "File task not found or not owned by this speaker.",
       );

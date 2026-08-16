@@ -182,6 +182,7 @@ export function EvaluationRoundsPanel() {
                   </label>
                   <RubricFields criteria={round.criteria} />
                   <button
+                    type="submit"
                     className="btn"
                     disabled={navigation.state !== "idle"}
                   >
@@ -321,6 +322,7 @@ export function EvaluationRoundsPanel() {
                   ))}
                 </select>
                 <button
+                  type="submit"
                   className="btn small"
                   name="operation"
                   value="add"
@@ -413,6 +415,7 @@ export function EvaluationRoundsPanel() {
                         )}
                       </select>
                       <button
+                        type="submit"
                         className="btn small"
                         disabled={navigation.state !== "idle"}
                       >

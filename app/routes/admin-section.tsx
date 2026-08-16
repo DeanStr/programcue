@@ -214,6 +214,7 @@ export default function AdminSection({ loaderData }: Route.ComponentProps) {
             </p>
             <div
               className="table-wrap programme-table-wrap"
+              role="region"
               tabIndex={0}
               aria-label="Programme records. Scroll horizontally to see all columns."
             >

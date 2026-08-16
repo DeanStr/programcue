@@ -101,7 +101,11 @@ export function EvaluationProgressionPanel() {
               Hide author and co-author identity from reviewers in this round
             </span>
           </label>
-          <button className="btn" disabled={navigation.state !== "idle"}>
+          <button
+            type="submit"
+            className="btn"
+            disabled={navigation.state !== "idle"}
+          >
             Add next round
           </button>
         </Form>

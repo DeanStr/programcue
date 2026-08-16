@@ -86,7 +86,7 @@ function CalendarAction({
         name="idempotencyKey"
         value={lifecycleKey(target, method, provider)}
       />
-      <button className="btn small" disabled={working}>
+      <button type="submit" className="btn small" disabled={working}>
         {method === "CANCEL"
           ? "Cancel invitation"
           : provider === "email_ics"
@@ -185,7 +185,11 @@ export function CalendarAdministration({
                             name="connectionId"
                             value={connection.id}
                           />
-                          <button className="btn small" disabled={working}>
+                          <button
+                            type="submit"
+                            className="btn small"
+                            disabled={working}
+                          >
                             {working && pendingIntent === "refresh-calendar"
                               ? "Refreshing…"
                               : "Refresh token"}
@@ -224,7 +228,11 @@ export function CalendarAdministration({
                             name="connectionId"
                             value={connection.id}
                           />
-                          <button className="btn small" disabled={working}>
+                          <button
+                            type="submit"
+                            className="btn small"
+                            disabled={working}
+                          >
                             Disconnect
                           </button>
                         </Form>
@@ -346,7 +354,11 @@ export function CalendarAdministration({
                               name="invitationId"
                               value={target.invitationId}
                             />
-                            <button className="btn small" disabled={working}>
+                            <button
+                              type="submit"
+                              className="btn small"
+                              disabled={working}
+                            >
                               Reconcile RSVP
                             </button>
                           </Form>

@@ -107,7 +107,7 @@ export class SubmissionDraftFinalizer {
           "Choose one configured format before creating the direct session.",
         );
       }
-      let configuredFormat;
+      let configuredFormat: ReturnType<typeof findSessionFormatConfiguration>;
       try {
         configuredFormat = findSessionFormatConfiguration(
           parseSessionFormatsConfiguration(event.sessionFormatsJson),

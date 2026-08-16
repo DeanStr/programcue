@@ -81,6 +81,7 @@ export function AcceptedSpeakerInvitationsPanel() {
                         value={invitation.expiresAt}
                       />
                       <button
+                        type="submit"
                         className="btn small"
                         disabled={navigation.state !== "idle"}
                       >

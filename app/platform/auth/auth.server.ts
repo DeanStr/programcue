@@ -154,7 +154,7 @@ export async function trustedParticipantOAuthProviders(
   environment: CloudflareEnvironment,
   request?: Request,
 ) {
-  if (!request || request.method !== "GET") return [];
+  if (request?.method !== "GET") return [];
   const url = new URL(request.url);
   if (url.pathname !== MICROSOFT_AUTH_CALLBACK_PATH) return [];
   const state = url.searchParams.get("state") ?? "";

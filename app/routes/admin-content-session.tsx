@@ -220,7 +220,7 @@ export default function AdminContentSession({
               <input type="checkbox" name="confirmed" value="true" required />
               Apply this exact status to the current content revision
             </label>
-            <button className="btn primary">
+            <button type="submit" className="btn primary">
               <CheckCircle2 aria-hidden size={15} /> Change status
             </button>
           </Form>
@@ -351,7 +351,7 @@ export default function AdminContentSession({
                         Restore exactly this title, description, track, format,
                         duration, visibility and resource set
                       </label>
-                      <button className="btn">
+                      <button type="submit" className="btn">
                         <RotateCcw aria-hidden size={15} /> Restore as new draft
                       </button>
                     </Form>

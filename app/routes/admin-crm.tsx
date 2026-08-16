@@ -210,7 +210,11 @@ export default function AdminCrm({ loaderData }: Route.ComponentProps) {
         </div>
       </div>
 
-      <div className="grid grid-4 mb" aria-label="Speaker Network overview">
+      <div
+        className="grid grid-4 mb"
+        role="region"
+        aria-label="Speaker Network overview"
+      >
         <section className="card metric">
           <div className="label">Total contacts</div>
           <div className="value">{dashboard.totalContacts}</div>
@@ -346,6 +350,7 @@ export default function AdminCrm({ loaderData }: Route.ComponentProps) {
         {filtersActive ? (
           <div
             className="crm-chip-row mt"
+            role="group"
             aria-label="Active directory filters"
           >
             {Object.entries(directory.filters)
@@ -517,7 +522,7 @@ export default function AdminCrm({ loaderData }: Route.ComponentProps) {
               Biography
               <textarea className="textarea" name="biography" />
             </label>
-            <button className="btn primary" disabled={busy}>
+            <button type="submit" className="btn primary" disabled={busy}>
               Create speaker contact
             </button>
           </Form>
@@ -551,7 +556,7 @@ export default function AdminCrm({ loaderData }: Route.ComponentProps) {
               Accepted columns: name, email, title, company and bio. Import is
               previewed before it writes.
             </p>
-            <button className="btn" disabled={busy}>
+            <button type="submit" className="btn" disabled={busy}>
               Preview import
             </button>
           </Form>
@@ -618,7 +623,7 @@ export default function AdminCrm({ loaderData }: Route.ComponentProps) {
                     name="csv"
                     value={actionData.importPreview.csv}
                   />
-                  <button className="btn primary" disabled={busy}>
+                  <button type="submit" className="btn primary" disabled={busy}>
                     Confirm import
                   </button>
                 </Form>
@@ -651,7 +656,7 @@ export default function AdminCrm({ loaderData }: Route.ComponentProps) {
                 required
               />
             </label>
-            <button className="btn primary" disabled={busy}>
+            <button type="submit" className="btn primary" disabled={busy}>
               Save dynamic segment
             </button>
           </Form>

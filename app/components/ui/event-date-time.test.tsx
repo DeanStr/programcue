@@ -27,8 +27,9 @@ describe("event timestamp presentation", () => {
       'data-exact-time="November 7, 2027 at 1:30:00 AM EST (America/Toronto)"',
     );
     expect(markup).toContain(
-      'aria-label="November 7, 2027 at 1:30:00 AM EST (America/Toronto)"',
+      '<span class="sr-only">November 7, 2027 at 1:30:00 AM EST (America/Toronto)</span>',
     );
+    expect(markup).toContain('<span aria-hidden="true">1:30 AM</span>');
     expect(markup).toContain('tabindex="0"');
   });
 

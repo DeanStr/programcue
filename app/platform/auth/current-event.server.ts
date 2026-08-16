@@ -451,7 +451,7 @@ export async function loadCurrentEventAdminShellContext(
       }>(),
   ]);
 
-  if (!row || !row.eventExists)
+  if (!row?.eventExists)
     throw new Error(
       "The authorised current event no longer belongs to its organisation.",
     );

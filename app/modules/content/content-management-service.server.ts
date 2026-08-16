@@ -965,7 +965,7 @@ export class ContentManagementService {
         404,
       );
     }
-    if (!workspace.version || workspace.version.status !== "draft") {
+    if (workspace.version?.status !== "draft") {
       throw new ContentManagementStateError(
         "Create a draft schedule before restoring content.",
       );

@@ -131,7 +131,7 @@ export async function buildCoSpeakerInvitationPlan(
       "Configure the event venue or mailing address before co-speaker invitations can be created.",
     );
   }
-  let emailProvider;
+  let emailProvider: ReturnType<typeof requireEmailProviderConfiguration>;
   try {
     emailProvider = requireEmailProviderConfiguration(env);
   } catch (error) {

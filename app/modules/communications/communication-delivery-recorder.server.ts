@@ -97,7 +97,7 @@ export abstract class CommunicationDeliveryRecorder extends CommunicationDeliver
       throw new CommunicationStateError(
         "A verified sender profile is required before sending.",
       );
-    let emailProvider;
+    let emailProvider: ReturnType<typeof requireEmailProviderConfiguration>;
     try {
       emailProvider = requireEmailProviderConfiguration(this.env);
     } catch (error) {

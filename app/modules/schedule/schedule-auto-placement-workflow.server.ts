@@ -163,7 +163,7 @@ export class ScheduleAutoPlacementWorkflow {
 
   async preview(viewer: ScheduleEventScope): Promise<AutoPlacementPreview> {
     const workspace = await this.getWorkspace(viewer);
-    if (!workspace.version || workspace.version.status !== "draft") {
+    if (workspace.version?.status !== "draft") {
       throw new ScheduleNotFoundError(
         "Auto-place assistance requires an active draft schedule. Create the next draft before placing sessions.",
       );

@@ -259,6 +259,7 @@ export function ApplicantPreviewPanel({
                       ) : null}
                     </fieldset>
                   ) : (
+                    // biome-ignore lint/a11y/noLabelWithoutControl: FieldPreview renders the wrapped input, select, or textarea.
                     <label className="label" key={field.id}>
                       {field.label}
                       {field.required ? " *" : ""}

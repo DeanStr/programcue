@@ -78,7 +78,7 @@ export function AdminTaskPlanPanel({
             I confirm these forms should be created and automatically assigned
             to speakers when a submission is accepted.
           </label>
-          <button className="btn primary" disabled={busy}>
+          <button type="submit" className="btn primary" disabled={busy}>
             <Plus aria-hidden size={15} /> Create travel forms
           </button>
         </Form>
@@ -129,6 +129,7 @@ export function AdminTaskPlanPanel({
             </select>
           </label>
           <button
+            type="submit"
             className="btn primary"
             disabled={
               !assignableTemplates.length || !assignmentTargets.length || busy
@@ -360,7 +361,7 @@ export function AdminTaskPlanPanel({
               </div>
             </fieldset>
           ) : null}
-          <button className="btn primary">
+          <button type="submit" className="btn primary">
             <Plus aria-hidden size={15} /> Create template
           </button>
         </Form>

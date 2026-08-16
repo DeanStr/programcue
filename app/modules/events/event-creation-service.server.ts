@@ -620,8 +620,7 @@ export class EventCreationService {
     }
     const converged = await this.loadOperation(operationId);
     if (
-      !converged ||
-      converged.status !== "failed" ||
+      converged?.status !== "failed" ||
       !converged.resultJson ||
       parseStoredOperationResult(converged.resultJson).failureCode !==
         EVENT_CREATION_STALLED_CODE

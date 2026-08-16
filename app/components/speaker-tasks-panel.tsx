@@ -341,6 +341,7 @@ export function SpeakerTasksPanel({
                               );
                             }
                             return (
+                              // biome-ignore lint/a11y/noLabelWithoutControl: The conditional branch renders a wrapped input or textarea.
                               <label className="label" key={field.id}>
                                 {field.label}
                                 {field.type === "long_text" ? (
@@ -387,7 +388,11 @@ export function SpeakerTasksPanel({
                           confirm this requirement
                         </label>
                       )}
-                      <button className="btn primary" disabled={busy}>
+                      <button
+                        type="submit"
+                        className="btn primary"
+                        disabled={busy}
+                      >
                         <CheckCircle2 aria-hidden size={15} /> Complete task
                       </button>
                     </Form>

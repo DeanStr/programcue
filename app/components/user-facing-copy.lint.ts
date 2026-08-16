@@ -321,6 +321,7 @@ describe("copy detection", () => {
 
   it("reads an interpolated sentence in a template literal", () => {
     expect(
+      // biome-ignore lint/suspicious/noTemplateCurlyInString: This literal is source-code input for the lint fixture.
       flagged("const m = `Saved to D1 as revision ${revision}.`;"),
     ).toEqual(["Saved to D1 as revision ."]);
   });

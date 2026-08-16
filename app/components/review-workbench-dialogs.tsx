@@ -291,7 +291,11 @@ export function ReviewConflictDialog() {
           The review will be recused and returned to the committee for
           reassignment.
         </p>
-        <button className="btn danger" disabled={fetcher.state !== "idle"}>
+        <button
+          type="submit"
+          className="btn danger"
+          disabled={fetcher.state !== "idle"}
+        >
           {fetcher.state === "submitting" ? "Declaring…" : "Declare and recuse"}
         </button>
       </fetcher.Form>

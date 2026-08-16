@@ -99,7 +99,7 @@ export function EvaluationDiscussionPanel() {
             />
           </label>
           <div className="page-actions">
-            <button className="btn primary" disabled={adding}>
+            <button type="submit" className="btn primary" disabled={adding}>
               {adding ? "Adding…" : "Add message"}
             </button>
             <Link

@@ -159,7 +159,7 @@ export default function AdminCrmPipeline({ loaderData }: Route.ComponentProps) {
                 <input className="field" name="rationale" />
               </label>
             </div>
-            <button className="btn primary" disabled={busy}>
+            <button type="submit" className="btn primary" disabled={busy}>
               Enroll contact
             </button>
           </Form>
@@ -219,7 +219,7 @@ export default function AdminCrmPipeline({ loaderData }: Route.ComponentProps) {
                         ))}
                       </select>
                     </label>
-                    <button className="btn" disabled={busy}>
+                    <button type="submit" className="btn" disabled={busy}>
                       Move card
                     </button>
                   </Form>

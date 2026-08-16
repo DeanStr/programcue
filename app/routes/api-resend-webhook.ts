@@ -92,7 +92,7 @@ export async function action({ request, context }: Route.ActionArgs) {
       { status: 400 },
     );
   }
-  let result;
+  let result: Awaited<ReturnType<CommunicationService["reconcileResendEvent"]>>;
   try {
     result = await new CommunicationService(env).reconcileResendEvent(
       payload,

@@ -339,6 +339,7 @@ export function OperationsListPanel({
                             value={operation.id}
                           />
                           <button
+                            type="submit"
                             className="btn small"
                             disabled={navigation.state !== "idle"}
                           >
@@ -381,6 +382,7 @@ export function OperationsListPanel({
                             value={operation.id}
                           />
                           <button
+                            type="submit"
                             className="btn small danger"
                             disabled={navigation.state !== "idle"}
                           >
@@ -420,6 +422,7 @@ export function OperationsListPanel({
                             value={operation.id}
                           />
                           <button
+                            type="submit"
                             className="btn small"
                             disabled={navigation.state !== "idle"}
                           >
@@ -621,6 +624,7 @@ export function OperationDetailPanel({
                                   value={item.id}
                                 />
                                 <button
+                                  type="submit"
                                   className="btn small"
                                   aria-label={`Retry ${label}`}
                                   disabled={navigation.state !== "idle"}
@@ -672,6 +676,7 @@ export function OperationDetailPanel({
                                   />
                                 </label>
                                 <button
+                                  type="submit"
                                   className="btn small danger"
                                   aria-label={`Skip ${label}`}
                                   disabled={navigation.state !== "idle"}

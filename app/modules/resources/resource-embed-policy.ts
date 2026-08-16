@@ -79,6 +79,7 @@ const externalEmbedSchema = z.discriminatedUnion("provider", [
         .trim()
         .min(3, "Enter a venue, address or map search.")
         .max(300)
+        // biome-ignore lint/suspicious/noControlCharactersInRegex: Map queries explicitly reject ASCII control characters.
         .refine((value) => !/[\u0000-\u001f\u007f]/u.test(value), {
           message: "The map query contains unsupported control characters.",
         }),

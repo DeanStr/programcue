@@ -97,7 +97,7 @@ export class ParticipantTaskEvidenceCommands extends ParticipantTaskWorkflowFoun
   ) {
     const input = completedFileEvidenceAttachmentSchema.parse(rawInput);
     const ownedTask = await this.participantTask(viewer, input.taskId);
-    if (!ownedTask || ownedTask.taskType !== "file_upload")
+    if (ownedTask?.taskType !== "file_upload")
       throw new TaskStateError(
         "File task not found or not owned by this speaker.",
       );
@@ -133,8 +133,7 @@ export class ParticipantTaskEvidenceCommands extends ParticipantTaskWorkflowFoun
       return { ...input, duplicate: true, webhookWarning };
     }
     if (
-      !asset ||
-      asset.uploadStatus !== "uploaded" ||
+      asset?.uploadStatus !== "uploaded" ||
       asset.signatureStatus !== "valid" ||
       !["pending", "clean"].includes(asset.scanStatus)
     )

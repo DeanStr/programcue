@@ -64,13 +64,15 @@ export function EventDateTime({
       className={["pc-event-time", className].filter(Boolean).join(" ")}
       dateTime={new Date(epochSeconds * 1_000).toISOString()}
       data-exact-time={disclosure}
-      aria-label={disclosure}
       tabIndex={focusable ? 0 : undefined}
     >
-      {children ?? exact}
-      {showTimeZone ? (
-        <small className="pc-event-time-zone"> {timeZone}</small>
-      ) : null}
+      <span aria-hidden="true">
+        {children ?? exact}
+        {showTimeZone ? (
+          <small className="pc-event-time-zone"> {timeZone}</small>
+        ) : null}
+      </span>
+      <span className="sr-only">{disclosure}</span>
     </time>
   );
 }

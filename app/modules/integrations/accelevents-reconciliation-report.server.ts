@@ -132,6 +132,7 @@ function iso(epoch: number | null) {
 
 function csvCell(value: CsvValue) {
   const raw = value === null ? "" : String(value);
+  // biome-ignore lint/suspicious/noControlCharactersInRegex: Leading ASCII controls must not bypass spreadsheet-formula neutralization.
   const safe = /^[\u0000-\u0020]*[=+\-@]/u.test(raw) ? `'${raw}` : raw;
   return /[",\r\n]/u.test(safe) ? `"${safe.replaceAll('"', '""')}"` : safe;
 }

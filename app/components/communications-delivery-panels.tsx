@@ -152,7 +152,7 @@ export function DeliveryConfiguration({
                 <input className="field" name="replyToEmail" type="email" />
               </label>
             </div>
-            <button className="btn" disabled={working}>
+            <button type="submit" className="btn" disabled={working}>
               {working && pendingIntent === "save-sender"
                 ? "Saving…"
                 : localCapture
@@ -208,7 +208,11 @@ export function DeliveryConfiguration({
                                 name="senderProfileId"
                                 value={sender.id}
                               />
-                              <button className="btn small" disabled={working}>
+                              <button
+                                type="submit"
+                                className="btn small"
+                                disabled={working}
+                              >
                                 Check Resend
                               </button>
                             </Form>
@@ -228,7 +232,11 @@ export function DeliveryConfiguration({
                               name="senderProfileId"
                               value={sender.id}
                             />
-                            <button className="btn small" disabled={working}>
+                            <button
+                              type="submit"
+                              className="btn small"
+                              disabled={working}
+                            >
                               {sender.status === "disabled"
                                 ? "Enable"
                                 : "Disable"}
@@ -284,7 +292,11 @@ export function DeliveryConfiguration({
                                   defaultValue={sender.replyToEmail ?? ""}
                                 />
                               </label>
-                              <button className="btn small" disabled={working}>
+                              <button
+                                type="submit"
+                                className="btn small"
+                                disabled={working}
+                              >
                                 Save changes
                               </button>
                             </Form>
@@ -343,6 +355,7 @@ export function DeliveryConfiguration({
                 <span className="help">{testSendBlocker}</span>
               ) : null}
               <button
+                type="submit"
                 className="btn primary"
                 disabled={working || Boolean(testSendBlocker)}
               >
@@ -456,6 +469,7 @@ export function CommunicationAutomation({
             </span>
           )}
           <button
+            type="submit"
             className="btn"
             disabled={working || !reminderTemplates.length}
           >
@@ -507,7 +521,11 @@ export function CommunicationAutomation({
                         name="triggerId"
                         value={trigger.id}
                       />
-                      <button className="btn small" disabled={working}>
+                      <button
+                        type="submit"
+                        className="btn small"
+                        disabled={working}
+                      >
                         {trigger.enabled ? "Disable" : "Enable"}
                       </button>
                     </Form>
@@ -550,6 +568,7 @@ export function SenderDnsRecords({ records }: { records: SenderDnsRecordSet }) {
       {records.readable.length ? (
         <div
           className="table-wrap mt"
+          role="region"
           tabIndex={0}
           aria-label="DNS records to add"
         >

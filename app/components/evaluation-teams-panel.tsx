@@ -79,6 +79,7 @@ export function EvaluationTeamsPanel() {
               </select>
             </label>
             <button
+              type="submit"
               className="btn primary"
               disabled={navigation.state !== "idle"}
             >
@@ -232,6 +233,7 @@ export function EvaluationTeamsPanel() {
                         value={member.role}
                       />
                       <button
+                        type="submit"
                         className="btn small"
                         name="operation"
                         value="remove"
@@ -270,6 +272,7 @@ export function EvaluationTeamsPanel() {
                   <option value="chair">Chair</option>
                 </select>
                 <button
+                  type="submit"
                   className="btn small"
                   name="operation"
                   value="add"
@@ -331,7 +334,11 @@ export function EvaluationTeamsPanel() {
                     <option value="archived">Archived</option>
                   </select>
                 </label>
-                <button className="btn" disabled={navigation.state !== "idle"}>
+                <button
+                  type="submit"
+                  className="btn"
+                  disabled={navigation.state !== "idle"}
+                >
                   Save team
                 </button>
               </Form>
@@ -366,6 +373,7 @@ export function EvaluationTeamsPanel() {
             </select>
           </label>
           <button
+            type="submit"
             className="btn primary"
             disabled={navigation.state !== "idle"}
           >

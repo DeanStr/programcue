@@ -622,7 +622,9 @@ export function EvaluationSubmissionQueue() {
                               ) : null;
                             })}
                           </select>
-                          <button className="btn small">Assign</button>
+                          <button type="submit" className="btn small">
+                            Assign
+                          </button>
                         </Form>
                       ) : (
                         <span className="help">

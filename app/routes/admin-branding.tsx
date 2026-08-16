@@ -641,6 +641,7 @@ export default function AdminBranding({ loaderData }: Route.ComponentProps) {
         <div className="branding-preview-stack">
           <div
             className="branding-preview-toolbar"
+            role="group"
             aria-label="Preview viewport"
           >
             <button

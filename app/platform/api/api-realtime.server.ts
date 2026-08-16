@@ -43,7 +43,7 @@ export async function recordApiChange(
   input: RecordEventChangeInput,
 ): Promise<ApiRealtimeResult> {
   const service = new EventRealtimeService(env);
-  let change;
+  let change: Awaited<ReturnType<EventRealtimeService["commitChange"]>>;
   try {
     change = await service.commitChange(principal, input);
   } catch (error) {

@@ -41,21 +41,12 @@
       "preset": "recommended",
       // Explicit pre-adoption debt. Remove entries in focused, tested batches.
       "a11y": {
-        "noAriaHiddenOnFocusable": "off",
-        "noAutofocus": "off",
-        "noLabelWithoutControl": "off",
-        "noNoninteractiveElementToInteractiveRole": "off",
         "noNoninteractiveTabindex": "off",
-        "noSvgWithoutTitle": "off",
-        "useAriaPropsSupportedByRole": "off",
-        "useButtonType": "off",
         "useSemanticElements": "off",
-        "useValidAnchor": "off",
       },
       "complexity": {
         "noImportantStyles": "off",
         "noStaticOnlyClass": "off",
-        "useOptionalChain": "off",
       },
       "correctness": {
         "useExhaustiveDependencies": "off",
@@ -68,13 +59,8 @@
       "suspicious": {
         "noArrayIndexKey": "off",
         "noConfusingVoidType": "off",
-        "noControlCharactersInRegex": "off",
         "noDocumentCookie": "off",
         "noExplicitAny": "off",
-        "noImplicitAnyLet": "off",
-        "noNonNullAssertedOptionalChain": "off",
-        "noRedundantUseStrict": "off",
-        "noTemplateCurlyInString": "off",
       },
     },
   },

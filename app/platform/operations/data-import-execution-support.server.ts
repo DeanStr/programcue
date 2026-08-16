@@ -330,9 +330,7 @@ export class DataImportExecutionSupport {
         return (
           stale ||
           (values.submitterPersonId !== null &&
-            (!submitter ||
-              !submitter.linked ||
-              submitter.id !== values.submitterPersonId))
+            (!submitter?.linked || submitter.id !== values.submitterPersonId))
         );
       }
       if (resource === "sessions") {
@@ -406,7 +404,7 @@ export class DataImportExecutionSupport {
             current.safeSubmittedEvidence !==
               values.expectedSafeSubmittedEvidence) ||
         (values.ownerPersonId !== null &&
-          (!owner || !owner.linked || owner.id !== values.ownerPersonId)) ||
+          (!owner?.linked || owner.id !== values.ownerPersonId)) ||
         !targetExists
       );
     });

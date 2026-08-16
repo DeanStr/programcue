@@ -452,8 +452,7 @@ export class EvaluationServiceFoundation {
       idempotencyActor = actor;
     }
     if (
-      !command ||
-      !command.idempotencyKey.trim() ||
+      !command?.idempotencyKey.trim() ||
       command.idempotencyKey.length > 255 ||
       !command.requestHash.trim() ||
       command.requestHash.length > 255

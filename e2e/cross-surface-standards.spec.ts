@@ -95,7 +95,10 @@ test.describe
         "data-exact-time",
         /America\/Toronto/,
       );
-      await expect(eventTime).toHaveAttribute("aria-label", /America\/Toronto/);
+      await expect(eventTime.locator(".sr-only")).toHaveText(
+        /America\/Toronto/,
+      );
+      await expect(eventTime).toHaveAttribute("tabindex", "0");
     });
 
     test("a likely existing speaker requires review before direct-session creation", async ({

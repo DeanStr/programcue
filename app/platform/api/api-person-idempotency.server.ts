@@ -125,7 +125,7 @@ export class ApiPersonIdempotencyService {
         options.scope,
         options.idempotencyKey,
       );
-      if (!converged || converged.status !== "completed") {
+      if (converged?.status !== "completed") {
         throw new Error(
           "The API command committed, but its durable result could not be recorded.",
         );

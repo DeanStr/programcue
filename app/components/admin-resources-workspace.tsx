@@ -271,7 +271,7 @@ function ResourceAuthoringPanel() {
   return (
     <div className="resource-authoring-grid">
       <div>
-        <label className="label">Page content</label>
+        <div className="label">Page content</div>
         <RichResourceEditor
           key={editorKey}
           document={document}
@@ -389,7 +389,11 @@ function ResourceEditorActions() {
       </span>
       <DraftRecoveryStatus state={recovery.state} />
       <span className="spacer" />
-      <button className="btn primary" disabled={navigation.state !== "idle"}>
+      <button
+        type="submit"
+        className="btn primary"
+        disabled={navigation.state !== "idle"}
+      >
         {navigation.state === "submitting" && pendingIntent === "save"
           ? "Saving…"
           : "Save draft version"}

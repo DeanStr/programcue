@@ -560,7 +560,7 @@ export default function CommunicationComposer({
                 eventTimezone={loaderData.eventTimezone}
                 eventStartDate={loaderData.eventStartDate}
               />
-              <button className="btn primary" disabled={working}>
+              <button type="submit" className="btn primary" disabled={working}>
                 <FilePenLine aria-hidden size={16} />
                 {working ? "Saving…" : "Create durable draft"}
               </button>
@@ -604,7 +604,7 @@ export default function CommunicationComposer({
                 eventStartDate={loaderData.eventStartDate}
               />
               <div className="row-actions">
-                <button className="btn" disabled={working}>
+                <button type="submit" className="btn" disabled={working}>
                   {working && pendingIntent === "save-draft"
                     ? "Saving…"
                     : "Save and continue"}
@@ -627,6 +627,7 @@ export default function CommunicationComposer({
             <Form method="post">
               <input type="hidden" name="intent" value="preview-draft" />
               <button
+                type="submit"
                 className="btn primary"
                 disabled={working || configurationDirty}
               >
@@ -675,7 +676,7 @@ export default function CommunicationComposer({
           >
             <input type="hidden" name="intent" value="discard-draft" />
             <input type="hidden" name="revision" value={draft.revision} />
-            <button className="btn danger" disabled={working}>
+            <button type="submit" className="btn danger" disabled={working}>
               <Trash2 aria-hidden size={16} /> Discard draft
             </button>
           </Form>

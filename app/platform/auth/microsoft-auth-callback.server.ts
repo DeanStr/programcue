@@ -190,6 +190,7 @@ function boundedCallbackPayload(body: URLSearchParams, relayId: string) {
     (code.length > 0 && !OAUTH_CODE_PATTERN.test(code)) ||
     (error.length > 0 && !OAUTH_ERROR_PATTERN.test(error)) ||
     errorDescription.length > MAXIMUM_ERROR_DESCRIPTION_LENGTH ||
+    // biome-ignore lint/suspicious/noControlCharactersInRegex: OAuth relay text explicitly rejects ASCII control characters.
     /[\u0000-\u001F\u007F]/u.test(errorDescription)
   ) {
     throw new MicrosoftCallbackRelayError();

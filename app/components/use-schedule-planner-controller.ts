@@ -431,12 +431,7 @@ export function useSchedulePlannerController(
   }
 
   function place(event: DragEndEvent) {
-    if (
-      !workspace.version ||
-      workspace.version.status !== "draft" ||
-      !event.over
-    )
-      return;
+    if (workspace.version?.status !== "draft" || !event.over) return;
     const sessionId = String(event.active.data.current?.sessionId ?? "");
     const roomId = String(event.over.data.current?.roomId ?? "");
     const startsAt = Number(event.over.data.current?.startsAt);
@@ -463,7 +458,7 @@ export function useSchedulePlannerController(
   }
 
   function unassign(entry: ScheduleWorkspace["entries"][number]) {
-    if (!workspace.version || workspace.version.status !== "draft") return;
+    if (workspace.version?.status !== "draft") return;
     void fetcher.submit(
       {
         intent: "unassign",
@@ -480,8 +475,7 @@ export function useSchedulePlannerController(
     durationMinutes: number,
   ) {
     if (
-      !workspace.version ||
-      workspace.version.status !== "draft" ||
+      workspace.version?.status !== "draft" ||
       !Number.isInteger(durationMinutes) ||
       durationMinutes < 5 ||
       durationMinutes > 480
@@ -507,8 +501,7 @@ export function useSchedulePlannerController(
     endsAt: number,
   ) {
     if (
-      !workspace.version ||
-      workspace.version.status !== "draft" ||
+      workspace.version?.status !== "draft" ||
       !Number.isInteger(startsAt) ||
       !Number.isInteger(endsAt) ||
       endsAt <= startsAt

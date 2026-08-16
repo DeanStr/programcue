@@ -115,7 +115,7 @@ export function assertPublishedSpeakerGraphIntegrity(
   for (const speaker of speakers) {
     for (const sessionId of speaker.sessionIds) {
       const session = sessionById.get(sessionId);
-      if (!session || !session.speakerIds.includes(speaker.id)) {
+      if (!session?.speakerIds.includes(speaker.id)) {
         throw new PublishedProgrammeSpeakerInvariantError(
           versionId,
           `speaker ${speaker.id} links invalid session ${sessionId}`,

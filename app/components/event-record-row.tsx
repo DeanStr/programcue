@@ -37,6 +37,7 @@ export function RecordField({
   children: ReactNode;
 }) {
   return (
+    // biome-ignore lint/a11y/noLabelWithoutControl: The caller supplies the wrapped form control through children.
     <label className="label event-record-field">
       <span
         className="event-record-caption"

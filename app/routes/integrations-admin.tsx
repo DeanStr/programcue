@@ -370,6 +370,7 @@ export default function IntegrationsAdmin({
           {loaderData.preview.items.length ? (
             <div
               className="table-wrap"
+              role="region"
               tabIndex={0}
               aria-label="Accelevents export preview"
             >

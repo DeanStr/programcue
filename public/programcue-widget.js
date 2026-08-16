@@ -1,6 +1,4 @@
 (function mountProgramCueWidget() {
-  "use strict";
-
   var script = document.currentScript;
   if (!(script instanceof HTMLScriptElement)) {
     throw new Error("Program Cue widget must be loaded from a script element.");
@@ -117,8 +115,7 @@
       return;
     var message = event.data;
     if (
-      !message ||
-      message.type !== "programcue:resize" ||
+      message?.type !== "programcue:resize" ||
       message.eventSlug !== slug ||
       !Number.isFinite(message.height)
     )
