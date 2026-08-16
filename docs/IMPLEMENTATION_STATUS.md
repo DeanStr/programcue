@@ -334,11 +334,12 @@ Expired-lease races converge only on terminal operations carrying the matching
 audit. Missing database aggregate rows and provider model attribution now fail
 explicitly rather than
 defaulting to zero or the configured request model. Reviewer-AI audit families
-are classified under Evaluation activity. This is repository evidence only and
-has not been deployed. Final validation on 16 August 2026 passed the complete
+are classified under Evaluation activity. The source is deployed in production
+revision `ad9b752`; a fresh live reviewer-AI provider request remains separate
+acceptance. Final validation on 16 August 2026 passed the complete
 core gate (63 unit files/352 tests, 173 Workerd files/1,419 tests and the Agent
 test), the 101-table/124-index/124-trigger migration and recovery contracts
-(including a populated `0034` to `0035` forward upgrade), and
+(including a populated `0034` to `0036` forward upgrade), and
 the new pull-request browser command (19 application tests across two isolated
 Chromium shards plus 14 public-site desktop/mobile tests).
 
@@ -398,15 +399,18 @@ manual assistive-technology acceptance remains external.
 
 ### Evaluation showcase fixture evidence
 
-- **Release-candidate production repository slice:** the deterministic reset
+- **Production evaluator repository slice:** the deterministic reset
   now keeps clean SBEK identities separate from a showcase cohort containing
   two completed reviews with a 2.30-point score spread, one committee
   discussion, a published waitlist decision, one historical public
   speaker-profile snapshot, an active named schedule embed and canonical
   venue/map context. Reset completeness requires those records while still
   requiring zero prior SBEK submissions, assignments, speaker tasks and clean
-  applicant activation. This expanded cohort remains release-candidate
-  evidence until the next production reset.
+  applicant activation. On 16 August 2026 the access-code-gated evaluator reset
+  completed under deployed revision `ad9b752`, rotated the evaluator-session
+  generation and returned a fresh unlocked role picker. Production health
+  reported that exact revision and the temporary operator reset endpoint
+  remained unavailable with HTTP 404.
 
 ### Reference-board adoption evidence
 

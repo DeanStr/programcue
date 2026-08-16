@@ -47,9 +47,10 @@ export const EVALUATION_IDENTITIES = {
   reviewer: {
     ...DEMO_IDENTITIES.evaluator,
     label: "Reviewer",
-    description: "An assigned proposal and the focused scoring workbench.",
+    description:
+      "A submitted review with rubric evidence and immutable history.",
     whatToTry:
-      "Score the assigned proposal, save an independent rubric response, then request and inspect AI suggestions before submitting the review.",
+      "Inspect the submitted review and its evidence. To try reviewer AI, enable it as Event organiser, assign a proposal, then switch to Clean reviewer.",
     group: "showcase",
   },
   applicant: {

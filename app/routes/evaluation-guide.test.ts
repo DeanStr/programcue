@@ -218,7 +218,8 @@ describe("production evaluation guide", () => {
     expect(
       unlockedGuide.identities.find((identity) => identity.key === "reviewer"),
     ).toMatchObject({
-      whatToTry: expect.stringContaining("save an independent rubric response"),
+      description: expect.stringContaining("submitted review"),
+      whatToTry: expect.stringContaining("then switch to Clean reviewer"),
     });
 
     const selected = await action({
