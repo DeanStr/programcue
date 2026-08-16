@@ -80,7 +80,8 @@ Event slugs are globally unique. Public programme and calendar-session links alw
 npm run check
 ```
 
-This runs Biome formatting and linting, configuration contracts, TypeScript and
+This runs Biome formatting and linting, configuration contracts, dependency
+vulnerability policy, TypeScript and
 React Router type generation, fast Node rule tests, isolated
 workerd/D1/R2/Agent integration tests, one production build,
 migration/recovery/OpenAPI validation, and Playwright
@@ -140,8 +141,9 @@ project.
 `npm test` runs both projects; focused commands do not replace the complete
 merge or release gate.
 
-The checked-in `Core gate` GitHub Actions workflow runs independent core and
-compact browser jobs for pull requests and `main`. Configure both checks as
+The checked-in `Core gate` GitHub Actions workflow runs independent dependency
+review, core and compact browser jobs for pull requests; core and browser also
+run on `main`. Configure these checks as
 required in branch protection so the repository gate cannot be bypassed by a
 direct merge. Workflow dependencies are pinned to immutable revisions. The manually
 dispatched `Production release` workflow runs the complete browser gate, applies

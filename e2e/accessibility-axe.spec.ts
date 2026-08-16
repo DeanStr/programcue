@@ -137,6 +137,57 @@ test("API reference remains accessible with its persisted dark theme", async ({
   await expectNoViolations(page, "/api/docs @ persisted dark theme");
 });
 
+test("API reference tolerates incrementally rendered download buttons", async ({
+  page,
+}) => {
+  await selectDemoRole(page, "administrator");
+  const pageErrors: Error[] = [];
+  page.on("pageerror", (error) => pageErrors.push(error));
+  await openHydrated(page, "/api/docs");
+
+  await page.evaluate(async () => {
+    const container = document.querySelector(".program-cue-api-reference");
+    if (!container) throw new Error("API reference container not found.");
+    const button = document.createElement("button");
+    button.className = "download-button incremental-download-test";
+    container.append(button);
+    await new Promise((resolve) => window.setTimeout(resolve, 20));
+
+    const visibleLabel = document.createElement("span");
+    visibleLabel.textContent = "Download";
+    const extension = document.createElement("span");
+    extension.className = "extension";
+    extension.textContent = "json";
+    button.append(visibleLabel, extension);
+  });
+
+  await expect(
+    page.locator("button.incremental-download-test"),
+  ).toHaveAccessibleName("Download OpenAPI document as JSON");
+  expect(pageErrors).toEqual([]);
+});
+
+test("API reference rejects settled incomplete download buttons", async ({
+  page,
+}) => {
+  await selectDemoRole(page, "administrator");
+  await openHydrated(page, "/api/docs");
+  const pageError = page.waitForEvent("pageerror");
+
+  await page.evaluate(() => {
+    const container = document.querySelector(".program-cue-api-reference");
+    if (!container) throw new Error("API reference container not found.");
+    const button = document.createElement("button");
+    button.className = "download-button settled-incomplete-download-test";
+    container.append(button);
+  });
+
+  await expect(pageError).resolves.toMatchObject({
+    message:
+      "Scalar download buttons remained incomplete after rendering settled.",
+  });
+});
+
 test("public and scheduling surfaces use complete, unique landmarks", async ({
   page,
 }) => {

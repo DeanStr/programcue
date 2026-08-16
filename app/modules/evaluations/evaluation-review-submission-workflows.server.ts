@@ -1014,7 +1014,9 @@ export class EvaluationReviewSubmissionWorkflows extends EvaluationServiceFounda
     const parsed = conflictDeclarationSchema.parse(input);
     const assignment = await this.env.DB.prepare(
       `SELECT assignment.id, assignment.revision, assignment.round_id AS roundId,
-              submission_id AS submissionId, session_id AS sessionId
+              assignment.submission_id AS submissionId,
+              assignment.session_id AS sessionId,
+              existing_conflict.id AS conflictId
          FROM evaluator_assignments assignment
          JOIN evaluation_round_reviewers pool
            ON pool.event_id = assignment.event_id
@@ -1031,6 +1033,12 @@ export class EvaluationReviewSubmissionWorkflows extends EvaluationServiceFounda
          LEFT JOIN sessions session
            ON session.id = assignment.session_id
           AND session.event_id = assignment.event_id
+         LEFT JOIN evaluator_conflicts existing_conflict
+           ON existing_conflict.event_id = assignment.event_id
+          AND existing_conflict.round_id = assignment.round_id
+          AND existing_conflict.evaluator_person_id = assignment.evaluator_person_id
+          AND existing_conflict.submission_id IS assignment.submission_id
+          AND existing_conflict.session_id IS assignment.session_id
          JOIN events event
            ON event.id = assignment.event_id AND event.organisation_id = ?
         WHERE assignment.id = ? AND assignment.event_id = ?
@@ -1059,6 +1067,7 @@ export class EvaluationReviewSubmissionWorkflows extends EvaluationServiceFounda
         roundId: string;
         submissionId: string | null;
         sessionId: string | null;
+        conflictId: string | null;
       }>();
     if (!assignment)
       throw new EvaluationStateError(
@@ -1072,6 +1081,8 @@ export class EvaluationReviewSubmissionWorkflows extends EvaluationServiceFounda
     if (!conflictTargetId) {
       throw new Error(`Evaluation assignment ${assignment.id} has no target.`);
     }
+    const conflictId = assignment.conflictId ?? crypto.randomUUID();
+    const auditEventId = crypto.randomUUID();
     const [recused] = await this.env.DB.batch([
       this.env.DB.prepare(
         `
@@ -1140,7 +1151,7 @@ export class EvaluationReviewSubmissionWorkflows extends EvaluationServiceFounda
         )
       `,
       ).bind(
-        crypto.randomUUID(),
+        conflictId,
         viewer.eventId,
         assignment.roundId,
         assignment.submissionId,
@@ -1155,14 +1166,15 @@ export class EvaluationReviewSubmissionWorkflows extends EvaluationServiceFounda
         operationId,
       ),
       this.env.DB.prepare(
-        `INSERT INTO audit_events (id, actor_kind, origin, metadata_version, organisation_id, event_id, actor_person_id, action, entity_type, entity_id, metadata_json, created_at) SELECT ?, 'person', ?, 1, ?, ?, ?, 'review.conflict.declared', 'evaluator_assignment', ?, ?, unixepoch() WHERE EXISTS (SELECT 1 FROM evaluator_assignments WHERE id = ? AND event_id = ? AND last_operation_id = ?)`,
+        `INSERT INTO audit_events (id, actor_kind, origin, metadata_version, organisation_id, event_id, actor_person_id, action, entity_type, entity_id, correlation_id, metadata_json, created_at) SELECT ?, 'person', ?, 1, ?, ?, ?, 'review.conflict.declared', 'evaluator_assignment', ?, ?, ?, unixepoch() WHERE EXISTS (SELECT 1 FROM evaluator_assignments WHERE id = ? AND event_id = ? AND last_operation_id = ?)`,
       ).bind(
-        crypto.randomUUID(),
+        auditEventId,
         origin,
         viewer.organisationId,
         viewer.eventId,
         viewer.personId,
         assignment.id,
+        operationId,
         JSON.stringify({
           roundId: assignment.roundId,
           targetType: assignment.submissionId ? "submission" : "session",
@@ -1172,7 +1184,74 @@ export class EvaluationReviewSubmissionWorkflows extends EvaluationServiceFounda
         viewer.eventId,
         operationId,
       ),
-    ]);
+      atomicBatchGuardStatement(
+        this.env,
+        `EXISTS (
+           SELECT 1 FROM evaluator_assignments assignment
+            WHERE assignment.id = ? AND assignment.event_id = ?
+              AND assignment.last_operation_id = ?
+         ) AND NOT (
+           EXISTS (
+             SELECT 1 FROM evaluator_assignments assignment
+              WHERE assignment.id = ? AND assignment.event_id = ?
+                AND assignment.evaluator_person_id = ?
+                AND assignment.status = 'recused'
+                AND assignment.revision = ?
+                AND assignment.conflict_declared_at IS NOT NULL
+                AND assignment.last_operation_id = ?
+           ) AND EXISTS (
+             SELECT 1 FROM evaluator_conflicts conflict
+              WHERE conflict.id = ? AND conflict.event_id = ?
+                AND conflict.round_id = ?
+                AND conflict.submission_id IS ? AND conflict.session_id IS ?
+                AND conflict.evaluator_person_id = ?
+                AND conflict.relationship = 'declared'
+                AND conflict.notes = ? AND conflict.status = 'recused'
+                AND conflict.declared_at IS NOT NULL
+           ) AND EXISTS (
+             SELECT 1 FROM audit_events audit
+              WHERE audit.id = ? AND audit.organisation_id = ?
+                AND audit.event_id = ? AND audit.actor_person_id = ?
+                AND audit.origin = ?
+                AND audit.action = 'review.conflict.declared'
+                AND audit.entity_type = 'evaluator_assignment'
+                AND audit.entity_id = ? AND audit.correlation_id = ?
+           )
+         )`,
+        [
+          assignment.id,
+          viewer.eventId,
+          operationId,
+          assignment.id,
+          viewer.eventId,
+          viewer.personId,
+          assignment.revision + 1,
+          operationId,
+          conflictId,
+          viewer.eventId,
+          assignment.roundId,
+          assignment.submissionId,
+          assignment.sessionId,
+          viewer.personId,
+          parsed.reason,
+          auditEventId,
+          viewer.organisationId,
+          viewer.eventId,
+          viewer.personId,
+          origin,
+          assignment.id,
+          operationId,
+        ],
+      ),
+    ]).catch((error: unknown) => {
+      if (isAtomicBatchGuardError(error)) {
+        throw new Error(
+          "The conflict declaration could not record its complete recusal and audit evidence.",
+          { cause: error },
+        );
+      }
+      throw error;
+    });
     if ((recused.meta.changes ?? 0) !== 1) {
       throw new EvaluationRevisionConflictError(
         "This assignment changed before the conflict could be recorded.",

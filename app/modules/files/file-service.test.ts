@@ -41,6 +41,71 @@ const admin: Viewer = {
   eventId: "evt-foe-2025",
   demo: true,
 };
+
+function withSuppressedStatement(
+  testEnv: CloudflareEnvironment,
+  pattern: RegExp,
+) {
+  let suppressed = 0;
+  const faultingDb = new Proxy(testEnv.DB, {
+    get(target, property) {
+      if (property === "prepare") {
+        return (query: string) => {
+          const statement = target.prepare(query);
+          if (suppressed > 0 || !pattern.test(query)) return statement;
+          suppressed += 1;
+          return new Proxy(statement, {
+            get(statementTarget, statementProperty) {
+              if (statementProperty === "bind") {
+                return () =>
+                  target.prepare(
+                    "UPDATE people SET display_name = display_name WHERE 0",
+                  );
+              }
+              const value = Reflect.get(statementTarget, statementProperty);
+              return typeof value === "function"
+                ? value.bind(statementTarget)
+                : value;
+            },
+          });
+        };
+      }
+      const value = Reflect.get(target, property);
+      return typeof value === "function" ? value.bind(target) : value;
+    },
+  });
+  return {
+    env: new Proxy(testEnv, {
+      get(target, property) {
+        return property === "DB" ? faultingDb : Reflect.get(target, property);
+      },
+    }),
+    suppressed: () => suppressed,
+  };
+}
+
+async function uploadCleanupState(
+  testEnv: CloudflareEnvironment,
+  upload: { assetId: string; versionId: string },
+) {
+  return testEnv.DB.prepare(
+    `SELECT asset.status AS assetStatus,
+            asset.current_version_id AS currentVersionId,
+            version.upload_status AS uploadStatus,
+            version.scan_status AS scanStatus,
+            version.scan_error AS scanError,
+            version.deleted_at AS deletedAt,
+            (SELECT COUNT(*) FROM audit_events audit
+              WHERE audit.id = 'file-upload-discarded:' || version.id) AS auditCount
+       FROM file_assets asset
+       JOIN file_versions version
+         ON version.id = ? AND version.asset_id = asset.id
+        AND version.event_id = asset.event_id
+      WHERE asset.id = ?`,
+  )
+    .bind(upload.versionId, upload.assetId)
+    .first();
+}
 const submitterOnly: Viewer = {
   ...speaker,
   personId: "file-submit-only-person",
@@ -1290,6 +1355,130 @@ describe("private R2 file lifecycle", () => {
       ).resolves.toBeUndefined();
       expect(await testEnv.FILES.head(stored!.objectKey)).toBeNull();
     });
+
+    it.each([
+      [
+        "discarded version",
+        /UPDATE file_versions[\s\S]*SET upload_status = 'failed'/u,
+      ],
+      [
+        "success audit",
+        /INSERT OR IGNORE INTO audit_events[\s\S]*file\.upload\.discarded/u,
+      ],
+    ])(
+      "rolls back resource cleanup when its %s is suppressed",
+      async (_evidence, pattern) => {
+        const testEnv = env as unknown as CloudflareEnvironment;
+        await ensureDemoSpeakerData(testEnv);
+        const upload = await completeTestDirectUpload(
+          testEnv,
+          admin,
+          {
+            targetType: "resource",
+            targetId: "resource-speaker-handbook",
+            assetKind: "resource_attachment",
+          },
+          new File(["%PDF-1.7 atomic cleanup"], "atomic-cleanup.pdf", {
+            type: "application/pdf",
+          }),
+        );
+        const stored = await testEnv.DB.prepare(
+          "SELECT object_key AS objectKey FROM file_versions WHERE id = ?",
+        )
+          .bind(upload.versionId)
+          .first<{ objectKey: string }>();
+        const before = await uploadCleanupState(testEnv, upload);
+        const fault = withSuppressedStatement(testEnv, pattern);
+
+        await expect(
+          new FileService(fault.env).discardUnattachedResourceUpload(
+            admin,
+            upload,
+          ),
+        ).rejects.toThrow(/complete discarded state and audit evidence/i);
+
+        expect(fault.suppressed()).toBe(1);
+        expect(await uploadCleanupState(testEnv, upload)).toEqual(before);
+        expect(await testEnv.FILES.head(stored!.objectKey)).not.toBeNull();
+      },
+    );
+
+    it("records participant provenance for task-upload cleanup", async () => {
+      const testEnv = env as unknown as CloudflareEnvironment;
+      await ensureDemoSpeakerData(testEnv);
+      const upload = await completeTestDirectUpload(
+        testEnv,
+        speaker,
+        {
+          targetType: "task",
+          targetId: "task-demo-slides",
+          assetKind: "task_evidence",
+        },
+        new File(["%PDF-1.7 participant cleanup"], "participant-cleanup.pdf", {
+          type: "application/pdf",
+        }),
+      );
+
+      await new FileService(testEnv).discardUnattachedTaskUpload(
+        speaker,
+        upload,
+        "task-demo-slides",
+      );
+
+      expect(
+        await testEnv.DB.prepare(
+          `SELECT origin FROM audit_events
+            WHERE id = ? AND action = 'file.upload.discarded'`,
+        )
+          .bind(`file-upload-discarded:${upload.versionId}`)
+          .first(),
+      ).toEqual({ origin: "participant_ui" });
+    });
+
+    it.each([
+      ["asset state", /UPDATE file_assets AS asset/u],
+      [
+        "success audit",
+        /INSERT OR IGNORE INTO audit_events[\s\S]*file\.upload\.discarded/u,
+      ],
+    ])(
+      "rolls back task cleanup when its %s is suppressed",
+      async (_evidence, pattern) => {
+        const testEnv = env as unknown as CloudflareEnvironment;
+        await ensureDemoSpeakerData(testEnv);
+        const upload = await completeTestDirectUpload(
+          testEnv,
+          speaker,
+          {
+            targetType: "task",
+            targetId: "task-demo-slides",
+            assetKind: "task_evidence",
+          },
+          new File(["%PDF-1.7 task cleanup"], "task-cleanup.pdf", {
+            type: "application/pdf",
+          }),
+        );
+        const stored = await testEnv.DB.prepare(
+          "SELECT object_key AS objectKey FROM file_versions WHERE id = ?",
+        )
+          .bind(upload.versionId)
+          .first<{ objectKey: string }>();
+        const before = await uploadCleanupState(testEnv, upload);
+        const fault = withSuppressedStatement(testEnv, pattern);
+
+        await expect(
+          new FileService(fault.env).discardUnattachedTaskUpload(
+            speaker,
+            upload,
+            "task-demo-slides",
+          ),
+        ).rejects.toThrow(/complete discarded state and audit evidence/i);
+
+        expect(fault.suppressed()).toBe(1);
+        expect(await uploadCleanupState(testEnv, upload)).toEqual(before);
+        expect(await testEnv.FILES.head(stored!.objectKey)).not.toBeNull();
+      },
+    );
 
     it("rejects a task upload before storage when the task is final", async () => {
       const testEnv = env as unknown as CloudflareEnvironment;

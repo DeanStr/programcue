@@ -2,6 +2,8 @@ import { ApiReferenceReact } from "@scalar/api-reference-react";
 import "@scalar/api-reference-react/style.css";
 import { useEffect, useRef } from "react";
 
+const scalarSettledValidationDelayMs = 1_000;
+
 function nameScalarCopyButtons(root: Element) {
   const buttons = root.matches("button.scalar-code-copy")
     ? [root as HTMLButtonElement]
@@ -14,27 +16,27 @@ function nameScalarCopyButtons(root: Element) {
 }
 
 function labelScalarDownloadButtons(root: Element) {
+  let complete = true;
   for (const button of root.querySelectorAll<HTMLButtonElement>(
     "button.download-button",
   )) {
     const extension = button.querySelector<HTMLElement>(".extension");
     if (!extension) {
-      throw new Error(
-        "Scalar download button is missing its required extension label.",
-      );
+      complete = false;
+      continue;
     }
     const format = extension.textContent?.trim();
     if (!format) {
-      throw new Error("Scalar download button has an empty extension label.");
+      complete = false;
+      continue;
     }
     const formatLabel = format.toUpperCase();
     const visibleLabel = button.querySelector<HTMLElement>(
       "span:not(.extension)",
     );
     if (!visibleLabel) {
-      throw new Error(
-        "Scalar download button is missing its required visible label.",
-      );
+      complete = false;
+      continue;
     }
     button.setAttribute(
       "aria-label",
@@ -46,6 +48,7 @@ function labelScalarDownloadButtons(root: Element) {
     }
     extension.setAttribute("aria-hidden", "true");
   }
+  return complete;
 }
 
 /* Scalar currently reuses each client tab-panel ID for its nested disclosure
@@ -83,22 +86,38 @@ export default function ApiReferenceClient() {
     const container = root.current;
     if (!container) return;
     let reconcileTimer: number | undefined;
+    let settledValidationTimer: number | undefined;
     const reconcileScalarMarkup = () => {
       window.clearTimeout(reconcileTimer);
+      window.clearTimeout(settledValidationTimer);
       reconcileTimer = window.setTimeout(() => {
         nameScalarCopyButtons(container);
-        labelScalarDownloadButtons(container);
+        const downloadButtonsComplete = labelScalarDownloadButtons(container);
         repairScalarClientTabPanels(container);
+        if (!downloadButtonsComplete) {
+          settledValidationTimer = window.setTimeout(() => {
+            if (!labelScalarDownloadButtons(container)) {
+              throw new Error(
+                "Scalar download buttons remained incomplete after rendering settled.",
+              );
+            }
+          }, scalarSettledValidationDelayMs);
+        }
       });
     };
     reconcileScalarMarkup();
     const observer = new MutationObserver(() => {
       reconcileScalarMarkup();
     });
-    observer.observe(container, { childList: true, subtree: true });
+    observer.observe(container, {
+      childList: true,
+      characterData: true,
+      subtree: true,
+    });
     return () => {
       observer.disconnect();
       window.clearTimeout(reconcileTimer);
+      window.clearTimeout(settledValidationTimer);
     };
   }, []);
 

@@ -466,6 +466,60 @@ async function reviewBatchState(assignmentId: string) {
     .first();
 }
 
+async function moderationBatchState(roundId: string, submissionId: string) {
+  return env.DB.prepare(
+    `SELECT event.last_operation_id AS eventOperationId,
+            submission.status AS submissionStatus,
+            submission.revision AS submissionRevision,
+            (SELECT COUNT(*) FROM review_moderations moderation
+              WHERE moderation.event_id = event.id
+                AND moderation.round_id = ?
+                AND moderation.submission_id = submission.id) AS moderationCount,
+            (SELECT id FROM review_moderations moderation
+              WHERE moderation.event_id = event.id
+                AND moderation.round_id = ?
+                AND moderation.submission_id = submission.id
+                AND moderation.status IN ('draft','confirmed')) AS currentModerationId,
+            (SELECT status FROM review_moderations moderation
+              WHERE moderation.event_id = event.id
+                AND moderation.round_id = ?
+                AND moderation.submission_id = submission.id
+                AND moderation.status IN ('draft','confirmed')) AS currentModerationStatus,
+            (SELECT COUNT(*) FROM audit_events audit
+              WHERE audit.event_id = event.id
+                AND audit.entity_type = 'review_moderation') AS moderationAuditCount
+       FROM events event
+       JOIN submissions submission
+         ON submission.event_id = event.id AND submission.id = ?
+      WHERE event.id = ?`,
+  )
+    .bind(roundId, roundId, roundId, submissionId, evaluator.eventId)
+    .first();
+}
+
+async function conflictBatchState(assignmentId: string) {
+  return env.DB.prepare(
+    `SELECT assignment.status, assignment.revision,
+            assignment.conflict_declared_at AS conflictDeclaredAt,
+            assignment.last_operation_id AS operationId,
+            (SELECT COUNT(*) FROM evaluator_conflicts conflict
+              WHERE conflict.event_id = assignment.event_id
+                AND conflict.round_id = assignment.round_id
+                AND conflict.evaluator_person_id = assignment.evaluator_person_id
+                AND conflict.submission_id IS assignment.submission_id
+                AND conflict.session_id IS assignment.session_id) AS conflictCount,
+            (SELECT COUNT(*) FROM audit_events audit
+              WHERE audit.event_id = assignment.event_id
+                AND audit.action = 'review.conflict.declared'
+                AND audit.entity_type = 'evaluator_assignment'
+                AND audit.entity_id = assignment.id) AS conflictAuditCount
+       FROM evaluator_assignments assignment
+      WHERE assignment.id = ? AND assignment.event_id = ?`,
+  )
+    .bind(assignmentId, evaluator.eventId)
+    .first();
+}
+
 async function addReviewWebhookEndpoint(eventType: string) {
   const endpointId = `review-atomic-${crypto.randomUUID()}`;
   await env.DB.prepare(
@@ -861,6 +915,172 @@ describe("evaluation vertical slice", () => {
         }
       },
     );
+
+    it.each([
+      ["replacement moderation", /INSERT INTO review_moderations/u],
+      [
+        "success audit",
+        /INSERT INTO audit_events \([\s\S]*'review_moderation'/u,
+      ],
+      [
+        "confirmed submission transition",
+        /UPDATE submissions SET status = 'decision_ready'/u,
+      ],
+    ])(
+      "rolls back moderation when its %s is suppressed",
+      async (_evidence, pattern) => {
+        const { assignmentId, initialReview, service, testEnv } =
+          await prepareReviewerAiGenerationFixture(
+            `eval-moderation-atomic-${crypto.randomUUID()}`,
+          );
+        await service.saveReview(
+          evaluator,
+          completeReviewInput(assignmentId, initialReview.revision, "submit"),
+          "participant_ui",
+        );
+        const assignment = await testEnv.DB.prepare(
+          `SELECT round_id AS roundId, submission_id AS submissionId
+             FROM evaluator_assignments WHERE id = ? AND event_id = ?`,
+        )
+          .bind(assignmentId, evaluator.eventId)
+          .first<{ roundId: string; submissionId: string }>();
+        const draftModerationId = await service.moderate(
+          admin,
+          {
+            roundId: assignment!.roundId,
+            submissionId: assignment!.submissionId,
+            expectedModerationId: null,
+            recommendation: "advance",
+            moderatedScore: 4,
+            notes: "Draft moderation evidence.",
+            status: "draft",
+            confirmed: false,
+          },
+          "admin_ui",
+        );
+        const before = await moderationBatchState(
+          assignment!.roundId,
+          assignment!.submissionId,
+        );
+        const fault = withSuppressedStatement(testEnv, pattern);
+
+        await expect(
+          new EvaluationService(fault.env).moderate(
+            admin,
+            {
+              roundId: assignment!.roundId,
+              submissionId: assignment!.submissionId,
+              expectedModerationId: draftModerationId,
+              recommendation: "advance",
+              moderatedScore: 4,
+              notes: "Confirmed moderation evidence.",
+              status: "confirmed",
+              confirmed: true,
+            },
+            "admin_ui",
+          ),
+        ).rejects.toThrow(/complete state and audit evidence/i);
+
+        expect(fault.suppressed()).toBe(1);
+        expect(
+          await moderationBatchState(
+            assignment!.roundId,
+            assignment!.submissionId,
+          ),
+        ).toEqual(before);
+        await resetEvaluationFixture();
+      },
+    );
+
+    it.each([
+      ["conflict record", /INSERT INTO evaluator_conflicts/u],
+      [
+        "success audit",
+        /INSERT INTO audit_events[\s\S]*'review\.conflict\.declared'/u,
+      ],
+    ])(
+      "rolls back conflict declaration when its %s is suppressed",
+      async (_evidence, pattern) => {
+        const { assignmentId, testEnv } =
+          await prepareReviewerAiGenerationFixture(
+            `eval-conflict-atomic-${crypto.randomUUID()}`,
+          );
+        const before = await conflictBatchState(assignmentId);
+        const fault = withSuppressedStatement(testEnv, pattern);
+
+        await expect(
+          new EvaluationService(fault.env).declareConflict(
+            evaluator,
+            {
+              assignmentId,
+              reason: "A material relationship prevents impartial review.",
+            },
+            "participant_ui",
+          ),
+        ).rejects.toThrow(/complete recusal and audit evidence/i);
+
+        expect(fault.suppressed()).toBe(1);
+        expect(await conflictBatchState(assignmentId)).toEqual(before);
+        await resetEvaluationFixture();
+      },
+    );
+
+    it("updates and guards the exact existing conflict record", async () => {
+      const { assignmentId, service, testEnv } =
+        await prepareReviewerAiGenerationFixture(
+          `eval-conflict-existing-${crypto.randomUUID()}`,
+        );
+      const assignment = await testEnv.DB.prepare(
+        `SELECT round_id AS roundId, submission_id AS submissionId
+           FROM evaluator_assignments WHERE id = ? AND event_id = ?`,
+      )
+        .bind(assignmentId, evaluator.eventId)
+        .first<{ roundId: string; submissionId: string }>();
+      const existingConflictId = `existing-conflict-${crypto.randomUUID()}`;
+      await testEnv.DB.prepare(
+        `INSERT INTO evaluator_conflicts (
+           id, event_id, round_id, submission_id, evaluator_person_id,
+           relationship, notes, status, declared_at
+         ) VALUES (?, ?, ?, ?, ?, 'declared', ?, 'declared', unixepoch())`,
+      )
+        .bind(
+          existingConflictId,
+          evaluator.eventId,
+          assignment!.roundId,
+          assignment!.submissionId,
+          evaluator.personId,
+          "Earlier disclosure awaiting recusal.",
+        )
+        .run();
+
+      await service.declareConflict(
+        evaluator,
+        {
+          assignmentId,
+          reason: "The confirmed relationship prevents impartial review.",
+        },
+        "participant_ui",
+      );
+
+      expect(
+        await testEnv.DB.prepare(
+          `SELECT id, notes, status FROM evaluator_conflicts
+            WHERE round_id = ? AND submission_id = ?
+              AND evaluator_person_id = ?`,
+        )
+          .bind(
+            assignment!.roundId,
+            assignment!.submissionId,
+            evaluator.personId,
+          )
+          .first(),
+      ).toEqual({
+        id: existingConflictId,
+        notes: "The confirmed relationship prevents impartial review.",
+        status: "recused",
+      });
+      await resetEvaluationFixture();
+    });
 
     it("records the explicit ingress origin for reviewer and manager actions", async () => {
       const { assignmentId, initialReview, service } =

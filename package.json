@@ -28,6 +28,7 @@
     "test:changed": "vitest run --config vitest.focused.config.ts --changed=main --passWithNoTests",
     "test:related": "vitest related --config vitest.focused.config.ts --run --passWithNoTests",
     "test:scanner": "python3 -m unittest discover -s scanner/tests -p 'test_*.py'",
+    "security:dependencies": "npm audit --audit-level=high",
     "test:watch": "vitest --config vitest.config.ts",
     "test:unit:watch": "vitest --config vitest.unit.config.ts",
     "test:worker:watch": "vitest --config vitest.worker.config.ts",

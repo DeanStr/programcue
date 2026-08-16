@@ -316,8 +316,10 @@ JSON and YAML download controls with light/dark contrast. The API-reference back
 link returns to the active runtime's evaluation or demo guide, and to API
 settings in ordinary production. Evaluation rate-limit errors state the
 approximate retry time; invalid retry durations fail their explicit UI invariant
-rather than being silently clamped, and settled Scalar markup fails explicitly
-if its required download labels disappear. The focused repository gate passed
+rather than being silently clamped. Scalar reconciliation tolerates incomplete
+intermediate third-party markup and re-runs when its child text arrives, while
+the settled browser contract still fails if required download labels disappear.
+The focused repository gate passed
 37 files/327 tests, and seven
 Chromium accessibility workflows passed across representative phone, tablet,
 desktop, dark-theme, landmark and embed cases. These changes remain local to
@@ -570,6 +572,11 @@ visibly identified latest round, while terminal submissions remain terminal and
 are reviewable only with published archived-decision provenance.
 Round assignment, reopening, conflict recusal and advancement revalidate
 persisted windows and current-cycle scope at the mutation boundary. Reviewer
+save, reopen, moderation and recusal batches guard their complete durable
+postconditions inside D1; fault-injection coverage proves that suppressed
+moderation, conflict, submission-transition or audit statements roll back prior
+mutations. Confirmed moderation preserves terminal archived-cycle submission
+status while advancing ordinary submitted/assigned/in-review work. Reviewer
 progress is round- and person-scoped; owners and administrators can prepare an
 exact-recipient reminder through the existing Communications preview rather
 than sending directly. Results support round-scoped stable sorting and an
@@ -1064,6 +1071,12 @@ clean callback before D1 released the file. The exact mutable test data and R2
 object were removed; append-only audit evidence remains. Separate production
 clean and EICAR probes verify clean release and malicious quarantine.
 
+Repository hardening now records organiser resource-upload cleanup as
+`admin_ui` and participant task-evidence cleanup as `participant_ui`. Both
+paths guard the exact discarded D1 state and audit identity in one batch before
+the retryable post-commit R2 deletion; focused fault injection proves a
+suppressed version or audit statement rolls the earlier mutations back.
+
 On 15 August at 07:15 UTC, the scanner alert detected a Cloudflare Containers
 `ContainerState.update` internal alarm exception with reference
 `makudm19k86ps0vtg3e3si22`. The scanner application remained active, its
@@ -1134,4 +1147,4 @@ returned HTTP 404. No evaluator mailbox magic-link delivery is claimed.
 4. Collect deployed p75 RUM and production-like scale evidence; retained structured logs are queryable, while trace continuity still needs acceptance.
 5. Complete manual screen-reader, keyboard-only and contrast/zoom acceptance; automated accessibility coverage is supporting evidence, not a substitute.
 6. Supply the Forge repository, deployed evaluator URL, competition submission and recorded walkthrough evidence outside this workspace.
-7. Complete security acceptance by removing ordinary inline styles, adding Trusted Types around intentional HTML sinks, and completing a deployed penetration test, dependency-policy gate, secret-rotation exercise and production access review. Application scripts now use per-response nonces with inline script attributes disabled; typed third-party script/frame origins remain explicit. Deployment acceptance remains outstanding.
+7. Complete security acceptance by removing ordinary inline styles, adding Trusted Types around intentional HTML sinks, and completing a deployed penetration test, secret-rotation exercise and production access review. A checked-in high/critical dependency audit, immutable-revision pull-request dependency review and weekly npm/GitHub Actions update policy are now present; their first hosted pull-request run remains acceptance evidence. Application scripts now use per-response nonces with inline script attributes disabled; typed third-party script/frame origins remain explicit. Deployment acceptance remains outstanding.

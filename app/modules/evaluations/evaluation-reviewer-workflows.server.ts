@@ -66,8 +66,25 @@ export class EvaluationReviewerWorkflows extends EvaluationServiceFoundation {
         "A confirmed moderation can only be replaced by another explicitly confirmed moderation.",
       );
     }
+    const submissionState = await this.env.DB.prepare(
+      `SELECT status, revision FROM submissions WHERE id = ? AND event_id = ?`,
+    )
+      .bind(parsed.submissionId, viewer.eventId)
+      .first<{ status: string; revision: number }>();
+    if (!submissionState) {
+      throw new EvaluationStateError("The moderated submission was not found.");
+    }
+    const advancesSubmission =
+      parsed.status === "confirmed" &&
+      ["submitted", "assigned", "in_review"].includes(submissionState.status);
+    const expectedSubmissionStatus = advancesSubmission
+      ? "decision_ready"
+      : submissionState.status;
+    const expectedSubmissionRevision =
+      submissionState.revision + (advancesSubmission ? 1 : 0);
     const moderationId = crypto.randomUUID();
     const operationId = crypto.randomUUID();
+    const auditEventId = crypto.randomUUID();
     const currentPredicate = current
       ? `EXISTS (
            SELECT 1 FROM review_moderations current_moderation
@@ -180,7 +197,8 @@ export class EvaluationReviewerWorkflows extends EvaluationServiceFoundation {
         `
         UPDATE submissions SET status = 'decision_ready',
                revision = revision + 1, updated_at = unixepoch()
-         WHERE id = ? AND event_id = ? AND status IN ('assigned','in_review')
+         WHERE id = ? AND event_id = ?
+           AND status IN ('submitted','assigned','in_review')
            AND ? = 'confirmed'
            AND EXISTS (
              SELECT 1 FROM review_moderations
@@ -198,15 +216,15 @@ export class EvaluationReviewerWorkflows extends EvaluationServiceFoundation {
         `
         INSERT INTO audit_events (
           id, actor_kind, origin, metadata_version, organisation_id, event_id, actor_person_id, action,
-          entity_type, entity_id, metadata_json, created_at
+          entity_type, entity_id, correlation_id, metadata_json, created_at
         )
-        SELECT ?, 'person', ?, 1, ?, ?, ?, ?, 'review_moderation', ?, ?, unixepoch()
+        SELECT ?, 'person', ?, 1, ?, ?, ?, ?, 'review_moderation', ?, ?, ?, unixepoch()
          WHERE EXISTS (
            SELECT 1 FROM review_moderations WHERE id = ? AND event_id = ?
          )
       `,
       ).bind(
-        crypto.randomUUID(),
+        auditEventId,
         origin,
         viewer.organisationId,
         viewer.eventId,
@@ -215,6 +233,7 @@ export class EvaluationReviewerWorkflows extends EvaluationServiceFoundation {
           ? "review.moderation.confirmed"
           : "review.moderation.saved",
         moderationId,
+        operationId,
         JSON.stringify({
           submissionId: parsed.submissionId,
           roundId: parsed.roundId,
@@ -224,7 +243,89 @@ export class EvaluationReviewerWorkflows extends EvaluationServiceFoundation {
         moderationId,
         viewer.eventId,
       ),
-    ]);
+      atomicBatchGuardStatement(
+        this.env,
+        `EXISTS (
+           SELECT 1 FROM events event
+            WHERE event.id = ? AND event.organisation_id = ?
+              AND event.last_operation_id = ?
+         ) AND NOT (
+           EXISTS (
+             SELECT 1 FROM review_moderations moderation
+              WHERE moderation.id = ? AND moderation.event_id = ?
+                AND moderation.round_id = ? AND moderation.submission_id = ?
+                AND moderation.moderator_person_id = ?
+                AND moderation.status = ?
+                AND moderation.recommendation IS ?
+                AND moderation.moderated_score IS ?
+                AND moderation.notes IS ?
+                AND ((? = 'confirmed' AND moderation.confirmed_at IS NOT NULL)
+                  OR (? <> 'confirmed' AND moderation.confirmed_at IS NULL))
+           ) AND (
+             ? IS NULL OR EXISTS (
+               SELECT 1 FROM review_moderations previous
+                WHERE previous.id = ? AND previous.event_id = ?
+                  AND previous.round_id = ? AND previous.submission_id = ?
+                  AND previous.status = 'superseded'
+             )
+           ) AND EXISTS (
+             SELECT 1 FROM audit_events audit
+              WHERE audit.id = ? AND audit.organisation_id = ?
+                AND audit.event_id = ? AND audit.actor_person_id = ?
+                AND audit.origin = ? AND audit.action = ?
+                AND audit.entity_type = 'review_moderation'
+                AND audit.entity_id = ? AND audit.correlation_id = ?
+           ) AND EXISTS (
+             SELECT 1 FROM submissions submission
+              WHERE submission.id = ? AND submission.event_id = ?
+                AND submission.status = ? AND submission.revision = ?
+           )
+         )`,
+        [
+          viewer.eventId,
+          viewer.organisationId,
+          operationId,
+          moderationId,
+          viewer.eventId,
+          parsed.roundId,
+          parsed.submissionId,
+          viewer.personId,
+          parsed.status,
+          parsed.recommendation,
+          parsed.moderatedScore,
+          parsed.notes,
+          parsed.status,
+          parsed.status,
+          current?.id ?? null,
+          current?.id ?? null,
+          viewer.eventId,
+          parsed.roundId,
+          parsed.submissionId,
+          auditEventId,
+          viewer.organisationId,
+          viewer.eventId,
+          viewer.personId,
+          origin,
+          parsed.status === "confirmed"
+            ? "review.moderation.confirmed"
+            : "review.moderation.saved",
+          moderationId,
+          operationId,
+          parsed.submissionId,
+          viewer.eventId,
+          expectedSubmissionStatus,
+          expectedSubmissionRevision,
+        ],
+      ),
+    ]).catch((error: unknown) => {
+      if (isAtomicBatchGuardError(error)) {
+        throw new Error(
+          "The moderation could not record its complete state and audit evidence.",
+          { cause: error },
+        );
+      }
+      throw error;
+    });
     if ((claimed.meta.changes ?? 0) !== 1) {
       throw new EvaluationRevisionConflictError(
         "The round, submission, reviews, or moderation changed before the moderation could be saved.",
