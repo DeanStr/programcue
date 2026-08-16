@@ -163,9 +163,12 @@ export function ScheduleSourcePanel({
     : matchingWorkspaceSessions;
   const matchingVisibleSessions = visibleSessions.filter(matchesSessionQuery);
   return (
-    <aside className="card pad schedule-source">
+    <aside
+      aria-labelledby="schedule-source-heading"
+      className="card pad schedule-source"
+    >
       <div className="card-title">
-        <h2>Sessions</h2>
+        <h2 id="schedule-source-heading">Sessions</h2>
       </div>
       {placementAvailable &&
       workspace.sessions.length &&

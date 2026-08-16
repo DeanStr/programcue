@@ -9,6 +9,7 @@ import { EvaluationService } from "~/modules/evaluations/evaluation-service.serv
 import { ProgrammeEmbedService } from "~/modules/programme/programme-embed-service.server";
 import { eventLocalCalendarDate } from "~/modules/schedule/schedule-time";
 import { readSpeakerProfileHistory } from "~/modules/speakers/speaker-profile-revision.server";
+import { SubmissionService } from "~/modules/submissions/submission-service.server";
 import type { Viewer } from "~/platform/auth/authorize.server";
 import {
   DEMO_ASSISTANT_FIXTURE_MODEL,
@@ -380,6 +381,24 @@ describe("complete evaluator demo reset", () => {
           recommendation: "reject",
         },
       ]);
+      const submissionService = new SubmissionService(testEnvironment);
+      for (const submissionId of [
+        "demo-evaluation-submission-calm",
+        "demo-evaluation-submission-inclusive",
+      ]) {
+        await expect(
+          submissionService.getAdminSubmission(demoAdministrator, submissionId),
+        ).resolves.toMatchObject({
+          id: submissionId,
+          routingExplanation: {
+            source: {
+              kind: "published_form",
+              formName: "Evaluation demo proposals",
+              versionNumber: 1,
+            },
+          },
+        });
+      }
       await expect(
         evaluation.listDiscussion(demoAdministrator, {
           roundId: "demo-evaluation-round",

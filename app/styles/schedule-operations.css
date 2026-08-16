@@ -524,6 +524,52 @@ body.dark-mode .program-cue-api-reference .scalar-api-reference {
   /* Scalar's tertiary dark text is 4.4:1 on its default background. */
   --scalar-color-3: var(--scalar-color-2);
 }
+.program-cue-api-reference .download-container.download-both {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  width: 100%;
+  margin-bottom: var(--space-4);
+}
+.program-cue-api-reference .download-container.download-both::before,
+.program-cue-api-reference
+  .download-container.download-both
+  .download-button::before {
+  display: none;
+}
+.program-cue-api-reference .download-container.download-both .download-button {
+  position: relative;
+  width: auto;
+  min-width: 0;
+  height: auto;
+  min-height: 44px;
+  margin: 0;
+  padding: var(--space-2) var(--space-3);
+  overflow: visible;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  clip-path: none;
+  background: var(--surface);
+  color: var(--ink);
+  white-space: nowrap;
+}
+.program-cue-api-reference
+  .download-container.download-both
+  .download-button:hover {
+  background: var(--surface-sunken);
+}
+.program-cue-api-reference
+  .download-container.download-both
+  .download-button
+  > span:not(.extension) {
+  color: #1e293b;
+}
+.program-cue-api-reference
+  .download-container.download-both
+  .download-button
+  .extension {
+  display: none;
+}
 .api-reference-back {
   position: absolute;
   right: 18px;

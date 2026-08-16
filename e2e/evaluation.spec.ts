@@ -5,6 +5,49 @@ test.beforeEach(async ({ request }) => {
   expect((await request.get("/admin/command")).ok()).toBeTruthy();
 });
 
+test("seeded evaluation submission details load with immutable form context", async ({
+  page,
+}) => {
+  await page.context().addCookies([
+    {
+      name: "program_cue_event",
+      value: "evt-foe-2025",
+      domain: "127.0.0.1",
+      path: "/",
+      httpOnly: true,
+      sameSite: "Lax",
+    },
+    {
+      name: "program_cue_demo_identity",
+      value: "administrator",
+      domain: "127.0.0.1",
+      path: "/",
+      httpOnly: true,
+      sameSite: "Lax",
+    },
+  ]);
+
+  for (const submission of [
+    {
+      id: "demo-evaluation-submission-calm",
+      title: "Operational calm under pressure",
+    },
+    {
+      id: "demo-evaluation-submission-inclusive",
+      title: "Designing inclusive attendee journeys",
+    },
+  ]) {
+    const response = await page.goto(`/admin/submissions/${submission.id}`);
+    expect(response?.ok()).toBeTruthy();
+    await expect(
+      page.getByRole("heading", { name: submission.title }),
+    ).toBeVisible();
+    await expect(
+      page.getByText("Evaluation demo proposals · Form version 1"),
+    ).toBeVisible();
+  }
+});
+
 test("a reviewer denied an administrator page receives a usable recovery path", async ({
   page,
 }) => {

@@ -135,7 +135,7 @@ function PublicSessionSpeakers({
 }) {
   const speakers = sessionSpeakerDetails(session, model.speakerById);
   return speakers.length ? (
-    <section className="public-session-speakers" aria-label="Speakers">
+    <div className="public-session-speakers">
       {speakers.map((speaker) => (
         <div className="public-session-speaker" key={speaker.id}>
           {model.showEmbedField("images") ? (
@@ -150,7 +150,7 @@ function PublicSessionSpeakers({
           </span>
         </div>
       ))}
-    </section>
+    </div>
   ) : (
     <p className="subtle">Speaker to be announced</p>
   );
@@ -901,7 +901,7 @@ export function PublicSpeakerGallerySurface({
         ) : null}
       </SurfaceHeading>
       {model.gallerySpeakers.length ? (
-        <section className="speaker-gallery-grid" aria-label="Speaker Gallery">
+        <div className="speaker-gallery-grid">
           {model.gallerySpeakers.map((speaker) => (
             <SpeakerGalleryCard
               key={speaker.id}
@@ -909,7 +909,7 @@ export function PublicSpeakerGallerySurface({
               model={model}
             />
           ))}
-        </section>
+        </div>
       ) : (
         <p className="empty">No speakers match this search.</p>
       )}

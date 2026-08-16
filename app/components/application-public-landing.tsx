@@ -103,7 +103,7 @@ export function PublicApplicationLanding({
   );
 
   return (
-    <div className="cfp-landing">
+    <main className="cfp-landing" id="main">
       <section
         className={`cfp-masthead${presentation.heroImagePath ? " has-image" : ""}`}
         style={
@@ -164,7 +164,7 @@ export function PublicApplicationLanding({
         </div>
       </section>
 
-      <main id="main" className="cfp-main">
+      <div className="cfp-main">
         {form.participantWelcomeText ? (
           <section className="card pad participant-welcome cfp-wide-notice">
             <span className="pc-page-eyebrow">From the event team</span>
@@ -315,7 +315,7 @@ export function PublicApplicationLanding({
             </div>
           </section>
         ) : null}
-      </main>
-    </div>
+      </div>
+    </main>
   );
 }

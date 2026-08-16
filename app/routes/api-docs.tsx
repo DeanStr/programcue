@@ -21,10 +21,12 @@ export default function ApiDocs() {
   }, []);
 
   return (
-    <main id="main" className="api-reference-page">
-      <Link className="api-reference-back" to="/admin/settings">
-        ← Program Cue settings
-      </Link>
+    <div id="main" className="api-reference-page" tabIndex={-1}>
+      <nav aria-label="API reference">
+        <Link className="api-reference-back" to="/evaluate">
+          ← Evaluation access
+        </Link>
+      </nav>
       {hydrated && ApiReferenceClient ? (
         <ApiReferenceClient />
       ) : (
@@ -40,6 +42,6 @@ export default function ApiDocs() {
           </p>
         </section>
       )}
-    </main>
+    </div>
   );
 }

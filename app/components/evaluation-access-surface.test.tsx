@@ -125,6 +125,38 @@ describe("evaluation access gate", () => {
     expect(markup).toContain('tabindex="-1"');
     expect(markup).toContain("That evaluation access code is not valid.");
   });
+
+  it("tells a rate-limited evaluator when to try again", () => {
+    const markup = render({
+      unlocked: false,
+      actionData: {
+        ok: false,
+        message: "Too many attempts.",
+        retryAfterSeconds: 95,
+      },
+    });
+
+    expect(markup).toContain("Too many attempts.");
+    expect(markup).toContain("Try again in about 2 minutes.");
+  });
+
+  it.each([0, -1, Number.NaN, Number.POSITIVE_INFINITY])(
+    "fails fast for an invalid retry-after duration of %s",
+    (retryAfterSeconds) => {
+      expect(() =>
+        render({
+          unlocked: false,
+          actionData: {
+            ok: false,
+            message: "Too many attempts.",
+            retryAfterSeconds,
+          },
+        }),
+      ).toThrow(
+        "Evaluation retry-after duration must be a positive finite number.",
+      );
+    },
+  );
 });
 
 describe("evaluation persona board", () => {

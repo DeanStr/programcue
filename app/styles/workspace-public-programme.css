@@ -380,7 +380,7 @@
 .public-surface {
   min-width: 0;
 }
-.public-shell > .public-main {
+.public-page-main {
   flex: 1;
 }
 .itinerary-verification {
@@ -792,6 +792,9 @@
   overflow: hidden;
 }
 .session-disclosure {
+  display: inline-flex;
+  align-items: center;
+  min-height: 24px;
   padding: 0;
   border: 0;
   background: transparent;
@@ -1442,6 +1445,7 @@
 .public-venue-map {
   display: inline-flex;
   align-items: center;
+  min-height: 24px;
   gap: var(--space-1);
   margin-top: var(--space-3);
   font-size: var(--text-xs);
@@ -1574,7 +1578,9 @@
   color: var(--text-secondary);
 }
 .session-detail-profile-link {
-  display: inline-block;
+  display: inline-flex;
+  align-items: center;
+  min-height: 24px;
   margin-top: var(--space-2);
   font-size: var(--text-xs);
   font-weight: var(--weight-semibold);
@@ -1596,6 +1602,13 @@
 #programme-speaker-profile .stack a:not(.btn):hover,
 #programme-speaker-profile .stack a:not(.btn):focus-visible {
   text-decoration-thickness: 2px;
+}
+@media (pointer: coarse) {
+  .session-disclosure,
+  .public-venue-map,
+  .session-detail-profile-link {
+    min-height: 44px;
+  }
 }
 /* biome-ignore lint/style/noDescendingSpecificity: Component variants intentionally precede broader child rules; their higher specificity preserves the intended state and layout overrides. */
 .public-profile-actions {

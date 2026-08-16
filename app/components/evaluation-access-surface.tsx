@@ -59,7 +59,11 @@ export type EvaluationSelection = {
   destination: string;
 };
 
-export type EvaluationActionResult = { ok: boolean; message: string };
+export type EvaluationActionResult = {
+  ok: boolean;
+  message: string;
+  retryAfterSeconds?: number;
+};
 
 export type EvaluationAccessSurfaceProps = {
   unlocked: boolean;
@@ -88,6 +92,20 @@ type Destination = {
   label: string;
   detail: string;
 };
+
+function retryAfterLabel(seconds: number) {
+  if (!Number.isFinite(seconds) || seconds <= 0) {
+    throw new Error(
+      "Evaluation retry-after duration must be a positive finite number.",
+    );
+  }
+  const roundedSeconds = Math.ceil(seconds);
+  if (roundedSeconds < 60) {
+    return `Try again in about ${roundedSeconds} second${roundedSeconds === 1 ? "" : "s"}.`;
+  }
+  const minutes = Math.ceil(roundedSeconds / 60);
+  return `Try again in about ${minutes} minute${minutes === 1 ? "" : "s"}.`;
+}
 
 export const PUBLIC_DESTINATIONS: readonly Destination[] = [
   {
@@ -409,6 +427,9 @@ function AccessGate({
               <TriangleAlert aria-hidden size={18} />
               <div className="pc-status-notice-copy">
                 <strong>{actionData.message}</strong>
+                {actionData.retryAfterSeconds !== undefined ? (
+                  <span>{retryAfterLabel(actionData.retryAfterSeconds)}</span>
+                ) : null}
               </div>
             </div>
           ) : null}
@@ -582,6 +603,9 @@ export function EvaluationAccessSurface({
           )}
           <div className="pc-status-notice-copy">
             <strong>{actionData.message}</strong>
+            {!actionData.ok && actionData.retryAfterSeconds !== undefined ? (
+              <span>{retryAfterLabel(actionData.retryAfterSeconds)}</span>
+            ) : null}
           </div>
         </div>
       ) : null}

@@ -23,9 +23,13 @@ export function ScheduleValidationPanel({
   const latestPlacementWasBlocked =
     workspace.conflicts.length === 0 && latestPlacementConflicts.length > 0;
   return (
-    <aside id="schedule-validation" className="card pad schedule-conflicts">
+    <aside
+      aria-labelledby="schedule-validation-heading"
+      id="schedule-validation"
+      className="card pad schedule-conflicts"
+    >
       <div className="card-title">
-        <h2>Validation</h2>
+        <h2 id="schedule-validation-heading">Validation</h2>
         <span
           className={`status ${workspace.conflicts.length || latestPlacementWasBlocked ? "danger" : "success"}`}
         >

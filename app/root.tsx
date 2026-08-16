@@ -8,6 +8,7 @@ import {
   Outlet,
   Scripts,
   ScrollRestoration,
+  useLocation,
 } from "react-router";
 import { Toaster } from "sonner";
 import { BrandMark } from "~/components/brand-mark";
@@ -114,6 +115,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
 }
 
 export default function App({ loaderData }: Route.ComponentProps) {
+  const embedded = useLocation().pathname.startsWith("/embed/");
   useEffect(() => {
     document.body.dataset.hydrated = "true";
     const removeDraftCleanup = installDraftRecoverySignOutCleanup();
@@ -125,7 +127,7 @@ export default function App({ loaderData }: Route.ComponentProps) {
   return (
     <>
       <RouteProgress />
-      {loaderData.evaluation ? (
+      {loaderData.evaluation && !embedded ? (
         <aside
           className="pc-status-notice is-warning"
           aria-label="Evaluation session"
@@ -144,16 +146,18 @@ export default function App({ loaderData }: Route.ComponentProps) {
         </aside>
       ) : null}
       <Outlet />
-      <Toaster
-        closeButton
-        containerAriaLabel="Action status notifications"
-        position="bottom-right"
-        toastOptions={{
-          closeButtonAriaLabel: "Dismiss notification",
-          classNames: { toast: "pc-toast" },
-        }}
-        visibleToasts={3}
-      />
+      {!embedded ? (
+        <Toaster
+          closeButton
+          containerAriaLabel="Action status notifications"
+          position="bottom-right"
+          toastOptions={{
+            closeButtonAriaLabel: "Dismiss notification",
+            classNames: { toast: "pc-toast" },
+          }}
+          visibleToasts={3}
+        />
+      ) : null}
     </>
   );
 }

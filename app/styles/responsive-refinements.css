@@ -475,6 +475,35 @@
   }
 }
 
+/* Keep the event identity readable when the programme header has to share a
+   320px viewport with the itinerary and navigation controls. */
+@media (max-width: 360px) {
+  .public-top {
+    height: auto;
+    flex-wrap: wrap;
+    row-gap: var(--space-1);
+  }
+  .public-top .brand {
+    flex: 1 0 100%;
+    width: 100%;
+  }
+  .public-brand-name {
+    overflow: visible;
+    text-overflow: clip;
+  }
+  .public-mobile-nav {
+    margin-left: 0;
+  }
+  .public-top > .public-itinerary-link {
+    margin-left: auto;
+  }
+  .public-shell #programme,
+  .public-shell #speakers,
+  .public-shell #itinerary {
+    scroll-margin-top: 120px;
+  }
+}
+
 /* --- Mobile navigation ---------------------------------------------------
    The sidebar is display:none below 760px. The trigger only exists there. */
 .pc-mobile-nav-trigger {

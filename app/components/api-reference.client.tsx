@@ -13,6 +13,41 @@ function nameScalarCopyButtons(root: Element) {
   });
 }
 
+function labelScalarDownloadButtons(root: Element) {
+  for (const button of root.querySelectorAll<HTMLButtonElement>(
+    "button.download-button",
+  )) {
+    const extension = button.querySelector<HTMLElement>(".extension");
+    if (!extension) {
+      throw new Error(
+        "Scalar download button is missing its required extension label.",
+      );
+    }
+    const format = extension.textContent?.trim();
+    if (!format) {
+      throw new Error("Scalar download button has an empty extension label.");
+    }
+    const formatLabel = format.toUpperCase();
+    const visibleLabel = button.querySelector<HTMLElement>(
+      "span:not(.extension)",
+    );
+    if (!visibleLabel) {
+      throw new Error(
+        "Scalar download button is missing its required visible label.",
+      );
+    }
+    button.setAttribute(
+      "aria-label",
+      `Download OpenAPI document as ${formatLabel}`,
+    );
+    const visibleText = `Download ${formatLabel}`;
+    if (visibleLabel.textContent !== visibleText) {
+      visibleLabel.textContent = visibleText;
+    }
+    extension.setAttribute("aria-hidden", "true");
+  }
+}
+
 /* Scalar currently reuses each client tab-panel ID for its nested disclosure
    panel. Keep this workaround exact so any different malformed markup still
    fails the real-page duplicate-ID assertion. */
@@ -47,22 +82,24 @@ export default function ApiReferenceClient() {
   useEffect(() => {
     const container = root.current;
     if (!container) return;
-    nameScalarCopyButtons(container);
-    repairScalarClientTabPanels(container);
-    const observer = new MutationObserver((mutations) => {
-      let scalarClientChanged = false;
-      for (const mutation of mutations) {
-        for (const node of mutation.addedNodes) {
-          if (node instanceof Element) {
-            scalarClientChanged = true;
-            nameScalarCopyButtons(node);
-          }
-        }
-      }
-      if (scalarClientChanged) repairScalarClientTabPanels(container);
+    let reconcileTimer: number | undefined;
+    const reconcileScalarMarkup = () => {
+      window.clearTimeout(reconcileTimer);
+      reconcileTimer = window.setTimeout(() => {
+        nameScalarCopyButtons(container);
+        labelScalarDownloadButtons(container);
+        repairScalarClientTabPanels(container);
+      });
+    };
+    reconcileScalarMarkup();
+    const observer = new MutationObserver(() => {
+      reconcileScalarMarkup();
     });
     observer.observe(container, { childList: true, subtree: true });
-    return () => observer.disconnect();
+    return () => {
+      observer.disconnect();
+      window.clearTimeout(reconcileTimer);
+    };
   }, []);
 
   return (

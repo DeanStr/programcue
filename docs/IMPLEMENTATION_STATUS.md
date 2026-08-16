@@ -303,6 +303,26 @@ including an axe colour-contrast assertion on each submitted canonical review.
 The added state-aware guide coverage exercises every requested phase. These
 changes have not been deployed or independently re-evaluated.
 
+A follow-up evaluator audit in this worktree also repairs the two seeded
+evaluation submission-detail failures by restoring the immutable form name,
+kind and public slug to the published version snapshot; both canonical detail
+routes now load through the real administrator interface. Public programme,
+agenda, gallery, application, Schedule and API-reference landmarks are complete
+and uniquely named, including the same-origin programme preview; embed mode no
+longer mounts an irrelevant evaluation banner or duplicate toast live region.
+At 320 pixels the full event name remains visible, compact programme links meet
+the WCAG 2.2 target-size minimum, and Scalar exposes separate, visible 44-pixel
+JSON and YAML download controls with light/dark contrast. The API-reference back
+link returns anonymous users to the public evaluation access gate rather than a
+private settings route, and evaluation rate-limit errors state the approximate
+retry time. Invalid retry durations now fail their explicit UI invariant rather
+than being silently clamped, and settled Scalar markup fails explicitly if its
+required download labels disappear. The focused repository gate passed 36
+files/324 tests, and seven
+Chromium accessibility workflows passed across representative phone, tablet,
+desktop, dark-theme, landmark and embed cases. These changes remain local and
+uncommitted; no deployment or fresh production reset is claimed.
+
 Bundled Priya Raman and Marcus Okafor portraits are presentation assets exposed
 only through the canonical event's published programme projection and optional
 application featured-speaker preview, under exact demo/evaluation runtime,

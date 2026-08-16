@@ -227,6 +227,12 @@
   }
 }
 
+@media (max-width: 360px) {
+  .public-shell:not(.embedded) .programme-day-divider {
+    top: 112px;
+  }
+}
+
 /* Phones ------------------------------------------------------------------
    The row reflows to a single column and the save control moves onto its own
    line. Nothing is hidden: the previous layout dropped the room and the track

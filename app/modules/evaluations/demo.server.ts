@@ -1,3 +1,4 @@
+import type { FormVersion } from "~/modules/submissions/submission-repository-shared";
 import type {
   FormRouting,
   SubmissionFormSchema,
@@ -111,12 +112,15 @@ const formRouting = {
 } satisfies FormRouting;
 
 const formSettings = {
+  name: "Evaluation demo proposals",
+  kind: "submission",
+  publicSlug: "evaluation-demo",
   closesAt: null,
   submissionLimit: null,
   minSpeakers: 1,
   maxSpeakers: 2,
   accessMode: "email_verified",
-};
+} satisfies Required<FormVersion["settings"]>;
 
 const proposals = [
   {

@@ -160,6 +160,8 @@ test("mobile programme navigation closes after activation and reflows at 320px",
 
   await page.setViewportSize({ width: 320, height: 700 });
   await openAnonymous(page, "/public/programme/future-of-events-2027");
+  const brandName = page.locator(".public-brand-name");
+  await expect(brandName).toHaveText("Future of Events 2027");
   const containment = await page.evaluate(() => ({
     viewportWidth: document.documentElement.clientWidth,
     documentWidth: document.documentElement.scrollWidth,
@@ -173,6 +175,29 @@ test("mobile programme navigation closes after activation and reflows at 320px",
   expect(
     containment.panelRights.every(
       (right) => right <= containment.viewportWidth + 1,
+    ),
+  ).toBe(true);
+  expect(
+    await brandName.evaluate(
+      (element) => element.scrollWidth <= element.clientWidth + 1,
+    ),
+  ).toBe(true);
+  const compactPublicTargets = page.locator(
+    ".session-disclosure, .public-venue-map, .session-detail-profile-link",
+  );
+  const compactPublicTargetSizes = await compactPublicTargets.evaluateAll(
+    (targets) =>
+      targets
+        .filter((target) => target.getClientRects().length > 0)
+        .map((target) => {
+          const box = target.getBoundingClientRect();
+          return { width: box.width, height: box.height };
+        }),
+  );
+  expect(compactPublicTargetSizes.length).toBeGreaterThan(0);
+  expect(
+    compactPublicTargetSizes.every(
+      ({ width, height }) => width >= 24 && height >= 24,
     ),
   ).toBe(true);
 });

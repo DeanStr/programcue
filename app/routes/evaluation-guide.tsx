@@ -48,7 +48,7 @@ import type { Route } from "./+types/evaluation-guide";
 
 type ActionResult =
   | { ok: true; message: string }
-  | { ok: false; message: string };
+  | { ok: false; message: string; retryAfterSeconds?: number };
 
 export const meta = () => [{ title: "Evaluation access · Program Cue" }];
 export const headers: Route.HeadersFunction = () => ({
@@ -394,7 +394,11 @@ export async function action({ request, context }: Route.ActionArgs) {
     } catch (error) {
       if (error instanceof AbuseRateLimitError) {
         return data<ActionResult>(
-          { ok: false, message: error.message },
+          {
+            ok: false,
+            message: error.message,
+            retryAfterSeconds: error.retryAfterSeconds,
+          },
           {
             status: 429,
             headers: {
@@ -482,7 +486,11 @@ export async function action({ request, context }: Route.ActionArgs) {
     } catch (error) {
       if (error instanceof AbuseRateLimitError) {
         return data<ActionResult>(
-          { ok: false, message: error.message },
+          {
+            ok: false,
+            message: error.message,
+            retryAfterSeconds: error.retryAfterSeconds,
+          },
           {
             status: 429,
             headers: {

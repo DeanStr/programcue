@@ -1149,53 +1149,58 @@ export function PublicProgrammeWorkspace({
       }
     >
       {!embedded ? <PublicProgrammeHeader model={model} /> : null}
-      <PublicProgrammeHero model={model} />
       <main
+        aria-label={embedded ? "Embedded programme preview" : undefined}
         id="main"
-        className={`public-main${!overviewSurface ? " public-surface-main" : ""}`}
+        className="public-page-main"
       >
-        {!overviewSurface ? (
-          <div className="public-surface-content">
-            <ItineraryVerificationPrompt model={model} />
-            {embedded && embedOptions.controls.length ? (
-              <PublicProgrammeFilters model={model} />
-            ) : null}
-            <PublicProgrammeSurfaceContent model={model} />
-          </div>
-        ) : (
-          <>
-            <div className="public-content" id="programme">
-              {fetcher.data && "error" in fetcher.data ? (
-                <div className="validation-item error mb" role="alert">
-                  <strong>Itinerary not updated</strong>
-                  <span>{String(fetcher.data.error)}</span>
-                </div>
-              ) : null}
-              {shareUrl ? (
-                <div className="public-share-notice mb" role="status">
-                  <strong>Share link ready</strong>
-                  <a href={shareUrl}>{shareUrl}</a>
-                  <span>
-                    The link is read-only. Creating another rotates it.
-                  </span>
-                </div>
-              ) : null}
-              {embedOptions.controls.length || !embedded ? (
+        <PublicProgrammeHero model={model} />
+        <div
+          className={`public-main${!overviewSurface ? " public-surface-main" : ""}`}
+        >
+          {!overviewSurface ? (
+            <div className="public-surface-content">
+              <ItineraryVerificationPrompt model={model} />
+              {embedded && embedOptions.controls.length ? (
                 <PublicProgrammeFilters model={model} />
               ) : null}
-              <ProgrammeSessionList model={model} />
+              <PublicProgrammeSurfaceContent model={model} />
             </div>
-            {/* The rail precedes the roster in source order, so on a phone —
+          ) : (
+            <>
+              <div className="public-content" id="programme">
+                {fetcher.data && "error" in fetcher.data ? (
+                  <div className="validation-item error mb" role="alert">
+                    <strong>Itinerary not updated</strong>
+                    <span>{String(fetcher.data.error)}</span>
+                  </div>
+                ) : null}
+                {shareUrl ? (
+                  <div className="public-share-notice mb" role="status">
+                    <strong>Share link ready</strong>
+                    <a href={shareUrl}>{shareUrl}</a>
+                    <span>
+                      The link is read-only. Creating another rotates it.
+                    </span>
+                  </div>
+                ) : null}
+                {embedOptions.controls.length || !embedded ? (
+                  <PublicProgrammeFilters model={model} />
+                ) : null}
+                <ProgrammeSessionList model={model} />
+              </div>
+              {/* The rail precedes the roster in source order, so on a phone —
                 where it stops being a rail — a tapped session's detail is the
                 next thing under the list rather than 2,400px below it. */}
-            <aside id="itinerary">
-              {!embedded ? <ItineraryPanel model={model} /> : null}
-              <SessionDetailPanel model={model} />
-              {!embedded ? <VenuePanel model={model} /> : null}
-            </aside>
-            <OverviewSpeakers model={model} />
-          </>
-        )}
+              <aside id="itinerary">
+                {!embedded ? <ItineraryPanel model={model} /> : null}
+                <SessionDetailPanel model={model} />
+                {!embedded ? <VenuePanel model={model} /> : null}
+              </aside>
+              <OverviewSpeakers model={model} />
+            </>
+          )}
+        </div>
       </main>
       {!embedded ? <PublicProgrammeFooter model={model} /> : null}
     </div>

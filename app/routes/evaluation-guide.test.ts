@@ -173,6 +173,20 @@ describe("production evaluation guide", () => {
     ).rejects.toMatchObject({ status: 404 });
   });
 
+  it("loads the locked access gate without an authenticated session", async () => {
+    await expect(
+      loader({
+        request: new Request("https://app.programcue.com/evaluate"),
+        params: {},
+        context: context(productionEnvironment()),
+      } as never),
+    ).resolves.toMatchObject({
+      unlocked: false,
+      selected: null,
+      eventName: "Future of Events 2027",
+    });
+  });
+
   it("unlocks a fixed persona and authenticates it through normal server authorization", async () => {
     await ensureDemoData(env as unknown as CloudflareEnvironment);
     const environment = productionEnvironment();
@@ -1107,5 +1121,9 @@ describe("production evaluation guide", () => {
     }
     expect(limited.init?.status).toBe(429);
     expect(new Headers(limited.init?.headers).get("retry-after")).toBeTruthy();
+    expect(limited.data).toMatchObject({
+      ok: false,
+      retryAfterSeconds: expect.any(Number),
+    });
   });
 });
