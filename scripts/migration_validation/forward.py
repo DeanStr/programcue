@@ -21,6 +21,9 @@ from .forward_canonical_demo_dates import validate_canonical_demo_dates_forward_
 from .forward_published_content_approval import (
     validate_published_content_approval_forward_migration,
 )
+from .forward_reviewer_ai_hardening import (
+    validate_reviewer_ai_hardening_forward_migration,
+)
 from .forward_session_participation import validate_session_participation_forward_migration
 from .forward_speaker_profile_depth import validate_speaker_profile_depth_forward_migration
 from .forward_speaker_workflow import validate_speaker_workflow_forward_migration
@@ -42,3 +45,4 @@ def validate_forward_migrations(root: Path) -> None:
     validate_contextual_revision_evidence_forward_migration(root)
     validate_decision_draft_preview_contract_forward_migration(root)
     validate_decision_draft_session_format_forward_migration(root)
+    validate_reviewer_ai_hardening_forward_migration(root)

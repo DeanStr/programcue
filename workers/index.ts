@@ -2,7 +2,10 @@ import { createRequestHandler, RouterContextProvider } from "react-router";
 
 import { runCommunicationAutomation } from "../app/modules/communications/communication-automation-service.server";
 import { requireRetiredEventBrandAssetCleanup } from "../app/modules/events/event-brand-asset-cleanup.server";
-import { cloudflareContext } from "../app/platform/cloudflare-context";
+import {
+  cloudflareContext,
+  cspNonceContext,
+} from "../app/platform/cloudflare-context";
 import {
   apiCorsHeaders,
   apiPreflightResponse,
@@ -99,6 +102,7 @@ function secure(
   response: Response,
   request: Request,
   env: CloudflareEnvironment,
+  cspNonce: string,
   appEnvironment: unknown = env.APP_ENV,
 ) {
   const headers = new Headers(response.headers);
@@ -107,6 +111,7 @@ function secure(
     headers,
     typeof appEnvironment === "string" ? appEnvironment : undefined,
     env.RESOURCE_EMBED_PROVIDERS,
+    cspNonce,
   );
   applyPrivateWorkspaceCachePolicy(headers, pathname);
   for (const [name, value] of apiCorsHeaders(request, env))
@@ -145,6 +150,7 @@ function invalidRuntimeConfiguration(
   request: Request,
   env: CloudflareEnvironment,
   correlationId: string,
+  cspNonce: string,
   error: unknown,
 ) {
   console.error(
@@ -173,7 +179,7 @@ function invalidRuntimeConfiguration(
     : new Response("The service runtime configuration is invalid.", {
         status: 503,
       });
-  return secure(response, request, env, "production");
+  return secure(response, request, env, cspNonce, "production");
 }
 
 function operationalIdentifier(value: unknown) {
@@ -335,6 +341,7 @@ export async function rejectUnsupportedQueueMessage(
 export default {
   async fetch(request, env, ctx) {
     const correlationId = requestCorrelationId(request);
+    const cspNonce = crypto.randomUUID().replaceAll("-", "");
     let sourceRevision: string;
     try {
       requireRuntimeMode(env);
@@ -345,21 +352,30 @@ export default {
           maintenanceResponse(request, correlationId),
           request,
           env,
+          cspNonce,
         );
       }
     } catch (error) {
-      return invalidRuntimeConfiguration(request, env, correlationId, error);
+      return invalidRuntimeConfiguration(
+        request,
+        env,
+        correlationId,
+        cspNonce,
+        error,
+      );
     }
     const rejectedMethod = rejectUnsupportedRequestMethod(request);
-    if (rejectedMethod) return secure(rejectedMethod, request, env);
+    if (rejectedMethod) return secure(rejectedMethod, request, env, cspNonce);
     const preflight = apiPreflightResponse(request, env, correlationId);
-    if (preflight) return secure(preflight, request, env);
+    if (preflight) return secure(preflight, request, env, cspNonce);
     const rejectedMutation = rejectCrossOriginBrowserMutation(request);
-    if (rejectedMutation) return secure(rejectedMutation, request, env);
+    if (rejectedMutation)
+      return secure(rejectedMutation, request, env, cspNonce);
 
     try {
       const routerContext = new RouterContextProvider();
       routerContext.set(cloudflareContext, { env, ctx });
+      routerContext.set(cspNonceContext, cspNonce);
       const response = await requestHandler(request, routerContext);
       if (response.status >= 500) {
         console.error(
@@ -375,7 +391,7 @@ export default {
           }),
         );
       }
-      return secure(response, request, env);
+      return secure(response, request, env, cspNonce);
     } catch (error) {
       const pathname = new URL(request.url).pathname;
       console.error(
@@ -399,7 +415,7 @@ export default {
             { status: 500 },
           )
         : new Response(message, { status: 500 });
-      return secure(response, request, env);
+      return secure(response, request, env, cspNonce);
     }
   },
 

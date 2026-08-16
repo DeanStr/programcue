@@ -102,6 +102,7 @@ npm run quality
 npm run quality:fix
 npm run format
 npm run lint
+npm run check:browser:pr
 npm run typecheck
 npm test
 npm run test:unit
@@ -127,7 +128,8 @@ projects using Vitest's changed-file graph;
 `test:worker:runtime` command makes a single Workerd file genuinely focusable
 without also starting the separate Agents Durable Object project.
 
-`check:quick` runs the complete core gate plus sharded desktop Chromium
+`check:browser:pr` runs the compact pull-request Chromium golden/provider/AI/
+accessibility lane plus the public-site browser suite. `check:quick` runs the complete core gate plus sharded desktop Chromium
 behavior, excluding the representative visual inventory and cross-browser
 smoke. It is an integration aid, not an ordinary completion gate. `test:unit`
 runs deterministic Node-compatible rules without starting Workerd or applying
@@ -137,9 +139,10 @@ project.
 `npm test` runs both projects; focused commands do not replace the complete
 merge or release gate.
 
-The checked-in `Core gate` GitHub Actions workflow runs `check:core` for pull
-requests and `main`. Configure that check as required in branch protection so
-the repository gate cannot be bypassed by a direct merge. The manually
+The checked-in `Core gate` GitHub Actions workflow runs independent core and
+compact browser jobs for pull requests and `main`. Configure both checks as
+required in branch protection so the repository gate cannot be bypassed by a
+direct merge. Workflow dependencies are pinned to immutable revisions. The manually
 dispatched `Production release` workflow runs the complete browser gate, applies
 migrations, verifies the exact remote ledger and required schema, deploys the
 unchanged tested build with the checkout's Git revision and confirms that
@@ -254,7 +257,7 @@ The command runs the complete release gate once and retains that build. Before
 any remote mutation it requires a clean checkout, configuration and secret
 preflights, D1 integrity, the immutable deployed migration baseline and an
 applied ledger that is an exact prefix of the local migration order. It then
-applies migrations, requires the exact remote ledger and branding schema,
+applies migrations, requires the exact remote ledger and deployed schema,
 deploys the unchanged tested artifact with the checkout's full Git revision and
 confirms production health reports that revision. The protected release
 workflow invokes this same entry point. Lower-level `deploy:*` commands are not

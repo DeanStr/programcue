@@ -230,10 +230,14 @@ export class EvaluationReviewSubmissionWorkflows extends EvaluationServiceFounda
       parsed.intent === "submit"
         ? calculateRubricWeightedScore(scaledCriteria, responses)
         : null;
+    const criterionInputTypeById = new Map(
+      criteria.results.map((criterion) => [criterion.id, criterion.inputType]),
+    );
     const existing = await this.env.DB.prepare(
       `SELECT review.id, review.revision, review.status,
               review.ai_suggestion_id AS aiSuggestionId,
-              review.imported_criterion_ids_json AS importedCriterionIdsJson
+              review.imported_criterion_ids_json AS importedCriterionIdsJson,
+              review.scores_json AS scoresJson
          FROM reviews review
          JOIN events event
            ON event.id = review.event_id AND event.organisation_id = ?
@@ -246,19 +250,27 @@ export class EvaluationReviewSubmissionWorkflows extends EvaluationServiceFounda
         status: string;
         aiSuggestionId: string | null;
         importedCriterionIdsJson: string;
+        scoresJson: string;
       }>();
     if ((existing?.revision ?? 0) !== parsed.revision)
       throw new EvaluationRevisionConflictError();
     const reviewId = existing?.id ?? crypto.randomUUID();
     let existingImportedCriterionIds: string[] = [];
+    let existingResponses: Record<string, string | number | boolean> = {};
     try {
       existingImportedCriterionIds = z
         .array(z.string().min(1).max(200))
         .max(30)
         .parse(JSON.parse(existing?.importedCriterionIdsJson ?? "[]"));
+      existingResponses = z
+        .record(
+          z.string().min(1),
+          z.union([z.string(), z.number(), z.boolean()]),
+        )
+        .parse(JSON.parse(existing?.scoresJson ?? "{}"));
     } catch {
       throw new EvaluationStateError(
-        `Review ${reviewId} has invalid AI suggestion provenance.`,
+        `Review ${reviewId} has invalid persisted scores or AI suggestion provenance.`,
       );
     }
     const suggestionId =
@@ -277,7 +289,6 @@ export class EvaluationReviewSubmissionWorkflows extends EvaluationServiceFounda
     }
     let suggestion: {
       status: "offered" | "imported";
-      importedReviewId: string | null;
       assignmentRevision: number;
       scorecardId: string;
       scorecardVersion: number;
@@ -287,7 +298,6 @@ export class EvaluationReviewSubmissionWorkflows extends EvaluationServiceFounda
     if (suggestionId) {
       const row = await this.env.DB.prepare(
         `SELECT suggestion.status,
-                suggestion.imported_review_id AS importedReviewId,
                 suggestion.assignment_revision AS assignmentRevision,
                 suggestion.scorecard_id AS scorecardId,
                 suggestion.scorecard_version AS scorecardVersion,
@@ -311,7 +321,6 @@ export class EvaluationReviewSubmissionWorkflows extends EvaluationServiceFounda
         )
         .first<{
           status: "offered" | "imported";
-          importedReviewId: string | null;
           assignmentRevision: number;
           scorecardId: string;
           scorecardVersion: number;
@@ -345,24 +354,49 @@ export class EvaluationReviewSubmissionWorkflows extends EvaluationServiceFounda
           "The assignment or scorecard changed after AI suggestions were generated. Refresh before saving.",
         );
       }
-      if (
-        suggestion.status === "imported" &&
-        suggestion.importedReviewId !== reviewId
-      ) {
+      const suggestedClosedValues = new Map(
+        suggestion.suggestions
+          .filter((item) => item.suggestedValue !== null)
+          .map((item) => [item.criterionId, item.suggestedValue!]),
+      );
+      if (importedCriterionIds.some((id) => !suggestedClosedValues.has(id))) {
         throw new EvaluationValidationError(
-          "This AI suggestion was imported into a different review.",
+          "Only closed criteria from this AI suggestion can be imported.",
         );
       }
-      const suggestedClosedIds = suggestion.suggestions
-        .filter((item) => item.suggestedValue !== null)
-        .map((item) => item.criterionId);
-      if (
-        importedCriterionIds.length !== suggestedClosedIds.length ||
-        importedCriterionIds.some((id) => !suggestedClosedIds.includes(id))
-      ) {
-        throw new EvaluationValidationError(
-          "Import every closed AI criterion through the reviewer suggestion action.",
-        );
+      if (!existing?.aiSuggestionId) {
+        if (!importedCriterionIds.length) {
+          throw new EvaluationValidationError(
+            "This AI suggestion has no unanswered closed criteria to import.",
+          );
+        }
+        if (
+          importedCriterionIds.some((id) =>
+            Object.hasOwn(existingResponses, id),
+          )
+        ) {
+          throw new EvaluationValidationError(
+            "AI suggestions can only fill criteria that were unanswered in the saved review.",
+          );
+        }
+        if (
+          importedCriterionIds.some((id) => {
+            const response = responses[id];
+            const persistedValue =
+              criterionInputTypeById.get(id) === "yes_no"
+                ? response === true
+                  ? "yes"
+                  : response === false
+                    ? "no"
+                    : ""
+                : String(response ?? "");
+            return persistedValue !== suggestedClosedValues.get(id);
+          })
+        ) {
+          throw new EvaluationValidationError(
+            "Each imported AI criterion must retain its exact suggested value.",
+          );
+        }
       }
       if (
         existing?.aiSuggestionId &&
@@ -383,9 +417,6 @@ export class EvaluationReviewSubmissionWorkflows extends EvaluationServiceFounda
         "AI criterion provenance requires an available reviewer suggestion.",
       );
     }
-    const criterionInputTypeById = new Map(
-      criteria.results.map((criterion) => [criterion.id, criterion.inputType]),
-    );
     const unchangedImportedCriterionIds = suggestion
       ? suggestion.suggestions
           .filter((item) => {
@@ -486,7 +517,7 @@ export class EvaluationReviewSubmissionWorkflows extends EvaluationServiceFounda
                 AND suggestion_guard.evaluator_person_id = ?
                 AND (
                   (suggestion_guard.status = 'imported'
-                   AND suggestion_guard.imported_review_id = ?)
+                   AND reviews.ai_suggestion_id = suggestion_guard.id)
                   OR
                   (suggestion_guard.status = 'offered'
                    AND EXISTS (
@@ -563,7 +594,6 @@ export class EvaluationReviewSubmissionWorkflows extends EvaluationServiceFounda
           viewer.eventId,
           assignment.id,
           viewer.personId,
-          reviewId,
           parsed.revision,
           assignment.id,
           viewer.eventId,
@@ -677,7 +707,7 @@ export class EvaluationReviewSubmissionWorkflows extends EvaluationServiceFounda
         ? this.env.DB.prepare(
             `UPDATE reviewer_ai_suggestions AS suggestion
                 SET status = 'imported', imported_at = unixepoch(),
-                    imported_review_id = ?, lifecycle_operation_id = ?
+                    lifecycle_operation_id = ?
               WHERE suggestion.id = ? AND suggestion.event_id = ?
                 AND suggestion.assignment_id = ?
                 AND suggestion.evaluator_person_id = ?
@@ -694,7 +724,6 @@ export class EvaluationReviewSubmissionWorkflows extends EvaluationServiceFounda
                      AND review.last_operation_id = ?
                 )`,
           ).bind(
-            reviewId,
             operationId,
             suggestionId,
             viewer.eventId,

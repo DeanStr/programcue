@@ -87,7 +87,7 @@ def validate_baseline(connection: sqlite3.Connection, schema_source: str) -> Non
         "evaluation_discussion_messages": {"event_id", "round_id", "submission_id", "session_id", "author_person_id", "body", "idempotency_key"},
         "ai_review_assessments": {"round_id", "submission_id", "scorecard_id", "scorecard_version", "round_revision", "score", "rationale", "provider", "model", "provider_response_id", "override_score", "override_rationale", "override_by_person_id", "override_at", "revision", "last_operation_id"},
         "event_ai_review_settings": {"event_id", "enabled", "revision", "updated_by_person_id", "last_operation_id", "created_at", "updated_at"},
-        "reviewer_ai_suggestions": {"event_id", "assignment_id", "evaluator_person_id", "assignment_revision", "round_id", "target_type", "target_id", "source_snapshot_hash", "scorecard_id", "scorecard_version", "suggestions_json", "provider", "model", "provider_response_id", "status", "generated_at", "dismissed_at", "imported_at", "imported_review_id", "lifecycle_operation_id", "last_operation_id"},
+        "reviewer_ai_suggestions": {"event_id", "assignment_id", "evaluator_person_id", "assignment_revision", "round_id", "target_type", "target_id", "source_snapshot_hash", "scorecard_id", "scorecard_version", "suggestions_json", "provider", "model", "provider_response_id", "status", "generated_at", "dismissed_at", "imported_at", "lifecycle_operation_id", "last_operation_id"},
         "file_versions": {"object_key", "upload_status", "signature_status", "scan_status", "released_at"},
         "file_multipart_uploads": {"version_id", "asset_id", "upload_id", "idempotency_key", "status", "manifest_json", "expires_at"},
         "schedule_policies": {"room_overlap_action", "speaker_overlap_action", "required_resource_overlap_action"},
@@ -141,7 +141,7 @@ def validate_baseline(connection: sqlite3.Connection, schema_source: str) -> Non
         "idx_event_changes_cursor", "idx_webhook_deliveries_status",
         "idx_audit_events_event_created_id", "idx_audit_events_organisation_created_id", "idx_audit_events_event_actor_created_id",
         "idx_speaker_profile_revisions_person_created", "idx_speaker_profile_revisions_event_person_created",
-        "idx_evaluation_rounds_schedule", "idx_evaluation_round_reviewers_round", "idx_evaluation_round_reviewers_person", "evaluation_criteria_position_unique", "idx_ai_review_assessments_round", "idx_ai_review_assessments_submission", "idx_reviewer_ai_suggestions_assignment", "ux_reviewer_ai_suggestions_active",
+        "idx_evaluation_rounds_schedule", "idx_evaluation_round_reviewers_round", "idx_evaluation_round_reviewers_person", "evaluation_criteria_position_unique", "idx_ai_review_assessments_round", "idx_ai_review_assessments_submission", "idx_reviewer_ai_suggestions_assignment", "ux_reviewer_ai_suggestions_active", "idx_reviewer_ai_operations_organisation_usage", "idx_reviewer_ai_operations_assignment_usage",
         "idx_organisation_contacts_status", "idx_organisation_contact_tags_tag",
         "idx_crm_pipeline_stage", "idx_crm_pipeline_activity_entry",
         "assistant_proposal_executions_claim_idx",
@@ -153,7 +153,9 @@ def validate_baseline(connection: sqlite3.Connection, schema_source: str) -> Non
     # Exercise the high-risk invariants instead of only checking names.
     connection.executescript("""
     INSERT INTO organisations (id,name,slug) VALUES ('org-a','A','a'),('org-b','B','b');
-    INSERT INTO people (id,email,display_name) VALUES ('person-a','a@example.test','A');
+    INSERT INTO people (id,email,display_name) VALUES
+      ('person-a','a@example.test','A'),
+      ('person-b','b@example.test','B');
     INSERT INTO events (id,organisation_id,name,slug,timezone,starts_at,ends_at,file_policy_json)
     VALUES
       ('event-a','org-a','A','a','UTC',100,200,'{"headshotMaximumBytes":10485760,"slidesMaximumBytes":104857600,"supportingDocumentMaximumBytes":104857600,"videoMaximumBytes":1073741824}'),
@@ -356,6 +358,100 @@ def validate_baseline(connection: sqlite3.Connection, schema_source: str) -> Non
         "A dropdown criterion without persisted options was accepted",
     )
 
+    connection.executescript("""
+    INSERT INTO sessions (
+      id,event_id,title,slug,format,duration_minutes,status,visibility
+    ) VALUES
+      ('reviewer-ai-session-a','event-a','Reviewer AI A','reviewer-ai-a','presentation',30,'unscheduled','private'),
+      ('reviewer-ai-session-b','event-a','Reviewer AI B','reviewer-ai-b','presentation',30,'unscheduled','private');
+    INSERT INTO evaluator_assignments (
+      id,event_id,round_id,session_id,session_snapshot_json,evaluator_person_id
+    ) VALUES
+      ('reviewer-ai-assignment-a','event-a','dropdown-round','reviewer-ai-session-a','{}','person-a'),
+      ('reviewer-ai-assignment-b','event-a','dropdown-round','reviewer-ai-session-b','{}','person-a');
+    INSERT INTO reviews (id,event_id,assignment_id)
+    VALUES
+      ('reviewer-ai-review-a','event-a','reviewer-ai-assignment-a'),
+      ('reviewer-ai-review-b','event-a','reviewer-ai-assignment-b');
+    """)
+    must_fail(
+        "INSERT INTO reviewer_ai_suggestions "
+        "(id,event_id,assignment_id,evaluator_person_id,assignment_revision,round_id,target_type,target_id,"
+        "source_snapshot_hash,scorecard_id,scorecard_version,suggestions_json,provider,model,provider_response_id,last_operation_id) "
+        "VALUES ('reviewer-ai-wrong-evaluator','event-a','reviewer-ai-assignment-a','person-b',1,'dropdown-round',"
+        "'session','reviewer-ai-session-a','cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc',"
+        "'dropdown-scorecard',1,'[]','workers_ai','test-model','wrong-evaluator-response','wrong-evaluator-operation')",
+        "A reviewer AI suggestion named an evaluator other than its assignment evaluator",
+    )
+    connection.executescript("""
+    INSERT INTO reviewer_ai_suggestions (
+      id,event_id,assignment_id,evaluator_person_id,assignment_revision,
+      round_id,target_type,target_id,source_snapshot_hash,scorecard_id,
+      scorecard_version,suggestions_json,provider,model,provider_response_id,
+      last_operation_id
+    ) VALUES
+      ('reviewer-ai-suggestion-a','event-a','reviewer-ai-assignment-a','person-a',1,
+       'dropdown-round','session','reviewer-ai-session-a',
+       'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+       'dropdown-scorecard',1,'[]','workers_ai','test-model','response-a','suggestion-operation-a'),
+      ('reviewer-ai-suggestion-b','event-a','reviewer-ai-assignment-b','person-a',1,
+       'dropdown-round','session','reviewer-ai-session-b',
+       'bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb',
+       'dropdown-scorecard',1,'[]','workers_ai','test-model','response-b','suggestion-operation-b');
+    """)
+    must_fail(
+        "UPDATE reviews SET ai_suggestion_id='reviewer-ai-suggestion-a' "
+        "WHERE id='reviewer-ai-review-b'",
+        "A review referenced a reviewer AI suggestion from another assignment",
+    )
+    must_fail(
+        "UPDATE reviewer_ai_suggestions SET status='imported', imported_at=unixepoch(), "
+        "lifecycle_operation_id='suggestion-import-b' WHERE id='reviewer-ai-suggestion-b'",
+        "A reviewer AI suggestion was imported without a matching review",
+    )
+    connection.execute(
+        "UPDATE reviewer_ai_suggestions SET status='dismissed', dismissed_at=unixepoch(), "
+        "lifecycle_operation_id='suggestion-dismiss-b' WHERE id='reviewer-ai-suggestion-b'"
+    )
+    must_fail(
+        "UPDATE reviews SET ai_suggestion_id='reviewer-ai-suggestion-b' "
+        "WHERE id='reviewer-ai-review-b'",
+        "A review referenced a dismissed reviewer AI suggestion",
+    )
+    connection.execute(
+        "UPDATE reviews SET ai_suggestion_id='reviewer-ai-suggestion-a' "
+        "WHERE id='reviewer-ai-review-a'"
+    )
+    must_fail(
+        "UPDATE reviewer_ai_suggestions SET status='dismissed', dismissed_at=unixepoch(), "
+        "lifecycle_operation_id='suggestion-dismiss-a' WHERE id='reviewer-ai-suggestion-a'",
+        "A reviewer AI suggestion referenced by a review was dismissed",
+    )
+    connection.execute(
+        "UPDATE reviewer_ai_suggestions SET status='imported', imported_at=unixepoch(), "
+        "lifecycle_operation_id='suggestion-import-a' WHERE id='reviewer-ai-suggestion-a'"
+    )
+    must_fail(
+        "INSERT INTO review_revisions "
+        "(id,event_id,review_id,revision_number,scores_json,content_json,save_kind,saved_by_person_id,"
+        "scorecard_id,scorecard_version,criteria_snapshot_json,ai_suggestion_id) "
+        "VALUES ('reviewer-ai-invalid-revision','event-a','reviewer-ai-review-b',1,'{}','{}','manual','person-a',"
+        "'dropdown-scorecard',1,'[]','reviewer-ai-suggestion-a')",
+        "A review revision referenced a reviewer AI suggestion from another review",
+    )
+    connection.execute(
+        "INSERT INTO review_revisions "
+        "(id,event_id,review_id,revision_number,scores_json,content_json,save_kind,saved_by_person_id,"
+        "scorecard_id,scorecard_version,criteria_snapshot_json,ai_suggestion_id) "
+        "VALUES ('reviewer-ai-valid-revision','event-a','reviewer-ai-review-a',1,'{}','{}','manual','person-a',"
+        "'dropdown-scorecard',1,'[]','reviewer-ai-suggestion-a')"
+    )
+    must_fail(
+        "UPDATE review_revisions SET ai_suggestion_id='reviewer-ai-suggestion-b' "
+        "WHERE id='reviewer-ai-valid-revision'",
+        "A review revision was changed to a dismissed reviewer AI suggestion",
+    )
+
     connection.execute(
         "UPDATE events SET participant_retention_completed_at=unixepoch() WHERE id='event-a'"
     )
@@ -415,6 +511,13 @@ def validate_baseline(connection: sqlite3.Connection, schema_source: str) -> Non
         "events_brand_assets_ready_insert",
         "events_brand_assets_ready_update",
         "events_retire_unreferenced_brand_assets",
+        "reviews_ai_suggestion_provenance_insert",
+        "reviews_ai_suggestion_provenance_update",
+        "reviewer_ai_suggestions_assignment_provenance_insert",
+        "reviewer_ai_suggestions_import_requires_review",
+        "reviewer_ai_suggestions_dismiss_requires_unreferenced",
+        "review_revisions_ai_suggestion_provenance_insert",
+        "review_revisions_ai_suggestion_provenance_update",
     }
     if required_triggers - triggers:
         raise SystemExit(f"Migration triggers are missing: {sorted(required_triggers - triggers)}")

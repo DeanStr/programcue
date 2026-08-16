@@ -592,7 +592,6 @@ export const reviewerAiSuggestions = sqliteTable(
     generatedAt: integer("generated_at").notNull().default(epochNow),
     dismissedAt: integer("dismissed_at"),
     importedAt: integer("imported_at"),
-    importedReviewId: text("imported_review_id"),
     lifecycleOperationId: text("lifecycle_operation_id"),
     lastOperationId: text("last_operation_id").notNull(),
   },

@@ -15,6 +15,9 @@ import {
 
 const MAX_CONTEXT_CHARACTERS = 60_000;
 const GENERATION_LEASE_SECONDS = 5 * 60;
+const USAGE_WINDOW_SECONDS = 24 * 60 * 60;
+const ASSIGNMENT_PROVIDER_CALL_LIMIT_PER_24_HOURS = 3;
+const ORGANISATION_PROVIDER_CALL_LIMIT_PER_24_HOURS = 100;
 
 export class ReviewerAiSuggestionStateError extends Error {
   constructor(message: string) {
@@ -73,6 +76,21 @@ export type ReviewerAiSuggestionRetry = {
 type SuggestionDependencies = {
   provider?: AiModelProvider;
 };
+
+function invariantGuardStatement(
+  env: CloudflareEnvironment,
+  failurePredicateSql: string,
+  bindings: Array<string | number | null>,
+) {
+  return env.DB.prepare(
+    `SELECT json('reviewer AI invariant failed')
+       WHERE ${failurePredicateSql}`,
+  ).bind(...bindings);
+}
+
+function isInvariantGuardError(error: unknown) {
+  return error instanceof Error && /malformed JSON/u.test(error.message);
+}
 
 type Criterion = {
   id: string;
@@ -255,6 +273,7 @@ export class ReviewerAiSuggestionService {
       })
       .parse(input);
     const operationId = crypto.randomUUID();
+    const auditEventId = crypto.randomUUID();
     const mutation =
       parsed.revision === 0
         ? this.env.DB.prepare(
@@ -315,7 +334,7 @@ export class ReviewerAiSuggestionService {
             AND setting.enabled = ? AND setting.revision = ?
             AND setting.last_operation_id = ?`,
       ).bind(
-        crypto.randomUUID(),
+        auditEventId,
         viewer.personId,
         operationId,
         JSON.stringify({
@@ -328,7 +347,34 @@ export class ReviewerAiSuggestionService {
         parsed.revision + 1,
         operationId,
       ),
-    ]);
+      invariantGuardStatement(
+        this.env,
+        `EXISTS (
+           SELECT 1 FROM event_ai_review_settings setting
+            WHERE setting.event_id = ? AND setting.last_operation_id = ?
+         ) <> EXISTS (
+           SELECT 1 FROM audit_events audit
+            WHERE audit.id = ? AND audit.event_id = ?
+              AND audit.action = 'evaluation.reviewer_ai_setting.updated'
+              AND audit.correlation_id = ?
+         )`,
+        [
+          viewer.eventId,
+          operationId,
+          auditEventId,
+          viewer.eventId,
+          operationId,
+        ],
+      ),
+    ]).catch((error: unknown) => {
+      if (isInvariantGuardError(error)) {
+        throw new Error(
+          "The reviewer AI setting could not record its audit evidence.",
+          { cause: error },
+        );
+      }
+      throw error;
+    });
     const updatedCount = updated.meta.changes ?? 0;
     const auditedCount = audited.meta.changes ?? 0;
     if (updatedCount !== 1 || auditedCount !== 1) {
@@ -442,6 +488,41 @@ export class ReviewerAiSuggestionService {
       .first<ReviewerAiSuggestionRetry>();
   }
 
+  private async auditedTerminalOperation(viewer: Viewer, operationId: string) {
+    return this.env.DB.prepare(
+      `SELECT operation.status,
+              CASE
+                WHEN operation.status = 'completed' THEN EXISTS (
+                  SELECT 1 FROM audit_events audit
+                   WHERE audit.event_id = operation.event_id
+                     AND audit.organisation_id = operation.organisation_id
+                     AND audit.correlation_id = operation.id
+                     AND audit.action = 'ai.reviewer_suggestion.generated'
+                     AND audit.entity_id = json_extract(
+                       operation.result_json, '$.suggestionId'
+                     )
+                )
+                WHEN operation.status = 'failed' THEN EXISTS (
+                  SELECT 1 FROM audit_events audit
+                   WHERE audit.event_id = operation.event_id
+                     AND audit.organisation_id = operation.organisation_id
+                     AND audit.correlation_id = operation.id
+                     AND audit.entity_id = operation.id
+                     AND audit.action IN (
+                       'ai.reviewer_suggestion.failed',
+                       'ai.reviewer_suggestion.interrupted'
+                     )
+                )
+                ELSE 0
+              END AS hasTerminalAudit
+         FROM operation_jobs operation
+        WHERE operation.id = ? AND operation.event_id = ?
+          AND operation.requested_by_person_id = ?`,
+    )
+      .bind(operationId, viewer.eventId, viewer.personId)
+      .first<{ status: string; hasTerminalAudit: number | boolean }>();
+  }
+
   private async recoverInterruptedOperation(
     viewer: Viewer,
     assignmentId: string,
@@ -471,27 +552,10 @@ export class ReviewerAiSuggestionService {
       .first<{ id: string }>();
     if (!interrupted) return;
     const recoveryId = crypto.randomUUID();
+    const interruptedAuditEventId = crypto.randomUUID();
     const message =
       "The AI request was interrupted before Program Cue could record its result.";
-    const [failed, audited] = await this.env.DB.batch([
-      this.env.DB.prepare(
-        `UPDATE operation_jobs
-            SET status = 'failed', progress_failed = 1, last_error = ?,
-                result_json = ?, claim_token = NULL, claim_expires_at = NULL,
-                completed_at = unixepoch(), updated_at = unixepoch()
-          WHERE id = ? AND event_id = ? AND status = 'running'
-            AND claim_expires_at <= unixepoch()`,
-      ).bind(
-        message,
-        JSON.stringify({
-          errorType: "InterruptedAiRequest",
-          providerRequestId: null,
-          retrySafe: false,
-          recoveryId,
-        }),
-        interrupted.id,
-        viewer.eventId,
-      ),
+    const [audited, failed] = await this.env.DB.batch([
       this.env.DB.prepare(
         `INSERT INTO audit_events (
            id, actor_kind, origin, metadata_version, organisation_id, event_id,
@@ -504,28 +568,82 @@ export class ReviewerAiSuggestionService {
                 operation.id, operation.id, ?, unixepoch()
            FROM operation_jobs operation
           WHERE operation.id = ? AND operation.event_id = ?
-            AND operation.status = 'failed' AND operation.last_error = ?
-            AND json_extract(operation.result_json, '$.recoveryId') = ?`,
+            AND operation.status = 'running'
+            AND operation.claim_expires_at <= unixepoch()`,
       ).bind(
-        crypto.randomUUID(),
+        interruptedAuditEventId,
         viewer.organisationId,
         viewer.eventId,
         viewer.personId,
-        JSON.stringify({ message, retrySafe: false }),
+        JSON.stringify({ message, retrySafe: false, recoveryId }),
         interrupted.id,
         viewer.eventId,
-        message,
-        recoveryId,
       ),
-    ]);
-    if (
-      (failed.meta.changes ?? 0) !== (audited.meta.changes ?? 0) ||
-      (failed.meta.changes ?? 0) > 1
-    ) {
-      throw new Error(
-        "Interrupted reviewer AI work could not record complete recovery evidence.",
-      );
+      this.env.DB.prepare(
+        `UPDATE operation_jobs
+            SET status = 'failed', progress_failed = 1, last_error = ?,
+                result_json = ?, claim_token = NULL, claim_expires_at = NULL,
+                completed_at = unixepoch(), updated_at = unixepoch()
+          WHERE id = ? AND event_id = ? AND status = 'running'
+            AND claim_expires_at <= unixepoch()
+            AND EXISTS (
+              SELECT 1 FROM audit_events audit
+               WHERE audit.id = ? AND audit.event_id = ?
+                 AND audit.action = 'ai.reviewer_suggestion.interrupted'
+                 AND audit.entity_id = ? AND audit.correlation_id = ?
+            )`,
+      ).bind(
+        message,
+        JSON.stringify({
+          errorType: "InterruptedAiRequest",
+          providerRequestId: null,
+          retrySafe: false,
+          recoveryId,
+        }),
+        interrupted.id,
+        viewer.eventId,
+        interruptedAuditEventId,
+        viewer.eventId,
+        interrupted.id,
+        interrupted.id,
+      ),
+      invariantGuardStatement(
+        this.env,
+        `EXISTS (
+           SELECT 1 FROM audit_events audit WHERE audit.id = ?
+         ) <> EXISTS (
+           SELECT 1 FROM operation_jobs operation
+            WHERE operation.id = ? AND operation.event_id = ?
+              AND operation.status = 'failed'
+              AND json_extract(operation.result_json, '$.recoveryId') = ?
+         )`,
+        [interruptedAuditEventId, interrupted.id, viewer.eventId, recoveryId],
+      ),
+    ]).catch((error: unknown) => {
+      if (isInvariantGuardError(error)) {
+        throw new Error(
+          "Interrupted reviewer AI work could not record complete recovery evidence.",
+          { cause: error },
+        );
+      }
+      throw error;
+    });
+    if ((failed.meta.changes ?? 0) === 1 && (audited.meta.changes ?? 0) === 1) {
+      return;
     }
+    const recovered = await this.auditedTerminalOperation(
+      viewer,
+      interrupted.id,
+    );
+    if (
+      (recovered?.status === "failed" || recovered?.status === "completed") &&
+      recovered.hasTerminalAudit
+    ) {
+      return;
+    }
+    throw new Error(
+      "Interrupted reviewer AI work could not record complete recovery evidence.",
+    );
   }
 
   async generate(viewer: Viewer, rawInput: unknown) {
@@ -657,6 +775,28 @@ export class ReviewerAiSuggestionService {
       );
     }
     const sourceSnapshotHash = await sha256(binding.sourceSnapshotJson);
+    const evidencePayload = JSON.stringify({
+      assignment: {
+        id: assignmentId,
+        revision: binding.assignmentRevision,
+        roundId: workspace.selected.roundId,
+        targetType: workspace.selected.targetType,
+        targetId: workspace.selected.targetId,
+        blindedReviewing: workspace.selected.blindedReviewing,
+      },
+      scorecard: {
+        id: binding.scorecardId,
+        version: binding.scorecardVersion,
+        criteria: criteria.map((criterion) => ({
+          ...criterion,
+          allowedValues: allowedValues(criterion),
+        })),
+      },
+      source: { fields: evidenceFields },
+    });
+    if (evidencePayload.length > MAX_CONTEXT_CHARACTERS) {
+      throw new AiContextTooLargeError();
+    }
     const operationContextHash = await sha256(
       JSON.stringify({
         eventId: viewer.eventId,
@@ -686,6 +826,7 @@ export class ReviewerAiSuggestionService {
     const operationId = crypto.randomUUID();
     const claimToken = crypto.randomUUID();
     const suggestionId = crypto.randomUUID();
+    const requestedAuditEventId = crypto.randomUUID();
     const previousAttempts = await this.env.DB.prepare(
       `SELECT COUNT(*) AS count
          FROM operation_jobs operation
@@ -701,7 +842,12 @@ export class ReviewerAiSuggestionService {
         operationKeyPrefix,
       )
       .first<{ count: number }>();
-    const operationIdempotencyKey = `${operationKeyPrefix}${(previousAttempts?.count ?? 0) + 1}`;
+    if (!previousAttempts) {
+      throw new Error(
+        "The reviewer AI attempt count could not be read from the database.",
+      );
+    }
+    const operationIdempotencyKey = `${operationKeyPrefix}${previousAttempts.count + 1}`;
     const operationResults = await this.env.DB.batch([
       this.env.DB.prepare(
         `INSERT INTO operation_jobs (
@@ -785,7 +931,20 @@ export class ReviewerAiSuggestionService {
             AND NOT EXISTS (
               SELECT 1 FROM operation_jobs operation
                WHERE operation.event_id = ? AND operation.idempotency_key = ?
-            )`,
+            )
+            AND (
+              SELECT COUNT(*) FROM operation_jobs usage
+               WHERE usage.event_id = assignment.event_id
+                 AND usage.type = 'ai.reviewer_suggestion.generate'
+                 AND json_extract(usage.payload_json, '$.assignmentId') = assignment.id
+                 AND usage.created_at >= unixepoch() - ?
+            ) < ?
+            AND (
+              SELECT COUNT(*) FROM operation_jobs usage
+               WHERE usage.organisation_id = event.organisation_id
+                 AND usage.type = 'ai.reviewer_suggestion.generate'
+                 AND usage.created_at >= unixepoch() - ?
+            ) < ?`,
       ).bind(
         operationId,
         operationIdempotencyKey,
@@ -815,6 +974,10 @@ export class ReviewerAiSuggestionService {
         binding.sourceSnapshotJson,
         viewer.eventId,
         operationIdempotencyKey,
+        USAGE_WINDOW_SECONDS,
+        ASSIGNMENT_PROVIDER_CALL_LIMIT_PER_24_HOURS,
+        USAGE_WINDOW_SECONDS,
+        ORGANISATION_PROVIDER_CALL_LIMIT_PER_24_HOURS,
       ),
       this.env.DB.prepare(
         `INSERT INTO audit_events (
@@ -831,7 +994,7 @@ export class ReviewerAiSuggestionService {
                AND operation.status = 'running'
           )`,
       ).bind(
-        crypto.randomUUID(),
+        requestedAuditEventId,
         viewer.organisationId,
         viewer.eventId,
         viewer.personId,
@@ -841,8 +1004,77 @@ export class ReviewerAiSuggestionService {
         operationId,
         viewer.eventId,
       ),
-    ]);
+      invariantGuardStatement(
+        this.env,
+        `EXISTS (
+           SELECT 1 FROM operation_jobs operation
+            WHERE operation.id = ? AND operation.event_id = ?
+              AND operation.status = 'running'
+         ) <> EXISTS (
+           SELECT 1 FROM audit_events audit
+            WHERE audit.id = ? AND audit.event_id = ?
+              AND audit.action = 'ai.reviewer_suggestion.requested'
+              AND audit.correlation_id = ?
+         )`,
+        [
+          operationId,
+          viewer.eventId,
+          requestedAuditEventId,
+          viewer.eventId,
+          operationId,
+        ],
+      ),
+    ]).catch((error: unknown) => {
+      if (isInvariantGuardError(error)) {
+        throw new Error(
+          "The reviewer AI request could not record its audit evidence.",
+          { cause: error },
+        );
+      }
+      throw error;
+    });
     if ((operationResults[0]?.meta.changes ?? 0) !== 1) {
+      const usage = await this.env.DB.prepare(
+        `SELECT
+           (SELECT COUNT(*) FROM operation_jobs operation
+             WHERE operation.event_id = ?
+               AND operation.type = 'ai.reviewer_suggestion.generate'
+               AND json_extract(operation.payload_json, '$.assignmentId') = ?
+               AND operation.created_at >= unixepoch() - ?
+           ) AS assignmentCalls,
+           (SELECT COUNT(*) FROM operation_jobs operation
+             WHERE operation.organisation_id = ?
+               AND operation.type = 'ai.reviewer_suggestion.generate'
+               AND operation.created_at >= unixepoch() - ?
+           ) AS organisationCalls`,
+      )
+        .bind(
+          viewer.eventId,
+          assignmentId,
+          USAGE_WINDOW_SECONDS,
+          viewer.organisationId,
+          USAGE_WINDOW_SECONDS,
+        )
+        .first<{ assignmentCalls: number; organisationCalls: number }>();
+      if (!usage) {
+        throw new Error(
+          "Reviewer AI usage could not be read after the request claim failed.",
+        );
+      }
+      if (
+        usage.assignmentCalls >= ASSIGNMENT_PROVIDER_CALL_LIMIT_PER_24_HOURS
+      ) {
+        throw new ReviewerAiSuggestionStateError(
+          `This assignment has reached its ${ASSIGNMENT_PROVIDER_CALL_LIMIT_PER_24_HOURS}-request reviewer AI limit for the last 24 hours. Try again later or continue without another suggestion.`,
+        );
+      }
+      if (
+        usage.organisationCalls >= ORGANISATION_PROVIDER_CALL_LIMIT_PER_24_HOURS
+      ) {
+        throw new ReviewerAiSuggestionStateError(
+          "This organisation has reached its reviewer AI request limit for the last 24 hours. Try again later.",
+        );
+      }
       throw new ReviewerAiSuggestionStateError(
         "AI suggestions could not start because this assignment or event setting changed, an active suggestion exists, or another request is already being generated. Refresh before trying again.",
       );
@@ -862,35 +1094,6 @@ export class ReviewerAiSuggestionService {
       );
     }
 
-    const evidencePayload = JSON.stringify({
-      assignment: {
-        id: assignmentId,
-        revision: binding.assignmentRevision,
-        roundId: workspace.selected.roundId,
-        targetType: workspace.selected.targetType,
-        targetId: workspace.selected.targetId,
-        blindedReviewing: workspace.selected.blindedReviewing,
-      },
-      scorecard: {
-        id: binding.scorecardId,
-        version: binding.scorecardVersion,
-        criteria: criteria.map((criterion) => ({
-          ...criterion,
-          allowedValues: allowedValues(criterion),
-        })),
-      },
-      source: { fields: evidenceFields },
-    });
-    if (evidencePayload.length > MAX_CONTEXT_CHARACTERS) {
-      await this.failOperation(
-        viewer,
-        operationId,
-        claimToken,
-        new AiContextTooLargeError(),
-        true,
-      );
-      throw new AiContextTooLargeError();
-    }
     let completedProviderResponseId: string | null = null;
     try {
       const response = await provider.create({
@@ -906,6 +1109,14 @@ Return exactly one item for every rubric criterion. For scale, yes/no and dropdo
         ),
       });
       completedProviderResponseId = response.id;
+      if (!response.model) {
+        throw new AiProviderError(
+          `${provider.providerName} completed the reviewer suggestion without model attribution.`,
+          null,
+          response.id,
+        );
+      }
+      const responseModel = response.model;
       if (openAiFunctionCalls(response).length) {
         throw new AiProviderError(
           `${provider.providerName} requested a tool for reviewer suggestions that expose no tools.`,
@@ -947,6 +1158,7 @@ Return exactly one item for every rubric criterion. For scale, yes/no and dropdo
       const evidenceFieldIds = [
         ...new Set(suggestions.flatMap((item) => item.evidenceFieldIds)),
       ];
+      const generatedAuditEventId = crypto.randomUUID();
       const results = await this.env.DB.batch([
         this.env.DB.prepare(
           `INSERT INTO reviewer_ai_suggestions (
@@ -1024,7 +1236,7 @@ Return exactly one item for every rubric criterion. For scale, yes/no and dropdo
           binding.scorecardVersion,
           JSON.stringify(suggestions),
           providerKeys[provider.providerName],
-          response.model ?? provider.model,
+          responseModel,
           response.id,
           operationId,
           viewer.organisationId,
@@ -1042,21 +1254,6 @@ Return exactly one item for every rubric criterion. For scale, yes/no and dropdo
           binding.sourceSnapshotJson,
         ),
         this.env.DB.prepare(
-          `UPDATE operation_jobs
-              SET status = 'completed', result_json = ?, progress_completed = 1,
-                  claim_token = NULL, claim_expires_at = NULL,
-                  completed_at = unixepoch(), updated_at = unixepoch()
-            WHERE id = ? AND event_id = ? AND status = 'running'
-              AND claim_token = ?
-              AND EXISTS (SELECT 1 FROM reviewer_ai_suggestions WHERE id = ?)`,
-        ).bind(
-          JSON.stringify({ suggestionId, providerResponseId: response.id }),
-          operationId,
-          viewer.eventId,
-          claimToken,
-          suggestionId,
-        ),
-        this.env.DB.prepare(
           `INSERT INTO audit_events (
              id, actor_kind, origin, metadata_version, organisation_id, event_id,
              actor_person_id, actor_id, action, entity_type, entity_id, correlation_id,
@@ -1069,10 +1266,11 @@ Return exactly one item for every rubric criterion. For scale, yes/no and dropdo
              JOIN operation_jobs operation
                ON operation.id = suggestion.last_operation_id
               AND operation.event_id = suggestion.event_id
-              AND operation.status = 'completed'
+              AND operation.status = 'running'
+              AND operation.claim_token = ?
             WHERE suggestion.id = ? AND suggestion.last_operation_id = ?`,
         ).bind(
-          crypto.randomUUID(),
+          generatedAuditEventId,
           viewer.organisationId,
           viewer.eventId,
           viewer.personId,
@@ -1080,14 +1278,94 @@ Return exactly one item for every rubric criterion. For scale, yes/no and dropdo
           JSON.stringify({
             assignmentId,
             provider: providerKeys[provider.providerName],
-            model: response.model ?? provider.model,
+            model: responseModel,
             providerResponseId: response.id,
             evidenceFieldIds,
           }),
+          claimToken,
           suggestionId,
           operationId,
         ),
-      ]);
+        this.env.DB.prepare(
+          `UPDATE operation_jobs
+              SET status = 'completed', result_json = ?, progress_completed = 1,
+                  claim_token = NULL, claim_expires_at = NULL,
+                  completed_at = unixepoch(), updated_at = unixepoch()
+            WHERE id = ? AND event_id = ? AND status = 'running'
+              AND claim_token = ?
+              AND EXISTS (SELECT 1 FROM reviewer_ai_suggestions WHERE id = ?)
+              AND EXISTS (
+                SELECT 1 FROM audit_events audit
+                 WHERE audit.id = ? AND audit.event_id = ?
+                   AND audit.action = 'ai.reviewer_suggestion.generated'
+                   AND audit.entity_id = ? AND audit.correlation_id = ?
+              )`,
+        ).bind(
+          JSON.stringify({ suggestionId, providerResponseId: response.id }),
+          operationId,
+          viewer.eventId,
+          claimToken,
+          suggestionId,
+          generatedAuditEventId,
+          viewer.eventId,
+          suggestionId,
+          operationId,
+        ),
+        invariantGuardStatement(
+          this.env,
+          `(EXISTS (
+              SELECT 1 FROM reviewer_ai_suggestions suggestion
+               WHERE suggestion.id = ? AND suggestion.last_operation_id = ?
+            ) OR EXISTS (
+              SELECT 1 FROM audit_events audit
+               WHERE audit.id = ?
+            ) OR EXISTS (
+              SELECT 1 FROM operation_jobs operation
+               WHERE operation.id = ? AND operation.status = 'completed'
+                 AND json_extract(operation.result_json, '$.suggestionId') = ?
+            ))
+            AND NOT (
+              EXISTS (
+                SELECT 1 FROM reviewer_ai_suggestions suggestion
+                 WHERE suggestion.id = ? AND suggestion.last_operation_id = ?
+              ) AND EXISTS (
+                SELECT 1 FROM audit_events audit
+                 WHERE audit.id = ? AND audit.event_id = ?
+                   AND audit.action = 'ai.reviewer_suggestion.generated'
+                   AND audit.entity_id = ? AND audit.correlation_id = ?
+              ) AND EXISTS (
+                SELECT 1 FROM operation_jobs operation
+                 WHERE operation.id = ? AND operation.event_id = ?
+                   AND operation.status = 'completed'
+                   AND json_extract(operation.result_json, '$.suggestionId') = ?
+              )
+            )`,
+          [
+            suggestionId,
+            operationId,
+            generatedAuditEventId,
+            operationId,
+            suggestionId,
+            suggestionId,
+            operationId,
+            generatedAuditEventId,
+            viewer.eventId,
+            suggestionId,
+            operationId,
+            operationId,
+            viewer.eventId,
+            suggestionId,
+          ],
+        ),
+      ]).catch((error: unknown) => {
+        if (isInvariantGuardError(error)) {
+          throw new Error(
+            "The reviewer AI suggestion could not record complete operation evidence.",
+            { cause: error },
+          );
+        }
+        throw error;
+      });
       if ((results[0]?.meta.changes ?? 0) !== 1) {
         throw new ReviewerAiSuggestionStateError(
           "The assignment changed while AI suggestions were being generated. Refresh before requesting another suggestion.",
@@ -1132,6 +1410,7 @@ Return exactly one item for every rubric criterion. For scale, yes/no and dropdo
       .max(200)
       .parse(rawSuggestionId);
     const operationId = crypto.randomUUID();
+    const dismissedAuditEventId = crypto.randomUUID();
     const [dismissed, audited] = await this.env.DB.batch([
       this.env.DB.prepare(
         `UPDATE reviewer_ai_suggestions AS suggestion
@@ -1166,7 +1445,7 @@ Return exactly one item for every rubric criterion. For scale, yes/no and dropdo
             AND suggestion.status = 'dismissed'
             AND suggestion.lifecycle_operation_id = ?`,
       ).bind(
-        crypto.randomUUID(),
+        dismissedAuditEventId,
         viewer.organisationId,
         viewer.eventId,
         viewer.personId,
@@ -1176,7 +1455,38 @@ Return exactly one item for every rubric criterion. For scale, yes/no and dropdo
         viewer.personId,
         operationId,
       ),
-    ]);
+      invariantGuardStatement(
+        this.env,
+        `EXISTS (
+           SELECT 1 FROM reviewer_ai_suggestions suggestion
+            WHERE suggestion.id = ? AND suggestion.event_id = ?
+              AND suggestion.status = 'dismissed'
+              AND suggestion.lifecycle_operation_id = ?
+         ) <> EXISTS (
+           SELECT 1 FROM audit_events audit
+            WHERE audit.id = ? AND audit.event_id = ?
+              AND audit.action = 'ai.reviewer_suggestion.dismissed'
+              AND audit.entity_id = ? AND audit.correlation_id = ?
+         )`,
+        [
+          suggestionId,
+          viewer.eventId,
+          operationId,
+          dismissedAuditEventId,
+          viewer.eventId,
+          suggestionId,
+          operationId,
+        ],
+      ),
+    ]).catch((error: unknown) => {
+      if (isInvariantGuardError(error)) {
+        throw new Error(
+          "The reviewer AI dismissal could not record its audit evidence.",
+          { cause: error },
+        );
+      }
+      throw error;
+    });
     if (
       (dismissed.meta.changes ?? 0) !== 1 ||
       (audited.meta.changes ?? 0) !== 1
@@ -1202,14 +1512,44 @@ Return exactly one item for every rubric criterion. For scale, yes/no and dropdo
     const providerRequestId =
       providerRequestIdOverride ??
       (error instanceof AiProviderError ? error.providerRequestId : null);
-    await this.env.DB.batch([
+    const failedAuditEventId = crypto.randomUUID();
+    const [audited, failed] = await this.env.DB.batch([
+      this.env.DB.prepare(
+        `INSERT INTO audit_events (
+           id, actor_kind, origin, metadata_version, organisation_id, event_id,
+           actor_person_id, actor_id, action, entity_type, entity_id, correlation_id,
+           metadata_json, created_at
+         )
+         SELECT ?, 'agent', 'participant_ui', 1, ?, ?, ?, 'program_cue_reviewer_ai',
+                'ai.reviewer_suggestion.failed', 'operation', ?, ?, ?, unixepoch()
+           FROM operation_jobs operation
+          WHERE operation.id = ? AND operation.event_id = ?
+            AND operation.status = 'running' AND operation.claim_token = ?`,
+      ).bind(
+        failedAuditEventId,
+        viewer.organisationId,
+        viewer.eventId,
+        viewer.personId,
+        operationId,
+        operationId,
+        JSON.stringify({ message, providerRequestId, retrySafe }),
+        operationId,
+        viewer.eventId,
+        claimToken,
+      ),
       this.env.DB.prepare(
         `UPDATE operation_jobs
             SET status = 'failed', progress_failed = 1, last_error = ?,
                 result_json = ?, claim_token = NULL, claim_expires_at = NULL,
                 completed_at = unixepoch(), updated_at = unixepoch()
           WHERE id = ? AND event_id = ? AND status = 'running'
-            AND claim_token = ?`,
+            AND claim_token = ?
+            AND EXISTS (
+              SELECT 1 FROM audit_events audit
+               WHERE audit.id = ? AND audit.event_id = ?
+                 AND audit.action = 'ai.reviewer_suggestion.failed'
+                 AND audit.entity_id = ? AND audit.correlation_id = ?
+            )`,
       ).bind(
         message,
         JSON.stringify({
@@ -1220,32 +1560,44 @@ Return exactly one item for every rubric criterion. For scale, yes/no and dropdo
         operationId,
         viewer.eventId,
         claimToken,
-      ),
-      this.env.DB.prepare(
-        `INSERT INTO audit_events (
-           id, actor_kind, origin, metadata_version, organisation_id, event_id,
-           actor_person_id, actor_id, action, entity_type, entity_id, correlation_id,
-           metadata_json, created_at
-         )
-         SELECT ?, 'agent', 'participant_ui', 1, ?, ?, ?, 'program_cue_reviewer_ai',
-                'ai.reviewer_suggestion.failed', 'operation', ?, ?, ?, unixepoch()
-          WHERE EXISTS (
-            SELECT 1 FROM operation_jobs operation
-             WHERE operation.id = ? AND operation.event_id = ?
-               AND operation.status = 'failed' AND operation.last_error = ?
-          )`,
-      ).bind(
-        crypto.randomUUID(),
-        viewer.organisationId,
+        failedAuditEventId,
         viewer.eventId,
-        viewer.personId,
         operationId,
         operationId,
-        JSON.stringify({ message, providerRequestId, retrySafe }),
-        operationId,
-        viewer.eventId,
-        message,
       ),
-    ]);
+      invariantGuardStatement(
+        this.env,
+        `EXISTS (
+           SELECT 1 FROM audit_events audit
+            WHERE audit.id = ?
+         ) <> EXISTS (
+           SELECT 1 FROM operation_jobs operation
+            WHERE operation.id = ? AND operation.event_id = ?
+              AND operation.status = 'failed' AND operation.last_error = ?
+         )`,
+        [failedAuditEventId, operationId, viewer.eventId, message],
+      ),
+    ]).catch((failureError: unknown) => {
+      if (isInvariantGuardError(failureError)) {
+        throw new Error(
+          "The reviewer AI failure could not record complete audit evidence.",
+          { cause: failureError },
+        );
+      }
+      throw failureError;
+    });
+    if ((audited.meta.changes ?? 0) === 1 && (failed.meta.changes ?? 0) === 1) {
+      return;
+    }
+    const existing = await this.auditedTerminalOperation(viewer, operationId);
+    if (
+      (existing?.status === "failed" || existing?.status === "completed") &&
+      existing.hasTerminalAudit
+    ) {
+      return;
+    }
+    throw new Error(
+      "The reviewer AI failure could not record complete audit evidence.",
+    );
   }
 }

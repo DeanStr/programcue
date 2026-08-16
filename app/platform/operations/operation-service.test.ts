@@ -1185,6 +1185,49 @@ describe("activity timeline", () => {
     );
   });
 
+  it("classifies every reviewer AI action as evaluation activity", async () => {
+    await ensureDemoData(env as unknown as CloudflareEnvironment);
+    const prefix = crypto.randomUUID();
+    const actions = [
+      ["ai.reviewer_suggestion.requested", "evaluator_assignment"],
+      ["ai.reviewer_suggestion.generated", "reviewer_ai_suggestion"],
+      ["ai.reviewer_suggestion.failed", "operation"],
+      ["ai.reviewer_suggestion.interrupted", "operation"],
+      ["ai.reviewer_suggestion.dismissed", "reviewer_ai_suggestion"],
+    ] as const;
+    await env.DB.batch(
+      actions.map(([action, entityType], index) =>
+        env.DB.prepare(
+          `INSERT INTO audit_events (
+             id, actor_kind, origin, metadata_version, organisation_id,
+             event_id, actor_person_id, action, entity_type, entity_id,
+             metadata_json, created_at
+           ) VALUES (?, 'person', 'internal', 1, ?, ?, ?, ?, ?, ?, '{}', unixepoch())`,
+        ).bind(
+          `${prefix}:${index}`,
+          viewer.organisationId,
+          viewer.eventId,
+          viewer.personId,
+          action,
+          entityType,
+          `${prefix}:entity:${index}`,
+        ),
+      ),
+    );
+
+    const activity = await new OperationService(
+      env as unknown as CloudflareEnvironment,
+    ).activity(viewer, { area: "evaluation", query: prefix });
+
+    expect(activity.items).toHaveLength(actions.length);
+    expect(activity.items.map((item) => item.action).sort()).toEqual(
+      actions.map(([action]) => action).sort(),
+    );
+    expect(activity.items.every((item) => item.area === "evaluation")).toBe(
+      true,
+    );
+  });
+
   it("uses a filter-bound keyset cursor without overlap", async () => {
     await ensureDemoData(env as unknown as CloudflareEnvironment);
     const prefix = crypto.randomUUID();

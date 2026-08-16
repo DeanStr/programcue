@@ -36,6 +36,7 @@ export const nodeOnlyTestFiles = [
   "app/modules/calendars/calendar-provider-response.test.ts",
   "app/modules/content/zip-stream.test.ts",
   "app/modules/evaluations/evaluation-rules.test.ts",
+  "app/modules/evaluations/reviewer-ai-import.test.ts",
   "app/modules/events/event-configuration.test.ts",
   "app/modules/events/event-branding.test.ts",
   "app/modules/programme/programme-embed-configuration.test.ts",

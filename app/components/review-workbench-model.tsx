@@ -17,6 +17,7 @@ import {
 } from "react-router";
 
 import { calculateRubricWeightedScore } from "~/modules/evaluations/evaluation-rules";
+import { buildUnansweredReviewerAiImport } from "~/modules/evaluations/reviewer-ai-import";
 import {
   clearDraftRecoveryScope,
   type DraftRecoveryController,
@@ -656,20 +657,16 @@ export function useReviewWorkbenchState({
   }
   function applyReviewerAiSuggestion() {
     if (!reviewerSuggestion || readOnly) return;
-    const suggestedScores = Object.fromEntries(
-      reviewerSuggestion.suggestions
-        .filter((suggestion) => suggestion.suggestedValue !== null)
-        .map((suggestion) => [
-          suggestion.criterionId,
-          suggestion.suggestedValue!,
-        ]),
+    const imported = buildUnansweredReviewerAiImport(
+      recoveryPayload.scores,
+      reviewerSuggestion.suggestions,
     );
-    const importedCriterionIds = Object.keys(suggestedScores);
+    if (!imported.importedCriterionIds.length) return;
     restoreReview({
       ...recoveryPayload,
-      scores: { ...recoveryPayload.scores, ...suggestedScores },
+      scores: imported.scores,
       aiSuggestionId: reviewerSuggestion.id,
-      aiImportedCriterionIds: importedCriterionIds,
+      aiImportedCriterionIds: imported.importedCriterionIds,
     });
   }
   function setAiCriterionConfirmed(criterionId: string, confirmed: boolean) {

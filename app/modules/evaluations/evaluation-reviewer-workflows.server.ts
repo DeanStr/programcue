@@ -236,7 +236,7 @@ export class EvaluationReviewerWorkflows extends EvaluationServiceFoundation {
       SELECT a.id, a.revision AS assignmentRevision,
              a.round_id AS roundId, a.submission_id AS submissionId,
              r.id AS reviewId, r.revision AS reviewRevision,
-             r.scores_json AS scoresJson, r.recommendation, r.confidence,
+             r.recommendation, r.confidence,
              r.submitter_feedback AS submitterFeedback,
              r.private_notes AS privateNotes,
              r.conflict_affirmed_at AS conflictAffirmedAt
@@ -282,7 +282,6 @@ export class EvaluationReviewerWorkflows extends EvaluationServiceFoundation {
         submissionId: string | null;
         reviewId: string;
         reviewRevision: number;
-        scoresJson: string;
         recommendation: string | null;
         confidence: number | null;
         submitterFeedback: string | null;
@@ -421,21 +420,22 @@ export class EvaluationReviewerWorkflows extends EvaluationServiceFoundation {
         INSERT INTO review_revisions (
           id, event_id, review_id, revision_number, scores_json,
           content_json, save_kind, saved_by_person_id, idempotency_key,
-          scorecard_id, scorecard_version, criteria_snapshot_json, created_at
+          scorecard_id, scorecard_version, criteria_snapshot_json,
+          ai_suggestion_id, imported_criterion_ids_json,
+          confirmed_ai_criterion_ids_json, created_at
         )
-        SELECT ?, ?, ?, ?, ?, ?, 'reopened', ?, ?, ?, ?, ?, unixepoch()
-         WHERE EXISTS (
-           SELECT 1 FROM reviews
-            WHERE id = ? AND event_id = ? AND status = 'reopened'
-              AND revision = ? AND last_operation_id = ?
-         )
+        SELECT ?, review.event_id, review.id, ?, review.scores_json, ?,
+               'reopened', ?, ?, ?, ?, ?, review.ai_suggestion_id,
+               review.imported_criterion_ids_json,
+               review.confirmed_ai_criterion_ids_json, unixepoch()
+          FROM reviews review
+         WHERE review.id = ? AND review.event_id = ?
+           AND review.status = 'reopened'
+           AND review.revision = ? AND review.last_operation_id = ?
       `,
       ).bind(
         crypto.randomUUID(),
-        viewer.eventId,
-        state.reviewId,
         nextRevision,
-        state.scoresJson,
         JSON.stringify({
           recommendation: state.recommendation,
           confidence: state.confidence,

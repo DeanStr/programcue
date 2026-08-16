@@ -200,9 +200,10 @@ invitation workflow.
 For reviewer AI, keep the consent and review steps with their actual actors.
 Jordan first enables reviewer AI under `Review & decisions`. After Jordan has
 assigned the proposal, switch to Sam, save at least one independent rubric
-response, then request and inspect the AI suggestions. Sam may import or edit
-the suggested closed-criterion values, must explicitly confirm any unchanged
-imported values, and submits the review through the ordinary reviewer workflow.
+response, then request and inspect the AI suggestions. Sam may fill unanswered
+closed criteria from the suggestions or explicitly edit existing answers, must
+confirm any unchanged imported values, and submits the review through the
+ordinary reviewer workflow.
 The configured organisation provider performs the request; the fixture does not
 simulate provider output or enable reviewer AI during reset.
 

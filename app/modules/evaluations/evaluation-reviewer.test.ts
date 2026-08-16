@@ -191,6 +191,116 @@ function withBatchRace(
   });
 }
 
+function withSuppressedStatement(
+  testEnv: CloudflareEnvironment,
+  pattern: RegExp,
+) {
+  let suppressed = 0;
+  const faultingDb = new Proxy(testEnv.DB, {
+    get(target, property) {
+      if (property === "prepare") {
+        return (query: string) => {
+          const statement = target.prepare(query);
+          if (suppressed > 0 || !pattern.test(query)) return statement;
+          suppressed += 1;
+          return new Proxy(statement, {
+            get(statementTarget, statementProperty) {
+              if (statementProperty === "bind") {
+                return () =>
+                  target.prepare(
+                    "UPDATE people SET display_name = display_name WHERE 0",
+                  );
+              }
+              const value = Reflect.get(statementTarget, statementProperty);
+              return typeof value === "function"
+                ? value.bind(statementTarget)
+                : value;
+            },
+          });
+        };
+      }
+      const value = Reflect.get(target, property);
+      return typeof value === "function" ? value.bind(target) : value;
+    },
+  });
+  return {
+    env: new Proxy(testEnv, {
+      get(target, property) {
+        return property === "DB" ? faultingDb : Reflect.get(target, property);
+      },
+    }),
+    suppressed: () => suppressed,
+  };
+}
+
+function withMissingFirstResult(
+  testEnv: CloudflareEnvironment,
+  pattern: RegExp,
+) {
+  let missing = 0;
+  const wrap = (statement: D1PreparedStatement): D1PreparedStatement =>
+    new Proxy(statement, {
+      get(target, property) {
+        if (property === "bind") {
+          return (...values: unknown[]) => wrap(target.bind(...values));
+        }
+        if (property === "first") {
+          return async () => {
+            missing += 1;
+            return null;
+          };
+        }
+        const value = Reflect.get(target, property);
+        return typeof value === "function" ? value.bind(target) : value;
+      },
+    });
+  const faultingDb = new Proxy(testEnv.DB, {
+    get(target, property) {
+      if (property === "prepare") {
+        return (query: string) => {
+          const statement = target.prepare(query);
+          return pattern.test(query) ? wrap(statement) : statement;
+        };
+      }
+      const value = Reflect.get(target, property);
+      return typeof value === "function" ? value.bind(target) : value;
+    },
+  });
+  return {
+    env: new Proxy(testEnv, {
+      get(target, property) {
+        return property === "DB" ? faultingDb : Reflect.get(target, property);
+      },
+    }),
+    missing: () => missing,
+  };
+}
+
+function successfulReviewerAiProvider(onCall?: () => void): AiModelProvider {
+  return {
+    providerName: "Workers AI",
+    model: "test-reviewer-ai-model",
+    async create() {
+      onCall?.();
+      return {
+        id: crypto.randomUUID(),
+        model: "test-reviewer-ai-model",
+        status: "completed",
+        output: [],
+        output_text: JSON.stringify({
+          criteria: criteria.map((criterion) => ({
+            criterionId: criterion.id,
+            suggestedValue: "4",
+            rationale:
+              "The proposal description supplies relevant concrete evidence for this criterion.",
+            evidenceFieldIds: ["description"],
+          })),
+        }),
+      };
+    },
+  };
+}
+
 async function resetEvaluationFixture() {
   await env.DB.batch([
     env.DB.prepare(
@@ -436,6 +546,480 @@ describe("evaluation vertical slice", () => {
         }
       },
     );
+
+    it("rolls back a reviewer AI setting when its audit insertion is suppressed", async () => {
+      await resetEvaluationFixture();
+      const testEnv = env as unknown as CloudflareEnvironment;
+      const fault = withSuppressedStatement(
+        testEnv,
+        /INSERT INTO audit_events[\s\S]*evaluation\.reviewer_ai_setting\.updated/u,
+      );
+
+      await expect(
+        new ReviewerAiSuggestionService(fault.env).updateSetting(admin, {
+          enabled: true,
+          revision: 0,
+        }),
+      ).rejects.toThrow();
+      expect(fault.suppressed()).toBe(1);
+      expect(
+        await env.DB.prepare(
+          "SELECT COUNT(*) AS count FROM event_ai_review_settings WHERE event_id = ?",
+        )
+          .bind(admin.eventId)
+          .first(),
+      ).toEqual({ count: 0 });
+    });
+
+    it("rolls back a reviewer AI request when its requested audit is suppressed", async () => {
+      const { assignmentId, testEnv } =
+        await prepareReviewerAiGenerationFixture("eval-ai-request-audit-round");
+      let providerCalls = 0;
+      const fault = withSuppressedStatement(
+        testEnv,
+        /INSERT INTO audit_events[\s\S]*ai\.reviewer_suggestion\.requested/u,
+      );
+
+      await expect(
+        new ReviewerAiSuggestionService(fault.env, {
+          provider: successfulReviewerAiProvider(() => {
+            providerCalls += 1;
+          }),
+        }).generate(evaluator, { assignmentId }),
+      ).rejects.toThrow(/audit evidence/i);
+      expect(fault.suppressed()).toBe(1);
+      expect(providerCalls).toBe(0);
+      expect(
+        await env.DB.prepare(
+          `SELECT COUNT(*) AS count FROM operation_jobs
+            WHERE event_id = ? AND type = 'ai.reviewer_suggestion.generate'
+              AND json_extract(payload_json, '$.assignmentId') = ?`,
+        )
+          .bind(evaluator.eventId, assignmentId)
+          .first(),
+      ).toEqual({ count: 0 });
+      await resetEvaluationFixture();
+    });
+
+    it("fails before claiming work when the attempt aggregate returns no row", async () => {
+      const { assignmentId, testEnv } =
+        await prepareReviewerAiGenerationFixture(
+          "eval-ai-missing-attempt-count-round",
+        );
+      let providerCalls = 0;
+      const fault = withMissingFirstResult(
+        testEnv,
+        /SELECT COUNT\(\*\) AS count[\s\S]*substr\(operation\.idempotency_key/u,
+      );
+
+      await expect(
+        new ReviewerAiSuggestionService(fault.env, {
+          provider: successfulReviewerAiProvider(() => {
+            providerCalls += 1;
+          }),
+        }).generate(evaluator, { assignmentId }),
+      ).rejects.toThrow(/attempt count could not be read/i);
+      expect(fault.missing()).toBe(1);
+      expect(providerCalls).toBe(0);
+      await resetEvaluationFixture();
+    });
+
+    it("fails explicitly when request-claim usage diagnostics return no row", async () => {
+      const { assignmentId, testEnv } =
+        await prepareReviewerAiGenerationFixture(
+          "eval-ai-missing-usage-count-round",
+        );
+      let providerCalls = 0;
+      const fault = withMissingFirstResult(
+        testEnv,
+        /SELECT\s+\(SELECT COUNT\(\*\)[\s\S]*AS assignmentCalls/u,
+      );
+      const racingEnv = withBatchRace(fault.env, async () => {
+        await new ReviewerAiSuggestionService(testEnv).updateSetting(admin, {
+          enabled: false,
+          revision: 1,
+        });
+      });
+
+      await expect(
+        new ReviewerAiSuggestionService(racingEnv, {
+          provider: successfulReviewerAiProvider(() => {
+            providerCalls += 1;
+          }),
+        }).generate(evaluator, { assignmentId }),
+      ).rejects.toThrow(/usage could not be read/i);
+      expect(fault.missing()).toBe(1);
+      expect(providerCalls).toBe(0);
+      await resetEvaluationFixture();
+    });
+
+    it("rejects a completed provider response without model attribution", async () => {
+      const { assignmentId, testEnv } =
+        await prepareReviewerAiGenerationFixture(
+          "eval-ai-missing-provider-model-round",
+        );
+      const providerResponseId = "provider-reviewer-ai-missing-model";
+      const provider: AiModelProvider = {
+        providerName: "Workers AI",
+        model: "configured-model-must-not-be-recorded",
+        async create() {
+          return {
+            id: providerResponseId,
+            status: "completed",
+            output: [],
+            output_text: JSON.stringify({
+              criteria: criteria.map((criterion) => ({
+                criterionId: criterion.id,
+                suggestedValue: "4",
+                rationale: "The supplied evidence is relevant.",
+                evidenceFieldIds: ["description"],
+              })),
+            }),
+          };
+        },
+      };
+
+      await expect(
+        new ReviewerAiSuggestionService(testEnv, { provider }).generate(
+          evaluator,
+          { assignmentId },
+        ),
+      ).rejects.toThrow(/without model attribution/i);
+      expect(
+        await env.DB.prepare(
+          `SELECT status,
+                  json_extract(result_json, '$.providerRequestId') AS providerRequestId
+             FROM operation_jobs
+            WHERE event_id = ? AND type = 'ai.reviewer_suggestion.generate'
+              AND json_extract(payload_json, '$.assignmentId') = ?
+            ORDER BY created_at DESC, id DESC LIMIT 1`,
+        )
+          .bind(evaluator.eventId, assignmentId)
+          .first(),
+      ).toEqual({
+        status: "failed",
+        providerRequestId: providerResponseId,
+      });
+      expect(
+        await env.DB.prepare(
+          `SELECT COUNT(*) AS count FROM reviewer_ai_suggestions
+            WHERE event_id = ? AND assignment_id = ?`,
+        )
+          .bind(evaluator.eventId, assignmentId)
+          .first(),
+      ).toEqual({ count: 0 });
+      await resetEvaluationFixture();
+    });
+
+    it.each([
+      {
+        label: "generated audit",
+        pattern:
+          /INSERT INTO audit_events[\s\S]*ai\.reviewer_suggestion\.generated/u,
+      },
+      {
+        label: "operation completion",
+        pattern: /UPDATE operation_jobs[\s\S]*SET status = 'completed'/u,
+      },
+    ])(
+      "rolls back generation when $label is suppressed",
+      async ({ pattern }) => {
+        const { assignmentId, testEnv } =
+          await prepareReviewerAiGenerationFixture(
+            `eval-ai-generation-guard-${crypto.randomUUID()}`,
+          );
+        const fault = withSuppressedStatement(testEnv, pattern);
+
+        await expect(
+          new ReviewerAiSuggestionService(fault.env, {
+            provider: successfulReviewerAiProvider(),
+          }).generate(evaluator, { assignmentId }),
+        ).rejects.toThrow(/complete operation evidence/i);
+        expect(fault.suppressed()).toBe(1);
+        expect(
+          await env.DB.prepare(
+            `SELECT
+             (SELECT COUNT(*) FROM reviewer_ai_suggestions
+               WHERE event_id = ? AND assignment_id = ?) AS suggestions,
+             (SELECT COUNT(*) FROM operation_jobs
+               WHERE event_id = ? AND status = 'completed'
+                 AND json_extract(payload_json, '$.assignmentId') = ?) AS completed,
+             (SELECT COUNT(*) FROM audit_events audit
+               JOIN operation_jobs operation ON operation.id = audit.correlation_id
+              WHERE audit.event_id = ?
+                AND audit.action = 'ai.reviewer_suggestion.generated'
+                AND json_extract(operation.payload_json, '$.assignmentId') = ?) AS generatedAudits`,
+          )
+            .bind(
+              evaluator.eventId,
+              assignmentId,
+              evaluator.eventId,
+              assignmentId,
+              evaluator.eventId,
+              assignmentId,
+            )
+            .first(),
+        ).toEqual({ suggestions: 0, completed: 0, generatedAudits: 0 });
+        await resetEvaluationFixture();
+      },
+    );
+
+    it("rolls back dismissal when its audit insertion is suppressed", async () => {
+      const { assignmentId, testEnv } =
+        await prepareReviewerAiGenerationFixture("eval-ai-dismiss-audit-round");
+      const ai = new ReviewerAiSuggestionService(testEnv, {
+        provider: successfulReviewerAiProvider(),
+      });
+      const suggestion = await ai.generate(evaluator, { assignmentId });
+      const fault = withSuppressedStatement(
+        testEnv,
+        /INSERT INTO audit_events[\s\S]*ai\.reviewer_suggestion\.dismissed/u,
+      );
+
+      await expect(
+        new ReviewerAiSuggestionService(fault.env).dismiss(
+          evaluator,
+          suggestion.id,
+        ),
+      ).rejects.toThrow(/audit evidence/i);
+      expect(fault.suppressed()).toBe(1);
+      expect(
+        await env.DB.prepare(
+          "SELECT status, dismissed_at AS dismissedAt FROM reviewer_ai_suggestions WHERE id = ?",
+        )
+          .bind(suggestion.id)
+          .first(),
+      ).toEqual({ status: "offered", dismissedAt: null });
+      await resetEvaluationFixture();
+    });
+
+    it.each(["completed", "failed"] as const)(
+      "accepts an audited %s terminal operation that wins the expiry-recovery race",
+      async (terminalStatus) => {
+        const { assignmentId, testEnv } =
+          await prepareReviewerAiGenerationFixture(
+            `eval-ai-terminal-race-${terminalStatus}-round`,
+          );
+        const operationId = `test-ai-terminal-race-${terminalStatus}`;
+        const auditId = `${operationId}-audit`;
+        await env.DB.prepare(
+          `INSERT INTO operation_jobs (
+             id, organisation_id, event_id, requested_by_person_id, type,
+             idempotency_key, correlation_id, status, payload_json,
+             progress_total, progress_completed, progress_failed, attempt_count,
+             cancellable, claim_token, claim_expires_at, started_at
+           ) VALUES (?, ?, ?, ?, 'ai.reviewer_suggestion.generate', ?, ?,
+                     'running', ?, 1, 0, 0, 1, 0, ?, unixepoch() - 1,
+                     unixepoch() - 301)`,
+        )
+          .bind(
+            operationId,
+            evaluator.organisationId,
+            evaluator.eventId,
+            evaluator.personId,
+            operationId,
+            operationId,
+            JSON.stringify({ assignmentId }),
+            `${operationId}-claim`,
+          )
+          .run();
+        const racingEnv = withBatchRace(testEnv, async () => {
+          if (terminalStatus === "completed") {
+            await env.DB.batch([
+              env.DB.prepare(
+                `INSERT INTO audit_events (
+                   id, actor_kind, origin, metadata_version, organisation_id,
+                   event_id, actor_person_id, actor_id, action, entity_type,
+                   entity_id, correlation_id, metadata_json, created_at
+                 ) VALUES (?, 'agent', 'participant_ui', 1, ?, ?, ?,
+                           'program_cue_reviewer_ai',
+                           'ai.reviewer_suggestion.generated',
+                           'reviewer_ai_suggestion', ?, ?, ?, unixepoch())`,
+              ).bind(
+                auditId,
+                evaluator.organisationId,
+                evaluator.eventId,
+                evaluator.personId,
+                `${operationId}-suggestion`,
+                operationId,
+                JSON.stringify({
+                  assignmentId,
+                  provider: "workers_ai",
+                  model: "test-reviewer-ai-model",
+                  providerResponseId: `${operationId}-response`,
+                  evidenceFieldIds: [],
+                }),
+              ),
+              env.DB.prepare(
+                `UPDATE operation_jobs
+                    SET status = 'completed', progress_completed = 1,
+                        result_json = ?, claim_token = NULL,
+                        claim_expires_at = NULL, completed_at = unixepoch(),
+                        updated_at = unixepoch()
+                  WHERE id = ?`,
+              ).bind(
+                JSON.stringify({
+                  suggestionId: `${operationId}-suggestion`,
+                  providerResponseId: `${operationId}-response`,
+                }),
+                operationId,
+              ),
+            ]);
+            return;
+          }
+          const message = "Another recovery actor recorded the interruption.";
+          const recoveryId = `${operationId}-recovery`;
+          await env.DB.batch([
+            env.DB.prepare(
+              `INSERT INTO audit_events (
+                 id, actor_kind, origin, metadata_version, organisation_id,
+                 event_id, actor_person_id, actor_id, action, entity_type,
+                 entity_id, correlation_id, metadata_json, created_at
+               ) VALUES (?, 'agent', 'participant_ui', 1, ?, ?, ?,
+                         'program_cue_reviewer_ai',
+                         'ai.reviewer_suggestion.interrupted', 'operation',
+                         ?, ?, ?, unixepoch())`,
+            ).bind(
+              auditId,
+              evaluator.organisationId,
+              evaluator.eventId,
+              evaluator.personId,
+              operationId,
+              operationId,
+              JSON.stringify({ message, retrySafe: false, recoveryId }),
+            ),
+            env.DB.prepare(
+              `UPDATE operation_jobs
+                  SET status = 'failed', progress_failed = 1, last_error = ?,
+                      result_json = ?, claim_token = NULL,
+                      claim_expires_at = NULL, completed_at = unixepoch(),
+                      updated_at = unixepoch()
+                WHERE id = ?`,
+            ).bind(
+              message,
+              JSON.stringify({
+                errorType: "InterruptedAiRequest",
+                providerRequestId: null,
+                retrySafe: false,
+                recoveryId,
+              }),
+              operationId,
+            ),
+          ]);
+        });
+
+        const retry = await new ReviewerAiSuggestionService(
+          racingEnv,
+        ).getRetryForAssignment(evaluator, assignmentId);
+        if (terminalStatus === "completed") {
+          expect(retry).toBeNull();
+        } else {
+          expect(retry).toMatchObject({ operationId });
+        }
+        await resetEvaluationFixture();
+      },
+    );
+
+    it("enforces a rolling transactional per-assignment reviewer AI request limit", async () => {
+      const { assignmentId, testEnv } =
+        await prepareReviewerAiGenerationFixture(
+          "eval-ai-assignment-limit-round",
+        );
+      let providerCalls = 0;
+      try {
+        for (let index = 1; index <= 3; index += 1) {
+          await env.DB.prepare(
+            `INSERT INTO operation_jobs (
+               id, organisation_id, event_id, requested_by_person_id, type,
+               idempotency_key, correlation_id, status, payload_json,
+               progress_total, progress_failed, attempt_count, cancellable,
+               completed_at
+             ) VALUES (?, ?, ?, ?, 'ai.reviewer_suggestion.generate', ?, ?,
+                       'failed', ?, 1, 1, 1, 0, unixepoch())`,
+          )
+            .bind(
+              `test-ai-assignment-limit-${index}`,
+              evaluator.organisationId,
+              evaluator.eventId,
+              evaluator.personId,
+              `test-ai-assignment-limit-${index}`,
+              `test-ai-assignment-limit-${index}`,
+              JSON.stringify({ assignmentId }),
+            )
+            .run();
+        }
+
+        await expect(
+          new ReviewerAiSuggestionService(testEnv, {
+            provider: successfulReviewerAiProvider(() => {
+              providerCalls += 1;
+            }),
+          }).generate(evaluator, { assignmentId }),
+        ).rejects.toThrow(/3-request reviewer AI limit/i);
+        expect(providerCalls).toBe(0);
+
+        await env.DB.prepare(
+          `UPDATE operation_jobs
+              SET created_at = unixepoch() - 86401
+            WHERE id LIKE 'test-ai-assignment-limit-%'`,
+        ).run();
+        await new ReviewerAiSuggestionService(testEnv, {
+          provider: successfulReviewerAiProvider(() => {
+            providerCalls += 1;
+          }),
+        }).generate(evaluator, { assignmentId });
+        expect(providerCalls).toBe(1);
+      } finally {
+        await env.DB.prepare(
+          "DELETE FROM operation_jobs WHERE id LIKE 'test-ai-assignment-limit-%'",
+        ).run();
+        await resetEvaluationFixture();
+      }
+    });
+
+    it("enforces the transactional organisation reviewer AI daily limit", async () => {
+      const { assignmentId, testEnv } =
+        await prepareReviewerAiGenerationFixture(
+          "eval-ai-organisation-limit-round",
+        );
+      let providerCalls = 0;
+      try {
+        await env.DB.prepare(
+          `WITH RECURSIVE numbers(value) AS (
+             SELECT 1 UNION ALL SELECT value + 1 FROM numbers WHERE value < 100
+           )
+           INSERT INTO operation_jobs (
+             id, organisation_id, event_id, requested_by_person_id, type,
+             idempotency_key, correlation_id, status, payload_json,
+             progress_total, progress_failed, attempt_count, cancellable,
+             completed_at
+           )
+           SELECT 'test-ai-org-limit-' || value, ?, ?, ?,
+                  'ai.reviewer_suggestion.generate',
+                  'test-ai-org-limit-' || value,
+                  'test-ai-org-limit-' || value,
+                  'failed', json_object('assignmentId', 'other-' || value),
+                  1, 1, 1, 0, unixepoch()
+             FROM numbers`,
+        )
+          .bind(evaluator.organisationId, evaluator.eventId, evaluator.personId)
+          .run();
+
+        await expect(
+          new ReviewerAiSuggestionService(testEnv, {
+            provider: successfulReviewerAiProvider(() => {
+              providerCalls += 1;
+            }),
+          }).generate(evaluator, { assignmentId }),
+        ).rejects.toThrow(/organisation.*last 24 hours/i);
+        expect(providerCalls).toBe(0);
+      } finally {
+        await env.DB.prepare(
+          "DELETE FROM operation_jobs WHERE id LIKE 'test-ai-org-limit-%'",
+        ).run();
+        await resetEvaluationFixture();
+      }
+    });
 
     it("blocks a different-revision request while provider work is live and preserves failed-call acknowledgement", async () => {
       const { assignmentId, initialReview, service, testEnv } =
@@ -739,8 +1323,19 @@ describe("evaluation vertical slice", () => {
               : 4,
         ]),
       );
-      const importedIds = suggestionCriteria
+      const reviewScores = {
+        ...suggestedScores,
+        "eval-test-relevance": 3,
+      };
+      const allSuggestedClosedIds = suggestionCriteria
         .filter((criterion) => criterion.inputType !== "free_text")
+        .map((criterion) => criterion.id);
+      const importedIds = suggestionCriteria
+        .filter(
+          (criterion) =>
+            criterion.inputType !== "free_text" &&
+            criterion.id !== "eval-test-relevance",
+        )
         .map((criterion) => criterion.id);
       await ai.updateSetting(admin, { enabled: false, revision: 1 });
       await expect(
@@ -762,10 +1357,25 @@ describe("evaluation vertical slice", () => {
         "offered",
       );
       await ai.updateSetting(admin, { enabled: true, revision: 2 });
+      await expect(
+        service.saveReview(evaluator, {
+          assignmentId,
+          revision: initial.revision,
+          scores: suggestedScores,
+          recommendation: "accept",
+          confidence: 4,
+          submitterFeedback: "",
+          privateNotes: "",
+          conflictAffirmed: true,
+          suggestionId: suggestion.id,
+          importedCriterionIds: allSuggestedClosedIds,
+          intent: "save",
+        }),
+      ).rejects.toThrow(/only fill criteria that were unanswered/i);
       const imported = await service.saveReview(evaluator, {
         assignmentId,
         revision: initial.revision,
-        scores: suggestedScores,
+        scores: reviewScores,
         recommendation: "accept",
         confidence: 4,
         submitterFeedback: "",
@@ -783,7 +1393,7 @@ describe("evaluation vertical slice", () => {
         service.saveReview(evaluator, {
           assignmentId,
           revision: imported.revision,
-          scores: suggestedScores,
+          scores: reviewScores,
           recommendation: "accept",
           confidence: 4,
           submitterFeedback: "",
@@ -799,7 +1409,7 @@ describe("evaluation vertical slice", () => {
       await service.saveReview(evaluator, {
         assignmentId,
         revision: imported.revision,
-        scores: suggestedScores,
+        scores: reviewScores,
         recommendation: "accept",
         confidence: 4,
         submitterFeedback: "",
@@ -829,16 +1439,46 @@ describe("evaluation vertical slice", () => {
       expect(JSON.parse(revision!.confirmedIdsJson)).toEqual(importedIds);
       expect(
         await env.DB.prepare(
-          `SELECT lifecycle_operation_id IS NOT NULL AS hasLifecycleOperation,
-                  imported_review_id AS importedReviewId
+          `SELECT json_extract(scores_json, '$.eval-test-relevance') AS relevance
+             FROM reviews WHERE id = ? AND event_id = ?`,
+        )
+          .bind(imported.reviewId, evaluator.eventId)
+          .first(),
+      ).toEqual({ relevance: 3 });
+      expect(
+        await env.DB.prepare(
+          `SELECT lifecycle_operation_id IS NOT NULL AS hasLifecycleOperation
              FROM reviewer_ai_suggestions WHERE id = ?`,
         )
           .bind(suggestion.id)
           .first(),
-      ).toEqual({
-        hasLifecycleOperation: 1,
-        importedReviewId: imported.reviewId,
+      ).toEqual({ hasLifecycleOperation: 1 });
+      await service.reopenReview(admin, {
+        assignmentId,
+        reason: "Recheck the AI-assisted scoring provenance.",
+        confirmed: true,
       });
+      const reopenedRevision = await env.DB.prepare(
+        `SELECT ai_suggestion_id AS suggestionId,
+                imported_criterion_ids_json AS importedIdsJson,
+                confirmed_ai_criterion_ids_json AS confirmedIdsJson
+           FROM review_revisions
+          WHERE event_id = ? AND review_id = ? AND save_kind = 'reopened'
+          ORDER BY revision_number DESC LIMIT 1`,
+      )
+        .bind(evaluator.eventId, imported.reviewId)
+        .first<{
+          suggestionId: string;
+          importedIdsJson: string;
+          confirmedIdsJson: string;
+        }>();
+      expect(reopenedRevision?.suggestionId).toBe(suggestion.id);
+      expect(JSON.parse(reopenedRevision!.importedIdsJson)).toEqual(
+        importedIds,
+      );
+      expect(JSON.parse(reopenedRevision!.confirmedIdsJson)).toEqual(
+        importedIds,
+      );
       await resetEvaluationFixture();
     });
 

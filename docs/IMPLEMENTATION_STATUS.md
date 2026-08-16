@@ -315,6 +315,33 @@ No 100% SBEK result is
 claimed before deployment, one clean reset, a fresh complete ordered run and
 the human checklist.
 
+Pre-release reviewer-AI hardening now makes setting, requested, generated,
+failed, interrupted and dismissed audit evidence atomic with the corresponding
+domain or operation transition. Focused Workerd fault injection suppresses the
+setting/request/generated/dismissed audits and operation completion and proves
+that no partial setting, suggestion or completed operation survives. Generation
+capacity is claimed transactionally with three assignment attempts and 100
+organisation attempts per rolling 24 hours; failed and ambiguous attempts count
+because provider cost may already exist without permanently disabling an
+assignment. Review provenance uses one relationship from the review to its
+suggestion, and D1 triggers reject contradictory
+assignment, evaluator, revision, round, target, scorecard and lifecycle
+relationships, and reopened immutable revisions retain the exact
+suggestion/imported/confirmed criterion fields. Bulk import fills only
+previously unanswered closed criteria, with server validation preserving saved
+independent answers and requiring exact suggested values for recorded imports.
+Expired-lease races converge only on terminal operations carrying the matching
+audit. Missing database aggregate rows and provider model attribution now fail
+explicitly rather than
+defaulting to zero or the configured request model. Reviewer-AI audit families
+are classified under Evaluation activity. This is repository evidence only and
+has not been deployed. Final validation on 16 August 2026 passed the complete
+core gate (63 unit files/352 tests, 173 Workerd files/1,419 tests and the Agent
+test), the 101-table/124-index/124-trigger migration and recovery contracts
+(including a populated `0034` to `0035` forward upgrade), and
+the new pull-request browser command (19 application tests across two isolated
+Chromium shards plus 14 public-site desktop/mobile tests).
+
 ## Capability status
 
 | Capability                             | Status                                                                     | Verified implementation and boundary                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              |
@@ -824,7 +851,7 @@ Repository release-control hardening now preserves the two complete deployed
 all future migration numbers remain unique. Checked-in GitHub workflows provide
 an always-on core gate and a manually confirmed production path that runs the
 complete browser gate, applies migrations, verifies the exact remote ledger and
-branding schema, deploys the unchanged tested build and checks the reported
+required deployed schema, deploys the unchanged tested build and checks the reported
 source revision. The manual deploy path uses that same entry point and reuses
 its build, failing configuration, checkout, secret, immutable-ledger baseline,
 schema or integrity preflights before applying remote migrations. Deployment
@@ -955,4 +982,4 @@ returned HTTP 404. No evaluator mailbox magic-link delivery is claimed.
 4. Collect deployed p75 RUM and production-like scale evidence; retained structured logs are queryable, while trace continuity still needs acceptance.
 5. Complete manual screen-reader, keyboard-only and contrast/zoom acceptance; automated accessibility coverage is supporting evidence, not a substitute.
 6. Supply the Forge repository, deployed evaluator URL, competition submission and recorded walkthrough evidence outside this workspace.
-7. Complete security acceptance with a nonce/hash-based application content security policy and explicit third-party provider allow-list, a deployed penetration test, a dependency-policy gate, a secret-rotation exercise and a production access review.
+7. Complete security acceptance by removing ordinary inline styles, adding Trusted Types around intentional HTML sinks, and completing a deployed penetration test, dependency-policy gate, secret-rotation exercise and production access review. Application scripts now use per-response nonces with inline script attributes disabled; typed third-party script/frame origins remain explicit. Deployment acceptance remains outstanding.

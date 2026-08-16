@@ -6,9 +6,16 @@ import {
 } from "./security-headers";
 
 describe("Worker security headers", () => {
+  const cspNonce = "test-response-nonce-1234567890";
+
   it("enforces transport security in production and for invalid environment values", () => {
     const production = new Headers();
-    applySecurityHeaders(production, "production", "youtube,vimeo,google_maps");
+    applySecurityHeaders(
+      production,
+      "production",
+      "youtube,vimeo,google_maps",
+      cspNonce,
+    );
     expect(production.get("strict-transport-security")).toBe(
       "max-age=31536000",
     );
@@ -16,7 +23,13 @@ describe("Worker security headers", () => {
       "frame-ancestors 'self'",
     );
     expect(production.get("content-security-policy")).toContain(
-      "script-src 'self' 'unsafe-inline' https://challenges.cloudflare.com https://static.cloudflareinsights.com",
+      `script-src 'self' 'nonce-${cspNonce}' https://challenges.cloudflare.com https://static.cloudflareinsights.com`,
+    );
+    expect(production.get("content-security-policy")).toContain(
+      "script-src-attr 'none'",
+    );
+    expect(production.get("content-security-policy")).not.toContain(
+      "script-src 'self' 'unsafe-inline'",
     );
     expect(production.get("content-security-policy")).toContain(
       "connect-src 'self' https://challenges.cloudflare.com https://*.r2.cloudflarestorage.com",
@@ -36,15 +49,15 @@ describe("Worker security headers", () => {
     expect(production.get("x-content-type-options")).toBe("nosniff");
 
     const development = new Headers();
-    applySecurityHeaders(development, "development", "none");
+    applySecurityHeaders(development, "development", "none", cspNonce);
     expect(development.has("strict-transport-security")).toBe(false);
 
     const missing = new Headers();
-    applySecurityHeaders(missing, undefined, "none");
+    applySecurityHeaders(missing, undefined, "none", cspNonce);
     expect(missing.get("strict-transport-security")).toBe("max-age=31536000");
 
     const misspelled = new Headers();
-    applySecurityHeaders(misspelled, "prodution", "none");
+    applySecurityHeaders(misspelled, "prodution", "none", cspNonce);
     expect(misspelled.get("strict-transport-security")).toBe(
       "max-age=31536000",
     );
@@ -52,11 +65,25 @@ describe("Worker security headers", () => {
 
   it("fails closed when resource embed provider configuration is invalid", () => {
     const headers = new Headers();
-    applySecurityHeaders(headers, "production", "unknown");
+    applySecurityHeaders(headers, "production", "unknown", cspNonce);
     expect(headers.get("content-security-policy")).toContain(
       "frame-src 'self' https://challenges.cloudflare.com;",
     );
     expect(headers.get("content-security-policy")).not.toContain("example.com");
+  });
+
+  it("rejects a missing or unsafe CSP nonce", () => {
+    expect(() =>
+      applySecurityHeaders(new Headers(), "production", "none", "short"),
+    ).toThrow("valid per-response CSP nonce");
+    expect(() =>
+      applySecurityHeaders(
+        new Headers(),
+        "production",
+        "none",
+        "unsafe-nonce; script-src *",
+      ),
+    ).toThrow("valid per-response CSP nonce");
   });
 
   it("prevents private workspace documents and route data from being cached", () => {

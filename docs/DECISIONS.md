@@ -259,14 +259,24 @@ than reading a potentially stale D1 projection.
 
 An offered suggestion can only be dismissed or imported. Import writes through
 the ordinary review save workflow and records suggestion and criterion
-provenance on the review revision; it does not write private notes, feedback,
-confidence or a final recommendation. On submission, each imported criterion
-whose value remains unchanged requires an explicit reviewer confirmation.
-Changed values require no AI confirmation. Suggestions themselves never enter
-review aggregates. Provider work uses a bounded lease; an interrupted or
-provider-completed generation that cannot be reconciled becomes an audited
-failed operation. Another provider call requires the reviewer to acknowledge
-the possible duplicate usage or charge explicitly and is never automatic.
+provenance on the review revision. The bulk action fills only unanswered closed
+criteria and never replaces the reviewer's saved independent answers; changing
+an answered criterion remains an explicit edit. Import does not write private
+notes, feedback, confidence or a final recommendation. On submission, each
+imported criterion whose value remains unchanged requires an explicit reviewer
+confirmation. Changed values require no AI confirmation. Suggestions themselves
+never enter review aggregates. Provider work uses a bounded lease; an
+interrupted or provider-completed generation that cannot be reconciled becomes
+an audited failed operation. Another provider call requires the reviewer to
+acknowledge the possible duplicate usage or charge explicitly and is never
+automatic.
+Every provider-call claim also enforces rolling 24-hour ceilings of three
+attempts for the assignment and 100 organisation-wide attempts. Attempts,
+including ambiguous and failed calls, consume capacity because they may already
+have incurred provider cost. A rolling assignment window prevents transient
+provider failures from permanently disabling later review work. The existing
+durable operation and activity views are the usage ledger; no second
+quota/accounting subsystem or cooldown state is introduced.
 Immediately before sending evidence to the provider, one guarded D1 claim
 revalidates the exact event repository and opt-in revision, reviewer pool,
 assignment status and revision, active round and scorecard, immutable source
@@ -274,6 +284,23 @@ snapshot and saved initial draft. The claim also requires that no active
 suggestion or unexpired generation exists for the assignment. A failed
 provider call remains visible for duplicate-risk acknowledgement even when a
 later draft save advances the assignment revision.
+
+Reviewer-AI setting, request, generation, failure, interruption and dismissal
+transitions commit only with their exact audit identity. Each D1 batch ends in
+an SQL assertion over the complete invariant so a suppressed audit or terminal
+operation write raises a database error and rolls the batch back. Review rows
+are the single import relationship: the suggestion does not retain a redundant
+`imported_review_id`, and baseline triggers enforce the exact assignment,
+evaluator, revision, round, target, scorecard and lifecycle relationships for
+suggestions, current reviews and immutable revisions. Reopening copies the three
+AI provenance fields into the new immutable revision. When a competing actor
+wins an expired-lease recovery or failure race, the caller converges only on a
+terminal operation carrying the matching terminal audit; an unaudited terminal
+row remains an invariant failure.
+Provider completion is accepted only when the response carries its own model
+attribution. The configured request model is not substituted for missing
+provider evidence, because aliases or provider routing could make that value an
+inaccurate account of the model that actually produced the suggestion.
 
 ## Selective deterministic scheduling
 
@@ -607,9 +634,17 @@ The deployed D1 ledger contains both
 tracks the complete migration filename, so both migration identities remain
 immutable. The repository validator permits only that exact historical numeric
 collision; every other migration number remains unique and the next migration
-is `0033`. Renaming an applied file or rewriting only the current production
+after that collision is `0033`. Renaming an applied file or rewriting only the current production
 ledger could leave retained rollback data or a restored backup with a divergent
 name history and make Wrangler replay destructive schema work.
+
+Reviewer-AI migration `0034` is also immutable now that it is shared on `main`.
+Hardening that removes its redundant import link, adds provenance triggers and
+adds rolling-usage indexes is therefore migration `0035`. The forward migration
+rejects contradictory persisted provenance, preserves valid review and revision
+links while replacing the referenced suggestion table, and restores foreign-key
+enforcement before completing; it does not rely on an application compatibility
+path.
 
 The production release entry point builds and tests once, then validates the
 clean checkout, configuration, secrets, D1 integrity, immutable deployed
@@ -620,6 +655,21 @@ Git revision while deploying that unchanged tested artifact, and checks the
 reported live revision. Missing or unexpected migration state stops the
 release; the Worker never receives an old-schema compatibility path. A separate
 revision-stamp commit is unnecessary.
+
+Pull requests run the cross-cutting core gate and a separate compact browser
+gate. The browser lane covers desktop-Chromium golden/provider/reviewer-AI and
+accessibility paths plus the public-site suite; the full visual and cross-engine
+matrix remains a release gate. Workflow actions are pinned to immutable commit
+identities so a mutable major tag cannot change trusted build code.
+
+Each application response receives one cryptographically random script nonce at
+the Worker boundary. The same value flows through a dedicated React Router
+context into `ServerRouter` and the response CSP, covering framework hydration,
+stream and scroll-restoration scripts without an inline-script fallback.
+Inline script attributes are disabled. `style-src 'unsafe-inline'` remains
+temporarily because the application has broad React style-prop usage; removing
+it is a separate observable styling migration, not a hidden compatibility shim
+or a reason to retain unsafe inline script execution.
 
 | Decision                          | Outcome                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              |
 | --------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |

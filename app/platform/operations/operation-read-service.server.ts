@@ -193,6 +193,8 @@ export type ActivityActor = {
 const activityAreaSql = `CASE
   WHEN a.action LIKE 'decision%' OR a.action LIKE 'review%'
     OR a.action LIKE 'evaluation%' OR a.action LIKE 'assignment%'
+    OR a.action LIKE 'ai.reviewer_suggestion.%'
+    OR a.entity_type IN ('evaluator_assignment','reviewer_ai_suggestion')
     THEN 'evaluation'
   WHEN a.action LIKE 'schedule%' OR a.action LIKE 'programme%'
     OR a.entity_type IN ('schedule_version','schedule_entry','schedule_conflict')

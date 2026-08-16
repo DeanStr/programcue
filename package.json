@@ -52,6 +52,7 @@
     "check": "node scripts/run-checks.mjs --full",
     "check:core": "node scripts/run-checks.mjs --core",
     "check:quick": "node scripts/run-checks.mjs --quick",
+    "check:browser:pr": "node scripts/run-pr-browser-checks.mjs",
     "check:focused": "npm run quality:ci && npm run typecheck:generated && npm run test:changed",
     "deploy": "npm run check && npm run deploy:preflight && npm run db:migrate:remote && npm run deploy:cutover && npm run deploy:smoke",
     "deploy:preflight": "npm run deploy:check && npm run deploy:state && npm run deploy:secrets && npm run deploy:ledger",

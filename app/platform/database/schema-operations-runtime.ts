@@ -86,6 +86,18 @@ export const operationJobs = sqliteTable(
       table.alertAcknowledgedAt,
       table.createdAt,
     ),
+    index("idx_reviewer_ai_operations_organisation_usage").on(
+      table.organisationId,
+      table.type,
+      table.createdAt,
+    ),
+    index("idx_reviewer_ai_operations_assignment_usage")
+      .on(
+        table.eventId,
+        sql`json_extract(${table.payloadJson}, '$.assignmentId')`,
+        sql`${table.createdAt} DESC`,
+      )
+      .where(sql`${table.type} = 'ai.reviewer_suggestion.generate'`),
   ],
 );
 

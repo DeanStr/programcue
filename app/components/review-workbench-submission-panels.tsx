@@ -1,6 +1,7 @@
 import { Sparkles } from "lucide-react";
 import { Link, useFetcher } from "react-router";
 import { useReviewWorkbenchModel } from "~/components/review-workbench-model";
+import { buildUnansweredReviewerAiImport } from "~/modules/evaluations/reviewer-ai-import";
 import type { action } from "~/routes/review-workbench.server";
 
 const QUEUE_STATE_RAIL: Record<string, string> = {
@@ -111,8 +112,13 @@ function unrepeatedAnswerFields(
 }
 
 function ReviewerAiSuggestionPanel() {
-  const { workspace, readOnly, applyReviewerAiSuggestion, suggestionImport } =
-    useReviewWorkbenchModel();
+  const {
+    workspace,
+    readOnly,
+    recoveryPayload,
+    applyReviewerAiSuggestion,
+    suggestionImport,
+  } = useReviewWorkbenchModel();
   const fetcher = useFetcher<typeof action>();
   const selected = workspace.selected;
   if (!selected) return null;
@@ -127,6 +133,13 @@ function ReviewerAiSuggestionPanel() {
   );
   const answerById = new Map(
     workspace.submission?.answerFields.map((field) => [field.id, field]) ?? [],
+  );
+  const hasUnansweredClosedSuggestion = Boolean(
+    suggestion &&
+      buildUnansweredReviewerAiImport(
+        recoveryPayload.scores,
+        suggestion.suggestions,
+      ).importedCriterionIds.length,
   );
   return (
     <div className="stack">
@@ -194,10 +207,12 @@ function ReviewerAiSuggestionPanel() {
               <button
                 className="btn primary"
                 type="button"
-                disabled={pending || suggestion.stale}
+                disabled={
+                  pending || suggestion.stale || !hasUnansweredClosedSuggestion
+                }
                 onClick={applyReviewerAiSuggestion}
               >
-                Use closed suggestions as draft
+                Fill unanswered criteria
               </button>
               <fetcher.Form method="post">
                 <input
@@ -214,6 +229,12 @@ function ReviewerAiSuggestionPanel() {
                   Dismiss suggestions
                 </button>
               </fetcher.Form>
+              {!hasUnansweredClosedSuggestion ? (
+                <span className="help">
+                  Every closed criterion already has your answer. Change one
+                  manually if the suggestion changes your assessment.
+                </span>
+              ) : null}
             </div>
           ) : suggestionImport.suggestionId === suggestion.id ? (
             <p className="help">

@@ -9,6 +9,7 @@ const repositoryRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const REMOTE_SCHEMA_TIMEOUT_MS = 60_000;
 export const lastImmutableMigrationName =
   "0032_event_brand_asset_normalization.sql";
+export const reviewerAiMigrationName = "0035_reviewer_ai_hardening.sql";
 
 export const requiredBrandAssetColumns = new Map([
   ["width_px", { type: "INTEGER", notnull: 0, defaultValue: null }],
@@ -36,6 +37,62 @@ export const requiredBrandSchemaObjects = new Map([
   ["events_brand_assets_ready_update", "trigger"],
   ["events_retire_unreferenced_brand_assets", "trigger"],
 ]);
+
+export const requiredReviewerAiReviewColumns = new Map([
+  ["ai_suggestion_id", { type: "TEXT", notnull: 0, defaultValue: null }],
+  [
+    "imported_criterion_ids_json",
+    { type: "TEXT", notnull: 1, defaultValue: "'[]'" },
+  ],
+  [
+    "confirmed_ai_criterion_ids_json",
+    { type: "TEXT", notnull: 1, defaultValue: "'[]'" },
+  ],
+]);
+
+export const requiredReviewerAiSuggestionColumns = new Map([
+  ["event_id", { type: "TEXT", notnull: 1, defaultValue: null }],
+  ["assignment_id", { type: "TEXT", notnull: 1, defaultValue: null }],
+  ["evaluator_person_id", { type: "TEXT", notnull: 1, defaultValue: null }],
+  ["status", { type: "TEXT", notnull: 1, defaultValue: "'offered'" }],
+  ["lifecycle_operation_id", { type: "TEXT", notnull: 0, defaultValue: null }],
+  ["last_operation_id", { type: "TEXT", notnull: 1, defaultValue: null }],
+]);
+
+export const requiredReviewerAiSchemaObjects = new Map([
+  ["idx_reviewer_ai_suggestions_assignment", "index"],
+  ["ux_reviewer_ai_suggestions_active", "index"],
+  ["idx_reviewer_ai_operations_organisation_usage", "index"],
+  ["idx_reviewer_ai_operations_assignment_usage", "index"],
+  ["reviewer_ai_suggestions_assignment_provenance_insert", "trigger"],
+  ["reviewer_ai_suggestions_generated_fields_immutable", "trigger"],
+  ["reviewer_ai_suggestions_lifecycle", "trigger"],
+  ["reviewer_ai_suggestions_participant_retention_no_pii_insert", "trigger"],
+  ["reviews_ai_suggestion_provenance_insert", "trigger"],
+  ["reviews_ai_suggestion_provenance_update", "trigger"],
+  ["reviewer_ai_suggestions_import_requires_review", "trigger"],
+  ["reviewer_ai_suggestions_dismiss_requires_unreferenced", "trigger"],
+  ["review_revisions_ai_suggestion_provenance_insert", "trigger"],
+  ["review_revisions_ai_suggestion_provenance_update", "trigger"],
+]);
+
+function validateColumns(rows, requiredColumns, tableName) {
+  const columns = new Map(rows.map((row) => [row.name, row]));
+  for (const [name, expected] of requiredColumns) {
+    const column = columns.get(name);
+    if (
+      !column ||
+      column.type !== expected.type ||
+      column.notnull !== expected.notnull ||
+      column.dflt_value !== expected.defaultValue
+    ) {
+      throw new Error(
+        `Remote D1 ${tableName}.${name} is missing or has the wrong contract.`,
+      );
+    }
+  }
+  return columns;
+}
 
 function successfulResults(result, label) {
   if (result?.success !== true || !Array.isArray(result.results)) {
@@ -69,7 +126,7 @@ export function validateRemoteSchemaEvidence(
   localMigrationNames,
   { allowPendingMigrations = false } = {},
 ) {
-  if (!Array.isArray(response) || response.length !== 5) {
+  if (!Array.isArray(response) || response.length !== 8) {
     throw new Error(
       "Remote D1 schema validation returned an unexpected result set.",
     );
@@ -109,40 +166,26 @@ export function validateRemoteSchemaEvidence(
     );
   }
 
-  const quickCheck = successfulResults(response[3], "integrity");
+  const quickCheck = successfulResults(response[6], "integrity");
   if (quickCheck.length !== 1 || quickCheck[0]?.quick_check !== "ok") {
     throw new Error("Remote D1 quick_check did not return ok.");
   }
   const foreignKeyFailures = successfulResults(
-    response[4],
+    response[7],
     "foreign-key integrity",
   );
   if (foreignKeyFailures.length > 0) {
     throw new Error("Remote D1 foreign_key_check returned violations.");
   }
 
-  const columns = new Map(
-    successfulResults(response[1], "brand asset columns").map((row) => [
-      row.name,
-      row,
-    ]),
+  validateColumns(
+    successfulResults(response[1], "brand asset columns"),
+    requiredBrandAssetColumns,
+    "event_brand_assets",
   );
-  for (const [name, expected] of requiredBrandAssetColumns) {
-    const column = columns.get(name);
-    if (
-      !column ||
-      column.type !== expected.type ||
-      column.notnull !== expected.notnull ||
-      column.dflt_value !== expected.defaultValue
-    ) {
-      throw new Error(
-        `Remote D1 event_brand_assets.${name} is missing or has the wrong contract.`,
-      );
-    }
-  }
 
   const objects = new Map(
-    successfulResults(response[2], "branding schema objects").map((row) => [
+    successfulResults(response[2], "required schema objects").map((row) => [
       row.name,
       row.type,
     ]),
@@ -153,12 +196,62 @@ export function validateRemoteSchemaEvidence(
     }
   }
 
+  const reviewerAiApplied = appliedMigrationNames.includes(
+    reviewerAiMigrationName,
+  );
+  if (reviewerAiApplied) {
+    validateColumns(
+      successfulResults(response[3], "review AI columns"),
+      requiredReviewerAiReviewColumns,
+      "reviews",
+    );
+    validateColumns(
+      successfulResults(response[4], "review revision AI columns"),
+      requiredReviewerAiReviewColumns,
+      "review_revisions",
+    );
+    const suggestionColumns = validateColumns(
+      successfulResults(response[5], "reviewer AI suggestion columns"),
+      requiredReviewerAiSuggestionColumns,
+      "reviewer_ai_suggestions",
+    );
+    if (suggestionColumns.has("imported_review_id")) {
+      throw new Error(
+        "Remote D1 reviewer_ai_suggestions retains redundant imported_review_id.",
+      );
+    }
+    for (const [name, type] of requiredReviewerAiSchemaObjects) {
+      if (objects.get(name) !== type) {
+        throw new Error(`Remote D1 is missing required ${type} ${name}.`);
+      }
+    }
+    const assignmentUsageIndex = successfulResults(
+      response[2],
+      "schema objects",
+    ).find((row) => row.name === "idx_reviewer_ai_operations_assignment_usage");
+    if (
+      typeof assignmentUsageIndex?.sql !== "string" ||
+      !/created_at\s+DESC/iu.test(assignmentUsageIndex.sql)
+    ) {
+      throw new Error(
+        "Remote D1 reviewer AI assignment usage index does not cover the rolling window.",
+      );
+    }
+  }
+
   return {
     migrationCount: appliedMigrationNames.length,
     pendingMigrationCount:
       localMigrationNames.length - appliedMigrationNames.length,
     brandingColumnCount: requiredBrandAssetColumns.size,
     brandingObjectCount: requiredBrandSchemaObjects.size,
+    reviewerAiColumnCount: reviewerAiApplied
+      ? requiredReviewerAiReviewColumns.size * 2 +
+        requiredReviewerAiSuggestionColumns.size
+      : 0,
+    reviewerAiObjectCount: reviewerAiApplied
+      ? requiredReviewerAiSchemaObjects.size
+      : 0,
   };
 }
 
@@ -167,13 +260,19 @@ function run() {
   const localMigrationNames = readdirSync(resolve(repositoryRoot, "migrations"))
     .filter((name) => /^\d{4}_[a-z0-9_]+\.sql$/u.test(name))
     .sort();
-  const objectNames = [...requiredBrandSchemaObjects.keys()]
+  const objectNames = [
+    ...requiredBrandSchemaObjects.keys(),
+    ...requiredReviewerAiSchemaObjects.keys(),
+  ]
     .map((name) => `'${name.replaceAll("'", "''")}'`)
     .join(", ");
   const command = [
     "SELECT name FROM d1_migrations ORDER BY id",
     "PRAGMA table_info(event_brand_assets)",
-    `SELECT type, name FROM sqlite_master WHERE name IN (${objectNames}) ORDER BY type, name`,
+    `SELECT type, name, sql FROM sqlite_master WHERE name IN (${objectNames}) ORDER BY type, name`,
+    "PRAGMA table_info(reviews)",
+    "PRAGMA table_info(review_revisions)",
+    "PRAGMA table_info(reviewer_ai_suggestions)",
     "PRAGMA quick_check",
     "PRAGMA foreign_key_check",
   ].join("; ");
@@ -223,7 +322,7 @@ function run() {
     );
   } else {
     console.log(
-      `Remote D1 schema validation passed (${evidence.migrationCount} migrations, ${evidence.brandingColumnCount} branding columns and ${evidence.brandingObjectCount} branding indexes/triggers).`,
+      `Remote D1 schema validation passed (${evidence.migrationCount} migrations, ${evidence.brandingColumnCount} branding columns, ${evidence.brandingObjectCount} branding indexes/triggers, ${evidence.reviewerAiColumnCount} reviewer-AI columns and ${evidence.reviewerAiObjectCount} reviewer-AI indexes/triggers).`,
     );
   }
 }

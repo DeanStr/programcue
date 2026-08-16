@@ -8,6 +8,10 @@ import {
   lastImmutableMigrationName,
   requiredBrandAssetColumns,
   requiredBrandSchemaObjects,
+  requiredReviewerAiReviewColumns,
+  requiredReviewerAiSchemaObjects,
+  requiredReviewerAiSuggestionColumns,
+  reviewerAiMigrationName,
   validateRemoteSchemaEvidence,
 } from "./validate-remote-schema.mjs";
 import { validateProductionHealth } from "./verify-production-health.mjs";
@@ -15,71 +19,113 @@ import { validateProductionHealth } from "./verify-production-health.mjs";
 const migrations = [
   "0032_decision_draft_preview_contract.sql",
   "0032_event_brand_asset_normalization.sql",
+  "0033_decision_draft_session_format.sql",
+  "0034_reviewer_ai_suggestions.sql",
+  reviewerAiMigrationName,
 ];
 const repositoryRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 
-function remoteEvidence() {
+function columnEvidence(requiredColumns) {
+  return [...requiredColumns].map(
+    ([name, { type, notnull, defaultValue }], cid) => ({
+      cid,
+      name,
+      type,
+      notnull,
+      dflt_value: defaultValue,
+      pk: 0,
+    }),
+  );
+}
+
+function remoteEvidence(appliedMigrations = migrations) {
   return [
     {
       success: true,
-      results: migrations.map((name) => ({ name })),
+      results: appliedMigrations.map((name) => ({ name })),
     },
     {
       success: true,
-      results: [...requiredBrandAssetColumns].map(
-        ([name, { type, notnull, defaultValue }], cid) => ({
-          cid,
+      results: columnEvidence(requiredBrandAssetColumns),
+    },
+    {
+      success: true,
+      results: [
+        ...[...requiredBrandSchemaObjects].map(([name, type]) => ({
           name,
           type,
-          notnull,
-          dflt_value: defaultValue,
-          pk: 0,
-        }),
-      ),
+          sql: null,
+        })),
+        ...[...requiredReviewerAiSchemaObjects].map(([name, type]) => ({
+          name,
+          type,
+          sql:
+            name === "idx_reviewer_ai_operations_assignment_usage"
+              ? "CREATE INDEX idx_reviewer_ai_operations_assignment_usage ON operation_jobs(event_id, json_extract(payload_json, '$.assignmentId'), created_at DESC)"
+              : `CREATE ${type} ${name}`,
+        })),
+      ],
     },
+    { success: true, results: columnEvidence(requiredReviewerAiReviewColumns) },
+    { success: true, results: columnEvidence(requiredReviewerAiReviewColumns) },
     {
       success: true,
-      results: [...requiredBrandSchemaObjects].map(([name, type]) => ({
-        name,
-        type,
-      })),
+      results: columnEvidence(requiredReviewerAiSuggestionColumns),
     },
     { success: true, results: [{ quick_check: "ok" }] },
     { success: true, results: [] },
   ];
 }
 
-test("remote schema validation requires the exact migration ledger and branding contract", () => {
+test("remote schema validation requires the exact migration ledger and deployed schema contracts", () => {
   assert.deepEqual(validateRemoteSchemaEvidence(remoteEvidence(), migrations), {
-    migrationCount: 2,
+    migrationCount: 5,
     pendingMigrationCount: 0,
     brandingColumnCount: 7,
     brandingObjectCount: 11,
+    reviewerAiColumnCount: 12,
+    reviewerAiObjectCount: 14,
   });
 
-  const nextReleaseMigrations = [...migrations, "0033_next_release.sql"];
+  const pendingEvidence = remoteEvidence(migrations.slice(0, 2));
   assert.deepEqual(
-    validateRemoteSchemaEvidence(remoteEvidence(), nextReleaseMigrations, {
+    validateRemoteSchemaEvidence(pendingEvidence, migrations, {
       allowPendingMigrations: true,
     }),
     {
       migrationCount: 2,
+      pendingMigrationCount: 3,
+      brandingColumnCount: 7,
+      brandingObjectCount: 11,
+      reviewerAiColumnCount: 0,
+      reviewerAiObjectCount: 0,
+    },
+  );
+  const sharedReviewerAiBaseline = remoteEvidence(migrations.slice(0, 4));
+  assert.deepEqual(
+    validateRemoteSchemaEvidence(sharedReviewerAiBaseline, migrations, {
+      allowPendingMigrations: true,
+    }),
+    {
+      migrationCount: 4,
       pendingMigrationCount: 1,
       brandingColumnCount: 7,
       brandingObjectCount: 11,
+      reviewerAiColumnCount: 0,
+      reviewerAiObjectCount: 0,
     },
   );
   const reorderedLedger = remoteEvidence();
   reorderedLedger[0].results.reverse();
   assert.throws(
     () =>
-      validateRemoteSchemaEvidence(reorderedLedger, nextReleaseMigrations, {
+      validateRemoteSchemaEvidence(reorderedLedger, migrations, {
         allowPendingMigrations: true,
       }),
     /ledger does not match this release/u,
   );
 
-  const missingMigration = remoteEvidence();
+  const missingMigration = remoteEvidence(migrations.slice(0, 2));
   missingMigration[0].results.pop();
   assert.throws(
     () =>
@@ -89,7 +135,7 @@ test("remote schema validation requires the exact migration ledger and branding 
     /missing: 0032_event_brand_asset_normalization\.sql/u,
   );
 
-  assert.equal(lastImmutableMigrationName, migrations.at(-1));
+  assert.equal(lastImmutableMigrationName, migrations[1]);
 
   const missingTrigger = remoteEvidence();
   missingTrigger[2].results = missingTrigger[2].results.filter(
@@ -98,6 +144,39 @@ test("remote schema validation requires the exact migration ledger and branding 
   assert.throws(
     () => validateRemoteSchemaEvidence(missingTrigger, migrations),
     /missing required trigger events_retire_unreferenced_brand_assets/u,
+  );
+
+  const missingReviewerTrigger = remoteEvidence();
+  missingReviewerTrigger[2].results = missingReviewerTrigger[2].results.filter(
+    ({ name }) => name !== "reviewer_ai_suggestions_import_requires_review",
+  );
+  assert.throws(
+    () => validateRemoteSchemaEvidence(missingReviewerTrigger, migrations),
+    /missing required trigger reviewer_ai_suggestions_import_requires_review/u,
+  );
+
+  const legacyReviewerRelation = remoteEvidence();
+  legacyReviewerRelation[5].results.push({
+    cid: 99,
+    name: "imported_review_id",
+    type: "TEXT",
+    notnull: 0,
+    dflt_value: null,
+    pk: 0,
+  });
+  assert.throws(
+    () => validateRemoteSchemaEvidence(legacyReviewerRelation, migrations),
+    /retains redundant imported_review_id/u,
+  );
+
+  const staleUsageIndex = remoteEvidence();
+  staleUsageIndex[2].results.find(
+    ({ name }) => name === "idx_reviewer_ai_operations_assignment_usage",
+  ).sql =
+    "CREATE INDEX idx_reviewer_ai_operations_assignment_usage ON operation_jobs(event_id, json_extract(payload_json, '$.assignmentId'))";
+  assert.throws(
+    () => validateRemoteSchemaEvidence(staleUsageIndex, migrations),
+    /assignment usage index does not cover the rolling window/u,
   );
 
   const invalidCleanupColumn = remoteEvidence();
@@ -110,7 +189,7 @@ test("remote schema validation requires the exact migration ledger and branding 
   );
 
   const foreignKeyFailure = remoteEvidence();
-  foreignKeyFailure[4].results.push({ table: "events", rowid: 1 });
+  foreignKeyFailure[7].results.push({ table: "events", rowid: 1 });
   assert.throws(
     () => validateRemoteSchemaEvidence(foreignKeyFailure, migrations),
     /foreign_key_check returned violations/u,
