@@ -8,6 +8,7 @@ import {
   type ScheduleCalendarFanoutMessage,
   scheduleCalendarFanoutMessageSchema,
 } from "~/modules/calendars/calendar-schema";
+import type { AuditOrigin } from "~/platform/audit/audit-contract";
 import type { Viewer } from "~/platform/auth/authorize.server";
 import {
   WebhookService,
@@ -42,6 +43,8 @@ import {
   detectWorkspaceConflicts,
   loadScheduleWorkspaceD1,
 } from "./schedule-workspace.server";
+
+export type ScheduleActionOrigin = Extract<AuditOrigin, "admin_ui" | "api">;
 
 export type WorkspaceEvent = {
   id: string;
@@ -227,6 +230,7 @@ export class ScheduleService {
 
   private async queueSessionWebhook(
     viewer: Viewer,
+    origin: ScheduleActionOrigin,
     input: {
       eventType: "session.created" | "session.updated";
       sessionId: string;
@@ -236,7 +240,7 @@ export class ScheduleService {
   ) {
     try {
       const deliveries = await new WebhookService(this.env).queueEvent(
-        webhookActorForAudit(viewer, "admin_ui"),
+        webhookActorForAudit(viewer, origin),
         {
           eventType: input.eventType,
           entityType: "session",
@@ -672,7 +676,7 @@ export class ScheduleService {
       input,
       () => this.createBreakD1(viewer, input),
     );
-    const webhook = await this.queueSessionWebhook(viewer, {
+    const webhook = await this.queueSessionWebhook(viewer, "admin_ui", {
       eventType: "session.created",
       sessionId: result.sessionId,
       revision: 1,
@@ -785,7 +789,7 @@ export class ScheduleService {
       input,
       () => this.contentWorkflow.updateSessionResourcesD1(viewer, input),
     );
-    const webhook = await this.queueSessionWebhook(viewer, {
+    const webhook = await this.queueSessionWebhook(viewer, "admin_ui", {
       eventType: "session.updated",
       sessionId: result.sessionId,
       revision: result.revision,
@@ -804,6 +808,7 @@ export class ScheduleService {
   private async commitSessionContent(
     viewer: Viewer,
     input: unknown,
+    origin: ScheduleActionOrigin,
     history: {
       changeKind: "edit" | "restore";
       restoredFromRevisionId: string | null;
@@ -829,10 +834,11 @@ export class ScheduleService {
           parsed,
           requestHash,
           history,
+          origin,
         ),
       { idempotencyKey: projectionKey, requestHash },
     );
-    const webhook = await this.queueSessionWebhook(viewer, {
+    const webhook = await this.queueSessionWebhook(viewer, origin, {
       eventType: "session.updated",
       sessionId: result.sessionId,
       revision: result.revision,
@@ -856,8 +862,12 @@ export class ScheduleService {
     };
   }
 
-  async updateSessionContent(viewer: Viewer, input: unknown) {
-    return this.commitSessionContent(viewer, input, {
+  async updateSessionContent(
+    viewer: Viewer,
+    input: unknown,
+    origin: ScheduleActionOrigin,
+  ) {
+    return this.commitSessionContent(viewer, input, origin, {
       changeKind: "edit",
       restoredFromRevisionId: null,
     });
@@ -867,13 +877,14 @@ export class ScheduleService {
     viewer: Viewer,
     input: unknown,
     restoredFromRevisionId: string,
+    origin: ScheduleActionOrigin,
   ) {
     if (!restoredFromRevisionId.trim()) {
       throw new ScheduleConfigurationError(
         "A content revision is required for restoration.",
       );
     }
-    return this.commitSessionContent(viewer, input, {
+    return this.commitSessionContent(viewer, input, origin, {
       changeKind: "restore",
       restoredFromRevisionId,
     });

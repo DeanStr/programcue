@@ -497,6 +497,22 @@ describe("versioned administration commands", () => {
     const editableSession = workspace.sessions[0];
     expect(workspace.version?.status).toBe("draft");
     expect(editableSession).toBeTruthy();
+    const sessionWebhookEndpointId = `api-session-hook-${suffix}`;
+    await testEnv.DB.prepare(
+      `INSERT INTO webhook_endpoints (
+         id, organisation_id, event_id, name, url, secret_ciphertext,
+         event_types_json, status, created_by_person_id
+       ) VALUES (?, ?, ?, 'API session updates',
+                 'https://hooks.example.com/api-session', 'test-only',
+                 '["session.updated"]', 'active', ?)`,
+    )
+      .bind(
+        sessionWebhookEndpointId,
+        administrator.organisationId,
+        eventId,
+        administrator.personId,
+      )
+      .run();
     const editKey = crypto.randomUUID();
     const edited = await result(
       await command(
@@ -525,6 +541,30 @@ describe("versioned administration commands", () => {
       sessionId: editableSession!.id,
       revision: editableSession!.revision + 1,
     });
+    await expect(
+      testEnv.DB.prepare(
+        `SELECT origin FROM audit_events
+          WHERE event_id = ? AND entity_id = ?
+            AND action = 'session.content.updated'`,
+      )
+        .bind(eventId, editableSession!.id)
+        .first(),
+    ).resolves.toEqual({ origin: "api" });
+    await expect(
+      testEnv.DB.prepare(
+        `SELECT audit.origin
+           FROM webhook_deliveries delivery
+           JOIN audit_events audit
+             ON audit.entity_type = 'webhook_delivery'
+            AND audit.entity_id = delivery.id
+            AND audit.action = 'webhook.queued'
+          WHERE delivery.endpoint_id = ?
+            AND delivery.event_type = 'session.updated'
+            AND delivery.entity_id = ?`,
+      )
+        .bind(sessionWebhookEndpointId, editableSession!.id)
+        .first(),
+    ).resolves.toEqual({ origin: "api" });
 
     const sessionId = `api-lifecycle-${suffix}`;
     await testEnv.DB.prepare(

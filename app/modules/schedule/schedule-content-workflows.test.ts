@@ -128,8 +128,12 @@ describe("schedule content and draft workflows", () => {
       requiredResources: [],
     };
 
-    const first = await service.updateSessionContent(viewer, input);
-    const replay = await service.updateSessionContent(viewer, input);
+    const first = await service.updateSessionContent(viewer, input, "admin_ui");
+    const replay = await service.updateSessionContent(
+      viewer,
+      input,
+      "admin_ui",
+    );
     expect(replay).toEqual(first);
     workspace = await service.getWorkspace(viewer);
     expect(
@@ -176,18 +180,22 @@ describe("schedule content and draft workflows", () => {
     ).toEqual({ count: 2 });
     expect(
       await env.DB.prepare(
-        `SELECT COUNT(*) AS count FROM audit_events
+        `SELECT COUNT(*) AS count, MIN(origin) AS origin FROM audit_events
             WHERE event_id = ? AND entity_id = ?
               AND action = 'session.content.updated'`,
       )
         .bind(viewer.eventId, session.id)
         .first(),
-    ).toEqual({ count: 1 });
+    ).toEqual({ count: 1, origin: "admin_ui" });
     await expect(
-      service.updateSessionContent(viewer, {
-        ...input,
-        title: "A different payload with the same key",
-      }),
+      service.updateSessionContent(
+        viewer,
+        {
+          ...input,
+          title: "A different payload with the same key",
+        },
+        "admin_ui",
+      ),
     ).rejects.toThrow(/already used for different content/i);
   });
 
@@ -200,20 +208,24 @@ describe("schedule content and draft workflows", () => {
     )!;
 
     await expect(
-      service.updateSessionContent(viewer, {
-        scheduleVersionId: versionId,
-        scheduleRevision: workspace.version!.revision,
-        sessionId: session.id,
-        sessionRevision: session.revision,
-        idempotencyKey: crypto.randomUUID(),
-        title: "Unavailable track",
-        description: "This content must not be persisted.",
-        format: "presentation",
-        durationMinutes: 45,
-        trackId: "missing-track",
-        visibility: "public",
-        requiredResources: [],
-      }),
+      service.updateSessionContent(
+        viewer,
+        {
+          scheduleVersionId: versionId,
+          scheduleRevision: workspace.version!.revision,
+          sessionId: session.id,
+          sessionRevision: session.revision,
+          idempotencyKey: crypto.randomUUID(),
+          title: "Unavailable track",
+          description: "This content must not be persisted.",
+          format: "presentation",
+          durationMinutes: 45,
+          trackId: "missing-track",
+          visibility: "public",
+          requiredResources: [],
+        },
+        "admin_ui",
+      ),
     ).rejects.toBeInstanceOf(ScheduleConfigurationError);
     expect(
       (await service.getWorkspace(viewer)).sessions.find(

@@ -46,7 +46,11 @@ export class ApiAdministrationDomainCommands extends ApiAdministrationCommandExe
           "The Idempotency-Key header must match body.idempotencyKey",
         );
       }
-      return new ScheduleService(this.env).updateSessionContent(viewer, input);
+      return new ScheduleService(this.env).updateSessionContent(
+        viewer,
+        input,
+        "api",
+      );
     }
 
     if (

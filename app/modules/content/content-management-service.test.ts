@@ -154,20 +154,24 @@ describe("content management", () => {
       (candidate) => candidate.id === "schedule-test-one",
     )!;
 
-    await schedule.updateSessionContent(viewer, {
-      scheduleVersionId: versionId,
-      scheduleRevision: workspace.version!.revision,
-      sessionId: session.id,
-      sessionRevision: session.revision,
-      idempotencyKey: crypto.randomUUID(),
-      title: "Approved session title",
-      description: "Exact approved public description.",
-      format: session.format,
-      durationMinutes: session.durationMinutes,
-      trackId: session.trackId,
-      visibility: "public",
-      requiredResources: session.requiredResources,
-    });
+    await schedule.updateSessionContent(
+      viewer,
+      {
+        scheduleVersionId: versionId,
+        scheduleRevision: workspace.version!.revision,
+        sessionId: session.id,
+        sessionRevision: session.revision,
+        idempotencyKey: crypto.randomUUID(),
+        title: "Approved session title",
+        description: "Exact approved public description.",
+        format: session.format,
+        durationMinutes: session.durationMinutes,
+        trackId: session.trackId,
+        visibility: "public",
+        requiredResources: session.requiredResources,
+      },
+      "admin_ui",
+    );
 
     let detail = await content.getSession(viewer, session.id);
     const reviewed = await content.changeStatus(viewer, {
@@ -198,20 +202,24 @@ describe("content management", () => {
     session = workspace.sessions.find(
       (candidate) => candidate.id === session.id,
     )!;
-    await schedule.updateSessionContent(viewer, {
-      scheduleVersionId: versionId,
-      scheduleRevision: workspace.version!.revision,
-      sessionId: session.id,
-      sessionRevision: session.revision,
-      idempotencyKey: crypto.randomUUID(),
-      title: "Edited after approval",
-      description: "This edit requires another approval.",
-      format: session.format,
-      durationMinutes: session.durationMinutes,
-      trackId: session.trackId,
-      visibility: "public",
-      requiredResources: session.requiredResources,
-    });
+    await schedule.updateSessionContent(
+      viewer,
+      {
+        scheduleVersionId: versionId,
+        scheduleRevision: workspace.version!.revision,
+        sessionId: session.id,
+        sessionRevision: session.revision,
+        idempotencyKey: crypto.randomUUID(),
+        title: "Edited after approval",
+        description: "This edit requires another approval.",
+        format: session.format,
+        durationMinutes: session.durationMinutes,
+        trackId: session.trackId,
+        visibility: "public",
+        requiredResources: session.requiredResources,
+      },
+      "admin_ui",
+    );
 
     detail = await content.getSession(viewer, session.id);
     expect(detail.current).toMatchObject({
@@ -274,20 +282,24 @@ describe("content management", () => {
         (candidate) => candidate.id === "schedule-test-one",
       )!;
 
-      await schedule.updateSessionContent(viewer, {
-        scheduleVersionId: versionId,
-        scheduleRevision: workspace.version!.revision,
-        sessionId: session.id,
-        sessionRevision: session.revision,
-        idempotencyKey: crypto.randomUUID(),
-        title: session.title,
-        description: "",
-        format: session.format,
-        durationMinutes: session.durationMinutes,
-        trackId: session.trackId,
-        visibility,
-        requiredResources: session.requiredResources,
-      });
+      await schedule.updateSessionContent(
+        viewer,
+        {
+          scheduleVersionId: versionId,
+          scheduleRevision: workspace.version!.revision,
+          sessionId: session.id,
+          sessionRevision: session.revision,
+          idempotencyKey: crypto.randomUUID(),
+          title: session.title,
+          description: "",
+          format: session.format,
+          durationMinutes: session.durationMinutes,
+          trackId: session.trackId,
+          visibility,
+          requiredResources: session.requiredResources,
+        },
+        "admin_ui",
+      );
 
       const detail = await content.getSession(viewer, session.id);
       await expect(
@@ -375,20 +387,24 @@ describe("content management", () => {
     const approvedSession = workspace.sessions.find(
       (candidate) => candidate.id === "schedule-test-one",
     )!;
-    await schedule.updateSessionContent(viewer, {
-      scheduleVersionId: versionId,
-      scheduleRevision: workspace.version!.revision,
-      sessionId: approvedSession.id,
-      sessionRevision: approvedSession.revision,
-      idempotencyKey: crypto.randomUUID(),
-      title: "Approved public session",
-      description: "This approved session may be published.",
-      format: approvedSession.format,
-      durationMinutes: approvedSession.durationMinutes,
-      trackId: approvedSession.trackId,
-      visibility: "public",
-      requiredResources: approvedSession.requiredResources,
-    });
+    await schedule.updateSessionContent(
+      viewer,
+      {
+        scheduleVersionId: versionId,
+        scheduleRevision: workspace.version!.revision,
+        sessionId: approvedSession.id,
+        sessionRevision: approvedSession.revision,
+        idempotencyKey: crypto.randomUUID(),
+        title: "Approved public session",
+        description: "This approved session may be published.",
+        format: approvedSession.format,
+        durationMinutes: approvedSession.durationMinutes,
+        trackId: approvedSession.trackId,
+        visibility: "public",
+        requiredResources: approvedSession.requiredResources,
+      },
+      "admin_ui",
+    );
     const detail = await content.getSession(viewer, approvedSession.id);
     await content.changeStatus(viewer, {
       scheduleVersionId: versionId,
@@ -421,20 +437,24 @@ describe("content management", () => {
     const secondDraft = workspace.sessions.find(
       (session) => session.id === secondSession.id,
     )!;
-    await schedule.updateSessionContent(viewer, {
-      scheduleVersionId: versionId,
-      scheduleRevision: workspace.version!.revision,
-      sessionId: secondDraft.id,
-      sessionRevision: secondDraft.revision,
-      idempotencyKey: crypto.randomUUID(),
-      title: secondDraft.title,
-      description: "This second public session is ready for approval.",
-      format: secondDraft.format,
-      durationMinutes: secondDraft.durationMinutes,
-      trackId: secondDraft.trackId,
-      visibility: "public",
-      requiredResources: secondDraft.requiredResources,
-    });
+    await schedule.updateSessionContent(
+      viewer,
+      {
+        scheduleVersionId: versionId,
+        scheduleRevision: workspace.version!.revision,
+        sessionId: secondDraft.id,
+        sessionRevision: secondDraft.revision,
+        idempotencyKey: crypto.randomUUID(),
+        title: secondDraft.title,
+        description: "This second public session is ready for approval.",
+        format: secondDraft.format,
+        durationMinutes: secondDraft.durationMinutes,
+        trackId: secondDraft.trackId,
+        visibility: "public",
+        requiredResources: secondDraft.requiredResources,
+      },
+      "admin_ui",
+    );
     const secondDetail = await content.getSession(viewer, secondSession.id);
     await content.changeStatus(viewer, {
       scheduleVersionId: versionId,

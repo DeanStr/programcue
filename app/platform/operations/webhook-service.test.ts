@@ -660,13 +660,20 @@ describe("outbound webhooks", () => {
       entityType: "speaker",
       entityId: "speaker-concurrent",
       idempotencyKey: `speaker.updated:concurrent:${crypto.randomUUID()}`,
-      correlationId: crypto.randomUUID(),
       data: { revision: 2 },
     } as const;
+    const firstCorrelationId = crypto.randomUUID();
+    const secondCorrelationId = crypto.randomUUID();
 
     const [first, second] = await Promise.all([
-      service.queueEvent(viewer, input),
-      service.queueEvent(viewer, input),
+      service.queueEvent(viewer, {
+        ...input,
+        correlationId: firstCorrelationId,
+      }),
+      service.queueEvent(viewer, {
+        ...input,
+        correlationId: secondCorrelationId,
+      }),
     ]);
 
     expect(first[0]?.deliveryId).toBe(second[0]?.deliveryId);
@@ -685,6 +692,28 @@ describe("outbound webhooks", () => {
         .bind(endpoint.id)
         .first(),
     ).toEqual({ count: 1 });
+    const persistedCorrelation = await testEnv.DB.prepare(
+      `SELECT audit.correlation_id AS auditCorrelationId,
+              json_extract(delivery.payload_json, '$.correlationId')
+                AS payloadCorrelationId
+         FROM webhook_deliveries delivery
+         JOIN audit_events audit
+           ON audit.entity_type = 'webhook_delivery'
+          AND audit.entity_id = delivery.id
+          AND audit.action = 'webhook.queued'
+        WHERE delivery.endpoint_id = ?`,
+    )
+      .bind(endpoint.id)
+      .first<{
+        auditCorrelationId: string;
+        payloadCorrelationId: string;
+      }>();
+    expect(persistedCorrelation?.auditCorrelationId).toBe(
+      persistedCorrelation?.payloadCorrelationId,
+    );
+    expect([firstCorrelationId, secondCorrelationId]).toContain(
+      persistedCorrelation?.payloadCorrelationId,
+    );
   });
 
   it("materialises a webhook operation in the same batch as its domain audit", async () => {

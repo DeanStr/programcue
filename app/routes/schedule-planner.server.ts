@@ -393,20 +393,24 @@ export async function action({ request, context }: Route.ActionArgs) {
         };
       }
       case "save-session-content": {
-        const result = await service.updateSessionContent(viewer, {
-          scheduleVersionId: values.get("scheduleVersionId"),
-          scheduleRevision: values.get("scheduleRevision"),
-          sessionId: values.get("sessionId"),
-          sessionRevision: values.get("sessionRevision"),
-          idempotencyKey: values.get("idempotencyKey"),
-          title: values.get("title"),
-          description: values.get("description"),
-          format: values.get("format"),
-          durationMinutes: values.get("durationMinutes"),
-          trackId: values.get("trackId"),
-          visibility: values.get("visibility"),
-          requiredResources: values.getAll("requiredResource").map(String),
-        });
+        const result = await service.updateSessionContent(
+          viewer,
+          {
+            scheduleVersionId: values.get("scheduleVersionId"),
+            scheduleRevision: values.get("scheduleRevision"),
+            sessionId: values.get("sessionId"),
+            sessionRevision: values.get("sessionRevision"),
+            idempotencyKey: values.get("idempotencyKey"),
+            title: values.get("title"),
+            description: values.get("description"),
+            format: values.get("format"),
+            durationMinutes: values.get("durationMinutes"),
+            trackId: values.get("trackId"),
+            visibility: values.get("visibility"),
+            requiredResources: values.getAll("requiredResource").map(String),
+          },
+          "admin_ui",
+        );
         const realtimeFailure = await recordRouteChange(env, viewer, {
           entityType: "session",
           entityId: result.sessionId,

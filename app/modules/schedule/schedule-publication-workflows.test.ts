@@ -102,20 +102,24 @@ describe("schedule publication workflows", () => {
     const draftSession = draftAfter.sessions.find(
       (session) => session.id === "schedule-test-one",
     )!;
-    await schedule.updateSessionContent(viewer, {
-      scheduleVersionId: versionId,
-      scheduleRevision: draftAfter.version!.revision,
-      sessionId: draftSession.id,
-      sessionRevision: draftSession.revision,
-      idempotencyKey: crypto.randomUUID(),
-      title: "Draft-only replacement title",
-      description: "Draft-only replacement description.",
-      format: draftSession.format,
-      durationMinutes: draftSession.durationMinutes,
-      trackId: draftSession.trackId,
-      visibility: draftSession.visibility,
-      requiredResources: draftSession.requiredResources,
-    });
+    await schedule.updateSessionContent(
+      viewer,
+      {
+        scheduleVersionId: versionId,
+        scheduleRevision: draftAfter.version!.revision,
+        sessionId: draftSession.id,
+        sessionRevision: draftSession.revision,
+        idempotencyKey: crypto.randomUUID(),
+        title: "Draft-only replacement title",
+        description: "Draft-only replacement description.",
+        format: draftSession.format,
+        durationMinutes: draftSession.durationMinutes,
+        trackId: draftSession.trackId,
+        visibility: draftSession.visibility,
+        requiredResources: draftSession.requiredResources,
+      },
+      "admin_ui",
+    );
     let [contentDraft, liveWhileContentDraft] = await Promise.all([
       schedule.getWorkspace(viewer),
       publicProgramme.getPublished("future-of-events-2027"),

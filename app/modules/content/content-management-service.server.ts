@@ -1007,6 +1007,7 @@ export class ContentManagementService {
           ),
         },
         revision.id,
+        "admin_ui",
       );
     } catch (error) {
       if (

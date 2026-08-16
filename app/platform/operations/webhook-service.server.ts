@@ -590,7 +590,8 @@ export class WebhookService {
                     AND queued_audit.action = 'webhook.queued'
                     AND queued_audit.entity_type = 'webhook_delivery'
                     AND queued_audit.entity_id = delivery.id
-                    AND queued_audit.correlation_id = ?
+                    AND queued_audit.correlation_id =
+                        json_extract(delivery.payload_json, '$.correlationId')
                     AND json_extract(queued_audit.metadata_json, '$.operationId') = operation.id
                )
                AND EXISTS (
@@ -616,7 +617,6 @@ export class WebhookService {
             input.entityId,
             viewer.organisationId,
             viewer.eventId,
-            input.correlationId,
             viewer.eventId,
           ],
         ),

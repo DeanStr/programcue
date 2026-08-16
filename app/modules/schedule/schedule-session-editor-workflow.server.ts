@@ -9,6 +9,7 @@ import {
 import type { ScheduleConflict } from "./schedule-rules";
 import type { scheduleSessionContentSchema } from "./schedule-schema";
 import type {
+  ScheduleActionOrigin,
   ScheduleSession,
   ScheduleWorkspace,
 } from "./schedule-service.server";
@@ -24,6 +25,7 @@ export abstract class ScheduleSessionEditorWorkflow extends ScheduleSessionResou
       changeKind: "edit" | "restore";
       restoredFromRevisionId: string | null;
     },
+    origin: ScheduleActionOrigin,
   ) {
     type Result = {
       sessionId: string;
@@ -412,7 +414,7 @@ export abstract class ScheduleSessionEditorWorkflow extends ScheduleSessionResou
            id, actor_kind, origin, metadata_version, organisation_id, event_id, actor_person_id, action,
            entity_type, entity_id, metadata_json, created_at
          )
-         SELECT ?, 'person', 'admin_ui', 1, ?, ?, ?, 'session.content.updated', 'session', ?, ?, unixepoch()
+         SELECT ?, 'person', ?, 1, ?, ?, ?, 'session.content.updated', 'session', ?, ?, unixepoch()
           WHERE EXISTS (
             SELECT 1 FROM schedule_session_contents
              WHERE schedule_version_id = ? AND event_id = ? AND session_id = ?
@@ -420,6 +422,7 @@ export abstract class ScheduleSessionEditorWorkflow extends ScheduleSessionResou
           )`,
       ).bind(
         auditEventId,
+        origin,
         viewer.organisationId,
         viewer.eventId,
         viewer.personId,
