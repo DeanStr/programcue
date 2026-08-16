@@ -50,3 +50,38 @@ test("a per-response CSP nonce authorises hydration without inline-script fallba
   expect(nextNonce).toMatch(/^[A-Za-z0-9_-]{16,128}$/u);
   expect(nextNonce).not.toBe(nonce);
 });
+
+test("conditional embed navigation retains the cached representation nonce", async ({
+  page,
+}) => {
+  await page.addInitScript(() => {
+    const violations: string[] = [];
+    Object.assign(window, { __programCueCspViolations: violations });
+    document.addEventListener("securitypolicyviolation", (event) => {
+      violations.push(`${event.effectiveDirective}:${event.blockedURI}`);
+    });
+  });
+
+  const sessionsUrl = "/embed/future-of-events-2027/sessions";
+  for (const path of [
+    sessionsUrl,
+    "/embed/future-of-events-2027/speakers",
+    sessionsUrl,
+  ]) {
+    const response = await page.goto(path);
+    expect(response?.ok(), `${path} should load`).toBe(true);
+    await page.locator("body[data-hydrated='true']").waitFor();
+  }
+
+  const violations = await page.evaluate(
+    () =>
+      (
+        window as typeof window & {
+          __programCueCspViolations?: string[];
+        }
+      ).__programCueCspViolations ?? [],
+  );
+  expect(
+    violations.filter((violation) => violation !== "script-src:eval"),
+  ).toEqual([]);
+});

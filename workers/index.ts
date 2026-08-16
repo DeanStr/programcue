@@ -138,6 +138,12 @@ function secure(
     );
   }
 
+  if (response.status === 304) {
+    // A 304 reuses the cached representation body and its inline-script
+    // nonces. Replacing only its CSP would reject those cached scripts.
+    headers.delete("content-security-policy");
+  }
+
   return new Response(response.body, {
     status: response.status,
     statusText: response.statusText,

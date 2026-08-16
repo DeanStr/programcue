@@ -666,6 +666,9 @@ Each application response receives one cryptographically random script nonce at
 the Worker boundary. The same value flows through a dedicated React Router
 context into `ServerRouter` and the response CSP, covering framework hydration,
 stream and scroll-restoration scripts without an inline-script fallback.
+Conditional `304` responses omit a newly generated CSP so the browser retains
+the cached representation's matching policy and nonce rather than combining an
+old body with new script authority.
 Inline script attributes are disabled. `style-src 'unsafe-inline'` remains
 temporarily because the application has broad React style-prop usage; removing
 it is a separate observable styling migration, not a hidden compatibility shim
