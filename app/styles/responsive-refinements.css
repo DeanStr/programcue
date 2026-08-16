@@ -476,10 +476,13 @@
 }
 
 /* Keep the event identity readable when the programme header has to share a
-   320px viewport with the itinerary and navigation controls. */
+   320px viewport with the itinerary and navigation controls. The header joins
+   normal flow here so wrapped customer names cannot invalidate a guessed
+   sticky-header offset. */
 @media (max-width: 360px) {
   .public-top {
     height: auto;
+    position: static;
     flex-wrap: wrap;
     row-gap: var(--space-1);
   }
@@ -489,7 +492,9 @@
   }
   .public-brand-name {
     overflow: visible;
+    overflow-wrap: anywhere;
     text-overflow: clip;
+    white-space: normal;
   }
   .public-mobile-nav {
     margin-left: 0;
@@ -500,7 +505,7 @@
   .public-shell #programme,
   .public-shell #speakers,
   .public-shell #itinerary {
-    scroll-margin-top: 120px;
+    scroll-margin-top: var(--space-3);
   }
 }
 

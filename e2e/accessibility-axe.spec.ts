@@ -190,10 +190,13 @@ test("API reference navigation remains public and its mobile downloads remain us
 }) => {
   await page.context().clearCookies();
   await page.setViewportSize({ width: 320, height: 700 });
+  const serverResponse = await page.request.get("/api/docs");
+  expect(serverResponse.ok()).toBe(true);
+  expect(await serverResponse.text()).toContain('<main id="main"');
   await openHydrated(page, "/api/docs");
 
-  const backLink = page.getByRole("link", { name: "Evaluation access" });
-  await expect(backLink).toHaveAttribute("href", "/evaluate");
+  const backLink = page.getByRole("link", { name: "Demo guide" });
+  await expect(backLink).toHaveAttribute("href", "/demo");
   await page.keyboard.press("Tab");
   const skipLink = page.getByRole("link", { name: "Skip to main content" });
   await expect(skipLink).toBeFocused();

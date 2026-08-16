@@ -162,6 +162,10 @@ test("mobile programme navigation closes after activation and reflows at 320px",
   await openAnonymous(page, "/public/programme/future-of-events-2027");
   const brandName = page.locator(".public-brand-name");
   await expect(brandName).toHaveText("Future of Events 2027");
+  await brandName.evaluate((element) => {
+    element.textContent =
+      "International Symposium for Responsible and Accessible Event Technology";
+  });
   const containment = await page.evaluate(() => ({
     viewportWidth: document.documentElement.clientWidth,
     documentWidth: document.documentElement.scrollWidth,
@@ -182,6 +186,8 @@ test("mobile programme navigation closes after activation and reflows at 320px",
       (element) => element.scrollWidth <= element.clientWidth + 1,
     ),
   ).toBe(true);
+  await expect(page.locator(".public-top")).toHaveCSS("position", "static");
+  await expect(brandName).toHaveCSS("white-space", "normal");
   const compactPublicTargets = page.locator(
     ".session-disclosure, .public-venue-map, .session-detail-profile-link",
   );

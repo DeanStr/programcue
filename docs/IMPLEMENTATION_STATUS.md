@@ -313,15 +313,15 @@ longer mounts an irrelevant evaluation banner or duplicate toast live region.
 At 320 pixels the full event name remains visible, compact programme links meet
 the WCAG 2.2 target-size minimum, and Scalar exposes separate, visible 44-pixel
 JSON and YAML download controls with light/dark contrast. The API-reference back
-link returns anonymous users to the public evaluation access gate rather than a
-private settings route, and evaluation rate-limit errors state the approximate
-retry time. Invalid retry durations now fail their explicit UI invariant rather
-than being silently clamped, and settled Scalar markup fails explicitly if its
-required download labels disappear. The focused repository gate passed 36
-files/324 tests, and seven
+link returns to the active runtime's evaluation or demo guide, and to API
+settings in ordinary production. Evaluation rate-limit errors state the
+approximate retry time; invalid retry durations fail their explicit UI invariant
+rather than being silently clamped, and settled Scalar markup fails explicitly
+if its required download labels disappear. The focused repository gate passed
+37 files/327 tests, and seven
 Chromium accessibility workflows passed across representative phone, tablet,
-desktop, dark-theme, landmark and embed cases. These changes remain local and
-uncommitted; no deployment or fresh production reset is claimed.
+desktop, dark-theme, landmark and embed cases. These changes remain local to
+the audit branch; no deployment or fresh production reset is claimed.
 
 Bundled Priya Raman and Marcus Okafor portraits are presentation assets exposed
 only through the canonical event's published programme projection and optional
