@@ -6,6 +6,10 @@ import { PersonLookup } from "~/components/person-lookup";
 import { CharacterCount } from "~/components/ui/character-count";
 import { DomainStatusBadge } from "~/components/ui/domain-status-badge";
 import { EventDateTime } from "~/components/ui/event-date-time";
+import {
+  formSectionsForDisplay,
+  visibleFields,
+} from "~/modules/submissions/submission-schema";
 import type { SubmissionService } from "~/modules/submissions/submission-service.server";
 import type {
   SubmissionAdminDetail,
@@ -49,8 +53,9 @@ export function SubmissionAdminDetailPanel({
 }) {
   const navigation = useNavigation();
   const [searchParams] = useSearchParams();
-  const labels = new Map(
-    submission.schema?.fields.map((field) => [field.id, field.label]) ?? [],
+  const answerSections = formSectionsForDisplay(
+    submission.schema,
+    visibleFields(submission.schema, submission.answers),
   );
   return (
     <>
@@ -60,7 +65,7 @@ export function SubmissionAdminDetailPanel({
             className="subtle"
             to={queueNavigation?.backHref ?? "/admin/submissions"}
           >
-            ← All submissions
+            ← All applications
           </Link>
           <h1>{submission.title}</h1>
           <p>
@@ -147,28 +152,43 @@ export function SubmissionAdminDetailPanel({
             <h2>Application snapshot</h2>
             <span className="subtle right">Immutable source answers</span>
           </div>
-          <dl className="stack">
-            {Object.entries(submission.answers).map(([key, value]) => (
-              <div key={key}>
-                <dt className="label">{labels.get(key) ?? key}</dt>
-                <dd style={{ margin: "4px 0 0", whiteSpace: "pre-wrap" }}>
-                  {Array.isArray(value) ? value.join(", ") : value || "—"}
-                </dd>
-              </div>
+          <div className="stack">
+            {answerSections.map((section) => (
+              <section key={section.id} className="stack">
+                {section.title ? <h3>{section.title}</h3> : null}
+                {section.description ? (
+                  <p className="subtle">{section.description}</p>
+                ) : null}
+                <dl className="stack">
+                  {section.fields.map((field) => {
+                    const value = submission.answers[field.id];
+                    const upload = submission.uploads[field.id];
+                    const displayValue = Array.isArray(value)
+                      ? value.join(", ")
+                      : value;
+                    return (
+                      <div key={field.id}>
+                        <dt className="label">{field.label}</dt>
+                        <dd
+                          style={{ margin: "4px 0 0", whiteSpace: "pre-wrap" }}
+                        >
+                          {displayValue || (!upload ? "—" : null)}
+                          {upload ? (
+                            <>
+                              {displayValue ? " · " : null}
+                              <Link to={`/review/files/${upload.assetId}`}>
+                                Download private scanned video
+                              </Link>
+                            </>
+                          ) : null}
+                        </dd>
+                      </div>
+                    );
+                  })}
+                </dl>
+              </section>
             ))}
-            {Object.entries(submission.uploads).map(([fieldId, reference]) => (
-              <div key={fieldId}>
-                <dt className="label">
-                  {labels.get(fieldId) ?? fieldId} · private file
-                </dt>
-                <dd style={{ margin: "4px 0 0" }}>
-                  <Link to={`/review/files/${reference.assetId}`}>
-                    Download scanned video
-                  </Link>
-                </dd>
-              </div>
-            ))}
-          </dl>
+          </div>
         </section>
         <aside className="stack">
           <section className="card pad">
@@ -604,7 +624,7 @@ export function AdminCreationForm(props: AdminCreationFormProps) {
                 </select>
                 <span className="help">
                   Routing is recorded now; evaluator assignments are created
-                  separately in Review administration.
+                  separately in Review &amp; selection.
                 </span>
               </label>
             </div>

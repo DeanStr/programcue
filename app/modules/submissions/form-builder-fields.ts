@@ -77,53 +77,104 @@ export function conditionalFieldOrderIssue(fields: FormField[]) {
   return null;
 }
 
-export function formFieldInsertionSectionId(
-  fields: FormField[],
-  targetIndex: number,
-  emptyFormSectionId: string,
+export type FormFieldInsertionTarget = {
+  sectionId: string;
+  index: number;
+};
+
+function fieldsGroupedBySection(fields: FormField[], sectionIds: string[]) {
+  const uniqueSectionIds = new Set(sectionIds);
+  if (uniqueSectionIds.size !== sectionIds.length) {
+    throw new Error("Form section IDs must be unique.");
+  }
+  const groups = new Map(sectionIds.map((sectionId) => [sectionId, []]));
+  for (const field of fields) {
+    const sectionFields = groups.get(field.sectionId);
+    if (!sectionFields) {
+      throw new Error(
+        `Form field “${field.id}” references unknown section “${field.sectionId}”.`,
+      );
+    }
+    sectionFields.push(field);
+  }
+  return groups;
+}
+
+function requireInsertionTarget(
+  groups: Map<string, FormField[]>,
+  target: FormFieldInsertionTarget,
 ) {
+  const sectionFields = groups.get(target.sectionId);
+  if (!sectionFields) {
+    throw new Error(
+      `Cannot insert into unknown form section “${target.sectionId}”.`,
+    );
+  }
   if (
-    !Number.isSafeInteger(targetIndex) ||
-    targetIndex < 0 ||
-    targetIndex > fields.length
+    !Number.isSafeInteger(target.index) ||
+    target.index < 0 ||
+    target.index > sectionFields.length
   ) {
     throw new Error("The form field insertion position is invalid.");
   }
-  return (
-    fields[targetIndex]?.sectionId ??
-    fields[targetIndex - 1]?.sectionId ??
-    emptyFormSectionId
-  );
+  return sectionFields;
 }
 
-export function moveFormFieldToInsertion(
+function flattenSectionGroups(
+  groups: Map<string, FormField[]>,
+  sectionIds: string[],
+) {
+  return sectionIds.flatMap((sectionId) => groups.get(sectionId)!);
+}
+
+export function insertFormFieldAtTarget(
+  fields: FormField[],
+  field: FormField,
+  target: FormFieldInsertionTarget,
+  sectionIds: string[],
+) {
+  if (fields.some((candidate) => candidate.id === field.id)) {
+    throw new Error(`Cannot insert duplicate form field “${field.id}”.`);
+  }
+  const groups = fieldsGroupedBySection(fields, sectionIds);
+  const sectionFields = requireInsertionTarget(groups, target);
+  sectionFields.splice(target.index, 0, {
+    ...field,
+    sectionId: target.sectionId,
+  });
+  return flattenSectionGroups(groups, sectionIds);
+}
+
+export function moveFormFieldToTarget(
   fields: FormField[],
   fieldId: string,
-  targetIndex: number,
-  emptyFormSectionId: string,
+  target: FormFieldInsertionTarget,
+  sectionIds: string[],
 ) {
-  const targetSectionId = formFieldInsertionSectionId(
-    fields,
-    targetIndex,
-    emptyFormSectionId,
+  const groups = fieldsGroupedBySection(fields, sectionIds);
+  const targetFields = requireInsertionTarget(groups, target);
+  const sourceSectionId = sectionIds.find((sectionId) =>
+    groups.get(sectionId)!.some((field) => field.id === fieldId),
   );
-  const sourceIndex = fields.findIndex((field) => field.id === fieldId);
-  if (sourceIndex < 0) {
+  if (!sourceSectionId) {
     throw new Error(`Cannot move missing form field “${fieldId}”.`);
   }
-  const nextFields = [...fields];
-  const [field] = nextFields.splice(sourceIndex, 1);
+  const sourceFields = groups.get(sourceSectionId)!;
+  const sourceIndex = sourceFields.findIndex((field) => field.id === fieldId);
+  const [field] = sourceFields.splice(sourceIndex, 1);
   if (!field) throw new Error(`Cannot move missing form field “${fieldId}”.`);
   const insertionIndex =
-    targetIndex > sourceIndex ? targetIndex - 1 : targetIndex;
-  if (insertionIndex === sourceIndex && field.sectionId === targetSectionId) {
+    sourceSectionId === target.sectionId && target.index > sourceIndex
+      ? target.index - 1
+      : target.index;
+  if (sourceSectionId === target.sectionId && insertionIndex === sourceIndex) {
     return null;
   }
-  nextFields.splice(insertionIndex, 0, {
+  targetFields.splice(insertionIndex, 0, {
     ...field,
-    sectionId: targetSectionId,
+    sectionId: target.sectionId,
   });
-  return nextFields;
+  return flattenSectionGroups(groups, sectionIds);
 }
 
 export function createFormField(

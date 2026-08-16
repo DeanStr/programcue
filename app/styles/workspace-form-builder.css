@@ -358,6 +358,24 @@
 .fb-canvas-insertion-target.is-over::after {
   border-color: var(--brand-500);
 }
+.fb-canvas-insertion-target.is-empty {
+  min-height: var(--space-12);
+  margin: var(--space-1) var(--space-2) var(--space-2);
+  border: 1px dashed var(--border);
+  border-radius: var(--radius-sm);
+}
+.fb-canvas-insertion-target.is-empty::after {
+  inset: 50% var(--space-2) auto;
+  border: 0;
+  color: var(--muted);
+  content: "Drag a field into this section";
+  font-size: var(--text-xs);
+  text-align: center;
+}
+.fb-canvas-insertion-target.is-empty.is-over {
+  border-color: var(--brand-500);
+  background: var(--brand-50);
+}
 .fb-canvas-field {
   position: relative;
   padding: var(--space-3);

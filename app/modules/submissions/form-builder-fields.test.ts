@@ -5,9 +5,9 @@ import {
   createFormField,
   formConditionSourceLabel,
   formFieldCreationIssue,
-  formFieldInsertionSectionId,
   formFieldTypeLabel,
-  moveFormFieldToInsertion,
+  insertFormFieldAtTarget,
+  moveFormFieldToTarget,
 } from "./form-builder-fields";
 import {
   DEFAULT_FORM_SCHEMA,
@@ -83,30 +83,66 @@ describe("form builder field rules", () => {
     );
   });
 
-  it("assigns an insertion boundary to the section after it", () => {
+  it("inserts a field into an explicitly selected empty section", () => {
     const fields = [
       { ...DEFAULT_FORM_SCHEMA.fields[0]!, id: "a1", sectionId: "a" },
       { ...DEFAULT_FORM_SCHEMA.fields[0]!, id: "a2", sectionId: "a" },
-      { ...DEFAULT_FORM_SCHEMA.fields[0]!, id: "b1", sectionId: "b" },
     ];
+    const inserted = {
+      ...DEFAULT_FORM_SCHEMA.fields[0]!,
+      id: "b1",
+      sectionId: "b",
+    };
 
-    expect(formFieldInsertionSectionId(fields, 2, "a")).toBe("b");
-    expect(formFieldInsertionSectionId(fields, fields.length, "a")).toBe("b");
-    expect(formFieldInsertionSectionId([], 0, "empty")).toBe("empty");
+    expect(
+      insertFormFieldAtTarget(fields, inserted, { sectionId: "b", index: 0 }, [
+        "a",
+        "b",
+      ]),
+    ).toEqual([...fields, inserted]);
   });
 
-  it("moves a boundary field into the next section even when its index is unchanged", () => {
+  it("moves fields using an explicit section and section-local position", () => {
     const fields = [
       { ...DEFAULT_FORM_SCHEMA.fields[0]!, id: "a1", sectionId: "a" },
       { ...DEFAULT_FORM_SCHEMA.fields[0]!, id: "a2", sectionId: "a" },
       { ...DEFAULT_FORM_SCHEMA.fields[0]!, id: "b1", sectionId: "b" },
     ];
 
-    expect(moveFormFieldToInsertion(fields, "a2", 2, "a")).toEqual([
-      fields[0],
-      { ...fields[1], sectionId: "b" },
-      fields[2],
-    ]);
-    expect(moveFormFieldToInsertion(fields, "a1", 1, "a")).toBeNull();
+    expect(
+      moveFormFieldToTarget(fields, "a2", { sectionId: "b", index: 0 }, [
+        "a",
+        "b",
+      ]),
+    ).toEqual([fields[0], { ...fields[1], sectionId: "b" }, fields[2]]);
+    expect(
+      moveFormFieldToTarget(fields, "a1", { sectionId: "a", index: 1 }, [
+        "a",
+        "b",
+      ]),
+    ).toBeNull();
+  });
+
+  it("fails fast for unknown sections and invalid section-local positions", () => {
+    const fields = [
+      { ...DEFAULT_FORM_SCHEMA.fields[0]!, id: "a1", sectionId: "a" },
+    ];
+    const inserted = {
+      ...DEFAULT_FORM_SCHEMA.fields[0]!,
+      id: "new",
+      sectionId: "a",
+    };
+
+    expect(() =>
+      insertFormFieldAtTarget(
+        fields,
+        inserted,
+        { sectionId: "missing", index: 0 },
+        ["a"],
+      ),
+    ).toThrow("Cannot insert into unknown form section “missing”.");
+    expect(() =>
+      moveFormFieldToTarget(fields, "a1", { sectionId: "a", index: 2 }, ["a"]),
+    ).toThrow("The form field insertion position is invalid.");
   });
 });

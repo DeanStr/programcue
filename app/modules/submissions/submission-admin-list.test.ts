@@ -27,14 +27,22 @@ describe("submission administration list", () => {
     const repository = new SubmissionAdminRepository({
       DB: {
         prepare: () => statement,
-        batch: async () => [{ results: [] }, { results: [] }],
+        batch: async () => [
+          { results: [] },
+          { results: [] },
+          { results: [{ count: 0 }] },
+          { results: [] },
+          { results: [] },
+        ],
       },
     } as unknown as CloudflareEnvironment);
 
     await expect(
-      repository.getAdminSubmissionSummary(
+      repository.listAdminSubmissionPage(
         viewer.organisationId,
         viewer.eventId,
+        {},
+        { limit: 50, offset: 0 },
       ),
     ).rejects.toThrow(/routed-team aggregate count was not returned/i);
   });

@@ -5,6 +5,7 @@ import {
   DEFAULT_FORM_SCHEMA,
   formPresentationSchema,
   formSchemaSchema,
+  formSectionsForAuthoring,
   formSectionsForDisplay,
   heroImagePathSchema,
   reviewerVisibleAnswers,
@@ -70,6 +71,28 @@ describe("submission form rules", () => {
     const missingReference = structuredClone(DEFAULT_FORM_SCHEMA);
     Reflect.deleteProperty(missingReference.fields[0]!, "sectionId");
     expect(formSchemaSchema.safeParse(missingReference).success).toBe(false);
+  });
+
+  it("keeps empty sections in the authoring projection only", () => {
+    const schema = structuredClone(DEFAULT_FORM_SCHEMA);
+    schema.sections.push({
+      id: "supporting_material",
+      title: "Supporting material",
+      description: "Optional links and files",
+    });
+
+    expect(
+      formSectionsForAuthoring(schema).map((section) => ({
+        id: section.id,
+        fieldCount: section.fields.length,
+      })),
+    ).toEqual([
+      { id: "proposal", fieldCount: DEFAULT_FORM_SCHEMA.fields.length },
+      { id: "supporting_material", fieldCount: 0 },
+    ]);
+    expect(formSectionsForDisplay(schema).map((section) => section.id)).toEqual(
+      ["proposal"],
+    );
   });
 
   it("reads immutable schema v1 and upgrades it deterministically for editing", () => {

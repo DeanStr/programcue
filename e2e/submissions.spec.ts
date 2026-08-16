@@ -739,7 +739,13 @@ test.describe
         .fill("Audience and outcomes");
 
       const editor = page.getByLabel("Visual call-for-speakers form editor");
+      await expect(
+        editor.locator(".fb-canvas-insertion-target.is-empty"),
+      ).toBeVisible();
       await editor.getByRole("button", { name: "Add Long text" }).click();
+      await expect(
+        editor.locator(".fb-canvas-insertion-target.is-empty"),
+      ).toHaveCount(0);
       await setStableFieldId(page, `key_takeaway_${unique}`);
       await page.getByLabel("Label", { exact: true }).fill("Key takeaway");
       await page

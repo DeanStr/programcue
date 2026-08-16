@@ -168,102 +168,143 @@ function adminSubmissionOrder(filters: AdminSubmissionFilters) {
   }
 }
 
-export class SubmissionAdminRepository {
-  constructor(private readonly env: CloudflareEnvironment) {}
+type AdminSubmissionRow = Omit<
+  AdminSubmission,
+  "category" | "routedTo" | "routedTeamIds" | "routingState"
+> & {
+  category: string | null;
+  formVersionId: string | null;
+  snapshotFormVersionId: string | null;
+  snapshotVersionNumber: number | null;
+  routingJson: string | null;
+  routedTeamIdsJson: string;
+  selectedTracksJson: string;
+};
 
-  async listAdminSubmissionCategories(
-    organisationId: string,
-    eventId: string,
-  ): Promise<string[]> {
-    const rows = await this.env.DB.prepare(
-      `
-      SELECT DISTINCT selection.track_name_snapshot AS category
-        FROM submission_track_selections selection
-        JOIN submissions s
-          ON s.id = selection.submission_id AND s.event_id = selection.event_id
-        JOIN events e ON e.id = s.event_id AND e.organisation_id = ?
-       WHERE selection.event_id = ?
-         AND trim(selection.track_name_snapshot) <> ''
-      UNION
-      SELECT DISTINCT trim(s.category) AS category
-        FROM submissions s
-        JOIN events e ON e.id = s.event_id AND e.organisation_id = ?
-       WHERE s.event_id = ? AND s.category IS NOT NULL AND trim(s.category) <> ''
-         AND s.status = 'draft'
-         AND NOT EXISTS (
-           SELECT 1 FROM submission_track_selections selection
-            WHERE selection.submission_id = s.id AND selection.event_id = s.event_id
-         )
-       ORDER BY category COLLATE NOCASE, category
-    `,
-    )
-      .bind(organisationId, eventId, organisationId, eventId)
-      .all<{ category: string }>();
-    return rows.results.map((row) => row.category);
-  }
-
-  async getAdminSubmissionSummary(
-    organisationId: string,
-    eventId: string,
-  ): Promise<AdminSubmissionSummary> {
-    const [statusResult, routedTeamResult] = await this.env.DB.batch([
-      this.env.DB.prepare(
-        `SELECT submission.status, COUNT(*) AS count
-           FROM submissions submission
-           JOIN events event
-             ON event.id = submission.event_id AND event.organisation_id = ?
-          WHERE submission.event_id = ?
-          GROUP BY submission.status`,
-      ).bind(organisationId, eventId),
-      this.env.DB.prepare(
-        `SELECT COUNT(DISTINCT route.team_id) AS count
-           FROM submission_routing_teams route
-           JOIN submissions submission
-             ON submission.id = route.submission_id
-            AND submission.event_id = route.event_id
-           JOIN events event
-             ON event.id = submission.event_id AND event.organisation_id = ?
-          WHERE route.event_id = ?`,
-      ).bind(organisationId, eventId),
-    ]);
-    const byStatus = Object.fromEntries(
-      ADMIN_SUBMISSION_STATUSES.map((status) => [status, 0]),
-    ) as Record<AdminSubmissionStatus, number>;
-    let eventTotal = 0;
-    for (const row of statusResult.results as unknown as Array<{
-      status: AdminSubmissionStatus;
-      count: number;
-    }>) {
-      if (!ADMIN_SUBMISSION_STATUSES.includes(row.status)) {
-        throw new Error(`Unknown persisted submission status: ${row.status}`);
-      }
-      const count = Number(row.count);
-      byStatus[row.status] = count;
-      eventTotal += count;
-    }
-    const routedTeamRow = routedTeamResult.results[0] as
-      | { count: number }
-      | undefined;
-    if (!routedTeamRow) {
-      throw new Error("The routed-team aggregate count was not returned.");
-    }
-    const routedTeamCount = Number(routedTeamRow.count);
-    if (!Number.isSafeInteger(routedTeamCount) || routedTeamCount < 0) {
-      throw new Error("The routed-team aggregate count is invalid.");
-    }
-    return {
-      eventTotal,
-      byStatus,
-      routedTeamCount,
-    };
-  }
-
-  async countAdminSubmissions(
-    organisationId: string,
-    eventId: string,
-    filters: AdminSubmissionFilters,
+function assertAdminSubmissionPagination(pagination: {
+  limit: number;
+  offset: number;
+}) {
+  if (
+    !Number.isSafeInteger(pagination.limit) ||
+    pagination.limit < 1 ||
+    pagination.limit > 200 ||
+    !Number.isSafeInteger(pagination.offset) ||
+    pagination.offset < 0
   ) {
-    const row = await this.env.DB.prepare(
+    throw new Error("Submission pagination is outside its supported range.");
+  }
+}
+
+function adminSubmissionRowsStatement(
+  db: D1Database,
+  organisationId: string,
+  eventId: string,
+  filters: AdminSubmissionFilters,
+  pagination: { limit: number; offset: number },
+) {
+  assertAdminSubmissionPagination(pagination);
+  return db
+    .prepare(
+      `SELECT s.id, s.public_reference AS publicReference, s.title,
+              CASE WHEN s.status = 'draft' THEN COALESCE(s.category, '')
+                   ELSE (
+                     SELECT group_concat(selected.track_name_snapshot, ', ')
+                       FROM (
+                         SELECT track_name_snapshot
+                           FROM submission_track_selections
+                          WHERE submission_id = s.id AND event_id = s.event_id
+                          ORDER BY position
+                       ) selected
+                   )
+              END AS category,
+              COALESCE(s.format, '') AS format, s.status,
+              COALESCE(p.display_name, s.submitter_email, 'Unknown') AS submitterName,
+              COALESCE(p.email, s.submitter_email, '') AS submitterEmail,
+              (SELECT COUNT(*) FROM submission_speakers ss
+                WHERE ss.submission_id = s.id AND ss.event_id = s.event_id) AS speakerCount,
+              fv.version_number AS versionNumber, s.submitted_at AS submittedAt, s.updated_at AS updatedAt,
+              s.form_version_id AS formVersionId,
+              json_extract(s.submitted_snapshot_json, '$.formVersionId') AS snapshotFormVersionId,
+              json_extract(s.submitted_snapshot_json, '$.versionNumber') AS snapshotVersionNumber,
+              COALESCE((
+                SELECT json_group_array(json_object(
+                         'trackId', selected_track.track_id,
+                         'trackName', selected_track.track_name_snapshot
+                       ))
+                  FROM submission_track_selections selected_track
+                 WHERE selected_track.submission_id = s.id
+                   AND selected_track.event_id = s.event_id
+                 ORDER BY selected_track.position
+              ), '[]') AS selectedTracksJson,
+              COALESCE((
+                SELECT json_group_array(routed.team_id)
+                  FROM (
+                    SELECT route.team_id
+                      FROM submission_routing_teams route
+                     WHERE route.submission_id = s.id AND route.event_id = s.event_id
+                     ORDER BY route.team_id
+                  ) routed
+              ), '[]') AS routedTeamIdsJson,
+              CASE
+                WHEN s.form_version_id IS NULL
+                  THEN json_extract(s.submitted_snapshot_json, '$.routing')
+                ELSE fv.routing_json
+              END AS routingJson
+         FROM submissions s
+         JOIN events e ON e.id = s.event_id AND e.organisation_id = ?
+         LEFT JOIN people p ON p.id = s.submitter_person_id
+         LEFT JOIN form_versions fv
+           ON fv.id = s.form_version_id AND fv.event_id = s.event_id
+        WHERE ${adminSubmissionFilterSql}
+        ORDER BY ${adminSubmissionOrder(filters)}
+        LIMIT ? OFFSET ?`,
+    )
+    .bind(
+      organisationId,
+      ...adminSubmissionFilterBindings(eventId, filters),
+      pagination.limit,
+      pagination.offset,
+    );
+}
+
+function adminSubmissionCategoriesStatement(
+  db: D1Database,
+  organisationId: string,
+  eventId: string,
+) {
+  return db
+    .prepare(
+      `SELECT DISTINCT selection.track_name_snapshot AS category
+         FROM submission_track_selections selection
+         JOIN submissions s
+           ON s.id = selection.submission_id AND s.event_id = selection.event_id
+         JOIN events e ON e.id = s.event_id AND e.organisation_id = ?
+        WHERE selection.event_id = ?
+          AND trim(selection.track_name_snapshot) <> ''
+       UNION
+       SELECT DISTINCT trim(s.category) AS category
+         FROM submissions s
+         JOIN events e ON e.id = s.event_id AND e.organisation_id = ?
+        WHERE s.event_id = ? AND s.category IS NOT NULL AND trim(s.category) <> ''
+          AND s.status = 'draft'
+          AND NOT EXISTS (
+            SELECT 1 FROM submission_track_selections selection
+             WHERE selection.submission_id = s.id AND selection.event_id = s.event_id
+          )
+        ORDER BY category COLLATE NOCASE, category`,
+    )
+    .bind(organisationId, eventId, organisationId, eventId);
+}
+
+function adminSubmissionCountStatement(
+  db: D1Database,
+  organisationId: string,
+  eventId: string,
+  filters: AdminSubmissionFilters,
+) {
+  return db
+    .prepare(
       `SELECT COUNT(*) AS count
          FROM submissions s
          JOIN events e ON e.id = s.event_id AND e.organisation_id = ?
@@ -272,10 +313,200 @@ export class SubmissionAdminRepository {
            ON fv.id = s.form_version_id AND fv.event_id = s.event_id
         WHERE ${adminSubmissionFilterSql}`,
     )
-      .bind(organisationId, ...adminSubmissionFilterBindings(eventId, filters))
-      .first<{ count: number }>();
-    if (!row) throw new Error("The submission result count was not returned.");
-    return Number(row.count);
+    .bind(organisationId, ...adminSubmissionFilterBindings(eventId, filters));
+}
+
+function adminSubmissionStatusSummaryStatement(
+  db: D1Database,
+  organisationId: string,
+  eventId: string,
+) {
+  return db
+    .prepare(
+      `SELECT submission.status, COUNT(*) AS count
+         FROM submissions submission
+         JOIN events event
+           ON event.id = submission.event_id AND event.organisation_id = ?
+        WHERE submission.event_id = ?
+        GROUP BY submission.status`,
+    )
+    .bind(organisationId, eventId);
+}
+
+function adminSubmissionRoutedTeamSummaryStatement(
+  db: D1Database,
+  organisationId: string,
+  eventId: string,
+) {
+  return db
+    .prepare(
+      `SELECT COUNT(DISTINCT route.team_id) AS count
+         FROM submission_routing_teams route
+         JOIN submissions submission
+           ON submission.id = route.submission_id
+          AND submission.event_id = route.event_id
+         JOIN events event
+           ON event.id = submission.event_id AND event.organisation_id = ?
+        WHERE route.event_id = ?`,
+    )
+    .bind(organisationId, eventId);
+}
+
+function requireAggregateCount(
+  rows: Array<{ count: number }>,
+  missingMessage: string,
+  invalidMessage: string,
+) {
+  const row = rows[0];
+  if (!row) throw new Error(missingMessage);
+  const count = Number(row.count);
+  if (!Number.isSafeInteger(count) || count < 0) {
+    throw new Error(invalidMessage);
+  }
+  return count;
+}
+
+function adminSubmissionSummary(
+  statusRows: Array<{ status: AdminSubmissionStatus; count: number }>,
+  routedTeamRows: Array<{ count: number }>,
+): AdminSubmissionSummary {
+  const byStatus = Object.fromEntries(
+    ADMIN_SUBMISSION_STATUSES.map((status) => [status, 0]),
+  ) as Record<AdminSubmissionStatus, number>;
+  let eventTotal = 0;
+  for (const row of statusRows) {
+    if (!ADMIN_SUBMISSION_STATUSES.includes(row.status)) {
+      throw new Error(`Unknown persisted submission status: ${row.status}`);
+    }
+    const count = Number(row.count);
+    if (!Number.isSafeInteger(count) || count < 0) {
+      throw new Error(`Submission status ${row.status} has an invalid count.`);
+    }
+    byStatus[row.status] = count;
+    eventTotal += count;
+  }
+  return {
+    eventTotal,
+    byStatus,
+    routedTeamCount: requireAggregateCount(
+      routedTeamRows,
+      "The routed-team aggregate count was not returned.",
+      "The routed-team aggregate count is invalid.",
+    ),
+  };
+}
+
+function mapAdminSubmissionRows(results: AdminSubmissionRow[]) {
+  return results.map((result) => {
+    const {
+      formVersionId,
+      snapshotFormVersionId,
+      snapshotVersionNumber,
+      routingJson,
+      routedTeamIdsJson,
+      selectedTracksJson,
+      ...row
+    } = result;
+    if (row.status !== "draft" && !row.category) {
+      throw new Error(
+        `Submission ${row.id} is missing persisted track selections.`,
+      );
+    }
+    if (!routingJson) {
+      throw new Error(
+        `Submission ${row.id} is missing its immutable routing snapshot.`,
+      );
+    }
+    const routing = routingSchema.parse(JSON.parse(routingJson));
+    const routedTeamIds = z
+      .array(z.string())
+      .parse(JSON.parse(routedTeamIdsJson));
+    const selectedTracks = z
+      .array(z.object({ trackId: z.string(), trackName: z.string() }))
+      .parse(JSON.parse(selectedTracksJson));
+    const routingState = classifySubmissionRouting({
+      submissionId: row.id,
+      status: row.status,
+      formVersionId,
+      snapshotFormVersionId,
+      versionNumber: row.versionNumber,
+      snapshotVersionNumber,
+      routing,
+      selectedTracks,
+      routedTeamIds,
+    });
+    return {
+      ...row,
+      category: row.category ?? "",
+      speakerCount: Number(row.speakerCount),
+      routedTeamIds,
+      routedTo: requireRoutedTeamSummary(row.id, routedTeamIds, routing),
+      routingState,
+    };
+  });
+}
+
+export class SubmissionAdminRepository {
+  constructor(private readonly env: CloudflareEnvironment) {}
+
+  async listAdminSubmissionPage(
+    organisationId: string,
+    eventId: string,
+    filters: AdminSubmissionFilters,
+    pagination: { limit: number; offset: number },
+  ) {
+    const [rowResult, categoryResult, countResult, statusResult, routedResult] =
+      await this.env.DB.batch([
+        adminSubmissionRowsStatement(
+          this.env.DB,
+          organisationId,
+          eventId,
+          filters,
+          pagination,
+        ),
+        adminSubmissionCategoriesStatement(
+          this.env.DB,
+          organisationId,
+          eventId,
+        ),
+        adminSubmissionCountStatement(
+          this.env.DB,
+          organisationId,
+          eventId,
+          filters,
+        ),
+        adminSubmissionStatusSummaryStatement(
+          this.env.DB,
+          organisationId,
+          eventId,
+        ),
+        adminSubmissionRoutedTeamSummaryStatement(
+          this.env.DB,
+          organisationId,
+          eventId,
+        ),
+      ]);
+    const matchingTotal = requireAggregateCount(
+      countResult.results as unknown as Array<{ count: number }>,
+      "The submission result count was not returned.",
+      "The submission result count is invalid.",
+    );
+    return {
+      submissions: mapAdminSubmissionRows(
+        rowResult.results as unknown as AdminSubmissionRow[],
+      ),
+      categories: (
+        categoryResult.results as unknown as Array<{ category: string }>
+      ).map((row) => row.category),
+      matchingTotal,
+      summary: adminSubmissionSummary(
+        statusResult.results as unknown as Array<{
+          status: AdminSubmissionStatus;
+          count: number;
+        }>,
+        routedResult.results as unknown as Array<{ count: number }>,
+      ),
+    };
   }
 
   async listAdminSubmissions(
@@ -284,139 +515,14 @@ export class SubmissionAdminRepository {
     filters: AdminSubmissionFilters,
     pagination: { limit: number; offset: number } = { limit: 200, offset: 0 },
   ): Promise<AdminSubmission[]> {
-    if (
-      !Number.isSafeInteger(pagination.limit) ||
-      pagination.limit < 1 ||
-      pagination.limit > 200 ||
-      !Number.isSafeInteger(pagination.offset) ||
-      pagination.offset < 0
-    ) {
-      throw new Error("Submission pagination is outside its supported range.");
-    }
-    const rows = await this.env.DB.prepare(
-      `
-      SELECT s.id, s.public_reference AS publicReference, s.title,
-             CASE WHEN s.status = 'draft' THEN COALESCE(s.category, '')
-                  ELSE (
-                    SELECT group_concat(selected.track_name_snapshot, ', ')
-                      FROM (
-                        SELECT track_name_snapshot
-                          FROM submission_track_selections
-                         WHERE submission_id = s.id AND event_id = s.event_id
-                         ORDER BY position
-                      ) selected
-                  )
-             END AS category,
-             COALESCE(s.format, '') AS format, s.status,
-             COALESCE(p.display_name, s.submitter_email, 'Unknown') AS submitterName,
-             COALESCE(p.email, s.submitter_email, '') AS submitterEmail,
-             (SELECT COUNT(*) FROM submission_speakers ss
-               WHERE ss.submission_id = s.id AND ss.event_id = s.event_id) AS speakerCount,
-             fv.version_number AS versionNumber, s.submitted_at AS submittedAt, s.updated_at AS updatedAt,
-             s.form_version_id AS formVersionId,
-             json_extract(s.submitted_snapshot_json, '$.formVersionId') AS snapshotFormVersionId,
-             json_extract(s.submitted_snapshot_json, '$.versionNumber') AS snapshotVersionNumber,
-             COALESCE((
-               SELECT json_group_array(json_object(
-                        'trackId', selected_track.track_id,
-                        'trackName', selected_track.track_name_snapshot
-                      ))
-                 FROM submission_track_selections selected_track
-                WHERE selected_track.submission_id = s.id
-                  AND selected_track.event_id = s.event_id
-                ORDER BY selected_track.position
-             ), '[]') AS selectedTracksJson,
-             COALESCE((
-               SELECT json_group_array(routed.team_id)
-                 FROM (
-                   SELECT route.team_id
-                     FROM submission_routing_teams route
-                    WHERE route.submission_id = s.id AND route.event_id = s.event_id
-                    ORDER BY route.team_id
-                 ) routed
-             ), '[]') AS routedTeamIdsJson,
-             CASE
-               WHEN s.form_version_id IS NULL
-                 THEN json_extract(s.submitted_snapshot_json, '$.routing')
-               ELSE fv.routing_json
-             END AS routingJson
-        FROM submissions s
-        JOIN events e ON e.id = s.event_id AND e.organisation_id = ?
-        LEFT JOIN people p ON p.id = s.submitter_person_id
-        LEFT JOIN form_versions fv
-          ON fv.id = s.form_version_id AND fv.event_id = s.event_id
-       WHERE ${adminSubmissionFilterSql}
-       ORDER BY ${adminSubmissionOrder(filters)}
-       LIMIT ? OFFSET ?
-    `,
-    )
-      .bind(
-        organisationId,
-        ...adminSubmissionFilterBindings(eventId, filters),
-        pagination.limit,
-        pagination.offset,
-      )
-      .all<
-        Omit<
-          AdminSubmission,
-          "category" | "routedTo" | "routedTeamIds" | "routingState"
-        > & {
-          category: string | null;
-          formVersionId: string | null;
-          snapshotFormVersionId: string | null;
-          snapshotVersionNumber: number | null;
-          routingJson: string | null;
-          routedTeamIdsJson: string;
-          selectedTracksJson: string;
-        }
-      >();
-    return rows.results.map((result) => {
-      const {
-        formVersionId,
-        snapshotFormVersionId,
-        snapshotVersionNumber,
-        routingJson,
-        routedTeamIdsJson,
-        selectedTracksJson,
-        ...row
-      } = result;
-      if (row.status !== "draft" && !row.category) {
-        throw new Error(
-          `Submission ${row.id} is missing persisted track selections.`,
-        );
-      }
-      if (!routingJson) {
-        throw new Error(
-          `Submission ${row.id} is missing its immutable routing snapshot.`,
-        );
-      }
-      const routing = routingSchema.parse(JSON.parse(routingJson));
-      const routedTeamIds = z
-        .array(z.string())
-        .parse(JSON.parse(routedTeamIdsJson));
-      const selectedTracks = z
-        .array(z.object({ trackId: z.string(), trackName: z.string() }))
-        .parse(JSON.parse(selectedTracksJson));
-      const routingState = classifySubmissionRouting({
-        submissionId: row.id,
-        status: row.status,
-        formVersionId,
-        snapshotFormVersionId,
-        versionNumber: row.versionNumber,
-        snapshotVersionNumber,
-        routing,
-        selectedTracks,
-        routedTeamIds,
-      });
-      return {
-        ...row,
-        category: row.category ?? "",
-        speakerCount: Number(row.speakerCount),
-        routedTeamIds,
-        routedTo: requireRoutedTeamSummary(row.id, routedTeamIds, routing),
-        routingState,
-      };
-    });
+    const rows = await adminSubmissionRowsStatement(
+      this.env.DB,
+      organisationId,
+      eventId,
+      filters,
+      pagination,
+    ).all<AdminSubmissionRow>();
+    return mapAdminSubmissionRows(rows.results);
   }
 
   async getAdminSubmission(
@@ -627,6 +733,9 @@ export class SubmissionAdminRepository {
       : row.schemaJson
         ? parseJson(row.schemaJson, storedFormSchemaSchema)
         : null;
+    if (!schema) {
+      throw new Error(`Submission ${row.id} is missing its form schema.`);
+    }
     const {
       answersJson: _answersJson,
       formVersionId: _formVersionId,

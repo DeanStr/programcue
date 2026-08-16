@@ -679,6 +679,14 @@ export function formSectionsForDisplay(
     .filter((section) => section.fields.length > 0);
 }
 
+export function formSectionsForAuthoring(schema: SubmissionFormSchema) {
+  const orderedFields = formFieldsInDisplayOrder(schema);
+  return schema.sections.map((section) => ({
+    ...section,
+    fields: orderedFields.filter((field) => field.sectionId === section.id),
+  }));
+}
+
 export function visibleAnswers(
   schema: StoredSubmissionFormSchema,
   answers: Record<string, string | string[]>,

@@ -20,24 +20,25 @@ import {
   conditionalFieldOrderIssue,
   createFormField,
   FORM_FIELD_TYPES,
+  type FormFieldInsertionTarget,
   formConditionSourceLabel,
   formFieldCreationIssue,
-  formFieldInsertionSectionId,
   formFieldTypeLabel,
-  moveFormFieldToInsertion,
+  insertFormFieldAtTarget,
+  moveFormFieldToTarget,
 } from "~/modules/submissions/form-builder-fields";
 import type {
   FormField,
   SaveFormInput,
 } from "~/modules/submissions/submission-schema";
-import { formSectionsForDisplay } from "~/modules/submissions/submission-schema";
+import { formSectionsForAuthoring } from "~/modules/submissions/submission-schema";
 
 type DraggedItem =
   | { kind: "new-field"; fieldType: FormField["type"]; label: string }
   | { kind: "field"; fieldId: string; label: string };
 
 function fieldsInSectionOrder(input: SaveFormInput) {
-  return formSectionsForDisplay(input.schema).flatMap(
+  return formSectionsForAuthoring(input.schema).flatMap(
     (section) => section.fields,
   );
 }
@@ -221,17 +222,24 @@ function CanvasField({
   );
 }
 
-function CanvasInsertionTarget({ index }: { index: number }) {
+function CanvasInsertionTarget({
+  target,
+  empty,
+}: {
+  target: FormFieldInsertionTarget;
+  empty?: boolean;
+}) {
   const droppable = useDroppable({
-    id: `form-insertion:${index}`,
-    data: { kind: "insertion-target", index },
+    id: `form-insertion:${target.sectionId}:${target.index}`,
+    data: { kind: "insertion-target", ...target },
   });
 
   return (
     <li
       ref={droppable.setNodeRef}
-      className={`fb-canvas-insertion-target${droppable.isOver ? " is-over" : ""}`}
-      data-drop-index={index}
+      className={`fb-canvas-insertion-target${empty ? " is-empty" : ""}${droppable.isOver ? " is-over" : ""}`}
+      data-drop-index={target.index}
+      data-drop-section={target.sectionId}
       aria-hidden="true"
     />
   );
@@ -252,11 +260,8 @@ function CanvasPage({
     id: "form-canvas-boundary",
     data: { kind: "canvas-boundary" },
   });
-  const sections = formSectionsForDisplay(input.schema);
+  const sections = formSectionsForAuthoring(input.schema);
   const orderedFields = sections.flatMap((section) => section.fields);
-  const fieldIndexes = new Map(
-    orderedFields.map((field, index) => [field.id, index]),
-  );
 
   return (
     <div ref={canvas.setNodeRef} className="fb-canvas-page">
@@ -273,9 +278,12 @@ function CanvasPage({
               <strong>{section.title}</strong>
               {section.description ? <p>{section.description}</p> : null}
             </li>
-            {section.fields.map((field) => (
+            <CanvasInsertionTarget
+              target={{ sectionId: section.id, index: 0 }}
+              empty={section.fields.length === 0}
+            />
+            {section.fields.map((field, index) => (
               <Fragment key={field.id}>
-                <CanvasInsertionTarget index={fieldIndexes.get(field.id)!} />
                 <CanvasField
                   field={field}
                   selected={field.id === selectedId}
@@ -290,11 +298,13 @@ function CanvasPage({
                       : null
                   }
                 />
+                <CanvasInsertionTarget
+                  target={{ sectionId: section.id, index: index + 1 }}
+                />
               </Fragment>
             ))}
           </Fragment>
         ))}
-        <CanvasInsertionTarget index={orderedFields.length} />
       </ol>
       {!input.schema.fields.length ? (
         <p className="fb-canvas-empty">Drag a field here to begin.</p>
@@ -325,50 +335,56 @@ export function FormBuilderVisualCanvas({
   );
   const [draggedItem, setDraggedItem] = useState<DraggedItem | null>(null);
 
-  function insertField(type: FormField["type"], targetIndex: number) {
+  function insertField(
+    type: FormField["type"],
+    target: FormFieldInsertionTarget,
+  ) {
     const orderedFields = fieldsInSectionOrder(input);
     const issue = formFieldCreationIssue(orderedFields, type);
     if (issue) {
       onOperationBlocked(issue);
       return;
     }
-    const sectionId = formFieldInsertionSectionId(
+    const field = createFormField(orderedFields, type, target.sectionId);
+    const fields = insertFormFieldAtTarget(
       orderedFields,
-      targetIndex,
-      input.schema.sections[0]!.id,
+      field,
+      target,
+      input.schema.sections.map((section) => section.id),
     );
-    const field = createFormField(orderedFields, type, sectionId);
-    const fields = [...orderedFields];
-    fields.splice(targetIndex, 0, field);
     change({ ...input, schema: { ...input.schema, fields } });
     onSelect(field.id);
   }
 
   function addField(type: FormField["type"]) {
-    insertField(type, input.schema.fields.length);
+    const section = input.schema.sections.at(-1)!;
+    const sectionFieldCount = input.schema.fields.filter(
+      (field) => field.sectionId === section.id,
+    ).length;
+    insertField(type, { sectionId: section.id, index: sectionFieldCount });
   }
 
   function finishDrag(event: DragEndEvent) {
     setDraggedItem(null);
     const active = event.active.data.current as DraggedItem | undefined;
     const over = event.over?.data.current as
-      | { kind: "insertion-target"; index: number }
+      | ({ kind: "insertion-target" } & FormFieldInsertionTarget)
       | undefined;
     if (!active || !over || over.kind !== "insertion-target") return;
 
-    const targetIndex = over.index;
+    const target = { sectionId: over.sectionId, index: over.index };
 
     if (active.kind === "new-field") {
-      insertField(active.fieldType, targetIndex);
+      insertField(active.fieldType, target);
       return;
     }
 
     const orderedFields = fieldsInSectionOrder(input);
-    const fields = moveFormFieldToInsertion(
+    const fields = moveFormFieldToTarget(
       orderedFields,
       active.fieldId,
-      targetIndex,
-      input.schema.sections[0]!.id,
+      target,
+      input.schema.sections.map((section) => section.id),
     );
     if (!fields) return;
     const issue = conditionalFieldOrderIssue(fields);

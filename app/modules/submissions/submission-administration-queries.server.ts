@@ -30,27 +30,13 @@ export class SubmissionAdministrationQueries extends SubmissionServiceFoundation
     }
     const pageSize = ADMIN_SUBMISSION_PAGE_SIZE;
     const offset = (page - 1) * pageSize;
-    const [rows, categories, matchingTotal, summary] = await Promise.all([
-      this.repository.listAdminSubmissions(
+    const { submissions, categories, matchingTotal, summary } =
+      await this.repository.listAdminSubmissionPage(
         viewer.organisationId,
         viewer.eventId,
         filters,
         { limit: pageSize, offset },
-      ),
-      this.repository.listAdminSubmissionCategories(
-        viewer.organisationId,
-        viewer.eventId,
-      ),
-      this.repository.countAdminSubmissions(
-        viewer.organisationId,
-        viewer.eventId,
-        filters,
-      ),
-      this.repository.getAdminSubmissionSummary(
-        viewer.organisationId,
-        viewer.eventId,
-      ),
-    ]);
+      );
     const totalPages = Math.max(1, Math.ceil(matchingTotal / pageSize));
     if (page > totalPages) {
       throw new Response(
@@ -62,12 +48,12 @@ export class SubmissionAdministrationQueries extends SubmissionServiceFoundation
       summary,
       categories,
       results: {
-        submissions: rows,
+        submissions,
         matchingTotal,
         page,
         pageSize,
         firstItem: matchingTotal === 0 ? null : offset + 1,
-        lastItem: matchingTotal === 0 ? null : offset + rows.length,
+        lastItem: matchingTotal === 0 ? null : offset + submissions.length,
         totalPages,
       },
     };
