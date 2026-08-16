@@ -1,6 +1,7 @@
--- 0034 is a shared migration and must remain immutable. Upgrade databases that
--- have already recorded it, rejecting contradictory provenance rather than
--- silently carrying an invalid relationship into the hardened schema.
+-- 0034 is the reviewer-AI baseline and 0035 is already deployed. Both must
+-- remain immutable. Upgrade databases that recorded the baseline, rejecting
+-- contradictory provenance rather than carrying an invalid relationship into
+-- the hardened schema.
 CREATE TABLE reviewer_ai_hardening_guard (
   valid INTEGER NOT NULL CHECK (valid = 1)
 );

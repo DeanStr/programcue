@@ -2,7 +2,7 @@ from pathlib import Path
 import sqlite3
 
 
-MIGRATION = "0035_reviewer_ai_hardening.sql"
+MIGRATION = "0036_reviewer_ai_hardening.sql"
 
 
 def database_before_migration(root: Path) -> sqlite3.Connection:

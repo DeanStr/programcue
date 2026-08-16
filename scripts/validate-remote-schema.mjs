@@ -9,7 +9,7 @@ const repositoryRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const REMOTE_SCHEMA_TIMEOUT_MS = 60_000;
 export const lastImmutableMigrationName =
   "0032_event_brand_asset_normalization.sql";
-export const reviewerAiMigrationName = "0035_reviewer_ai_hardening.sql";
+export const reviewerAiMigrationName = "0036_reviewer_ai_hardening.sql";
 
 export const requiredBrandAssetColumns = new Map([
   ["width_px", { type: "INTEGER", notnull: 0, defaultValue: null }],
