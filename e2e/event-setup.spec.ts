@@ -81,6 +81,7 @@ test("Event Setup rejects an invalid date range before persistence", async ({
   page,
 }) => {
   await page.goto("/admin/event");
+  await page.locator("body[data-hydrated='true']").waitFor();
   await page.getByLabel("End date").fill("2025-05-19");
   await page.getByRole("button", { name: "Save event" }).click();
   await expect(page.getByRole("alert")).toContainText(

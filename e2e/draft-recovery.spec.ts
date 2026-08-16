@@ -3,10 +3,21 @@ import { expect, test, type Page } from "@playwright/test";
 async function clearDraftRecovery(page: Page) {
   await page.evaluate(async () => {
     await new Promise<void>((resolve, reject) => {
-      const request = indexedDB.deleteDatabase("program-cue-draft-recovery");
-      request.onsuccess = () => resolve();
+      const request = indexedDB.open("program-cue-draft-recovery", 2);
       request.onerror = () => reject(request.error);
-      request.onblocked = () => reject(new Error("Draft database is blocked"));
+      request.onsuccess = () => {
+        const database = request.result;
+        const transaction = database.transaction("snapshots", "readwrite");
+        transaction.objectStore("snapshots").clear();
+        transaction.oncomplete = () => {
+          database.close();
+          resolve();
+        };
+        transaction.onerror = () => {
+          database.close();
+          reject(transaction.error);
+        };
+      };
     });
   });
 }
