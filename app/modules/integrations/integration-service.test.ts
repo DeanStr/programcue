@@ -681,10 +681,7 @@ describe("Accelevents integration service", () => {
       externalEventId: 441,
       sessionTypeFormat: "IN_PERSON",
     });
-    const firstPreview = await service.preview(
-      viewer,
-      configured.connectionId,
-    );
+    const firstPreview = await service.preview(viewer, configured.connectionId);
     const first = await service.startRun(viewer, {
       connectionId: configured.connectionId,
       dryRun: false,

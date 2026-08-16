@@ -14,7 +14,7 @@ import {
   loader as tasksLoader,
 } from "~/routes/api-tasks";
 import {
-  ApiError,
+  type ApiError,
   apiFailure,
   readJson,
   requireApiKey,

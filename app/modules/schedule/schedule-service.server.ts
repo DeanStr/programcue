@@ -29,9 +29,8 @@ import { SchedulePlacementWorkflow } from "./schedule-placement-workflow.server"
 import {
   detectWorkspaceConflicts,
   loadScheduleWorkspaceD1,
-  schedulePolicyAction,
 } from "./schedule-workspace.server";
-import { type ScheduleConflict, type SchedulePolicies } from "./schedule-rules";
+import type { ScheduleConflict, SchedulePolicies } from "./schedule-rules";
 import {
   scheduleBreakSchema,
   scheduleAutoPlacementConfirmSchema,
@@ -133,7 +132,8 @@ export {
 
 export type ScheduleEventScope = Pick<Viewer, "organisationId" | "eventId">;
 export type ScheduleAuditActor =
-  { personId: string; actorId?: null } | { personId?: null; actorId: string };
+  | { personId: string; actorId?: null }
+  | { personId?: null; actorId: string };
 export type SchedulePublicationCommand = {
   actorId: string;
   idempotencyKey: string;
@@ -1215,7 +1215,8 @@ export class ScheduleService {
       throw new ScheduleRevisionConflictError();
     }
     const change = results[changeIndex]?.results?.[0] as
-      { sequence?: number } | undefined;
+      | { sequence?: number }
+      | undefined;
     if (!Number.isSafeInteger(change?.sequence)) {
       throw new Error(
         "Schedule publication committed without an event change cursor.",

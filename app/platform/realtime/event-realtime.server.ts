@@ -265,7 +265,6 @@ export class EventRealtimeService {
         body: JSON.stringify(summary),
       },
     );
-    if (!response.ok)
-      throw new EventRealtimeDeliveryError(response.status);
+    if (!response.ok) throw new EventRealtimeDeliveryError(response.status);
   }
 }

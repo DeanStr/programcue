@@ -16,7 +16,10 @@ export type RealtimeInvalidationOptions = {
 };
 
 export type RealtimeTransportStatus =
-  "connecting" | "live" | "polling" | "unavailable";
+  | "connecting"
+  | "live"
+  | "polling"
+  | "unavailable";
 
 function boundedDelay(value: unknown) {
   const delay =

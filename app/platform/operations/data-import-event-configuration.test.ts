@@ -1,18 +1,11 @@
 import { env } from "cloudflare:test";
 import { beforeEach, describe, expect, it } from "vitest";
 
-import {
-  acceptEventInvitation,
-  requireEventRole,
-  type Viewer,
-} from "~/platform/auth/authorize.server";
+import type { Viewer } from "~/platform/auth/authorize.server";
 import { ensureDemoData } from "~/platform/demo/seed.server";
 import { INITIAL_EVENT_SESSION_FORMATS_JSON } from "~/modules/events/event-configuration";
 import { CANONICAL_EVENT_FILE_POLICY_JSON } from "~/modules/files/file-policy";
-import {
-  DataImportService,
-  DataImportStateError,
-} from "~/platform/operations/data-import-service.server";
+import { DataImportService } from "~/platform/operations/data-import-service.server";
 
 const viewer: Viewer = {
   personId: "person-demo-admin",

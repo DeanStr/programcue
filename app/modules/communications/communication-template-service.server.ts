@@ -525,7 +525,8 @@ export class CommunicationTemplateService {
       throw error;
     }
     const allocated = results[1]?.results?.[0] as
-      { versionNumber?: number } | undefined;
+      | { versionNumber?: number }
+      | undefined;
     const versionNumber = Number(allocated?.versionNumber);
     if (
       (results[1].meta.changes ?? 0) !== 1 ||

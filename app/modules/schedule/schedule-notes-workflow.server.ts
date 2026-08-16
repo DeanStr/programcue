@@ -3,7 +3,7 @@ import {
   ScheduleNotFoundError,
   ScheduleRevisionConflictError,
 } from "./schedule-errors";
-import { scheduleNotesSchema } from "./schedule-schema";
+import type { scheduleNotesSchema } from "./schedule-schema";
 import { ScheduleSessionEditorWorkflow } from "./schedule-session-editor-workflow.server";
 
 export abstract class ScheduleNotesWorkflow extends ScheduleSessionEditorWorkflow {

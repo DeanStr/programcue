@@ -161,7 +161,8 @@ export type ApplicantVideoUploadRow = {
 export type PreparedAdminMutation = {
   recordId: string;
   scope:
-    "submission.admin.direct_session.create" | "submission.admin.manual.create";
+    | "submission.admin.direct_session.create"
+    | "submission.admin.manual.create";
   idempotencyKey: string;
   requestHash: string;
   organisationId: string;
@@ -197,7 +198,8 @@ export class SubmissionServiceFoundation {
     )
       .bind(eventId)
       .first<{ organisationId: string }>();
-    if (!event) throw new Response("This event could not be found.", { status: 404 });
+    if (!event)
+      throw new Response("This event could not be found.", { status: 404 });
     return { organisationId: event.organisationId, eventId };
   }
 

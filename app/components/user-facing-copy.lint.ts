@@ -29,7 +29,10 @@ const BANNED = [
   ...NAMED_PRODUCTS,
   { pattern: /\bbinding\b/iu, note: "deployment wiring" },
   { pattern: /\bmultipart\b/iu, note: "transfer protocol detail" },
-  { pattern: /\bprojection\b/iu, note: "internal word for a synchronised copy" },
+  {
+    pattern: /\bprojection\b/iu,
+    note: "internal word for a synchronised copy",
+  },
   { pattern: /\boutbox\b/iu, note: "internal delivery mechanism" },
   { pattern: /\bidempotenc/iu, note: "internal retry mechanism" },
   { pattern: /\bfingerprint\b/iu, note: "internal identifier" },
@@ -77,7 +80,8 @@ const EXEMPT: ReadonlyArray<{ file: string; reason: string }> = [
   },
   {
     file: "routes/api-docs.tsx",
-    reason: "API reference written for developers integrating with Program Cue.",
+    reason:
+      "API reference written for developers integrating with Program Cue.",
   },
   {
     file: "routes/api-settings.tsx",
@@ -293,7 +297,9 @@ describe("copy detection", () => {
           environment.
         </p>
       `),
-    ).toEqual(["Secrets and the Workers AI binding stay in the deployment environment."]);
+    ).toEqual([
+      "Secrets and the Workers AI binding stay in the deployment environment.",
+    ]);
   });
 
   it("reads a short JSX label on its own line", () => {
@@ -308,26 +314,29 @@ describe("copy detection", () => {
   });
 
   it("reads copy passed as a prop rather than rendered as a child", () => {
-    expect(flagged(`<X description="Uploading to private R2 with Uppy." />`))
-      .toEqual(["Uploading to private R2 with Uppy."]);
+    expect(
+      flagged(`<X description="Uploading to private R2 with Uppy." />`),
+    ).toEqual(["Uploading to private R2 with Uppy."]);
   });
 
   it("reads an interpolated sentence in a template literal", () => {
-    expect(flagged("const m = `Saved to D1 as revision ${revision}.`;")).toEqual(
-      ["Saved to D1 as revision ."],
-    );
+    expect(
+      flagged("const m = `Saved to D1 as revision ${revision}.`;"),
+    ).toEqual(["Saved to D1 as revision ."]);
   });
 
   it("ignores TypeScript generics that sit between angle brackets", () => {
     expect(
-      flagged(`type X = { dirty: boolean; setDirty: Dispatch<SetStateAction<boolean>> };`),
+      flagged(
+        `type X = { dirty: boolean; setDirty: Dispatch<SetStateAction<boolean>> };`,
+      ),
     ).toEqual([]);
   });
 
   it("ignores SQL and request paths", () => {
     expect(
       flagged(
-        'const q = `SELECT id FROM operation_jobs WHERE idempotency_key = ?`;',
+        "const q = `SELECT id FROM operation_jobs WHERE idempotency_key = ?`;",
       ),
     ).toEqual([]);
     expect(flagged('const u = "/files/multipart/initiate";')).toEqual([]);

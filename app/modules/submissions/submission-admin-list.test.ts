@@ -1,7 +1,7 @@
 import { env } from "cloudflare:test";
 import { describe, expect, it } from "vitest";
 
-import { AirtableProviderBoundary } from "~/modules/airtable/airtable-provider-boundary.server";
+import type { AirtableProviderBoundary } from "~/modules/airtable/airtable-provider-boundary.server";
 import type { Viewer } from "~/platform/auth/authorize.server";
 import { ensureDemoData } from "~/platform/demo/seed.server";
 import { SubmissionService } from "./submission-service.server";
@@ -91,8 +91,9 @@ describe("submission administration list", () => {
     );
     expect(firstPage.submissions).toHaveLength(50);
     expect(firstPage.hasNext).toBe(true);
-    expect(firstPage.submissions.every((row) => row.routingState === "draft"))
-      .toBe(true);
+    expect(
+      firstPage.submissions.every((row) => row.routingState === "draft"),
+    ).toBe(true);
 
     const secondPage = await service.listAdminSubmissionPage(
       viewer,

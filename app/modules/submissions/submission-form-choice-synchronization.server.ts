@@ -3,7 +3,7 @@ import {
   SubmissionStateError,
   type FormWorkspace,
 } from "./submission-repository.server";
-import { type SaveFormInput } from "./submission-schema";
+import type { SaveFormInput } from "./submission-schema";
 
 export class SubmissionFormChoiceSynchronization {
   static workspaceToInput(workspace: FormWorkspace): SaveFormInput {

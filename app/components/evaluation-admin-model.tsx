@@ -79,7 +79,9 @@ export type EvaluationAdminModel = {
   bulkAssignmentTargetLabel: string | undefined;
   moderationSubmission: EvaluationSubmission | undefined;
   currentModeration:
-    EvaluationAdminLoaderData["moderations"][number] | null | undefined;
+    | EvaluationAdminLoaderData["moderations"][number]
+    | null
+    | undefined;
   reopenAssignment: EvaluationAssignment | undefined;
 };
 

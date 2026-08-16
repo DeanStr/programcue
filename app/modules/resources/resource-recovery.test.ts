@@ -25,10 +25,16 @@ describe("resource browser recovery", () => {
 
   it("rejects legacy, malformed and structurally invalid snapshots", () => {
     expect(
-      isResourceRecoveryPayload({ ...validPayload, externalEmbedDraft: undefined }),
+      isResourceRecoveryPayload({
+        ...validPayload,
+        externalEmbedDraft: undefined,
+      }),
     ).toBe(false);
     expect(
-      isResourceRecoveryPayload({ ...validPayload, embedUrls: "https://example.com" }),
+      isResourceRecoveryPayload({
+        ...validPayload,
+        embedUrls: "https://example.com",
+      }),
     ).toBe(false);
     expect(
       isResourceRecoveryPayload({

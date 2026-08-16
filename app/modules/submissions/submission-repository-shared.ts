@@ -151,7 +151,8 @@ export type AdminSubmission = {
 };
 
 export type AdminSubmissionRoutingFilter =
-  "missing_automatic" | "manual_override";
+  | "missing_automatic"
+  | "manual_override";
 
 export type AdminSubmissionFilters = {
   status?: string;

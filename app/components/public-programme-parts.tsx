@@ -79,7 +79,11 @@ export function PublicSpeakerShareActions({
   }
   return (
     <>
-      <button className="btn small" type="button" onClick={() => void copyLink()}>
+      <button
+        className="btn small"
+        type="button"
+        onClick={() => void copyLink()}
+      >
         {status === "copied" ? (
           <Check aria-hidden size={14} />
         ) : (

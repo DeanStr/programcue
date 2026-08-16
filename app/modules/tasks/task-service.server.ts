@@ -20,8 +20,7 @@ export class TaskService {
     env: CloudflareEnvironment,
     dependencies: { airtable?: AirtableProviderBoundary } = {},
   ) {
-    const airtable =
-      dependencies.airtable ?? new AirtableProviderBoundary(env);
+    const airtable = dependencies.airtable ?? new AirtableProviderBoundary(env);
     const collaborators = { airtable };
     this.templates = new TaskTemplateWorkflows(env, collaborators);
     this.participants = new ParticipantTaskWorkflows(env, collaborators);
@@ -33,7 +32,9 @@ export class TaskService {
   }
 
   createTravelOnboardingTemplates(
-    ...args: Parameters<TaskTemplateWorkflows["createTravelOnboardingTemplates"]>
+    ...args: Parameters<
+      TaskTemplateWorkflows["createTravelOnboardingTemplates"]
+    >
   ) {
     return this.templates.createTravelOnboardingTemplates(...args);
   }
@@ -69,9 +70,7 @@ export class TaskService {
   }
 
   attachCompletedFileEvidence(
-    ...args: Parameters<
-      ParticipantTaskWorkflows["attachCompletedFileEvidence"]
-    >
+    ...args: Parameters<ParticipantTaskWorkflows["attachCompletedFileEvidence"]>
   ) {
     return this.participants.attachCompletedFileEvidence(...args);
   }

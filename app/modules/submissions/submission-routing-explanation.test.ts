@@ -60,9 +60,7 @@ describe("submission routing explanation", () => {
       versionNumber: 3 as number | null,
       snapshotVersionNumber: 3 as number | null,
       routing,
-      selectedTracks: [
-        { trackId: "track-ai", trackName: "AI & Innovation" },
-      ],
+      selectedTracks: [{ trackId: "track-ai", trackName: "AI & Innovation" }],
       routedTeamIds: ["team-workshops"],
     };
     expect(classifySubmissionRouting(base)).toBe("automatic");

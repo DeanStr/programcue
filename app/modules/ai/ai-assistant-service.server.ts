@@ -4,8 +4,6 @@ import {
   AiAssistantCoreService,
   allowedReviewRoles,
   focusSchema,
-  generatedReminderDraftSchema,
-  generatedReminderTextFormat,
   identifierSchema,
   parseJson,
 } from "./ai-assistant-core-service.server";
@@ -15,11 +13,7 @@ import {
   prepareReminderSendProposal,
   reminderCohortSchema,
 } from "./ai-tools.server";
-import type {
-  AiEvidence,
-  AiProposalPreview,
-  ContextualAiResult,
-} from "./ai-types";
+import type { AiEvidence } from "./ai-types";
 import { AiProviderSettingsService } from "./ai-provider.server";
 import { AiProviderError } from "./openai-responses-provider.server";
 import type { AiProposalApprovalResult } from "./ai-proposal-lifecycle.server";

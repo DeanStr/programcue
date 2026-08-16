@@ -10,7 +10,10 @@ export function SpeakerProfileHistory({
   timeZone: string;
 }) {
   return (
-    <section className="card inset pad mt" aria-labelledby="profile-history-title">
+    <section
+      className="card inset pad mt"
+      aria-labelledby="profile-history-title"
+    >
       <div className="card-title">
         <div>
           <h3 id="profile-history-title">Public profile history</h3>

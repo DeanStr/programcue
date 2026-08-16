@@ -291,7 +291,7 @@
   gap: var(--space-3);
 }
 .pc-design-wide {
-  grid-column: 1/-1;
+  grid-column: 1 / -1;
 }
 .pc-section-heading {
   display: flex;

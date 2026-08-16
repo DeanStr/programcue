@@ -124,7 +124,8 @@ export function EventSetupForm({
   canManageOrganisationAdministrators: boolean;
 }) {
   const actionData = useActionData<typeof action>() as
-    ActionResponse | undefined;
+    | ActionResponse
+    | undefined;
   const inviteFetcher = useFetcher<typeof action>();
   const repositoryFetcher = useFetcher<typeof action>();
   const formRef = useRef<HTMLFormElement | null>(null);

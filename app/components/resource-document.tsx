@@ -16,9 +16,7 @@ function safeUrl(raw: unknown) {
   if (typeof raw !== "string") return null;
   try {
     const url = new URL(raw);
-    return ["https:", "mailto:"].includes(url.protocol)
-      ? url.toString()
-      : null;
+    return ["https:", "mailto:"].includes(url.protocol) ? url.toString() : null;
   } catch {
     return null;
   }
@@ -28,7 +26,8 @@ function textNode(node: TiptapNode, key: string): ReactNode {
   let content: ReactNode = node.text ?? "";
   for (const [index, mark] of (node.marks ?? []).entries()) {
     const markKey = `${key}:mark:${index}`;
-    if (mark.type === "bold") content = <strong key={markKey}>{content}</strong>;
+    if (mark.type === "bold")
+      content = <strong key={markKey}>{content}</strong>;
     if (mark.type === "italic") content = <em key={markKey}>{content}</em>;
     if (mark.type === "strike") content = <s key={markKey}>{content}</s>;
     if (mark.type === "code") content = <code key={markKey}>{content}</code>;
@@ -130,7 +129,9 @@ function resourceNode(
 ): ReactNode {
   switch (node.type) {
     case "doc":
-      return <Fragment key={key}>{children(node, configuration, key)}</Fragment>;
+      return (
+        <Fragment key={key}>{children(node, configuration, key)}</Fragment>
+      );
     case "text":
       return textNode(node, key);
     case "paragraph":
@@ -150,7 +151,9 @@ function resourceNode(
     case "listItem":
       return <li key={key}>{children(node, configuration, key)}</li>;
     case "blockquote":
-      return <blockquote key={key}>{children(node, configuration, key)}</blockquote>;
+      return (
+        <blockquote key={key}>{children(node, configuration, key)}</blockquote>
+      );
     case "codeBlock":
       return (
         <pre key={key}>

@@ -232,7 +232,8 @@ export async function action({ request, context }: Route.ActionArgs) {
 
 export default function FormBuilder({ loaderData }: Route.ComponentProps) {
   const actionData = useActionData<typeof action>() as
-    FormBuilderActionResult | undefined;
+    | FormBuilderActionResult
+    | undefined;
   const {
     categoryField,
     change,

@@ -723,10 +723,7 @@ export class ContentManagementService {
       current,
       revisions: page.map((revision, index) => ({
         ...revision,
-        changes: contentRevisionChanges(
-          revision,
-          revisions.results[index + 1],
-        ),
+        changes: contentRevisionChanges(revision, revisions.results[index + 1]),
       })),
       nextHistoryCursor:
         revisions.results.length > CONTENT_HISTORY_PAGE_SIZE && last

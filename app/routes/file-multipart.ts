@@ -91,14 +91,23 @@ export async function action({ request, params, context }: Route.ActionArgs) {
     try {
       body = JSON.parse(rawBody);
     } catch {
-      return response({ error: "That request could not be read. Reload the page and try again." }, 400);
+      return response(
+        {
+          error:
+            "That request could not be read. Reload the page and try again.",
+        },
+        400,
+      );
     }
     const service = new MultipartUploadService(env);
     if (params.operation === "initiate" || params.operation === "resume") {
       const idempotencyKey = request.headers.get("idempotency-key")?.trim();
       if (!idempotencyKey)
         return response(
-          { error: "That request was missing information needed to avoid duplicates. Reload the page and try again." },
+          {
+            error:
+              "That request was missing information needed to avoid duplicates. Reload the page and try again.",
+          },
           400,
         );
       const record =
@@ -106,7 +115,10 @@ export async function action({ request, params, context }: Route.ActionArgs) {
           ? { ...body, idempotencyKey }
           : body;
       if (params.operation === "resume")
-        return response({ ok: true, upload: await service.resume(viewer, record) });
+        return response({
+          ok: true,
+          upload: await service.resume(viewer, record),
+        });
       return response(
         { ok: true, upload: await service.initiate(viewer, record) },
         201,
@@ -115,9 +127,15 @@ export async function action({ request, params, context }: Route.ActionArgs) {
     if (params.operation === "list-parts")
       return response({ ok: true, ...(await service.listParts(viewer, body)) });
     if (params.operation === "part-url")
-      return response({ ok: true, part: await service.createPartUrl(viewer, body) });
+      return response({
+        ok: true,
+        part: await service.createPartUrl(viewer, body),
+      });
     if (params.operation === "complete")
-      return response({ ok: true, upload: await service.complete(viewer, body) });
+      return response({
+        ok: true,
+        upload: await service.complete(viewer, body),
+      });
     return response({ ok: true, upload: await service.abort(viewer, body) });
   } catch (error) {
     if (error instanceof RequestBodyTooLargeError)
@@ -125,7 +143,9 @@ export async function action({ request, params, context }: Route.ActionArgs) {
     if (error instanceof ZodError)
       return response(
         {
-          error: error.issues[0]?.message ?? "That upload request could not be read.",
+          error:
+            error.issues[0]?.message ??
+            "That upload request could not be read.",
           issues: error.issues,
         },
         422,

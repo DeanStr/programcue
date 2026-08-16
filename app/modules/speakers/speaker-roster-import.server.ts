@@ -304,7 +304,9 @@ export class SpeakerRosterImportService {
           ...batch.map((row) => row.email),
         )
         .all<ExistingRosterProfile>();
-      rows.results.forEach((row) => existingProfiles.set(row.email, row));
+      rows.results.forEach((row) => {
+        existingProfiles.set(row.email, row);
+      });
     }
     const valid = linkable.flatMap((row) => {
       const existing = existingProfiles.get(row.email);

@@ -5,7 +5,6 @@ import {
   AIRTABLE_REPOSITORY_PROVIDER,
   AirtableRepositoryConfigurationError,
   AirtableRoomRepository,
-  type AirtableRoomSnapshot,
 } from "./airtable-room-repository.server";
 import { AirtableProgrammeRepository } from "./airtable-programme-repository.server";
 import { AirtableEventDataRepository } from "./airtable-event-data-repository.server";
@@ -685,7 +684,8 @@ export class AirtableMigrationService {
         "The D1 migration completed without recording its audit result.",
       );
     const change = results.at(-1)?.results[0] as
-      { sequence: number } | undefined;
+      | { sequence: number }
+      | undefined;
     if (!change || !Number.isSafeInteger(change.sequence))
       throw new AirtableMigrationStateError(
         "The D1 authority switch did not commit its public change cursor.",

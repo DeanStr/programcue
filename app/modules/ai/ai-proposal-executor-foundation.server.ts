@@ -1,4 +1,4 @@
-import { z } from "zod";
+import type { z } from "zod";
 import {
   assertMergeAudienceCompatible,
   type CommunicationPreview,
@@ -14,7 +14,7 @@ import {
   adminRoles,
   assistantProposalMetadataSchema,
   reminderSendProposalArgumentsSchema,
-  taskProposalArgumentsSchema,
+  type taskProposalArgumentsSchema,
 } from "./ai-tool-contracts.server";
 import {
   AiToolPermissionError,

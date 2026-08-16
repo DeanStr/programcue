@@ -11,10 +11,7 @@ export type SummaryError =
       href?: string;
     };
 
-function focusHashTarget(
-  event: MouseEvent<HTMLAnchorElement>,
-  href: string,
-) {
+function focusHashTarget(event: MouseEvent<HTMLAnchorElement>, href: string) {
   if (!href.startsWith("#")) return;
 
   const target = document.getElementById(href.slice(1));

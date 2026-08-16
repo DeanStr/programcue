@@ -66,7 +66,8 @@ const containerScanResultSchema = z.discriminatedUnion("verdict", [
 type ContainerScanResult = z.infer<typeof containerScanResultSchema>;
 
 type ContainerScanAttempt =
-  { kind: "verdict"; result: ContainerScanResult } | ScannerContainerFailure;
+  | { kind: "verdict"; result: ContainerScanResult }
+  | ScannerContainerFailure;
 
 interface ScannerRuntime {
   callbackSecret: string;

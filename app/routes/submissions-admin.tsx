@@ -186,7 +186,9 @@ async function queueAdminWebhook(
   viewer: Awaited<ReturnType<typeof getViewer>>["viewer"],
   input: {
     eventType:
-      "submission.created" | "submission.submitted" | "session.created";
+      | "submission.created"
+      | "submission.submitted"
+      | "session.created";
     entityType: "submission" | "session";
     entityId: string;
     idempotencyKey: string;
@@ -397,7 +399,8 @@ export async function action({ request, context }: Route.ActionArgs) {
 
 export default function SubmissionsAdmin({ loaderData }: Route.ComponentProps) {
   const actionData = useActionData<typeof action>() as
-    SubmissionsAdminActionResult | undefined;
+    | SubmissionsAdminActionResult
+    | undefined;
   if (loaderData.mode === "detail")
     return (
       <SubmissionAdminDetailPanel

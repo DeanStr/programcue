@@ -113,7 +113,10 @@ export class ProgramCueEventAgent extends Agent<
 
   async streamAsk(viewer: Viewer, prompt: unknown) {
     await this.assertScope(viewer);
-    const { readable, writable } = new TransformStream<Uint8Array, Uint8Array>();
+    const { readable, writable } = new TransformStream<
+      Uint8Array,
+      Uint8Array
+    >();
     const writer = writable.getWriter();
     const encoder = new TextEncoder();
     let open = true;
@@ -133,7 +136,10 @@ export class ProgramCueEventAgent extends Agent<
         });
     };
     const execution = (async () => {
-      send("status", { phase: "inspecting", message: "Inspecting authorised event records…" });
+      send("status", {
+        phase: "inspecting",
+        message: "Inspecting authorised event records…",
+      });
       try {
         const result = await new AiAssistantService(
           this.env as unknown as CloudflareEnvironment,
@@ -205,13 +211,7 @@ export class ProgramCueEventAgent extends Agent<
     await this.assertScope(viewer);
     const result = await new AiAssistantService(
       this.env as unknown as CloudflareEnvironment,
-    ).reviseReminderProposal(
-      viewer,
-      proposalId,
-      subject,
-      body,
-      correlationId,
-    );
+    ).reviseReminderProposal(viewer, proposalId, subject, body, correlationId);
     this.setState({
       ...this.state,
       pendingProposalIds: [

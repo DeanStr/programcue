@@ -83,10 +83,7 @@ export function resolveE2eShardRuntimes(environment = process.env) {
       `PROGRAM_CUE_E2E_INSPECTOR_PORT ${base.inspectorPort} cannot reserve ${shardCount} consecutive ports.`,
     );
   }
-  if (
-    base.port <= lastInspectorPort &&
-    base.inspectorPort <= lastPort
-  ) {
+  if (base.port <= lastInspectorPort && base.inspectorPort <= lastPort) {
     throw new Error("E2E HTTP and inspector port ranges must not overlap.");
   }
 

@@ -333,10 +333,12 @@ async function resolveEventRole(
       ]);
       const acceptedCount = accepted.results.length;
       const auditCount = audited.meta.changes ?? 0;
-      if (!(
-        (acceptedCount === 1 && auditCount === 1) ||
-        (acceptedCount === 0 && auditCount === 0)
-      )) {
+      if (
+        !(
+          (acceptedCount === 1 && auditCount === 1) ||
+          (acceptedCount === 0 && auditCount === 0)
+        )
+      ) {
         throw new Error(
           "Invitation acceptance did not preserve its required audit boundary.",
         );

@@ -7,7 +7,6 @@ import {
 } from "~/modules/evaluations/evaluation-decision-statements.server";
 import type { PreparedApplicantSession } from "./applicant-session.server";
 import {
-  SubmissionRevisionConflictError,
   SubmissionStateError,
   type Applicant,
   type CoSpeakerInvitation,

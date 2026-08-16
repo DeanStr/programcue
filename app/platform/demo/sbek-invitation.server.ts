@@ -10,7 +10,9 @@ type DemoInvitationActivation = {
 };
 
 export type SbekDemoActivationOutcome =
-  "not_fixture" | "already_active" | "activated";
+  | "not_fixture"
+  | "already_active"
+  | "activated";
 
 export class SbekDemoActivationError extends Error {
   constructor(message: string) {

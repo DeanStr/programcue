@@ -3,10 +3,7 @@ import { beforeEach, describe, expect, it } from "vitest";
 
 import type { Viewer } from "~/platform/auth/authorize.server";
 import { ensureDemoData } from "~/platform/demo/seed.server";
-import {
-  EvaluationService,
-  EvaluationStateError,
-} from "./evaluation-service.server";
+import { EvaluationService } from "./evaluation-service.server";
 import {
   encodeScorecardSelection,
   parseScorecardSelection,

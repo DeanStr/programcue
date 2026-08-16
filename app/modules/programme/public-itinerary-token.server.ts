@@ -6,7 +6,9 @@ const BROWSER_ID_PATTERN =
 
 function base64Url(bytes: Uint8Array) {
   let binary = "";
-  bytes.forEach((byte) => (binary += String.fromCharCode(byte)));
+  bytes.forEach((byte) => {
+    binary += String.fromCharCode(byte);
+  });
   return btoa(binary)
     .replaceAll("+", "-")
     .replaceAll("/", "_")

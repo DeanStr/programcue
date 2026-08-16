@@ -11,7 +11,7 @@ import {
   assistantProposalMetadataSchema,
   taskProposalArgumentsSchema,
 } from "./ai-tool-contracts.server";
-import { type AiToolExecution } from "./ai-tool-execution";
+import type { AiToolExecution } from "./ai-tool-execution";
 import type { AiEvidence, AiProposalPreview } from "./ai-types";
 
 export abstract class AiOperationsProposalWorkflows extends AiScheduleProposalWorkflows {

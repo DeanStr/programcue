@@ -33,7 +33,11 @@ export interface DirectCalendarProvider {
 }
 
 export type CalendarAttendanceStatus =
-  "accepted" | "declined" | "tentative" | "needs_action" | "organizer";
+  | "accepted"
+  | "declined"
+  | "tentative"
+  | "needs_action"
+  | "organizer";
 
 export class CalendarProviderConfigurationError extends Error {
   constructor(message: string) {

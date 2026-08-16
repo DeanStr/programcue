@@ -178,7 +178,9 @@ export function headers({
 }: Route.HeadersArgs) {
   if (errorHeaders) return errorHeaders;
   const responseHeaders = new Headers(loaderHeaders);
-  actionHeaders.forEach((value, name) => responseHeaders.set(name, value));
+  actionHeaders.forEach((value, name) => {
+    responseHeaders.set(name, value);
+  });
   return responseHeaders;
 }
 

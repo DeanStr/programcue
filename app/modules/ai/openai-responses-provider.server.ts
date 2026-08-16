@@ -103,7 +103,9 @@ export class AiConfigurationError extends Error {
 }
 
 export type AiProviderFailureKind =
-  "transient" | "request-rejected" | "invalid-response";
+  | "transient"
+  | "request-rejected"
+  | "invalid-response";
 
 type AiProviderErrorOptions = ErrorOptions & {
   failureKind?: AiProviderFailureKind;

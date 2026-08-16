@@ -153,10 +153,7 @@ export function ActivityTimelinePanel({
                   {loaderData.activityScope === "organisation" ? (
                     <>
                       {item.eventName ?? "Removed event"}
-                      {item.eventId
-                        ? ` ${shortReference(item.eventId)}`
-                        : ""}{" "}
-                      ·{" "}
+                      {item.eventId ? ` ${shortReference(item.eventId)}` : ""} ·{" "}
                     </>
                   ) : null}
                   {entityHref ? (

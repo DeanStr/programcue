@@ -277,7 +277,8 @@ async function consumeRateLimit(
       ),
   ]);
   const row = consumed.results?.[0] as
-    { requestCount: number; blockedUntil: number } | undefined;
+    | { requestCount: number; blockedUntil: number }
+    | undefined;
   if (!row) {
     throw new Error("The D1 abuse-rate-limit mutation returned no state.");
   }

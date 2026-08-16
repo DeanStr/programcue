@@ -320,9 +320,7 @@ export function SchedulePublicationDialog({
           <strong>
             {publicContentVisibilityBlockers.length} scheduled public content
             record
-            {publicContentVisibilityBlockers.length === 1
-              ? " is"
-              : "s are"}{" "}
+            {publicContentVisibilityBlockers.length === 1 ? " is" : "s are"}{" "}
             private or hidden.
           </strong>{" "}
           Public sessions require public content snapshots. Correct each listed

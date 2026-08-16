@@ -8,7 +8,7 @@ import {
   submittedSnapshotSchema,
 } from "~/modules/submissions/submission-schema";
 import type { Viewer } from "~/platform/auth/authorize.server";
-import { type WebhookEventResult } from "~/platform/operations/webhook-service.server";
+import type { WebhookEventResult } from "~/platform/operations/webhook-service.server";
 import {
   EvaluationRevisionConflictError,
   EvaluationStateError,

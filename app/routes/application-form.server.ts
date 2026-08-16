@@ -326,18 +326,12 @@ async function handleClaimedSpeakerIntent(input: {
   } = input;
   if (intent === "claim_token") {
     const speakerId = String(
-      formData.get("speakerId") ??
-        actionUrl.searchParams.get("speaker") ??
-        "",
+      formData.get("speakerId") ?? actionUrl.searchParams.get("speaker") ?? "",
     );
     const rawToken = String(
       formData.get("claimToken") ?? actionUrl.searchParams.get("claim") ?? "",
     );
-    const result = await service.claimCoSpeakerToken(
-      slug,
-      speakerId,
-      rawToken,
-    );
+    const result = await service.claimCoSpeakerToken(slug, speakerId, rawToken);
     const query = await applicationNoticeQuery(env, {
       slug,
       kind: "claimed",

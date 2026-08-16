@@ -21,7 +21,11 @@ describe("evaluation result workbench rules", () => {
       decisionReady: true,
     });
     expect(
-      evaluationResultFlags({ ...complete, assignmentCount: 0, completedReviewCount: 0 }),
+      evaluationResultFlags({
+        ...complete,
+        assignmentCount: 0,
+        completedReviewCount: 0,
+      }),
     ).toMatchObject({ decisionReady: false, incomplete: false });
     expect(
       evaluationResultFlags({ ...complete, completedReviewCount: 1 }),
@@ -38,7 +42,9 @@ describe("evaluation result workbench rules", () => {
   });
 
   it("routes targets into coverage, decision-ready and moderation presets", () => {
-    expect(matchesEvaluationResultPreset("decision_ready", complete)).toBe(true);
+    expect(matchesEvaluationResultPreset("decision_ready", complete)).toBe(
+      true,
+    );
     expect(
       matchesEvaluationResultPreset("coverage", {
         ...complete,

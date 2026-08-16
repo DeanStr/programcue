@@ -101,9 +101,7 @@ function submissionColumns(detailSearchParams: string) {
       enableHiding: false,
       cell: ({ row }) => (
         <div className="pc-record-stack">
-          <Link
-            to={submissionDetailHref(row.original.id, detailSearchParams)}
-          >
+          <Link to={submissionDetailHref(row.original.id, detailSearchParams)}>
             <strong>{row.original.title}</strong>
           </Link>
           <small className="subtle">

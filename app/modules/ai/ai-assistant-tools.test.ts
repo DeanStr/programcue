@@ -6,21 +6,9 @@ import {
   AiPermissionError,
 } from "./ai-assistant-service.server";
 import { AiToolPermissionError } from "./ai-tools.server";
-import {
-  AI_PROVIDER_RESPONSE_MAX_BYTES,
-  OpenAiResponsesProvider,
-} from "./openai-responses-provider.server";
-import {
-  AiProviderSettingsConflictError,
-  AiProviderSettingsService,
-  AnthropicMessagesProvider,
-  WorkersAiProvider,
-} from "./ai-provider.server";
 import { CommunicationService } from "~/modules/communications/communication-service.server";
-import { ensureDemoEvaluationData } from "~/modules/evaluations/demo.server";
 import type { Viewer } from "~/platform/auth/authorize.server";
 import { ensureDemoData } from "~/platform/demo/seed.server";
-import { OperationService } from "~/platform/operations/operation-service.server";
 
 const admin: Viewer = {
   personId: "person-demo-admin",
@@ -40,14 +28,6 @@ const evaluator: Viewer = {
   organisationId: "org-future-events",
   eventId: "evt-foe-2025",
   demo: true,
-};
-
-const owner: Viewer = {
-  ...admin,
-  personId: "person-demo-owner",
-  name: "Morgan Chen",
-  email: "owner@example.com",
-  role: "owner",
 };
 
 const providerConfiguration = {

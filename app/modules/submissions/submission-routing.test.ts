@@ -2,25 +2,7 @@ import { env } from "cloudflare:test";
 import { describe, expect, it } from "vitest";
 
 import type { Viewer } from "~/platform/auth/authorize.server";
-import { CommunicationService } from "~/modules/communications/communication-service.server";
-import { MultipartUploadService } from "~/modules/files/multipart-upload.server";
-import { ResourceService } from "~/modules/resources/resource-service.server";
-import { ResendEmailProvider } from "~/modules/communications/resend.server";
-import type { AirtableProviderBoundary } from "~/modules/airtable/airtable-provider-boundary.server";
 import { ensureDemoData } from "~/platform/demo/seed.server";
-import { processSubmissionNotification } from "../../../workers/communications-queue";
-import {
-  ApplicantConfigurationError,
-  ApplicantSessionService,
-} from "./applicant-session.server";
-import {
-  D1SubmissionRepository,
-  SubmissionDraftSavedError,
-  SubmissionRevisionConflictError,
-  SubmissionStateError,
-  type Applicant,
-} from "./submission-repository.server";
-import { DEFAULT_FORM_SCHEMA, routingSchema } from "./submission-schema";
 import { SubmissionService } from "./submission-service.server";
 
 declare module "cloudflare:test" {
@@ -119,53 +101,6 @@ const validAnswers = {
   format: "Presentation",
   video: "https://example.com/pitch",
 };
-
-const directSessionAnswers = {
-  ...validAnswers,
-  category: "AI & Innovation",
-};
-
-async function insertReadySubmissionVideo(
-  testEnv: CloudflareEnvironment,
-  input: {
-    eventId: string;
-    submissionId: string;
-    ownerPersonId: string | null;
-  },
-) {
-  const assetId = `video-asset-${crypto.randomUUID()}`;
-  const versionId = `video-version-${crypto.randomUUID()}`;
-  await testEnv.DB.batch([
-    testEnv.DB.prepare(
-      `INSERT INTO file_assets (
-         id, event_id, owner_person_id, target_type, target_id, asset_kind,
-         status, created_at, updated_at
-       ) VALUES (?, ?, ?, 'submission', ?, 'video', 'pending', unixepoch(), unixepoch())`,
-    ).bind(assetId, input.eventId, input.ownerPersonId, input.submissionId),
-    testEnv.DB.prepare(
-      `INSERT INTO file_versions (
-         id, event_id, asset_id, version_number, object_key, original_filename,
-         declared_content_type, detected_content_type, size_bytes, object_etag,
-         upload_status, signature_status, scan_status, created_by_person_id,
-         created_at, uploaded_at, scanned_at, released_at
-       ) VALUES (?, ?, ?, 1, ?, 'pitch.mp4', 'video/mp4', 'video/mp4', 1024,
-                 'test-etag', 'uploaded', 'valid', 'clean', ?,
-                 unixepoch(), unixepoch(), unixepoch(), unixepoch())`,
-    ).bind(
-      versionId,
-      input.eventId,
-      assetId,
-      `private/test/${versionId}`,
-      input.ownerPersonId,
-    ),
-    testEnv.DB.prepare(
-      `UPDATE file_assets SET current_version_id = ?, status = 'active',
-              updated_at = unixepoch()
-        WHERE id = ? AND event_id = ?`,
-    ).bind(versionId, assetId, input.eventId),
-  ]);
-  return { assetId, versionId };
-}
 
 function withNthBatchRace(
   testEnv: CloudflareEnvironment,

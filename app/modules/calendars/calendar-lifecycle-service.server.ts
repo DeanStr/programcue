@@ -39,7 +39,12 @@ type InvitationRow = {
   providerEventId: string | null;
   currentAttemptId: string | null;
   currentAttemptStatus:
-    "queued" | "running" | "succeeded" | "failed" | "superseded" | null;
+    | "queued"
+    | "running"
+    | "succeeded"
+    | "failed"
+    | "superseded"
+    | null;
   currentAttemptProvider: "email_ics" | "google" | "microsoft" | null;
 };
 

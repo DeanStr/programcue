@@ -23,7 +23,7 @@
   }
   .builder-layout > .preview-panel {
     position: static;
-    grid-column: 1/-1;
+    grid-column: 1 / -1;
     grid-row: auto;
   }
   .builder-inspector-stack {
@@ -37,7 +37,7 @@
     grid-template-columns: 270px 1fr;
   }
   .review-score {
-    grid-column: 1/-1;
+    grid-column: 1 / -1;
   }
   .schedule-layout {
     grid-template-columns: 1fr;
@@ -51,7 +51,7 @@
     grid-template-columns: 210px 1fr;
   }
   .comms-side {
-    grid-column: 1/-1;
+    grid-column: 1 / -1;
     display: grid;
     grid-template-columns: 1fr 1fr;
     gap: var(--space-3);

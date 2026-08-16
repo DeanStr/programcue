@@ -6,7 +6,9 @@ import { expect, type Page } from "@playwright/test";
  * can show the affected records and restore focus. These drive that instead.
  */
 export function confirmDialog(page: Page) {
-  return page.getByRole("dialog").filter({ has: page.locator("[data-pc-confirm]") });
+  return page
+    .getByRole("dialog")
+    .filter({ has: page.locator("[data-pc-confirm]") });
 }
 
 export async function acceptConfirm(page: Page) {

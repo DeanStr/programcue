@@ -1,20 +1,10 @@
 import { env } from "cloudflare:test";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it } from "vitest";
 
 import type { Viewer } from "~/platform/auth/authorize.server";
 import { ensureDemoData } from "~/platform/demo/seed.server";
-import { ensureDemoProgramme } from "~/platform/demo/seed.server";
 import { ensureJudgedDemoWorkflow } from "~/platform/demo/demo-reset.server";
-import {
-  EventService,
-  EventRepositoryMigrationRequiredError,
-} from "~/modules/events/event-service.server";
-import { EventTrackInUseError } from "~/modules/events/event-repository.server";
-import { EvaluationService } from "~/modules/evaluations/evaluation-service.server";
-import { ScheduleService } from "~/modules/schedule/schedule-service.server";
-import { SubmissionService } from "~/modules/submissions/submission-service.server";
-import { TaskService } from "~/modules/tasks/task-service.server";
-import { ParticipantRetentionService } from "~/modules/privacy/participant-retention-service.server";
+import { EventService } from "~/modules/events/event-service.server";
 import {
   AirtableProviderError,
   type AirtableRecord,
@@ -22,32 +12,19 @@ import {
 } from "./airtable-client.server";
 import { AirtableEventDataRepository } from "./airtable-event-data-repository.server";
 import {
-  AirtableEventDataUnsynchronizedError,
-  AirtableEventProjectionCommitError,
-} from "./airtable-event-data-repository.server";
-import { AIRTABLE_EVENT_TABLE_SPECS } from "./airtable-event-data-schema";
-import {
-  AirtableCommandReplayUnavailableError,
   AirtableProviderBoundary,
   airtableIntentCommand,
 } from "./airtable-provider-boundary.server";
-import { AirtableProjectionRecoveryService } from "./airtable-projection-recovery-service.server";
-import {
-  AirtableMigrationService,
-  AirtableMigrationStateError,
-} from "./airtable-migration-service.server";
+import { AirtableMigrationService } from "./airtable-migration-service.server";
 import { AirtableProgrammeRepository } from "./airtable-programme-repository.server";
 import {
-  AirtableRepositoryConfigurationError,
   AirtableRepositoryReconciliationError,
-  AirtableRepositorySchemaError,
   AirtableRoomRepository,
 } from "./airtable-room-repository.server";
 import {
   AIRTABLE_EVENT_DATA_TABLE_NAMES,
   AIRTABLE_ROOMS_TABLE,
   AIRTABLE_SCHEMA_VERSION,
-  AIRTABLE_SYNCHRONOUS_MIGRATION_MAX_CHANGES,
 } from "./airtable-schema";
 
 declare module "cloudflare:test" {
@@ -226,26 +203,6 @@ function eventDataRepository(
     createClient: () => provider.client,
     now,
   });
-}
-
-async function changeEventFormat(label: string) {
-  const result = await env.DB.prepare(
-    `UPDATE events SET session_formats_json = ?, updated_at = unixepoch()
-      WHERE id = ?`,
-  )
-    .bind(
-      JSON.stringify([
-        {
-          key: "talk",
-          label,
-          defaultDurationMinutes: 40,
-          position: 0,
-        },
-      ]),
-      viewer.eventId,
-    )
-    .run();
-  expect(result.meta.changes).toBe(1);
 }
 
 async function initializeEventDataProjection(

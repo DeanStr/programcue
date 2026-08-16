@@ -474,8 +474,7 @@ describe("speaker resource service", () => {
             attrs: {
               provider: "youtube",
               videoId: "dQw4w9WgXcQ",
-              sourceUrl:
-                "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
+              sourceUrl: "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
             },
           },
         ],
@@ -494,9 +493,9 @@ describe("speaker resource service", () => {
       speaker,
       "accessibility-guide-test",
     );
-    expect(participant.selected?.document.content?.[0]?.content?.[0]?.text).toBe(
-      "Use large, readable text on every presentation slide.",
-    );
+    expect(
+      participant.selected?.document.content?.[0]?.content?.[0]?.text,
+    ).toBe("Use large, readable text on every presentation slide.");
     expect(resourceDocumentEmbeds(participant.selected!.document)).toEqual([
       {
         provider: "youtube",
@@ -1574,8 +1573,7 @@ describe("speaker resource service", () => {
               attrs: {
                 provider: "youtube",
                 videoId: "dQw4w9WgXcQ",
-                sourceUrl:
-                  "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
+                sourceUrl: "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
               },
             },
           ],

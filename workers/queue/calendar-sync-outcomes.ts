@@ -6,7 +6,6 @@ import {
   QueueClaimLeaseLostError,
   returnedChangeSequence,
 } from "./claim-infrastructure";
-import { loadCalendarAttempt } from "./calendar-sync-state";
 
 export async function finishSupersededCalendarAttempt(
   env: CloudflareEnvironment,

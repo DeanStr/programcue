@@ -25,7 +25,9 @@ export function runProcess(command, args, options = {}) {
       if (settled) return;
       settled = true;
       const duration = performance.now() - startedAt;
-      console.error(`[failed] ${label} (${formatDuration(duration)}): ${error.message}`);
+      console.error(
+        `[failed] ${label} (${formatDuration(duration)}): ${error.message}`,
+      );
       resolveRun({ code: 1, duration, label });
     });
     child.once("exit", (code, signal) => {
@@ -35,7 +37,9 @@ export function runProcess(command, args, options = {}) {
       const exitCode = code ?? 1;
       const outcome = exitCode === 0 ? "passed" : "failed";
       const signalNote = signal ? `, signal ${signal}` : "";
-      console.log(`[${outcome}] ${label} (${formatDuration(duration)}${signalNote})`);
+      console.log(
+        `[${outcome}] ${label} (${formatDuration(duration)}${signalNote})`,
+      );
       resolveRun({ code: exitCode, duration, label });
     });
   });

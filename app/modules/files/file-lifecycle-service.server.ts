@@ -314,7 +314,8 @@ export class FileLifecycleService {
       );
     }
     const change = results.at(-1)?.results[0] as
-      { sequence: number } | undefined;
+      | { sequence: number }
+      | undefined;
     if (!change || !Number.isSafeInteger(change.sequence)) {
       throw new Error(
         "The committed file erasure change cursor was not recorded.",

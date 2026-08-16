@@ -6,11 +6,11 @@ import { getCloudflareContext } from "~/platform/cloudflare-context";
 
 export async function loader({ request, context }: LoaderFunctionArgs) {
   const { env } = getCloudflareContext(context);
-  const viewer = await requireCurrentEventRole(
-    request,
-    env,
-    ["owner", "administrator", "committee_chair"],
-  );
+  const viewer = await requireCurrentEventRole(request, env, [
+    "owner",
+    "administrator",
+    "committee_chair",
+  ]);
   const search = new URL(request.url).searchParams;
   const query = search.get("q") ?? "";
   if (query.trim().length < 2) return { records: [] };

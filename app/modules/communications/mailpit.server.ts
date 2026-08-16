@@ -1,10 +1,7 @@
 import { z } from "zod";
 
 import { readBoundedResponseJson } from "~/platform/http/read-response";
-import type {
-  EmailProvider,
-  SendEmailInput,
-} from "./email-provider";
+import type { EmailProvider, SendEmailInput } from "./email-provider";
 
 const mailpitResponseSchema = z.object({ ID: z.string().min(1).max(512) });
 const emailSchema = z.email();
@@ -14,7 +11,10 @@ const PROVIDER_RESPONSE_MAX_BYTES = 64 * 1_024;
 type MailpitAddress = { Email: string; Name?: string };
 
 export class MailpitDeliveryError extends Error {
-  constructor(readonly status: number, message: string) {
+  constructor(
+    readonly status: number,
+    message: string,
+  ) {
     super(message);
     this.name = "MailpitDeliveryError";
   }
@@ -34,7 +34,10 @@ function parseAddress(value: string): MailpitAddress {
   const named = /^(.*?)\s*<([^<>]+)>$/.exec(trimmed);
   const email = (named?.[2] ?? trimmed).trim();
   if (!emailSchema.safeParse(email).success) {
-    throw new MailpitDeliveryError(0, "Mailpit email delivery requires a valid address.");
+    throw new MailpitDeliveryError(
+      0,
+      "Mailpit email delivery requires a valid address.",
+    );
   }
   const name = named?.[1]?.trim().replace(/^(["'])(.*)\1$/, "$2");
   return { Email: email, ...(name ? { Name: name } : {}) };
@@ -83,9 +86,7 @@ export class MailpitEmailProvider implements EmailProvider {
           "Message-ID": await deterministicMessageId(input.idempotencyKey),
           "X-Program-Cue-Idempotency-Key": input.idempotencyKey,
         },
-        ...(input.replyTo
-          ? { ReplyTo: [parseAddress(input.replyTo)] }
-          : {}),
+        ...(input.replyTo ? { ReplyTo: [parseAddress(input.replyTo)] } : {}),
         ...(input.attachments?.length
           ? {
               Attachments: input.attachments.map((attachment) => ({
@@ -102,9 +103,10 @@ export class MailpitEmailProvider implements EmailProvider {
       PROVIDER_RESPONSE_MAX_BYTES,
     ).catch(() => null);
     if (!response.ok) {
-      const error = body && typeof body === "object"
-        ? body as Record<string, unknown>
-        : {};
+      const error =
+        body && typeof body === "object"
+          ? (body as Record<string, unknown>)
+          : {};
       throw new MailpitDeliveryError(
         response.status,
         String(

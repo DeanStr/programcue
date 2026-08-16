@@ -19,7 +19,8 @@ export function fieldLabel(key: string) {
 export function fieldValue(value: unknown): string {
   if (value === null || value === undefined || value === "") return "Empty";
   if (typeof value === "boolean") return value ? "Yes" : "No";
-  if (typeof value === "number") return new Intl.NumberFormat("en").format(value);
+  if (typeof value === "number")
+    return new Intl.NumberFormat("en").format(value);
   if (typeof value === "string") return value;
   if (Array.isArray(value))
     return value.length ? value.map(fieldValue).join(", ") : "Empty";

@@ -132,11 +132,7 @@ export async function action({ request, params, context }: Route.ActionArgs) {
 export function loader({ request, context }: Route.LoaderArgs) {
   const { env } = getCloudflareContext(context);
   const response = apiFailure(
-    new ApiError(
-      405,
-      "METHOD_NOT_ALLOWED",
-      "Operation commands require POST",
-    ),
+    new ApiError(405, "METHOD_NOT_ALLOWED", "Operation commands require POST"),
     request,
     env.APP_ENV ?? "unknown",
   );

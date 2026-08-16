@@ -54,9 +54,9 @@ export abstract class IntegrationConnectionWorkflows extends IntegrationServiceF
         ) as unknown;
         const demoNoWriteFixture = Boolean(
           configuration &&
-          typeof configuration === "object" &&
-          "demoNoWriteFixture" in configuration &&
-          configuration.demoNoWriteFixture === true,
+            typeof configuration === "object" &&
+            "demoNoWriteFixture" in configuration &&
+            configuration.demoNoWriteFixture === true,
         );
         return {
           ...connection,

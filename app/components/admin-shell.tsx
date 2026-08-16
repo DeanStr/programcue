@@ -457,7 +457,7 @@ export function AdminShell({
   );
   const recordSearchPending = Boolean(
     currentRecordSearchKey &&
-    (recordSearch.state !== "idle" || currentRecordSearchResult === null),
+      (recordSearch.state !== "idle" || currentRecordSearchResult === null),
   );
 
   useEffect(() => {

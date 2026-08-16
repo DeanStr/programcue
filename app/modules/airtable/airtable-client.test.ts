@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 
 import {
   AirtableClient,
-  AirtableProviderError,
+  type AirtableProviderError,
 } from "./airtable-client.server";
 
 const credentials = {
@@ -240,11 +240,12 @@ describe("Airtable Web API client", () => {
 
   it("rejects an oversized successful provider body", async () => {
     const client = new AirtableClient(credentials, {
-      fetch: vi.fn(async () =>
-        new Response("{}", {
-          status: 200,
-          headers: { "content-length": String(4 * 1_024 * 1_024 + 1) },
-        }),
+      fetch: vi.fn(
+        async () =>
+          new Response("{}", {
+            status: 200,
+            headers: { "content-length": String(4 * 1_024 * 1_024 + 1) },
+          }),
       ) as typeof fetch,
     });
 

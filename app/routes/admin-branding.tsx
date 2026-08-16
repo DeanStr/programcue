@@ -412,7 +412,8 @@ function AssetUpload({
 
 export default function AdminBranding({ loaderData }: Route.ComponentProps) {
   const actionData = useActionData<typeof action>() as
-    BrandingActionResponse | undefined;
+    | BrandingActionResponse
+    | undefined;
   const navigation = useNavigation();
   const submit = useSubmit();
   const { confirm, dialog } = useConfirm();

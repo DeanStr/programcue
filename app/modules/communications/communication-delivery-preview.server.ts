@@ -21,7 +21,7 @@ import { emailProviderConfigurationIssue } from "./email-provider.server";
 import { renderProgramCueEmail } from "./email-templates/render-email.server";
 import {
   renderMergeTemplate,
-  representativeMergeValues,
+  type representativeMergeValues,
 } from "./merge-template";
 
 export abstract class CommunicationDeliveryPreview extends CommunicationDeliveryFoundation {

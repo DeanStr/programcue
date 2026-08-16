@@ -34,9 +34,13 @@ describe("managed programme embeds", () => {
       configurationJson: JSON.stringify(configuration),
     });
 
-    let embed = (await service.list(admin)).find((candidate) => candidate.id === id)!;
+    let embed = (await service.list(admin)).find(
+      (candidate) => candidate.id === id,
+    )!;
     expect(embed).toMatchObject({ slug, status: "draft", revision: 1 });
-    expect(await service.getPublic("future-of-events-2027", slug)).toMatchObject({
+    expect(
+      await service.getPublic("future-of-events-2027", slug),
+    ).toMatchObject({
       status: "draft",
     });
     await testEnvironment.DB.prepare(
@@ -61,10 +65,15 @@ describe("managed programme embeds", () => {
       revision: 1,
       name: "Homepage schedule",
       installationNote: "Homepage below the hero",
-      configurationJson: JSON.stringify({ ...configuration, density: "compact" }),
+      configurationJson: JSON.stringify({
+        ...configuration,
+        density: "compact",
+      }),
       confirmed: "yes",
     });
-    embed = (await service.list(admin)).find((candidate) => candidate.id === id)!;
+    embed = (await service.list(admin)).find(
+      (candidate) => candidate.id === id,
+    )!;
     expect(embed).toMatchObject({
       name: "Homepage schedule",
       slug,
@@ -308,7 +317,9 @@ describe("managed programme embeds", () => {
     });
     const racingEnvironment = new Proxy(testEnvironment, {
       get(target, property) {
-        return property === "DB" ? racingDatabase : Reflect.get(target, property);
+        return property === "DB"
+          ? racingDatabase
+          : Reflect.get(target, property);
       },
     });
 

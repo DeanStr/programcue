@@ -8,11 +8,7 @@ import {
 describe("Worker security headers", () => {
   it("enforces transport security in production and for invalid environment values", () => {
     const production = new Headers();
-    applySecurityHeaders(
-      production,
-      "production",
-      "youtube,vimeo,google_maps",
-    );
+    applySecurityHeaders(production, "production", "youtube,vimeo,google_maps");
     expect(production.get("strict-transport-security")).toBe(
       "max-age=31536000",
     );

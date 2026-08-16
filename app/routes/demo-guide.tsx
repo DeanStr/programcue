@@ -262,10 +262,10 @@ export async function loader({ request, context }: Route.LoaderArgs) {
       email: Boolean(!emailConfigurationIssue && verifiedSender),
       calendar: Boolean(
         env.CALENDAR_CREDENTIALS_KEY?.trim() &&
-        ((env.GOOGLE_CALENDAR_CLIENT_ID?.trim() &&
-          env.GOOGLE_CALENDAR_CLIENT_SECRET?.trim()) ||
-          (env.MICROSOFT_CALENDAR_CLIENT_ID?.trim() &&
-            env.MICROSOFT_CALENDAR_CLIENT_SECRET?.trim())),
+          ((env.GOOGLE_CALENDAR_CLIENT_ID?.trim() &&
+            env.GOOGLE_CALENDAR_CLIENT_SECRET?.trim()) ||
+            (env.MICROSOFT_CALENDAR_CLIENT_ID?.trim() &&
+              env.MICROSOFT_CALENDAR_CLIENT_SECRET?.trim())),
       ),
       ai: aiProvider.configured,
     },

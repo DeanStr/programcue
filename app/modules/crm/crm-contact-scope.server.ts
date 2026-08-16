@@ -137,7 +137,9 @@ export async function unavailableExistingEmails(
     )
       .bind(...batch, ...organisationRelationshipBindings(viewer))
       .all<{ email: string }>();
-    rows.results.forEach((row) => unavailable.add(row.email));
+    rows.results.forEach((row) => {
+      unavailable.add(row.email);
+    });
   }
   return unavailable;
 }

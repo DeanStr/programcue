@@ -2,7 +2,6 @@ import { z } from "zod";
 
 import { AirtableProviderBoundary } from "~/modules/airtable/airtable-provider-boundary.server";
 import {
-  decodePrivateCursor,
   encodePrivateCursor,
   isoTimestamp,
   parseStrictQuery,

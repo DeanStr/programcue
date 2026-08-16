@@ -1,17 +1,11 @@
 import { env } from "cloudflare:test";
-import { afterAll, beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it } from "vitest";
 
 import type { Viewer } from "~/platform/auth/authorize.server";
 import { ensureDemoData } from "~/platform/demo/seed.server";
-import { formSchemaSchema } from "~/modules/submissions/submission-schema";
-import { ensureDemoEvaluationData } from "./demo.server";
-import { processCommunicationSend } from "../../../workers/queue/communication-send";
-import { EvaluationDecisionService } from "./evaluation-decision-service.server";
 import {
   EvaluationRevisionConflictError,
   EvaluationService,
-  EvaluationStateError,
-  EvaluationValidationError,
 } from "./evaluation-service.server";
 
 const admin: Viewer = {
@@ -33,38 +27,6 @@ const evaluator: Viewer = {
   eventId: "evt-foe-2025",
   demo: true,
 };
-
-const committeeChair: Viewer = {
-  ...admin,
-  personId: admin.personId,
-  name: "Casey Chair",
-  email: "casey.chair@example.com",
-  role: "committee_chair",
-};
-
-function evaluationEnvironment(base = env as unknown as CloudflareEnvironment) {
-  return {
-    ...base,
-    OPERATIONS_QUEUE: { send: async () => undefined },
-  } as unknown as CloudflareEnvironment;
-}
-
-async function invitationTokenIdentifier(snapshotJson: string) {
-  const body = JSON.parse(snapshotJson).content.body as string;
-  const token = new URL(
-    body.match(/https?:\/\/\S+/u)?.[0] ?? "",
-  ).searchParams.get("token");
-  if (!token) throw new Error("The invitation snapshot is missing its token.");
-  const digest = new Uint8Array(
-    await crypto.subtle.digest("SHA-256", new TextEncoder().encode(token)),
-  );
-  let binary = "";
-  for (const byte of digest) binary += String.fromCharCode(byte);
-  return btoa(binary)
-    .replaceAll("+", "-")
-    .replaceAll("/", "_")
-    .replace(/=+$/u, "");
-}
 
 const criteria = [
   {

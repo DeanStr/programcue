@@ -96,7 +96,13 @@ export async function action({ request, params, context }: Route.ActionArgs) {
     try {
       body = JSON.parse(rawBody);
     } catch {
-      return response({ error: "That request could not be read. Reload the page and try again." }, 400);
+      return response(
+        {
+          error:
+            "That request could not be read. Reload the page and try again.",
+        },
+        400,
+      );
     }
     const scopeInput = scopeSchema.parse(body);
     const authorized = await new SubmissionService(
@@ -113,7 +119,10 @@ export async function action({ request, params, context }: Route.ActionArgs) {
       const idempotencyKey = request.headers.get("idempotency-key")?.trim();
       if (!idempotencyKey)
         return response(
-          { error: "That request was missing information needed to avoid duplicates. Reload the page and try again." },
+          {
+            error:
+              "That request was missing information needed to avoid duplicates. Reload the page and try again.",
+          },
           400,
         );
       const record = z
@@ -177,7 +186,9 @@ export async function action({ request, params, context }: Route.ActionArgs) {
     if (error instanceof ZodError)
       return response(
         {
-          error: error.issues[0]?.message ?? "That upload request could not be read.",
+          error:
+            error.issues[0]?.message ??
+            "That upload request could not be read.",
           issues: error.issues,
         },
         422,

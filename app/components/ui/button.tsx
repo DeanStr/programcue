@@ -20,12 +20,23 @@ const buttonVariants = cva("btn", {
   defaultVariants: { variant: "default", size: "default" },
 });
 
-export type ButtonProps = ButtonHTMLAttributes<HTMLButtonElement> & VariantProps<typeof buttonVariants> & {
-  pending?: boolean;
-  pendingLabel?: ReactNode;
-};
+export type ButtonProps = ButtonHTMLAttributes<HTMLButtonElement> &
+  VariantProps<typeof buttonVariants> & {
+    pending?: boolean;
+    pendingLabel?: ReactNode;
+  };
 
-export function Button({ className, variant, size, type = "button", pending = false, pendingLabel, disabled, children, ...props }: ButtonProps) {
+export function Button({
+  className,
+  variant,
+  size,
+  type = "button",
+  pending = false,
+  pendingLabel,
+  disabled,
+  children,
+  ...props
+}: ButtonProps) {
   return (
     <button
       type={type}
@@ -34,7 +45,14 @@ export function Button({ className, variant, size, type = "button", pending = fa
       aria-busy={pending || undefined}
       {...props}
     >
-      {pending ? <><LoaderCircle className="pc-spin" aria-hidden size={15} />{pendingLabel ?? children}</> : children}
+      {pending ? (
+        <>
+          <LoaderCircle className="pc-spin" aria-hidden size={15} />
+          {pendingLabel ?? children}
+        </>
+      ) : (
+        children
+      )}
     </button>
   );
 }

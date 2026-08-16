@@ -49,7 +49,7 @@ export function reviewableSubmissionSql(
              OR current_cycle_assignment.last_operation_id <> ?
            )`
                : ""
-           }
+}
       )
     )`
       : "";

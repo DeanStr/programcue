@@ -589,7 +589,12 @@ export class SubmissionCoSpeakerWorkflows extends SubmissionServiceFoundation {
         speakerEmail: string;
         roleLabel: "Co-author" | "Co-speaker" | "Co-presenter";
         speakerInvitationStatus:
-          "pending" | "sent" | "claimed" | "declined" | "expired" | "revoked";
+          | "pending"
+          | "sent"
+          | "claimed"
+          | "declined"
+          | "expired"
+          | "revoked";
         claimTokenHash: string | null;
         communicationId: string;
         deliveryId: string;

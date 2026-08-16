@@ -143,7 +143,8 @@ function chatMessages(request: OpenAiResponsesRequest): ChatMessage[] {
   }
 
   let pendingAssistant:
-    { content: string[]; toolCalls: ChatToolCall[] } | undefined;
+    | { content: string[]; toolCalls: ChatToolCall[] }
+    | undefined;
   const flushAssistant = () => {
     if (!pendingAssistant) return;
     const content = pendingAssistant.content.join("\n\n").trim();

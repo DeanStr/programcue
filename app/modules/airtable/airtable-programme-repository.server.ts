@@ -61,7 +61,9 @@ type ProgrammeSource = {
 
 type ProgrammeEntity = {
   entityType:
-    "published_speaker" | "published_session" | "published_schedule_entry";
+    | "published_speaker"
+    | "published_session"
+    | "published_schedule_entry";
   entityId: string;
   key: string;
   label: string;
@@ -784,10 +786,12 @@ export class AirtableProgrammeRepository {
           throw new AirtableProgrammeSchemaError(
             `Airtable managed record ${record.id} has no status.`,
           );
-        if (!(
-          record.fields.Status === "active" ||
-          record.fields.Status === "retired"
-        ))
+        if (
+          !(
+            record.fields.Status === "active" ||
+            record.fields.Status === "retired"
+          )
+        )
           throw new AirtableProgrammeSchemaError(
             `Airtable managed record ${record.id} must have active or retired status.`,
           );

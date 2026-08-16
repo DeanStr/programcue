@@ -139,9 +139,7 @@ export default function AdminEventRepositoryRecovery({
   const { confirm, dialog } = useConfirm();
   const busy = navigation.state !== "idle";
   const pendingRecovery = Boolean(
-    actionData &&
-      "pendingRecovery" in actionData &&
-      actionData.pendingRecovery,
+    actionData && "pendingRecovery" in actionData && actionData.pendingRecovery,
   );
   const active = loaderData.activationStatus === "active";
   const discarded = loaderData.activationStatus === "discarded";
@@ -243,9 +241,9 @@ export default function AdminEventRepositoryRecovery({
             <AlertTriangle aria-hidden size={19} />
           </div>
           <p>
-            Setup ran out of time without finishing. Move this event to
-            recovery before retrying Airtable, keeping it in Program Cue or
-            discarding it. This action does not contact Airtable.
+            Setup ran out of time without finishing. Move this event to recovery
+            before retrying Airtable, keeping it in Program Cue or discarding
+            it. This action does not contact Airtable.
           </p>
           <Form method="post">
             <input type="hidden" name="intent" value="fail_stalled_creation" />
@@ -277,7 +275,9 @@ export default function AdminEventRepositoryRecovery({
         <div className="grid grid-2 mt">
           <section className="card pad">
             <div className="card-title">
-              <h2>{retryFenced ? "Airtable retry unavailable" : "Retry Airtable"}</h2>
+              <h2>
+                {retryFenced ? "Airtable retry unavailable" : "Retry Airtable"}
+              </h2>
               {retryFenced ? (
                 <AlertTriangle aria-hidden size={19} />
               ) : (

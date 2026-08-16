@@ -5,7 +5,8 @@ const RESERVED_OR_LOCAL_EMAIL_DOMAIN =
   /(?:^|\.)(?:example(?:\.(?:com|net|org))?|invalid|localhost|test)$/iu;
 
 export type EmailDeliveryIssue =
-  "Invalid email address" | "Reserved or local-only domain";
+  | "Invalid email address"
+  | "Reserved or local-only domain";
 
 /**
  * Returns the concrete reason an address cannot be sent to. Reserved domains

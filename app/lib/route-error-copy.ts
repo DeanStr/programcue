@@ -55,7 +55,8 @@ const STATUS_COPY: ReadonlyArray<{
   {
     matches: (status) => status === 503,
     title: "Temporarily unavailable",
-    message: "This part of Program Cue is not available right now. Try again shortly.",
+    message:
+      "This part of Program Cue is not available right now. Try again shortly.",
   },
   {
     // Deliberately not "your work has not been lost": this copy is shared by

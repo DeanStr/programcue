@@ -1,6 +1,5 @@
 import { z } from "zod";
 
-import type { Viewer } from "~/platform/auth/authorize.server";
 import {
   FileMultipartConflictError,
   FileMultipartIncompleteError,
@@ -8,7 +7,7 @@ import {
 } from "./multipart-upload-errors";
 import { MultipartR2Provider } from "./multipart-r2-provider.server";
 import {
-  assetKindSchema,
+  type assetKindSchema,
   detectInspectionContentType,
   DIRECT_MULTIPART_PART_SIZE_BYTES,
   type FileInspectionSource,
@@ -482,7 +481,8 @@ export class MultipartUploadService {
       ),
     ]);
     const version = results[1]?.results?.[0] as
-      { versionNumber?: number } | undefined;
+      | { versionNumber?: number }
+      | undefined;
     if (!Number.isSafeInteger(Number(version?.versionNumber)))
       throw new Error(
         "The multipart file version could not be allocated atomically.",

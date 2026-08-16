@@ -71,7 +71,9 @@ export type EventSetup = {
   };
   retentionMonths: 12 | 24 | 36;
   submissionAccessMode:
-    "email_verified" | "account_required" | "password_protected";
+    | "email_verified"
+    | "account_required"
+    | "password_protected";
   allowAnonymousDrafts: boolean;
   duplicatePersonWarnings: boolean;
   filePolicy: EventFilePolicy;
@@ -994,7 +996,8 @@ export class D1EventRepository implements EventRepository {
         );
       }
       const change = results.at(-1)?.results[0] as
-        { sequence: number } | undefined;
+        | { sequence: number }
+        | undefined;
       if (!change || !Number.isSafeInteger(change.sequence)) {
         throw new Error(
           "The event settings change cursor was not committed with the update.",

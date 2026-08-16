@@ -13,7 +13,8 @@ test("the event speaker workflow migration remains complete through Wrangler's S
 
   assert.equal(statements.length, 7);
   assert.equal(
-    statements.filter((statement) => statement.includes("CREATE TRIGGER")).length,
+    statements.filter((statement) => statement.includes("CREATE TRIGGER"))
+      .length,
     4,
   );
   for (const trigger of statements.filter((statement) =>

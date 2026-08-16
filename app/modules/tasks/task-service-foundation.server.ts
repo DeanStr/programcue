@@ -62,7 +62,12 @@ export type TemplateRow = {
     | "administrator_only";
   impact: "critical" | "high" | "medium" | "low";
   evidenceMode:
-    "none" | "checkbox" | "file" | "text" | "link" | "admin_approval";
+    | "none"
+    | "checkbox"
+    | "file"
+    | "text"
+    | "link"
+    | "admin_approval";
   dueAnchor: "none" | "acceptance" | "session_start" | "fixed";
   dueOffsetMinutes: number | null;
   fixedDueAt: number | null;
@@ -382,7 +387,8 @@ export class TaskServiceFoundation {
         timezone: string;
         startsAt: number;
       }>();
-    if (!row) throw new Response("This event could not be found.", { status: 404 });
+    if (!row)
+      throw new Response("This event could not be found.", { status: 404 });
     return row;
   }
 

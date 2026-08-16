@@ -257,13 +257,13 @@ export function useReviewWorkbenchState({
       : (workspace.review?.revision ?? 0);
   const committedWarning = Boolean(
     fetcher.data &&
-    "committed" in fetcher.data &&
-    fetcher.data.committed === true,
+      "committed" in fetcher.data &&
+      fetcher.data.committed === true,
   );
   const saveFailed = Boolean(
     fetcher.data &&
-    !committedWarning &&
-    ("error" in fetcher.data || ("ok" in fetcher.data && !fetcher.data.ok)),
+      !committedWarning &&
+      ("error" in fetcher.data || ("ok" in fetcher.data && !fetcher.data.ok)),
   );
   const selectedIndex = workspace.assignments.findIndex(
     (assignment) => assignment.id === workspace.selected?.id,

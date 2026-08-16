@@ -17,10 +17,7 @@ test("E2E runtime isolates a configured port and Wrangler state directory", () =
   assert.equal(runtime.port, 5184);
   assert.equal(runtime.inspectorPort, 15184);
   assert.equal(runtime.origin, "http://127.0.0.1:5184");
-  assert.equal(
-    runtime.statePathFromRepository,
-    ".wrangler/e2e-state-shard-2",
-  );
+  assert.equal(runtime.statePathFromRepository, ".wrangler/e2e-state-shard-2");
 });
 
 test("E2E runtime rejects state outside the repository Wrangler directory", () => {
@@ -47,8 +44,7 @@ test("E2E runtime validates ports and shard counts", () => {
     /PROGRAM_CUE_E2E_PORT must be an integer/,
   );
   assert.throws(
-    () =>
-      resolveE2eRuntime({ PROGRAM_CUE_E2E_INSPECTOR_PORT: "not-a-port" }),
+    () => resolveE2eRuntime({ PROGRAM_CUE_E2E_INSPECTOR_PORT: "not-a-port" }),
     /PROGRAM_CUE_E2E_INSPECTOR_PORT must be an integer/,
   );
   assert.equal(resolveE2eShardCount({}), 5);

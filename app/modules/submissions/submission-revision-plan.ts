@@ -125,10 +125,7 @@ export function planSubmittedRevisionSpeakers(input: {
       `Submission ${input.submissionId} has an invalid primary-speaker relationship.`,
     );
   }
-  const submittedByEmail = new Map<
-    string,
-    DraftPayload["speakers"][number]
-  >();
+  const submittedByEmail = new Map<string, DraftPayload["speakers"][number]>();
   for (const speaker of input.submitted) {
     const email = speaker.email.toLowerCase();
     if (submittedByEmail.has(email)) {

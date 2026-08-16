@@ -749,18 +749,19 @@ a {
 .grid-4,
 .grid-5 {
   grid-template-columns: repeat(
-    auto-fill,
-    minmax(
-      max(
-        min(var(--grid-min), 100%),
-        calc(
-          (100% - (var(--grid-cols) - 1) * var(--grid-gap)) / var(--grid-cols) -
+      auto-fill,
+      minmax(
+        max(
+          min(var(--grid-min), 100%),
+          calc(
+            (100% - (var(--grid-cols) - 1) * var(--grid-gap)) /
+            var(--grid-cols) -
             0.02px
-        )
-      ),
-      1fr
-    )
-  );
+          )
+        ),
+        1fr
+      )
+    );
 }
 .grid-2 {
   --grid-cols: 2;

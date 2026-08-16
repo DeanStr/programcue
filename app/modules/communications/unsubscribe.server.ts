@@ -1,6 +1,9 @@
 import { z } from "zod";
 
-import { communicationCategorySchema, type CommunicationCategory } from "./communication-schema";
+import {
+  communicationCategorySchema,
+  type CommunicationCategory,
+} from "./communication-schema";
 
 const tokenLifetimeSeconds = 365 * 24 * 60 * 60;
 const tokenPurpose = "programcue:communication-unsubscribe:v1";
@@ -53,13 +56,19 @@ function applicationOrigin(env: CloudflareEnvironment) {
   try {
     configured = new URL(env.BETTER_AUTH_URL);
   } catch {
-    throw new UnsubscribeConfigurationError("BETTER_AUTH_URL must be an absolute HTTP(S) URL.");
+    throw new UnsubscribeConfigurationError(
+      "BETTER_AUTH_URL must be an absolute HTTP(S) URL.",
+    );
   }
   if (!(["http:", "https:"] as string[]).includes(configured.protocol)) {
-    throw new UnsubscribeConfigurationError("BETTER_AUTH_URL must be an absolute HTTP(S) URL.");
+    throw new UnsubscribeConfigurationError(
+      "BETTER_AUTH_URL must be an absolute HTTP(S) URL.",
+    );
   }
   if (env.APP_ENV === "production" && configured.protocol !== "https:") {
-    throw new UnsubscribeConfigurationError("BETTER_AUTH_URL must use HTTPS in production.");
+    throw new UnsubscribeConfigurationError(
+      "BETTER_AUTH_URL must use HTTPS in production.",
+    );
   }
   return configured.origin;
 }
@@ -67,7 +76,10 @@ function applicationOrigin(env: CloudflareEnvironment) {
 function encodeBase64Url(bytes: Uint8Array) {
   let binary = "";
   for (const byte of bytes) binary += String.fromCharCode(byte);
-  return btoa(binary).replaceAll("+", "-").replaceAll("/", "_").replace(/=+$/, "");
+  return btoa(binary)
+    .replaceAll("+", "-")
+    .replaceAll("/", "_")
+    .replace(/=+$/, "");
 }
 
 function decodeBase64Url(value: string) {
@@ -108,7 +120,8 @@ async function parseAndVerifyToken(
   nowSeconds = Math.floor(Date.now() / 1_000),
 ) {
   const parts = token.split(".");
-  if (parts.length !== 2 || !parts[0] || !parts[1]) throw new InvalidUnsubscribeTokenError();
+  if (parts.length !== 2 || !parts[0] || !parts[1])
+    throw new InvalidUnsubscribeTokenError();
   const [encodedPayload, encodedSignature] = parts;
   const signature = decodeBase64Url(encodedSignature);
   const verified = await crypto.subtle.verify(
@@ -121,7 +134,9 @@ async function parseAndVerifyToken(
 
   let decoded: unknown;
   try {
-    decoded = JSON.parse(new TextDecoder().decode(decodeBase64Url(encodedPayload)));
+    decoded = JSON.parse(
+      new TextDecoder().decode(decodeBase64Url(encodedPayload)),
+    );
   } catch {
     throw new InvalidUnsubscribeTokenError();
   }
@@ -148,13 +163,22 @@ async function preferenceForToken(env: CloudflareEnvironment, token: string) {
       JOIN communications c ON c.id = d.communication_id AND c.event_id = d.event_id
       JOIN events e ON e.id = d.event_id
      WHERE d.id = ? AND d.channel = 'email' AND c.channel = 'email' AND c.kind = 'optional'
-  `).bind(payload.deliveryId).first<
-    Omit<UnsubscribePreference, "category" | "isUnsubscribed"> & { category: string; isUnsubscribed: number }
-  >();
+  `)
+    .bind(payload.deliveryId)
+    .first<
+      Omit<UnsubscribePreference, "category" | "isUnsubscribed"> & {
+        category: string;
+        isUnsubscribed: number;
+      }
+    >();
   if (!row) throw new InvalidUnsubscribeTokenError();
   const category = communicationCategorySchema.safeParse(row.category);
   if (!category.success) throw new InvalidUnsubscribeTokenError();
-  return { ...row, category: category.data, isUnsubscribed: row.isUnsubscribed === 1 } satisfies UnsubscribePreference;
+  return {
+    ...row,
+    category: category.data,
+    isUnsubscribed: row.isUnsubscribed === 1,
+  } satisfies UnsubscribePreference;
 }
 
 export async function createCommunicationUnsubscribeUrl(
@@ -167,9 +191,14 @@ export async function createCommunicationUnsubscribeUrl(
     deliveryId,
     expiresAt: nowSeconds + tokenLifetimeSeconds,
   });
-  const encodedPayload = encodeBase64Url(new TextEncoder().encode(JSON.stringify(payload)));
+  const encodedPayload = encodeBase64Url(
+    new TextEncoder().encode(JSON.stringify(payload)),
+  );
   const token = `${encodedPayload}.${await signPayload(env, encodedPayload)}`;
-  return new URL(`/communications/unsubscribe/${encodeURIComponent(token)}`, applicationOrigin(env)).toString();
+  return new URL(
+    `/communications/unsubscribe/${encodeURIComponent(token)}`,
+    applicationOrigin(env),
+  ).toString();
 }
 
 export async function describeCommunicationUnsubscribe(
@@ -192,12 +221,18 @@ export async function unsubscribeFromOptionalCommunication(
       person_id = COALESCE(excluded.person_id, communication_unsubscribes.person_id),
       reason = 'recipient_unsubscribe', revoked_at = NULL
     WHERE communication_unsubscribes.revoked_at IS NOT NULL
-  `).bind(
-    crypto.randomUUID(),
-    preference.eventId,
-    preference.personId,
-    preference.address,
-    preference.category,
-  ).run();
-  return { ...preference, isUnsubscribed: true, changed: (result.meta.changes ?? 0) === 1 };
+  `)
+    .bind(
+      crypto.randomUUID(),
+      preference.eventId,
+      preference.personId,
+      preference.address,
+      preference.category,
+    )
+    .run();
+  return {
+    ...preference,
+    isUnsubscribed: true,
+    changed: (result.meta.changes ?? 0) === 1,
+  };
 }

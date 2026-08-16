@@ -10,7 +10,13 @@ export type PageHeaderProps = {
   className?: string;
 };
 
-export function PageHeader({ title, description, eyebrow, actions, className }: PageHeaderProps) {
+export function PageHeader({
+  title,
+  description,
+  eyebrow,
+  actions,
+  className,
+}: PageHeaderProps) {
   return (
     <header className={cn("page-head pc-page-header", className)}>
       <div className="pc-page-header-copy">
@@ -18,7 +24,11 @@ export function PageHeader({ title, description, eyebrow, actions, className }: 
         <h1>{title}</h1>
         {description ? <p>{description}</p> : null}
       </div>
-      {actions ? <div className="page-actions" aria-label="Page actions">{actions}</div> : null}
+      {actions ? (
+        <div className="page-actions" aria-label="Page actions">
+          {actions}
+        </div>
+      ) : null}
     </header>
   );
 }

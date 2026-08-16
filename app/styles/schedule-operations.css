@@ -132,7 +132,10 @@
   position: absolute;
   top: calc(var(--pc-entry-offset) * var(--pc-slot-height) / 30);
   inset-inline-start: calc(
-    2px + var(--pc-entry-column) * (100% - 4px) / var(--pc-entry-columns)
+    2px +
+    var(--pc-entry-column) *
+    (100% - 4px) /
+    var(--pc-entry-columns)
   );
   width: calc((100% - 4px) / var(--pc-entry-columns));
   height: calc(var(--pc-entry-minutes) * var(--pc-slot-height) / 30 - 3px);
@@ -279,7 +282,7 @@
     grid-template-columns: 240px minmax(0, 1fr);
   }
   .schedule-conflicts {
-    grid-column: 1/-1;
+    grid-column: 1 / -1;
     position: static;
     max-height: none;
   }
@@ -819,7 +822,7 @@ body.dark-mode .program-cue-api-reference .scalar-api-reference {
   }
 }
 .file-history {
-  grid-column: 2/-1;
+  grid-column: 2 / -1;
 }
 .file-history summary {
   cursor: pointer;

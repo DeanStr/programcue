@@ -98,7 +98,9 @@ export type AiDomainProposalPreview = AiProposalBase & {
 };
 
 export type AiProposalPreview =
-  AiTaskProposalPreview | AiReminderProposalPreview | AiDomainProposalPreview;
+  | AiTaskProposalPreview
+  | AiReminderProposalPreview
+  | AiDomainProposalPreview;
 
 export type AiAttribution = {
   provider: "OpenAI" | "Workers AI" | "Anthropic";

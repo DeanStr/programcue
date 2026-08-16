@@ -94,7 +94,10 @@ describe("Accelevents provider contract", () => {
     };
 
     await expect(
-      new AcceleventsProvider(credentials, fetcher).upsertSession(payload, null),
+      new AcceleventsProvider(credentials, fetcher).upsertSession(
+        payload,
+        null,
+      ),
     ).resolves.toBe("813");
     expect(fetcher).toHaveBeenCalledOnce();
     expect(String(fetcher.mock.calls[0]![0])).toBe(

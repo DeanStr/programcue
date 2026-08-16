@@ -17,8 +17,11 @@ const statusBadgeVariants = cva("status", {
   defaultVariants: { tone: "neutral" },
 });
 
-export type StatusBadgeProps = HTMLAttributes<HTMLSpanElement> & VariantProps<typeof statusBadgeVariants>;
+export type StatusBadgeProps = HTMLAttributes<HTMLSpanElement> &
+  VariantProps<typeof statusBadgeVariants>;
 
 export function StatusBadge({ tone, className, ...props }: StatusBadgeProps) {
-  return <span className={cn(statusBadgeVariants({ tone }), className)} {...props} />;
+  return (
+    <span className={cn(statusBadgeVariants({ tone }), className)} {...props} />
+  );
 }

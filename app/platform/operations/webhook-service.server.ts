@@ -18,7 +18,6 @@ import {
 } from "./webhook-errors";
 import {
   outboundWebhookEventTypeSchema,
-  outboundWebhookEventTypes,
   webhookDeliveryMessageSchema,
   type WebhookDeliveryMessage,
 } from "~/platform/operations/webhook-schema";

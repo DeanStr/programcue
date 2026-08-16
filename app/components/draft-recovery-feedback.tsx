@@ -28,11 +28,7 @@ function statusClass(state: DraftRecoveryState) {
   return "success";
 }
 
-export function DraftRecoveryStatus({
-  state,
-}: {
-  state: DraftRecoveryState;
-}) {
+export function DraftRecoveryStatus({ state }: { state: DraftRecoveryState }) {
   if (state === "idle") return null;
   return (
     <span className={`status ${statusClass(state)}`} role="status">
@@ -68,7 +64,11 @@ export function DraftRecoveryFeedback<T>({
       <span className="row-actions right">
         {needsChoice ? (
           <>
-            <button className="btn small" type="button" onClick={recovery.restore}>
+            <button
+              className="btn small"
+              type="button"
+              onClick={recovery.restore}
+            >
               Restore local edits
             </button>
             <button

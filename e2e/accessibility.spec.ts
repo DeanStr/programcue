@@ -380,10 +380,9 @@ test("resource authoring exposes typed click-to-load video and map blocks", asyn
     ".resource-live-preview .resource-external-embed--youtube",
   );
   await expect(video).toContainText("YouTube video");
-  await expect(video.getByRole("link", { name: /Open on YouTube/ })).toHaveAttribute(
-    "href",
-    "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
-  );
+  await expect(
+    video.getByRole("link", { name: /Open on YouTube/ }),
+  ).toHaveAttribute("href", "https://www.youtube.com/watch?v=dQw4w9WgXcQ");
   await video.getByRole("button", { name: "Load video from YouTube" }).click();
   await expect(video.locator("iframe")).toHaveAttribute(
     "src",
@@ -395,9 +394,9 @@ test("resource authoring exposes typed click-to-load video and map blocks", asyn
   );
 
   await page.getByRole("button", { name: "Map", exact: true }).click();
-  await page.getByRole("textbox", { name: "Venue or address" }).fill(
-    "Barbican Centre, London",
-  );
+  await page
+    .getByRole("textbox", { name: "Venue or address" })
+    .fill("Barbican Centre, London");
   await page.getByRole("button", { name: "Add map" }).click();
   const map = page.locator(
     ".resource-live-preview .resource-external-embed--google_maps",
@@ -406,9 +405,7 @@ test("resource authoring exposes typed click-to-load video and map blocks", asyn
   await expect(
     map.getByRole("link", { name: /Open in Google Maps/ }),
   ).toBeVisible();
-  await page
-    .getByRole("button", { name: "Move Google Maps block up" })
-    .click();
+  await page.getByRole("button", { name: "Move Google Maps block up" }).click();
   await expect(video.locator("iframe")).toHaveCount(0);
   await expect(
     video.getByRole("button", { name: "Load video from YouTube" }),

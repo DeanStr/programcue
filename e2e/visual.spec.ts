@@ -380,10 +380,8 @@ async function expectMobileCommandOverlaysContained(page: Page) {
   await page.keyboard.press("Escape");
 }
 
-test.describe.serial(
-  "common-laptop visual coverage",
-  { tag: "@laptop-visual" },
-  () => {
+test.describe
+  .serial("common-laptop visual coverage", { tag: "@laptop-visual" }, () => {
     test.beforeAll(async ({ request }) => {
       await prepareVisualBaseline(request);
     });
@@ -465,123 +463,123 @@ test.describe.serial(
       ).toBeInViewport();
       await captureLaptopViewport(page, "communications-preview");
     });
-  },
-);
-
-test.describe.serial("responsive visual inventory", () => {
-  test.beforeAll(async ({ request }) => {
-    await prepareVisualBaseline(request);
   });
 
-  test.afterAll(async ({ request }) => {
-    await resetDemoEvent(request);
-  });
+test.describe
+  .serial("responsive visual inventory", () => {
+    test.beforeAll(async ({ request }) => {
+      await prepareVisualBaseline(request);
+    });
 
-  for (const surface of SURFACES) {
-    test(`${surface.name} uses the Program Cue visual system`, async ({
+    test.afterAll(async ({ request }) => {
+      await resetDemoEvent(request);
+    });
+
+    for (const surface of SURFACES) {
+      test(`${surface.name} uses the Program Cue visual system`, async ({
+        page,
+      }, testInfo) => {
+        if (surface.role) await selectDemoRole(page, surface.role);
+        await openHydrated(page, surface.path);
+        await expect(
+          page.getByRole("heading", { level: 1 }).first(),
+        ).toBeVisible();
+        await waitForSurfaceReady(page, surface.name);
+        const isolateFixedSpeakerNavigation =
+          testInfo.project.name === "mobile-chromium" &&
+          surface.role === "speaker";
+        let fixedNavigationStyle: Awaited<
+          ReturnType<Page["addStyleTag"]>
+        > | null = null;
+        if (isolateFixedSpeakerNavigation) {
+          const navigation = page.locator(".speaker-nav");
+          await captureState(page, navigation, `${surface.name}-navigation`);
+          fixedNavigationStyle = await page.addStyleTag({
+            content: ".speaker-nav { visibility: hidden !important; }",
+          });
+        }
+        try {
+          await expect(page.locator("body")).toHaveScreenshot(
+            `${surface.name}.png`,
+          );
+        } finally {
+          await fixedNavigationStyle?.evaluate((style) =>
+            style.parentNode?.removeChild(style),
+          );
+        }
+        if (
+          testInfo.project.name === "mobile-chromium" &&
+          surface.name === "command-centre"
+        ) {
+          await expectMobileCommandOverlaysContained(page);
+        }
+        await expectDocumentContained(page, surface.name);
+      });
+    }
+
+    test("distinctive high-risk surfaces retain reviewed visual baselines", async ({
       page,
     }, testInfo) => {
-      if (surface.role) await selectDemoRole(page, surface.role);
-      await openHydrated(page, surface.path);
-      await expect(
-        page.getByRole("heading", { level: 1 }).first(),
-      ).toBeVisible();
-      await waitForSurfaceReady(page, surface.name);
-      const isolateFixedSpeakerNavigation =
-        testInfo.project.name === "mobile-chromium" &&
-        surface.role === "speaker";
-      let fixedNavigationStyle: Awaited<
-        ReturnType<Page["addStyleTag"]>
-      > | null = null;
-      if (isolateFixedSpeakerNavigation) {
-        const navigation = page.locator(".speaker-nav");
-        await captureState(page, navigation, `${surface.name}-navigation`);
-        fixedNavigationStyle = await page.addStyleTag({
-          content: ".speaker-nav { visibility: hidden !important; }",
-        });
-      }
-      try {
-        await expect(page.locator("body")).toHaveScreenshot(
-          `${surface.name}.png`,
-        );
-      } finally {
-        await fixedNavigationStyle?.evaluate((style) =>
-          style.parentNode?.removeChild(style),
+      let surfaces: readonly Surface[];
+      if (testInfo.project.name === "desktop-chromium") {
+        surfaces = [
+          { name: "evaluation-admin", path: "/admin/review" },
+          { name: "programme-admin", path: "/admin/programme" },
+        ];
+      } else if (testInfo.project.name === "mobile-chromium") {
+        surfaces = [
+          { name: "evaluation-admin", path: "/admin/review" },
+          { name: "tasks-readiness", path: "/admin/tasks" },
+          {
+            name: "public-speaker-gallery",
+            path: "/public/programme/future-of-events-2027/gallery",
+          },
+          {
+            name: "speaker-profile",
+            path: "/participant/profile",
+            role: "speaker",
+          },
+        ];
+      } else {
+        throw new Error(
+          `High-risk visual surfaces are not configured for Playwright project "${testInfo.project.name}".`,
         );
       }
-      if (
-        testInfo.project.name === "mobile-chromium" &&
-        surface.name === "command-centre"
-      ) {
-        await expectMobileCommandOverlaysContained(page);
+
+      for (const surface of surfaces) {
+        if (surface.role) await selectDemoRole(page, surface.role);
+        await openHydrated(page, surface.path);
+        await expect(
+          page.getByRole("heading", { level: 1 }).first(),
+        ).toBeVisible();
+        if (
+          testInfo.project.name === "mobile-chromium" &&
+          surface.name === "evaluation-admin"
+        ) {
+          await page.getByRole("button", { name: /Proposal queue/ }).click();
+        }
+        await waitForSurfaceReady(page, surface.name);
+        // Locator screenshots stitch long pages from viewport-sized tiles.
+        // Normalize already-covered fixed navigation so it is not repeated at
+        // every stitch boundary; the dashboard baseline owns the speaker nav.
+        const fullPageCaptureCss =
+          testInfo.project.name === "mobile-chromium" &&
+          surface.name === "evaluation-admin"
+            ? ".pc-admin-section-nav { position: static !important; }"
+            : testInfo.project.name === "mobile-chromium" &&
+                surface.role === "speaker"
+              ? ".speaker-nav { visibility: hidden !important; }"
+              : null;
+        const fullPageCaptureStyle = fullPageCaptureCss
+          ? await page.addStyleTag({ content: fullPageCaptureCss })
+          : null;
+        try {
+          await captureState(page, page.locator("body"), surface.name);
+        } finally {
+          await fullPageCaptureStyle?.evaluate((style) =>
+            style.parentNode?.removeChild(style),
+          );
+        }
       }
-      await expectDocumentContained(page, surface.name);
     });
-  }
-
-  test("distinctive high-risk surfaces retain reviewed visual baselines", async ({
-    page,
-  }, testInfo) => {
-    let surfaces: readonly Surface[];
-    if (testInfo.project.name === "desktop-chromium") {
-      surfaces = [
-        { name: "evaluation-admin", path: "/admin/review" },
-        { name: "programme-admin", path: "/admin/programme" },
-      ];
-    } else if (testInfo.project.name === "mobile-chromium") {
-      surfaces = [
-        { name: "evaluation-admin", path: "/admin/review" },
-        { name: "tasks-readiness", path: "/admin/tasks" },
-        {
-          name: "public-speaker-gallery",
-          path: "/public/programme/future-of-events-2027/gallery",
-        },
-        {
-          name: "speaker-profile",
-          path: "/participant/profile",
-          role: "speaker",
-        },
-      ];
-    } else {
-      throw new Error(
-        `High-risk visual surfaces are not configured for Playwright project "${testInfo.project.name}".`,
-      );
-    }
-
-    for (const surface of surfaces) {
-      if (surface.role) await selectDemoRole(page, surface.role);
-      await openHydrated(page, surface.path);
-      await expect(
-        page.getByRole("heading", { level: 1 }).first(),
-      ).toBeVisible();
-      if (
-        testInfo.project.name === "mobile-chromium" &&
-        surface.name === "evaluation-admin"
-      ) {
-        await page.getByRole("button", { name: /Proposal queue/ }).click();
-      }
-      await waitForSurfaceReady(page, surface.name);
-      // Locator screenshots stitch long pages from viewport-sized tiles.
-      // Normalize already-covered fixed navigation so it is not repeated at
-      // every stitch boundary; the dashboard baseline owns the speaker nav.
-      const fullPageCaptureCss =
-        testInfo.project.name === "mobile-chromium" &&
-        surface.name === "evaluation-admin"
-          ? ".pc-admin-section-nav { position: static !important; }"
-          : testInfo.project.name === "mobile-chromium" &&
-              surface.role === "speaker"
-            ? ".speaker-nav { visibility: hidden !important; }"
-            : null;
-      const fullPageCaptureStyle = fullPageCaptureCss
-        ? await page.addStyleTag({ content: fullPageCaptureCss })
-        : null;
-      try {
-        await captureState(page, page.locator("body"), surface.name);
-      } finally {
-        await fullPageCaptureStyle?.evaluate((style) =>
-          style.parentNode?.removeChild(style),
-        );
-      }
-    }
   });
-});

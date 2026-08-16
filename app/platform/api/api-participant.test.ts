@@ -3,11 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { RouterContextProvider } from "react-router";
 
 import type { AirtableProviderBoundary } from "~/modules/airtable/airtable-provider-boundary.server";
-import { EvaluationService } from "~/modules/evaluations/evaluation-service.server";
 import { ensureDemoSpeakerData } from "~/modules/speakers/demo.server";
-import { ensureDemoSubmissionForm } from "~/modules/submissions/demo-submissions.server";
-import { SubmissionService } from "~/modules/submissions/submission-service.server";
-import type { Applicant } from "~/modules/submissions/submission-repository.server";
 import {
   ApiParticipantService,
   participantProfilePatchSchema,
@@ -21,14 +17,10 @@ import {
   ensureDemoProgramme,
 } from "~/platform/demo/seed.server";
 import { WebhookService } from "~/platform/operations/webhook-service.server";
-import { EventRealtimeService } from "~/platform/realtime/event-realtime.server";
-import { action as directSessionAction } from "~/routes/api-direct-sessions";
-import { action as evaluationAdvanceAction } from "~/routes/api-evaluation-advance";
 import {
   action as participantResourceAction,
   loader as participantResourceLoader,
 } from "~/routes/api-participant-resources";
-import { action as participantSubmissionAction } from "~/routes/api-participant-submission-command";
 
 const testEnv = {
   ...(env as unknown as CloudflareEnvironment),
@@ -54,50 +46,6 @@ function participantHeaders(
     cookie: `program_cue_demo_identity=${role}`,
     ...Object.fromEntries(new Headers(extras)),
   });
-}
-
-async function hash(value: string) {
-  const digest = await crypto.subtle.digest(
-    "SHA-256",
-    new TextEncoder().encode(value),
-  );
-  return Array.from(new Uint8Array(digest), (byte) =>
-    byte.toString(16).padStart(2, "0"),
-  ).join("");
-}
-
-async function createApiKey(scope: "sessions:write" | "evaluation:write") {
-  const suffix = crypto.randomUUID();
-  const keyId = `participant-api-key-${suffix}`;
-  const token = `pc_api_participant_${suffix}`;
-  await testEnv.DB.prepare(
-    `INSERT INTO api_keys (
-       id, organisation_id, event_id, name, key_prefix, key_hash,
-       scopes_json, created_at
-     ) VALUES (?, ?, ?, ?, 'pc_api_', ?, ?, unixepoch())`,
-  )
-    .bind(
-      keyId,
-      organisationId,
-      eventId,
-      `Participant API ${suffix}`,
-      await hash(token),
-      JSON.stringify([scope]),
-    )
-    .run();
-  return { keyId, token };
-}
-
-function submitterApplicant(): Extract<Applicant, { verified: true }> {
-  return {
-    personId: DEMO_IDENTITIES.submitter.personId,
-    email: DEMO_IDENTITIES.submitter.email,
-    name: DEMO_IDENTITIES.submitter.name,
-    verified: true,
-    anonymousDraftId: null,
-    biography: "",
-    profileRevision: 1,
-  };
 }
 
 function participantViewer(role: "speaker" | "submitter"): Viewer {
@@ -134,34 +82,6 @@ async function insertParticipantClaim(input: {
       input.requestHash,
     )
     .run();
-}
-
-function participantSubmissionRequest(input: {
-  submissionId: string;
-  command: "submit" | "withdraw";
-  idempotencyKey: string;
-  body: unknown;
-}) {
-  return participantSubmissionAction({
-    request: new Request(
-      `https://programcue.test/api/v1/events/${eventId}/participant/submissions/${input.submissionId}/${input.command}`,
-      {
-        method: "POST",
-        headers: participantHeaders("submitter", {
-          origin: "https://programcue.test",
-          "content-type": "application/json",
-          "idempotency-key": input.idempotencyKey,
-        }),
-        body: JSON.stringify(input.body),
-      },
-    ),
-    params: {
-      eventId,
-      submissionId: input.submissionId,
-      command: input.command,
-    },
-    context: routeContext(),
-  } as never);
 }
 
 beforeEach(async () => {

@@ -12,7 +12,7 @@ import {
 } from "./file-lifecycle-service.server";
 import {
   FileScanResultService,
-  scanResultSchema,
+  type scanResultSchema,
 } from "./file-scan-result-service.server";
 
 export {

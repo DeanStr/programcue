@@ -64,12 +64,14 @@ export async function action({ request, params, context }: Route.ActionArgs) {
     if (!params.eventId)
       throw new ApiError(404, "EVENT_NOT_FOUND", "Event not found");
     const resource = parseEvaluationResource(params.resource);
-    if (!(
-      resource === "plans" ||
-      resource === "rounds" ||
-      resource === "round-reviewers" ||
-      resource === "assignments"
-    )) {
+    if (
+      !(
+        resource === "plans" ||
+        resource === "rounds" ||
+        resource === "round-reviewers" ||
+        resource === "assignments"
+      )
+    ) {
       throw new ApiError(
         405,
         "METHOD_NOT_ALLOWED",

@@ -140,14 +140,8 @@ export async function action({ request, params, context }: Route.ActionArgs) {
       idempotencyKey,
       await apiRequestHash(input),
       (operationId) =>
-        service.updateProfile(
-          viewer,
-          input,
-          requestCorrelationId,
-          operationId,
-        ),
-      (operationId) =>
-        service.recoverProfileUpdate(viewer, input, operationId),
+        service.updateProfile(viewer, input, requestCorrelationId, operationId),
+      (operationId) => service.recoverProfileUpdate(viewer, input, operationId),
     );
     return apiSuccess({
       ...result.response,

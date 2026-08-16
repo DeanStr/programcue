@@ -2,9 +2,7 @@ import { env } from "cloudflare:test";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { RouterContextProvider } from "react-router";
 
-import type { AirtableProviderBoundary } from "~/modules/airtable/airtable-provider-boundary.server";
 import { EventService } from "~/modules/events/event-service.server";
-import { ensureDemoEvaluationData } from "~/modules/evaluations/demo.server";
 import { FileService } from "~/modules/files/file-service.server";
 import { PublicProgrammeService } from "~/modules/programme/public-programme-service.server";
 import {
@@ -12,18 +10,10 @@ import {
   ensureDemoProgramme,
 } from "~/platform/demo/seed.server";
 import {
-  ApiAdministrationService,
-  parseAdminQuery,
-} from "./api-administration-service.server";
-import { ApiAdministrationItemService } from "./api-administration-item-service.server";
-import { ApiEvaluationService } from "./api-evaluation-service.server";
-import { ApiIntegrationService } from "./api-integration-service.server";
-import {
   PUBLIC_CALENDAR_SESSION_ID_LIMIT,
   PUBLIC_CALENDAR_SESSION_LIMIT,
   publicCalendarQuerySchema,
   publicProgrammeResponse,
-  publicSchedulePage,
   publicSessionPage,
   publicSessionQuerySchema,
 } from "./api-public-programme.server";
@@ -32,38 +22,14 @@ import {
   encodePrivateCursor,
   parseStrictQuery,
 } from "./api-pagination.server";
-import { ApiError, type ApiPrincipal } from "./api.server";
 import { cloudflareContext } from "~/platform/cloudflare-context";
-import { loader as administrationResourceLoader } from "~/routes/api-administration-resources";
-import { action as evaluationResourceAction } from "~/routes/api-evaluation-resources";
 import { loader as publicCalendarLoader } from "~/routes/api-public-calendar";
 import { loader as publicEventLoader } from "~/routes/api-public-event";
 import { loader as publicScheduleLoader } from "~/routes/api-public-schedule";
 import { loader as publicSessionsLoader } from "~/routes/api-public-sessions";
 import { loader as publicSpeakersLoader } from "~/routes/api-public-speakers";
 
-async function hash(value: string) {
-  const digest = await crypto.subtle.digest(
-    "SHA-256",
-    new TextEncoder().encode(value),
-  );
-  return Array.from(new Uint8Array(digest), (byte) =>
-    byte.toString(16).padStart(2, "0"),
-  ).join("");
-}
-
 const testEnv = env as unknown as CloudflareEnvironment;
-const principal = {
-  keyId: "expanded-api-key",
-  organisationId: "org-future-events",
-  eventId: "evt-foe-2025",
-  scopes: new Set([
-    "events:read",
-    "sessions:read",
-    "evaluation:read",
-    "integrations:read",
-  ]),
-} satisfies ApiPrincipal & { eventId: string };
 
 function routeContext() {
   const context = new RouterContextProvider();

@@ -155,9 +155,11 @@ export function ProgrammeEmbedBuilder({
           })
       : "";
   const changedConfigurationFields = selectedEmbed
-    ? (Object.keys(selectedEmbed.configuration) as Array<
-        keyof ProgrammeEmbedConfiguration
-      >).filter(
+    ? (
+        Object.keys(selectedEmbed.configuration) as Array<
+          keyof ProgrammeEmbedConfiguration
+        >
+      ).filter(
         (key) =>
           JSON.stringify(selectedEmbed.configuration[key]) !==
           JSON.stringify(outputConfiguration?.[key]),
@@ -629,7 +631,11 @@ export function ProgrammeEmbedBuilder({
         </div>
         {actionData?.message ? (
           <p
-            className={actionData.ok ? "validation-item success" : "validation-item error"}
+            className={
+              actionData.ok
+                ? "validation-item success"
+                : "validation-item error"
+            }
             role={actionData.ok ? "status" : "alert"}
           >
             {actionData.message}
@@ -657,7 +663,11 @@ export function ProgrammeEmbedBuilder({
           />
           <div className="card-title">
             <div>
-              <h3>{selectedEmbed ? `Edit ${selectedEmbed.name}` : "Save a new draft"}</h3>
+              <h3>
+                {selectedEmbed
+                  ? `Edit ${selectedEmbed.name}`
+                  : "Save a new draft"}
+              </h3>
               <p className="help">
                 {selectedEmbed
                   ? `Stable slug ${selectedEmbed.slug} cannot be changed. Current revision ${selectedEmbed.revision}.`
@@ -721,14 +731,16 @@ export function ProgrammeEmbedBuilder({
               <div className="notice">
                 <strong>Before/after preview</strong>
                 <p className="help">
-                  Revision {selectedEmbed.revision} → {selectedEmbed.revision + 1}.
+                  Revision {selectedEmbed.revision} →{" "}
+                  {selectedEmbed.revision + 1}.
                   {changedConfigurationFields.length
                     ? ` Configuration changes: ${changedConfigurationFields.join(", ")}.`
                     : " Configuration values are unchanged."}
                   {selectedEmbed.name !== managedName.trim()
                     ? " Name will change."
                     : ""}
-                  {(selectedEmbed.installationNote ?? "") !== installationNote.trim()
+                  {(selectedEmbed.installationNote ?? "") !==
+                  installationNote.trim()
                     ? " Installation note will change."
                     : ""}
                 </p>
@@ -739,7 +751,9 @@ export function ProgrammeEmbedBuilder({
                   name="confirmed"
                   value="yes"
                   checked={managedConfirmed}
-                  onChange={(event) => setManagedConfirmed(event.target.checked)}
+                  onChange={(event) =>
+                    setManagedConfirmed(event.target.checked)
+                  }
                 />
                 I reviewed the live preview and this before/after summary.
               </label>
@@ -766,7 +780,11 @@ export function ProgrammeEmbedBuilder({
             <p className="help">
               This URL does not change when the configuration revision changes.
             </p>
-            <a href={selectedManagedUrl} target="_blank" rel="noopener noreferrer">
+            <a
+              href={selectedManagedUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+            >
               {selectedManagedUrl} <ExternalLink aria-hidden size={13} />
             </a>
             <label className="label">
@@ -783,7 +801,12 @@ export function ProgrammeEmbedBuilder({
         ) : null}
 
         {managedEmbeds.length ? (
-          <div className="table-wrap" role="region" aria-label="Managed programme embeds" tabIndex={0}>
+          <div
+            className="table-wrap"
+            role="region"
+            aria-label="Managed programme embeds"
+            tabIndex={0}
+          >
             <table className="data-table">
               <thead>
                 <tr>
@@ -809,7 +832,9 @@ export function ProgrammeEmbedBuilder({
                         <strong>{embed.name}</strong>
                         <div className="help">{embed.slug}</div>
                       </td>
-                      <td><span className="status info">{embed.status}</span></td>
+                      <td>
+                        <span className="status info">{embed.status}</span>
+                      </td>
                       <td>{embed.revision}</td>
                       <td>{embed.installationNote ?? "—"}</td>
                       <td>
@@ -832,18 +857,39 @@ export function ProgrammeEmbedBuilder({
                       <td>
                         <div className="stack">
                           {embed.status !== "revoked" ? (
-                            <button className="btn small" type="button" onClick={() => loadManagedEmbed(embed)}>
+                            <button
+                              className="btn small"
+                              type="button"
+                              onClick={() => loadManagedEmbed(embed)}
+                            >
                               Load and preview
                             </button>
                           ) : null}
                           {nextStatus ? (
                             <Form method="post" className="stack">
-                              <input type="hidden" name="intent" value="transition-managed-embed" />
+                              <input
+                                type="hidden"
+                                name="intent"
+                                value="transition-managed-embed"
+                              />
                               <input type="hidden" name="id" value={embed.id} />
-                              <input type="hidden" name="revision" value={embed.revision} />
-                              <input type="hidden" name="nextStatus" value={nextStatus} />
+                              <input
+                                type="hidden"
+                                name="revision"
+                                value={embed.revision}
+                              />
+                              <input
+                                type="hidden"
+                                name="nextStatus"
+                                value={nextStatus}
+                              />
                               <label className="choice">
-                                <input type="checkbox" name="confirmed" value="yes" required />
+                                <input
+                                  type="checkbox"
+                                  name="confirmed"
+                                  value="yes"
+                                  required
+                                />
                                 {nextStatus === "active"
                                   ? "I previewed this configuration."
                                   : "I confirm visitors will see an unavailable response."}
@@ -857,7 +903,9 @@ export function ProgrammeEmbedBuilder({
                                 }
                               >
                                 {nextStatus === "active"
-                                  ? embed.status === "paused" ? "Resume" : "Activate"
+                                  ? embed.status === "paused"
+                                    ? "Resume"
+                                    : "Activate"
                                   : "Pause"}
                               </button>
                               {nextStatus === "active" &&
@@ -872,18 +920,40 @@ export function ProgrammeEmbedBuilder({
                           ) : null}
                           {embed.status !== "revoked" ? (
                             <Form method="post" className="stack">
-                              <input type="hidden" name="intent" value="transition-managed-embed" />
+                              <input
+                                type="hidden"
+                                name="intent"
+                                value="transition-managed-embed"
+                              />
                               <input type="hidden" name="id" value={embed.id} />
-                              <input type="hidden" name="revision" value={embed.revision} />
-                              <input type="hidden" name="nextStatus" value="revoked" />
+                              <input
+                                type="hidden"
+                                name="revision"
+                                value={embed.revision}
+                              />
+                              <input
+                                type="hidden"
+                                name="nextStatus"
+                                value="revoked"
+                              />
                               <label className="choice">
-                                <input type="checkbox" name="confirmed" value="yes" required />
-                                I understand this URL will permanently return 410.
+                                <input
+                                  type="checkbox"
+                                  name="confirmed"
+                                  value="yes"
+                                  required
+                                />
+                                I understand this URL will permanently return
+                                410.
                               </label>
-                              <button className="btn small danger">Revoke</button>
+                              <button className="btn small danger">
+                                Revoke
+                              </button>
                             </Form>
                           ) : (
-                            <span className="help">Stable slug permanently reserved.</span>
+                            <span className="help">
+                              Stable slug permanently reserved.
+                            </span>
                           )}
                         </div>
                       </td>

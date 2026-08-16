@@ -202,8 +202,7 @@ export class AiClaimedProposalExecutor {
     viewer: Viewer,
     input: ClaimedProposalInput<TaskProposalMetadata>,
   ): Promise<AiProposalApprovalResult> {
-    const { proposalId, metadata, correlationId, claimToken, operationId } =
-      input;
+    const { proposalId, metadata, correlationId, claimToken } = input;
     const result = await new ApiTaskService(this.env).create(
       {
         keyId: `assistant:${viewer.personId}`,

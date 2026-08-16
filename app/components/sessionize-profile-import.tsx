@@ -22,9 +22,7 @@ function isImportedProfile(value: unknown): value is ImportedProfile {
 }
 
 export async function readProfileImportResponse(response: Response) {
-  if (
-    !response.headers.get("content-type")?.includes("application/json")
-  ) {
+  if (!response.headers.get("content-type")?.includes("application/json")) {
     throw new Error(
       "Program Cue returned an invalid profile-import response. No details were changed.",
     );

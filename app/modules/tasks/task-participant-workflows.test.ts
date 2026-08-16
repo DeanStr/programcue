@@ -9,11 +9,7 @@ import {
 } from "~/modules/files/direct-upload.test-helper";
 import { FileService } from "~/modules/files/file-service.server";
 import { ensureDemoSpeakerData } from "~/modules/speakers/demo.server";
-import {
-  fixedDateEndEpoch,
-  TaskService,
-  TaskStateError,
-} from "./task-service.server";
+import { TaskService } from "./task-service.server";
 
 const admin: Viewer = {
   personId: "person-demo-admin",
@@ -99,33 +95,6 @@ function withBatchRace(
           }
           return target.batch(statements);
         };
-      const value = Reflect.get(target, property);
-      return typeof value === "function" ? value.bind(target) : value;
-    },
-  });
-  return new Proxy(testEnv, {
-    get(target, property) {
-      return property === "DB" ? racingDb : Reflect.get(target, property);
-    },
-  });
-}
-
-function withBatchBarrier(testEnv: CloudflareEnvironment, participants = 2) {
-  let arrivals = 0;
-  let release!: () => void;
-  const allArrived = new Promise<void>((resolve) => {
-    release = resolve;
-  });
-  const racingDb = new Proxy(testEnv.DB, {
-    get(target, property) {
-      if (property === "batch") {
-        return async (statements: D1PreparedStatement[]) => {
-          arrivals += 1;
-          if (arrivals === participants) release();
-          await allArrived;
-          return target.batch(statements);
-        };
-      }
       const value = Reflect.get(target, property);
       return typeof value === "function" ? value.bind(target) : value;
     },

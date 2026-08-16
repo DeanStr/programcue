@@ -1,7 +1,4 @@
-import {
-  calendarQueueMessageSchema,
-  type CalendarQueueMessage,
-} from "../../app/modules/calendars/calendar-schema";
+import { calendarQueueMessageSchema } from "../../app/modules/calendars/calendar-schema";
 import { hashCalendarLifecyclePayload } from "../../app/modules/calendars/ics.server";
 import {
   assertOperationClaim,
@@ -10,8 +7,6 @@ import {
   notifyRealtimeAfterCommit,
   QUEUE_CLAIM_LEASE_SECONDS,
   QueueClaimLeaseBusyError,
-  QueueClaimLeaseLostError,
-  renewOperationClaim,
   returnedChangeSequence,
 } from "./claim-infrastructure";
 import type { QueueProviderDependencies } from "./handler-types";

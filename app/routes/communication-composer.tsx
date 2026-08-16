@@ -465,7 +465,8 @@ export default function CommunicationComposer({
   loaderData,
 }: Route.ComponentProps) {
   const actionData = useActionData<typeof action>() as
-    ComposerActionResult | undefined;
+    | ComposerActionResult
+    | undefined;
   const navigation = useNavigation();
   const submit = useSubmit();
   const { confirm, dialog } = useConfirm();

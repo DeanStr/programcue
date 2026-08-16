@@ -1,6 +1,5 @@
 import { z } from "zod";
 
-import type { AiProposalPreview } from "./ai-types";
 import type { OpenAiFunctionTool } from "./openai-responses-provider.server";
 import { saveTemplateSchema } from "~/modules/communications/communication-schema";
 import {

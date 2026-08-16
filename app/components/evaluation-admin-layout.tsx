@@ -12,48 +12,6 @@ import {
 } from "~/components/evaluation-admin-dialogs";
 
 export function EvaluationHeader() {
-  const {
-    loaderData,
-    actionData,
-    navigation,
-    committedWarning,
-    assignmentUndo,
-    decisionId,
-    setDecisionId,
-    noReviewOverrideConfirmed,
-    setNoReviewOverrideConfirmed,
-    moderationSubmissionId,
-    setModerationSubmissionId,
-    reopenAssignmentId,
-    setReopenAssignmentId,
-    advanceOpen,
-    setAdvanceOpen,
-    bulkAssignOpen,
-    setBulkAssignOpen,
-    bulkAssignPreview,
-    setBulkAssignPreview,
-    bulkAssignmentTarget,
-    setBulkAssignmentTarget,
-    invitationRole,
-    setInvitationRole,
-    bulkSubmissionIds,
-    setBulkSubmissionIds,
-    selected,
-    selectedHasCompletedReview,
-    activeRound,
-    nextRound,
-    activeRoundAssignments,
-    sessionReviewAssignments,
-    unfinishedAssignmentCount,
-    advanceableSubmissions,
-    assignmentTargets,
-    bulkAssignableSubmissions,
-    bulkSelectedSubmissions,
-    bulkAssignmentTargetLabel,
-    moderationSubmission,
-    currentModeration,
-    reopenAssignment,
-  } = useEvaluationAdminModel();
   return (
     <div className="page-head">
       <div>

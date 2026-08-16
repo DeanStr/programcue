@@ -265,7 +265,7 @@
 /* The scale takes the full row so ten positions stay legible and the four
    criteria line up as a profile you can read down. */
 .reviewer-shell .review-scale {
-  grid-column: 1/-1;
+  grid-column: 1 / -1;
   min-width: 0;
   display: flex;
   flex-wrap: wrap;
@@ -346,13 +346,13 @@
   color: var(--text-primary);
 }
 .reviewer-shell .review-score-select {
-  grid-column: 1/-1;
+  grid-column: 1 / -1;
   width: 100%;
   min-width: 0;
   margin-top: var(--space-1);
 }
 .reviewer-shell .review-rubric-row .textarea {
-  grid-column: 1/-1;
+  grid-column: 1 / -1;
   margin-top: var(--space-1);
 }
 .reviewer-shell .review-conflict-gate {
@@ -582,7 +582,7 @@
     max-height: none;
   }
   .reviewer-shell .review-score {
-    grid-column: 1/-1;
+    grid-column: 1 / -1;
     max-height: none;
     overflow: visible;
   }
@@ -605,11 +605,11 @@
     gap: var(--space-2) var(--space-3);
   }
   .reviewer-shell .review-context {
-    grid-column: 1/-1;
+    grid-column: 1 / -1;
     grid-row: 2;
   }
   .reviewer-shell .review-session-actions {
-    grid-column: 1/-1;
+    grid-column: 1 / -1;
     grid-row: 3;
   }
   .reviewer-shell .review-account {
@@ -637,7 +637,7 @@
     height: 31px;
   }
   .reviewer-shell .review-context {
-    grid-column: 1/-1;
+    grid-column: 1 / -1;
     grid-row: 2;
     grid-template-columns: minmax(0, 1fr) auto;
     align-items: baseline;
@@ -650,7 +650,7 @@
     text-align: right;
   }
   .reviewer-shell .review-session-actions {
-    grid-column: 1/-1;
+    grid-column: 1 / -1;
     grid-row: 3;
   }
   .reviewer-shell .review-session-actions > * {
@@ -709,15 +709,15 @@
     align-items: stretch;
   }
   .reviewer-shell .review-actions > .review-submit-block {
-    grid-column: 1/-1;
+    grid-column: 1 / -1;
   }
   .reviewer-shell .review-actions > .btn.primary {
-    grid-column: 1/-1;
+    grid-column: 1 / -1;
     order: -1;
   }
   .reviewer-shell .review-save-state,
   .reviewer-shell .review-actions > .subtle {
-    grid-column: 1/-1;
+    grid-column: 1 / -1;
   }
   .reviewer-shell .review-save-state {
     order: -2;
@@ -812,7 +812,7 @@
     align-items: end;
   }
   .pc-data-grid-selection {
-    grid-column: 1/-1;
+    grid-column: 1 / -1;
     flex-wrap: wrap;
   }
   .pc-data-grid-density {

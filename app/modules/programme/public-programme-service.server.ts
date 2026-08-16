@@ -650,7 +650,8 @@ export class PublicProgrammeService {
         SnapshotIntegrityRow | PublishedSessionRow | PublishedSpeakerRow
       >([snapshotIntegrityStatement, sessionsStatement, speakersStatement]);
     const snapshotIntegrity = snapshotResult.results[0] as
-      SnapshotIntegrityRow | undefined;
+      | SnapshotIntegrityRow
+      | undefined;
     if (!snapshotIntegrity) {
       throw new Error(
         "Published schedule snapshot integrity query returned no result.",

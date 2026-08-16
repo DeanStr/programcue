@@ -15,7 +15,11 @@ export class ResendConfigurationError extends Error {
 }
 
 export class ResendDeliveryError extends Error {
-  constructor(readonly status: number, readonly code: string, message: string) {
+  constructor(
+    readonly status: number,
+    readonly code: string,
+    message: string,
+  ) {
     super(message);
     this.name = "ResendDeliveryError";
   }
@@ -60,13 +64,15 @@ export class ResendEmailProvider implements EmailProvider {
         text: input.text,
         ...(input.replyTo ? { reply_to: input.replyTo } : {}),
         ...(input.tags?.length ? { tags: input.tags } : {}),
-        ...(input.attachments?.length ? {
-          attachments: input.attachments.map((attachment) => ({
-            filename: attachment.filename,
-            content: bytesToBase64(attachment.content),
-            content_type: attachment.contentType,
-          })),
-        } : {}),
+        ...(input.attachments?.length
+          ? {
+              attachments: input.attachments.map((attachment) => ({
+                filename: attachment.filename,
+                content: bytesToBase64(attachment.content),
+                content_type: attachment.contentType,
+              })),
+            }
+          : {}),
       }),
     });
     const body = await readBoundedResponseJson(
@@ -74,7 +80,10 @@ export class ResendEmailProvider implements EmailProvider {
       PROVIDER_RESPONSE_MAX_BYTES,
     ).catch(() => null);
     if (!response.ok) {
-      const error = body && typeof body === "object" ? body as Record<string, unknown> : {};
+      const error =
+        body && typeof body === "object"
+          ? (body as Record<string, unknown>)
+          : {};
       throw new ResendDeliveryError(
         response.status,
         String(error.name ?? error.code ?? "RESEND_ERROR").slice(0, 128),
@@ -85,7 +94,11 @@ export class ResendEmailProvider implements EmailProvider {
     }
     const parsed = resendResponseSchema.safeParse(body);
     if (!parsed.success) {
-      throw new ResendDeliveryError(response.status, "INVALID_PROVIDER_RESPONSE", "Resend accepted the request without returning a message id.");
+      throw new ResendDeliveryError(
+        response.status,
+        "INVALID_PROVIDER_RESPONSE",
+        "Resend accepted the request without returning a message id.",
+      );
     }
     return { provider: this.name, messageId: parsed.data.id };
   }

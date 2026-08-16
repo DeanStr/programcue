@@ -462,7 +462,8 @@ export class EvaluationAssignmentWorkflows extends EvaluationServiceFoundation {
     }
     const results = await this.env.DB.batch(statements);
     const validation = results[validationStatementIndex]?.results?.[0] as
-      { valid?: number | boolean } | undefined;
+      | { valid?: number | boolean }
+      | undefined;
     if (Number(validation?.valid ?? 0) !== 1) {
       const replay = await this.recoverApiCommand(commandState.prepared);
       if (replay) return replay;

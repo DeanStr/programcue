@@ -1,55 +1,33 @@
 import { env } from "cloudflare:test";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it } from "vitest";
 
 import type { Viewer } from "~/platform/auth/authorize.server";
 import { INITIAL_EVENT_SESSION_FORMATS_JSON } from "~/modules/events/event-configuration";
 import { ensureDemoData } from "~/platform/demo/seed.server";
-import { ensureDemoProgramme } from "~/platform/demo/seed.server";
 import { ensureJudgedDemoWorkflow } from "~/platform/demo/demo-reset.server";
 import {
   EventService,
   EventRepositoryMigrationRequiredError,
 } from "~/modules/events/event-service.server";
-import { EventTrackInUseError } from "~/modules/events/event-repository.server";
-import { EvaluationService } from "~/modules/evaluations/evaluation-service.server";
-import { ScheduleService } from "~/modules/schedule/schedule-service.server";
-import { SubmissionService } from "~/modules/submissions/submission-service.server";
-import { TaskService } from "~/modules/tasks/task-service.server";
 import { ParticipantRetentionService } from "~/modules/privacy/participant-retention-service.server";
-import {
-  AirtableProviderError,
-  type AirtableRecord,
-  type AirtableTable,
-} from "./airtable-client.server";
+import type { AirtableRecord, AirtableTable } from "./airtable-client.server";
 import { AirtableEventDataRepository } from "./airtable-event-data-repository.server";
-import {
-  AirtableEventDataUnsynchronizedError,
-  AirtableEventProjectionCommitError,
-} from "./airtable-event-data-repository.server";
-import { AIRTABLE_EVENT_TABLE_SPECS } from "./airtable-event-data-schema";
+import { AirtableEventProjectionCommitError } from "./airtable-event-data-repository.server";
 import {
   AirtableCommandReplayUnavailableError,
   AirtableProviderBoundary,
-  airtableIntentCommand,
 } from "./airtable-provider-boundary.server";
 import { AirtableProjectionRecoveryService } from "./airtable-projection-recovery-service.server";
 import {
   AirtableMigrationService,
-  AirtableMigrationStateError,
+  type AirtableMigrationStateError,
 } from "./airtable-migration-service.server";
 import { AirtableProgrammeRepository } from "./airtable-programme-repository.server";
 import {
   AirtableRepositoryConfigurationError,
-  AirtableRepositoryReconciliationError,
-  AirtableRepositorySchemaError,
   AirtableRoomRepository,
 } from "./airtable-room-repository.server";
-import {
-  AIRTABLE_EVENT_DATA_TABLE_NAMES,
-  AIRTABLE_ROOMS_TABLE,
-  AIRTABLE_SCHEMA_VERSION,
-  AIRTABLE_SYNCHRONOUS_MIGRATION_MAX_CHANGES,
-} from "./airtable-schema";
+import { AIRTABLE_SYNCHRONOUS_MIGRATION_MAX_CHANGES } from "./airtable-schema";
 
 declare module "cloudflare:test" {
   interface ProvidedEnv {

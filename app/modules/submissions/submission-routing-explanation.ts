@@ -56,9 +56,7 @@ export function classifySubmissionRouting(input: {
         `Submission ${input.submissionId} is missing its immutable form version identity.`,
       );
     }
-    return input.routedTeamIds.length
-      ? "manual_override"
-      : "manual_unassigned";
+    return input.routedTeamIds.length ? "manual_override" : "manual_unassigned";
   }
   if (
     input.versionNumber === null ||

@@ -19,8 +19,6 @@ import { readEventCloneSource } from "./event-clone-source.server";
 
 const EVENT_NAME_MAX_LENGTH = 160;
 const EVENT_SLUG_MAX_LENGTH = 120;
-const CLONE_NAME_SUFFIX = " Copy";
-const CLONE_SLUG_SUFFIX = "-copy";
 
 const cloneEventSchema = z
   .object({
@@ -160,7 +158,8 @@ export class EventCloneService {
     )
       .bind(viewer.eventId, viewer.organisationId)
       .first<EventClonePreparation["source"]>();
-    if (!source) throw new Response("This event could not be found.", { status: 404 });
+    if (!source)
+      throw new Response("This event could not be found.", { status: 404 });
 
     return {
       source,

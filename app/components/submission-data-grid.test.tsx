@@ -5,10 +5,7 @@ import { describe, expect, it } from "vitest";
 import { SubmissionDataGrid } from "./submission-data-grid";
 import type { AdminSubmission } from "~/modules/submissions/submission-repository-shared";
 
-function renderGrid(
-  submissions: AdminSubmission[],
-  detailSearchParams = "",
-) {
+function renderGrid(submissions: AdminSubmission[], detailSearchParams = "") {
   const router = createMemoryRouter(
     [
       {
@@ -26,9 +23,7 @@ function renderGrid(
   return renderToStaticMarkup(<RouterProvider router={router} />);
 }
 
-function submission(
-  overrides: Partial<AdminSubmission> = {},
-): AdminSubmission {
+function submission(overrides: Partial<AdminSubmission> = {}): AdminSubmission {
   return {
     id: "submission-1",
     publicReference: "PC-001",

@@ -23,7 +23,8 @@ export function AirtableRecoveryPanel({
         <h2 id="airtable-recovery-heading">Airtable recovery</h2>
         <span className="status danger">
           {loaderData.airtableRecoveries.length} change
-          {loaderData.airtableRecoveries.length === 1 ? "" : "s"} not in Airtable
+          {loaderData.airtableRecoveries.length === 1 ? "" : "s"} not in
+          Airtable
         </span>
       </div>
       <p>

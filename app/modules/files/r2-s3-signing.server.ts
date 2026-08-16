@@ -51,7 +51,11 @@ export function requireR2S3Configuration(
   env: CloudflareEnvironment,
 ): R2S3Configuration {
   const accountId = requireValue(env.R2_ACCOUNT_ID, "R2_ACCOUNT_ID", "account");
-  const bucketName = requireValue(env.R2_BUCKET_NAME, "R2_BUCKET_NAME", "bucket");
+  const bucketName = requireValue(
+    env.R2_BUCKET_NAME,
+    "R2_BUCKET_NAME",
+    "bucket",
+  );
   const accessKeyId = requireValue(
     env.R2_ACCESS_KEY_ID,
     "R2_ACCESS_KEY_ID",

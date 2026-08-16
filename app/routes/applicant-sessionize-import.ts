@@ -72,7 +72,13 @@ export async function action({ request, params, context }: Route.ActionArgs) {
     if (error instanceof RequestBodyTooLargeError)
       return response({ error: "Profile import request exceeds 8 KB." }, 413);
     if (error instanceof SyntaxError)
-      return response({ error: "That request could not be read. Reload the page and try again." }, 400);
+      return response(
+        {
+          error:
+            "That request could not be read. Reload the page and try again.",
+        },
+        400,
+      );
     if (error instanceof ZodError)
       return response(
         { error: error.issues[0]?.message ?? "Invalid profile import." },

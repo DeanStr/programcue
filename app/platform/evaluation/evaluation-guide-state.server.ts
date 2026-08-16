@@ -6,7 +6,11 @@ import {
 import { EVALUATION_APPLICANT_MEMBERSHIP_ID } from "~/platform/evaluation/evaluation-session.server";
 
 export type EvaluationApplicantGuidePhase =
-  "clean" | "activated" | "draft" | "submitted" | "inactive";
+  | "clean"
+  | "activated"
+  | "draft"
+  | "submitted"
+  | "inactive";
 
 export type EvaluationReviewerGuidePhase =
   | "clean"

@@ -27,75 +27,130 @@ async function unsubscribeFixture() {
         channel, provider, idempotency_key, status, created_at, updated_at
       ) VALUES (?, 'evt-foe-2025', ?, 'person-demo-speaker', ?,
                 'Route Recipient', 'email', 'resend', ?, 'sent', unixepoch(), unixepoch())
-    `).bind(deliveryId, communicationId, address, `unsubscribe-delivery-${deliveryId}`),
+    `).bind(
+      deliveryId,
+      communicationId,
+      address,
+      `unsubscribe-delivery-${deliveryId}`,
+    ),
   ]);
-  const unsubscribeUrl = await createCommunicationUnsubscribeUrl(testEnv, deliveryId);
-  const token = decodeURIComponent(new URL(unsubscribeUrl).pathname.split("/").at(-1)!);
+  const unsubscribeUrl = await createCommunicationUnsubscribeUrl(
+    testEnv,
+    deliveryId,
+  );
+  const token = decodeURIComponent(
+    new URL(unsubscribeUrl).pathname.split("/").at(-1)!,
+  );
   const context = new RouterContextProvider();
   context.set(cloudflareContext, { env: testEnv, ctx: {} as ExecutionContext });
   return { testEnv, token, context, unsubscribeUrl, deliveryId, address };
 }
 
-function args(
-  request: Request,
-  token: string,
-  context: RouterContextProvider,
-) {
+function args(request: Request, token: string, context: RouterContextProvider) {
   return { request, params: { token }, context } as never;
 }
 
 describe("public communication unsubscribe route", () => {
   it("keeps GET read-only and requires a confirmation POST before recording the category opt-out", async () => {
-    const { token, context, unsubscribeUrl, address } = await unsubscribeFixture();
+    const { token, context, unsubscribeUrl, address } =
+      await unsubscribeFixture();
     await loader(args(new Request(unsubscribeUrl), token, context));
-    expect(await env.DB.prepare(`
+    expect(
+      await env.DB.prepare(`
       SELECT COUNT(*) AS count FROM communication_unsubscribes
        WHERE event_id = 'evt-foe-2025' AND address = ?
-    `).bind(address).first()).toEqual({ count: 0 });
+    `)
+        .bind(address)
+        .first(),
+    ).toEqual({ count: 0 });
 
-    const methodRejected = await action(args(new Request(unsubscribeUrl, { method: "PUT" }), token, context));
+    const methodRejected = await action(
+      args(new Request(unsubscribeUrl, { method: "PUT" }), token, context),
+    );
     expect(methodRejected.status).toBe(405);
     expect(methodRejected.headers.get("allow")).toBe("POST");
 
-    const applied = await action(args(new Request(`${unsubscribeUrl}.data`, { method: "POST" }), token, context));
+    const applied = await action(
+      args(
+        new Request(`${unsubscribeUrl}.data`, { method: "POST" }),
+        token,
+        context,
+      ),
+    );
     expect(applied.status).toBe(303);
-    expect(applied.headers.get("location")).toBe(new URL(unsubscribeUrl).pathname);
-    expect(await env.DB.prepare(`
+    expect(applied.headers.get("location")).toBe(
+      new URL(unsubscribeUrl).pathname,
+    );
+    expect(
+      await env.DB.prepare(`
       SELECT address, category, reason, revoked_at AS revokedAt
         FROM communication_unsubscribes
        WHERE event_id = 'evt-foe-2025' AND address = ?
-    `).bind(address).first()).toEqual({
+    `)
+        .bind(address)
+        .first(),
+    ).toEqual({
       address,
       category: "ad_hoc",
       reason: "recipient_unsubscribe",
       revokedAt: null,
     });
-    const confirmed = await loader(args(new Request(unsubscribeUrl), token, context));
+    const confirmed = await loader(
+      args(new Request(unsubscribeUrl), token, context),
+    );
     expect(confirmed.data).toMatchObject({ isUnsubscribed: true });
 
-    await action(args(new Request(unsubscribeUrl, { method: "POST" }), token, context));
-    expect(await env.DB.prepare(`
+    await action(
+      args(new Request(unsubscribeUrl, { method: "POST" }), token, context),
+    );
+    expect(
+      await env.DB.prepare(`
       SELECT COUNT(*) AS count FROM communication_unsubscribes
        WHERE event_id = 'evt-foe-2025' AND address = ? AND category = 'ad_hoc'
-    `).bind(address).first()).toEqual({ count: 1 });
+    `)
+        .bind(address)
+        .first(),
+    ).toEqual({ count: 1 });
   });
 
   it("rejects tampered and expired signed tokens without changing preferences", async () => {
-    const { testEnv, token, context, unsubscribeUrl, deliveryId, address } = await unsubscribeFixture();
+    const { testEnv, token, context, unsubscribeUrl, deliveryId, address } =
+      await unsubscribeFixture();
     const [payload, signature] = token.split(".");
     const tamperedToken = `${payload}.${signature?.startsWith("A") ? "B" : "A"}${signature?.slice(1)}`;
-    await expect(loader(args(
-      new Request(unsubscribeUrl.replace(encodeURIComponent(token), encodeURIComponent(tamperedToken))),
-      tamperedToken,
-      context,
-    ))).rejects.toMatchObject({ status: 404 });
+    await expect(
+      loader(
+        args(
+          new Request(
+            unsubscribeUrl.replace(
+              encodeURIComponent(token),
+              encodeURIComponent(tamperedToken),
+            ),
+          ),
+          tamperedToken,
+          context,
+        ),
+      ),
+    ).rejects.toMatchObject({ status: 404 });
 
-    const expiredUrl = await createCommunicationUnsubscribeUrl(testEnv, deliveryId, 1);
-    const expiredToken = decodeURIComponent(new URL(expiredUrl).pathname.split("/").at(-1)!);
-    await expect(loader(args(new Request(expiredUrl), expiredToken, context))).rejects.toMatchObject({ status: 404 });
-    expect(await env.DB.prepare(`
+    const expiredUrl = await createCommunicationUnsubscribeUrl(
+      testEnv,
+      deliveryId,
+      1,
+    );
+    const expiredToken = decodeURIComponent(
+      new URL(expiredUrl).pathname.split("/").at(-1)!,
+    );
+    await expect(
+      loader(args(new Request(expiredUrl), expiredToken, context)),
+    ).rejects.toMatchObject({ status: 404 });
+    expect(
+      await env.DB.prepare(`
       SELECT COUNT(*) AS count FROM communication_unsubscribes
        WHERE event_id = 'evt-foe-2025' AND address = ?
-    `).bind(address).first()).toEqual({ count: 0 });
+    `)
+        .bind(address)
+        .first(),
+    ).toEqual({ count: 0 });
   });
 });

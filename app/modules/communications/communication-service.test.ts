@@ -1,32 +1,9 @@
 import { env } from "cloudflare:test";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, expect, it, vi } from "vitest";
 
 import type { Viewer } from "~/platform/auth/authorize.server";
 import { ensureDemoData } from "~/platform/demo/seed.server";
-import {
-  handleProgramCueQueueMessage,
-  processCommunicationSend,
-  processDecisionNotification,
-  processSubmissionNotification,
-  QUEUE_CLAIM_LEASE_SECONDS,
-} from "../../../workers/communications-queue";
-import {
-  CommunicationQueueUnavailableError,
-  CommunicationService,
-} from "./communication-service.server";
 import { snapshotSourceValues } from "./communication-service-shared";
-import { CommunicationDeliveryService } from "./communication-delivery-service.server";
-import type { AirtableProviderBoundary } from "~/modules/airtable/airtable-provider-boundary.server";
-import { CommunicationTemplateService } from "./communication-template-service.server";
-import { MailpitEmailProvider } from "./mailpit.server";
-import { RecipientQuery } from "./recipient-query.server";
-import { ResendEmailProvider } from "./resend.server";
-import {
-  createCommunicationUnsubscribeUrl,
-  describeCommunicationUnsubscribe,
-  unsubscribeFromOptionalCommunication,
-} from "./unsubscribe.server";
-import { verifyResendWebhook } from "./resend-webhook.server";
 
 const viewer: Viewer = {
   personId: "person-demo-admin",
@@ -134,17 +111,4 @@ async function communicationEnvironment() {
     .bind(viewer.eventId)
     .run();
   return { testEnv, sent, realtime };
-}
-
-async function confirmPreviewed(
-  service: CommunicationService,
-  input: Parameters<CommunicationService["preview"]>[1] & {
-    idempotencyKey: string;
-  },
-) {
-  const preview = await service.preview(viewer, input);
-  return service.confirm(viewer, {
-    ...input,
-    ...preview.confirmation,
-  });
 }

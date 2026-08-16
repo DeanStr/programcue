@@ -1,19 +1,9 @@
 import { env } from "cloudflare:test";
 import { describe, expect, it } from "vitest";
-import { ZodError } from "zod";
 
 import type { Viewer } from "~/platform/auth/authorize.server";
-import {
-  acceptTestFileScanDispatch,
-  completeTestDirectUpload,
-} from "~/modules/files/direct-upload.test-helper";
-import { FileService } from "~/modules/files/file-service.server";
 import { ensureDemoSpeakerData } from "~/modules/speakers/demo.server";
-import {
-  fixedDateEndEpoch,
-  TaskService,
-  TaskStateError,
-} from "./task-service.server";
+import { TaskService, TaskStateError } from "./task-service.server";
 
 const admin: Viewer = {
   personId: "person-demo-admin",
@@ -33,47 +23,6 @@ const speaker: Viewer = {
   eventId: "evt-foe-2025",
   demo: true,
 };
-
-async function createFileTask(testEnv: CloudflareEnvironment, name: string) {
-  const tasks = new TaskService(testEnv);
-  const templateId = await tasks.createTemplate(admin, {
-    name,
-    description: "Upload test evidence.",
-    targetType: "speaker",
-    taskType: "file_upload",
-    impact: "high",
-    evidenceMode: "file",
-    dueAnchor: "none",
-    dueOffsetDays: null,
-    fixedDueDate: null,
-    autoAssignOnAcceptance: false,
-    dependencyIds: [],
-  });
-  return (await tasks.assignTemplate(admin, templateId, speaker.personId))
-    .taskId;
-}
-
-async function createChecklistTask(
-  testEnv: CloudflareEnvironment,
-  name: string,
-) {
-  const tasks = new TaskService(testEnv);
-  const templateId = await tasks.createTemplate(admin, {
-    name,
-    description: "Confirm the test requirement.",
-    targetType: "speaker",
-    taskType: "checklist",
-    impact: "high",
-    evidenceMode: "checkbox",
-    dueAnchor: "none",
-    dueOffsetDays: null,
-    fixedDueDate: null,
-    autoAssignOnAcceptance: false,
-    dependencyIds: [],
-  });
-  return (await tasks.assignTemplate(admin, templateId, speaker.personId))
-    .taskId;
-}
 
 function withBatchRace(
   testEnv: CloudflareEnvironment,
@@ -126,62 +75,6 @@ function withBatchBarrier(testEnv: CloudflareEnvironment, participants = 2) {
       return property === "DB" ? racingDb : Reflect.get(target, property);
     },
   });
-}
-
-async function createDependencyPair(
-  testEnv: CloudflareEnvironment,
-  dependentName: string,
-  dependent: {
-    taskType: "checklist" | "file_upload";
-    evidenceMode: "checkbox" | "file";
-  },
-) {
-  const tasks = new TaskService(testEnv);
-  const prerequisiteTemplateId = await tasks.createTemplate(admin, {
-    name: `${dependentName} prerequisite`,
-    description: "Complete this first.",
-    targetType: "speaker",
-    taskType: "checklist",
-    impact: "high",
-    evidenceMode: "checkbox",
-    dueAnchor: "none",
-    dueOffsetDays: null,
-    fixedDueDate: null,
-    autoAssignOnAcceptance: false,
-    dependencyIds: [],
-  });
-  const dependentTemplateId = await tasks.createTemplate(admin, {
-    name: dependentName,
-    description: "Depends on the prerequisite.",
-    targetType: "speaker",
-    taskType: dependent.taskType,
-    impact: "high",
-    evidenceMode: dependent.evidenceMode,
-    dueAnchor: "none",
-    dueOffsetDays: null,
-    fixedDueDate: null,
-    autoAssignOnAcceptance: false,
-    dependencyIds: [prerequisiteTemplateId],
-  });
-  const { taskId: dependentTaskId } = await tasks.assignTemplate(
-    admin,
-    dependentTemplateId,
-    speaker.personId,
-  );
-  let assigned = await tasks.listParticipantTasks(speaker);
-  const prerequisite = assigned.find(
-    (task) => task.templateId === prerequisiteTemplateId,
-  )!;
-  await tasks.completeParticipant(speaker, {
-    taskId: prerequisite.id,
-    revision: prerequisite.revision,
-    confirmed: true,
-  });
-  assigned = await tasks.listParticipantTasks(speaker);
-  return {
-    prerequisite: assigned.find((task) => task.id === prerequisite.id)!,
-    dependent: assigned.find((task) => task.id === dependentTaskId)!,
-  };
 }
 
 describe("onboarding task service", () => {

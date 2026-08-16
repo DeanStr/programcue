@@ -29,7 +29,11 @@ export function EmptyState({
   const Glyph = Icon ?? (tone === "positive" ? CheckCircle2 : Inbox);
   return (
     <section
-      className={cn("empty pc-empty-state", tone === "positive" && "is-positive", className)}
+      className={cn(
+        "empty pc-empty-state",
+        tone === "positive" && "is-positive",
+        className,
+      )}
     >
       <span className="pc-state-icon">
         <Glyph aria-hidden size={22} />
@@ -57,9 +61,7 @@ export function PendingState({
       aria-live="polite"
       aria-busy="true"
     >
-      <div className="pc-pending-label">
-        {label}
-      </div>
+      <div className="pc-pending-label">{label}</div>
       <div aria-hidden className="pc-skeleton-stack">
         {Array.from({ length: rows }, (_, index) => (
           <span key={index} style={{ width: `${92 - index * 9}%` }} />

@@ -49,9 +49,7 @@ export function requiredProductionSecretNames(resourceEmbedProviders) {
   }
   return [
     ...ALWAYS_REQUIRED_PRODUCTION_SECRET_NAMES,
-    ...(providers.includes("google_maps")
-      ? ["GOOGLE_MAPS_EMBED_API_KEY"]
-      : []),
+    ...(providers.includes("google_maps") ? ["GOOGLE_MAPS_EMBED_API_KEY"] : []),
   ];
 }
 

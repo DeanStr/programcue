@@ -82,12 +82,20 @@ const SURFACES = [
   { name: "operations", path: "/admin/operations" },
   { name: "settings", path: "/admin/settings" },
   { name: "review-workbench", path: "/review/workbench", role: "evaluator" },
-  { name: "speaker-dashboard", path: "/participant/dashboard", role: "speaker" },
+  {
+    name: "speaker-dashboard",
+    path: "/participant/dashboard",
+    role: "speaker",
+  },
   { name: "speaker-tasks", path: "/participant/tasks", role: "speaker" },
   { name: "speaker-sessions", path: "/participant/sessions", role: "speaker" },
   { name: "speaker-profile", path: "/participant/profile", role: "speaker" },
   { name: "speaker-files", path: "/participant/files", role: "speaker" },
-  { name: "speaker-resources", path: "/participant/resources", role: "speaker" },
+  {
+    name: "speaker-resources",
+    path: "/participant/resources",
+    role: "speaker",
+  },
   {
     name: "public-programme",
     path: "/public/programme/future-of-events-2027",
@@ -135,7 +143,8 @@ async function resetDemo(request) {
     });
     if (response.status() >= 200 && response.status() < 300) {
       // A 202 means the reset was accepted and is still settling.
-      if (response.status() === 202) await new Promise((r) => setTimeout(r, 3000));
+      if (response.status() === 202)
+        await new Promise((r) => setTimeout(r, 3000));
       return;
     }
     if (response.status() !== 409 || Date.now() >= deadline) {

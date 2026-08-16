@@ -3,13 +3,12 @@ import {
   airtableIntentCommand,
   type AirtableCommandIdentity,
 } from "~/modules/airtable/airtable-provider-boundary.server";
-import type { Viewer } from "~/platform/auth/authorize.server";
 import { DEMO_ORGANISATION_ID } from "~/platform/demo/demo-identities";
 import {
   resolveEvaluatorEmailAlias,
   type EvaluatorEmailRouting,
 } from "~/platform/evaluation/evaluator-email-alias.server";
-import { type PublicForm } from "./applicant-session.server";
+import type { PublicForm } from "./applicant-session.server";
 import { SubmissionApplicantEventService } from "./submission-applicant-events.server";
 import { dispatchCoSpeakerInvitationsForSubmissionRevision } from "./co-speaker-invitation.server";
 import { SubmissionServiceFoundation } from "./submission-service-foundation.server";

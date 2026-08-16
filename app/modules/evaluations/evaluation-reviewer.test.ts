@@ -225,9 +225,9 @@ function withBatchRace(
 
 async function resetEvaluationFixture() {
   await env.DB.batch([
-    env.DB.prepare("DELETE FROM event_ai_review_settings WHERE event_id = ?").bind(
-      admin.eventId,
-    ),
+    env.DB.prepare(
+      "DELETE FROM event_ai_review_settings WHERE event_id = ?",
+    ).bind(admin.eventId),
     env.DB.prepare(
       "DELETE FROM submissions WHERE id = 'eval-multi-round-not-advanced'",
     ),
@@ -422,15 +422,20 @@ describe("evaluation vertical slice", () => {
           model: "must-not-run",
           async create() {
             providerCalls += 1;
-            throw new Error("Provider must not run after reviewer access changes.");
+            throw new Error(
+              "Provider must not run after reviewer access changes.",
+            );
           },
         };
         const racingEnv = withBatchRace(testEnv, async () => {
           if (race === "disablement") {
-            await new ReviewerAiSuggestionService(testEnv).updateSetting(admin, {
-              enabled: false,
-              revision: 1,
-            });
+            await new ReviewerAiSuggestionService(testEnv).updateSetting(
+              admin,
+              {
+                enabled: false,
+                revision: 1,
+              },
+            );
             return;
           }
           await service.declareConflict(evaluator, {
@@ -715,7 +720,7 @@ describe("evaluation vertical slice", () => {
               AND id <> ?
               AND json_extract(payload_json, '$.assignmentId') = ?
             ORDER BY created_at DESC, id DESC LIMIT 1`,
-          )
+        )
           .bind(evaluator.eventId, interruptedOperationId, assignmentId)
           .first(),
       ).toEqual({
@@ -862,7 +867,10 @@ describe("evaluation vertical slice", () => {
         )
           .bind(suggestion.id)
           .first(),
-      ).toEqual({ hasLifecycleOperation: 1, importedReviewId: imported.reviewId });
+      ).toEqual({
+        hasLifecycleOperation: 1,
+        importedReviewId: imported.reviewId,
+      });
       await resetEvaluationFixture();
     });
 

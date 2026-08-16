@@ -28,11 +28,7 @@ const BROADCAST_FAILURE_MESSAGE =
  * these causes name configuration variables, and this project keeps those out
  * of logs.
  */
-function logBroadcastFailure(
-  event: string,
-  scope: EventScope,
-  error: unknown,
-) {
+function logBroadcastFailure(event: string, scope: EventScope, error: unknown) {
   const diagnostics =
     error instanceof EventRealtimeConfigurationError
       ? { reason: error.reason }

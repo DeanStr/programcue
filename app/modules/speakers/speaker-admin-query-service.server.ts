@@ -1,4 +1,4 @@
-import { AirtableProviderBoundary } from "~/modules/airtable/airtable-provider-boundary.server";
+import type { AirtableProviderBoundary } from "~/modules/airtable/airtable-provider-boundary.server";
 import { parseEventFilePolicy } from "~/modules/files/file-policy";
 import type { Viewer } from "~/platform/auth/authorize.server";
 import {
@@ -10,10 +10,10 @@ import type {
   AdminSpeakerFilters,
   AdminSpeakerListItem,
 } from "./speaker-administration-contracts.server";
-import {
-  type FileRow,
-  type ProfileRow,
-  type SessionRow,
+import type {
+  FileRow,
+  ProfileRow,
+  SessionRow,
 } from "./speaker-portal-service.server";
 import { SpeakerAdminIntegrityError } from "./speaker-service-errors";
 import { readSpeakerProfileHistory } from "./speaker-profile-revision.server";

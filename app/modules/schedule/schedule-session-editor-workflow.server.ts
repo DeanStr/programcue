@@ -8,7 +8,7 @@ import {
 } from "./schedule-errors";
 import { detectWorkspaceConflicts } from "./schedule-workspace.server";
 import type { ScheduleConflict } from "./schedule-rules";
-import { scheduleSessionContentSchema } from "./schedule-schema";
+import type { scheduleSessionContentSchema } from "./schedule-schema";
 import type {
   ScheduleSession,
   ScheduleWorkspace,

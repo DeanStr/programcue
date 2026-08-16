@@ -1,5 +1,8 @@
 export type RuntimeAppEnvironment =
-  "production" | "demo" | "development" | "test";
+  | "production"
+  | "demo"
+  | "development"
+  | "test";
 
 export type RuntimeMode = {
   appEnvironment: RuntimeAppEnvironment;

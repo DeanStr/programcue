@@ -32,7 +32,10 @@ export type DraftRecoveryState =
   | "conflict";
 
 export type DraftSnapshotAssessment =
-  "expired" | "incompatible" | "restore_available" | "conflict";
+  | "expired"
+  | "incompatible"
+  | "restore_available"
+  | "conflict";
 
 export type DraftSnapshotStore = {
   get<T>(key: string): Promise<DraftSnapshot<T> | null>;

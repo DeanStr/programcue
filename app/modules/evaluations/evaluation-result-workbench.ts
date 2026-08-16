@@ -5,8 +5,7 @@ export const EVALUATION_RESULT_PRESETS = [
   "moderation",
 ] as const;
 
-export type EvaluationResultPreset =
-  (typeof EVALUATION_RESULT_PRESETS)[number];
+export type EvaluationResultPreset = (typeof EVALUATION_RESULT_PRESETS)[number];
 
 export type EvaluationResultSignals = {
   assignmentCount: number;
@@ -38,7 +37,9 @@ export function matchesEvaluationResultPreset(
   const flags = evaluationResultFlags(result);
   if (preset === "coverage") {
     return (
-      result.assignmentCount === 0 || flags.incomplete || result.recusedCount > 0
+      result.assignmentCount === 0 ||
+      flags.incomplete ||
+      result.recusedCount > 0
     );
   }
   if (preset === "decision_ready") return flags.decisionReady;

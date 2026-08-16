@@ -24,14 +24,18 @@ export function calculateReadiness(tasks: ReadonlyArray<ReadinessTask>) {
   let blockers = 0;
   for (const task of tasks) {
     const weight = IMPACT_WEIGHTS[task.impact];
-    if (!Number.isFinite(task.readinessPercent) || task.readinessPercent < 0 || task.readinessPercent > 100) {
+    if (
+      !Number.isFinite(task.readinessPercent) ||
+      task.readinessPercent < 0 ||
+      task.readinessPercent > 100
+    ) {
       throw new Error(`Readiness for ${task.id} must be between 0 and 100.`);
     }
     achieved += task.readinessPercent * weight;
     possible += 100 * weight;
     if (task.blocking && task.readinessPercent < 100) blockers += 1;
   }
-  return { percentage: Math.round(achieved / possible * 100), blockers };
+  return { percentage: Math.round((achieved / possible) * 100), blockers };
 }
 
 export function calculateOverallReadiness(
@@ -43,8 +47,14 @@ export function calculateOverallReadiness(
   }
   if (!workflows.length) return declaredBlockers > 0 ? 0 : 100;
   const total = workflows.reduce((sum, workflow) => {
-    if (!Number.isFinite(workflow.score) || workflow.score < 0 || workflow.score > 100) {
-      throw new Error(`Readiness for ${workflow.key} must be between 0 and 100.`);
+    if (
+      !Number.isFinite(workflow.score) ||
+      workflow.score < 0 ||
+      workflow.score > 100
+    ) {
+      throw new Error(
+        `Readiness for ${workflow.key} must be between 0 and 100.`,
+      );
     }
     return sum + workflow.score;
   }, 0);

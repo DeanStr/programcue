@@ -48,7 +48,8 @@ import {
 import { rejectCrossOriginBrowserMutation } from "~/platform/http/mutation-origin.server";
 
 type ActionResult =
-  { ok: true; message: string } | { ok: false; message: string };
+  | { ok: true; message: string }
+  | { ok: false; message: string };
 
 export const meta = () => [{ title: "Evaluation access · Program Cue" }];
 export const headers: Route.HeadersFunction = () => ({

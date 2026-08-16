@@ -635,7 +635,8 @@ export async function activateEvaluationApplicantAccount(
     ),
   ]);
   const state = verification.results?.[0] as
-    { generationMatches: number; activationMatches: number } | undefined;
+    | { generationMatches: number; activationMatches: number }
+    | undefined;
   if (state?.generationMatches !== 1) {
     throw new Response(
       "The evaluation fixture changed before this account could be activated. Unlock the current fixture and try again.",

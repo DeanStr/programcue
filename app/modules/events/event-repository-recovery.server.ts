@@ -20,7 +20,10 @@ type RecoverableEvent = {
   name: string;
   slug: string;
   activationStatus:
-    "provisioning" | "active" | "provisioning_failed" | "discarded";
+    | "provisioning"
+    | "active"
+    | "provisioning_failed"
+    | "discarded";
   repositoryProvider: "d1" | "airtable";
   lastOperationId: string | null;
   operationStatus: string | null;

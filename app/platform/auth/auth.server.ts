@@ -76,7 +76,8 @@ function optionalParticipantOAuthCredentials(
   provider: "Google" | "Microsoft",
   clientIdName: "GOOGLE_AUTH_CLIENT_ID" | "MICROSOFT_AUTH_CLIENT_ID",
   clientSecretName:
-    "GOOGLE_AUTH_CLIENT_SECRET" | "MICROSOFT_AUTH_CLIENT_SECRET",
+    | "GOOGLE_AUTH_CLIENT_SECRET"
+    | "MICROSOFT_AUTH_CLIENT_SECRET",
 ): ParticipantOAuthCredentials | null {
   const clientId = env[clientIdName]?.trim() ?? "";
   const clientSecret = env[clientSecretName]?.trim() ?? "";

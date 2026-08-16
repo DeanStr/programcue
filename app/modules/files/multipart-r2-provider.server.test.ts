@@ -44,10 +44,9 @@ describe("multipart R2 completion", () => {
       },
     } as unknown as CloudflareEnvironment;
 
-    const completed = await new MultipartR2Provider(environment).complete(
-      row,
-      [{ partNumber: 1, etag: "part-etag" }],
-    );
+    const completed = await new MultipartR2Provider(environment).complete(row, [
+      { partNumber: 1, etag: "part-etag" },
+    ]);
 
     expect(completed).toBe(canonicalObject);
     expect(complete).toHaveBeenCalledWith([

@@ -23,11 +23,10 @@ export async function action({ request, context }: ActionFunctionArgs) {
     });
   }
   const { env } = getCloudflareContext(context);
-  const viewer = await requireCurrentEventRole(
-    request,
-    env,
-    ["owner", "administrator"],
-  );
+  const viewer = await requireCurrentEventRole(request, env, [
+    "owner",
+    "administrator",
+  ]);
   const form = await request.formData();
   const service = new SavedViewService(env);
   try {
@@ -43,7 +42,10 @@ export async function action({ request, context }: ActionFunctionArgs) {
     } else {
       throw new Response("Unsupported saved-view action", { status: 400 });
     }
-    const destination = new URL(returnLocation(form.get("returnTo")), request.url);
+    const destination = new URL(
+      returnLocation(form.get("returnTo")),
+      request.url,
+    );
     destination.searchParams.set("savedView", "updated");
     throw redirect(`${destination.pathname}${destination.search}`);
   } catch (error) {

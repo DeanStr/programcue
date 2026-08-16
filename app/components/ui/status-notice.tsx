@@ -1,4 +1,10 @@
-import { AlertTriangle, CheckCircle2, CircleAlert, Info, X } from "lucide-react";
+import {
+  AlertTriangle,
+  CheckCircle2,
+  CircleAlert,
+  Info,
+  X,
+} from "lucide-react";
 import type { ReactNode } from "react";
 
 import { cn } from "~/lib/cn";
@@ -40,7 +46,16 @@ export function StatusNotice({
         {children ? <div>{children}</div> : null}
       </div>
       {action ? <div className="pc-status-notice-action">{action}</div> : null}
-      {onDismiss ? <button type="button" className="icon-btn" aria-label="Dismiss notification" onClick={onDismiss}><X aria-hidden size={16} /></button> : null}
+      {onDismiss ? (
+        <button
+          type="button"
+          className="icon-btn"
+          aria-label="Dismiss notification"
+          onClick={onDismiss}
+        >
+          <X aria-hidden size={16} />
+        </button>
+      ) : null}
     </section>
   );
 }

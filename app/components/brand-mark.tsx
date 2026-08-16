@@ -1,4 +1,8 @@
-export function BrandMark({ size = "default" }: { size?: "default" | "small" }) {
+export function BrandMark({
+  size = "default",
+}: {
+  size?: "default" | "small";
+}) {
   return (
     <svg
       aria-hidden="true"

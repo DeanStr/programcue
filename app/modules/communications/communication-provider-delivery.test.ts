@@ -7,26 +7,18 @@ import {
   handleProgramCueQueueMessage,
   processCommunicationSend,
   processDecisionNotification,
-  processSubmissionNotification,
   QUEUE_CLAIM_LEASE_SECONDS,
 } from "../../../workers/communications-queue";
 import {
   CommunicationQueueUnavailableError,
   CommunicationService,
 } from "./communication-service.server";
-import { snapshotSourceValues } from "./communication-service-shared";
-import { CommunicationDeliveryService } from "./communication-delivery-service.server";
-import type { AirtableProviderBoundary } from "~/modules/airtable/airtable-provider-boundary.server";
-import { CommunicationTemplateService } from "./communication-template-service.server";
-import { MailpitEmailProvider } from "./mailpit.server";
-import { RecipientQuery } from "./recipient-query.server";
 import { ResendEmailProvider } from "./resend.server";
 import {
   createCommunicationUnsubscribeUrl,
   describeCommunicationUnsubscribe,
   unsubscribeFromOptionalCommunication,
 } from "./unsubscribe.server";
-import { verifyResendWebhook } from "./resend-webhook.server";
 
 const viewer: Viewer = {
   personId: "person-demo-admin",
@@ -346,7 +338,7 @@ describe("Communications D1 vertical slice", () => {
         },
       });
       await service.publishTemplate(viewer, saved.versionId);
-      const confirmed = await confirmPreviewed(service, {
+      await confirmPreviewed(service, {
         templateVersionId: saved.versionId,
         audienceType: "manual",
         manualRecipients: "Optional Recipient <optional-link@example.com>",

@@ -2,33 +2,12 @@ import { env } from "cloudflare:test";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { RouterContextProvider } from "react-router";
 
-import type { AirtableProviderBoundary } from "~/modules/airtable/airtable-provider-boundary.server";
 import { EvaluationService } from "~/modules/evaluations/evaluation-service.server";
-import { ensureDemoSpeakerData } from "~/modules/speakers/demo.server";
-import { ensureDemoSubmissionForm } from "~/modules/submissions/demo-submissions.server";
-import { SubmissionService } from "~/modules/submissions/submission-service.server";
-import type { Applicant } from "~/modules/submissions/submission-repository.server";
-import {
-  ApiParticipantService,
-  participantProfilePatchSchema,
-} from "~/platform/api/api-participant-service.server";
-import { apiRequestHash } from "~/platform/api/api.server";
-import type { Viewer } from "~/platform/auth/authorize.server";
 import { cloudflareContext } from "~/platform/cloudflare-context";
-import {
-  DEMO_IDENTITIES,
-  ensureDemoData,
-  ensureDemoProgramme,
-} from "~/platform/demo/seed.server";
+import { DEMO_IDENTITIES, ensureDemoData } from "~/platform/demo/seed.server";
 import { WebhookService } from "~/platform/operations/webhook-service.server";
-import { EventRealtimeService } from "~/platform/realtime/event-realtime.server";
 import { action as directSessionAction } from "~/routes/api-direct-sessions";
 import { action as evaluationAdvanceAction } from "~/routes/api-evaluation-advance";
-import {
-  action as participantResourceAction,
-  loader as participantResourceLoader,
-} from "~/routes/api-participant-resources";
-import { action as participantSubmissionAction } from "~/routes/api-participant-submission-command";
 
 const testEnv = {
   ...(env as unknown as CloudflareEnvironment),
@@ -44,16 +23,6 @@ function routeContext() {
     ctx: {} as ExecutionContext,
   });
   return context;
-}
-
-function participantHeaders(
-  role: "speaker" | "submitter",
-  extras: HeadersInit = {},
-) {
-  return new Headers({
-    cookie: `program_cue_demo_identity=${role}`,
-    ...Object.fromEntries(new Headers(extras)),
-  });
 }
 
 async function hash(value: string) {
@@ -86,82 +55,6 @@ async function createApiKey(scope: "sessions:write" | "evaluation:write") {
     )
     .run();
   return { keyId, token };
-}
-
-function submitterApplicant(): Extract<Applicant, { verified: true }> {
-  return {
-    personId: DEMO_IDENTITIES.submitter.personId,
-    email: DEMO_IDENTITIES.submitter.email,
-    name: DEMO_IDENTITIES.submitter.name,
-    verified: true,
-    anonymousDraftId: null,
-    biography: "",
-    profileRevision: 1,
-  };
-}
-
-function participantViewer(role: "speaker" | "submitter"): Viewer {
-  return {
-    ...DEMO_IDENTITIES[role],
-    role,
-    organisationId,
-    eventId,
-    demo: true,
-  };
-}
-
-async function insertParticipantClaim(input: {
-  id: string;
-  personId: string;
-  scope: string;
-  idempotencyKey: string;
-  requestHash: string;
-}) {
-  await testEnv.DB.prepare(
-    `INSERT INTO idempotency_records (
-       id, organisation_id, event_id, actor_id, scope, idempotency_key,
-       request_hash, status, expires_at, created_at
-     ) VALUES (?, ?, ?, ?, ?, ?, ?, 'processing',
-               unixepoch() + 2592000, unixepoch())`,
-  )
-    .bind(
-      input.id,
-      organisationId,
-      eventId,
-      `person:${input.personId}`,
-      input.scope,
-      input.idempotencyKey,
-      input.requestHash,
-    )
-    .run();
-}
-
-function participantSubmissionRequest(input: {
-  submissionId: string;
-  command: "submit" | "withdraw";
-  idempotencyKey: string;
-  body: unknown;
-}) {
-  return participantSubmissionAction({
-    request: new Request(
-      `https://programcue.test/api/v1/events/${eventId}/participant/submissions/${input.submissionId}/${input.command}`,
-      {
-        method: "POST",
-        headers: participantHeaders("submitter", {
-          origin: "https://programcue.test",
-          "content-type": "application/json",
-          "idempotency-key": input.idempotencyKey,
-        }),
-        body: JSON.stringify(input.body),
-      },
-    ),
-    params: {
-      eventId,
-      submissionId: input.submissionId,
-      command: input.command,
-    },
-    context: routeContext(),
-  } as never);
 }
 
 beforeEach(async () => {

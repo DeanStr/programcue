@@ -1,8 +1,5 @@
 import type { Viewer } from "~/platform/auth/authorize.server";
-import {
-  AirtableProviderBoundary,
-  airtableCommandKey,
-} from "~/modules/airtable/airtable-provider-boundary.server";
+import { AirtableProviderBoundary } from "~/modules/airtable/airtable-provider-boundary.server";
 import { parseEventFilePolicy } from "~/modules/files/file-policy";
 import {
   parseResourceDocument,

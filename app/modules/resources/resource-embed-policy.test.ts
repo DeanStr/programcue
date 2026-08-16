@@ -19,9 +19,7 @@ describe("resource external embed policy", () => {
       "vimeo",
       "google_maps",
     ]);
-    expect(
-      resourceEmbedFrameOrigins("youtube,vimeo,google_maps"),
-    ).toEqual([
+    expect(resourceEmbedFrameOrigins("youtube,vimeo,google_maps")).toEqual([
       "https://www.youtube-nocookie.com",
       "https://player.vimeo.com",
       "https://www.google.com",
@@ -88,9 +86,9 @@ describe("resource external embed policy", () => {
       "https://player.vimeo.com/not-video/123456789",
       "https://vimeo.com/123456789/AbC123xy/extra",
     ]) {
-      expect(() => externalVideoEmbedFromUrl(url, ["youtube", "vimeo"])).toThrow(
-        ResourceEmbedInputError,
-      );
+      expect(() =>
+        externalVideoEmbedFromUrl(url, ["youtube", "vimeo"]),
+      ).toThrow(ResourceEmbedInputError);
     }
     expect(() =>
       externalVideoEmbedFromUrl("https://youtu.be/dQw4w9WgXcQ", ["vimeo"]),
@@ -118,9 +116,7 @@ describe("resource external embed policy", () => {
     expect(presentation.embedUrl).toContain(
       "https://www.google.com/maps/embed/v1/place?",
     );
-    expect(presentation.embedUrl).toContain(
-      "q=Barbican+Centre%2C+London",
-    );
+    expect(presentation.embedUrl).toContain("q=Barbican+Centre%2C+London");
     expect(presentation.sourceUrl).not.toContain("key=");
     expect(() =>
       externalGoogleMapFromQuery(
@@ -134,10 +130,7 @@ describe("resource external embed policy", () => {
       "goo.gl/maps/example",
     ]) {
       expect(() =>
-        externalGoogleMapFromQuery(
-          { mode: "place", query },
-          ["google_maps"],
-        ),
+        externalGoogleMapFromQuery({ mode: "place", query }, ["google_maps"]),
       ).toThrow("rather than a Google Maps URL");
     }
   });

@@ -5,9 +5,14 @@ import { providerFailureMessage } from "./assistant";
 
 describe("assistant provider failure copy", () => {
   it("offers a retry for transport failures without an HTTP status", () => {
-    const error = new AiProviderError("Provider connection failed.", null, null, {
-      failureKind: "transient",
-    });
+    const error = new AiProviderError(
+      "Provider connection failed.",
+      null,
+      null,
+      {
+        failureKind: "transient",
+      },
+    );
 
     expect(providerFailureMessage(error)).toBe(
       "The AI provider is temporarily unavailable. Try again in a moment.",

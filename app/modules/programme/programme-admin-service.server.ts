@@ -124,7 +124,8 @@ export class ProgrammeAdminService {
         .bind(viewer.organisationId, viewer.eventId)
         .first<{ total: number }>(),
     ]);
-    if (!event) throw new Response("This event could not be found.", { status: 404 });
+    if (!event)
+      throw new Response("This event could not be found.", { status: 404 });
     const missingPublishedContent = sessions.results.find(
       (session) =>
         session.startsAt !== null && session.publishedContentSessionId === null,

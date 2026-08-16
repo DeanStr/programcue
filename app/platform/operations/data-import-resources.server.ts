@@ -17,7 +17,12 @@ function readiness(status: string) {
 }
 
 type TaskStatusTransition =
-  "none" | "progress" | "complete" | "approve" | "waive" | "reopen";
+  | "none"
+  | "progress"
+  | "complete"
+  | "approve"
+  | "waive"
+  | "reopen";
 
 const taskProgressStatuses = [
   "not_started",

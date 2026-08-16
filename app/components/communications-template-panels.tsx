@@ -325,7 +325,10 @@ export function TemplatePreview({ draft }: { draft: TemplateDraftFields }) {
     [draft.subject, draft.body],
   );
   return (
-    <aside className="card pad comms-message-preview" aria-label="Message preview">
+    <aside
+      className="card pad comms-message-preview"
+      aria-label="Message preview"
+    >
       <div className="card-title">
         <h2>Message preview</h2>
       </div>

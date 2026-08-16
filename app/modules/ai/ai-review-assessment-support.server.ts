@@ -2,7 +2,7 @@ import { z } from "zod";
 
 import type { Viewer } from "~/platform/auth/authorize.server";
 
-import { type AiModelProvider } from "./openai-responses-provider.server";
+import type { AiModelProvider } from "./openai-responses-provider.server";
 
 export const generationInputSchema = z
   .object({
@@ -189,14 +189,6 @@ export type GenerationOperationRow = {
   claimToken: string | null;
   claimExpiresAt: number | null;
 };
-
-import {
-  AiReviewAssessmentConflictError,
-  AiReviewAssessmentIntentConflictError,
-  AiReviewAssessmentStateError,
-} from "./ai-review-assessment-errors";
-
-import { type AiReviewAssessmentGenerationAttempt } from "./ai-review-assessment-reader.server";
 
 export {
   AiReviewAssessmentConflictError,

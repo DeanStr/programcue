@@ -56,9 +56,9 @@ function serialize(value: unknown) {
 function isCommittedFailure(error: unknown) {
   return Boolean(
     error &&
-    typeof error === "object" &&
-    "committed" in error &&
-    error.committed === true,
+      typeof error === "object" &&
+      "committed" in error &&
+      error.committed === true,
   );
 }
 

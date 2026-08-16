@@ -262,7 +262,8 @@ async function readAnthropicStream(
       typeof event.index === "number"
     ) {
       const content = event.content_block as
-        Record<string, unknown> | undefined;
+        | Record<string, unknown>
+        | undefined;
       if (content?.type === "text" && typeof content.text === "string") {
         blocks.set(event.index, { type: "text", text: content.text });
       } else if (

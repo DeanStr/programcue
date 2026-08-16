@@ -420,9 +420,12 @@ export async function action({ request, context }: Route.ActionArgs) {
         id: String(form.get("triggerId") ?? "") || undefined,
         templateId: String(form.get("templateId") ?? ""),
         triggerType: String(form.get("triggerType") ?? "") as
-          "task_due" | "task_overdue",
+          | "task_due"
+          | "task_overdue",
         audienceType: String(form.get("triggerAudience") ?? "") as
-          "due_speakers" | "overdue_speakers" | "event_administrators",
+          | "due_speakers"
+          | "overdue_speakers"
+          | "event_administrators",
         kind: String(form.get("kind") ?? "") as "transactional" | "optional",
         sendHourUtc: Number(form.get("sendHourUtc")),
         enabled: true,
@@ -452,7 +455,9 @@ export async function action({ request, context }: Route.ActionArgs) {
         personId: String(form.get("personId") ?? ""),
         method: String(form.get("method") ?? "") as "REQUEST" | "CANCEL",
         provider: String(form.get("provider") ?? "") as
-          "email_ics" | "google" | "microsoft",
+          | "email_ics"
+          | "google"
+          | "microsoft",
         ...(String(form.get("connectionId") ?? "")
           ? { connectionId: String(form.get("connectionId")) }
           : {}),

@@ -1,7 +1,7 @@
 import { materializePublishedResourceAcknowledgementsForSession } from "~/modules/resources/resource-service.server";
 import type { Viewer } from "~/platform/auth/authorize.server";
-import { type AcceptedSpeakerInvitationPlan } from "./accepted-speaker-invitation.server";
-import { decisionSchema } from "./evaluation-schema";
+import type { AcceptedSpeakerInvitationPlan } from "./accepted-speaker-invitation.server";
+import type { decisionSchema } from "./evaluation-schema";
 
 export type DecisionSubmission = {
   id: string;

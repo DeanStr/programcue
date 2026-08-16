@@ -96,10 +96,10 @@ export function PublicApplicationLanding({
   );
   const hasInvitation = Boolean(
     presentation.invitationHeading ||
-    presentation.invitationText ||
-    form.eventDescription ||
-    presentation.organizerName ||
-    presentation.organizerRole,
+      presentation.invitationText ||
+      form.eventDescription ||
+      presentation.organizerName ||
+      presentation.organizerRole,
   );
 
   return (

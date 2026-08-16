@@ -347,9 +347,7 @@ export default function AdminEventNew({ loaderData }: Route.ComponentProps) {
                 />
                 <span>
                   <strong>Program Cue — recommended</strong>
-                  <small>
-                    Keep event data here. Nothing else to set up.
-                  </small>
+                  <small>Keep event data here. Nothing else to set up.</small>
                 </span>
               </label>
               <label className="pc-repository-choice mt">

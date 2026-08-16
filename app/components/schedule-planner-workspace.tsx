@@ -12,10 +12,7 @@ import {
 import type { SchedulePlannerWorkspaceData } from "./schedule-planner-panel-types";
 import { ScheduleSourcePanel } from "./schedule-planner-source-panel";
 import { ScheduleValidationPanel } from "./schedule-planner-validation-panel";
-import {
-  conflictTypeLabel,
-  parseScheduleActionNotices,
-} from "./schedule-planner-workspace-helpers";
+import { conflictTypeLabel } from "./schedule-planner-workspace-helpers";
 
 import { useSchedulePlannerController } from "./use-schedule-planner-controller";
 

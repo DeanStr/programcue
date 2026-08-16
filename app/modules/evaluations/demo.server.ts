@@ -16,7 +16,8 @@ const PLAN_ID = "demo-evaluation-plan";
 const ROUND_ID = "demo-evaluation-round";
 
 const formSchema = {
-  introduction: "These archived proposals provide stable, realistic evaluation examples in demo mode.",
+  introduction:
+    "These archived proposals provide stable, realistic evaluation examples in demo mode.",
   presentation: DEFAULT_FORM_PRESENTATION,
   fields: [
     {
@@ -129,9 +130,12 @@ const proposals = [
     speakerId: "demo-evaluation-speaker-calm",
     speakerName: "Alex Morgan",
     answers: {
-      session_overview: "A practical workshop for replacing fragmented run-of-show decisions with clear operating rhythms.",
-      audience_takeaway: "A reusable incident cadence and handoff checklist for live event teams.",
-      delivery_approach: "Short case study, facilitated scenario and a take-home operating template.",
+      session_overview:
+        "A practical workshop for replacing fragmented run-of-show decisions with clear operating rhythms.",
+      audience_takeaway:
+        "A reusable incident cadence and handoff checklist for live event teams.",
+      delivery_approach:
+        "Short case study, facilitated scenario and a take-home operating template.",
     },
   },
   {
@@ -145,18 +149,45 @@ const proposals = [
     speakerId: "demo-evaluation-speaker-inclusive",
     speakerName: "Priya Shah",
     answers: {
-      session_overview: "Field-tested patterns for making event technology calmer and more accessible from registration to follow-up.",
-      audience_takeaway: "A prioritised set of accessibility checks that can be applied before launch.",
-      delivery_approach: "Annotated examples, audience prompts and a concise implementation checklist.",
+      session_overview:
+        "Field-tested patterns for making event technology calmer and more accessible from registration to follow-up.",
+      audience_takeaway:
+        "A prioritised set of accessibility checks that can be applied before launch.",
+      delivery_approach:
+        "Annotated examples, audience prompts and a concise implementation checklist.",
     },
   },
 ] as const;
 
 const criteria = [
-  { id: "demo-evaluation-criterion-relevance", name: "Audience relevance", description: "Fit for the event audience and programme.", weight: 30, position: 0 },
-  { id: "demo-evaluation-criterion-substance", name: "Content substance", description: "Clarity, evidence and depth of the proposal.", weight: 25, position: 1 },
-  { id: "demo-evaluation-criterion-practicality", name: "Practical value", description: "Usefulness of the promised attendee outcomes.", weight: 25, position: 2 },
-  { id: "demo-evaluation-criterion-delivery", name: "Delivery approach", description: "Suitability of the format and facilitation plan.", weight: 20, position: 3 },
+  {
+    id: "demo-evaluation-criterion-relevance",
+    name: "Audience relevance",
+    description: "Fit for the event audience and programme.",
+    weight: 30,
+    position: 0,
+  },
+  {
+    id: "demo-evaluation-criterion-substance",
+    name: "Content substance",
+    description: "Clarity, evidence and depth of the proposal.",
+    weight: 25,
+    position: 1,
+  },
+  {
+    id: "demo-evaluation-criterion-practicality",
+    name: "Practical value",
+    description: "Usefulness of the promised attendee outcomes.",
+    weight: 25,
+    position: 2,
+  },
+  {
+    id: "demo-evaluation-criterion-delivery",
+    name: "Delivery approach",
+    description: "Suitability of the format and facilitation plan.",
+    weight: 20,
+    position: 3,
+  },
 ] as const;
 
 export async function ensureDemoEvaluationData(env: CloudflareEnvironment) {
@@ -232,7 +263,9 @@ export async function ensureDemoEvaluationData(env: CloudflareEnvironment) {
       versionNumber: 1,
       schema: formSchema,
       answers: answerValues,
-      speakers: [{ name: proposal.speakerName, email: proposal.submitterEmail }],
+      speakers: [
+        { name: proposal.speakerName, email: proposal.submitterEmail },
+      ],
     });
     statements.push(
       env.DB.prepare(`
@@ -323,7 +356,8 @@ export async function ensureDemoEvaluationData(env: CloudflareEnvironment) {
   );
 
   for (const criterion of criteria) {
-    statements.push(env.DB.prepare(`
+    statements.push(
+      env.DB.prepare(`
       INSERT OR IGNORE INTO evaluation_criteria (
         id, event_id, round_id, name, description, input_type,
         options_json, weight_percent, required, position
@@ -332,17 +366,19 @@ export async function ensureDemoEvaluationData(env: CloudflareEnvironment) {
         FROM evaluation_rounds r
        WHERE r.id = ? AND r.event_id = ? AND r.status = 'active'
     `).bind(
-      criterion.id,
-      criterion.name,
-      criterion.description,
-      criterion.weight,
-      criterion.position,
-      ROUND_ID,
-      DEMO_EVENT_ID,
-    ));
+        criterion.id,
+        criterion.name,
+        criterion.description,
+        criterion.weight,
+        criterion.position,
+        ROUND_ID,
+        DEMO_EVENT_ID,
+      ),
+    );
   }
 
-  statements.push(env.DB.prepare(`
+  statements.push(
+    env.DB.prepare(`
     INSERT OR IGNORE INTO evaluation_round_reviewers (
       id, event_id, round_id, person_id, added_by_person_id,
       revision, created_at, updated_at
@@ -355,15 +391,12 @@ export async function ensureDemoEvaluationData(env: CloudflareEnvironment) {
        AND m.role = 'evaluator'
        AND m.accepted_at IS NOT NULL AND m.revoked_at IS NULL
      WHERE r.id = ? AND r.event_id = ? AND r.status = 'active'
-  `).bind(
-    DEMO_ADMIN_ID,
-    DEMO_EVALUATOR_ID,
-    ROUND_ID,
-    DEMO_EVENT_ID,
-  ));
+  `).bind(DEMO_ADMIN_ID, DEMO_EVALUATOR_ID, ROUND_ID, DEMO_EVENT_ID),
+  );
 
   for (const [index, proposal] of proposals.entries()) {
-    statements.push(env.DB.prepare(`
+    statements.push(
+      env.DB.prepare(`
       INSERT OR IGNORE INTO evaluator_assignments (
         id, event_id, round_id, submission_id, evaluator_person_id,
         status, revision, assigned_at
@@ -382,12 +415,13 @@ export async function ensureDemoEvaluationData(env: CloudflareEnvironment) {
          AND pool.person_id = m.person_id
        WHERE r.id = ? AND r.event_id = ? AND r.status = 'active'
     `).bind(
-      `demo-evaluation-assignment-${index + 1}`,
-      proposal.id,
-      DEMO_EVALUATOR_ID,
-      ROUND_ID,
-      DEMO_EVENT_ID,
-    ));
+        `demo-evaluation-assignment-${index + 1}`,
+        proposal.id,
+        DEMO_EVALUATOR_ID,
+        ROUND_ID,
+        DEMO_EVENT_ID,
+      ),
+    );
   }
 
   await env.DB.batch(statements);

@@ -1,8 +1,8 @@
-import { z } from "zod";
+import type { z } from "zod";
 
 import type { Viewer } from "~/platform/auth/authorize.server";
 import { decryptWebhookSecret } from "~/platform/operations/webhook-crypto.server";
-import {
+import type {
   apiAdministrationCommandSchema,
   apiAdministrationFamilySchema,
 } from "./api-command-contract";
@@ -33,8 +33,6 @@ export type StoredWebhookSecret = {
   endpointId: string;
   secretFingerprint: string;
 };
-
-const identifierSchema = z.string().trim().min(1).max(300);
 
 export function assertNew(itemId: string) {
   if (itemId !== "new") {

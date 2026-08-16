@@ -1,9 +1,6 @@
 import { getAgentByName } from "agents";
 
-import {
-  ProgramCueEventAgent,
-  programCueAgentInstanceName,
-} from "./program-cue-agent.server";
+import { programCueAgentInstanceName } from "./program-cue-agent.server";
 import type { Viewer } from "~/platform/auth/authorize.server";
 
 export class AiAgentRuntimeConfigurationError extends Error {

@@ -1,4 +1,4 @@
-import { z } from "zod";
+import type { z } from "zod";
 
 import { CsvParseError, parseCsv } from "~/platform/operations/csv";
 import type { OrganisationAdministrator } from "~/platform/auth/organisation.server";

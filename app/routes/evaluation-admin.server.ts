@@ -1,4 +1,4 @@
-import { type LoaderFunctionArgs } from "react-router";
+import type { LoaderFunctionArgs } from "react-router";
 import { z } from "zod";
 import { AiReviewAssessmentService } from "~/modules/ai/ai-review-assessment.server";
 import { ReviewerAiSuggestionService } from "~/modules/ai/reviewer-ai-suggestion.server";

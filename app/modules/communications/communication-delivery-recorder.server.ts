@@ -3,7 +3,7 @@ import { sourceRevisionForLog } from "~/platform/observability/source-revision.s
 import { WebhookService } from "~/platform/operations/webhook-service.server";
 import { representativeSourceSnapshot } from "./communication-delivery-foundation.server";
 import { CommunicationDeliveryPreview } from "./communication-delivery-preview.server";
-import { type ConfirmCommunicationInput } from "./communication-schema";
+import type { ConfirmCommunicationInput } from "./communication-schema";
 import {
   communicationDeliveryIdempotencyKey,
   CommunicationQueueUnavailableError,

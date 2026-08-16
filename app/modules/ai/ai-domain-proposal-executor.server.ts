@@ -1,7 +1,7 @@
-import { z } from "zod";
+import type { z } from "zod";
 
 import { AiProposalStateError } from "./ai-assistant-errors";
-import { assistantProposalMetadataSchema } from "./ai-tool-contracts.server";
+import type { assistantProposalMetadataSchema } from "./ai-tool-contracts.server";
 import { CommunicationService } from "~/modules/communications/communication-service.server";
 import { EvaluationService } from "~/modules/evaluations/evaluation-service.server";
 import { IntegrationService } from "~/modules/integrations/integration-service.server";
@@ -151,7 +151,7 @@ export class AiDomainProposalExecutor {
       DomainProposalMetadataFor<"propose_reviewer_assignment">
     >,
   ): Promise<ExecutedDomainProposal> {
-    const { proposalId, metadata, operationId } = input;
+    const { metadata, operationId } = input;
     const evaluation = new EvaluationService(this.env);
     const assignmentInput = metadata.snapshot.input;
     const requestHash = await sha256(JSON.stringify(assignmentInput));
@@ -254,7 +254,7 @@ export class AiDomainProposalExecutor {
       DomainProposalMetadataFor<"propose_schedule_placement">
     >,
   ): Promise<ExecutedDomainProposal> {
-    const { proposalId, metadata, operationId } = input;
+    const { metadata, operationId } = input;
     const result = await new ScheduleService(this.env).place(
       viewer,
       metadata.snapshot.input,
@@ -361,7 +361,7 @@ export class AiDomainProposalExecutor {
       DomainProposalMetadataFor<"propose_schedule_publication">
     >,
   ): Promise<ExecutedDomainProposal> {
-    const { proposalId, metadata, operationId } = input;
+    const { metadata, operationId } = input;
     const schedules = new ScheduleService(this.env);
     const scheduleActorId = `assistant:${viewer.personId}`;
     const requestHash = await sha256(JSON.stringify(metadata.arguments));
@@ -437,7 +437,7 @@ export class AiDomainProposalExecutor {
       DomainProposalMetadataFor<"propose_accelevents_run">
     >,
   ): Promise<ExecutedDomainProposal> {
-    const { proposalId, metadata, operationId } = input;
+    const { metadata, operationId } = input;
     const integrations = new IntegrationService(this.env);
     const previewFingerprint = metadata.snapshot.previewFingerprint;
     const recordedRun = await this.env.DB.prepare(

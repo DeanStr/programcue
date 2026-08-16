@@ -323,7 +323,8 @@ export function FormBuilderVisualCanvas({
     setDraggedItem(null);
     const active = event.active.data.current as DraggedItem | undefined;
     const over = event.over?.data.current as
-      { kind: "insertion-target"; index: number } | undefined;
+      | { kind: "insertion-target"; index: number }
+      | undefined;
     if (!active || !over || over.kind !== "insertion-target") return;
 
     const targetIndex = over.index;

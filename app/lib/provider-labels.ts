@@ -24,6 +24,8 @@ export function providerLabel(
   if (!provider) return fallback;
   return (
     PROVIDER_LABELS[provider] ??
-    provider.replaceAll("_", " ").replace(/^./u, (letter) => letter.toUpperCase())
+    provider
+      .replaceAll("_", " ")
+      .replace(/^./u, (letter) => letter.toUpperCase())
   );
 }

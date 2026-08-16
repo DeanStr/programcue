@@ -1,54 +1,14 @@
 import { env } from "cloudflare:test";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it } from "vitest";
 
 import type { Viewer } from "~/platform/auth/authorize.server";
 import { ensureDemoData } from "~/platform/demo/seed.server";
 import { ensureDemoProgramme } from "~/platform/demo/seed.server";
-import { ensureJudgedDemoWorkflow } from "~/platform/demo/demo-reset.server";
-import {
-  EventService,
-  EventRepositoryMigrationRequiredError,
-} from "~/modules/events/event-service.server";
-import { EventTrackInUseError } from "~/modules/events/event-repository.server";
-import { EvaluationService } from "~/modules/evaluations/evaluation-service.server";
-import { ScheduleService } from "~/modules/schedule/schedule-service.server";
-import { SubmissionService } from "~/modules/submissions/submission-service.server";
-import { TaskService } from "~/modules/tasks/task-service.server";
-import { ParticipantRetentionService } from "~/modules/privacy/participant-retention-service.server";
-import {
-  AirtableProviderError,
-  type AirtableRecord,
-  type AirtableTable,
-} from "./airtable-client.server";
+import type { AirtableRecord, AirtableTable } from "./airtable-client.server";
 import { AirtableEventDataRepository } from "./airtable-event-data-repository.server";
-import {
-  AirtableEventDataUnsynchronizedError,
-  AirtableEventProjectionCommitError,
-} from "./airtable-event-data-repository.server";
-import { AIRTABLE_EVENT_TABLE_SPECS } from "./airtable-event-data-schema";
-import {
-  AirtableCommandReplayUnavailableError,
-  AirtableProviderBoundary,
-  airtableIntentCommand,
-} from "./airtable-provider-boundary.server";
-import { AirtableProjectionRecoveryService } from "./airtable-projection-recovery-service.server";
-import {
-  AirtableMigrationService,
-  AirtableMigrationStateError,
-} from "./airtable-migration-service.server";
+import { AirtableMigrationService } from "./airtable-migration-service.server";
 import { AirtableProgrammeRepository } from "./airtable-programme-repository.server";
-import {
-  AirtableRepositoryConfigurationError,
-  AirtableRepositoryReconciliationError,
-  AirtableRepositorySchemaError,
-  AirtableRoomRepository,
-} from "./airtable-room-repository.server";
-import {
-  AIRTABLE_EVENT_DATA_TABLE_NAMES,
-  AIRTABLE_ROOMS_TABLE,
-  AIRTABLE_SCHEMA_VERSION,
-  AIRTABLE_SYNCHRONOUS_MIGRATION_MAX_CHANGES,
-} from "./airtable-schema";
+import { AirtableRoomRepository } from "./airtable-room-repository.server";
 
 declare module "cloudflare:test" {
   interface ProvidedEnv {
@@ -69,14 +29,6 @@ const viewer: Viewer = {
   organisationId: "org-future-events",
   eventId: "evt-foe-2025",
   demo: true,
-};
-
-const owner: Viewer = {
-  ...viewer,
-  personId: "person-demo-owner",
-  name: "Maya Chen",
-  email: "maya@example.com",
-  role: "owner",
 };
 
 const connectionInput = {
@@ -185,36 +137,6 @@ function fakeAirtable(initialTables: AirtableTable[] = []) {
   };
 }
 
-function eventInput(event: Awaited<ReturnType<EventService["getSetup"]>>) {
-  return {
-    revision: event.revision,
-    name: event.name,
-    timezone: event.timezone,
-    startDate: event.startDate,
-    endDate: event.endDate,
-    venue: event.venue,
-    venueAddress: event.venueAddress,
-    venueMapUrl: event.venueMapUrl,
-    city: event.city,
-    publicSlug: event.publicSlug,
-    brandAccent: event.brandAccent,
-    programmeHeroImageUrl: event.programmeHeroImageUrl,
-    participantLogoUrl: event.participantLogoUrl,
-    participantWelcomeText: event.participantWelcomeText,
-    participantSupportUrl: event.participantSupportUrl,
-    description: event.description,
-    repositoryProvider: event.repositoryProvider,
-    retentionMonths: event.retentionMonths,
-    submissionAccessMode: event.submissionAccessMode,
-    allowAnonymousDrafts: event.allowAnonymousDrafts,
-    duplicatePersonWarnings: event.duplicatePersonWarnings,
-    rooms: event.rooms,
-    tracks: event.tracks,
-    sessionFormats: event.sessionFormats,
-    filePolicy: event.filePolicy,
-  };
-}
-
 function eventDataRepository(
   testEnv: CloudflareEnvironment,
   rooms: AirtableRoomRepository,
@@ -226,71 +148,6 @@ function eventDataRepository(
     createClient: () => provider.client,
     now,
   });
-}
-
-async function changeEventFormat(label: string) {
-  const result = await env.DB.prepare(
-    `UPDATE events SET session_formats_json = ?, updated_at = unixepoch()
-      WHERE id = ?`,
-  )
-    .bind(
-      JSON.stringify([
-        {
-          key: "talk",
-          label,
-          defaultDurationMinutes: 40,
-          position: 0,
-        },
-      ]),
-      viewer.eventId,
-    )
-    .run();
-  expect(result.meta.changes).toBe(1);
-}
-
-async function initializeEventDataProjection(
-  repository: AirtableEventDataRepository,
-  suffix: string,
-  rooms?: AirtableRoomRepository,
-) {
-  if (rooms) {
-    const d1Rooms = await env.DB.prepare(
-      `SELECT id, name, capacity, resources_json AS resourcesJson, position,
-              building, level
-         FROM rooms WHERE event_id = ? AND status = 'active'
-         ORDER BY position, name, id`,
-    )
-      .bind(viewer.eventId)
-      .all<{
-        id: string;
-        name: string;
-        capacity: number;
-        resourcesJson: string;
-        position: number;
-        building: string | null;
-        level: string | null;
-      }>();
-    await rooms.replaceRooms(
-      viewer.organisationId,
-      viewer.eventId,
-      d1Rooms.results.map(({ resourcesJson, ...room }) => ({
-        ...room,
-        resources: JSON.parse(resourcesJson) as string[],
-      })),
-      1,
-    );
-  }
-  await repository.synchronizeFromD1(
-    {
-      organisationId: viewer.organisationId,
-      eventId: viewer.eventId,
-      personId: viewer.personId,
-    },
-    {
-      idempotencyKey: `airtable-test-initial-sync:${suffix}`,
-      reason: "Airtable repository contract test",
-    },
-  );
 }
 
 describe("Airtable authoritative room repository", () => {

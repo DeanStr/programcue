@@ -18,12 +18,22 @@ export type FieldProps = {
   className?: string;
 };
 
-export function Field({ label, children, description, error, required = false, className }: FieldProps) {
+export function Field({
+  label,
+  children,
+  description,
+  error,
+  required = false,
+  className,
+}: FieldProps) {
   const generatedId = useId();
   const controlId = children.props.id ?? `field-${generatedId}`;
   const descriptionId = description ? `${controlId}-description` : undefined;
   const errorId = error ? `${controlId}-error` : undefined;
-  const describedBy = [children.props["aria-describedby"], descriptionId, errorId].filter(Boolean).join(" ") || undefined;
+  const describedBy =
+    [children.props["aria-describedby"], descriptionId, errorId]
+      .filter(Boolean)
+      .join(" ") || undefined;
 
   const control = cloneElement(children, {
     id: controlId,
@@ -40,7 +50,11 @@ export function Field({ label, children, description, error, required = false, c
           {required ? <span className="pc-required">Required</span> : null}
         </span>
       </label>
-      {description ? <p className="help pc-field-description" id={descriptionId}>{description}</p> : null}
+      {description ? (
+        <p className="help pc-field-description" id={descriptionId}>
+          {description}
+        </p>
+      ) : null}
       {control}
       {/* role="alert" so a validation failure is announced, not just rendered. */}
       {error ? (

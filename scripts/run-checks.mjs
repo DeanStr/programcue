@@ -21,6 +21,10 @@ const generatedTypes = await runProcess(npmCommand, ["run", "types:generate"], {
 if (generatedTypes.code !== 0) process.exit(generatedTypes.code);
 
 const coreRuns = await Promise.all([
+  runProcess(npmCommand, ["run", "quality:ci"], {
+    cwd: repositoryRoot,
+    label: "Biome formatting and linting",
+  }),
   runProcess(npmCommand, ["run", "typecheck:generated"], {
     cwd: repositoryRoot,
     label: "TypeScript",

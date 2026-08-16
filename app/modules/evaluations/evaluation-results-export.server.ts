@@ -437,7 +437,8 @@ export class EvaluationResultsExportService extends EvaluationServiceFoundation 
           ],
         );
       const exportPreflight = preflightResult.results[0] as
-        ExportPreflight | undefined;
+        | ExportPreflight
+        | undefined;
       if (!exportPreflight) {
         throw new Error(
           "The Abstract results export size could not be verified.",

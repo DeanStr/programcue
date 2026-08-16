@@ -19,10 +19,13 @@ function requireDemo(env: CloudflareEnvironment) {
 }
 
 function requireConfirmation(request: Request, formData?: FormData) {
-  const confirmation = formData?.get("confirm")
-    ?? new URL(request.url).searchParams.get("confirm");
+  const confirmation =
+    formData?.get("confirm") ??
+    new URL(request.url).searchParams.get("confirm");
   if (confirmation !== CONFIRMATION) {
-    throw new Response("Explicit demo fixture confirmation is required", { status: 400 });
+    throw new Response("Explicit demo fixture confirmation is required", {
+      status: 400,
+    });
   }
 }
 
@@ -31,11 +34,13 @@ async function fixtureState(env: CloudflareEnvironment) {
     SELECT COUNT(*) AS count, MAX(reason) AS reason, MAX(revoked_at) AS revokedAt
       FROM communication_unsubscribes
      WHERE event_id = ? AND address = ? COLLATE NOCASE AND category = ?
-  `).bind(EVENT_ID, ADDRESS, CATEGORY).first<{
-    count: number;
-    reason: string | null;
-    revokedAt: number | null;
-  }>();
+  `)
+    .bind(EVENT_ID, ADDRESS, CATEGORY)
+    .first<{
+      count: number;
+      reason: string | null;
+      revokedAt: number | null;
+    }>();
   return {
     address: ADDRESS,
     category: CATEGORY,
@@ -61,9 +66,12 @@ export async function loader({ request, context }: Route.LoaderArgs) {
   const { env } = getCloudflareContext(context);
   requireDemo(env);
   requireConfirmation(request);
-  return data({ ok: true, ...(await fixtureState(env)) }, {
-    headers: { "cache-control": "private, no-store" },
-  });
+  return data(
+    { ok: true, ...(await fixtureState(env)) },
+    {
+      headers: { "cache-control": "private, no-store" },
+    },
+  );
 }
 
 export async function action({ request, context }: Route.ActionArgs) {
@@ -110,7 +118,9 @@ export async function action({ request, context }: Route.ActionArgs) {
     ),
   ]);
 
-  const unsubscribeUrl = new URL(await createCommunicationUnsubscribeUrl(env, DELIVERY_ID));
+  const unsubscribeUrl = new URL(
+    await createCommunicationUnsubscribeUrl(env, DELIVERY_ID),
+  );
   return data({
     ok: true,
     unsubscribePath: `${unsubscribeUrl.pathname}${unsubscribeUrl.search}`,

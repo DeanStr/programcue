@@ -68,11 +68,7 @@ export function RouteProgress() {
       >
         <span />
       </div>
-      <div
-        aria-live="polite"
-        className="sr-only"
-        data-pc-route-announcement
-      >
+      <div aria-live="polite" className="sr-only" data-pc-route-announcement>
         {active ? "Loading" : announcement}
       </div>
     </>

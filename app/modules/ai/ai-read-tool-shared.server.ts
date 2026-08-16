@@ -1,6 +1,9 @@
-import { z } from "zod";
+import type { z } from "zod";
 import type { Viewer } from "~/platform/auth/authorize.server";
-import { adminRoles, reminderCohortSchema } from "./ai-tool-contracts.server";
+import {
+  adminRoles,
+  type reminderCohortSchema,
+} from "./ai-tool-contracts.server";
 import {
   AiToolPermissionError,
   AiToolValidationError,

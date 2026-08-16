@@ -44,7 +44,11 @@ async function createSpeaker(testEnv: CloudflareEnvironment, prefix: string) {
 }
 
 type WorkflowStatus =
-  "prospect" | "invited" | "confirmed" | "declined" | "withdrawn";
+  | "prospect"
+  | "invited"
+  | "confirmed"
+  | "declined"
+  | "withdrawn";
 
 async function createRosterSpeaker(
   testEnv: CloudflareEnvironment,

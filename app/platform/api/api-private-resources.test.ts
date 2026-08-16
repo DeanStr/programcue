@@ -4,12 +4,12 @@ import { beforeEach, describe, expect, it } from "vitest";
 import type { AirtableProviderBoundary } from "~/modules/airtable/airtable-provider-boundary.server";
 import { ContentManagementService } from "~/modules/content/content-management-service.server";
 import {
-  ScheduleIdempotencyConflictError,
+  type ScheduleIdempotencyConflictError,
   ScheduleRevisionConflictError,
   ScheduleService,
 } from "~/modules/schedule/schedule-service.server";
 import { ensureDemoData } from "~/platform/demo/seed.server";
-import { ApiError, apiRequestHash, type ApiPrincipal } from "./api.server";
+import { type ApiError, apiRequestHash, type ApiPrincipal } from "./api.server";
 import {
   ApiTaskService,
   apiTaskCreateSchema,

@@ -1,41 +1,22 @@
 import { env } from "cloudflare:test";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it } from "vitest";
 import { RouterContextProvider } from "react-router";
 
-import type { AirtableProviderBoundary } from "~/modules/airtable/airtable-provider-boundary.server";
 import { ensureDemoEvaluationData } from "~/modules/evaluations/demo.server";
 import { PublicProgrammeService } from "~/modules/programme/public-programme-service.server";
 import {
   ensureDemoData,
   ensureDemoProgramme,
 } from "~/platform/demo/seed.server";
-import {
-  ApiAdministrationService,
-  parseAdminQuery,
-} from "./api-administration-service.server";
-import { ApiAdministrationItemService } from "./api-administration-item-service.server";
 import { ApiEvaluationService } from "./api-evaluation-service.server";
 import { ApiIntegrationService } from "./api-integration-service.server";
 import {
-  publicProgrammeResponse,
   publicSchedulePage,
   publicSessionPage,
-  publicSessionQuerySchema,
 } from "./api-public-programme.server";
-import {
-  decodePrivateCursor,
-  encodePrivateCursor,
-  parseStrictQuery,
-} from "./api-pagination.server";
-import { ApiError, type ApiPrincipal } from "./api.server";
+import type { ApiError, ApiPrincipal } from "./api.server";
 import { cloudflareContext } from "~/platform/cloudflare-context";
-import { loader as administrationResourceLoader } from "~/routes/api-administration-resources";
 import { action as evaluationResourceAction } from "~/routes/api-evaluation-resources";
-import { loader as publicCalendarLoader } from "~/routes/api-public-calendar";
-import { loader as publicEventLoader } from "~/routes/api-public-event";
-import { loader as publicScheduleLoader } from "~/routes/api-public-schedule";
-import { loader as publicSessionsLoader } from "~/routes/api-public-sessions";
-import { loader as publicSpeakersLoader } from "~/routes/api-public-speakers";
 
 async function hash(value: string) {
   const digest = await crypto.subtle.digest(

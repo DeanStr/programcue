@@ -7,7 +7,6 @@ import {
 } from "./ai-assistant-errors";
 import {
   assistantProposalMetadataSchema,
-  loadReminderCohort,
   prepareReminderSendProposal,
 } from "./ai-tools.server";
 import type { Viewer } from "~/platform/auth/authorize.server";

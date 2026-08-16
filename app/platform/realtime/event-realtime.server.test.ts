@@ -9,7 +9,7 @@ import {
 } from "~/platform/api/api-realtime.server";
 import {
   EventChangeNotFoundError,
-  EventRealtimeDeliveryError,
+  type EventRealtimeDeliveryError,
   EventRealtimeService,
 } from "./event-realtime.server";
 import { recordRouteChange } from "./route-realtime.server";
@@ -89,11 +89,7 @@ describe("event realtime service", () => {
       changeType: "progress",
     });
 
-    const first = await service.getChangesSince(
-      viewer,
-      before,
-      1,
-    );
+    const first = await service.getChangesSince(viewer, before, 1);
     expect(first.changes).toHaveLength(1);
     expect(first.hasMore).toBe(true);
     expect(first.pollAfterMs).toBe(0);
@@ -168,7 +164,9 @@ describe("event realtime service", () => {
       .bind(viewer.eventId)
       .first<{ cursor: number }>();
 
-    const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
+    const consoleError = vi
+      .spyOn(console, "error")
+      .mockImplementation(() => {});
     const failure = await recordRouteChange(
       { DB: env.DB } as unknown as CloudflareEnvironment,
       viewer,

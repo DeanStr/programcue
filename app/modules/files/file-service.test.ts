@@ -933,7 +933,6 @@ describe("private R2 file lifecycle", () => {
   it("identifies Office uploads from container metadata instead of the filename", async () => {
     const testEnv = env as unknown as CloudflareEnvironment;
     await ensureDemoSpeakerData(testEnv);
-    const service = new FileService(testEnv);
     const target = {
       targetType: "person" as const,
       targetId: speaker.personId,
@@ -1105,7 +1104,6 @@ describe("private R2 file lifecycle", () => {
   it("serializes concurrent versions onto one logical profile asset", async () => {
     const testEnv = env as unknown as CloudflareEnvironment;
     await ensureDemoSpeakerData(testEnv);
-    const service = new FileService(testEnv);
     const previous = await testEnv.DB.prepare(
       `SELECT COALESCE(MAX(fv.version_number), 0) AS versionNumber
          FROM file_assets fa
@@ -1169,7 +1167,6 @@ describe("private R2 file lifecycle", () => {
   it("creates an immutable asset for each resource attachment upload", async () => {
     const testEnv = env as unknown as CloudflareEnvironment;
     await ensureDemoSpeakerData(testEnv);
-    const service = new FileService(testEnv);
     const upload = (name: string) =>
       completeTestDirectUpload(
         testEnv,

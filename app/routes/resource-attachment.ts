@@ -51,7 +51,13 @@ export async function action({ request, context }: Route.ActionArgs) {
     try {
       body = JSON.parse(raw);
     } catch {
-      return response({ error: "That request could not be read. Reload the page and try again." }, 400);
+      return response(
+        {
+          error:
+            "That request could not be read. Reload the page and try again.",
+        },
+        400,
+      );
     }
     const input = attachmentSchema.parse(body);
     try {

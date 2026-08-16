@@ -116,7 +116,12 @@ for (const [file, source] of sources) {
     /* 3. font sizes below the readable floor */
     for (const [, size] of code.matchAll(/font-size:\s*(\d+(?:\.\d+)?)px/gi)) {
       if (Number(size) < MIN_FONT_PX) {
-        record(file, line, "tiny-type", `${size}px is below the ${MIN_FONT_PX}px floor`);
+        record(
+          file,
+          line,
+          "tiny-type",
+          `${size}px is below the ${MIN_FONT_PX}px floor`,
+        );
       }
     }
 
@@ -130,7 +135,12 @@ for (const [file, source] of sources) {
       if (/\b(clamp|calc|min|max)\(/i.test(value)) continue;
       for (const [, px] of value.matchAll(/(-?\d+px)/g)) {
         if (ALLOWED_SPACE_PX.has(px) || px.startsWith("-")) continue;
-        record(file, line, "raw-space", `${prop}: ${px} should use a --space-* token`);
+        record(
+          file,
+          line,
+          "raw-space",
+          `${prop}: ${px} should use a --space-* token`,
+        );
       }
     }
   });

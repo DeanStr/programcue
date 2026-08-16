@@ -2,6 +2,24 @@
 
 This file records durable decisions. It does not imply that every decided capability is implemented; verified delivery status lives in `IMPLEMENTATION_STATUS.md`.
 
+## Source quality tooling
+
+Biome is the repository formatter and baseline JavaScript, TypeScript, JSX,
+JSON and CSS linter. Its exact version is pinned, and the core and focused
+validation gates run its non-mutating CI command. TypeScript remains the source
+of truth for typechecking; Biome does not replace either TypeScript or the
+observable behavior covered by Vitest and Playwright.
+
+The initial configuration keeps Biome's recommended preset but explicitly
+disables rules already violated by the pre-adoption source. Those exceptions
+record migration debt rather than approval of the affected patterns. They are
+to be removed in focused behavior-preserving batches with the relevant tests,
+not hidden through broad per-file suppressions. Import organization remains
+disabled until its repository-wide baseline can be reviewed independently.
+Generated build, Worker and route artifacts are excluded. The generated public
+OpenAPI document and package lock retain their owning generators rather than
+being rewritten by the formatter.
+
 ## Licensing
 
 Program Cue is released under the GNU Affero General Public License version 3

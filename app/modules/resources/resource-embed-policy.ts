@@ -204,12 +204,7 @@ function httpsUrl(raw: unknown) {
   if (typeof raw !== "string") return null;
   try {
     const url = new URL(raw.trim());
-    if (
-      url.protocol !== "https:" ||
-      url.username ||
-      url.password ||
-      url.port
-    )
+    if (url.protocol !== "https:" || url.username || url.password || url.port)
       return null;
     return url;
   } catch {
@@ -240,7 +235,8 @@ function youtubeEmbed(url: URL): ExternalEmbed | null {
       (path[0] === "embed" || path[0] === "shorts" || path[0] === "live")
     )
       videoId = path[1] ?? "";
-    else if (url.pathname === "/watch") videoId = url.searchParams.get("v") ?? "";
+    else if (url.pathname === "/watch")
+      videoId = url.searchParams.get("v") ?? "";
   }
   if (!youtubeVideoId.test(videoId)) return null;
   return {
@@ -252,9 +248,7 @@ function youtubeEmbed(url: URL): ExternalEmbed | null {
 
 function vimeoEmbed(url: URL): ExternalEmbed | null {
   const hostname = url.hostname.toLowerCase();
-  if (
-    !["vimeo.com", "www.vimeo.com", "player.vimeo.com"].includes(hostname)
-  )
+  if (!["vimeo.com", "www.vimeo.com", "player.vimeo.com"].includes(hostname))
     return null;
   const path = url.pathname.split("/").filter(Boolean);
   let videoId: string | undefined;
@@ -372,10 +366,7 @@ export function assertExternalEmbedEnabled(
       `${providerLabel(embed.provider)} embeds are no longer enabled. Remove this block or add the content as a normal link.`,
     );
   }
-  if (
-    embed.provider === "google_maps" &&
-    !configuration.googleMapsApiKey
-  ) {
+  if (embed.provider === "google_maps" && !configuration.googleMapsApiKey) {
     throw new ResourceEmbedConfigurationError(
       "Google Maps embeds are enabled, but GOOGLE_MAPS_EMBED_API_KEY is unavailable or invalid.",
     );

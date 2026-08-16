@@ -1,7 +1,7 @@
 import { z } from "zod";
 
 import {
-  AirtableProviderBoundary,
+  type AirtableProviderBoundary,
   airtableCommandKey,
 } from "~/modules/airtable/airtable-provider-boundary.server";
 import type { Viewer } from "~/platform/auth/authorize.server";

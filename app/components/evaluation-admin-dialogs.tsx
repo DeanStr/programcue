@@ -2,7 +2,6 @@ import { useEffect, useMemo, useState } from "react";
 import { Form } from "react-router";
 
 import { Dialog } from "~/components/dialog";
-import { EventDateTime } from "~/components/ui/event-date-time";
 import { useEvaluationAdminModel } from "~/components/evaluation-admin-model";
 
 export function BulkAssignmentDialog() {

@@ -354,17 +354,13 @@ export default function AdminFileRetention({
             </li>
             <li>
               {participantRetention.sharedIdentityAuditLinks} audit actor link
-              {participantRetention.sharedIdentityAuditLinks === 1
-                ? ""
-                : "s"}{" "}
+              {participantRetention.sharedIdentityAuditLinks === 1 ? "" : "s"}{" "}
               remain attached to identities shared with another event; all
               mutable links in this event are pseudonymised.
             </li>
             <li>
               {participantRetention.retainedProgrammeRecords} programme session
-              {participantRetention.retainedProgrammeRecords === 1
-                ? ""
-                : "s"}{" "}
+              {participantRetention.retainedProgrammeRecords === 1 ? "" : "s"}{" "}
               retain titles, slugs, formats, durations and schedule facts;
               speaker identities and submission-derived descriptions are
               anonymised.

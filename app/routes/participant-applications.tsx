@@ -74,7 +74,9 @@ export async function action({ request, context }: Route.ActionArgs) {
         name: String(formData.get("name") ?? ""),
         email: String(formData.get("email") ?? ""),
         roleLabel: String(formData.get("roleLabel") ?? "") as
-          "Co-author" | "Co-speaker" | "Co-presenter",
+          | "Co-author"
+          | "Co-speaker"
+          | "Co-presenter",
         confirmed: true,
       },
       formIdempotencyKeySchema.parse(formData.get("idempotencyKey")),
@@ -340,7 +342,8 @@ export default function ParticipantApplications({
   loaderData,
 }: Route.ComponentProps) {
   const actionData = useActionData<typeof action>() as
-    ParticipantApplicationsActionResult | undefined;
+    | ParticipantApplicationsActionResult
+    | undefined;
   return (
     <>
       <div className="page-head">

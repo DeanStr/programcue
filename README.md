@@ -79,7 +79,16 @@ Event slugs are globally unique. Public programme and calendar-session links alw
 npm run check
 ```
 
-This runs configuration contracts, TypeScript and React Router type generation, fast Node rule tests, isolated workerd/D1/R2/Agent integration tests, one production build, migration/recovery/OpenAPI validation, and Playwright behavior/accessibility/visual coverage against freshly migrated local production Workers in desktop, focused 1280 × 720 laptop and mobile Chromium plus Firefox/WebKit smoke coverage. Independent core lanes run concurrently after type generation. The browser gate builds once, then distributes the unchanged suite across five isolated Worker/D1 shards and prints timing summaries for both phases.
+This runs Biome formatting and linting, configuration contracts, TypeScript and
+React Router type generation, fast Node rule tests, isolated
+workerd/D1/R2/Agent integration tests, one production build,
+migration/recovery/OpenAPI validation, and Playwright
+behavior/accessibility/visual coverage against freshly migrated local
+production Workers in desktop, focused 1280 × 720 laptop and mobile Chromium
+plus Firefox/WebKit smoke coverage. Independent core lanes run concurrently
+after type generation. The browser gate builds once, then distributes the
+unchanged suite across five isolated Worker/D1 shards and prints timing
+summaries for both phases.
 
 The shards reserve five consecutive ports beginning at `5173`; their inspector ports are derived from the same base. When another worktree owns that range, choose another base, for example `PROGRAM_CUE_E2E_PORT=5180 npm run check`. Set `PROGRAM_CUE_E2E_SHARDS=1` to diagnose the complete suite serially, or use `npm run test:e2e:serial -- e2e/example.spec.ts` for a focused Playwright invocation. Successful local runs leave tracing off to avoid recording and discarding every browser interaction; set `PROGRAM_CUE_E2E_TRACE=1` when a diagnostic trace is worth the additional I/O. CI retains traces on failure.
 
@@ -89,6 +98,10 @@ Use the smaller commands while developing:
 npm run check:focused
 npm run check:core
 npm run check:quick
+npm run quality
+npm run quality:fix
+npm run format
+npm run lint
 npm run typecheck
 npm test
 npm run test:unit
@@ -104,6 +117,9 @@ npm run performance:local
 
 `check:focused` uses the existing generated types and runs tests affected by
 changes since the local `main` branch, including staged and unstaged changes.
+It also enforces the repository's Biome formatting and enabled lint rules.
+`quality` checks formatting and lint without changing files; `quality:fix`
+applies safe fixes, while `format` and `lint` run those tools separately.
 Use `typecheck` instead when route types, Worker bindings or generated types
 may have changed. `test:changed` selects tests from the Node, Workerd and Agents
 projects using Vitest's changed-file graph;

@@ -56,11 +56,13 @@ export class ParticipantTaskCompletionCommands extends ParticipantTaskWorkflowFo
       throw new TaskStateError("Complete the prerequisite tasks first.");
     const evidence: Record<string, unknown> = {};
     if (["checklist", "acknowledgement"].includes(task.taskType)) {
-      if (!(
-        input.confirmed === true ||
-        input.confirmed === "true" ||
-        input.confirmed === "on"
-      ))
+      if (
+        !(
+          input.confirmed === true ||
+          input.confirmed === "true" ||
+          input.confirmed === "on"
+        )
+      )
         throw new TaskStateError("Confirm the task before completing it.");
       evidence.confirmed = true;
     }

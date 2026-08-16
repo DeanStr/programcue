@@ -67,10 +67,7 @@ export function ResourceExternalEmbedEditor({
       if (kind === "video") {
         commit([
           ...embeds,
-          externalVideoEmbedFromUrl(
-            videoUrl,
-            configuration.enabledProviders,
-          ),
+          externalVideoEmbedFromUrl(videoUrl, configuration.enabledProviders),
         ]);
         onDraftChange({ ...draft, videoUrl: "" });
       } else {
@@ -199,8 +196,7 @@ export function ResourceExternalEmbedEditor({
               onChange={(event) =>
                 onDraftChange({
                   ...draft,
-                  mapMode:
-                    event.target.value === "search" ? "search" : "place",
+                  mapMode: event.target.value === "search" ? "search" : "place",
                 })
               }
             >
@@ -253,7 +249,10 @@ export function ResourceExternalEmbedEditor({
       ) : null}
 
       {embeds.length ? (
-        <ol className="resource-embed-list" aria-label="External content blocks">
+        <ol
+          className="resource-embed-list"
+          aria-label="External content blocks"
+        >
           {embeds.map((embed, index) => (
             <li key={`${embed.provider}:${description(embed)}:${index}`}>
               <span>

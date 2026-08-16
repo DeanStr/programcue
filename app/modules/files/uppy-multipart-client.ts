@@ -7,7 +7,12 @@ import { UserFacingError } from "~/platform/user-facing-error";
 import { DIRECT_MULTIPART_PART_SIZE_BYTES } from "./file-policy";
 
 export type ProgramCueMultipartOperation =
-  "initiate" | "resume" | "list-parts" | "part-url" | "complete" | "abort";
+  | "initiate"
+  | "resume"
+  | "list-parts"
+  | "part-url"
+  | "complete"
+  | "abort";
 
 export type ProgramCueMultipartRequest = <T>(
   operation: ProgramCueMultipartOperation,

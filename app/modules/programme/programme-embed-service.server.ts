@@ -397,7 +397,12 @@ export class ProgrammeEmbedService {
       (audited.meta.changes ?? 0) !== 1 ||
       (updated.meta.changes ?? 0) !== 1
     ) {
-      await this.throwAuditBoundaryFailure(viewer, id, revision, current.status);
+      await this.throwAuditBoundaryFailure(
+        viewer,
+        id,
+        revision,
+        current.status,
+      );
     }
   }
 
@@ -519,7 +524,12 @@ export class ProgrammeEmbedService {
       (audited.meta.changes ?? 0) !== 1 ||
       (updated.meta.changes ?? 0) !== 1
     ) {
-      await this.throwAuditBoundaryFailure(viewer, id, revision, current.status);
+      await this.throwAuditBoundaryFailure(
+        viewer,
+        id,
+        revision,
+        current.status,
+      );
     }
   }
 

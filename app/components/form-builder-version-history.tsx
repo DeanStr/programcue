@@ -45,10 +45,7 @@ export function FormVersionHistory({
                   <strong>v{version.versionNumber}</strong>
                 </td>
                 <td>
-                  <DomainStatusBadge
-                    domain="version"
-                    status={version.status}
-                  />
+                  <DomainStatusBadge domain="version" status={version.status} />
                 </td>
                 <td>
                   {version.publishedAt

@@ -10,7 +10,7 @@ import {
   type SubmittedRevisionCommand,
   type SubmittedRevisionCommit,
 } from "./submission-repository-shared";
-import { type DraftPayload } from "./submission-schema";
+import type { DraftPayload } from "./submission-schema";
 import {
   assertCurrentRevisionState,
   assertSubmittedRevisionRequest,

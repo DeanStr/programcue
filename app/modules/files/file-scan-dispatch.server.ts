@@ -4,7 +4,6 @@ import {
   QueueClaimLeaseBusyError,
   QueueClaimLeaseLostError,
 } from "../../../workers/queue/claim-infrastructure";
-import type { Viewer } from "~/platform/auth/authorize.server";
 import { readBoundedResponseText } from "~/platform/http/read-response";
 
 // Covers the Workflow's roughly three-hour capacity window plus its bounded

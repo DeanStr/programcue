@@ -16,7 +16,7 @@ import {
   type FormSummary,
   type FormVersion,
 } from "./submission-repository-shared";
-import { type DraftPayload } from "./submission-schema";
+import type { DraftPayload } from "./submission-schema";
 
 function directSessionSlug(title: string, sessionId: string) {
   const base =
