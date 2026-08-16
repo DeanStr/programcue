@@ -35,6 +35,14 @@ const palette = {
   border: "#e4e4e7",
 };
 
+const paragraphStyle = {
+  color: palette.text,
+  fontSize: 16,
+  lineHeight: "25px",
+  margin: "0 0 16px",
+  whiteSpace: "pre-line",
+} as const;
+
 export function ProgramCueEmail({
   preview,
   heading,
@@ -111,16 +119,8 @@ export function ProgramCueEmail({
               {heading}
             </Heading>
             {body.split(/\n{2,}/).map((paragraph, index) => (
-              <Text
-                key={index}
-                style={{
-                  color: palette.text,
-                  fontSize: 16,
-                  lineHeight: "25px",
-                  margin: "0 0 16px",
-                  whiteSpace: "pre-line",
-                }}
-              >
+              // biome-ignore lint/suspicious/noArrayIndexKey: Email paragraphs are stateless output and duplicate paragraph content is valid.
+              <Text key={index} style={paragraphStyle}>
                 {paragraph}
               </Text>
             ))}

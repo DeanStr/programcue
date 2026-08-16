@@ -254,6 +254,7 @@ export function ResourceExternalEmbedEditor({
           aria-label="External content blocks"
         >
           {embeds.map((embed, index) => (
+            // biome-ignore lint/suspicious/noArrayIndexKey: Duplicate embeds are valid and these controlled, stateless rows are explicitly reordered by position.
             <li key={`${embed.provider}:${description(embed)}:${index}`}>
               <span>
                 <strong>{providerLabel(embed.provider)}</strong>

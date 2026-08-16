@@ -46,17 +46,10 @@
       },
       "complexity": {
         "noImportantStyles": "off",
-        "noStaticOnlyClass": "off",
       },
       "style": {
         "noDescendingSpecificity": "off",
         "noNonNullAssertion": "off",
-      },
-      "suspicious": {
-        "noArrayIndexKey": "off",
-        "noConfusingVoidType": "off",
-        "noDocumentCookie": "off",
-        "noExplicitAny": "off",
       },
     },
   },

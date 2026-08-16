@@ -64,6 +64,7 @@ export function PendingState({
       <div className="pc-pending-label">{label}</div>
       <div aria-hidden className="pc-skeleton-stack">
         {Array.from({ length: rows }, (_, index) => (
+          // biome-ignore lint/suspicious/noArrayIndexKey: Skeleton rows are fixed, decorative positional placeholders with no state.
           <span key={index} style={{ width: `${92 - index * 9}%` }} />
         ))}
       </div>

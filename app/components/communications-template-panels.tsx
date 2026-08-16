@@ -353,6 +353,7 @@ export function TemplatePreview({ draft }: { draft: TemplateDraftFields }) {
       <div className="comms-message-frame">
         <p className="comms-message-subject">{preview.subject}</p>
         {preview.paragraphs.map((paragraph, index) => (
+          // biome-ignore lint/suspicious/noArrayIndexKey: Preview paragraphs are stateless derived text and duplicate paragraph content is valid.
           <p key={index} className="comms-message-paragraph">
             {paragraph}
           </p>

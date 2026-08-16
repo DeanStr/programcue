@@ -157,9 +157,14 @@ test("an administrator demo identity cannot use a speaker-owned portal", async (
   page,
 }) => {
   await page.goto("/admin/event");
-  await page.evaluate(
-    () => (document.cookie = "program_cue_demo_identity=administrator; Path=/"),
-  );
+  await page.context().addCookies([
+    {
+      name: "program_cue_demo_identity",
+      value: "administrator",
+      domain: "127.0.0.1",
+      path: "/",
+    },
+  ]);
   const response = await page.goto("/participant/dashboard");
   expect(response?.status()).toBe(403);
   await expect(

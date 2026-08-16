@@ -1,7 +1,10 @@
 import { AirtableProviderBoundary } from "~/modules/airtable/airtable-provider-boundary.server";
 import { SubmissionAdministrationQueries } from "./submission-administration-queries.server";
 import { SubmissionDirectSessionCommands } from "./submission-direct-session-commands.server";
-import { SubmissionFormChoiceSynchronization } from "./submission-form-choice-synchronization.server";
+import {
+  submissionFormWorkspaceToInput,
+  synchronizeSubmissionFormEventChoices,
+} from "./submission-form-choice-synchronization.server";
 import { SubmissionManualApplicationCommands } from "./submission-manual-application-commands.server";
 
 /** Stable administration façade over queries and independent command workflows. */
@@ -28,20 +31,14 @@ export class SubmissionAdministrationWorkflows {
   }
 
   static workspaceToInput(
-    ...args: Parameters<
-      typeof SubmissionFormChoiceSynchronization.workspaceToInput
-    >
+    ...args: Parameters<typeof submissionFormWorkspaceToInput>
   ) {
-    return SubmissionFormChoiceSynchronization.workspaceToInput(...args);
+    return submissionFormWorkspaceToInput(...args);
   }
   static synchronizeFormEventChoices(
-    ...args: Parameters<
-      typeof SubmissionFormChoiceSynchronization.synchronizeFormEventChoices
-    >
+    ...args: Parameters<typeof synchronizeSubmissionFormEventChoices>
   ) {
-    return SubmissionFormChoiceSynchronization.synchronizeFormEventChoices(
-      ...args,
-    );
+    return synchronizeSubmissionFormEventChoices(...args);
   }
   listAdminSubmissions(
     ...args: Parameters<SubmissionAdministrationQueries["listAdminSubmissions"]>

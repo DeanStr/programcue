@@ -75,7 +75,7 @@ export function DirectMultipartUpload({
   onCompleted?: (result: {
     assetId: string;
     versionId: string;
-  }) => Promise<{ message?: string } | void>;
+  }) => Promise<{ message?: string } | undefined>;
   disabled?: boolean;
 }) {
   const revalidator = useRevalidator();

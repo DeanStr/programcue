@@ -382,9 +382,8 @@ export function SchedulePublicationDialog({
         {workspace.publicationConflicts.length ? (
           <ul>
             {workspace.publicationConflicts.map((conflict, index) => (
-              <li
-                key={`${conflict.type}:${conflict.conflictingEntryId ?? "entry"}:${index}`}
-              >
+              // biome-ignore lint/suspicious/noArrayIndexKey: Duplicate stateless publication conflicts are valid, and this projection does not expose the primary entry ID needed for a stable unique key.
+              <li key={index}>
                 {conflict.severity === "blocking" ? "Blocking" : "Warning"}:{" "}
                 {conflict.message}
               </li>

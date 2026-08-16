@@ -69,7 +69,7 @@ export function RecordHead({
       {captions.map((caption, column) => (
         // Trailing action columns have no caption, so several are the empty
         // string and the caption cannot be the key.
-        // eslint-disable-next-line react/no-array-index-key
+        // biome-ignore lint/suspicious/noArrayIndexKey: These stateless captions have fixed positional identity, including duplicate empty action captions.
         <span key={column}>{caption}</span>
       ))}
     </div>

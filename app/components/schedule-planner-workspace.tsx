@@ -261,6 +261,7 @@ export function SchedulePlannerWorkspace({
         <div className="validation-item schedule-notice error mb" role="alert">
           <span>{actionResult.error}</span>
           {actionNotices.conflicts.map((conflict, index) => (
+            // biome-ignore lint/suspicious/noArrayIndexKey: Duplicate stateless conflict notices are valid and have no persisted identity.
             <span key={`${conflict.type}-${index}`}>
               <strong>{conflictTypeLabel(conflict.type)}:</strong>{" "}
               {conflict.message}
@@ -301,6 +302,7 @@ export function SchedulePlannerWorkspace({
         >
           <span>{actionResult.message}</span>
           {actionNotices.warnings.map((warning, index) => (
+            // biome-ignore lint/suspicious/noArrayIndexKey: Duplicate stateless warning notices are valid and have no persisted identity.
             <span key={`${warning.type}-${index}`}>
               <strong>{conflictTypeLabel(warning.type)}:</strong>{" "}
               {warning.message}

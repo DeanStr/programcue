@@ -59,6 +59,7 @@ export function ErrorSummary({
             const item = typeof error === "string" ? { message: error } : error;
             const href = item.href;
             return (
+              // biome-ignore lint/suspicious/noArrayIndexKey: Duplicate stateless validation messages are valid and errors expose no stable identity.
               <li key={`${item.message}-${index}`}>
                 {href ? (
                   <Link

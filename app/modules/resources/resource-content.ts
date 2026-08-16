@@ -8,10 +8,10 @@ import {
   type ResourceEmbedConfiguration,
 } from "./resource-embed-policy";
 
-type TiptapMark = { type: string; attrs?: Record<string, any> };
+type TiptapMark = { type: string; attrs?: Record<string, unknown> };
 export type TiptapNode = {
   type: string;
-  attrs?: Record<string, any>;
+  attrs?: Record<string, unknown>;
   marks?: TiptapMark[];
   text?: string;
   content?: TiptapNode[];
@@ -89,14 +89,17 @@ function validateNode(
     typeof node.attrs === "object" &&
     !Array.isArray(node.attrs)
   )
-    validated.attrs = node.attrs as Record<string, any>;
+    validated.attrs = node.attrs as Record<string, unknown>;
   if (Array.isArray(node.marks))
     validated.marks = node.marks.slice(0, 12).map((mark) => {
       if (!mark || typeof mark !== "object")
         throw new ResourceContentError(
           "Resource content contains an invalid mark.",
         );
-      const value = mark as { type?: unknown; attrs?: Record<string, any> };
+      const value = mark as {
+        type?: unknown;
+        attrs?: Record<string, unknown>;
+      };
       if (
         !["bold", "italic", "strike", "code", "link"].includes(
           String(value.type),

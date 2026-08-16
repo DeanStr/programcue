@@ -158,6 +158,7 @@ function readSidebarCollapsedCookie() {
 function writeSidebarCollapsedCookie(collapsed: boolean) {
   // A cookie rather than local storage so the shell can eventually be rendered
   // at the stored width on the server and skip the restoring frame entirely.
+  // biome-ignore lint/suspicious/noDocumentCookie: This non-sensitive preference cookie must work in browsers without the asynchronous Cookie Store API.
   document.cookie = `${SIDEBAR_COLLAPSE_COOKIE}=${
     collapsed ? "collapsed" : "expanded"
   }; path=/; max-age=31536000; samesite=lax`;

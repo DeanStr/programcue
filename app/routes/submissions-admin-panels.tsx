@@ -382,6 +382,7 @@ function SpeakerFields({
         <strong>Speakers</strong>
       </legend>
       {speakers.map((speaker, index) => (
+        // biome-ignore lint/suspicious/noArrayIndexKey: These controlled rows have positional identity; deleting a co-speaker intentionally promotes each following row to the preceding position.
         <div className="grid grid-3 mb" key={index}>
           <PersonLookup
             purpose="submission-speaker"

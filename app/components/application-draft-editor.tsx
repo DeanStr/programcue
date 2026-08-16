@@ -568,6 +568,7 @@ export function DraftEditor({
           />
         ) : null}
         {speakers.map((speaker, index) => (
+          // biome-ignore lint/suspicious/noArrayIndexKey: These controlled rows have positional identity; deleting a co-speaker intentionally promotes each following row to the preceding position.
           <div className="form-row mb" key={index}>
             <label className="label">
               Speaker {index + 1} name
