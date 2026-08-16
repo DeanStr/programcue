@@ -9,6 +9,7 @@ import {
   scheduleTestViewer as viewer,
 } from "~/modules/schedule/schedule-service-test-fixture";
 import { eventLocalTimeEpoch } from "~/modules/schedule/schedule-time";
+import { ensureDemoSubmissionForm } from "~/modules/submissions/demo-submissions.server";
 import { cloudflareContext } from "~/platform/cloudflare-context";
 import { loader as publicProgrammePageLoader } from "~/routes/public-programme";
 import { PublicRecordingService } from "./public-recording-service.server";
@@ -73,6 +74,11 @@ beforeEach(async () => {
     "UPDATE sessions SET visibility = 'public' WHERE event_id = ?",
   )
     .bind(viewer.eventId)
+    .run();
+  await env.DB.prepare(
+    "UPDATE people SET profile_status = 'published' WHERE id = ?",
+  )
+    .bind("person-demo-speaker")
     .run();
 });
 
@@ -227,8 +233,55 @@ describe("public event site publication", () => {
       site: { configuration: { tagline: "Applications are open" } },
     });
     expect(routeResult.init?.headers).toMatchObject({
-      "cache-control": expect.stringContaining("public"),
+      "cache-control": "public, max-age=0, s-maxage=0, must-revalidate",
     });
+  });
+
+  it("projects a published CFP as closed after its closing time", async () => {
+    await ensureDemoSubmissionForm(publicSiteEnv);
+    const service = new PublicSiteService(publicSiteEnv);
+    const configuration = publishableSite();
+    configuration.sectionVisibility.statistics = false;
+    const saved = await service.saveDraft(viewer, {
+      commandId: crypto.randomUUID(),
+      revision: 0,
+      configurationJson: JSON.stringify(configuration),
+    });
+    await service.publish(viewer, {
+      commandId: crypto.randomUUID(),
+      revision: saved.revision,
+      confirmed: "true",
+    });
+    const form = await env.DB.prepare(
+      `SELECT id, closes_at AS closesAt
+         FROM form_definitions
+        WHERE event_id = ? AND kind = 'submission' AND status = 'published'
+        ORDER BY updated_at DESC, id
+        LIMIT 1`,
+    )
+      .bind(viewer.eventId)
+      .first<{ id: string; closesAt: number | null }>();
+    expect(form).not.toBeNull();
+    await env.DB.prepare(
+      "UPDATE form_definitions SET closes_at = ? WHERE id = ? AND event_id = ?",
+    )
+      .bind(100, form!.id, viewer.eventId)
+      .run();
+    try {
+      expect(
+        (await service.getPublished("future-of-events-2027", 101))?.event
+          .application,
+      ).toEqual({
+        url: expect.stringMatching(/^\/apply\//u),
+        state: "closed",
+      });
+    } finally {
+      await env.DB.prepare(
+        "UPDATE form_definitions SET closes_at = ? WHERE id = ? AND event_id = ?",
+      )
+        .bind(form!.closesAt, form!.id, viewer.eventId)
+        .run();
+    }
   });
 
   it("converges an exact site-publication replay without advancing event state", async () => {
@@ -486,6 +539,82 @@ describe("public event site publication", () => {
     ).toEqual({ status: "published" });
   });
 
+  it("blocks a featured published session from being hidden directly", async () => {
+    await publishProgramme();
+    const site = new PublicSiteService(publicSiteEnv);
+    const configuration = publishableSite();
+    configuration.sectionVisibility.featured_sessions = true;
+    configuration.featuredSessionIds = ["schedule-test-one"];
+    const saved = await site.saveDraft(viewer, {
+      commandId: crypto.randomUUID(),
+      revision: 0,
+      configurationJson: JSON.stringify(configuration),
+    });
+    await site.publish(viewer, {
+      commandId: crypto.randomUUID(),
+      revision: saved.revision,
+      confirmed: "true",
+    });
+
+    await expect(
+      env.DB.prepare(
+        "UPDATE sessions SET visibility = 'hidden' WHERE id = ? AND event_id = ?",
+      )
+        .bind("schedule-test-one", viewer.eventId)
+        .run(),
+    ).rejects.toThrow(/withdraw public-site references/i);
+  });
+
+  it("blocks a featured speaker profile from being unpublished", async () => {
+    await publishProgramme();
+    const site = new PublicSiteService(publicSiteEnv);
+    const configuration = publishableSite();
+    configuration.sectionVisibility.featured_speakers = true;
+    configuration.featuredSpeakerIds = ["person-demo-speaker"];
+    const saved = await site.saveDraft(viewer, {
+      commandId: crypto.randomUUID(),
+      revision: 0,
+      configurationJson: JSON.stringify(configuration),
+    });
+    await site.publish(viewer, {
+      commandId: crypto.randomUUID(),
+      revision: saved.revision,
+      confirmed: "true",
+    });
+
+    await expect(
+      env.DB.prepare("UPDATE people SET profile_status = 'draft' WHERE id = ?")
+        .bind("person-demo-speaker")
+        .run(),
+    ).rejects.toThrow(/featured speaker/i);
+  });
+
+  it("blocks hiding the last eligible session for a featured speaker", async () => {
+    await publishProgramme();
+    const site = new PublicSiteService(publicSiteEnv);
+    const configuration = publishableSite();
+    configuration.sectionVisibility.featured_speakers = true;
+    configuration.featuredSpeakerIds = ["person-demo-speaker"];
+    const saved = await site.saveDraft(viewer, {
+      commandId: crypto.randomUUID(),
+      revision: 0,
+      configurationJson: JSON.stringify(configuration),
+    });
+    await site.publish(viewer, {
+      commandId: crypto.randomUUID(),
+      revision: saved.revision,
+      confirmed: "true",
+    });
+
+    await expect(
+      env.DB.prepare(
+        "UPDATE sessions SET visibility = 'private' WHERE id = ? AND event_id = ?",
+      )
+        .bind("schedule-test-one", viewer.eventId)
+        .run(),
+    ).rejects.toThrow(/withdraw public-site references/i);
+  });
+
   it("rejects enabled sections that would publish empty content", async () => {
     await publishProgramme();
     const service = new PublicSiteService(publicSiteEnv);
@@ -713,5 +842,34 @@ describe("public event site publication", () => {
         scheduleRevision: workspace.version!.revision,
       }),
     ).rejects.toThrow(/published recording/i);
+  });
+
+  it("blocks hiding a session that owns a published recording", async () => {
+    await publishProgramme();
+    const recordings = new PublicRecordingService(publicSiteEnv);
+    const recording = await recordings.saveDraft(viewer, {
+      commandId: crypto.randomUUID(),
+      id: "",
+      sessionId: "schedule-test-one",
+      revision: 0,
+      title: "Published recording",
+      recordingUrl: "https://video.example.test/watch",
+      captionsUrl: "",
+      transcriptUrl: "",
+    });
+    await recordings.publish(viewer, {
+      commandId: crypto.randomUUID(),
+      id: recording.id,
+      revision: 1,
+      confirmed: "true",
+    });
+
+    await expect(
+      env.DB.prepare(
+        "UPDATE sessions SET visibility = 'private' WHERE id = ? AND event_id = ?",
+      )
+        .bind("schedule-test-one", viewer.eventId)
+        .run(),
+    ).rejects.toThrow(/withdraw public-site references and recordings/i);
   });
 });

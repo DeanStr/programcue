@@ -2,6 +2,10 @@ import {
   AirtableProviderBoundary,
   airtableCommandKey,
 } from "~/modules/airtable/airtable-provider-boundary.server";
+import {
+  isPublicSiteDatabaseConstraint,
+  PUBLIC_SITE_SPEAKER_PROFILE_CONSTRAINT,
+} from "~/modules/public-site/public-site-errors";
 import { ApiError } from "~/platform/api/api.server";
 import { ApiPersonIdempotencyService } from "~/platform/api/api-person-idempotency.server";
 import type { Viewer } from "~/platform/auth/authorize.server";
@@ -339,7 +343,7 @@ export class SpeakerProfileAdministration {
       },
       auditEventId,
     );
-    const results = await this.env.DB.batch([
+    const statements = [
       this.env.DB.prepare(
         `
         UPDATE people
@@ -455,7 +459,23 @@ export class SpeakerProfileAdministration {
         operationId,
       ),
       ...webhook.statements,
-    ]);
+    ];
+    let results: D1Result<unknown>[];
+    try {
+      results = await this.env.DB.batch(statements);
+    } catch (error) {
+      if (
+        isPublicSiteDatabaseConstraint(
+          error,
+          PUBLIC_SITE_SPEAKER_PROFILE_CONSTRAINT,
+        )
+      ) {
+        throw new SpeakerAdminStateError(
+          "Remove this featured speaker from the published event site before unpublishing their profile.",
+        );
+      }
+      throw error;
+    }
     const [updated, eventProfile] = results;
     if ((updated.meta.changes ?? 0) !== 1)
       throw new ParticipantProfileConflictError(

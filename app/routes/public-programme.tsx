@@ -309,6 +309,7 @@ export async function loader({ request, params, context }: Route.LoaderArgs) {
       request,
       site,
       `public-site-${site.revision}`,
+      "live",
     );
     if (publishedProgrammeNotModified(request, cacheHeaders.etag)) {
       return new Response(null, { status: 304, headers: cacheHeaders });

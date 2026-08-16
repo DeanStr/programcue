@@ -48,7 +48,10 @@ export type PublishedProgramme = {
     logoUrl: string | null;
     bannerUrl: string | null;
     supportUrl: string | null;
-    applicationUrl: string | null;
+    application: {
+      url: string;
+      state: "accepting" | "closed" | "full";
+    } | null;
   };
   version: { id: string; versionNumber: number; publishedAt: number };
   sessions: PublishedSession[];

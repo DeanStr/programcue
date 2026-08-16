@@ -1,6 +1,7 @@
 import { AirtableProgrammeRepository } from "~/modules/airtable/airtable-programme-repository.server";
 import { publicEventBrandAssetPath } from "~/modules/events/event-branding";
 import { eventBoundaryCalendarDate } from "~/modules/schedule/schedule-time";
+import { parsePublicApplicationProjection } from "~/modules/submissions/submission-availability";
 import { ensureDemoProgramme } from "~/platform/demo/seed.server";
 import { sortPublishedSpeakers } from "./programme-presentation";
 import {
@@ -211,7 +212,7 @@ async function publicContentRevision(
         programme.event.city,
         programme.event.description,
         programme.event.supportUrl,
-        programme.event.applicationUrl,
+        programme.event.application,
         programme.event.brandAccent,
         programme.event.heroImageUrl,
         programme.event.logoUrl,
@@ -451,7 +452,20 @@ export class PublicProgrammeService {
              participant_logo_url AS legacyLogoUrl,
              participant_support_url AS supportUrl,
              (
-               SELECT '/apply/' || form.public_slug
+               SELECT json_object(
+                        'url', '/apply/' || form.public_slug,
+                        'closesAt', form.closes_at,
+                        'submissionLimit', form.submission_limit,
+                        'submittedCount', (
+                          SELECT COUNT(*)
+                            FROM submissions submission
+                            JOIN form_versions submission_version
+                              ON submission_version.id = submission.form_version_id
+                             AND submission_version.event_id = submission.event_id
+                           WHERE submission_version.form_id = form.id
+                             AND submission.status <> 'draft'
+                        )
+                      )
                  FROM form_definitions form
                 WHERE form.event_id = events.id
                   AND form.kind = 'submission' AND form.status = 'published'
@@ -463,7 +477,7 @@ export class PublicProgrammeService {
                   )
                 ORDER BY form.updated_at DESC, form.id
                 LIMIT 1
-             ) AS applicationUrl,
+             ) AS applicationJson,
              organisation_id AS organisationId,
              repository_provider AS repositoryProvider
         FROM events
@@ -475,7 +489,7 @@ export class PublicProgrammeService {
       .first<
         Omit<
           PublishedProgramme["event"],
-          "startDate" | "endDate" | "logoUrl" | "bannerUrl"
+          "startDate" | "endDate" | "logoUrl" | "bannerUrl" | "application"
         > & {
           startDateMarker: number;
           endDateMarker: number;
@@ -484,9 +498,13 @@ export class PublicProgrammeService {
           logoAssetId: string | null;
           bannerAssetId: string | null;
           legacyLogoUrl: string | null;
+          applicationJson: string | null;
         }
       >();
     if (!eventRow) return null;
+    const application = parsePublicApplicationProjection(
+      eventRow.applicationJson,
+    );
     const event: PublishedProgramme["event"] = {
       id: eventRow.id,
       slug: eventRow.slug,
@@ -508,7 +526,7 @@ export class PublicProgrammeService {
         ? publicEventBrandAssetPath(eventRow.slug, "banner")
         : null,
       supportUrl: eventRow.supportUrl,
-      applicationUrl: eventRow.applicationUrl,
+      application,
     };
     const version = await this.env.DB.prepare(
       `

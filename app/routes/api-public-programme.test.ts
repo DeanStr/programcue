@@ -19,7 +19,7 @@ describe("static programme HTML", () => {
         city: null,
         description: null,
         supportUrl: null,
-        applicationUrl: null,
+        application: null,
         brandAccent: "#4f46e5",
         heroImageUrl: null,
         logoUrl: null,

@@ -24,7 +24,7 @@ export async function loader({ request, params, context }: Route.LoaderArgs) {
       await new PublicProgrammeService(env).getPublished(params.slug ?? ""),
     );
     const headers = {
-      ...(await publishedProgrammeCacheHeaders(request, programme)),
+      ...(await publishedProgrammeCacheHeaders(request, programme, "", "live")),
       "access-control-allow-origin": "*",
     };
     if (publishedProgrammeNotModified(request, headers.etag)) {

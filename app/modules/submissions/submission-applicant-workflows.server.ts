@@ -2,6 +2,7 @@ import { z } from "zod";
 import type { PublicForm } from "./applicant-session.server";
 import { routeEvaluationCoSpeakerEmails } from "./evaluation-co-speaker-email-routing.server";
 import { SubmissionApplicantEventService } from "./submission-applicant-events.server";
+import { submissionApplicationAvailability } from "./submission-availability";
 import {
   type Applicant,
   SubmissionStateError,
@@ -123,31 +124,7 @@ export class SubmissionApplicantWorkflows extends SubmissionServiceFoundation {
   protected applicationAvailability(
     form: Awaited<ReturnType<SubmissionServiceFoundation["getPublicForm"]>>,
   ) {
-    if (form.status !== "published") {
-      return {
-        accepting: false as const,
-        reason: "Applications for this event are closed.",
-      };
-    }
-    if (
-      form.closesAt !== null &&
-      form.closesAt < Math.floor(Date.now() / 1_000)
-    ) {
-      return {
-        accepting: false as const,
-        reason: "Applications for this event are closed.",
-      };
-    }
-    if (
-      form.submissionLimit !== null &&
-      form.submittedCount >= form.submissionLimit
-    ) {
-      return {
-        accepting: false as const,
-        reason: "This call for speakers has reached its submission limit.",
-      };
-    }
-    return { accepting: true as const, reason: null };
+    return submissionApplicationAvailability(form);
   }
 
   protected async getApplicantVideoUpload(

@@ -8,8 +8,8 @@ import {
   type ScheduleCalendarFanoutMessage,
   scheduleCalendarFanoutMessageSchema,
 } from "~/modules/calendars/calendar-schema";
-import type { AuditOrigin } from "~/platform/audit/audit-contract";
 import { validatePublishedSiteReferencesForSchedule } from "~/modules/public-site/public-site-publication-validation.server";
+import type { AuditOrigin } from "~/platform/audit/audit-contract";
 import type { Viewer } from "~/platform/auth/authorize.server";
 import {
   WebhookService,

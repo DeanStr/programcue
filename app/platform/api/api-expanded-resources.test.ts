@@ -475,7 +475,9 @@ describe("expanded public API contract", () => {
       } as never);
       expect(response.status).toBe(200);
       expect(response.headers.get("cache-control")).toBe(
-        "public, max-age=0, s-maxage=300, stale-while-revalidate=60, must-revalidate",
+        route.key === "event"
+          ? "public, max-age=0, s-maxage=0, must-revalidate"
+          : "public, max-age=0, s-maxage=300, stale-while-revalidate=60, must-revalidate",
       );
       expect(response.headers.get("access-control-allow-origin")).toBe("*");
       const etag = response.headers.get("etag");

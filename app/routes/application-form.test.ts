@@ -148,6 +148,7 @@ describe("public application mutations", () => {
       expect(result.availability).toEqual({
         accepting: false,
         reason: "Applications for this event are closed.",
+        state: "closed",
       });
       const invalidClaim = await loader({
         request: new Request(

@@ -1637,7 +1637,7 @@ components:
           city,
           description,
           supportUrl,
-          applicationUrl,
+          application,
           brandAccent,
           heroImageUrl,
           logoUrl,
@@ -1668,7 +1668,13 @@ components:
             pattern: "^https://",
             maxLength: 2048,
           }
-        applicationUrl: { type: [string, "null"], format: uri-reference }
+        application:
+          type: [object, "null"]
+          additionalProperties: false
+          required: [url, state]
+          properties:
+            url: { type: string, format: uri-reference }
+            state: { type: string, enum: [accepting, closed, full] }
         brandAccent: { type: string }
         heroImageUrl:
           {
@@ -1716,7 +1722,7 @@ components:
               city,
               description,
               supportUrl,
-              applicationUrl,
+              application,
               brandAccent,
               heroImageUrl,
               logoUrl,
@@ -1757,7 +1763,13 @@ components:
                 pattern: "^https://",
                 maxLength: 2048,
               }
-            applicationUrl: { type: [string, "null"], format: uri-reference }
+            application:
+              type: [object, "null"]
+              additionalProperties: false
+              required: [url, state]
+              properties:
+                url: { type: string, format: uri-reference }
+                state: { type: string, enum: [accepting, closed, full] }
             brandAccent: { type: string }
             heroImageUrl:
               {

@@ -775,8 +775,14 @@ this AIA-08 production slice.
   no arbitrary HTML or routes. Invalid or credentialed Markdown links fail
   draft validation and remain sanitized at render time as defense in depth.
 - **Canonical data and publication integrity:** The visible event description,
-  venue/address/map, published support URL and current CFP action continue to
-  come from Event Setup, Branding and the published form. Site publication
+  venue/address/map, published support URL and CFP action continue to come from
+  Event Setup, Branding and the published form. The CFP projection applies the
+  applicant workflow's closing-time and submission-limit rule: only an
+  accepting form says “Apply to speak”, while a closed or full published form
+  links honestly as “View call for speakers”. Public event/programme API
+  responses and the pre-programme event home use ETag revalidation without a
+  positive shared-cache freshness window, so closing, filling or manually
+  changing a form cannot leave an accepting state fresh at the edge. Site publication
   snapshots editorial configuration and structured sponsors, not programme
   records. Featured IDs must resolve against the current published programme at
   site publication, are materialized only when visible, and are revalidated in
@@ -800,10 +806,12 @@ this AIA-08 production slice.
   reuse conflicts. Site publication reads the site draft and ordered sponsors
   in one SQL snapshot before its revision compare-and-set. The confirmation
   names additions and removals rather than listing only the replacement's
-  enabled content. Published-session status is part of site publication,
-  recording publication and recording-read eligibility; the baseline trigger
-  blocks direct changes that would silently invalidate a featured record or
-  published recording.
+  enabled content. Published-session status and public visibility are part of
+  site publication, recording publication and recording-read eligibility; the
+  baseline triggers block direct session changes that would invalidate a
+  featured record or published recording and block demotion of a featured
+  speaker profile. Public loaders remain fail-closed instead of dropping
+  referenced content.
 - **Promotion and post-event tools:** The organizer can copy the public URL,
   suggested announcement, escaped programme iframe and existing speaker share
   links, and can inspect the actual unfurl. Event and speaker social cards are
@@ -827,8 +835,11 @@ this AIA-08 production slice.
   recording resources/timing, independent withdrawal and a real Images WebP
   render. Unsaved client configuration blocks navigation and tab closure.
   `e2e/public-site.spec.ts` passes the complete organizer-to-public Chromium
-  workflow, including discard confirmation, Event home/programme navigation and
-  conditional fixed-page caching, and `/admin/site` passes
+  workflow, including discard confirmation, Event home/programme navigation,
+  40-character labels without header overflow and conditional fixed-page
+  caching. The shared header keeps primary destinations visible, puts variants
+  and editorial pages in Browse, and collapses fully at tablet width.
+  `/admin/site` passes
   the WCAG A/AA axe sweep at phone, tablet and desktop widths. The complete local
   core gate also passes, including TypeScript, production builds, the Agents
   Durable Object test, recovery, migration/contracts and synchronized OpenAPI

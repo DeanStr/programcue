@@ -99,10 +99,13 @@ CREATE INDEX idx_event_session_recordings_public
   ON event_session_recordings(event_id, published_at, session_id)
   WHERE published_at IS NOT NULL;
 
-CREATE TRIGGER prevent_referenced_public_session_status_change
-BEFORE UPDATE OF status ON sessions
+CREATE TRIGGER prevent_referenced_public_session_eligibility_change
+BEFORE UPDATE OF status, visibility ON sessions
 WHEN OLD.status = 'published'
- AND NEW.status <> 'published'
+ AND (
+   NEW.status <> 'published'
+   OR (OLD.visibility = 'public' AND NEW.visibility <> 'public')
+ )
  AND (
    EXISTS (
      SELECT 1 FROM event_public_site_references reference
@@ -157,7 +160,20 @@ WHEN OLD.status = 'published'
    )
  )
 BEGIN
-  SELECT RAISE(ABORT, 'Withdraw public-site references and recordings before changing this published session status');
+  SELECT RAISE(ABORT, 'Withdraw public-site references and recordings before changing this published session eligibility');
+END;
+
+CREATE TRIGGER prevent_referenced_public_speaker_profile_demotion
+BEFORE UPDATE OF profile_status ON people
+WHEN OLD.profile_status = 'published'
+ AND NEW.profile_status <> 'published'
+ AND EXISTS (
+   SELECT 1 FROM event_public_site_references reference
+    WHERE reference.kind = 'speaker'
+      AND reference.record_id = OLD.id
+ )
+BEGIN
+  SELECT RAISE(ABORT, 'Remove this featured speaker from published event sites before unpublishing their profile');
 END;
 
 -- Managed embeds predate the controlled theme selector. The new contract is

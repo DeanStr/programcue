@@ -776,9 +776,13 @@ selections are not hard references. Published-session status is part of the
 same eligibility contract used by the canonical programme. A database guard
 prevents a referenced session, the last eligible session for a featured
 speaker, or a session with a published recording from leaving published status
-until the public dependency is withdrawn. The organizer sees branding, site
-and programme publication state together even though their publication
-boundaries remain independent.
+or public visibility until the public dependency is withdrawn. A featured
+speaker's canonical profile cannot return to draft while any published site
+references it; another session cannot compensate because profile publication is
+global to the person. These guards remain authoritative under concurrent writes,
+while the service layer translates their exact failures into withdrawal-first
+guidance. The organizer sees branding, site and programme publication state
+together even though their publication boundaries remain independent.
 
 The event public slug becomes immutable when either the public site or programme
 is first published. Event Setup applies that rule in validation, in the atomic
@@ -842,13 +846,29 @@ editorial changes invalidate the representation together.
 
 The programme and fixed event pages share one event header, navigation and
 footer contract. With a published site, the root is explicitly Event home while
-All sessions and Speakers use their dedicated programme routes; editorial pages
-are peers under an accessible Event navigation label. The publication
-confirmation reports added and removed sections, fixed pages, featured records
-and sponsors, plus ordering, theme and editorial changes. The administrator
-route retains one loader/action and splits only its concrete editor, sponsor,
-recording and preview panels; no generic CMS component or block framework is
-introduced.
+All sessions and Speakers use their dedicated programme routes. Those three
+primary destinations stay visible on wide screens; agenda, schedule, gallery
+and the five bounded editorial pages live in one keyboard-accessible Browse
+popover whose labels wrap. At tablet widths all destinations use the existing
+Browse disclosure, so navigation capacity does not depend on label length or
+JavaScript width measurement. The publication confirmation reports added and
+removed sections, fixed pages, featured records and sponsors, plus ordering,
+theme and editorial changes. The administrator route retains one loader/action
+and splits only its concrete editor, sponsor, recording and preview panels; no
+generic CMS component or block framework is introduced.
+
+The canonical CFP projection carries one coherent application link and
+availability state. It derives accepting, closed and submission-limit-reached
+states from the same deterministic rule used by applicant workflows. Only the
+accepting state is labelled “Apply to speak”; closed and full calls retain a
+read-only “View call for speakers” destination. Availability participates in
+the public content revision instead of becoming presentation-only stale state.
+Responses that expose that live projection—the event and programme APIs and a
+site-only event home—remain conditionally cacheable by ETag but require shared
+cache revalidation on every request. A closing time, manual form transition or
+new submission therefore cannot leave an accepting CTA behind a fresh edge
+cache entry. Publication-only collection and editorial representations retain
+their bounded shared-cache lifetime.
 
 The public-site editor uses the shared navigation and before-unload blocker for
 its client-held configuration. Internal navigation, event switching and closing

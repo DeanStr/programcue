@@ -388,36 +388,18 @@
   }
 }
 
-/* Below this the four header controls leave the event name about 55px, which
-   truncates "Future of Events 2027" to "Futur…" and tells a speaker nothing.
-   The name takes its own row instead: two short rows beat one unreadable one. */
-@media (max-width: 430px) {
-  .speaker-top {
-    flex-wrap: wrap;
-    row-gap: var(--space-1);
-  }
-  .speaker-event-context {
-    order: 3;
-    flex: 1 0 100%;
-    padding-left: 0;
-    border-left: 0;
-  }
-  .resource-grid {
-    grid-template-columns: 1fr;
-  }
+/* Programme variants and editorial labels stay in bounded menus. At tablet
+   widths the primary destinations also collapse so the event identity and
+   itinerary never compete with a variable number of navigation labels. */
+@media (max-width: 960px) {
   .public-top {
     min-width: 0;
-    gap: var(--space-2);
-    padding: var(--space-2) var(--space-3);
+    gap: var(--space-3);
+    padding: var(--space-2) var(--space-4);
   }
-  /* The event name is the identity of this page, so it truncates rather than
-     disappearing the way the old vendor wordmark did. */
   .public-top .brand {
     flex: 1 1 auto;
     min-width: 0;
-  }
-  .public-brand-name {
-    font-size: var(--text-sm);
   }
   .public-nav {
     display: none;
@@ -451,6 +433,32 @@
   .public-shell #speakers,
   .public-shell #itinerary {
     scroll-margin-top: 80px;
+  }
+}
+
+/* Below this the four header controls leave the event name about 55px, which
+   truncates "Future of Events 2027" to "Futur…" and tells a speaker nothing.
+   The name takes its own row instead: two short rows beat one unreadable one. */
+@media (max-width: 430px) {
+  .speaker-top {
+    flex-wrap: wrap;
+    row-gap: var(--space-1);
+  }
+  .speaker-event-context {
+    order: 3;
+    flex: 1 0 100%;
+    padding-left: 0;
+    border-left: 0;
+  }
+  .resource-grid {
+    grid-template-columns: 1fr;
+  }
+  .public-top {
+    gap: var(--space-2);
+    padding: var(--space-2) var(--space-3);
+  }
+  .public-brand-name {
+    font-size: var(--text-sm);
   }
   /* On a phone the list stays scannable by collapsing descriptions until a
      session is opened. Room, track and format stay visible in every state. */

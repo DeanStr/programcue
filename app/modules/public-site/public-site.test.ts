@@ -7,6 +7,7 @@ import {
   restrictedMarkdownPlainText,
 } from "~/components/restricted-markdown";
 import type { PublishedProgramme } from "~/modules/programme/public-programme-types";
+import { submissionApplicationAvailability } from "~/modules/submissions/submission-availability";
 import {
   defaultPublicSiteDraft,
   PUBLIC_SITE_CONFIGURATION_JSON_MAX_LENGTH,
@@ -18,6 +19,27 @@ import {
 import { resolvePublicSitePresentation } from "./public-site-presentation";
 
 describe("public event site rules", () => {
+  it("uses the canonical submission availability rule for public CTA state", () => {
+    const base = {
+      status: "published" as const,
+      closesAt: null,
+      submissionLimit: null,
+      submittedCount: 0,
+    };
+    expect(submissionApplicationAvailability(base, 100).state).toBe(
+      "accepting",
+    );
+    expect(
+      submissionApplicationAvailability({ ...base, closesAt: 99 }, 100).state,
+    ).toBe("closed");
+    expect(
+      submissionApplicationAvailability(
+        { ...base, submissionLimit: 2, submittedCount: 2 },
+        100,
+      ).state,
+    ).toBe("full");
+  });
+
   it("keeps the homepage to exactly six unique fixed sections", () => {
     const draft = defaultPublicSiteDraft();
     expect(publicSiteDraftSchema.parse(draft).sectionOrder).toHaveLength(6);
@@ -184,7 +206,10 @@ describe("public event site rules", () => {
         city: "Example City",
         venueAddress: "1 Example Street",
         venueMapUrl: "https://maps.example.test/hall",
-        applicationUrl: "https://forms.example.test/apply",
+        application: {
+          url: "https://forms.example.test/apply",
+          state: "accepting",
+        },
         supportUrl: "https://help.example.test/event",
       },
       sessions: [],
@@ -203,6 +228,43 @@ describe("public event site rules", () => {
     expect(markup).toContain("Event help");
     expect(markup).toContain("Open map");
     expect(markup).not.toContain("href=");
+  });
+
+  it("uses honest wording for a published but closed call for speakers", () => {
+    const configuration = {
+      ...defaultPublicSiteDraft(),
+      sponsors: [],
+    };
+    const programme = {
+      event: {
+        slug: "example-event",
+        startDate: "2027-01-01",
+        endDate: "2027-01-01",
+        description: "An example event.",
+        venue: "Example Hall",
+        city: "Example City",
+        venueAddress: "1 Example Street",
+        venueMapUrl: null,
+        application: {
+          url: "/apply/example-event",
+          state: "closed",
+        },
+        supportUrl: null,
+      },
+      sessions: [],
+      speakers: [],
+    } as unknown as PublishedProgramme;
+    const markup = renderToStaticMarkup(
+      createElement(PublicSiteHome, {
+        event: programme.event,
+        programme,
+        site: { configuration, recordings: [] },
+      }),
+    );
+
+    expect(markup).toContain("View call for speakers");
+    expect(markup).not.toContain("Apply to speak");
+    expect(markup).toContain('href="/apply/example-event"');
   });
 
   it("rejects unsafe restricted-Markdown links before publication", () => {

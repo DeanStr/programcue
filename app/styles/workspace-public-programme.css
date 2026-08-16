@@ -163,6 +163,67 @@
 .public-nav a:hover:not(.active)::after {
   opacity: 0.35;
 }
+.public-nav-overflow {
+  position: relative;
+  display: flex;
+  align-items: stretch;
+}
+.public-nav-overflow > summary {
+  display: flex;
+  align-items: center;
+  list-style: none;
+  cursor: pointer;
+  color: var(--text-secondary);
+  font-size: var(--text-sm);
+  font-weight: var(--weight-semibold);
+}
+.public-nav-overflow > summary::-webkit-details-marker {
+  display: none;
+}
+.public-nav-overflow > summary::after {
+  content: "▾";
+  margin-left: var(--space-1);
+  font-size: var(--text-2xs);
+}
+.public-nav-overflow > summary:hover,
+.public-nav-overflow > summary.active {
+  color: var(--accent-ink);
+}
+.public-nav-overflow-panel {
+  position: absolute;
+  top: calc(100% - 6px);
+  right: 0;
+  z-index: 2;
+  display: grid;
+  width: min(300px, calc(100vw - 32px));
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  box-shadow: var(--elev-3);
+}
+.public-nav-overflow:not([open]) > .public-nav-overflow-panel {
+  display: none;
+}
+.public-nav .public-nav-overflow-panel a {
+  min-height: 44px;
+  padding: var(--space-3);
+  color: var(--ink);
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+  white-space: normal;
+}
+.public-nav .public-nav-overflow-panel a::after {
+  display: none;
+}
+.public-nav .public-nav-overflow-panel a.active {
+  color: var(--accent-ink);
+  background: var(--accent-soft);
+  box-shadow: inset 3px 0 0 var(--accent-ink);
+}
+.public-nav .public-nav-overflow-panel a + a {
+  border-top: 1px solid var(--line);
+}
 .public-itinerary-link {
   flex: none;
   gap: var(--space-2);

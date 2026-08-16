@@ -1,3 +1,7 @@
+import {
+  isPublicSiteDatabaseConstraint,
+  PUBLIC_SITE_SESSION_ELIGIBILITY_CONSTRAINT,
+} from "~/modules/public-site/public-site-errors";
 import type { Viewer } from "~/platform/auth/authorize.server";
 import { WebhookService } from "~/platform/operations/webhook-service.server";
 import {
@@ -493,7 +497,22 @@ export abstract class ScheduleSessionEditorWorkflow extends ScheduleSessionResou
     ];
     const auditIndex = statements.length - 3;
     statements.push(...preparedWebhook.statements);
-    const results = await this.env.DB.batch(statements);
+    let results: D1Result<unknown>[];
+    try {
+      results = await this.env.DB.batch(statements);
+    } catch (error) {
+      if (
+        isPublicSiteDatabaseConstraint(
+          error,
+          PUBLIC_SITE_SESSION_ELIGIBILITY_CONSTRAINT,
+        )
+      ) {
+        throw new ScheduleConfigurationError(
+          "Remove this session from published event-site dependencies and withdraw any published recording before making it private.",
+        );
+      }
+      throw error;
+    }
     const eventUpdated = results[2]!;
     const versionUpdated = results[3]!;
     const sessionUpdated = results[4]!;

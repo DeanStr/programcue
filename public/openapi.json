@@ -3214,7 +3214,7 @@
           "city",
           "description",
           "supportUrl",
-          "applicationUrl",
+          "application",
           "brandAccent",
           "heroImageUrl",
           "logoUrl",
@@ -3285,12 +3285,30 @@
             "pattern": "^https://",
             "maxLength": 2048
           },
-          "applicationUrl": {
+          "application": {
             "type": [
-              "string",
+              "object",
               "null"
             ],
-            "format": "uri-reference"
+            "additionalProperties": false,
+            "required": [
+              "url",
+              "state"
+            ],
+            "properties": {
+              "url": {
+                "type": "string",
+                "format": "uri-reference"
+              },
+              "state": {
+                "type": "string",
+                "enum": [
+                  "accepting",
+                  "closed",
+                  "full"
+                ]
+              }
+            }
           },
           "brandAccent": {
             "type": "string"
@@ -3386,7 +3404,7 @@
               "city",
               "description",
               "supportUrl",
-              "applicationUrl",
+              "application",
               "brandAccent",
               "heroImageUrl",
               "logoUrl",
@@ -3458,12 +3476,30 @@
                 "pattern": "^https://",
                 "maxLength": 2048
               },
-              "applicationUrl": {
+              "application": {
                 "type": [
-                  "string",
+                  "object",
                   "null"
                 ],
-                "format": "uri-reference"
+                "additionalProperties": false,
+                "required": [
+                  "url",
+                  "state"
+                ],
+                "properties": {
+                  "url": {
+                    "type": "string",
+                    "format": "uri-reference"
+                  },
+                  "state": {
+                    "type": "string",
+                    "enum": [
+                      "accepting",
+                      "closed",
+                      "full"
+                    ]
+                  }
+                }
               },
               "brandAccent": {
                 "type": "string"

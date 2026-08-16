@@ -1,3 +1,7 @@
+import {
+  isPublicSiteDatabaseConstraint,
+  PUBLIC_SITE_SPEAKER_PROFILE_CONSTRAINT,
+} from "~/modules/public-site/public-site-errors";
 import type { Viewer } from "~/platform/auth/authorize.server";
 import { WebhookService } from "~/platform/operations/webhook-service.server";
 import { notifyRouteChange } from "~/platform/realtime/route-realtime.server";
@@ -108,7 +112,7 @@ export class ParticipantProfileService {
       auditEventId,
     );
 
-    const results = await this.env.DB.batch([
+    const statements = [
       this.env.DB.prepare(
         `UPDATE people
             SET display_name = ?, biography = ?, pronunciation = ?,
@@ -246,7 +250,23 @@ export class ParticipantProfileService {
         operationId,
       ),
       ...webhook.statements,
-    ]);
+    ];
+    let results: D1Result<unknown>[];
+    try {
+      results = await this.env.DB.batch(statements);
+    } catch (error) {
+      if (
+        isPublicSiteDatabaseConstraint(
+          error,
+          PUBLIC_SITE_SPEAKER_PROFILE_CONSTRAINT,
+        )
+      ) {
+        throw new ParticipantProfileConflictError(
+          "Your profile is featured on a published event site. Ask an organiser to remove it from the site before unpublishing your profile.",
+        );
+      }
+      throw error;
+    }
 
     if ((results[0]?.meta.changes ?? 0) !== 1) {
       throw new ParticipantProfileConflictError();

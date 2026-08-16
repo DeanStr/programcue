@@ -575,7 +575,7 @@ describe("published programme and itinerary", () => {
     } as never);
     expect(response.headers.get("cache-control")).toContain("public");
     expect(response.headers.get("cache-control")).toBe(
-      "public, max-age=0, s-maxage=300, stale-while-revalidate=60, must-revalidate",
+      "public, max-age=0, s-maxage=0, must-revalidate",
     );
     expect(response.headers.get("etag")).toMatch(/^"program-cue-publication-/u);
     const body = await response.json<Record<string, unknown>>();

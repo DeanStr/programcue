@@ -141,13 +141,15 @@ export function PublicSiteHome({
       <HomeSection title={configuration.introductionHeading}>
         <p className="public-site-lede">{event.description}</p>
         <div className="public-site-actions">
-          {event.applicationUrl ? (
+          {event.application ? (
             <PreviewSafeLink
-              className="btn primary"
-              href={event.applicationUrl}
+              className={`btn${event.application.state === "accepting" ? " primary" : ""}`}
+              href={event.application.url}
               preview={preview}
             >
-              Apply to speak
+              {event.application.state === "accepting"
+                ? "Apply to speak"
+                : "View call for speakers"}
             </PreviewSafeLink>
           ) : null}
           {programme ? (

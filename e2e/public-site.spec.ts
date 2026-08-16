@@ -45,6 +45,8 @@ test("organisers compose, preview and publish the bounded public event site", as
     .locator(".public-site-page-editor fieldset")
     .filter({ has: page.locator("legend", { hasText: "About" }) });
   await aboutPage.getByLabel("Publish this page with the site").check();
+  const longAboutNavigationLabel = "A".repeat(40);
+  await aboutPage.getByLabel("Navigation label").fill(longAboutNavigationLabel);
   await aboutPage
     .getByLabel("Restricted Markdown")
     .fill("## Why attend\n\nMeet practitioners building better events.");
@@ -52,6 +54,10 @@ test("organisers compose, preview and publish the bounded public event site", as
     .locator(".public-site-page-editor fieldset")
     .filter({ has: page.locator("legend", { hasText: "Sponsors" }) });
   await sponsorsPage.getByLabel("Publish this page with the site").check();
+  const longSponsorsNavigationLabel = "S".repeat(40);
+  await sponsorsPage
+    .getByLabel("Navigation label")
+    .fill(longSponsorsNavigationLabel);
   await sponsorsPage
     .getByLabel("Restricted Markdown")
     .fill("Thanks to the organisations supporting this event.");
@@ -149,6 +155,9 @@ test("organisers compose, preview and publish the bounded public event site", as
     page.getByRole("heading", { name: "About the event" }),
   ).toBeVisible();
   await expect(
+    page.getByRole("link", { name: "Apply to speak" }),
+  ).toHaveAttribute("href", "/apply/form");
+  await expect(
     page.getByRole("heading", { name: "Supported by" }),
   ).toBeVisible();
   await expect(page.getByText("Example Partner")).toBeVisible();
@@ -172,11 +181,49 @@ test("organisers compose, preview and publish the bounded public event site", as
   await expect(
     eventNavigation.getByRole("link", { name: "All sessions" }),
   ).toHaveAttribute("href", "/public/programme/future-of-events-2027/sessions");
+  await expect(
+    eventNavigation.getByRole("link", { name: "Speakers", exact: true }),
+  ).toBeVisible();
+  await expect(
+    eventNavigation.getByLabel("Browse programme and event pages"),
+  ).toBeVisible();
+  expect(
+    await page
+      .locator(".public-top")
+      .evaluate((element) => element.scrollWidth <= element.clientWidth),
+  ).toBe(true);
 
-  await page.getByRole("link", { name: "About", exact: true }).click();
+  await page.setViewportSize({ width: 900, height: 720 });
+  await expect(page.locator(".public-nav")).toBeHidden();
+  await expect(
+    page.locator(".public-mobile-nav").getByText("Browse", { exact: true }),
+  ).toBeVisible();
+  expect(
+    await page
+      .locator(".public-top")
+      .evaluate((element) => element.scrollWidth <= element.clientWidth),
+  ).toBe(true);
+  await page.setViewportSize({ width: 1280, height: 720 });
+
+  await eventNavigation.getByLabel("Browse programme and event pages").click();
+  const longAboutNavigationLink = eventNavigation.getByRole("link", {
+    name: longAboutNavigationLabel,
+  });
+  expect(
+    await longAboutNavigationLink.evaluate(
+      (element) => element.scrollWidth <= element.clientWidth,
+    ),
+  ).toBe(true);
+  await longAboutNavigationLink.click();
   await expect(page).toHaveURL(
     /\/public\/programme\/future-of-events-2027\/pages\/about$/u,
   );
+  await expect(
+    page
+      .getByRole("navigation", { name: "Event navigation" })
+      .first()
+      .getByLabel(`Browse, current page ${longAboutNavigationLabel}`),
+  ).toBeVisible();
   await expect(page.getByRole("heading", { name: "Why attend" })).toBeVisible();
   await expect(
     page.getByRole("link", { name: "All sessions" }),
@@ -197,9 +244,12 @@ test("organisers compose, preview and publish the bounded public event site", as
   await expect(
     page.getByRole("link", { name: "All sessions" }).first(),
   ).toHaveAttribute("aria-current", "page");
-  await page
-    .getByRole("link", { name: "Sponsors", exact: true })
-    .first()
+  const pageNavigation = page
+    .getByRole("navigation", { name: "Event navigation" })
+    .first();
+  await pageNavigation.getByLabel("Browse programme and event pages").click();
+  await pageNavigation
+    .getByRole("link", { name: longSponsorsNavigationLabel })
     .click();
   await expect(page.getByRole("heading", { name: "Community" })).toBeVisible();
   await expect(page.getByText("Example Partner")).toBeVisible();

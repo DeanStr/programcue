@@ -37,70 +37,64 @@ export function PublicEventHeader({
   itinerary?: { shared: boolean; savedCount: number };
 }) {
   const mobileNavigationRef = useRef<HTMLDetailsElement>(null);
+  const overflowNavigationRef = useRef<HTMLDetailsElement>(null);
   const slug = event.slug;
   const overviewSurface =
     activeSurface === "overview" || activeSurface === "sessions";
   const programmeHref = `/public/programme/${slug}`;
-  const links: EventNavigationLink[] = [
-    ...(programme
-      ? [
-          ...(site
-            ? [
-                {
-                  key: "home",
-                  label: "Event home",
-                  href: programmeHref,
-                  active: activeSurface === "overview" && !activePage,
-                  routed: true,
-                },
-              ]
-            : []),
-          {
-            key: "sessions",
-            label: "All sessions",
-            href: site
-              ? publicProgrammeSurfacePath(slug, "sessions")
-              : overviewSurface
-                ? "#programme"
-                : `${programmeHref}#programme`,
-            active: site
-              ? activeSurface === "sessions"
-              : Boolean(overviewSurface && !activePage),
-            routed: Boolean(site),
-          },
-          {
-            key: "speakers",
-            label: "Speakers",
-            href:
-              site || !overviewSurface
-                ? publicProgrammeSurfacePath(slug, "speakers")
-                : "#speakers",
-            active: activeSurface === "speakers",
-            routed: Boolean(site || !overviewSurface),
-          },
-          ...(["agenda", "schedule", "gallery"] as const).map((surface) => ({
-            key: surface,
-            label:
-              surface === "agenda"
-                ? "Day agenda"
-                : surface === "schedule"
-                  ? "Full schedule"
-                  : "Speaker Gallery",
-            href: publicProgrammeSurfacePath(slug, surface),
-            active: activeSurface === surface,
-            routed: true,
-          })),
-        ]
-      : [
-          {
-            key: "home",
-            label: "Event home",
-            href: programmeHref,
-            active: !activePage,
-            routed: true,
-          },
-        ]),
-    ...PUBLIC_SITE_PAGE_TYPES.flatMap((page) => {
+  const homeLink: EventNavigationLink = {
+    key: "home",
+    label: "Event home",
+    href: programmeHref,
+    active: programme
+      ? activeSurface === "overview" && !activePage
+      : !activePage,
+    routed: true,
+  };
+  const programmePrimaryLinks: EventNavigationLink[] = programme
+    ? [
+        ...(site ? [homeLink] : []),
+        {
+          key: "sessions",
+          label: "All sessions",
+          href: site
+            ? publicProgrammeSurfacePath(slug, "sessions")
+            : overviewSurface
+              ? "#programme"
+              : `${programmeHref}#programme`,
+          active: site
+            ? activeSurface === "sessions"
+            : Boolean(overviewSurface && !activePage),
+          routed: Boolean(site),
+        },
+        {
+          key: "speakers",
+          label: "Speakers",
+          href:
+            site || !overviewSurface
+              ? publicProgrammeSurfacePath(slug, "speakers")
+              : "#speakers",
+          active: activeSurface === "speakers",
+          routed: Boolean(site || !overviewSurface),
+        },
+      ]
+    : [homeLink];
+  const programmeOverflowLinks: EventNavigationLink[] = programme
+    ? (["agenda", "schedule", "gallery"] as const).map((surface) => ({
+        key: surface,
+        label:
+          surface === "agenda"
+            ? "Day agenda"
+            : surface === "schedule"
+              ? "Full schedule"
+              : "Speaker Gallery",
+        href: publicProgrammeSurfacePath(slug, surface),
+        active: activeSurface === surface,
+        routed: true,
+      }))
+    : [];
+  const pageLinks: EventNavigationLink[] = PUBLIC_SITE_PAGE_TYPES.flatMap(
+    (page) => {
       const configuration = site?.pages[page];
       return configuration?.enabled
         ? [
@@ -113,8 +107,11 @@ export function PublicEventHeader({
             },
           ]
         : [];
-    }),
-  ];
+    },
+  );
+  const overflowLinks = [...programmeOverflowLinks, ...pageLinks];
+  const links = [...programmePrimaryLinks, ...overflowLinks];
+  const activeOverflowLink = overflowLinks.find((link) => link.active);
   const itineraryHref = overviewSurface
     ? "#itinerary"
     : `${programmeHref}#itinerary`;
@@ -161,7 +158,28 @@ export function PublicEventHeader({
         className="public-nav"
         aria-label={site ? "Event navigation" : "Programme"}
       >
-        {links.map((link) => navigationLink(link))}
+        {programmePrimaryLinks.map((link) => navigationLink(link))}
+        {overflowLinks.length ? (
+          <details className="public-nav-overflow" ref={overflowNavigationRef}>
+            <summary
+              className={activeOverflowLink ? "active" : undefined}
+              aria-label={
+                activeOverflowLink
+                  ? `Browse, current page ${activeOverflowLink.label}`
+                  : "Browse programme and event pages"
+              }
+            >
+              Browse
+            </summary>
+            <div className="public-nav-overflow-panel">
+              {overflowLinks.map((link) =>
+                navigationLink(link, () =>
+                  overflowNavigationRef.current?.removeAttribute("open"),
+                ),
+              )}
+            </div>
+          </details>
+        ) : null}
       </nav>
       <details className="public-mobile-nav" ref={mobileNavigationRef}>
         <summary className="btn small">Browse</summary>

@@ -3,6 +3,7 @@ import { publicEventBrandAssetPath } from "~/modules/events/event-branding";
 import { PublicProgrammeService } from "~/modules/programme/public-programme-service.server";
 import type { PublishedProgramme } from "~/modules/programme/public-programme-types";
 import { eventBoundaryCalendarDate } from "~/modules/schedule/schedule-time";
+import { parsePublicApplicationProjection } from "~/modules/submissions/submission-availability";
 import type { Viewer } from "~/platform/auth/authorize.server";
 import {
   PublicRecordingService,
@@ -95,7 +96,7 @@ type EventRow = {
   bannerAssetId: string | null;
   legacyLogoUrl: string | null;
   supportUrl: string | null;
-  applicationUrl: string | null;
+  applicationJson: string | null;
   brandDraftRevision: number;
   brandPublishedRevision: number;
   brandPublishedAt: number | null;
@@ -128,7 +129,20 @@ export class PublicSiteService {
               participant_logo_url AS legacyLogoUrl,
               participant_support_url AS supportUrl,
               (
-                SELECT '/apply/' || form.public_slug
+                SELECT json_object(
+                         'url', '/apply/' || form.public_slug,
+                         'closesAt', form.closes_at,
+                         'submissionLimit', form.submission_limit,
+                         'submittedCount', (
+                           SELECT COUNT(*)
+                             FROM submissions submission
+                             JOIN form_versions submission_version
+                               ON submission_version.id = submission.form_version_id
+                              AND submission_version.event_id = submission.event_id
+                            WHERE submission_version.form_id = form.id
+                              AND submission.status <> 'draft'
+                         )
+                       )
                   FROM form_definitions form
                  WHERE form.event_id = events.id
                    AND form.kind = 'submission' AND form.status = 'published'
@@ -140,7 +154,7 @@ export class PublicSiteService {
                    )
                  ORDER BY form.updated_at DESC, form.id
                  LIMIT 1
-              ) AS applicationUrl,
+              ) AS applicationJson,
               brand_draft_revision AS brandDraftRevision,
               brand_published_revision AS brandPublishedRevision,
               brand_published_at AS brandPublishedAt,
@@ -154,7 +168,14 @@ export class PublicSiteService {
     return row;
   }
 
-  private publicEvent(row: EventRow): PublicSiteEvent {
+  private publicEvent(
+    row: EventRow,
+    now = Math.floor(Date.now() / 1_000),
+  ): PublicSiteEvent {
+    const application = parsePublicApplicationProjection(
+      row.applicationJson,
+      now,
+    );
     return {
       id: row.id,
       slug: row.slug,
@@ -176,7 +197,7 @@ export class PublicSiteService {
         ? publicEventBrandAssetPath(row.slug, "banner")
         : null,
       supportUrl: row.supportUrl,
-      applicationUrl: row.applicationUrl,
+      application,
     };
   }
 
@@ -971,7 +992,20 @@ export class PublicSiteService {
               event.programme_published_at AS programmePublishedAt,
               event.organisation_id AS organisationId,
               (
-                SELECT '/apply/' || form.public_slug
+                SELECT json_object(
+                         'url', '/apply/' || form.public_slug,
+                         'closesAt', form.closes_at,
+                         'submissionLimit', form.submission_limit,
+                         'submittedCount', (
+                           SELECT COUNT(*)
+                             FROM submissions submission
+                             JOIN form_versions submission_version
+                               ON submission_version.id = submission.form_version_id
+                              AND submission_version.event_id = submission.event_id
+                            WHERE submission_version.form_id = form.id
+                              AND submission.status <> 'draft'
+                         )
+                       )
                   FROM form_definitions form
                  WHERE form.event_id = event.id
                    AND form.kind = 'submission' AND form.status = 'published'
@@ -983,7 +1017,7 @@ export class PublicSiteService {
                    )
                  ORDER BY form.updated_at DESC, form.id
                  LIMIT 1
-              ) AS applicationUrl
+              ) AS applicationJson
          FROM event_public_sites site
          JOIN events event
            ON event.id = site.event_id AND event.organisation_id = site.organisation_id
@@ -1001,7 +1035,7 @@ export class PublicSiteService {
       >();
     if (!row) return null;
     const configuration = parsePublishedPublicSiteSnapshot(row.publishedJson);
-    const event = this.publicEvent(row);
+    const event = this.publicEvent(row, now);
     let recordings: PublishedPublicRecording[] = [];
     if (configuration.postEvent.enabled && now >= row.endsAt) {
       recordings = await new PublicRecordingService(
