@@ -152,10 +152,14 @@ export async function action({ request, context }: ActionFunctionArgs) {
       };
     }
     if (intent === "conflict") {
-      await service.declareConflict(viewer, {
-        assignmentId: values.get("assignmentId"),
-        reason: values.get("reason"),
-      });
+      await service.declareConflict(
+        viewer,
+        {
+          assignmentId: values.get("assignmentId"),
+          reason: values.get("reason"),
+        },
+        "participant_ui",
+      );
       const realtimeFailure = await recordRouteChange(env, viewer, {
         entityType: "evaluator_assignment",
         entityId: String(values.get("assignmentId") ?? ""),
@@ -179,22 +183,26 @@ export async function action({ request, context }: ActionFunctionArgs) {
     const scores: Record<string, FormDataEntryValue> = {};
     for (const [name, value] of values)
       if (name.startsWith("score:")) scores[name.slice(6)] = value;
-    const result = await service.saveReview(viewer, {
-      assignmentId: values.get("assignmentId"),
-      revision: values.get("revision"),
-      scores,
-      recommendation: values.get("recommendation") || null,
-      confidence: values.get("confidence") || null,
-      submitterFeedback: values.get("submitterFeedback"),
-      privateNotes: values.get("privateNotes"),
-      conflictAffirmed: values.get("conflictAffirmed") === "affirmed",
-      suggestionId: values.get("suggestionId") || null,
-      importedCriterionIds: values.getAll("importedCriterionId").map(String),
-      confirmedAiCriterionIds: values
-        .getAll("confirmedAiCriterionId")
-        .map(String),
-      intent,
-    });
+    const result = await service.saveReview(
+      viewer,
+      {
+        assignmentId: values.get("assignmentId"),
+        revision: values.get("revision"),
+        scores,
+        recommendation: values.get("recommendation") || null,
+        confidence: values.get("confidence") || null,
+        submitterFeedback: values.get("submitterFeedback"),
+        privateNotes: values.get("privateNotes"),
+        conflictAffirmed: values.get("conflictAffirmed") === "affirmed",
+        suggestionId: values.get("suggestionId") || null,
+        importedCriterionIds: values.getAll("importedCriterionId").map(String),
+        confirmedAiCriterionIds: values
+          .getAll("confirmedAiCriterionId")
+          .map(String),
+        intent,
+      },
+      "participant_ui",
+    );
     const realtimeFailure = await recordRouteChange(env, viewer, {
       entityType: "review",
       entityId: result.reviewId,

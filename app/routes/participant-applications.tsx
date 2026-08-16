@@ -84,6 +84,7 @@ export async function action({ request, context }: Route.ActionArgs) {
       await participantService.finalizeAcceptedCoSpeakerInvitation(
         viewer,
         result.response,
+        "participant_ui",
       );
     const partial = finalization.warnings.length > 0;
     const relationshipMessage = `${result.response.speaker.name} was added as ${result.response.speaker.roleLabel.toLowerCase()}`;

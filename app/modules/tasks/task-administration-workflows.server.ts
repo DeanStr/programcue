@@ -666,7 +666,7 @@ export class TaskAdministrationWorkflows extends TaskServiceFoundation {
       );
     await this.refreshStates(viewer.eventId);
     const undoOffered = (results[3]?.meta.changes ?? 0) === 1;
-    const webhookWarning = await this.queueTaskWebhook(viewer, {
+    const webhookWarning = await this.queueTaskWebhook(viewer, "admin_ui", {
       eventType: "task.updated",
       taskId: task.id,
       operationId,

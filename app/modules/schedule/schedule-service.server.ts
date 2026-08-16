@@ -9,7 +9,10 @@ import {
   scheduleCalendarFanoutMessageSchema,
 } from "~/modules/calendars/calendar-schema";
 import type { Viewer } from "~/platform/auth/authorize.server";
-import { WebhookService } from "~/platform/operations/webhook-service.server";
+import {
+  WebhookService,
+  webhookActorForAudit,
+} from "~/platform/operations/webhook-service.server";
 import {
   type AutoPlacementPreview,
   autoPlacementRequestHash,
@@ -232,14 +235,17 @@ export class ScheduleService {
     },
   ) {
     try {
-      const deliveries = await new WebhookService(this.env).queueEvent(viewer, {
-        eventType: input.eventType,
-        entityType: "session",
-        entityId: input.sessionId,
-        idempotencyKey: `${input.eventType}:${input.sessionId}:${input.revision}`,
-        correlationId: `${input.sessionId}:${input.revision}`,
-        data: input.data,
-      });
+      const deliveries = await new WebhookService(this.env).queueEvent(
+        webhookActorForAudit(viewer, "admin_ui"),
+        {
+          eventType: input.eventType,
+          entityType: "session",
+          entityId: input.sessionId,
+          idempotencyKey: `${input.eventType}:${input.sessionId}:${input.revision}`,
+          correlationId: `${input.sessionId}:${input.revision}`,
+          data: input.data,
+        },
+      );
       return {
         deliveries,
         warning: deliveries.some(

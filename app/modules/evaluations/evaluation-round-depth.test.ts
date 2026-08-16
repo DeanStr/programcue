@@ -504,26 +504,30 @@ describe("abstract management round depth", () => {
         .bind(admin.eventId, "abstract-initial-round", sam.personId)
         .first<{ id: string }>();
       const workspace = await service.getReviewerWorkspace(sam, assignment!.id);
-      await service.saveReview(sam, {
-        assignmentId: assignment!.id,
-        revision: workspace.review?.revision ?? 0,
-        scores: Object.fromEntries(
-          workspace.criteria.map((criterion) => [
-            criterion.id,
-            criterion.inputType === "dropdown"
-              ? "Accept"
-              : criterion.inputType === "free_text"
-                ? "Strong proposal."
-                : 5,
-          ]),
-        ),
-        recommendation: "accept",
-        confidence: 5,
-        submitterFeedback: "Advance this proposal.",
-        privateNotes: "Partially scoped team pool.",
-        conflictAffirmed: true,
-        intent: "submit",
-      });
+      await service.saveReview(
+        sam,
+        {
+          assignmentId: assignment!.id,
+          revision: workspace.review?.revision ?? 0,
+          scores: Object.fromEntries(
+            workspace.criteria.map((criterion) => [
+              criterion.id,
+              criterion.inputType === "dropdown"
+                ? "Accept"
+                : criterion.inputType === "free_text"
+                  ? "Strong proposal."
+                  : 5,
+            ]),
+          ),
+          recommendation: "accept",
+          confidence: 5,
+          submitterFeedback: "Advance this proposal.",
+          privateNotes: "Partially scoped team pool.",
+          conflictAffirmed: true,
+          intent: "submit",
+        },
+        "participant_ui",
+      );
 
       await expect(
         service.advanceRound(
@@ -1158,22 +1162,26 @@ describe("abstract management round depth", () => {
     )
       .bind(admin.eventId, "abstract-initial-round", sam.personId)
       .first<{ id: string }>();
-    const saved = await service.saveReview(sam, {
-      assignmentId: assigned!.id,
-      revision: 0,
-      scores: {
-        "abstract-originality": 5,
-        "abstract-relevance": 4,
-        "abstract-recommendation": "Accept",
-        "abstract-comments": "Strong fit.",
+    const saved = await service.saveReview(
+      sam,
+      {
+        assignmentId: assigned!.id,
+        revision: 0,
+        scores: {
+          "abstract-originality": 5,
+          "abstract-relevance": 4,
+          "abstract-recommendation": "Accept",
+          "abstract-comments": "Strong fit.",
+        },
+        recommendation: "accept",
+        confidence: 5,
+        submitterFeedback: "",
+        privateNotes: "",
+        conflictAffirmed: true,
+        intent: "submit",
       },
-      recommendation: "accept",
-      confidence: 5,
-      submitterFeedback: "",
-      privateNotes: "",
-      conflictAffirmed: true,
-      intent: "submit",
-    });
+      "participant_ui",
+    );
     expect(saved.reviewId).toBeTruthy();
     const reloaded = await service.getReviewerWorkspace(sam);
     expect(
@@ -1337,10 +1345,14 @@ describe("abstract management round depth", () => {
       .run();
 
     await expect(
-      service.declareConflict(sam, {
-        assignmentId: assigned!.id,
-        reason: "Conflict declared after the review deadline.",
-      }),
+      service.declareConflict(
+        sam,
+        {
+          assignmentId: assigned!.id,
+          reason: "Conflict declared after the review deadline.",
+        },
+        "participant_ui",
+      ),
     ).rejects.toThrow(/assignment not found|cannot be recused/i);
     await expect(
       env.DB.prepare(

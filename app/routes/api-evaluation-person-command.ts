@@ -156,7 +156,7 @@ export async function action({ request, params, context }: Route.ActionArgs) {
     const service = new EvaluationService(env);
     if (command === "conflict") {
       const input = conflictSchema.parse(raw);
-      await service.declareConflict(viewer, input);
+      await service.declareConflict(viewer, input, "api");
       const realtime = await recordPersonChange(env, viewer, {
         entityType: "evaluator_assignment",
         entityId: input.assignmentId,
@@ -172,7 +172,7 @@ export async function action({ request, params, context }: Route.ActionArgs) {
     }
     if (command === "review") {
       const input = reviewSchema.parse(raw);
-      const result = await service.saveReview(viewer, input);
+      const result = await service.saveReview(viewer, input, "api");
       const realtime = await recordPersonChange(env, viewer, {
         entityType: "review",
         entityId: result.reviewId,
@@ -196,7 +196,7 @@ export async function action({ request, params, context }: Route.ActionArgs) {
     }
     if (command === "moderation") {
       const input = moderationSchema.parse(raw);
-      const moderationId = await service.moderate(viewer, input);
+      const moderationId = await service.moderate(viewer, input, "api");
       const realtime = await recordPersonChange(env, viewer, {
         entityType: "review_moderation",
         entityId: moderationId,
@@ -211,7 +211,7 @@ export async function action({ request, params, context }: Route.ActionArgs) {
       });
     }
     const input = reopenSchema.parse(raw);
-    const result = await service.reopenReview(viewer, input);
+    const result = await service.reopenReview(viewer, input, "api");
     const realtime = await recordPersonChange(env, viewer, {
       entityType: "review",
       entityId: result.reviewId,

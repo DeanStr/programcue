@@ -393,22 +393,98 @@ async function prepareReviewerAiGenerationFixture(roundId: string) {
   });
   const workspace = await service.getReviewerWorkspace(evaluator);
   const assignmentId = workspace.selected!.id;
-  const initialReview = await service.saveReview(evaluator, {
-    assignmentId,
-    revision: 0,
-    scores: { "eval-test-relevance": 3 },
-    recommendation: null,
-    confidence: null,
-    submitterFeedback: "",
-    privateNotes: "",
-    conflictAffirmed: false,
-    intent: "save",
-  });
+  const initialReview = await service.saveReview(
+    evaluator,
+    {
+      assignmentId,
+      revision: 0,
+      scores: { "eval-test-relevance": 3 },
+      recommendation: null,
+      confidence: null,
+      submitterFeedback: "",
+      privateNotes: "",
+      conflictAffirmed: false,
+      intent: "save",
+    },
+    "participant_ui",
+  );
   await new ReviewerAiSuggestionService(testEnv).updateSetting(admin, {
     enabled: true,
     revision: 0,
   });
   return { assignmentId, initialReview, service, testEnv };
+}
+
+function completeReviewInput(
+  assignmentId: string,
+  revision: number,
+  intent: "save" | "submit",
+) {
+  return {
+    assignmentId,
+    revision,
+    scores: Object.fromEntries(criteria.map((criterion) => [criterion.id, 4])),
+    recommendation: "accept",
+    confidence: 4,
+    submitterFeedback: "Clear evidence supports this recommendation.",
+    privateNotes: "Atomic batch test.",
+    conflictAffirmed: true,
+    intent,
+  };
+}
+
+async function reviewBatchState(assignmentId: string) {
+  return env.DB.prepare(
+    `SELECT assignment.status AS assignmentStatus,
+            assignment.revision AS assignmentRevision,
+            assignment.last_operation_id AS assignmentOperationId,
+            review.id AS reviewId, review.status AS reviewStatus,
+            review.revision AS reviewRevision,
+            review.last_operation_id AS reviewOperationId,
+            review.scores_json AS scoresJson,
+            (SELECT submission.status FROM submissions submission
+              WHERE submission.id = assignment.submission_id
+                AND submission.event_id = assignment.event_id) AS submissionStatus,
+            (SELECT COUNT(*) FROM review_revisions revision
+              WHERE revision.event_id = assignment.event_id
+                AND revision.review_id = review.id) AS reviewRevisionCount,
+            (SELECT COUNT(*) FROM audit_events audit
+              WHERE audit.event_id = assignment.event_id
+                AND ((audit.entity_type = 'review' AND audit.entity_id = review.id)
+                  OR (audit.entity_type = 'evaluator_assignment'
+                    AND audit.entity_id = assignment.id))) AS auditCount,
+            (SELECT COUNT(*) FROM webhook_deliveries delivery
+              WHERE delivery.entity_type = 'review'
+                AND delivery.entity_id = review.id) AS webhookDeliveryCount
+       FROM evaluator_assignments assignment
+       LEFT JOIN reviews review
+         ON review.assignment_id = assignment.id
+        AND review.event_id = assignment.event_id
+      WHERE assignment.id = ? AND assignment.event_id = ?`,
+  )
+    .bind(assignmentId, evaluator.eventId)
+    .first();
+}
+
+async function addReviewWebhookEndpoint(eventType: string) {
+  const endpointId = `review-atomic-${crypto.randomUUID()}`;
+  await env.DB.prepare(
+    `INSERT INTO webhook_endpoints (
+       id, organisation_id, event_id, name, url, secret_ciphertext,
+       event_types_json, status, failure_count, created_by_person_id,
+       created_at, updated_at
+     ) VALUES (?, ?, ?, 'Review atomicity', 'https://hooks.example.com/reviews',
+               'test-ciphertext', ?, 'active', 0, ?, unixepoch(), unixepoch())`,
+  )
+    .bind(
+      endpointId,
+      admin.organisationId,
+      admin.eventId,
+      JSON.stringify([eventType]),
+      admin.personId,
+    )
+    .run();
+  return endpointId;
 }
 
 describe("evaluation vertical slice", () => {
@@ -516,10 +592,14 @@ describe("evaluation vertical slice", () => {
             );
             return;
           }
-          await service.declareConflict(evaluator, {
-            assignmentId,
-            reason: "A concurrent conflict declaration requires recusal.",
-          });
+          await service.declareConflict(
+            evaluator,
+            {
+              assignmentId,
+              reason: "A concurrent conflict declaration requires recusal.",
+            },
+            "participant_ui",
+          );
         });
 
         try {
@@ -598,6 +678,298 @@ describe("evaluation vertical slice", () => {
           .bind(evaluator.eventId, assignmentId)
           .first(),
       ).toEqual({ count: 0 });
+      await resetEvaluationFixture();
+    });
+
+    it.each([
+      ["immutable revision", /INSERT INTO review_revisions/u],
+      [
+        "success audit",
+        /INSERT INTO audit_events \(id, actor_kind, origin,[\s\S]*'review', \?, \?, \?, unixepoch\(\)/u,
+      ],
+    ])(
+      "rolls back a review save when its %s is suppressed",
+      async (_evidence, pattern) => {
+        const { assignmentId, initialReview, testEnv } =
+          await prepareReviewerAiGenerationFixture(
+            `eval-review-atomic-${crypto.randomUUID()}`,
+          );
+        const before = await reviewBatchState(assignmentId);
+        const fault = withSuppressedStatement(testEnv, pattern);
+
+        await expect(
+          new EvaluationService(fault.env).saveReview(
+            evaluator,
+            completeReviewInput(assignmentId, initialReview.revision, "save"),
+            "participant_ui",
+          ),
+        ).rejects.toThrow(/complete revision, audit, and delivery evidence/i);
+
+        expect(fault.suppressed()).toBe(1);
+        expect(await reviewBatchState(assignmentId)).toEqual(before);
+        await resetEvaluationFixture();
+      },
+    );
+
+    it("rolls back a review save when its AI import transition is suppressed", async () => {
+      const { assignmentId, initialReview, testEnv } =
+        await prepareReviewerAiGenerationFixture(
+          `eval-review-ai-import-atomic-${crypto.randomUUID()}`,
+        );
+      const ai = new ReviewerAiSuggestionService(testEnv, {
+        provider: successfulReviewerAiProvider(),
+      });
+      const suggestion = await ai.generate(evaluator, { assignmentId });
+      const importedCriterionIds = criteria
+        .map((criterion) => criterion.id)
+        .filter((criterionId) => criterionId !== "eval-test-relevance");
+      const before = await reviewBatchState(assignmentId);
+      const suggestionBefore = await env.DB.prepare(
+        `SELECT status, imported_at AS importedAt,
+                lifecycle_operation_id AS operationId
+           FROM reviewer_ai_suggestions WHERE id = ?`,
+      )
+        .bind(suggestion.id)
+        .first();
+      const fault = withSuppressedStatement(
+        testEnv,
+        /UPDATE reviewer_ai_suggestions AS suggestion[\s\S]*SET status = 'imported'/u,
+      );
+
+      await expect(
+        new EvaluationService(fault.env).saveReview(
+          evaluator,
+          {
+            ...completeReviewInput(
+              assignmentId,
+              initialReview.revision,
+              "save",
+            ),
+            scores: Object.fromEntries(
+              criteria.map((criterion) => [
+                criterion.id,
+                criterion.id === "eval-test-relevance" ? 3 : 4,
+              ]),
+            ),
+            suggestionId: suggestion.id,
+            importedCriterionIds,
+          },
+          "participant_ui",
+        ),
+      ).rejects.toThrow();
+
+      expect(fault.suppressed()).toBe(1);
+      expect(await reviewBatchState(assignmentId)).toEqual(before);
+      expect(
+        await env.DB.prepare(
+          `SELECT status, imported_at AS importedAt,
+                  lifecycle_operation_id AS operationId
+             FROM reviewer_ai_suggestions WHERE id = ?`,
+        )
+          .bind(suggestion.id)
+          .first(),
+      ).toEqual(suggestionBefore);
+      await resetEvaluationFixture();
+    });
+
+    it("rolls back a review submission when one expected webhook row is suppressed", async () => {
+      const { assignmentId, initialReview, testEnv } =
+        await prepareReviewerAiGenerationFixture(
+          `eval-review-webhook-atomic-${crypto.randomUUID()}`,
+        );
+      const endpointId = await addReviewWebhookEndpoint("review.submitted");
+      const before = await reviewBatchState(assignmentId);
+      const fault = withSuppressedStatement(
+        evaluationEnvironment(testEnv),
+        /INSERT INTO operation_items/u,
+      );
+
+      try {
+        await expect(
+          new EvaluationService(fault.env).saveReview(
+            evaluator,
+            completeReviewInput(assignmentId, initialReview.revision, "submit"),
+            "participant_ui",
+          ),
+        ).rejects.toThrow(/complete revision, audit, and delivery evidence/i);
+        expect(fault.suppressed()).toBe(1);
+        expect(await reviewBatchState(assignmentId)).toEqual(before);
+        expect(
+          await env.DB.prepare(
+            "SELECT COUNT(*) AS count FROM webhook_deliveries WHERE endpoint_id = ?",
+          )
+            .bind(endpointId)
+            .first(),
+        ).toEqual({ count: 0 });
+      } finally {
+        await env.DB.prepare("DELETE FROM webhook_endpoints WHERE id = ?")
+          .bind(endpointId)
+          .run();
+        await resetEvaluationFixture();
+      }
+    });
+
+    it.each([
+      ["immutable revision", /INSERT INTO review_revisions/u],
+      ["success audit", /INSERT INTO audit_events[\s\S]*'review\.reopened'/u],
+      ["webhook operation item", /INSERT INTO operation_items/u],
+    ])(
+      "rolls back review reopen when its %s is suppressed",
+      async (_evidence, pattern) => {
+        const { assignmentId, initialReview, service, testEnv } =
+          await prepareReviewerAiGenerationFixture(
+            `eval-reopen-atomic-${crypto.randomUUID()}`,
+          );
+        await service.saveReview(
+          evaluator,
+          completeReviewInput(assignmentId, initialReview.revision, "submit"),
+          "participant_ui",
+        );
+        const endpointId = await addReviewWebhookEndpoint("review.reopened");
+        const before = await reviewBatchState(assignmentId);
+        const fault = withSuppressedStatement(
+          evaluationEnvironment(testEnv),
+          pattern,
+        );
+
+        try {
+          await expect(
+            new EvaluationService(fault.env).reopenReview(
+              admin,
+              {
+                assignmentId,
+                reason: "The reviewer must correct material evidence.",
+                confirmed: true,
+              },
+              "admin_ui",
+            ),
+          ).rejects.toThrow(/complete revision, audit, and delivery evidence/i);
+          expect(fault.suppressed()).toBe(1);
+          expect(await reviewBatchState(assignmentId)).toEqual(before);
+          expect(
+            await env.DB.prepare(
+              "SELECT COUNT(*) AS count FROM webhook_deliveries WHERE endpoint_id = ?",
+            )
+              .bind(endpointId)
+              .first(),
+          ).toEqual({ count: 0 });
+        } finally {
+          await env.DB.prepare("DELETE FROM webhook_endpoints WHERE id = ?")
+            .bind(endpointId)
+            .run();
+          await resetEvaluationFixture();
+        }
+      },
+    );
+
+    it("records the explicit ingress origin for reviewer and manager actions", async () => {
+      const { assignmentId, initialReview, service } =
+        await prepareReviewerAiGenerationFixture(
+          `eval-review-origin-${crypto.randomUUID()}`,
+        );
+      const initialOrigin = await env.DB.prepare(
+        `SELECT origin FROM audit_events
+          WHERE event_id = ? AND action = 'review.saved'
+            AND entity_id = ?
+          ORDER BY created_at DESC, id DESC LIMIT 1`,
+      )
+        .bind(evaluator.eventId, initialReview.reviewId)
+        .first();
+      expect(initialOrigin).toEqual({ origin: "participant_ui" });
+
+      const apiSave = await service.saveReview(
+        evaluator,
+        completeReviewInput(assignmentId, initialReview.revision, "save"),
+        "api",
+      );
+      expect(
+        await env.DB.prepare(
+          `SELECT origin FROM audit_events
+            WHERE event_id = ? AND action = 'review.saved'
+              AND entity_id = ?
+              AND correlation_id = (
+                SELECT last_operation_id FROM reviews
+                 WHERE id = ? AND event_id = ?
+              )`,
+        )
+          .bind(
+            evaluator.eventId,
+            apiSave.reviewId,
+            apiSave.reviewId,
+            evaluator.eventId,
+          )
+          .first(),
+      ).toEqual({ origin: "api" });
+
+      await service.saveReview(
+        evaluator,
+        completeReviewInput(assignmentId, apiSave.revision, "submit"),
+        "participant_ui",
+      );
+      const assignment = await env.DB.prepare(
+        "SELECT round_id AS roundId, submission_id AS submissionId FROM evaluator_assignments WHERE id = ?",
+      )
+        .bind(assignmentId)
+        .first<{ roundId: string; submissionId: string }>();
+      await service.moderate(
+        admin,
+        {
+          roundId: assignment!.roundId,
+          submissionId: assignment!.submissionId,
+          expectedModerationId: null,
+          recommendation: "advance",
+          moderatedScore: 4,
+          notes: "The panel confirms the evidence.",
+          status: "confirmed",
+          confirmed: true,
+        },
+        "admin_ui",
+      );
+      await service.reopenReview(
+        admin,
+        {
+          assignmentId,
+          reason: "The reviewer must correct material evidence.",
+          confirmed: true,
+        },
+        "admin_ui",
+      );
+      await service.declareConflict(
+        evaluator,
+        {
+          assignmentId,
+          reason: "A material relationship prevents impartial evaluation.",
+        },
+        "participant_ui",
+      );
+
+      expect(
+        await env.DB.prepare(
+          `SELECT action, origin FROM audit_events
+            WHERE event_id = ? AND action IN (
+              'review.submitted', 'review.moderation.confirmed',
+              'review.reopened', 'review.conflict.declared'
+            ) AND (entity_id = ? OR entity_id = ?)
+            ORDER BY action`,
+        )
+          .bind(evaluator.eventId, apiSave.reviewId, assignmentId)
+          .all(),
+      ).toMatchObject({
+        results: [
+          { action: "review.conflict.declared", origin: "participant_ui" },
+          { action: "review.reopened", origin: "admin_ui" },
+          { action: "review.submitted", origin: "participant_ui" },
+        ],
+      });
+      expect(
+        await env.DB.prepare(
+          `SELECT origin FROM audit_events
+            WHERE event_id = ? AND action = 'review.moderation.confirmed'
+            ORDER BY created_at DESC, id DESC LIMIT 1`,
+        )
+          .bind(evaluator.eventId)
+          .first(),
+      ).toEqual({ origin: "admin_ui" });
       await resetEvaluationFixture();
     });
 
@@ -1065,17 +1437,21 @@ describe("evaluation vertical slice", () => {
       try {
         const firstGeneration = ai.generate(evaluator, { assignmentId });
         await providerStart;
-        await service.saveReview(evaluator, {
-          assignmentId,
-          revision: initialReview.revision,
-          scores: { "eval-test-relevance": 4 },
-          recommendation: null,
-          confidence: null,
-          submitterFeedback: "",
-          privateNotes: "",
-          conflictAffirmed: false,
-          intent: "save",
-        });
+        await service.saveReview(
+          evaluator,
+          {
+            assignmentId,
+            revision: initialReview.revision,
+            scores: { "eval-test-relevance": 4 },
+            recommendation: null,
+            confidence: null,
+            submitterFeedback: "",
+            privateNotes: "",
+            conflictAffirmed: false,
+            intent: "save",
+          },
+          "participant_ui",
+        );
 
         await expect(ai.generate(evaluator, { assignmentId })).rejects.toThrow(
           /another request is already being generated/i,
@@ -1146,20 +1522,25 @@ describe("evaluation vertical slice", () => {
       });
       let workspace = await service.getReviewerWorkspace(evaluator);
       const assignmentId = workspace.selected!.id;
-      const initial = await service.saveReview(evaluator, {
-        assignmentId,
-        revision: 0,
-        scores: {
-          "eval-test-relevance": 3,
-          "eval-test-reviewer-observation": "My independent first impression.",
+      const initial = await service.saveReview(
+        evaluator,
+        {
+          assignmentId,
+          revision: 0,
+          scores: {
+            "eval-test-relevance": 3,
+            "eval-test-reviewer-observation":
+              "My independent first impression.",
+          },
+          recommendation: null,
+          confidence: null,
+          submitterFeedback: "",
+          privateNotes: "",
+          conflictAffirmed: false,
+          intent: "save",
         },
-        recommendation: null,
-        confidence: null,
-        submitterFeedback: "",
-        privateNotes: "",
-        conflictAffirmed: false,
-        intent: "save",
-      });
+        "participant_ui",
+      );
       let releaseProvider!: () => void;
       let providerStarted!: () => void;
       const providerRelease = new Promise<void>((resolve) => {
@@ -1339,10 +1720,53 @@ describe("evaluation vertical slice", () => {
         .map((criterion) => criterion.id);
       await ai.updateSetting(admin, { enabled: false, revision: 1 });
       await expect(
-        service.saveReview(evaluator, {
+        service.saveReview(
+          evaluator,
+          {
+            assignmentId,
+            revision: initial.revision,
+            scores: suggestedScores,
+            recommendation: "accept",
+            confidence: 4,
+            submitterFeedback: "",
+            privateNotes: "",
+            conflictAffirmed: true,
+            suggestionId: suggestion.id,
+            importedCriterionIds: importedIds,
+            intent: "save",
+          },
+          "participant_ui",
+        ),
+      ).rejects.toThrow(/suggestion changed/i);
+      expect((await ai.getForAssignment(evaluator, assignmentId))?.status).toBe(
+        "offered",
+      );
+      await ai.updateSetting(admin, { enabled: true, revision: 2 });
+      await expect(
+        service.saveReview(
+          evaluator,
+          {
+            assignmentId,
+            revision: initial.revision,
+            scores: suggestedScores,
+            recommendation: "accept",
+            confidence: 4,
+            submitterFeedback: "",
+            privateNotes: "",
+            conflictAffirmed: true,
+            suggestionId: suggestion.id,
+            importedCriterionIds: allSuggestedClosedIds,
+            intent: "save",
+          },
+          "participant_ui",
+        ),
+      ).rejects.toThrow(/only fill criteria that were unanswered/i);
+      const imported = await service.saveReview(
+        evaluator,
+        {
           assignmentId,
           revision: initial.revision,
-          scores: suggestedScores,
+          scores: reviewScores,
           recommendation: "accept",
           confidence: 4,
           submitterFeedback: "",
@@ -1351,46 +1775,37 @@ describe("evaluation vertical slice", () => {
           suggestionId: suggestion.id,
           importedCriterionIds: importedIds,
           intent: "save",
-        }),
-      ).rejects.toThrow(/suggestion changed/i);
-      expect((await ai.getForAssignment(evaluator, assignmentId))?.status).toBe(
-        "offered",
+        },
+        "participant_ui",
       );
-      await ai.updateSetting(admin, { enabled: true, revision: 2 });
-      await expect(
-        service.saveReview(evaluator, {
-          assignmentId,
-          revision: initial.revision,
-          scores: suggestedScores,
-          recommendation: "accept",
-          confidence: 4,
-          submitterFeedback: "",
-          privateNotes: "",
-          conflictAffirmed: true,
-          suggestionId: suggestion.id,
-          importedCriterionIds: allSuggestedClosedIds,
-          intent: "save",
-        }),
-      ).rejects.toThrow(/only fill criteria that were unanswered/i);
-      const imported = await service.saveReview(evaluator, {
-        assignmentId,
-        revision: initial.revision,
-        scores: reviewScores,
-        recommendation: "accept",
-        confidence: 4,
-        submitterFeedback: "",
-        privateNotes: "",
-        conflictAffirmed: true,
-        suggestionId: suggestion.id,
-        importedCriterionIds: importedIds,
-        intent: "save",
-      });
       expect((await ai.getForAssignment(evaluator, assignmentId))?.status).toBe(
         "imported",
       );
 
       await expect(
-        service.saveReview(evaluator, {
+        service.saveReview(
+          evaluator,
+          {
+            assignmentId,
+            revision: imported.revision,
+            scores: reviewScores,
+            recommendation: "accept",
+            confidence: 4,
+            submitterFeedback: "",
+            privateNotes: "",
+            conflictAffirmed: true,
+            suggestionId: suggestion.id,
+            importedCriterionIds: importedIds,
+            confirmedAiCriterionIds: [],
+            intent: "submit",
+          },
+          "participant_ui",
+        ),
+      ).rejects.toThrow(/confirm every unchanged AI-derived criterion/i);
+
+      await service.saveReview(
+        evaluator,
+        {
           assignmentId,
           revision: imported.revision,
           scores: reviewScores,
@@ -1401,25 +1816,11 @@ describe("evaluation vertical slice", () => {
           conflictAffirmed: true,
           suggestionId: suggestion.id,
           importedCriterionIds: importedIds,
-          confirmedAiCriterionIds: [],
+          confirmedAiCriterionIds: importedIds,
           intent: "submit",
-        }),
-      ).rejects.toThrow(/confirm every unchanged AI-derived criterion/i);
-
-      await service.saveReview(evaluator, {
-        assignmentId,
-        revision: imported.revision,
-        scores: reviewScores,
-        recommendation: "accept",
-        confidence: 4,
-        submitterFeedback: "",
-        privateNotes: "",
-        conflictAffirmed: true,
-        suggestionId: suggestion.id,
-        importedCriterionIds: importedIds,
-        confirmedAiCriterionIds: importedIds,
-        intent: "submit",
-      });
+        },
+        "participant_ui",
+      );
       const revision = await env.DB.prepare(
         `SELECT ai_suggestion_id AS suggestionId,
                 imported_criterion_ids_json AS importedIdsJson,
@@ -1453,11 +1854,15 @@ describe("evaluation vertical slice", () => {
           .bind(suggestion.id)
           .first(),
       ).toEqual({ hasLifecycleOperation: 1 });
-      await service.reopenReview(admin, {
-        assignmentId,
-        reason: "Recheck the AI-assisted scoring provenance.",
-        confirmed: true,
-      });
+      await service.reopenReview(
+        admin,
+        {
+          assignmentId,
+          reason: "Recheck the AI-assisted scoring provenance.",
+          confirmed: true,
+        },
+        "admin_ui",
+      );
       const reopenedRevision = await env.DB.prepare(
         `SELECT ai_suggestion_id AS suggestionId,
                 imported_criterion_ids_json AS importedIdsJson,
@@ -1542,43 +1947,55 @@ describe("evaluation vertical slice", () => {
       const scores = Object.fromEntries(
         criteria.map((criterion, index) => [criterion.id, index === 2 ? 5 : 4]),
       );
-      const draft = await service.saveReview(evaluator, {
-        assignmentId: workspace.selected!.id,
-        revision: 0,
-        scores,
-        recommendation: null,
-        confidence: null,
-        submitterFeedback: "Useful proposal.",
-        privateNotes: "",
-        intent: "save",
-      });
+      const draft = await service.saveReview(
+        evaluator,
+        {
+          assignmentId: workspace.selected!.id,
+          revision: 0,
+          scores,
+          recommendation: null,
+          confidence: null,
+          submitterFeedback: "Useful proposal.",
+          privateNotes: "",
+          intent: "save",
+        },
+        "participant_ui",
+      );
       expect(draft.revision).toBe(1);
 
       await expect(
-        service.saveReview(evaluator, {
+        service.saveReview(
+          evaluator,
+          {
+            assignmentId: workspace.selected!.id,
+            revision: 1,
+            scores: { [criteria[0]!.id]: 4 },
+            recommendation: "accept",
+            confidence: 4,
+            submitterFeedback: "Useful proposal.",
+            privateNotes: "Recommend acceptance.",
+            conflictAffirmed: true,
+            intent: "submit",
+          },
+          "participant_ui",
+        ),
+      ).rejects.toBeInstanceOf(EvaluationValidationError);
+
+      const submitted = await service.saveReview(
+        evaluator,
+        {
           assignmentId: workspace.selected!.id,
           revision: 1,
-          scores: { [criteria[0]!.id]: 4 },
+          scores,
           recommendation: "accept",
           confidence: 4,
           submitterFeedback: "Useful proposal.",
           privateNotes: "Recommend acceptance.",
           conflictAffirmed: true,
           intent: "submit",
-        }),
-      ).rejects.toBeInstanceOf(EvaluationValidationError);
-
-      const submitted = await service.saveReview(evaluator, {
-        assignmentId: workspace.selected!.id,
-        revision: 1,
-        scores,
-        recommendation: "accept",
-        confidence: 4,
-        submitterFeedback: "Useful proposal.",
-        privateNotes: "Recommend acceptance.",
-        conflictAffirmed: true,
-        intent: "submit",
-      });
+        },
+        "participant_ui",
+      );
       expect(submitted.weightedScore).toBe(4.25);
       const stored = await env.DB.prepare(
         `SELECT status, revision,
@@ -1626,17 +2043,21 @@ describe("evaluation vertical slice", () => {
       expect(submittedWorkspace.selected?.status).toBe("submitted");
       expect(submittedWorkspace.review?.status).toBe("submitted");
       await expect(
-        service.saveReview(evaluator, {
-          assignmentId: workspace.selected!.id,
-          revision: 2,
-          scores,
-          recommendation: "reject",
-          confidence: 5,
-          submitterFeedback: "",
-          privateNotes: "",
-          conflictAffirmed: true,
-          intent: "submit",
-        }),
+        service.saveReview(
+          evaluator,
+          {
+            assignmentId: workspace.selected!.id,
+            revision: 2,
+            scores,
+            recommendation: "reject",
+            confidence: 5,
+            submitterFeedback: "",
+            privateNotes: "",
+            conflictAffirmed: true,
+            intent: "submit",
+          },
+          "participant_ui",
+        ),
       ).rejects.toThrow(/unavailable|already submitted/);
     });
   });
@@ -1786,21 +2207,30 @@ describe("evaluation vertical slice", () => {
       );
 
       const attempts = await Promise.allSettled([
-        service.saveReview(evaluator, {
-          assignmentId: workspace.selected!.id,
-          revision: 0,
-          scores,
-          recommendation: "accept",
-          confidence: 4,
-          submitterFeedback: "A useful proposal.",
-          privateNotes: "",
-          conflictAffirmed: true,
-          intent: "submit",
-        }),
-        service.declareConflict(evaluator, {
-          assignmentId: workspace.selected!.id,
-          reason: "A close working relationship prevents an impartial review.",
-        }),
+        service.saveReview(
+          evaluator,
+          {
+            assignmentId: workspace.selected!.id,
+            revision: 0,
+            scores,
+            recommendation: "accept",
+            confidence: 4,
+            submitterFeedback: "A useful proposal.",
+            privateNotes: "",
+            conflictAffirmed: true,
+            intent: "submit",
+          },
+          "participant_ui",
+        ),
+        service.declareConflict(
+          evaluator,
+          {
+            assignmentId: workspace.selected!.id,
+            reason:
+              "A close working relationship prevents an impartial review.",
+          },
+          "participant_ui",
+        ),
       ]);
       expect(
         attempts.filter((attempt) => attempt.status === "fulfilled"),

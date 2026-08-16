@@ -18,6 +18,7 @@ import type { EvaluatorEmailRouting } from "~/platform/evaluation/evaluator-emai
 import {
   type WebhookEventResult,
   WebhookService,
+  webhookActorForAudit,
 } from "~/platform/operations/webhook-service.server";
 import { EventRealtimeService } from "~/platform/realtime/event-realtime.server";
 import { ApiError, apiRequestHash } from "./api.server";
@@ -201,13 +202,14 @@ export class ApiParticipantService {
   async finalizeAcceptedCoSpeakerInvitation(
     viewer: Viewer,
     result: AcceptedCoSpeakerInvitationResult,
+    auditOrigin: "participant_ui" | "api",
   ) {
     const operationId = result.invitation.operationId;
     let webhookDeliveries: WebhookEventResult[] = [];
     let webhookWarning: string | null = null;
     try {
       webhookDeliveries = await new WebhookService(this.env).queueEvent(
-        viewer,
+        webhookActorForAudit(viewer, auditOrigin),
         {
           eventType: "submission.updated",
           entityType: "submission",

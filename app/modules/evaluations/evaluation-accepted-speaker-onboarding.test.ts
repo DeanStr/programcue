@@ -1976,18 +1976,22 @@ describe("evaluation vertical slice", () => {
         .first<{ status: string }>();
       expect(stored?.status).toBe("cancelled");
       await expect(
-        service.saveReview(evaluator, {
-          assignmentId: assignment.id,
-          revision: 0,
-          scores: Object.fromEntries(
-            criteria.map((criterion) => [criterion.id, 4]),
-          ),
-          recommendation: null,
-          confidence: null,
-          submitterFeedback: "",
-          privateNotes: "",
-          intent: "save",
-        }),
+        service.saveReview(
+          evaluator,
+          {
+            assignmentId: assignment.id,
+            revision: 0,
+            scores: Object.fromEntries(
+              criteria.map((criterion) => [criterion.id, 4]),
+            ),
+            recommendation: null,
+            confidence: null,
+            submitterFeedback: "",
+            privateNotes: "",
+            intent: "save",
+          },
+          "participant_ui",
+        ),
       ).rejects.toThrow(/unavailable|already submitted/);
     });
   });

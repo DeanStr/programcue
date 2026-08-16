@@ -315,7 +315,7 @@ describe("Communications D1 vertical slice", () => {
             return async (statements: D1PreparedStatement[]) => {
               if (
                 providerCalls === 1 &&
-                statements.length === 9 &&
+                statements.length === 10 &&
                 !injectedWebhookFailure
               ) {
                 injectedWebhookFailure = true;

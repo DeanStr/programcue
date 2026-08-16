@@ -33,7 +33,10 @@ import {
   TurnstileRejectedError,
   TurnstileUnavailableError,
 } from "~/platform/http/public-abuse-protection.server";
-import { WebhookService } from "~/platform/operations/webhook-service.server";
+import {
+  WebhookService,
+  webhookActorForAudit,
+} from "~/platform/operations/webhook-service.server";
 import { recordRouteChange } from "~/platform/realtime/route-realtime.server";
 import type { Route } from "./+types/application-form";
 
@@ -243,7 +246,10 @@ async function queueApplicantWebhook(
 ) {
   try {
     const deliveries = await new WebhookService(env).queueEvent(
-      { ...scope, personId: actor.personId },
+      webhookActorForAudit(
+        { ...scope, personId: actor.personId },
+        "public_form",
+      ),
       { ...input, correlationId: crypto.randomUUID() },
     );
     return deliveries.some((delivery) => delivery.status === "queue_failed")

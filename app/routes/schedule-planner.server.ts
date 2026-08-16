@@ -16,7 +16,10 @@ import {
 } from "~/modules/schedule/schedule-service.server";
 import { requireCurrentEventRole } from "~/platform/auth/current-event.server";
 import { getCloudflareContext } from "~/platform/cloudflare-context";
-import { WebhookService } from "~/platform/operations/webhook-service.server";
+import {
+  WebhookService,
+  webhookActorForAudit,
+} from "~/platform/operations/webhook-service.server";
 import {
   notifyRouteChange,
   recordRouteChange,
@@ -35,10 +38,13 @@ async function queueScheduleWebhook(
   },
 ) {
   try {
-    const deliveries = await new WebhookService(env).queueEvent(viewer, {
-      ...input,
-      correlationId: crypto.randomUUID(),
-    });
+    const deliveries = await new WebhookService(env).queueEvent(
+      webhookActorForAudit(viewer, "admin_ui"),
+      {
+        ...input,
+        correlationId: crypto.randomUUID(),
+      },
+    );
     return {
       deliveries,
       warning: deliveries.some((delivery) => delivery.status === "queue_failed")

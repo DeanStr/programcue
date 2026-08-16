@@ -287,12 +287,16 @@ export class ParticipantTaskCompletionCommands extends ParticipantTaskWorkflowFo
       );
     await this.refreshStates(viewer.eventId);
     const undoOffered = (results[3]?.meta.changes ?? 0) === 1;
-    const webhookWarning = await this.queueTaskWebhook(viewer, {
-      eventType: "task.updated",
-      taskId: task.id,
-      operationId,
-      data: { status: nextStatus, action: "participant_completion" },
-    });
+    const webhookWarning = await this.queueTaskWebhook(
+      viewer,
+      "participant_ui",
+      {
+        eventType: "task.updated",
+        taskId: task.id,
+        operationId,
+        data: { status: nextStatus, action: "participant_completion" },
+      },
+    );
     return {
       taskId: task.id,
       undoToken: undoOffered ? `${operationId}.${undoSecret}` : null,
@@ -542,12 +546,16 @@ export class ParticipantTaskCompletionCommands extends ParticipantTaskWorkflowFo
       );
     }
     await this.refreshStates(viewer.eventId);
-    const webhookWarning = await this.queueTaskWebhook(viewer, {
-      eventType: "task.updated",
-      taskId: result.taskId,
-      operationId: undoOperationId,
-      data: { action: "completion_undone", status: result.before.status },
-    });
+    const webhookWarning = await this.queueTaskWebhook(
+      viewer,
+      "participant_ui",
+      {
+        eventType: "task.updated",
+        taskId: result.taskId,
+        operationId: undoOperationId,
+        data: { action: "completion_undone", status: result.before.status },
+      },
+    );
     return { taskId: result.taskId, webhookWarning };
   }
 }

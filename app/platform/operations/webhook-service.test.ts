@@ -6,13 +6,15 @@ import { ensureDemoData } from "~/platform/demo/seed.server";
 import { signWebhookPayload } from "~/platform/operations/webhook-crypto.server";
 import {
   validateWebhookUrl,
+  WebhookAuditOriginRequiredError,
   WebhookEventIdempotencyConflictError,
   WebhookQueueConfigurationError,
   WebhookService,
+  webhookActorForAudit,
 } from "~/platform/operations/webhook-service.server";
 import { processWebhookDelivery } from "../../../workers/queue/webhook-delivery-handler";
 
-const viewer: Viewer = {
+const viewer: Viewer & { auditOrigin: "admin_ui" } = {
   personId: "person-demo-admin",
   name: "Olivia Bennett",
   email: "olivia@example.com",
@@ -20,6 +22,7 @@ const viewer: Viewer = {
   organisationId: "org-future-events",
   eventId: "evt-foe-2025",
   demo: true,
+  auditOrigin: "admin_ui",
 };
 
 const credentialKey = btoa(
@@ -44,6 +47,76 @@ describe("outbound webhooks", () => {
     expect(() => validateWebhookUrl("https://service.internal/events")).toThrow(
       "public DNS",
     );
+  });
+
+  it("fails fast when a person-originated event omits its audit origin", async () => {
+    const service = new WebhookService(env as unknown as CloudflareEnvironment);
+    const actorWithoutOrigin = {
+      organisationId: viewer.organisationId,
+      eventId: viewer.eventId,
+      personId: viewer.personId,
+    } as Parameters<WebhookService["queueEvent"]>[0];
+
+    await expect(
+      service.queueEvent(actorWithoutOrigin, {
+        eventType: "submission.submitted",
+        entityType: "submission",
+        entityId: "submission-missing-audit-origin",
+        idempotencyKey: `submission.submitted:${crypto.randomUUID()}`,
+        correlationId: crypto.randomUUID(),
+        data: { revision: 1 },
+      }),
+    ).rejects.toBeInstanceOf(WebhookAuditOriginRequiredError);
+  });
+
+  it("preserves an explicit public-form origin without inventing a person actor", async () => {
+    const correlationId = crypto.randomUUID();
+    const testEnv = {
+      ...(env as unknown as CloudflareEnvironment),
+      WEBHOOK_CREDENTIALS_KEY: credentialKey,
+      OPERATIONS_QUEUE: { send: async () => undefined },
+    } as unknown as CloudflareEnvironment;
+    const service = new WebhookService(testEnv);
+    await service.create(viewer, {
+      name: `Public form ${crypto.randomUUID()}`,
+      url: "https://hooks.example.com/public-form",
+      eventTypes: ["submission.created"],
+    });
+
+    await service.queueEvent(
+      webhookActorForAudit(
+        {
+          organisationId: viewer.organisationId,
+          eventId: viewer.eventId,
+          personId: null,
+        },
+        "public_form",
+      ),
+      {
+        eventType: "submission.created",
+        entityType: "submission",
+        entityId: `submission-${crypto.randomUUID()}`,
+        idempotencyKey: `submission.created:${crypto.randomUUID()}`,
+        correlationId,
+        data: { status: "draft" },
+      },
+    );
+
+    await expect(
+      testEnv.DB.prepare(
+        `SELECT actor_kind AS actorKind, origin,
+                actor_person_id AS actorPersonId
+           FROM audit_events
+          WHERE event_id = ? AND action = 'webhook.queued'
+            AND correlation_id = ?`,
+      )
+        .bind(viewer.eventId, correlationId)
+        .first(),
+    ).resolves.toEqual({
+      actorKind: "system",
+      origin: "public_form",
+      actorPersonId: null,
+    });
   });
 
   it("encrypts endpoint secrets and records a verifiably signed successful test", async () => {
@@ -630,14 +703,19 @@ describe("outbound webhooks", () => {
       eventTypes: ["speaker.updated"],
     });
     const auditEventId = crypto.randomUUID();
+    const correlationId = crypto.randomUUID();
     const prepared = await service.prepareEventForAudit(
-      viewer,
+      {
+        organisationId: viewer.organisationId,
+        eventId: viewer.eventId,
+        personId: viewer.personId,
+      },
       {
         eventType: "speaker.updated",
         entityType: "speaker",
         entityId: viewer.personId,
         idempotencyKey: `speaker.updated:transactional:${crypto.randomUUID()}`,
-        correlationId: crypto.randomUUID(),
+        correlationId,
         data: { revision: 9 },
       },
       auditEventId,
@@ -658,6 +736,21 @@ describe("outbound webhooks", () => {
       ),
       ...prepared.statements,
     ]);
+
+    await expect(
+      testEnv.DB.prepare(
+        `SELECT actor_kind AS actorKind, origin, actor_person_id AS actorPersonId
+           FROM audit_events
+          WHERE event_id = ? AND action = 'webhook.queued'
+            AND correlation_id = ?`,
+      )
+        .bind(viewer.eventId, correlationId)
+        .first(),
+    ).resolves.toEqual({
+      actorKind: "person",
+      origin: "internal",
+      actorPersonId: viewer.personId,
+    });
 
     expect(queued).toHaveLength(0);
     await expect(service.dispatchPendingEvents()).resolves.toEqual({

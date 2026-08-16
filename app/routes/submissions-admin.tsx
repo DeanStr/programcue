@@ -15,7 +15,10 @@ import type {
 import { SubmissionService } from "~/modules/submissions/submission-service.server";
 import { requireCurrentEventRole } from "~/platform/auth/current-event.server";
 import { getCloudflareContext } from "~/platform/cloudflare-context";
-import { WebhookService } from "~/platform/operations/webhook-service.server";
+import {
+  WebhookService,
+  webhookActorForAudit,
+} from "~/platform/operations/webhook-service.server";
 import type { Route } from "./+types/submissions-admin";
 import {
   ActionNotice,
@@ -195,10 +198,13 @@ async function queueAdminWebhook(
   },
 ) {
   try {
-    const deliveries = await new WebhookService(env).queueEvent(viewer, {
-      ...input,
-      correlationId: crypto.randomUUID(),
-    });
+    const deliveries = await new WebhookService(env).queueEvent(
+      webhookActorForAudit(viewer, "admin_ui"),
+      {
+        ...input,
+        correlationId: crypto.randomUUID(),
+      },
+    );
     return deliveries.some((delivery) => delivery.status === "queue_failed")
       ? "One or more outbound webhook deliveries require a retry."
       : null;

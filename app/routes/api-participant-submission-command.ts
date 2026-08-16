@@ -25,7 +25,10 @@ import {
 import { ApiParticipantService } from "~/platform/api/api-participant-service.server";
 import { requireEventRole } from "~/platform/auth/authorize.server";
 import { getCloudflareContext } from "~/platform/cloudflare-context";
-import { WebhookService } from "~/platform/operations/webhook-service.server";
+import {
+  WebhookService,
+  webhookActorForAudit,
+} from "~/platform/operations/webhook-service.server";
 import type { Route } from "./+types/api-participant-submission-command";
 
 const commandSchema = z.enum(["submit", "withdraw", "invite-co-speaker"]);
@@ -145,7 +148,10 @@ async function queueWebhook(
   input: Parameters<WebhookService["queueEvent"]>[1],
 ) {
   try {
-    const deliveries = await new WebhookService(env).queueEvent(actor, input);
+    const deliveries = await new WebhookService(env).queueEvent(
+      webhookActorForAudit(actor, "api"),
+      input,
+    );
     return {
       deliveries,
       warning: deliveries.some((delivery) => delivery.status === "queue_failed")
@@ -214,6 +220,7 @@ export async function action({ request, params, context }: Route.ActionArgs) {
         await participantService.finalizeAcceptedCoSpeakerInvitation(
           viewer,
           result.response,
+          "api",
         );
       return apiSuccess(
         {

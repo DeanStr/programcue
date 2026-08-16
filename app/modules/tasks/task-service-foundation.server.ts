@@ -9,6 +9,7 @@ import type { Viewer } from "~/platform/auth/authorize.server";
 import {
   WebhookQueueConfigurationError,
   WebhookService,
+  webhookActorForAudit,
 } from "~/platform/operations/webhook-service.server";
 import {
   taskEvidenceUrlSchema,
@@ -337,6 +338,7 @@ export class TaskServiceFoundation {
 
   protected async queueTaskWebhook(
     viewer: Viewer,
+    origin: "admin_ui" | "participant_ui",
     input: {
       eventType: "task.created" | "task.updated";
       taskId: string;
@@ -345,14 +347,17 @@ export class TaskServiceFoundation {
     },
   ) {
     try {
-      const deliveries = await new WebhookService(this.env).queueEvent(viewer, {
-        eventType: input.eventType,
-        entityType: "task",
-        entityId: input.taskId,
-        idempotencyKey: `${input.eventType}:${input.taskId}:${input.operationId}`,
-        correlationId: input.operationId,
-        data: input.data,
-      });
+      const deliveries = await new WebhookService(this.env).queueEvent(
+        webhookActorForAudit(viewer, origin),
+        {
+          eventType: input.eventType,
+          entityType: "task",
+          entityId: input.taskId,
+          idempotencyKey: `${input.eventType}:${input.taskId}:${input.operationId}`,
+          correlationId: input.operationId,
+          data: input.data,
+        },
+      );
       return deliveries.some((delivery) => delivery.status === "queue_failed")
         ? "The task change was saved, but one or more outbound webhooks need a queue retry."
         : null;

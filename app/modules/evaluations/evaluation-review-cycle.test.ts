@@ -690,38 +690,50 @@ describe("explicit evaluation review cycles", () => {
           criterion.inputType === "free_text" ? "Second-cycle context." : 5,
         ]),
       );
-      await service.saveReview(evaluator, {
-        assignmentId: assignment.id,
-        revision: 0,
-        scores,
-        recommendation: "accept",
-        confidence: 5,
-        submitterFeedback: "Reviewed in the explicit second cycle.",
-        privateNotes: "Prior terminal state remains authoritative.",
-        conflictAffirmed: true,
-        intent: "submit",
-      });
+      await service.saveReview(
+        evaluator,
+        {
+          assignmentId: assignment.id,
+          revision: 0,
+          scores,
+          recommendation: "accept",
+          confidence: 5,
+          submitterFeedback: "Reviewed in the explicit second cycle.",
+          privateNotes: "Prior terminal state remains authoritative.",
+          conflictAffirmed: true,
+          intent: "submit",
+        },
+        "participant_ui",
+      );
     }
 
     const acceptedAssignment = assignments.results.find(
       (assignment) =>
         assignment.submissionId === "demo-evaluation-submission-calm",
     )!;
-    const moderationId = await service.moderate(admin, {
-      roundId: cycle.roundId,
-      submissionId: acceptedAssignment.submissionId,
-      expectedModerationId: null,
-      recommendation: "advance",
-      moderatedScore: 5,
-      notes: "The second-cycle panel confirms this proposal should advance.",
-      status: "confirmed",
-      confirmed: true,
-    });
-    const reopened = await service.reopenReview(admin, {
-      assignmentId: acceptedAssignment.id,
-      reason: "The reviewer must add material context before advancement.",
-      confirmed: true,
-    });
+    const moderationId = await service.moderate(
+      admin,
+      {
+        roundId: cycle.roundId,
+        submissionId: acceptedAssignment.submissionId,
+        expectedModerationId: null,
+        recommendation: "advance",
+        moderatedScore: 5,
+        notes: "The second-cycle panel confirms this proposal should advance.",
+        status: "confirmed",
+        confirmed: true,
+      },
+      "admin_ui",
+    );
+    const reopened = await service.reopenReview(
+      admin,
+      {
+        assignmentId: acceptedAssignment.id,
+        reason: "The reviewer must add material context before advancement.",
+        confirmed: true,
+      },
+      "admin_ui",
+    );
     const reopenedWorkspace = await service.getReviewerWorkspace(
       evaluator,
       acceptedAssignment.id,
@@ -743,7 +755,24 @@ describe("explicit evaluation review cycles", () => {
       ]),
     );
     await expect(
-      service.saveReview(evaluator, {
+      service.saveReview(
+        evaluator,
+        {
+          assignmentId: acceptedAssignment.id,
+          revision: reopened.revision,
+          scores: reopenedScores,
+          recommendation: "accept",
+          confidence: 5,
+          submitterFeedback: "Reviewed again in the explicit second cycle.",
+          privateNotes: "The released terminal state remains authoritative.",
+          intent: "submit",
+        },
+        "participant_ui",
+      ),
+    ).rejects.toThrow(/Confirm you hold no conflict of interest/u);
+    await service.saveReview(
+      evaluator,
+      {
         assignmentId: acceptedAssignment.id,
         revision: reopened.revision,
         scores: reopenedScores,
@@ -751,20 +780,11 @@ describe("explicit evaluation review cycles", () => {
         confidence: 5,
         submitterFeedback: "Reviewed again in the explicit second cycle.",
         privateNotes: "The released terminal state remains authoritative.",
+        conflictAffirmed: true,
         intent: "submit",
-      }),
-    ).rejects.toThrow(/Confirm you hold no conflict of interest/u);
-    await service.saveReview(evaluator, {
-      assignmentId: acceptedAssignment.id,
-      revision: reopened.revision,
-      scores: reopenedScores,
-      recommendation: "accept",
-      confidence: 5,
-      submitterFeedback: "Reviewed again in the explicit second cycle.",
-      privateNotes: "The released terminal state remains authoritative.",
-      conflictAffirmed: true,
-      intent: "submit",
-    });
+      },
+      "participant_ui",
+    );
 
     const currentWorkspace = await service.getAdminWorkspace(admin);
     expect(
@@ -890,11 +910,15 @@ describe("explicit evaluation review cycles", () => {
         .run();
 
       await expect(
-        service.reopenReview(admin, {
-          assignmentId,
-          reason: "This inactive session review must stay in history.",
-          confirmed: true,
-        }),
+        service.reopenReview(
+          admin,
+          {
+            assignmentId,
+            reason: "This inactive session review must stay in history.",
+            confirmed: true,
+          },
+          "admin_ui",
+        ),
       ).rejects.toBeInstanceOf(EvaluationStateError);
       await expect(
         env.DB.prepare(
@@ -969,16 +993,20 @@ describe("explicit evaluation review cycles", () => {
     ).run();
 
     await expect(
-      service.saveReview(evaluator, {
-        assignmentId: assignment!.id,
-        revision: 0,
-        scores: {},
-        recommendation: null,
-        confidence: null,
-        submitterFeedback: "",
-        privateNotes: "",
-        intent: "save",
-      }),
+      service.saveReview(
+        evaluator,
+        {
+          assignmentId: assignment!.id,
+          revision: 0,
+          scores: {},
+          recommendation: null,
+          confidence: null,
+          submitterFeedback: "",
+          privateNotes: "",
+          intent: "save",
+        },
+        "participant_ui",
+      ),
     ).rejects.toBeInstanceOf(EvaluationStateError);
     await expect(
       env.DB.prepare(
@@ -1005,23 +1033,31 @@ describe("explicit evaluation review cycles", () => {
       ).bind(admin.eventId, assignment!.id),
     ]);
     await expect(
-      service.moderate(admin, {
-        roundId: cycle.roundId,
-        submissionId: "demo-evaluation-submission-inclusive",
-        expectedModerationId: null,
-        recommendation: "reject",
-        moderatedScore: 2,
-        notes: "This must not use revoked first-cycle provenance.",
-        status: "confirmed",
-        confirmed: true,
-      }),
+      service.moderate(
+        admin,
+        {
+          roundId: cycle.roundId,
+          submissionId: "demo-evaluation-submission-inclusive",
+          expectedModerationId: null,
+          recommendation: "reject",
+          moderatedScore: 2,
+          notes: "This must not use revoked first-cycle provenance.",
+          status: "confirmed",
+          confirmed: true,
+        },
+        "admin_ui",
+      ),
     ).rejects.toBeInstanceOf(EvaluationRevisionConflictError);
     await expect(
-      service.reopenReview(admin, {
-        assignmentId: assignment!.id,
-        reason: "This must not use revoked first-cycle decision provenance.",
-        confirmed: true,
-      }),
+      service.reopenReview(
+        admin,
+        {
+          assignmentId: assignment!.id,
+          reason: "This must not use revoked first-cycle decision provenance.",
+          confirmed: true,
+        },
+        "admin_ui",
+      ),
     ).rejects.toBeInstanceOf(EvaluationStateError);
   });
 

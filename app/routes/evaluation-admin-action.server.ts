@@ -591,16 +591,20 @@ export async function action({ request, context }: ActionFunctionArgs) {
     }
     if (values.get("intent") === "moderate") {
       const status = values.get("moderationStatus");
-      const moderationId = await service.moderate(viewer, {
-        roundId: values.get("roundId"),
-        submissionId: values.get("submissionId"),
-        expectedModerationId: values.get("expectedModerationId") || null,
-        recommendation: values.get("recommendation"),
-        moderatedScore: values.get("moderatedScore") || null,
-        notes: values.get("notes"),
-        status,
-        confirmed: values.get("confirmed") === "true",
-      });
+      const moderationId = await service.moderate(
+        viewer,
+        {
+          roundId: values.get("roundId"),
+          submissionId: values.get("submissionId"),
+          expectedModerationId: values.get("expectedModerationId") || null,
+          recommendation: values.get("recommendation"),
+          moderatedScore: values.get("moderatedScore") || null,
+          notes: values.get("notes"),
+          status,
+          confirmed: values.get("confirmed") === "true",
+        },
+        "admin_ui",
+      );
       const realtimeFailure = await recordRouteChange(env, viewer, {
         entityType: "review_moderation",
         entityId: moderationId,
@@ -616,11 +620,15 @@ export async function action({ request, context }: ActionFunctionArgs) {
       };
     }
     if (values.get("intent") === "reopen-review") {
-      const result = await service.reopenReview(viewer, {
-        assignmentId: values.get("assignmentId"),
-        reason: values.get("reason"),
-        confirmed: values.get("confirmed") === "true",
-      });
+      const result = await service.reopenReview(
+        viewer,
+        {
+          assignmentId: values.get("assignmentId"),
+          reason: values.get("reason"),
+          confirmed: values.get("confirmed") === "true",
+        },
+        "admin_ui",
+      );
       const realtimeFailure = await recordRouteChange(env, viewer, {
         entityType: "review",
         entityId: result.reviewId,

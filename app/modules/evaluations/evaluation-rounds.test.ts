@@ -942,19 +942,23 @@ describe("evaluation vertical slice", () => {
           (assignment) => assignment.submissionId === "eval-test-submission",
         )!.id,
       );
-      const submitted = await service.saveReview(evaluator, {
-        assignmentId: firstWorkspace.selected!.id,
-        revision: 0,
-        scores: Object.fromEntries(
-          firstWorkspace.criteria.map((criterion) => [criterion.id, 5]),
-        ),
-        recommendation: "accept",
-        confidence: 5,
-        submitterFeedback: "Strong proposal.",
-        privateNotes: "Advance to the final round.",
-        conflictAffirmed: true,
-        intent: "submit",
-      });
+      const submitted = await service.saveReview(
+        evaluator,
+        {
+          assignmentId: firstWorkspace.selected!.id,
+          revision: 0,
+          scores: Object.fromEntries(
+            firstWorkspace.criteria.map((criterion) => [criterion.id, 5]),
+          ),
+          recommendation: "accept",
+          confidence: 5,
+          submitterFeedback: "Strong proposal.",
+          privateNotes: "Advance to the final round.",
+          conflictAffirmed: true,
+          intent: "submit",
+        },
+        "participant_ui",
+      );
       const nonAdvancedWorkspace = await service.getReviewerWorkspace(
         evaluator,
         queue.assignments.find(
@@ -962,19 +966,23 @@ describe("evaluation vertical slice", () => {
             assignment.submissionId === "eval-multi-round-not-advanced",
         )!.id,
       );
-      await service.saveReview(evaluator, {
-        assignmentId: nonAdvancedWorkspace.selected!.id,
-        revision: 0,
-        scores: Object.fromEntries(
-          nonAdvancedWorkspace.criteria.map((criterion) => [criterion.id, 3]),
-        ),
-        recommendation: "reject",
-        confidence: 4,
-        submitterFeedback: "Not selected for the final round.",
-        privateNotes: "Conclude after the first round.",
-        conflictAffirmed: true,
-        intent: "submit",
-      });
+      await service.saveReview(
+        evaluator,
+        {
+          assignmentId: nonAdvancedWorkspace.selected!.id,
+          revision: 0,
+          scores: Object.fromEntries(
+            nonAdvancedWorkspace.criteria.map((criterion) => [criterion.id, 3]),
+          ),
+          recommendation: "reject",
+          confidence: 4,
+          submitterFeedback: "Not selected for the final round.",
+          privateNotes: "Conclude after the first round.",
+          conflictAffirmed: true,
+          intent: "submit",
+        },
+        "participant_ui",
+      );
 
       const advanceInput = {
         fromRoundId: "eval-multi-round-one",
@@ -1353,21 +1361,25 @@ describe("evaluation vertical slice", () => {
           "eval-private-review-video",
         ),
       ).rejects.toMatchObject({ status: 404 });
-      const submitted = await service.saveReview(evaluator, {
-        assignmentId: reviewerWorkspace.selected!.id,
-        revision: 0,
-        scores: {
-          "eval-scale-ten": "10",
-          "eval-yes-no": "yes",
-          "eval-free-text": "The evidence is clear.",
+      const submitted = await service.saveReview(
+        evaluator,
+        {
+          assignmentId: reviewerWorkspace.selected!.id,
+          revision: 0,
+          scores: {
+            "eval-scale-ten": "10",
+            "eval-yes-no": "yes",
+            "eval-free-text": "The evidence is clear.",
+          },
+          recommendation: "accept",
+          confidence: 5,
+          submitterFeedback: "Well evidenced.",
+          privateNotes: "Ready for moderation.",
+          conflictAffirmed: true,
+          intent: "submit",
         },
-        recommendation: "accept",
-        confidence: 5,
-        submitterFeedback: "Well evidenced.",
-        privateNotes: "Ready for moderation.",
-        conflictAffirmed: true,
-        intent: "submit",
-      });
+        "participant_ui",
+      );
       expect(submitted.weightedScore).toBe(5);
       const savedResponses = await env.DB.prepare(
         "SELECT scores_json AS scoresJson FROM reviews WHERE id = ?",
@@ -1380,33 +1392,45 @@ describe("evaluation vertical slice", () => {
         "eval-free-text": "The evidence is clear.",
       });
 
-      const draftModerationId = await service.moderate(admin, {
-        roundId: "eval-moderation-round",
-        submissionId: "eval-test-submission",
-        expectedModerationId: null,
-        recommendation: "advance",
-        moderatedScore: 4.75,
-        notes: "The panel agrees this proposal should advance.",
-        status: "draft",
-        confirmed: false,
-      });
-      const confirmedModerationId = await service.moderate(admin, {
-        roundId: "eval-moderation-round",
-        submissionId: "eval-test-submission",
-        expectedModerationId: draftModerationId,
-        recommendation: "advance",
-        moderatedScore: 4.75,
-        notes: "The panel confirmed this outcome.",
-        status: "confirmed",
-        confirmed: true,
-      });
+      const draftModerationId = await service.moderate(
+        admin,
+        {
+          roundId: "eval-moderation-round",
+          submissionId: "eval-test-submission",
+          expectedModerationId: null,
+          recommendation: "advance",
+          moderatedScore: 4.75,
+          notes: "The panel agrees this proposal should advance.",
+          status: "draft",
+          confirmed: false,
+        },
+        "admin_ui",
+      );
+      const confirmedModerationId = await service.moderate(
+        admin,
+        {
+          roundId: "eval-moderation-round",
+          submissionId: "eval-test-submission",
+          expectedModerationId: draftModerationId,
+          recommendation: "advance",
+          moderatedScore: 4.75,
+          notes: "The panel confirmed this outcome.",
+          status: "confirmed",
+          confirmed: true,
+        },
+        "admin_ui",
+      );
       expect(confirmedModerationId).not.toBe(draftModerationId);
 
-      const reopened = await service.reopenReview(admin, {
-        assignmentId: reviewerWorkspace.selected!.id,
-        reason: "The evaluator must correct a material factual error.",
-        confirmed: true,
-      });
+      const reopened = await service.reopenReview(
+        admin,
+        {
+          assignmentId: reviewerWorkspace.selected!.id,
+          reason: "The evaluator must correct a material factual error.",
+          confirmed: true,
+        },
+        "admin_ui",
+      );
       expect(reopened).toEqual({
         reviewId: submitted.reviewId,
         revision: 2,

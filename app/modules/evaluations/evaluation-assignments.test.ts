@@ -381,17 +381,21 @@ describe("evaluation vertical slice", () => {
         const scores = Object.fromEntries(
           criteria.map((criterion) => [criterion.id, 4]),
         );
-        const submitted = await service.saveReview(evaluator, {
-          assignmentId: targetAssignment!.id,
-          revision: 0,
-          scores,
-          recommendation: "accept",
-          confidence: 4,
-          submitterFeedback: "Strong session.",
-          privateNotes: "Ready.",
-          conflictAffirmed: true,
-          intent: "submit",
-        });
+        const submitted = await service.saveReview(
+          evaluator,
+          {
+            assignmentId: targetAssignment!.id,
+            revision: 0,
+            scores,
+            recommendation: "accept",
+            confidence: 4,
+            submitterFeedback: "Strong session.",
+            privateNotes: "Ready.",
+            conflictAffirmed: true,
+            intent: "submit",
+          },
+          "participant_ui",
+        );
         expect(submitted.weightedScore).toBe(4);
         expect(
           await env.DB.prepare(
@@ -399,48 +403,69 @@ describe("evaluation vertical slice", () => {
           ).first(),
         ).toEqual({ status: "unscheduled" });
 
-        const reopened = await service.reopenReview(admin, {
-          assignmentId: targetAssignment!.id,
-          reason: "The evaluator needs to correct a material factual error.",
-          confirmed: true,
-        });
+        const reopened = await service.reopenReview(
+          admin,
+          {
+            assignmentId: targetAssignment!.id,
+            reason: "The evaluator needs to correct a material factual error.",
+            confirmed: true,
+          },
+          "admin_ui",
+        );
         expect(reopened.revision).toBe(2);
-        await service.saveReview(evaluator, {
-          assignmentId: targetAssignment!.id,
-          revision: reopened.revision,
-          scores,
-          recommendation: "accept",
-          confidence: 5,
-          submitterFeedback: "Corrected session review.",
-          privateNotes: "Ready.",
-          conflictAffirmed: true,
-          intent: "submit",
-        });
+        await service.saveReview(
+          evaluator,
+          {
+            assignmentId: targetAssignment!.id,
+            revision: reopened.revision,
+            scores,
+            recommendation: "accept",
+            confidence: 5,
+            submitterFeedback: "Corrected session review.",
+            privateNotes: "Ready.",
+            conflictAffirmed: true,
+            intent: "submit",
+          },
+          "participant_ui",
+        );
 
         const conflictAssignment = queue.assignments.find(
           (assignment) =>
             assignment.sessionId === "eval-session-conflict-target",
         );
-        await service.saveReview(evaluator, {
-          assignmentId: conflictAssignment!.id,
-          revision: 0,
-          scores,
-          recommendation: "reject",
-          confidence: 4,
-          submitterFeedback: "This needs another reviewer.",
-          privateNotes: "A conflict became apparent after submission.",
-          conflictAffirmed: true,
-          intent: "submit",
-        });
-        await service.reopenReview(admin, {
-          assignmentId: conflictAssignment!.id,
-          reason: "The evaluator disclosed a conflict after submitting.",
-          confirmed: true,
-        });
-        await service.declareConflict(evaluator, {
-          assignmentId: conflictAssignment!.id,
-          reason: "I have a close working relationship with the session owner.",
-        });
+        await service.saveReview(
+          evaluator,
+          {
+            assignmentId: conflictAssignment!.id,
+            revision: 0,
+            scores,
+            recommendation: "reject",
+            confidence: 4,
+            submitterFeedback: "This needs another reviewer.",
+            privateNotes: "A conflict became apparent after submission.",
+            conflictAffirmed: true,
+            intent: "submit",
+          },
+          "participant_ui",
+        );
+        await service.reopenReview(
+          admin,
+          {
+            assignmentId: conflictAssignment!.id,
+            reason: "The evaluator disclosed a conflict after submitting.",
+            confirmed: true,
+          },
+          "admin_ui",
+        );
+        await service.declareConflict(
+          evaluator,
+          {
+            assignmentId: conflictAssignment!.id,
+            reason:
+              "I have a close working relationship with the session owner.",
+          },
+          "participant_ui",
+        );
         expect(
           await env.DB.prepare(
             `SELECT submission_id AS submissionId, session_id AS sessionId,
@@ -635,22 +660,30 @@ describe("evaluation vertical slice", () => {
             .then((response) => response.text()),
         ).resolves.toBe(attachmentBody);
         await expect(
-          service.declareConflict(evaluator, {
-            assignmentId: assignmentBySession.get("eval-session-cancelled"),
-            reason: "This stale assignment must remain immutable.",
-          }),
+          service.declareConflict(
+            evaluator,
+            {
+              assignmentId: assignmentBySession.get("eval-session-cancelled"),
+              reason: "This stale assignment must remain immutable.",
+            },
+            "participant_ui",
+          ),
         ).rejects.toBeInstanceOf(EvaluationStateError);
         await expect(
-          service.saveReview(evaluator, {
-            assignmentId: assignmentBySession.get("eval-session-archived"),
-            revision: 0,
-            scores: {},
-            recommendation: "reject",
-            confidence: 1,
-            submitterFeedback: "No longer reviewable.",
-            privateNotes: "The session is archived.",
-            intent: "save",
-          }),
+          service.saveReview(
+            evaluator,
+            {
+              assignmentId: assignmentBySession.get("eval-session-archived"),
+              revision: 0,
+              scores: {},
+              recommendation: "reject",
+              confidence: 1,
+              submitterFeedback: "No longer reviewable.",
+              privateNotes: "The session is archived.",
+              intent: "save",
+            },
+            "participant_ui",
+          ),
         ).rejects.toBeInstanceOf(EvaluationStateError);
         await expect(
           env.DB.prepare(
@@ -672,19 +705,23 @@ describe("evaluation vertical slice", () => {
           evaluator,
           currentAssignmentId,
         );
-        const result = await service.saveReview(evaluator, {
-          assignmentId: currentAssignmentId,
-          revision: 0,
-          scores: Object.fromEntries(
-            current.criteria.map((criterion) => [criterion.id, 4]),
-          ),
-          recommendation: "accept",
-          confidence: 4,
-          submitterFeedback: "Ready for the programme.",
-          privateNotes: "No concerns.",
-          conflictAffirmed: true,
-          intent: "submit",
-        });
+        const result = await service.saveReview(
+          evaluator,
+          {
+            assignmentId: currentAssignmentId,
+            revision: 0,
+            scores: Object.fromEntries(
+              current.criteria.map((criterion) => [criterion.id, 4]),
+            ),
+            recommendation: "accept",
+            confidence: 4,
+            submitterFeedback: "Ready for the programme.",
+            privateNotes: "No concerns.",
+            conflictAffirmed: true,
+            intent: "submit",
+          },
+          "participant_ui",
+        );
         expect(result.nextAssignmentId).toBeNull();
       } finally {
         await env.DB.prepare(
@@ -1132,16 +1169,20 @@ describe("evaluation vertical slice", () => {
         evaluatorPersonIds: [evaluator.personId],
       });
       const reviewerWorkspace = await service.getReviewerWorkspace(evaluator);
-      await service.saveReview(evaluator, {
-        assignmentId: reviewerWorkspace.selected!.id,
-        revision: 0,
-        scores: {},
-        recommendation: null,
-        confidence: null,
-        submitterFeedback: "",
-        privateNotes: "Started reviewing.",
-        intent: "save",
-      });
+      await service.saveReview(
+        evaluator,
+        {
+          assignmentId: reviewerWorkspace.selected!.id,
+          revision: 0,
+          scores: {},
+          recommendation: null,
+          confidence: null,
+          submitterFeedback: "",
+          privateNotes: "Started reviewing.",
+          intent: "save",
+        },
+        "participant_ui",
+      );
       await expect(
         service.undoAssignments(admin, {
           operationId: reassigned.undoOperationId,

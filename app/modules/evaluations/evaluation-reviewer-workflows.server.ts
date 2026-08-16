@@ -1,4 +1,9 @@
+import type { AuditOrigin } from "~/platform/audit/audit-contract";
 import type { Viewer } from "~/platform/auth/authorize.server";
+import {
+  atomicBatchGuardStatement,
+  isAtomicBatchGuardError,
+} from "~/platform/database/atomic-batch-guard.server";
 import { WebhookService } from "~/platform/operations/webhook-service.server";
 import {
   EvaluationRevisionConflictError,
@@ -9,18 +14,28 @@ import { moderationSchema, reviewReopenSchema } from "./evaluation-schema";
 import { EvaluationServiceFoundation } from "./evaluation-service-foundation.server";
 import { reviewableSubmissionSql } from "./evaluation-submission-review-eligibility.server";
 
+type ManagerReviewActionOrigin = Extract<AuditOrigin, "admin_ui" | "api">;
+
 export class EvaluationReviewerWorkflows extends EvaluationServiceFoundation {
-  async moderate(viewer: Viewer, input: unknown) {
+  async moderate(
+    viewer: Viewer,
+    input: unknown,
+    origin: ManagerReviewActionOrigin,
+  ) {
     return this.projectCommand(
       viewer,
       "evaluation.review.moderate",
       input,
       undefined,
-      () => this.moderateD1(viewer, input),
+      () => this.moderateD1(viewer, input, origin),
     );
   }
 
-  protected async moderateD1(viewer: Viewer, input: unknown) {
+  protected async moderateD1(
+    viewer: Viewer,
+    input: unknown,
+    origin: ManagerReviewActionOrigin,
+  ) {
     await this.assertViewerEvent(viewer);
     this.assertEvaluationManager(viewer);
     const parsed = moderationSchema.parse(input);
@@ -185,13 +200,14 @@ export class EvaluationReviewerWorkflows extends EvaluationServiceFoundation {
           id, actor_kind, origin, metadata_version, organisation_id, event_id, actor_person_id, action,
           entity_type, entity_id, metadata_json, created_at
         )
-        SELECT ?, 'person', 'admin_ui', 1, ?, ?, ?, ?, 'review_moderation', ?, ?, unixepoch()
+        SELECT ?, 'person', ?, 1, ?, ?, ?, ?, 'review_moderation', ?, ?, unixepoch()
          WHERE EXISTS (
            SELECT 1 FROM review_moderations WHERE id = ? AND event_id = ?
          )
       `,
       ).bind(
         crypto.randomUUID(),
+        origin,
         viewer.organisationId,
         viewer.eventId,
         viewer.personId,
@@ -217,17 +233,25 @@ export class EvaluationReviewerWorkflows extends EvaluationServiceFoundation {
     return moderationId;
   }
 
-  async reopenReview(viewer: Viewer, input: unknown) {
+  async reopenReview(
+    viewer: Viewer,
+    input: unknown,
+    origin: ManagerReviewActionOrigin,
+  ) {
     return this.projectCommand(
       viewer,
       "evaluation.review.reopen",
       input,
       undefined,
-      () => this.reopenReviewD1(viewer, input),
+      () => this.reopenReviewD1(viewer, input, origin),
     );
   }
 
-  protected async reopenReviewD1(viewer: Viewer, input: unknown) {
+  protected async reopenReviewD1(
+    viewer: Viewer,
+    input: unknown,
+    origin: ManagerReviewActionOrigin,
+  ) {
     await this.assertViewerEvent(viewer);
     this.assertEvaluationManager(viewer);
     const parsed = reviewReopenSchema.parse(input);
@@ -236,6 +260,7 @@ export class EvaluationReviewerWorkflows extends EvaluationServiceFoundation {
       SELECT a.id, a.revision AS assignmentRevision,
              a.round_id AS roundId, a.submission_id AS submissionId,
              r.id AS reviewId, r.revision AS reviewRevision,
+             r.ai_suggestion_id AS aiSuggestionId,
              r.recommendation, r.confidence,
              r.submitter_feedback AS submitterFeedback,
              r.private_notes AS privateNotes,
@@ -282,6 +307,7 @@ export class EvaluationReviewerWorkflows extends EvaluationServiceFoundation {
         submissionId: string | null;
         reviewId: string;
         reviewRevision: number;
+        aiSuggestionId: string | null;
         recommendation: string | null;
         confidence: number | null;
         submitterFeedback: string | null;
@@ -335,6 +361,7 @@ export class EvaluationReviewerWorkflows extends EvaluationServiceFoundation {
     const operationId = crypto.randomUUID();
     const nextRevision = state.reviewRevision + 1;
     const auditEventId = crypto.randomUUID();
+    const reviewRevisionId = crypto.randomUUID();
     const webhookService = new WebhookService(this.env);
     const preparedWebhook = await webhookService.prepareEventForAudit(
       viewer,
@@ -434,7 +461,7 @@ export class EvaluationReviewerWorkflows extends EvaluationServiceFoundation {
            AND review.revision = ? AND review.last_operation_id = ?
       `,
       ).bind(
-        crypto.randomUUID(),
+        reviewRevisionId,
         nextRevision,
         JSON.stringify({
           recommendation: state.recommendation,
@@ -496,9 +523,9 @@ export class EvaluationReviewerWorkflows extends EvaluationServiceFoundation {
         `
         INSERT INTO audit_events (
           id, actor_kind, origin, metadata_version, organisation_id, event_id, actor_person_id, action,
-          entity_type, entity_id, metadata_json, created_at
+          entity_type, entity_id, correlation_id, metadata_json, created_at
         )
-        SELECT ?, 'person', 'admin_ui', 1, ?, ?, ?, 'review.reopened', 'review', ?, ?, unixepoch()
+        SELECT ?, 'person', ?, 1, ?, ?, ?, 'review.reopened', 'review', ?, ?, ?, unixepoch()
          WHERE EXISTS (
            SELECT 1 FROM reviews
             WHERE id = ? AND event_id = ? AND status = 'reopened'
@@ -507,10 +534,12 @@ export class EvaluationReviewerWorkflows extends EvaluationServiceFoundation {
       `,
       ).bind(
         auditEventId,
+        origin,
         viewer.organisationId,
         viewer.eventId,
         viewer.personId,
         state.reviewId,
+        operationId,
         JSON.stringify({
           assignmentId: state.id,
           reason: parsed.reason,
@@ -521,7 +550,117 @@ export class EvaluationReviewerWorkflows extends EvaluationServiceFoundation {
         operationId,
       ),
       ...preparedWebhook.statements,
-    ]);
+      atomicBatchGuardStatement(
+        this.env,
+        `(EXISTS (
+            SELECT 1 FROM evaluator_assignments assignment
+             WHERE assignment.id = ? AND assignment.event_id = ?
+               AND assignment.last_operation_id = ?
+          ) OR EXISTS (
+            SELECT 1 FROM reviews review
+             WHERE review.id = ? AND review.event_id = ?
+               AND review.last_operation_id = ?
+          ) OR EXISTS (
+            SELECT 1 FROM review_revisions revision WHERE revision.id = ?
+          ) OR EXISTS (
+            SELECT 1 FROM audit_events audit WHERE audit.id = ?
+          )) AND NOT (
+            EXISTS (
+              SELECT 1 FROM evaluator_assignments assignment
+               WHERE assignment.id = ? AND assignment.event_id = ?
+                 AND assignment.status = 'reopened'
+                 AND assignment.revision = ?
+                 AND assignment.last_operation_id = ?
+            ) AND EXISTS (
+              SELECT 1 FROM reviews review
+               WHERE review.id = ? AND review.event_id = ?
+                 AND review.status = 'reopened'
+                 AND review.revision = ?
+                 AND review.last_operation_id = ?
+            ) AND EXISTS (
+              SELECT 1 FROM review_revisions revision
+               WHERE revision.id = ? AND revision.event_id = ?
+                 AND revision.review_id = ? AND revision.revision_number = ?
+                 AND revision.idempotency_key = ?
+                 AND revision.save_kind = 'reopened'
+            ) AND EXISTS (
+              SELECT 1 FROM audit_events audit
+               WHERE audit.id = ? AND audit.organisation_id = ?
+                 AND audit.event_id = ? AND audit.actor_person_id = ?
+                 AND audit.origin = ? AND audit.action = 'review.reopened'
+                 AND audit.entity_type = 'review' AND audit.entity_id = ?
+                 AND audit.correlation_id = ?
+            ) AND (
+              ? IS NULL OR EXISTS (
+                SELECT 1 FROM reviewer_ai_suggestions suggestion
+                 WHERE suggestion.id = ? AND suggestion.event_id = ?
+                   AND suggestion.status = 'imported'
+              )
+            ) AND (
+              ? IS NULL OR NOT EXISTS (
+                SELECT 1 FROM review_moderations moderation
+                 WHERE moderation.event_id = ? AND moderation.round_id = ?
+                   AND moderation.submission_id = ?
+                   AND moderation.status IN ('draft','confirmed')
+              )
+            ) AND (
+              ? IS NULL OR NOT EXISTS (
+                SELECT 1 FROM submissions submission
+                 WHERE submission.id = ? AND submission.event_id = ?
+                   AND submission.status = 'decision_ready'
+              )
+            )
+          )`,
+        [
+          state.id,
+          viewer.eventId,
+          operationId,
+          state.reviewId,
+          viewer.eventId,
+          operationId,
+          reviewRevisionId,
+          auditEventId,
+          state.id,
+          viewer.eventId,
+          state.assignmentRevision + 1,
+          operationId,
+          state.reviewId,
+          viewer.eventId,
+          nextRevision,
+          operationId,
+          reviewRevisionId,
+          viewer.eventId,
+          state.reviewId,
+          nextRevision,
+          operationId,
+          auditEventId,
+          viewer.organisationId,
+          viewer.eventId,
+          viewer.personId,
+          origin,
+          state.reviewId,
+          operationId,
+          state.aiSuggestionId,
+          state.aiSuggestionId,
+          viewer.eventId,
+          state.submissionId,
+          viewer.eventId,
+          state.roundId,
+          state.submissionId,
+          state.submissionId,
+          state.submissionId,
+          viewer.eventId,
+        ],
+      ),
+    ]).catch((error: unknown) => {
+      if (isAtomicBatchGuardError(error)) {
+        throw new Error(
+          "The reopened review could not record its complete revision, audit, and delivery evidence.",
+          { cause: error },
+        );
+      }
+      throw error;
+    });
     if (
       (assignmentUpdated.meta.changes ?? 0) !== 1 ||
       (reviewUpdated.meta.changes ?? 0) !== 1

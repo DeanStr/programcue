@@ -122,13 +122,17 @@ export class ParticipantTaskEvidenceCommands extends ParticipantTaskWorkflowFoun
     }
     await this.requireTaskWebhookReadiness(viewer, "task.updated");
     if (this.exactFileEvidenceAlreadyAttached(ownedTask, asset, input)) {
-      const webhookWarning = await this.queueTaskWebhook(viewer, {
-        eventType: "task.updated",
-        taskId: input.taskId,
-        operationId:
-          ownedTask.lastOperationId ?? `evidence:${asset!.evidenceId}`,
-        data: { action: "file_evidence_attached", status: ownedTask.status },
-      });
+      const webhookWarning = await this.queueTaskWebhook(
+        viewer,
+        "participant_ui",
+        {
+          eventType: "task.updated",
+          taskId: input.taskId,
+          operationId:
+            ownedTask.lastOperationId ?? `evidence:${asset!.evidenceId}`,
+          data: { action: "file_evidence_attached", status: ownedTask.status },
+        },
+      );
       return { ...input, duplicate: true, webhookWarning };
     }
     if (
@@ -324,28 +328,36 @@ export class ParticipantTaskEvidenceCommands extends ParticipantTaskWorkflowFoun
         currentTask &&
         this.exactFileEvidenceAlreadyAttached(currentTask, asset, input)
       ) {
-        const webhookWarning = await this.queueTaskWebhook(viewer, {
-          eventType: "task.updated",
-          taskId: input.taskId,
-          operationId:
-            currentTask.lastOperationId ?? `evidence:${asset!.evidenceId}`,
-          data: {
-            action: "file_evidence_attached",
-            status: currentTask.status,
+        const webhookWarning = await this.queueTaskWebhook(
+          viewer,
+          "participant_ui",
+          {
+            eventType: "task.updated",
+            taskId: input.taskId,
+            operationId:
+              currentTask.lastOperationId ?? `evidence:${asset!.evidenceId}`,
+            data: {
+              action: "file_evidence_attached",
+              status: currentTask.status,
+            },
           },
-        });
+        );
         return { ...input, duplicate: true, webhookWarning };
       }
       throw new TaskEvidenceAttachmentConflictError(
         "This task changed. Refresh before submitting file evidence.",
       );
     }
-    const webhookWarning = await this.queueTaskWebhook(viewer, {
-      eventType: "task.updated",
-      taskId: input.taskId,
-      operationId,
-      data: { action: "file_evidence_attached", status: "submitted" },
-    });
+    const webhookWarning = await this.queueTaskWebhook(
+      viewer,
+      "participant_ui",
+      {
+        eventType: "task.updated",
+        taskId: input.taskId,
+        operationId,
+        data: { action: "file_evidence_attached", status: "submitted" },
+      },
+    );
     return { ...input, duplicate: false, webhookWarning };
   }
 }

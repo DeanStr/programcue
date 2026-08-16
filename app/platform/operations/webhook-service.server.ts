@@ -1,6 +1,8 @@
 import { z } from "zod";
 
+import type { AuditOrigin } from "~/platform/audit/audit-contract";
 import type { Viewer } from "~/platform/auth/authorize.server";
+import { atomicBatchGuardStatement } from "~/platform/database/atomic-batch-guard.server";
 import {
   type WebhookEndpointListItem,
   WebhookEndpointService,
@@ -41,10 +43,49 @@ const queueEventSchema = z
 
 type QueueEventInput = z.infer<typeof queueEventSchema>;
 
-type WebhookEventActor = Pick<Viewer, "organisationId" | "eventId"> & {
+type WebhookEventScope = Pick<Viewer, "organisationId" | "eventId"> & {
   personId: string | null;
   actorId?: string;
 };
+
+export type WebhookExplicitAuditOrigin = Extract<
+  AuditOrigin,
+  "admin_ui" | "participant_ui" | "public_form" | "api" | "internal"
+>;
+
+type WebhookEventActor =
+  | (WebhookEventScope & {
+      personId: string;
+      auditOrigin: WebhookExplicitAuditOrigin;
+    })
+  | (WebhookEventScope & {
+      personId: null;
+      actorId: string;
+      auditOrigin?: never;
+    })
+  | (WebhookEventScope & {
+      personId: null;
+      actorId?: never;
+      auditOrigin: WebhookExplicitAuditOrigin;
+    });
+
+export function webhookActorForAudit(
+  actor: WebhookEventScope & { actorId?: never },
+  auditOrigin: WebhookExplicitAuditOrigin,
+): WebhookEventActor {
+  return actor.personId === null
+    ? { ...actor, personId: null, auditOrigin }
+    : { ...actor, personId: actor.personId, auditOrigin };
+}
+
+export class WebhookAuditOriginRequiredError extends Error {
+  constructor() {
+    super(
+      "Standalone webhook events without an API-key actor require an explicit audit origin.",
+    );
+    this.name = "WebhookAuditOriginRequiredError";
+  }
+}
 
 export type WebhookEventResult = {
   endpointId: string;
@@ -211,16 +252,38 @@ export class WebhookService {
   }
 
   async prepareEventForAudit(
+    viewer: WebhookEventScope,
+    rawInput: unknown,
+    auditEventId: string,
+  ): Promise<PreparedWebhookEvent>;
+  async prepareEventForAudit(
     viewer: WebhookEventActor,
+    rawInput: unknown,
+    auditEventId: null,
+  ): Promise<PreparedWebhookEvent>;
+  async prepareEventForAudit(
+    viewer: WebhookEventScope,
     rawInput: unknown,
     auditEventId: string | null,
   ): Promise<PreparedWebhookEvent> {
     const input = queueEventSchema.parse(rawInput);
-    const auditActor = viewer.personId
-      ? { kind: "person" as const, origin: "admin_ui" as const }
-      : viewer.actorId
-        ? { kind: "api_key" as const, origin: "api" as const }
-        : { kind: "system" as const, origin: "queue" as const };
+    const auditActor = auditEventId
+      ? null
+      : viewer.personId !== null
+        ? "auditOrigin" in viewer && viewer.auditOrigin
+          ? {
+              kind: "person" as const,
+              origin: viewer.auditOrigin,
+            }
+          : null
+        : viewer.actorId
+          ? { kind: "api_key" as const, origin: "api" as const }
+          : "auditOrigin" in viewer && viewer.auditOrigin
+            ? { kind: "system" as const, origin: viewer.auditOrigin }
+            : null;
+    if (!auditEventId && !auditActor) {
+      throw new WebhookAuditOriginRequiredError();
+    }
     const requestHash = await webhookRequestHash(input);
     const endpoints = await this.env.DB.prepare(
       `
@@ -375,6 +438,66 @@ export class WebhookService {
             requestHash,
             payload,
           );
+      const queuedAudit = auditEventId
+        ? this.env.DB.prepare(
+            `
+            INSERT INTO audit_events (
+              id, actor_kind, origin, metadata_version, organisation_id, event_id, actor_person_id, actor_id, action,
+              entity_type, entity_id, correlation_id, metadata_json, created_at
+            ) SELECT ?, source.actor_kind, source.origin, 1, ?, ?,
+                     source.actor_person_id, source.actor_id,
+                     'webhook.queued', 'webhook_delivery', ?, ?, ?, unixepoch()
+                FROM audit_events source
+               WHERE source.id = ?
+                 AND source.organisation_id = ?
+                 AND source.event_id = ?
+                 AND EXISTS (SELECT 1 FROM operation_jobs WHERE id = ?)
+          `,
+          ).bind(
+            crypto.randomUUID(),
+            viewer.organisationId,
+            viewer.eventId,
+            deliveryId,
+            input.correlationId,
+            JSON.stringify({
+              operationId,
+              endpointId: endpoint.id,
+              eventType: input.eventType,
+              entityType: input.entityType,
+              entityId: input.entityId,
+            }),
+            auditEventId,
+            viewer.organisationId,
+            viewer.eventId,
+            operationId,
+          )
+        : this.env.DB.prepare(
+            `
+            INSERT INTO audit_events (
+              id, actor_kind, origin, metadata_version, organisation_id, event_id, actor_person_id, actor_id, action,
+              entity_type, entity_id, correlation_id, metadata_json, created_at
+            ) SELECT ?, ?, ?, 1, ?, ?, ?, ?, 'webhook.queued', 'webhook_delivery', ?, ?, ?, unixepoch()
+               WHERE EXISTS (SELECT 1 FROM operation_jobs WHERE id = ?)
+          `,
+          ).bind(
+            crypto.randomUUID(),
+            auditActor!.kind,
+            auditActor!.origin,
+            viewer.organisationId,
+            viewer.eventId,
+            viewer.personId,
+            viewer.actorId ?? null,
+            deliveryId,
+            input.correlationId,
+            JSON.stringify({
+              operationId,
+              endpointId: endpoint.id,
+              eventType: input.eventType,
+              entityType: input.entityType,
+              entityId: input.entityId,
+            }),
+            operationId,
+          );
       statements.push(
         delivery,
         this.env.DB.prepare(
@@ -416,33 +539,7 @@ export class WebhookService {
           deliveryId,
           operationId,
         ),
-        this.env.DB.prepare(
-          `
-          INSERT INTO audit_events (
-            id, actor_kind, origin, metadata_version, organisation_id, event_id, actor_person_id, actor_id, action,
-            entity_type, entity_id, correlation_id, metadata_json, created_at
-          ) SELECT ?, ?, ?, 1, ?, ?, ?, ?, 'webhook.queued', 'webhook_delivery', ?, ?, ?, unixepoch()
-             WHERE EXISTS (SELECT 1 FROM operation_jobs WHERE id = ?)
-        `,
-        ).bind(
-          crypto.randomUUID(),
-          auditActor.kind,
-          auditActor.origin,
-          viewer.organisationId,
-          viewer.eventId,
-          viewer.personId,
-          viewer.actorId ?? null,
-          deliveryId,
-          input.correlationId,
-          JSON.stringify({
-            operationId,
-            endpointId: endpoint.id,
-            eventType: input.eventType,
-            entityType: input.entityType,
-            entityId: input.entityId,
-          }),
-          operationId,
-        ),
+        queuedAudit,
         this.env.DB.prepare(
           `
           INSERT INTO event_changes (
@@ -455,6 +552,73 @@ export class WebhookService {
           operationId,
           operationCorrelationId,
           operationId,
+        ),
+        atomicBatchGuardStatement(
+          this.env,
+          `${
+            auditEventId
+              ? `EXISTS (
+                   SELECT 1 FROM audit_events source_audit
+                    WHERE source_audit.id = ?
+                      AND source_audit.organisation_id = ?
+                      AND source_audit.event_id = ?
+                 ) AND`
+              : ""
+          } NOT EXISTS (
+            SELECT 1
+              FROM webhook_deliveries delivery
+              JOIN operation_items item
+                ON item.entity_type = 'webhook_delivery'
+               AND item.entity_id = delivery.id
+               AND item.item_key = delivery.idempotency_key
+              JOIN operation_jobs operation
+                ON operation.id = item.operation_id
+               AND operation.event_id = ?
+               AND operation.organisation_id = ?
+               AND operation.type = 'webhook.deliver'
+               AND operation.idempotency_key = delivery.idempotency_key
+             WHERE delivery.endpoint_id = ?
+               AND delivery.idempotency_key = ?
+               AND delivery.request_hash = ?
+               AND delivery.event_type = ?
+               AND delivery.entity_type = ?
+               AND delivery.entity_id = ?
+               AND EXISTS (
+                 SELECT 1 FROM audit_events queued_audit
+                  WHERE queued_audit.organisation_id = ?
+                    AND queued_audit.event_id = ?
+                    AND queued_audit.action = 'webhook.queued'
+                    AND queued_audit.entity_type = 'webhook_delivery'
+                    AND queued_audit.entity_id = delivery.id
+                    AND queued_audit.correlation_id = ?
+                    AND json_extract(queued_audit.metadata_json, '$.operationId') = operation.id
+               )
+               AND EXISTS (
+                 SELECT 1 FROM event_changes change
+                  WHERE change.event_id = ?
+                    AND change.entity_type = 'operation'
+                    AND change.entity_id = operation.id
+                    AND change.change_type = 'created'
+                    AND change.correlation_id = operation.correlation_id
+               )
+          )`,
+          [
+            ...(auditEventId
+              ? [auditEventId, viewer.organisationId, viewer.eventId]
+              : []),
+            viewer.eventId,
+            viewer.organisationId,
+            endpoint.id,
+            endpointIdempotencyKey,
+            requestHash,
+            input.eventType,
+            input.entityType,
+            input.entityId,
+            viewer.organisationId,
+            viewer.eventId,
+            input.correlationId,
+            viewer.eventId,
+          ],
         ),
       );
       candidates.push({
@@ -572,7 +736,7 @@ export class WebhookService {
    * registered during a response-persistence recovery window.
    */
   async resumePreparedEventForAudit(
-    viewer: WebhookEventActor,
+    viewer: WebhookEventScope,
     rawInput: unknown,
     auditEventId: string,
   ) {

@@ -1,5 +1,10 @@
 import { z } from "zod";
+import type { AuditOrigin } from "~/platform/audit/audit-contract";
 import type { Viewer } from "~/platform/auth/authorize.server";
+import {
+  atomicBatchGuardStatement,
+  isAtomicBatchGuardError,
+} from "~/platform/database/atomic-batch-guard.server";
 import { WebhookService } from "~/platform/operations/webhook-service.server";
 import {
   EvaluationRevisionConflictError,
@@ -18,6 +23,8 @@ import {
 import { EvaluationServiceFoundation } from "./evaluation-service-foundation.server";
 import { reviewableSubmissionSql } from "./evaluation-submission-review-eligibility.server";
 
+type ReviewerActionOrigin = Extract<AuditOrigin, "participant_ui" | "api">;
+
 async function reviewSourceSnapshotHash(value: string) {
   const digest = await crypto.subtle.digest(
     "SHA-256",
@@ -29,17 +36,25 @@ async function reviewSourceSnapshotHash(value: string) {
 }
 
 export class EvaluationReviewSubmissionWorkflows extends EvaluationServiceFoundation {
-  async saveReview(viewer: Viewer, input: unknown) {
+  async saveReview(
+    viewer: Viewer,
+    input: unknown,
+    origin: ReviewerActionOrigin,
+  ) {
     return this.projectCommand(
       viewer,
       "evaluation.review.save",
       input,
       undefined,
-      () => this.saveReviewD1(viewer, input),
+      () => this.saveReviewD1(viewer, input, origin),
     );
   }
 
-  protected async saveReviewD1(viewer: Viewer, input: unknown) {
+  protected async saveReviewD1(
+    viewer: Viewer,
+    input: unknown,
+    origin: ReviewerActionOrigin,
+  ) {
     await this.assertViewerEvent(viewer);
     const parsed = reviewDraftSchema.parse(input);
     const assignment = await this.env.DB.prepare(
@@ -360,6 +375,7 @@ export class EvaluationReviewSubmissionWorkflows extends EvaluationServiceFounda
     const operationId = crypto.randomUUID();
     const status = parsed.intent === "submit" ? "submitted" : "draft";
     const auditEventId = crypto.randomUUID();
+    const reviewRevisionId = crypto.randomUUID();
     const webhookService = new WebhookService(this.env);
     const preparedWebhook =
       parsed.intent === "submit"
@@ -712,7 +728,7 @@ export class EvaluationReviewSubmissionWorkflows extends EvaluationServiceFounda
            AND EXISTS (SELECT 1 FROM evaluator_assignments WHERE id = ? AND last_operation_id = ?)
       `,
       ).bind(
-        crypto.randomUUID(),
+        reviewRevisionId,
         viewer.eventId,
         reviewId,
         nextRevision,
@@ -759,8 +775,8 @@ export class EvaluationReviewSubmissionWorkflows extends EvaluationServiceFounda
         operationId,
       ),
       this.env.DB.prepare(
-        `INSERT INTO audit_events (id, actor_kind, origin, metadata_version, organisation_id, event_id, actor_person_id, action, entity_type, entity_id, metadata_json, created_at)
-         SELECT ?, 'person', 'admin_ui', 1, ?, ?, ?, ?, 'review', ?, ?, unixepoch()
+        `INSERT INTO audit_events (id, actor_kind, origin, metadata_version, organisation_id, event_id, actor_person_id, action, entity_type, entity_id, correlation_id, metadata_json, created_at)
+         SELECT ?, 'person', ?, 1, ?, ?, ?, ?, 'review', ?, ?, ?, unixepoch()
           WHERE EXISTS (
             SELECT 1 FROM reviews review
              JOIN events event
@@ -770,11 +786,13 @@ export class EvaluationReviewSubmissionWorkflows extends EvaluationServiceFounda
             AND EXISTS (SELECT 1 FROM evaluator_assignments WHERE id = ? AND last_operation_id = ?)`,
       ).bind(
         auditEventId,
+        origin,
         viewer.organisationId,
         viewer.eventId,
         viewer.personId,
         parsed.intent === "submit" ? "review.submitted" : "review.saved",
         reviewId,
+        operationId,
         JSON.stringify({
           revision: nextRevision,
           aiSuggestionId: suggestionId,
@@ -788,7 +806,114 @@ export class EvaluationReviewSubmissionWorkflows extends EvaluationServiceFounda
         operationId,
       ),
       ...(preparedWebhook?.statements ?? []),
-    ]);
+      atomicBatchGuardStatement(
+        this.env,
+        `(EXISTS (
+            SELECT 1 FROM reviews review
+             WHERE review.id = ? AND review.event_id = ?
+               AND review.last_operation_id = ?
+          ) OR EXISTS (
+            SELECT 1 FROM evaluator_assignments assignment
+             WHERE assignment.id = ? AND assignment.event_id = ?
+               AND assignment.last_operation_id = ?
+          ) OR EXISTS (
+            SELECT 1 FROM review_revisions revision WHERE revision.id = ?
+          ) OR EXISTS (
+            SELECT 1 FROM audit_events audit WHERE audit.id = ?
+          )) AND NOT (
+            EXISTS (
+              SELECT 1 FROM reviews review
+               WHERE review.id = ? AND review.event_id = ?
+                 AND review.status = ? AND review.revision = ?
+                 AND review.last_operation_id = ?
+            ) AND EXISTS (
+              SELECT 1 FROM evaluator_assignments assignment
+               WHERE assignment.id = ? AND assignment.event_id = ?
+                 AND assignment.status = ? AND assignment.revision = ?
+                 AND assignment.last_operation_id = ?
+            ) AND EXISTS (
+              SELECT 1 FROM review_revisions revision
+               WHERE revision.id = ? AND revision.event_id = ?
+                 AND revision.review_id = ? AND revision.revision_number = ?
+                 AND revision.idempotency_key = ? AND revision.save_kind = ?
+            ) AND EXISTS (
+              SELECT 1 FROM audit_events audit
+               WHERE audit.id = ? AND audit.organisation_id = ?
+                 AND audit.event_id = ? AND audit.actor_person_id = ?
+                 AND audit.origin = ? AND audit.action = ?
+                 AND audit.entity_type = 'review' AND audit.entity_id = ?
+                 AND audit.correlation_id = ?
+            ) AND (
+              ? IS NULL OR EXISTS (
+                SELECT 1 FROM reviewer_ai_suggestions suggestion
+                 WHERE suggestion.id = ? AND suggestion.event_id = ?
+                   AND suggestion.assignment_id = ?
+                   AND suggestion.evaluator_person_id = ?
+                   AND suggestion.status = 'imported'
+                   AND (? = 0 OR suggestion.lifecycle_operation_id = ?)
+              )
+            ) AND (
+              ? IS NULL OR NOT EXISTS (
+                SELECT 1 FROM submissions submission
+                 WHERE submission.id = ? AND submission.event_id = ?
+                   AND submission.status IN ('submitted','assigned')
+              )
+            )
+          )`,
+        [
+          reviewId,
+          viewer.eventId,
+          operationId,
+          assignment.id,
+          viewer.eventId,
+          operationId,
+          reviewRevisionId,
+          auditEventId,
+          reviewId,
+          viewer.eventId,
+          status,
+          nextRevision,
+          operationId,
+          assignment.id,
+          viewer.eventId,
+          parsed.intent === "submit" ? "submitted" : "in_progress",
+          assignment.revision + 1,
+          operationId,
+          reviewRevisionId,
+          viewer.eventId,
+          reviewId,
+          nextRevision,
+          operationId,
+          parsed.intent === "submit" ? "submitted" : "manual",
+          auditEventId,
+          viewer.organisationId,
+          viewer.eventId,
+          viewer.personId,
+          origin,
+          parsed.intent === "submit" ? "review.submitted" : "review.saved",
+          reviewId,
+          operationId,
+          suggestionId,
+          suggestionId,
+          viewer.eventId,
+          assignment.id,
+          viewer.personId,
+          suggestionImportStatement ? 1 : 0,
+          operationId,
+          assignment.submissionId,
+          assignment.submissionId,
+          viewer.eventId,
+        ],
+      ),
+    ]).catch((error: unknown) => {
+      if (isAtomicBatchGuardError(error)) {
+        throw new Error(
+          "The review could not record its complete revision, audit, and delivery evidence.",
+          { cause: error },
+        );
+      }
+      throw error;
+    });
     const saved = batchResults[0]!;
     const suggestionImported = suggestionImportStatement
       ? batchResults[1]
@@ -866,17 +991,25 @@ export class EvaluationReviewSubmissionWorkflows extends EvaluationServiceFounda
     };
   }
 
-  async declareConflict(viewer: Viewer, input: unknown) {
+  async declareConflict(
+    viewer: Viewer,
+    input: unknown,
+    origin: ReviewerActionOrigin,
+  ) {
     return this.projectCommand(
       viewer,
       "evaluation.conflict.declare",
       input,
       undefined,
-      () => this.declareConflictD1(viewer, input),
+      () => this.declareConflictD1(viewer, input, origin),
     );
   }
 
-  protected async declareConflictD1(viewer: Viewer, input: unknown) {
+  protected async declareConflictD1(
+    viewer: Viewer,
+    input: unknown,
+    origin: ReviewerActionOrigin,
+  ) {
     await this.assertViewerEvent(viewer);
     const parsed = conflictDeclarationSchema.parse(input);
     const assignment = await this.env.DB.prepare(
@@ -1022,9 +1155,10 @@ export class EvaluationReviewSubmissionWorkflows extends EvaluationServiceFounda
         operationId,
       ),
       this.env.DB.prepare(
-        `INSERT INTO audit_events (id, actor_kind, origin, metadata_version, organisation_id, event_id, actor_person_id, action, entity_type, entity_id, metadata_json, created_at) SELECT ?, 'person', 'admin_ui', 1, ?, ?, ?, 'review.conflict.declared', 'evaluator_assignment', ?, ?, unixepoch() WHERE EXISTS (SELECT 1 FROM evaluator_assignments WHERE id = ? AND event_id = ? AND last_operation_id = ?)`,
+        `INSERT INTO audit_events (id, actor_kind, origin, metadata_version, organisation_id, event_id, actor_person_id, action, entity_type, entity_id, metadata_json, created_at) SELECT ?, 'person', ?, 1, ?, ?, ?, 'review.conflict.declared', 'evaluator_assignment', ?, ?, unixepoch() WHERE EXISTS (SELECT 1 FROM evaluator_assignments WHERE id = ? AND event_id = ? AND last_operation_id = ?)`,
       ).bind(
         crypto.randomUUID(),
+        origin,
         viewer.organisationId,
         viewer.eventId,
         viewer.personId,
