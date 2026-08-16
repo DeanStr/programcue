@@ -16,6 +16,10 @@ import { CharacterCount } from "~/components/ui/character-count";
 import { DomainStatusBadge } from "~/components/ui/domain-status-badge";
 import { useUnsavedChanges } from "~/components/ui/use-unsaved-changes";
 import { maximumMegabytes } from "~/modules/files/file-policy";
+import {
+  formatSpeakerXHandleInput,
+  normalizeSpeakerLinkedinUrl,
+} from "~/modules/speakers/speaker-schema";
 
 function formatUploadTimestamp(epoch: number, timezone: string) {
   return new Intl.DateTimeFormat("en", {
@@ -316,14 +320,9 @@ export function SpeakerProfilePanel({
               placeholder="https://www.linkedin.com/in/your-name"
               value={linkedinUrl}
               onChange={(event) => setLinkedinUrl(event.currentTarget.value)}
-              onBlur={() => {
-                const trimmed = linkedinUrl.trim();
-                setLinkedinUrl(
-                  trimmed && !/^https:\/\//iu.test(trimmed)
-                    ? `https://${trimmed.replace(/^www\./iu, "")}`
-                    : trimmed,
-                );
-              }}
+              onBlur={() =>
+                setLinkedinUrl(normalizeSpeakerLinkedinUrl(linkedinUrl))
+              }
               maxLength={500}
             />
           </label>
@@ -335,14 +334,8 @@ export function SpeakerProfilePanel({
               placeholder="@your_handle"
               value={xHandle}
               onChange={(event) => setXHandle(event.currentTarget.value)}
-              onBlur={() => {
-                const normalised = xHandle
-                  .trim()
-                  .replace(/^https?:\/\/(?:www\.)?(?:x|twitter)\.com\//iu, "")
-                  .replace(/^@/u, "");
-                setXHandle(normalised ? `@${normalised}` : "");
-              }}
-              maxLength={16}
+              onBlur={() => setXHandle(formatSpeakerXHandleInput(xHandle))}
+              maxLength={500}
             />
           </label>
         </div>

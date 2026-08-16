@@ -25,6 +25,10 @@ import { useUnsavedChanges } from "~/components/ui/use-unsaved-changes";
 import { maximumMegabytes } from "~/modules/files/file-policy";
 import { ensureDemoSpeakerData } from "~/modules/speakers/demo.server";
 import {
+  formatSpeakerXHandleInput,
+  normalizeSpeakerLinkedinUrl,
+} from "~/modules/speakers/speaker-schema";
+import {
   SpeakerAdminStateError,
   SpeakerProfileConflictError,
   SpeakerService,
@@ -529,6 +533,11 @@ export default function AdminSpeakerDetail({
                     inputMode="url"
                     placeholder="https://www.linkedin.com/in/your-name"
                     defaultValue={profile.linkedinUrl ?? ""}
+                    onBlur={(event) => {
+                      event.currentTarget.value = normalizeSpeakerLinkedinUrl(
+                        event.currentTarget.value,
+                      );
+                    }}
                     maxLength={500}
                   />
                 </label>
@@ -539,7 +548,12 @@ export default function AdminSpeakerDetail({
                     name="xHandle"
                     placeholder="@your_handle"
                     defaultValue={profile.xHandle ? `@${profile.xHandle}` : ""}
-                    maxLength={16}
+                    onBlur={(event) => {
+                      event.currentTarget.value = formatSpeakerXHandleInput(
+                        event.currentTarget.value,
+                      );
+                    }}
+                    maxLength={500}
                   />
                 </label>
               </div>

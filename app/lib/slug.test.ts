@@ -49,6 +49,7 @@ describe("sanitizeSlugInput", () => {
     expect(canonicalSlugOnBlur(customSlug, false, { maximumLength: 80 })).toBe(
       customSlug,
     );
+    expect(canonicalSlugOnBlur("conference-", false)).toBe("conference");
     expect(canonicalSlugOnBlur("Derived slug-", true)).toBe("derived-slug");
   });
 });

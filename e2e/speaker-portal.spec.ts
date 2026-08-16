@@ -87,8 +87,14 @@ test("speaker profile, sessions and D1 task state render through the production 
   ).toHaveAttribute("href", "/participant/files#headshot-upload");
   await page
     .getByLabel("LinkedIn profile URL")
-    .fill("https://www.linkedin.com/in/priya-shah");
-  await page.getByLabel("X handle").fill("@priya_shah");
+    .fill("http://www.linkedin.com/in/priya-shah");
+  await page.getByLabel("LinkedIn profile URL").press("Tab");
+  await expect(page.getByLabel("LinkedIn profile URL")).toHaveValue(
+    "https://www.linkedin.com/in/priya-shah",
+  );
+  await page.getByLabel("X handle").fill("https://x.com/priya_shah");
+  await page.getByLabel("X handle").press("Tab");
+  await expect(page.getByLabel("X handle")).toHaveValue("@priya_shah");
   await page
     .getByLabel("Travel and logistics preferences")
     .fill("Arrival May 11, aisle seat; dietary: Vegetarian");

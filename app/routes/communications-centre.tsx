@@ -55,7 +55,10 @@ import {
   type CommunicationCategory,
 } from "~/modules/communications/communication-schema";
 import { UnknownMergeVariableError } from "~/modules/communications/merge-template";
-import { OrganisationCommunicationSettingsService } from "~/modules/communications/organisation-communication-settings.server";
+import {
+  OrganisationCommunicationSettingsConflictError,
+  OrganisationCommunicationSettingsService,
+} from "~/modules/communications/organisation-communication-settings.server";
 import { RecipientLimitError } from "~/modules/communications/recipient-query.server";
 import { EventService } from "~/modules/events/event-service.server";
 import {
@@ -270,6 +273,8 @@ export async function loader({ request, context }: Route.LoaderArgs) {
     eventTimezone: event.timezone,
     organisationPhysicalAddress:
       organisationCommunicationSettings.physicalAddress,
+    organisationPhysicalAddressRevision:
+      organisationCommunicationSettings.revision,
     canManageOrganisationCommunicationSettings:
       organisationCommunicationSettings.canManage,
     deliveryHealth,
@@ -295,6 +300,7 @@ export async function action({ request, context }: Route.ActionArgs) {
       await new OrganisationCommunicationSettingsService(env).save(
         viewer,
         form.get("physicalAddress"),
+        form.get("physicalAddressRevision"),
       );
       return data<ActionResult>({
         ok: true,
@@ -520,12 +526,18 @@ export async function action({ request, context }: Route.ActionArgs) {
       error instanceof CalendarStateError ||
       error instanceof CalendarProviderConfigurationError ||
       error instanceof CalendarProviderRequestError ||
+      error instanceof OrganisationCommunicationSettingsConflictError ||
       error instanceof ResendDomainConfigurationError ||
       error instanceof ResendDomainRequestError
     ) {
       return data<ActionResult>(
         { ok: false, intent, message: communicationErrorMessage(error) },
-        { status: 422 },
+        {
+          status:
+            error instanceof OrganisationCommunicationSettingsConflictError
+              ? 409
+              : 422,
+        },
       );
     }
     if (error instanceof CommunicationQueueUnavailableError) {
@@ -761,6 +773,11 @@ export default function CommunicationsCentre({
                     type="hidden"
                     name="intent"
                     value="save-organisation-physical-address"
+                  />
+                  <input
+                    type="hidden"
+                    name="physicalAddressRevision"
+                    value={loaderData.organisationPhysicalAddressRevision}
                   />
                   <label className="label">
                     Complete postal address

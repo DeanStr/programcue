@@ -416,13 +416,19 @@ lookup is an authorised, organisation-scoped read over established membership,
 submission and session relationships; it may fill a manual form but never
 links an unrelated global identity or bypasses the mutation's existing server
 checks.
+Lookup results expose the exact current-event speaker workflow state. Roster
+entry blocks active prospects/invitees/confirmed speakers while permitting an
+explicit declined or withdrawn restoration; submission editing may reuse an
+existing event speaker.
 
 Communication footer defaults come only from an owner-managed organisation
 postal address. The setting is organisation scoped and audited without copying
-the address into audit metadata. A new template may copy that value into its
-editable versioned content; no venue, product-office or fictitious fallback is
-substituted when it is absent. Progressive task and communication controls omit
-irrelevant values rather than persisting hidden defaults.
+the address into audit metadata. Its write predicates revalidate active owner
+membership and compare a dedicated revision, and an operation-bound completion
+guard rolls back a partial update or audit. A new template may copy that value
+into its editable versioned content; no venue, product-office or fictitious
+fallback is substituted when it is absent. Progressive task and communication
+controls omit irrelevant values rather than persisting hidden defaults.
 
 Error summaries focus when a new failed submission is rendered and link to the
 corresponding field. Character counts appear near bounded limits instead of

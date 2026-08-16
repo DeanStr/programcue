@@ -46,7 +46,13 @@ export type OrganisationPersonMatch = {
   personId: string;
   name: string;
   email: string;
-  currentEvent: boolean;
+  currentEventSpeakerStatus:
+    | "prospect"
+    | "invited"
+    | "confirmed"
+    | "declined"
+    | "withdrawn"
+    | null;
 };
 
 function placeholders(values: readonly unknown[]) {
@@ -80,48 +86,52 @@ export class PersonDuplicateService {
     const exactEmailSearch = query.length > 120;
     const pattern = `%${query.replaceAll("%", "\\%").replaceAll("_", "\\_")}%`;
     const rows = await this.env.DB.prepare(
-      `WITH organisation_people(person_id, event_id, is_speaker) AS (
-         SELECT membership.person_id, membership.event_id,
-                CASE WHEN membership.role = 'speaker'
-                           AND membership.accepted_at IS NOT NULL
-                           AND membership.revoked_at IS NULL
-                     THEN 1 ELSE 0 END
+      `WITH organisation_people(person_id) AS (
+         SELECT membership.person_id
            FROM memberships membership
           WHERE membership.organisation_id = ?
          UNION
-         SELECT submission.submitter_person_id, submission.event_id, 0
+         SELECT submission.submitter_person_id
            FROM submissions submission
            JOIN events event ON event.id = submission.event_id
           WHERE event.organisation_id = ?
             AND submission.submitter_person_id IS NOT NULL
          UNION
-         SELECT speaker.person_id, speaker.event_id, 0
+         SELECT speaker.person_id
            FROM submission_speakers speaker
            JOIN events event ON event.id = speaker.event_id
           WHERE event.organisation_id = ? AND speaker.person_id IS NOT NULL
          UNION
-         SELECT session_speaker.person_id, session_speaker.event_id, 1
+         SELECT session_speaker.person_id
            FROM session_speakers session_speaker
            JOIN events event ON event.id = session_speaker.event_id
           WHERE event.organisation_id = ?
          UNION
-         SELECT workflow.person_id, workflow.event_id, 1
+         SELECT workflow.person_id
            FROM event_speaker_workflows workflow
            JOIN events event ON event.id = workflow.event_id
           WHERE event.organisation_id = ?
        )
        SELECT person.id AS personId, person.display_name AS name, person.email,
-              MAX(CASE WHEN scoped.event_id = ? AND scoped.is_speaker = 1
-                       THEN 1 ELSE 0 END) AS currentEvent
+              current_workflow.status AS currentEventSpeakerStatus
          FROM organisation_people scoped
          JOIN people person ON person.id = scoped.person_id
+         LEFT JOIN event_speaker_workflows current_workflow
+           ON current_workflow.event_id = ?
+          AND current_workflow.person_id = person.id
         WHERE ${
           exactEmailSearch
             ? "lower(person.email) = lower(?)"
             : "(person.display_name LIKE ? ESCAPE '\\' COLLATE NOCASE OR person.email LIKE ? ESCAPE '\\' COLLATE NOCASE)"
         }
-        GROUP BY person.id, person.display_name, person.email
-        ORDER BY currentEvent DESC, person.display_name COLLATE NOCASE, person.id
+        GROUP BY person.id, person.display_name, person.email,
+                 current_workflow.status
+        ORDER BY CASE
+                   WHEN current_workflow.status IN ('prospect','invited','confirmed') THEN 0
+                   WHEN current_workflow.status IS NOT NULL THEN 1
+                   ELSE 2
+                 END,
+                 person.display_name COLLATE NOCASE, person.id
         LIMIT 10`,
     )
       .bind(
@@ -133,13 +143,8 @@ export class PersonDuplicateService {
         viewer.eventId,
         ...(exactEmailSearch ? [query] : [pattern, pattern]),
       )
-      .all<
-        Omit<OrganisationPersonMatch, "currentEvent"> & { currentEvent: number }
-      >();
-    return rows.results.map((row) => ({
-      ...row,
-      currentEvent: Boolean(row.currentEvent),
-    }));
+      .all<OrganisationPersonMatch>();
+    return rows.results;
   }
 
   async findLikelyDuplicates(

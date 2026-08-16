@@ -2,21 +2,37 @@ import { Search } from "lucide-react";
 import { useEffect, useId, useState } from "react";
 import { useFetcher } from "react-router";
 
-type PersonMatch = {
-  personId: string;
-  name: string;
-  email: string;
-  currentEvent: boolean;
-};
+import type { OrganisationPersonMatch as PersonMatch } from "~/modules/people/person-duplicate-service.server";
+
+export type PersonLookupPurpose = "event-roster" | "submission-speaker";
+
+const activeEventSpeakerStatuses = new Set([
+  "prospect",
+  "invited",
+  "confirmed",
+]);
+
+export function personLookupMatchIsDisabled(
+  person: PersonMatch,
+  purpose: PersonLookupPurpose,
+) {
+  return (
+    purpose === "event-roster" &&
+    person.currentEventSpeakerStatus !== null &&
+    activeEventSpeakerStatuses.has(person.currentEventSpeakerStatus)
+  );
+}
 
 export function PersonLookup({
   onSelect,
   label = "Find an existing person",
   suggestedQuery,
+  purpose,
 }: {
   onSelect(person: PersonMatch): void;
   label?: string;
   suggestedQuery?: string;
+  purpose: PersonLookupPurpose;
 }) {
   const generatedId = useId();
   const inputId = `person-lookup-${generatedId}`;
@@ -83,30 +99,40 @@ export function PersonLookup({
             {searchError}
           </span>
         ) : null}
-        {matches.map((person) => (
-          <button
-            className="list-row pc-person-lookup-result"
-            type="button"
-            key={person.personId}
-            disabled={person.currentEvent}
-            onClick={() => {
-              onSelect(person);
-              setQuery("");
-            }}
-          >
-            <span>
-              <strong>{person.name}</strong>
-              <small className="subtle">{person.email}</small>
-            </span>
-            <span
-              className={`status ${person.currentEvent ? "success" : "info"}`}
+        {matches.map((person) => {
+          const activeEventSpeaker =
+            person.currentEventSpeakerStatus !== null &&
+            activeEventSpeakerStatuses.has(person.currentEventSpeakerStatus);
+          const restorableEventSpeaker =
+            person.currentEventSpeakerStatus === "declined" ||
+            person.currentEventSpeakerStatus === "withdrawn";
+          return (
+            <button
+              className="list-row pc-person-lookup-result"
+              type="button"
+              key={person.personId}
+              disabled={personLookupMatchIsDisabled(person, purpose)}
+              onClick={() => {
+                onSelect(person);
+                setQuery("");
+              }}
             >
-              {person.currentEvent
-                ? "Already in this event"
-                : "In this organisation"}
-            </span>
-          </button>
-        ))}
+              <span>
+                <strong>{person.name}</strong>
+                <small className="subtle">{person.email}</small>
+              </span>
+              <span
+                className={`status ${activeEventSpeaker ? "success" : "info"}`}
+              >
+                {activeEventSpeaker
+                  ? "Already on this event roster"
+                  : restorableEventSpeaker
+                    ? "Previously on this event roster"
+                    : "In this organisation"}
+              </span>
+            </button>
+          );
+        })}
         {fetcher.state === "idle" &&
         trimmedQuery.length >= 2 &&
         fetcher.data?.query === trimmedQuery &&

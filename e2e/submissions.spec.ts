@@ -606,6 +606,15 @@ test.describe.serial("submissions vertical slice", () => {
     await directSession
       .getByLabel("Description")
       .fill("A confirmed sponsor programme contribution.");
+    await directSession.getByLabel("Find existing speaker 1").fill("Priya");
+    const existingEventSpeaker = directSession.getByRole("button", {
+      name: /Priya Shah.*Already on this event roster/,
+    });
+    await expect(existingEventSpeaker).toBeEnabled();
+    await existingEventSpeaker.click();
+    await expect(directSession.getByLabel("Speaker 1 name")).toHaveValue(
+      "Priya Shah",
+    );
     await directSession.getByLabel("Speaker 1 name").fill("Morgan Sponsor");
     await directSession
       .getByLabel("Email", { exact: true })

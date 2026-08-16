@@ -332,6 +332,7 @@ export default function AdminSpeakers({ loaderData }: Route.ComponentProps) {
             value={loaderData.manualSpeakerIdempotencyKey}
           />
           <PersonLookup
+            purpose="event-roster"
             suggestedQuery={manualLookupQuery}
             onSelect={(person) => {
               setManualName(person.name);

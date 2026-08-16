@@ -347,17 +347,22 @@ summaries. Existing and published identifiers remain unchanged.
 Application intake reports remaining required answers, labels required fields,
 warns about repeated speaker email addresses and surfaces bounded-text counts.
 Organisation-scoped person lookup is connected to organiser speaker entry while
-remaining server-authorised and isolated. Form authoring uses label-derived
+remaining server-authorised and isolated. It returns exact event workflow state,
+allows declined/withdrawn roster restoration and permits existing event speakers
+to be selected while editing submissions. Form authoring uses label-derived
 stable field IDs, protects referenced IDs behind an explicit override, rejects
 case-insensitive duplicate choices, couples speaker limits and offers a
 question-derived completion estimate. Profile editors guard unsaved changes and
-normalise common social-link input before the existing server mutation.
+normalise supported LinkedIn and X profile inputs before the existing server
+mutation while unsupported values fail validation.
 
 Task and communication composers progressively reveal only deadline/audience
 controls that apply, provide natural-language or event-local scheduling
 feedback and retain the existing server validation. Organisation owners can
 persist an audited real postal address for new communication-template defaults;
-missing data remains explicit. Schedule source search and public programme
+the write revalidates active ownership, rejects stale revisions and rolls back
+unless the update and audit complete together. Missing data remains explicit.
+Schedule source search and public programme
 filters persist in the URL, saved-view names reflect active filters, and long
 content fields expose near-limit counts. Focused unit/Worker and browser
 coverage records these observable contracts; manual assistive-technology

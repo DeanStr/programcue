@@ -19,10 +19,23 @@ export const organisations = sqliteTable(
     name: text("name").notNull(),
     slug: text("slug").notNull(),
     communicationPhysicalAddress: text("communication_physical_address"),
+    communicationPhysicalAddressRevision: integer(
+      "communication_physical_address_revision",
+    )
+      .notNull()
+      .default(1),
+    communicationPhysicalAddressLastOperationId: text(
+      "communication_physical_address_last_operation_id",
+    ),
     createdAt: integer("created_at").notNull().default(epochNow),
     updatedAt: integer("updated_at").notNull().default(epochNow),
   },
-  (table) => [uniqueIndex("organisations_slug_unique").on(table.slug)],
+  (table) => [
+    uniqueIndex("organisations_slug_unique").on(table.slug),
+    uniqueIndex("ux_organisations_communication_address_operation").on(
+      table.communicationPhysicalAddressLastOperationId,
+    ),
+  ],
 );
 
 export const people = sqliteTable(

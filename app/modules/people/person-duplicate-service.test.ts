@@ -36,7 +36,7 @@ describe("likely duplicate person checks", () => {
         expect.objectContaining({
           personId: "person-demo-speaker",
           name: "Priya Shah",
-          currentEvent: true,
+          currentEventSpeakerStatus: "invited",
         }),
       ]),
     );
@@ -45,12 +45,48 @@ describe("likely duplicate person checks", () => {
     ).resolves.toEqual([
       expect.objectContaining({
         personId: "person-demo-admin",
-        currentEvent: false,
+        currentEventSpeakerStatus: null,
       }),
     ]);
     await expect(
       service.searchOrganisationPeople(viewer, "isolated@example.com"),
     ).resolves.toEqual([]);
+  });
+
+  it("returns inactive event workflow state so callers can offer restoration", async () => {
+    const suffix = crypto.randomUUID();
+    const personId = `person-declined-${suffix}`;
+    const email = `declined-${suffix.slice(0, 8)}@example.com`;
+    await env.DB.batch([
+      env.DB.prepare(
+        `INSERT INTO people (
+           id, email, display_name, email_verified, profile_status,
+           created_at, updated_at
+         ) VALUES (?, ?, 'Declined Speaker', 1, 'draft', unixepoch(), unixepoch())`,
+      ).bind(personId, email),
+      env.DB.prepare(
+        `INSERT INTO event_speaker_workflows (
+           event_id, person_id, status, source, last_operation_id,
+           updated_by_person_id, created_at, updated_at
+         ) VALUES (?, ?, 'declined', 'manual', ?, ?, unixepoch(), unixepoch())`,
+      ).bind(
+        viewer.eventId,
+        personId,
+        `declined-lookup:${suffix}`,
+        viewer.personId,
+      ),
+    ]);
+
+    await expect(
+      new PersonDuplicateService(
+        env as unknown as CloudflareEnvironment,
+      ).searchOrganisationPeople(viewer, email),
+    ).resolves.toEqual([
+      expect.objectContaining({
+        personId,
+        currentEventSpeakerStatus: "declined",
+      }),
+    ]);
   });
 
   it("accepts complete email-length searches and rejects oversized queries", async () => {

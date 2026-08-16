@@ -384,6 +384,7 @@ function SpeakerFields({
       {speakers.map((speaker, index) => (
         <div className="grid grid-3 mb" key={index}>
           <PersonLookup
+            purpose="submission-speaker"
             label={`Find existing speaker ${index + 1}`}
             onSelect={(person) => {
               const next = [...speakers];

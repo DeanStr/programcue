@@ -26,5 +26,5 @@ export function canonicalSlugOnBlur(
   derived: boolean,
   options: { maximumLength?: number } = {},
 ) {
-  return derived ? slugify(value, options) : value;
+  return derived ? slugify(value, options) : value.replace(/-+$/gu, "");
 }
