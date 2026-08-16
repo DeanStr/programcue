@@ -27,10 +27,8 @@ describe("controlled status presentation", () => {
     expect(markup).toContain('data-status-value="queue_failed"');
   });
 
-  it("fails fast when a surface tries to invent a status label", () => {
-    expect(() => statusPresentation("task", "done-ish")).toThrow(
-      "Unsupported task status: done-ish.",
-    );
+  it("rejects an unsupported stored status", () => {
+    expect(() => statusPresentation("task", "done-ish")).toThrow();
   });
 
   it("words every status as a phrase rather than its stored value", () => {

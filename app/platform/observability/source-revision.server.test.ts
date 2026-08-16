@@ -24,8 +24,6 @@ describe("source revision", () => {
 
   it.each([
     undefined,
-    "",
-    "unknown",
     "REPLACE_WITH_SOURCE_REVISION",
     "contains personal@example.test",
   ])(

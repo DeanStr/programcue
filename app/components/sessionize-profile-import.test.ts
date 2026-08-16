@@ -34,19 +34,19 @@ describe("Sessionize profile-import response", () => {
     );
   });
 
-  it("rejects a non-object JSON response as a contract violation", async () => {
-    const response = Response.json(null);
+  it("rejects a successful JSON response with blank required content", async () => {
+    const response = Response.json({
+      ok: true,
+      profile: { ...profile, biography: " " },
+    });
 
     await expect(readProfileImportResponse(response)).rejects.toThrow(
       "Program Cue returned an invalid profile-import response. No details were changed.",
     );
   });
 
-  it("rejects a successful JSON response with an empty biography", async () => {
-    const response = Response.json({
-      ok: true,
-      profile: { ...profile, biography: "" },
-    });
+  it("rejects a non-object JSON response as a contract violation", async () => {
+    const response = Response.json(null);
 
     await expect(readProfileImportResponse(response)).rejects.toThrow(
       "Program Cue returned an invalid profile-import response. No details were changed.",

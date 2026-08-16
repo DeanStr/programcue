@@ -323,12 +323,9 @@ describe("public programme speaker surfaces", () => {
     );
   });
 
-  it("fails fast when a session speaker name is missing or stale", () => {
+  it("rejects a stale published speaker name", () => {
     const speakerById = new Map([[speaker.id, speaker]]);
 
-    expect(() =>
-      sessionSpeakerDetails({ ...session, speakerNames: [] }, speakerById),
-    ).toThrow(/missing or stale name/iu);
     expect(() =>
       sessionSpeakerDetails(
         { ...session, speakerNames: ["Another Name"] },

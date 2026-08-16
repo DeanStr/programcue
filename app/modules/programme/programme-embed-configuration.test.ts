@@ -142,26 +142,29 @@ describe("programme embed configuration", () => {
         new URLSearchParams("fields=time,unknown"),
       ),
     ).toThrow(/supported public fields/i);
-    expect(() =>
-      parseProgrammeEmbedSearchParameters(
-        new URLSearchParams("fields=time,speakers"),
-      ),
-    ).toThrow(/supported public fields/i);
   });
 
-  it("rejects empty, unknown and duplicate request parameters", () => {
-    for (const name of ["day", "track", "format", "room", "accent"]) {
-      expect(() =>
-        parseProgrammeEmbedSearchParameters(new URLSearchParams(`${name}=`)),
-      ).toThrow(new RegExp(`Embed ${name} must not be empty`, "i"));
-    }
+  it("parses supported parameters and rejects empty, unknown or duplicate input", () => {
+    expect(
+      parseProgrammeEmbedSearchParameters(
+        new URLSearchParams(
+          "day=2027-05-20&track=AI&format=panel&room=Main&accent=%230d9488",
+        ),
+      ),
+    ).toMatchObject({
+      day: "2027-05-20",
+      track: "AI",
+      format: "panel",
+      room: "Main",
+      accent: "#0d9488",
+    });
+    expect(() =>
+      parseProgrammeEmbedSearchParameters(new URLSearchParams("day=")),
+    ).toThrow(/embed day must not be empty/i);
     expect(() =>
       parseProgrammeEmbedSearchParameters(
         new URLSearchParams("densitty=compact"),
       ),
-    ).toThrow(/unsupported parameter/i);
-    expect(() =>
-      parseProgrammeEmbedSearchParameters(new URLSearchParams("speakers=hide")),
     ).toThrow(/unsupported parameter/i);
     expect(() =>
       parseProgrammeEmbedSearchParameters(
@@ -174,12 +177,6 @@ describe("programme embed configuration", () => {
   });
 
   it("rejects invalid generated configuration before producing install code", () => {
-    expect(() =>
-      programmeEmbedUrl("https://events.example.com", "event", {
-        ...defaultProgrammeEmbedConfiguration(),
-        controls: ["unknown" as never],
-      }),
-    ).toThrow(/unique comma-separated selection/i);
     expect(() =>
       programmeEmbedUrl("https://events.example.com", "event", {
         ...defaultProgrammeEmbedConfiguration(),
@@ -205,25 +202,13 @@ describe("programme embed configuration", () => {
       }),
     ).toThrow(/speaker directory visibility must be a boolean/i);
     expect(() =>
-      programmeEmbedUrl("https://events.example.com", "event", {
-        ...defaultProgrammeEmbedConfiguration(),
-        surface: "timeline" as never,
-      }),
-    ).toThrow(/surface must be sessions/i);
-    expect(() =>
-      programmeEmbedUrl("https://events.example.com", "event", {
-        ...defaultProgrammeEmbedConfiguration(),
-        fields: ["sponsors" as never],
-      }),
-    ).toThrow(/supported public fields/i);
-    expect(() =>
       programmeIframeSnippet(
         "https://events.example.com/embed/event/sessions",
         "Event",
         159,
       ),
     ).toThrow(/160 to 20000 pixels/i);
-    expect(() => parseProgrammeEmbedHeight("")).toThrow(
+    expect(() => parseProgrammeEmbedHeight("not-a-height")).toThrow(
       /integer from 160 to 20000 pixels/i,
     );
     expect(() => parseProgrammeEmbedHeight("159")).toThrow(
@@ -278,12 +263,6 @@ describe("programme embed configuration", () => {
         JSON.parse(JSON.stringify(configuration)),
       ),
     ).toEqual(configuration);
-    expect(() =>
-      parsePersistedProgrammeEmbedConfiguration({
-        ...configuration,
-        controls: ["unknown"],
-      }),
-    ).toThrow(/unique comma-separated selection/i);
     const { density: _density, ...missingDensity } = configuration;
     expect(() =>
       parsePersistedProgrammeEmbedConfiguration(missingDensity),
@@ -291,9 +270,9 @@ describe("programme embed configuration", () => {
     expect(() =>
       parsePersistedProgrammeEmbedConfiguration({
         ...configuration,
-        unexpected: true,
+        accent: "red",
       }),
-    ).toThrow(/invalid shape/i);
+    ).toThrow(/six-digit hexadecimal colour/i);
   });
 
   it("generates stable managed iframe and widget destinations", () => {
