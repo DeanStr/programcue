@@ -43,13 +43,16 @@ function formatEventDateRange(startDate: string, endDate: string) {
   return `${month.format(start)} ${day.format(start)} – ${month.format(end)} ${day.format(end)}, ${year.format(end)}`;
 }
 
+export function adminLayoutAllowedRoles(pathname: string) {
+  return /^\/admin\/review(?:\.data$|\/|$)/u.test(pathname)
+    ? (["owner", "administrator", "committee_chair"] as const)
+    : (["owner", "administrator"] as const);
+}
+
 export async function loader({ request, context }: Route.LoaderArgs) {
   const { env } = getCloudflareContext(context);
   const pathname = new URL(request.url).pathname.replace(/\/$/, "");
-  const allowedRoles =
-    pathname === "/admin/review" || pathname.startsWith("/admin/review/")
-      ? (["owner", "administrator", "committee_chair"] as const)
-      : (["owner", "administrator"] as const);
+  const allowedRoles = adminLayoutAllowedRoles(pathname);
   const viewer = await requireCurrentEventRole(request, env, allowedRoles);
   const commandPalette = new CommandPaletteService(env);
   const [

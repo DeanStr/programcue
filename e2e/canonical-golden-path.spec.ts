@@ -31,6 +31,17 @@ async function expectStatus(page: Page, text: string) {
   ).toBeVisible();
 }
 
+async function createNextScheduleDraft(page: Page) {
+  await page.getByRole("button", { name: "Create next draft" }).click();
+  const confirmation = page.getByRole("dialog", {
+    name: "Create the next schedule draft?",
+  });
+  await expect(confirmation).toContainText(
+    "The published programme will not change",
+  );
+  await confirmation.getByRole("button", { name: "Confirm new draft" }).click();
+}
+
 function waitForScheduleMutation(page: Page) {
   return page.waitForResponse(
     (response) =>
@@ -361,7 +372,7 @@ test.describe.serial("canonical D1-backed judged workflow", () => {
   }) => {
     await switchDemoRole(page, "administrator");
     await waitForInterface(page, "/admin/schedule");
-    await page.getByRole("button", { name: "Create next draft" }).click();
+    await createNextScheduleDraft(page);
     await expect(page.getByText(/Version 2 · Draft/)).toBeVisible();
     const placement = page.locator("details").filter({
       has: page.getByText("Place or move with form", { exact: true }),

@@ -17,6 +17,31 @@ import {
 beforeEach(prepareScheduleServiceTest);
 
 describe("schedule content and draft workflows", () => {
+  it("derives the next draft number from all historical schedule versions", async () => {
+    await env.DB.prepare(
+      `INSERT INTO schedule_versions (
+         id, event_id, version_number, name, status, revision,
+         created_by_person_id, created_at
+       ) VALUES (
+         'schedule-historical-failed', ?, 4, 'Failed version', 'failed', 1,
+         ?, unixepoch()
+       )`,
+    )
+      .bind(viewer.eventId, viewer.personId)
+      .run();
+
+    const service = new ScheduleService(scheduleTestEnv);
+    const versionId = await service.createDraft(viewer);
+    await expect(
+      env.DB.prepare(
+        `SELECT version_number AS versionNumber
+           FROM schedule_versions WHERE id = ? AND event_id = ?`,
+      )
+        .bind(versionId, viewer.eventId)
+        .first(),
+    ).resolves.toEqual({ versionNumber: 5 });
+  });
+
   it("preserves speaker names containing the former aggregate delimiter", async () => {
     const original = await env.DB.prepare(
       "SELECT display_name AS displayName FROM people WHERE id = 'person-demo-speaker'",

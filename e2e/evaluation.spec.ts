@@ -302,6 +302,89 @@ test("evaluation administration exposes onboarding and consequential previews", 
   ).toBeFocused();
 });
 
+test("a committee chair stays authorised after saving and can resume a decision draft", async ({
+  page,
+  request,
+}) => {
+  test.setTimeout(60_000);
+  await resetDemoEvent(request);
+  await page.context().addCookies([
+    {
+      name: "program_cue_event",
+      value: "evt-foe-2025",
+      domain: "127.0.0.1",
+      path: "/",
+      httpOnly: true,
+      sameSite: "Lax",
+    },
+    {
+      name: "program_cue_demo_identity",
+      value: "committee_chair",
+      domain: "127.0.0.1",
+      path: "/",
+      httpOnly: true,
+      sameSite: "Lax",
+    },
+  ]);
+  const response = await page.goto("/admin/review");
+  expect(response?.ok()).toBeTruthy();
+  await page.locator("body[data-hydrated='true']").waitFor();
+
+  await page.getByRole("button", { name: "Decide" }).first().click();
+  let decision = page.getByRole("dialog", { name: /Decision ·/ });
+  await decision.locator('select[name="decision"]').selectOption("rejected");
+  await decision.getByLabel("Rationale").fill("Keep this chair draft intact.");
+  await decision.getByLabel("Acceptance session duration (minutes)").fill("75");
+  await decision.getByRole("button", { name: "Save draft" }).click();
+
+  await expect(
+    page.getByRole("heading", { name: "Evaluation", exact: true }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("status").filter({ hasText: "Decision draft saved" }),
+  ).toBeVisible();
+  await page.getByRole("button", { name: "Decide" }).first().click();
+  decision = page.getByRole("dialog", { name: /Decision ·/ });
+  await expect(decision).toContainText("Resuming decision draft revision");
+  await expect(decision.locator('select[name="decision"]')).toHaveValue(
+    "rejected",
+  );
+  await expect(decision.getByLabel("Rationale")).toHaveValue(
+    "Keep this chair draft intact.",
+  );
+  await expect(
+    decision.getByLabel("Acceptance session duration (minutes)"),
+  ).toHaveValue("75");
+
+  await resetDemoEvent(request);
+});
+
+test("a clean reviewer sees a waiting state before receiving an invitation", async ({
+  page,
+  request,
+}) => {
+  await resetDemoEvent(request);
+  await page.context().addCookies([
+    {
+      name: "program_cue_demo_identity",
+      value: "sbek_reviewer",
+      domain: "127.0.0.1",
+      path: "/",
+      httpOnly: true,
+      sameSite: "Lax",
+    },
+  ]);
+
+  const response = await page.goto("/events/select");
+  expect(response?.ok()).toBeTruthy();
+  await page.locator("body[data-hydrated='true']").waitFor();
+  await expect(
+    page.getByRole("heading", { name: "Choose an event" }),
+  ).toBeVisible();
+  await expect(page.getByText("No event access yet")).toBeVisible();
+  await expect(page.getByText("You do not have access")).toBeHidden();
+});
+
 test("the exact SBEK reviewer invitation hands off to Sam without claiming email delivery", async ({
   page,
   request,

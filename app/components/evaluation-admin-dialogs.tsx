@@ -522,8 +522,11 @@ export function DecisionDialog() {
     sessionTrackId && !selectedSessionTrack,
   );
   useEffect(() => {
-    setDecision("accepted");
-    setSessionTrackId(defaultSessionTrackId);
+    const draft = selected?.decisionDraft;
+    setDecision(draft?.decision ?? "accepted");
+    setSessionTrackId(
+      draft ? (draft.sessionTrackId ?? "") : defaultSessionTrackId,
+    );
   }, [defaultSessionTrackId, selected?.id]);
   return selected ? (
     <Dialog
@@ -541,6 +544,15 @@ export function DecisionDialog() {
       >
         <input type="hidden" name="intent" value="decide" />
         <input type="hidden" name="submissionId" value={selected.id} />
+        {selected.decisionDraft ? (
+          <div className="validation-item info" role="status">
+            <strong>
+              Resuming decision draft revision{" "}
+              {selected.decisionDraft.revisionNumber}
+            </strong>
+            <span>Saving creates the next audited draft revision.</span>
+          </div>
+        ) : null}
         <label className="label">
           Decision
           <select
@@ -594,13 +606,21 @@ export function DecisionDialog() {
         </label>
         <label className="label">
           Rationale
-          <textarea className="textarea" name="rationale" />
+          <textarea
+            className="textarea"
+            name="rationale"
+            defaultValue={selected.decisionDraft?.rationale ?? ""}
+          />
         </label>
         <label className="speaker-confirm">
           <input
             type="checkbox"
             name="includeReviewerFeedback"
             value="true"
+            defaultChecked={
+              selected.decisionDraft?.includeReviewerFeedback === true &&
+              selectedHasCompletedReview
+            }
             disabled={!selectedHasCompletedReview}
           />{" "}
           Include submitted reviewer feedback in the decision email
@@ -620,7 +640,11 @@ export function DecisionDialog() {
             name="sessionDurationMinutes"
             min="5"
             max="1440"
-            defaultValue="60"
+            defaultValue={
+              selected.decisionDraft
+                ? (selected.decisionDraft.sessionDurationMinutes ?? "")
+                : "60"
+            }
             required
           />
           <span className="help">

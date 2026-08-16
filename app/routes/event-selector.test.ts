@@ -42,6 +42,24 @@ beforeEach(async () => {
 });
 
 describe("event selector route", () => {
+  it("renders an empty selector state while an account waits for an invitation", async () => {
+    await env.DB.prepare(
+      `UPDATE memberships
+          SET revoked_at = unixepoch()
+        WHERE person_id = 'person-demo-evaluator'`,
+    ).run();
+    const result = await loader({
+      request: new Request("http://localhost/events/select", {
+        headers: { cookie: "program_cue_demo_identity=evaluator" },
+      }),
+      params: {},
+      context: context(),
+    } as never);
+
+    expect(result.events).toEqual([]);
+    expect(result.currentEventId).toBeNull();
+  });
+
   it("lists every authorised event and preserves a safe local return path", async () => {
     const result = await loader({
       request: new Request(

@@ -55,9 +55,9 @@ export const EVALUATION_IDENTITIES = {
   applicant: {
     ...DEMO_IDENTITIES.submitter,
     label: "Applicant",
-    description: "Submitted proposal history, messages and participant tasks.",
+    description: "Submitted proposal details and current application status.",
     whatToTry:
-      "Open the submitted application and inspect its timeline and messages.",
+      "Open the submitted application and inspect its proposal details and status.",
     group: "showcase",
   },
   speaker: {

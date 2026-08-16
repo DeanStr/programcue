@@ -182,6 +182,19 @@ test.describe.serial("canonical provider boundaries", () => {
         },
       });
     });
+    let releaseAttachment: (() => void) | undefined;
+    let markAttachmentRequested: (() => void) | undefined;
+    const attachmentRequested = new Promise<void>((resolve) => {
+      markAttachmentRequested = resolve;
+    });
+    const attachmentRelease = new Promise<void>((resolve) => {
+      releaseAttachment = resolve;
+    });
+    await page.route("**/files/task-evidence", async (route) => {
+      markAttachmentRequested?.();
+      await attachmentRelease;
+      await route.continue();
+    });
 
     await switchDemoRole(page, "speaker");
     await waitForInterface(page, "/participant/tasks");
@@ -193,9 +206,18 @@ test.describe.serial("canonical provider boundaries", () => {
       mimeType: "application/pdf",
       buffer: EVIDENCE_BYTES,
     });
-    await uploadTask
-      .getByRole("button", { name: "Upload file" })
-      .click();
+    await uploadTask.getByRole("button", { name: "Upload file" }).click();
+    await attachmentRequested;
+    await expect(uploadTask.getByRole("status")).toContainText(
+      "Transfer complete. Finalizing",
+    );
+    await expect(
+      uploadTask.getByRole("button", { name: "Pause upload" }),
+    ).toBeHidden();
+    await expect(
+      uploadTask.getByRole("button", { name: "Cancel upload" }),
+    ).toBeHidden();
+    releaseAttachment?.();
     await expect(
       uploadTask.getByText("Submitted", { exact: true }),
     ).toBeVisible();
@@ -314,7 +336,9 @@ test.describe.serial("canonical provider boundaries", () => {
     await expect(page.locator(".pc-status-notice")).toContainText(
       "Preview recorded. Nothing was written to Accelevents.",
     );
-    const dryRun = page.getByRole("row", { name: /accelevents.*Preview only/i });
+    const dryRun = page.getByRole("row", {
+      name: /accelevents.*Preview only/i,
+    });
     await expect(dryRun).toContainText("Succeeded");
 
     await waitForInterface(

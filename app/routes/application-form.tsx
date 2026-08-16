@@ -690,21 +690,17 @@ export default function ApplicationForm({ loaderData }: Route.ComponentProps) {
             Participant support
           </a>
         ) : null}
-        {applicant ? (
+        {applicant && !isEvaluationApplicant ? (
           <Form
             method="post"
-            action={isEvaluationApplicant ? "/sign-out" : claimScopedAction}
+            action={claimScopedAction}
             style={{ marginLeft: "auto" }}
           >
-            {!isEvaluationApplicant ? (
-              <input type="hidden" name="_intent" value="sign_out" />
-            ) : null}
+            <input type="hidden" name="_intent" value="sign_out" />
             <button type="submit" className="btn">
-              {isEvaluationApplicant
-                ? "Change persona"
-                : applicant.verified
-                  ? `Sign out ${applicant.email}`
-                  : "Discard anonymous session"}
+              {applicant.verified
+                ? `Sign out ${applicant.email}`
+                : "Discard anonymous session"}
             </button>
           </Form>
         ) : null}

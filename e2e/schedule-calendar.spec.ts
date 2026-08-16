@@ -16,6 +16,17 @@ async function expectStatus(page: Page, text: string | RegExp) {
   ).toBeVisible();
 }
 
+async function createNextScheduleDraft(page: Page) {
+  await page.getByRole("button", { name: "Create next draft" }).click();
+  const confirmation = page.getByRole("dialog", {
+    name: "Create the next schedule draft?",
+  });
+  await expect(confirmation).toContainText(
+    "The published programme will not change",
+  );
+  await confirmation.getByRole("button", { name: "Confirm new draft" }).click();
+}
+
 test.beforeEach(async ({ page }) => {
   await page.context().addCookies([
     {
@@ -191,7 +202,7 @@ test.describe("mutable schedule authoring", () => {
     const notes =
       "Restore these draft-only production notes after reconnecting.";
     await waitForInterface(page, "/admin/schedule?session=demo-session-1");
-    await page.getByRole("button", { name: "Create next draft" }).click();
+    await createNextScheduleDraft(page);
     await expect(page.getByText(/Version \d+ · Draft/)).toBeVisible();
 
     const editor = page.getByTestId("session-content-editor");
@@ -262,7 +273,7 @@ test.describe("mutable schedule authoring", () => {
     test.slow();
     const approvedTitle = `Approved content ${crypto.randomUUID().slice(0, 8)}`;
     await waitForInterface(page, "/admin/schedule?session=demo-session-1");
-    await page.getByRole("button", { name: "Create next draft" }).click();
+    await createNextScheduleDraft(page);
     const editor = page.getByTestId("session-content-editor");
     await editor.getByLabel("Title").fill(approvedTitle);
     await editor
@@ -370,7 +381,7 @@ test.describe("mutable schedule authoring", () => {
     await expectStatus(page, "Event settings saved");
 
     await waitForInterface(page, "/admin/schedule");
-    await page.getByRole("button", { name: "Create next draft" }).click();
+    await createNextScheduleDraft(page);
     await expect(page.getByText(/Version \d+ · Draft/)).toBeVisible();
     await page.getByText("Session required resources", { exact: true }).click();
     await page
@@ -458,7 +469,7 @@ test.describe("mutable schedule authoring", () => {
     }
 
     await waitForInterface(page, "/admin/schedule");
-    await page.getByRole("button", { name: "Create next draft" }).click();
+    await createNextScheduleDraft(page);
     await expect(page.getByText(/Version \d+ · Draft/)).toBeVisible();
 
     const autoPlace = page.getByRole("button", {

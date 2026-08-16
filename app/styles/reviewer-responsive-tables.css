@@ -408,6 +408,7 @@
   min-width: 0;
 }
 .reviewer-shell .review-conflict-option small {
+  color: var(--text-secondary);
   line-height: var(--leading-snug);
 }
 .reviewer-shell .review-conflict-action {

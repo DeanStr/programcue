@@ -346,6 +346,12 @@ export const decisionBaseSchema = z.object({
     .default(null),
 });
 
+export const decisionDraftEffectPreviewSchema = z.object({
+  includeReviewerFeedback: z.boolean(),
+  sessionTrackId: z.string().trim().min(1).max(100).nullable(),
+  sessionDurationMinutes: z.number().int().min(5).max(1_440).nullable(),
+});
+
 export function requireAcceptedSessionTrack(
   decision: { decision: string; sessionTrackId: string | null },
   context: z.RefinementCtx,

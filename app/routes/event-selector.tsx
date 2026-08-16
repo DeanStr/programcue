@@ -57,11 +57,6 @@ export async function loader({ request, context }: Route.LoaderArgs) {
   const { env } = getCloudflareContext(context);
   const url = new URL(request.url);
   const events = await listAuthorisedEvents(request, env);
-  if (events.length === 0)
-    throw new Response("You do not have access to any events.", {
-      status: 403,
-      statusText: "Forbidden",
-    });
   let currentEventId: string | null = null;
   try {
     currentEventId = selectedEventId(request, env);
@@ -183,6 +178,16 @@ export default function EventSelector({ loaderData }: Route.ComponentProps) {
           <BrandMark />
         </div>
         <div className="stack">
+          {loaderData.events.length === 0 ? (
+            <div className="validation-item info" role="status">
+              <strong>No event access yet</strong>
+              <span>
+                You do not currently have an accepted event role or a pending
+                invitation. Ask an event organiser to invite this account, then
+                return here to accept it.
+              </span>
+            </div>
+          ) : null}
           {loaderData.events.map((event) => {
             const current = event.eventId === loaderData.currentEventId;
             return (

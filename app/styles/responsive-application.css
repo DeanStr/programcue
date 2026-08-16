@@ -24,6 +24,9 @@
 .application-drafts .queue-card h3 {
   margin: var(--space-2) 0 var(--space-1);
 }
+.application-drafts .queue-card.active .subtle {
+  color: var(--text-secondary);
+}
 .field-error {
   display: block;
   color: var(--red);

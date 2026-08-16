@@ -1,12 +1,64 @@
 import { Dialog } from "~/components/dialog";
 import type { AutoPlacementPreview } from "~/modules/schedule/schedule-auto-placement";
 import type { ScheduleSession } from "~/modules/schedule/schedule-service.server";
-import { Link } from "react-router";
+import { Form, Link } from "react-router";
 import { scheduleDateTimeLabel } from "./schedule-planner-workspace-helpers";
 import type {
   ScheduleFetcher,
   SchedulePlannerWorkspaceData,
 } from "./schedule-planner-panel-types";
+
+export function ScheduleDraftDialog({
+  workspace,
+  busy,
+  close,
+}: {
+  workspace: SchedulePlannerWorkspaceData & {
+    version: NonNullable<SchedulePlannerWorkspaceData["version"]>;
+  };
+  busy: boolean;
+  close: () => void;
+}) {
+  return (
+    <Dialog
+      title="Create the next schedule draft?"
+      description="Prepare a new draft from the current published schedule."
+      onClose={close}
+      footer={
+        <>
+          <button className="btn" type="button" onClick={close} disabled={busy}>
+            Cancel
+          </button>
+          <Form method="post" onSubmit={close}>
+            <input type="hidden" name="intent" value="create-draft" />
+            <input type="hidden" name="intentId" value={workspace.intentId} />
+            <button className="btn primary" disabled={busy}>
+              {busy ? "Creating draft…" : "Confirm new draft"}
+            </button>
+          </Form>
+        </>
+      }
+    >
+      <div className="stack">
+        <p>
+          The new draft will copy the current schedule notes and{" "}
+          <strong>
+            {workspace.entries.length} placement
+            {workspace.entries.length === 1 ? "" : "s"}
+          </strong>
+          . The published programme will not change.
+        </p>
+        <div className="validation-item warn">
+          <strong>The new version remains unpublished.</strong>
+          <span>
+            It will appear as an outstanding schedule draft until it is checked
+            and published.
+          </span>
+        </div>
+      </div>
+    </Dialog>
+  );
+}
 
 export function AutoPlacementPreviewDialog({
   preview,

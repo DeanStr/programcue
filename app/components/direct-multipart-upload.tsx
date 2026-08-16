@@ -31,6 +31,7 @@ type DirectUploadState =
   | { status: "idle"; message: null }
   | { status: "uploading"; message: string; progress: number }
   | { status: "paused"; message: string; progress: number }
+  | { status: "finalizing"; message: string; progress: 100 }
   | { status: "error"; message: string; reloadRequired?: boolean }
   | { status: "complete"; message: string };
 
@@ -103,6 +104,12 @@ export function DirectMultipartUpload({
     assetId: string;
     versionId: string;
   }) {
+    setState({
+      status: "finalizing",
+      message:
+        "Transfer complete. Finalizing and attaching the private upload…",
+      progress: 100,
+    });
     const completion = onCompleted ? await onCompleted(result) : undefined;
     session.current?.markAttached();
     completedUpload.current = null;
@@ -129,7 +136,7 @@ export function DirectMultipartUpload({
     if (!completed) return;
     try {
       setState({
-        status: "uploading",
+        status: "finalizing",
         message: "Attaching the completed upload to the current record…",
         progress: 100,
       });
@@ -286,8 +293,7 @@ export function DirectMultipartUpload({
           if (!paused) return;
           setState((current) => ({
             status: "paused",
-            message:
-              "Upload paused. Resume to continue from where it stopped.",
+            message: "Upload paused. Resume to continue from where it stopped.",
             progress:
               current.status === "uploading" || current.status === "paused"
                 ? current.progress
@@ -320,6 +326,7 @@ export function DirectMultipartUpload({
 
   const uploading = state.status === "uploading";
   const transferActive = uploading || state.status === "paused";
+  const operationActive = transferActive || state.status === "finalizing";
   const selectedKind =
     kinds.find((kind) => kind.value === selectedKindValue) ?? kinds[0];
   return (
@@ -336,7 +343,7 @@ export function DirectMultipartUpload({
           title={selectedKind?.label ?? "Choose file purpose"}
           value={selectedKind?.value ?? ""}
           onChange={(event) => setSelectedKindValue(event.currentTarget.value)}
-          disabled={disabled || transferActive}
+          disabled={disabled || operationActive}
         >
           {kinds.map((kind) => (
             <option key={kind.value} value={kind.value}>
@@ -353,7 +360,7 @@ export function DirectMultipartUpload({
           type="file"
           accept={selectedKind?.accept}
           required
-          disabled={disabled || transferActive}
+          disabled={disabled || operationActive}
         />
         {selectedKind ? (
           <span className="help">
@@ -362,7 +369,7 @@ export function DirectMultipartUpload({
           </span>
         ) : null}
       </label>
-      {transferActive ? (
+      {operationActive ? (
         <progress max={100} value={state.progress} aria-label="Upload progress">
           {state.progress}%
         </progress>
@@ -372,7 +379,7 @@ export function DirectMultipartUpload({
           className="btn primary"
           disabled={
             disabled ||
-            transferActive ||
+            operationActive ||
             uploadInFlight.current ||
             Boolean(session.current)
           }
@@ -410,7 +417,7 @@ export function DirectMultipartUpload({
             <X aria-hidden size={15} /> Cancel upload
           </button>
         ) : null}
-        {!uploading && completedUpload.current ? (
+        {state.status === "error" && completedUpload.current ? (
           <button
             className="btn"
             type="button"

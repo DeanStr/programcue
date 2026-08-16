@@ -1,10 +1,12 @@
 import { DndContext, DragOverlay, type DragStartEvent } from "@dnd-kit/core";
 import { Form, Link } from "react-router";
+import { useState } from "react";
 import { ScheduleContentWorkflows } from "~/components/schedule-content-workflows";
 import { statusPresentation } from "~/components/ui/domain-status-badge";
 import { ScheduleCanvasPanel } from "./schedule-planner-canvas-panel";
 import {
   AutoPlacementPreviewDialog,
+  ScheduleDraftDialog,
   SchedulePublicationDialog,
 } from "./schedule-planner-dialogs";
 import type { SchedulePlannerWorkspaceData } from "./schedule-planner-panel-types";
@@ -27,6 +29,7 @@ export function SchedulePlannerWorkspace({
 }: {
   workspace: SchedulePlannerWorkspaceData;
 }) {
+  const [draftOpen, setDraftOpen] = useState(false);
   const {
     actionNotices,
     actionResult,
@@ -139,6 +142,15 @@ export function SchedulePlannerWorkspace({
             >
               Publish schedule
             </button>
+          ) : workspace.version ? (
+            <button
+              className="btn primary"
+              type="button"
+              disabled={navigation.state !== "idle"}
+              onClick={() => setDraftOpen(true)}
+            >
+              Create next draft
+            </button>
           ) : (
             <Form method="post">
               <input type="hidden" name="intent" value="create-draft" />
@@ -147,7 +159,7 @@ export function SchedulePlannerWorkspace({
                 className="btn primary"
                 disabled={navigation.state !== "idle"}
               >
-                {workspace.version ? "Create next draft" : "Create schedule"}
+                Create schedule
               </button>
             </Form>
           )}
@@ -483,6 +495,13 @@ export function SchedulePlannerWorkspace({
           contentApprovalBlockers={contentApprovalBlockers}
           publicContentVisibilityBlockers={publicContentVisibilityBlockers}
           close={() => setPublishOpen(false)}
+        />
+      ) : null}
+      {draftOpen && workspace.version ? (
+        <ScheduleDraftDialog
+          workspace={{ ...workspace, version: workspace.version }}
+          busy={navigation.state !== "idle"}
+          close={() => setDraftOpen(false)}
         />
       ) : null}
     </>

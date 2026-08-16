@@ -105,6 +105,12 @@ test("API reference remains accessible with its persisted dark theme", async ({
     "aria-label",
     "Copy code",
   );
+  const duplicateIds = await page.locator("[id]").evaluateAll((elements) => {
+    const ids = elements.map((element) => element.id).filter(Boolean);
+    return ids.filter((id, index) => ids.indexOf(id) !== index);
+  });
+  expect(duplicateIds).toEqual([]);
+  await expect(page.locator('[id=""]')).toHaveCount(0);
   await expectNoViolations(page, "/api/docs @ persisted dark theme");
 });
 

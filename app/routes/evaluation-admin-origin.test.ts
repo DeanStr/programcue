@@ -111,6 +111,92 @@ beforeEach(async () => {
 });
 
 describe("evaluation administration results", () => {
+  it("projects the latest decision draft back into the decision editor", async () => {
+    await expect(
+      action({
+        request: actionRequest(
+          new URLSearchParams({
+            intent: "decide",
+            submissionId: "demo-evaluation-submission-calm",
+            decision: "rejected",
+            rationale: "Retain this exact draft rationale.",
+            includeReviewerFeedback: "false",
+            release: "false",
+            sessionDurationMinutes: "75",
+          }),
+        ),
+        params: {},
+        context: context(),
+      } as never),
+    ).resolves.toMatchObject({
+      data: {
+        committed: true,
+      },
+      init: { status: 207 },
+    });
+
+    const result = await loader({
+      request: loaderRequest(),
+      params: {},
+      context: context(),
+    } as never);
+    expect(
+      result.submissions.find(
+        (submission) => submission.id === "demo-evaluation-submission-calm",
+      )?.decisionDraft,
+    ).toMatchObject({
+      revisionNumber: 1,
+      decision: "rejected",
+      rationale: "Retain this exact draft rationale.",
+      includeReviewerFeedback: false,
+      sessionTrackId: null,
+      sessionDurationMinutes: 75,
+    });
+  });
+
+  it("rejects a decision draft whose persisted effect preview is incomplete", async () => {
+    await action({
+      request: actionRequest(
+        new URLSearchParams({
+          intent: "decide",
+          submissionId: "demo-evaluation-submission-calm",
+          decision: "rejected",
+          rationale: "Do not infer missing persisted fields.",
+          includeReviewerFeedback: "false",
+          release: "false",
+          sessionDurationMinutes: "75",
+        }),
+      ),
+      params: {},
+      context: context(),
+    } as never);
+    await workerEnv.DB.prepare(
+      `UPDATE submission_decisions SET effect_preview_json = '{}'
+        WHERE event_id = 'evt-foe-2025'
+          AND submission_id = 'demo-evaluation-submission-calm'
+          AND status = 'draft'`,
+    ).run();
+
+    try {
+      await expect(
+        loader({
+          request: loaderRequest(),
+          params: {},
+          context: context(),
+        } as never),
+      ).rejects.toThrow(
+        "Decision draft demo-evaluation-submission-calm has invalid persisted preview data.",
+      );
+    } finally {
+      await workerEnv.DB.prepare(
+        `DELETE FROM submission_decisions
+          WHERE event_id = 'evt-foe-2025'
+            AND submission_id = 'demo-evaluation-submission-calm'
+            AND status = 'draft'`,
+      ).run();
+    }
+  });
+
   it("persists a discussion post without adding realtime chat semantics", async () => {
     const result = await action({
       request: actionRequest(
@@ -411,9 +497,7 @@ describe("evaluation administration results", () => {
     expect(focusedSession.focusedSessionId).toBe(
       "evaluation-admin-session-target",
     );
-    expect(focusedSession.reviewDiscussionTitle).toBe(
-      "AI in Event Operations",
-    );
+    expect(focusedSession.reviewDiscussionTitle).toBe("AI in Event Operations");
 
     await expect(
       loader({
