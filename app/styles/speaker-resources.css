@@ -370,7 +370,7 @@
   padding: var(--space-4);
   border: 1px solid var(--brand-200);
   border-radius: var(--radius);
-  background: #f8faff;
+  background: var(--soft);
 }
 .resource-link .status {
   margin-top: var(--space-2);

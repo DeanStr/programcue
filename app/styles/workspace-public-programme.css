@@ -310,9 +310,8 @@
   margin: var(--space-6) 0 0;
 }
 /* White on the panel rather than the accent button: the hero ground is already
-   built from the customer's accent, and .event-branded .btn.primary mixes that
-   same accent for its fill, so an accent button here would sit on a near-match
-   of itself. */
+   built from the customer's accent, so another branded button would compete
+   with the event masthead instead of reading as its action. */
 .hero-action {
   border-color: transparent;
   background: white;

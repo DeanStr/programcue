@@ -28,8 +28,20 @@ const SIGN_IN_URL = "https://app.programcue.com/sign-in";
 const CALENDAR_SCOPE = "https://www.googleapis.com/auth/calendar.events.owned";
 const LIMITED_USE_STATEMENT =
   "The use of information received from Google Workspace APIs will adhere to the Google User Data Policy, including the Limited Use requirements.";
-const PRODUCT_DESCRIPTION =
-  "Program Cue keeps submissions, reviews, speakers, communications and scheduling connected, so your team can see what needs action and move confidently from the first proposal to publication.";
+/* OAuth reviewers need an accurate public description of the product, not one
+   permanently frozen marketing sentence. Keep the visible homepage honest
+   about the connected workflow and its material stages while allowing the
+   headline and supporting copy to improve. */
+const CONNECTED_WORKFLOW_TERMINOLOGY = /\bconnect(?:ed|s|ing)?\b/i;
+const REQUIRED_PRODUCT_CAPABILITIES = Object.freeze([
+  ["submissions", /\bsubmissions?\b/i],
+  ["reviews", /\breviews?\b/i],
+  ["speakers", /\bspeakers?\b/i],
+  ["communications", /\bcommunications?\b/i],
+  ["scheduling", /\bschedul(?:e|es|ed|ing)\b/i],
+  ["publication", /\bpublish(?:ed|es|ing)?\b|\bpublication\b/i],
+]);
+const CONNECTED_WORKFLOW_MINIMUM_STAGES = 3;
 const REQUIRED_PRODUCT_TERMINOLOGY = /\bcall(?:\s+|-)for(?:\s+|-)speakers\b/i;
 const REJECTED_PRODUCT_TERMINOLOGY = /\bcalls?(?:\s+|-)for(?:\s+|-)papers\b/i;
 const ACCOUNT_ACTION = "Sign in or create an account";
@@ -296,8 +308,28 @@ export function validateSitePages(assetRoot = ASSET_ROOT) {
   const homeText = documentText(home);
   if (!REQUIRED_PRODUCT_TERMINOLOGY.test(home))
     add('Home page must use "call for speakers" terminology.');
-  if (!homeText.includes(PRODUCT_DESCRIPTION))
-    add("Home page must describe Program Cue in the approved wording.");
+  /* Keep this claim scoped to a single piece of product copy. A page-wide
+     search can be satisfied by the unrelated Google Calendar disclosure. */
+  const visibleCopyBlocks = Array.from(
+    home.matchAll(/<(p|li)\b[^>]*>[\s\S]*?<\/\1>/gi),
+    ([markup]) => documentText(markup),
+  );
+  const hasConnectedWorkflowClaim = visibleCopyBlocks.some(
+    (copy) =>
+      CONNECTED_WORKFLOW_TERMINOLOGY.test(copy) &&
+      REQUIRED_PRODUCT_CAPABILITIES.filter(([, pattern]) => pattern.test(copy))
+        .length >= CONNECTED_WORKFLOW_MINIMUM_STAGES,
+  );
+  if (!hasConnectedWorkflowClaim)
+    add("Home page must describe Program Cue as a connected workflow.");
+  const missingCapabilities = REQUIRED_PRODUCT_CAPABILITIES.filter(
+    ([, pattern]) => !pattern.test(homeText),
+  ).map(([label]) => label);
+  if (missingCapabilities.length) {
+    add(
+      `Home page must describe the essential product capabilities: ${missingCapabilities.join(", ")}.`,
+    );
+  }
   if (!home.includes(`href="${SIGN_IN_URL}"`))
     add(`Home page must link to ${SIGN_IN_URL}.`);
   if (!homeText.includes(ACCOUNT_ACTION))
@@ -349,17 +381,6 @@ export function validateSitePages(assetRoot = ASSET_ROOT) {
     )
   ) {
     add("Home page must carry the approved Google integration explanation.");
-  }
-  for (const capability of [
-    "Submissions",
-    "Reviewing",
-    "Speakers",
-    "Programme scheduling",
-    "Communications",
-    "Calendar invitations",
-  ]) {
-    if (!new RegExp(`<h3>${capability}</h3>`).test(home))
-      add(`Home page must list the ${capability} capability.`);
   }
   for (const outcome of [
     "Move from proposal to decision",
@@ -506,6 +527,15 @@ export function validateSitePages(assetRoot = ASSET_ROOT) {
       ) {
         add(`${file} links to a missing anchor: ${href}.`);
       }
+    }
+    for (const [, src] of html.matchAll(/\ssrc="([^"]+)"/g)) {
+      if (/^https:/.test(src)) continue;
+      if (!src.startsWith("/")) {
+        add(`${file} uses a relative asset path that may break: ${src}.`);
+        continue;
+      }
+      if (!assetForPath(assetRoot, src))
+        add(`${file} references a missing asset: ${src}.`);
     }
   }
 

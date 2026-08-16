@@ -545,3 +545,29 @@ ports remain allowed because no current requirement narrows them.
 | Admin content has a maximum measure                | `.main` caps at 1600px and centres. It previously had no maximum, so content grew with the viewport: an Event Setup paragraph ran 326 characters at 2560px and a record field reached 1,194px. `width: 100%` is required alongside the cap — auto inline margins stop a grid item stretching, and without a definite width the box falls back to fit-content, making the cap whatever the content happens to be.                                                                                                      |
 | Unbounded collections collapse by default          | A panel whose height grows with the event's data opens closed, with its record count in the summary so nothing is hidden about whether it is configured. Rooms, tracks and formats were 1,600px of a 3,577px page. Deep links that target a record inside a collapsed panel must open it, or focus lands on an unrendered element.                                                                                                                                                                                    |
 | Unsaved client state blocks navigation             | Where a form holds edits that exist only in client state, leaving is confirmed rather than silent. Event Setup's rooms, tracks and formats reach the server through serialised hidden inputs, so navigating away discarded them with no warning. The blocker compares pathnames so the save POST and the focus-clearing replace both pass through. A typed but not yet added room, resource, track or format also blocks save until it is added or cleared, so a successful save never ignores a visible half-record. |
+
+## Cross-surface visual language decision
+
+The public site and every application shell use the same restrained
+ink-and-copper product palette: warm canvas and paper surfaces, tinted
+elevation, and copper for product emphasis. Event-branded public programme and
+application surfaces continue to derive their accent exclusively from the
+published event brand; the product palette must not overwrite it. Operational
+shells use the self-hosted Inter variable face for headings as well as body
+copy, controls and data, so dense working views keep a single scanning rhythm.
+The static B2B marketing site and event-branded public pages also use the
+self-hosted Inter variable face, with hierarchy expressed through layout,
+weight and tracking rather than a browser-owned serif fallback. This avoids a
+third-party font request and preserves the public site's `font-src 'self'` CSP.
+Shared token changes are the primary mechanism for cross-surface design
+changes; workspace styles own only the exceptions required by their interaction
+model. Event accents may identify primary actions but never receive synthetic
+product gradients, and status text rather than a decorative dot communicates
+state.
+
+The public-site release gate protects the visible product scope rather than an
+exact marketing sentence. The homepage must describe one connected workflow
+and name submissions, reviews, speakers, communications, scheduling and
+publication, but its headline and supporting copy may evolve. Google OAuth
+review requires an accurate public product description; it does not make one
+internally approved sentence an external invariant.

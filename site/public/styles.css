@@ -46,35 +46,39 @@
   /* Lets the disclosure panels transition to and from `auto` height. */
   interpolate-size: allow-keywords;
 
-  --brand-50: #eef2ff;
-  --brand-100: #e0e7ff;
-  --brand-200: #c7d2fe;
-  --brand-300: #a5b4fc;
-  --brand-400: #818cf8;
-  --brand-500: #6366f1;
-  --brand-600: #4f46e5;
-  --brand-700: #4338ca;
+  /* Copper is the only accent. It gives the public site a warmer, more
+     editorial character without asking a colour to carry hierarchy alone. */
+  --brand-50: #fff4ec;
+  --brand-100: #fce1d0;
+  --brand-200: #f6c5a9;
+  --brand-300: #e9a27d;
+  --brand-400: #d9805c;
+  --brand-500: #be6242;
+  --brand-600: #9d4a31;
+  --brand-700: #783220;
 
-  --ink: #0f172a;
-  --nav: #091426;
-  --nav-2: #101e35;
-  --nav-3: #16243d;
-  --nav-line: #253750;
+  --ink: #182522;
+  --nav: #13201f;
+  --nav-2: #1b2e2b;
+  --nav-3: #263c37;
+  --nav-line: #36504a;
 
   --surface: #ffffff;
-  --canvas: #f3f6fb;
-  --soft: #f8fafc;
-  --line: #e2e8f0;
+  --canvas: #f4f4ef;
+  --soft: #faf9f5;
+  --line: #e0e1d8;
 
   --text-primary: var(--ink);
-  --text-secondary: #475569;
-  --text-tertiary: #5b6b81;
+  --text-secondary: #4b5d58;
+  --text-tertiary: #66736e;
   --text-inverse: #ffffff;
-  --text-on-nav: #cbd5e1;
-  --text-on-nav-soft: #a9b8cc;
+  --text-on-nav: #d7dfd7;
+  --text-on-nav-soft: #b9c8c1;
 
   --font:
     "Inter Variable", Inter, ui-sans-serif, system-ui, -apple-system,
+    BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --font-display: "Inter Variable", Inter, ui-sans-serif, system-ui, -apple-system,
     BlinkMacSystemFont, "Segoe UI", sans-serif;
 
   --shell: 1120px;
@@ -104,17 +108,17 @@
 
   /* Stacked shadows: a tight contact edge plus a wide ambient one, so cards
      read as lifted rather than outlined in grey. */
-  --shadow-1: 0 1px 2px rgb(15 23 42 / 5%), 0 2px 6px -2px rgb(15 23 42 / 6%);
+  --shadow-1: 0 1px 2px rgb(19 32 31 / 5%), 0 2px 6px -2px rgb(19 32 31 / 7%);
   --shadow-2:
-    0 1px 2px rgb(15 23 42 / 4%), 0 6px 12px -4px rgb(15 23 42 / 7%),
-    0 14px 28px -12px rgb(15 23 42 / 10%);
+    0 1px 2px rgb(19 32 31 / 4%), 0 6px 12px -4px rgb(19 32 31 / 8%),
+    0 14px 28px -12px rgb(19 32 31 / 12%);
   --shadow-3:
-    0 2px 4px rgb(15 23 42 / 5%), 0 12px 22px -8px rgb(15 23 42 / 10%),
-    0 28px 52px -20px rgb(15 23 42 / 16%);
+    0 2px 4px rgb(19 32 31 / 5%), 0 12px 22px -8px rgb(19 32 31 / 12%),
+    0 28px 52px -20px rgb(19 32 31 / 18%);
   --shadow-brand:
-    0 1px 2px rgb(49 46 129 / 20%), 0 6px 14px -6px rgb(79 70 229 / 40%);
+    0 1px 2px rgb(100 48 32 / 22%), 0 6px 14px -6px rgb(157 74 49 / 36%);
   --shadow-brand-lift:
-    0 2px 4px rgb(49 46 129 / 22%), 0 12px 24px -8px rgb(79 70 229 / 48%);
+    0 2px 4px rgb(100 48 32 / 24%), 0 12px 24px -8px rgb(157 74 49 / 44%);
 }
 
 *,
@@ -149,8 +153,9 @@ h1,
 h2,
 h3 {
   color: var(--text-primary);
+  font-family: var(--font-display);
   line-height: 1.2;
-  letter-spacing: -0.021em;
+  letter-spacing: -0.035em;
   margin: 0;
   text-wrap: balance;
 }
@@ -223,6 +228,18 @@ section[id] {
 .skip-link:focus {
   top: var(--space-3);
   color: var(--text-inverse);
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
 }
 
 /* --- brand mark --------------------------------------------------------- */
@@ -360,8 +377,6 @@ a.wordmark:hover .wordmark-accent {
 
 /* --- buttons ------------------------------------------------------------ */
 
-/* The highlight is a background layer rather than a pseudo-element, so it
-   never fights the focus ring for stacking order. */
 .btn {
   display: inline-flex;
   align-items: center;
@@ -370,15 +385,6 @@ a.wordmark:hover .wordmark-accent {
   padding: 0.6875rem var(--space-4);
   border-radius: var(--radius-sm);
   background-color: var(--brand-600);
-  background-image: linear-gradient(
-    115deg,
-    transparent 42%,
-    rgb(255 255 255 / 22%) 50%,
-    transparent 58%
-  );
-  background-size: 260% 100%;
-  background-position: 135% 0;
-  background-repeat: no-repeat;
   color: var(--text-inverse);
   font-weight: 600;
   font-size: 1rem;
@@ -387,7 +393,6 @@ a.wordmark:hover .wordmark-accent {
   box-shadow: var(--shadow-brand);
   transition:
     background-color var(--dur-2) var(--ease-out),
-    background-position var(--dur-4) var(--ease-out),
     border-color var(--dur-2) var(--ease-out),
     box-shadow var(--dur-2) var(--ease-out),
     translate var(--dur-2) var(--ease-out);
@@ -395,7 +400,6 @@ a.wordmark:hover .wordmark-accent {
 
 .btn:hover {
   background-color: var(--brand-700);
-  background-position: -35% 0;
   border-color: var(--brand-700);
   color: var(--text-inverse);
   box-shadow: var(--shadow-brand-lift);
@@ -403,7 +407,8 @@ a.wordmark:hover .wordmark-accent {
 }
 
 .btn:active {
-  translate: 0 0;
+  translate: 0 1px;
+  scale: 0.985;
   box-shadow: var(--shadow-brand);
   transition-duration: var(--dur-1);
 }
@@ -434,38 +439,19 @@ a.wordmark:hover .wordmark-accent {
   isolation: isolate;
   background:
     radial-gradient(
-      58rem 34rem at 78% 6%,
-      rgb(99 102 241 / 32%),
-      transparent 70%
-    ),
-    radial-gradient(
-      40rem 30rem at 2% 96%,
-      rgb(67 56 202 / 26%),
+      54rem 36rem at 82% 8%,
+      rgb(190 98 66 / 22%),
       transparent 72%
     ),
-    linear-gradient(162deg, #0a1729 0%, var(--nav) 46%, var(--nav-2) 100%);
+    radial-gradient(
+      36rem 28rem at 4% 100%,
+      rgb(64 99 89 / 20%),
+      transparent 74%
+    ),
+    var(--nav);
   color: var(--text-inverse);
   padding-block: var(--space-7);
   overflow: hidden;
-}
-
-/* A faint engineering grid, faded out towards the edges so it never competes
-   with the copy. */
-.hero::before {
-  content: "";
-  position: absolute;
-  inset: -1px;
-  z-index: -1;
-  background-image:
-    linear-gradient(to right, rgb(148 163 184 / 9%) 1px, transparent 1px),
-    linear-gradient(to bottom, rgb(148 163 184 / 9%) 1px, transparent 1px);
-  background-size: 62px 62px;
-  mask-image: radial-gradient(
-    72% 68% at 26% 34%,
-    #000 0%,
-    rgb(0 0 0 / 45%) 45%,
-    transparent 78%
-  );
 }
 
 .hero-layout {
@@ -479,7 +465,7 @@ a.wordmark:hover .wordmark-accent {
   color: var(--text-inverse);
   font-size: clamp(2.15rem, 1.5rem + 2.5vw, 3.5rem);
   font-weight: 700;
-  letter-spacing: -0.028em;
+  letter-spacing: -0.045em;
   margin-bottom: var(--space-4);
   max-width: 21ch;
 }
@@ -506,48 +492,11 @@ a.wordmark:hover .wordmark-accent {
 }
 
 .hero .lead {
-  max-width: 61ch;
+  max-width: 54ch;
   margin: 0;
   font-size: clamp(1.0625rem, 1rem + 0.4vw, 1.3125rem);
   line-height: 1.55;
-  color: #dbe3ef;
-}
-
-/* The stage list under the lead. Separators are drawn with ::after so the
-   accessible name of each stage stays clean. */
-.hero-pipeline {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: var(--space-1) var(--space-2);
-  margin: var(--space-4) 0 0;
-  padding: var(--space-3) 0 0;
-  border-top: 1px solid rgb(148 163 184 / 22%);
-  list-style: none;
-}
-
-.hero-pipeline li {
-  display: inline-flex;
-  align-items: center;
-  color: #e2e8f0;
-  font-size: 0.8125rem;
-  font-weight: 600;
-  letter-spacing: 0.02em;
-  white-space: nowrap;
-}
-
-.hero-pipeline li::after {
-  content: "";
-  width: 0.35rem;
-  height: 0.35rem;
-  margin-left: var(--space-2);
-  border-top: 2px solid var(--brand-400);
-  border-right: 2px solid var(--brand-400);
-  rotate: 45deg;
-}
-
-.hero-pipeline li:last-child::after {
-  display: none;
+  color: #d9e2dc;
 }
 
 .hero-actions {
@@ -560,33 +509,25 @@ a.wordmark:hover .wordmark-accent {
 .hero-actions .btn-secondary {
   background-color: rgb(255 255 255 / 4%);
   color: var(--text-inverse);
-  border-color: #33415c;
+  border-color: #49635b;
 }
 
 .hero-actions .btn-secondary:hover {
   background-color: rgb(255 255 255 / 10%);
   color: var(--text-inverse);
-  border-color: #5568836b;
+  border-color: rgb(185 200 193 / 58%);
   box-shadow: 0 10px 24px -14px rgb(2 6 23 / 90%);
 }
 
-.hero-note {
-  max-width: 60ch;
-  margin: var(--space-4) 0 0;
-  font-size: 0.9375rem;
-  color: #aebbcd;
-}
-
-/* Staggered entrance for the first screen. `backwards` fill keeps the resting
-   values declarative, so hover transforms still apply once it has played. */
+/* Staggered movement for the first screen. Keep content fully opaque at every
+   frame: fading text and controls composites both foreground and background
+   into a transient low-contrast state. */
 @keyframes rise {
   from {
-    opacity: 0;
     transform: translateY(16px);
   }
 
   to {
-    opacity: 1;
     transform: none;
   }
 }
@@ -611,21 +552,12 @@ a.wordmark:hover .wordmark-accent {
   animation-delay: 210ms;
 }
 
-.hero-copy > :nth-child(5) {
-  animation-delay: 270ms;
-}
-
-.hero-copy > :nth-child(6) {
-  animation-delay: 330ms;
-}
-
-.product-visual {
+.hero-image {
   margin: 0;
-  padding: var(--space-4);
-  border: 1px solid rgb(165 180 252 / 22%);
+  overflow: hidden;
+  aspect-ratio: 16 / 10;
+  border: 1px solid rgb(233 162 125 / 24%);
   border-radius: var(--radius-lg);
-  background: rgb(255 255 255 / 97%);
-  color: var(--text-primary);
   box-shadow:
     0 0 0 1px rgb(255 255 255 / 6%),
     0 2rem 4.5rem -1.25rem rgb(2 6 23 / 62%);
@@ -637,7 +569,7 @@ a.wordmark:hover .wordmark-accent {
     box-shadow var(--dur-3) var(--ease-out);
 }
 
-.product-visual:hover {
+.hero-image:hover {
   rotate: 0deg;
   translate: 0 -6px;
   box-shadow:
@@ -645,165 +577,12 @@ a.wordmark:hover .wordmark-accent {
     0 2.5rem 5.5rem -1.25rem rgb(2 6 23 / 70%);
 }
 
-.visual-caption {
-  display: flex;
-  align-items: end;
-  justify-content: space-between;
-  gap: var(--space-3);
-  margin-bottom: var(--space-3);
-}
-
-.visual-caption strong {
-  font-size: 1.0625rem;
-  letter-spacing: -0.015em;
-}
-
-.visual-kicker,
-.capability-tag {
-  color: var(--brand-700);
-  font-size: 0.75rem;
-  font-weight: 700;
-  letter-spacing: 0.07em;
-  text-transform: uppercase;
-}
-
-.visual-progress {
-  height: 0.5rem;
-  overflow: hidden;
-  border-radius: 999px;
-  background: var(--brand-100);
-}
-
-.visual-progress span {
+.hero-image img {
   display: block;
+  width: 100%;
   height: 100%;
-  border-radius: inherit;
-  background: linear-gradient(90deg, var(--brand-500), var(--brand-700));
-}
-
-@keyframes sweep-in {
-  from {
-    transform: scaleX(0);
-  }
-
-  to {
-    transform: scaleX(1);
-  }
-}
-
-.visual-progress-value {
-  width: 84%;
-  transform-origin: left;
-  animation: sweep-in 900ms 620ms var(--ease-out) backwards;
-}
-
-.visual-metrics {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: var(--space-2);
-  margin: var(--space-4) 0;
-}
-
-.visual-metrics div {
-  display: grid;
-  gap: 0.1rem;
-  padding: var(--space-2);
-  border-radius: var(--radius-sm);
-  background: var(--soft);
-  border: 1px solid var(--line);
-}
-
-.visual-metrics dd {
-  order: -1;
-  margin: 0;
-  font-size: 1.25rem;
-  font-weight: 700;
-  line-height: 1.2;
-  font-variant-numeric: tabular-nums;
-  letter-spacing: -0.02em;
-}
-
-.visual-metrics dt {
-  color: var(--text-tertiary);
-  font-size: 0.75rem;
-  line-height: 1.35;
-}
-
-.workflow-preview {
-  display: grid;
-  gap: var(--space-2);
-  padding: 0;
-  margin: 0;
-  list-style: none;
-}
-
-.workflow-preview li {
-  display: grid;
-  grid-template-columns: 2rem minmax(0, 1fr);
-  gap: var(--space-2);
-  align-items: start;
-  padding: var(--space-2);
-  border: 1px solid var(--line);
-  border-radius: var(--radius-sm);
-  background: var(--surface);
-  animation: rise var(--dur-3) var(--ease-out) backwards;
-}
-
-.workflow-preview li:nth-child(1) {
-  animation-delay: 420ms;
-}
-
-.workflow-preview li:nth-child(2) {
-  animation-delay: 500ms;
-}
-
-.workflow-preview li:nth-child(3) {
-  animation-delay: 580ms;
-}
-
-.workflow-preview li.active {
-  border-color: var(--brand-300);
-  background: var(--brand-50);
-  box-shadow: 0 0 0 3px rgb(199 210 254 / 40%);
-}
-
-.workflow-marker {
-  display: grid;
-  width: 2rem;
-  height: 2rem;
-  place-items: center;
-  border-radius: 50%;
-  background: var(--soft);
-  color: var(--text-tertiary);
-  font-size: 0.8125rem;
-  font-weight: 700;
-}
-
-.workflow-marker .icon {
-  width: 0.95rem;
-  height: 0.95rem;
-}
-
-.workflow-preview .complete .workflow-marker,
-.workflow-preview .active .workflow-marker {
-  background: var(--brand-600);
-  color: var(--text-inverse);
-}
-
-.workflow-preview li div {
-  display: grid;
-  gap: 0.1rem;
-}
-
-.workflow-preview strong {
-  font-size: 0.875rem;
-  line-height: 1.4;
-}
-
-.workflow-preview li div span {
-  color: var(--text-secondary);
-  font-size: 0.75rem;
-  line-height: 1.45;
+  object-fit: cover;
+  object-position: center top;
 }
 
 /* --- sections ----------------------------------------------------------- */
@@ -840,8 +619,18 @@ a.wordmark:hover .wordmark-accent {
   color: var(--brand-700);
 }
 
-/* Reveal on scroll, where the engine supports a view timeline. Everything
-   stays visible without it, and the reduced-motion query opts out. */
+/* Reveal on scroll with movement only. Opacity-based reveals lower the
+   effective contrast of readable content while it enters the viewport. */
+@keyframes rise-on-view {
+  from {
+    transform: translateY(16px);
+  }
+
+  to {
+    transform: none;
+  }
+}
+
 @supports (animation-timeline: view()) {
   @media (prefers-reduced-motion: no-preference) {
     .section-intro,
@@ -854,7 +643,7 @@ a.wordmark:hover .wordmark-accent {
     .integration-card,
     .cta-card,
     .contact-card {
-      animation: rise auto var(--ease-out) both;
+      animation: rise-on-view auto var(--ease-out) both;
       animation-timeline: view();
       animation-range: entry 2% cover 18%;
     }
@@ -868,6 +657,25 @@ a.wordmark:hover .wordmark-accent {
   margin: var(--space-5) 0 0;
   padding: 0;
   list-style: none;
+}
+
+/* The middle decision is deliberately given more room: it is the bridge
+   between opening a call and publishing a programme, not just another tile. */
+@media (min-width: 62rem) {
+  .outcome-grid {
+    grid-template-columns: repeat(12, minmax(0, 1fr));
+    gap: var(--space-5);
+  }
+
+  .outcome-grid li {
+    grid-column: span 3;
+  }
+
+  .outcome-grid li:nth-child(2) {
+    grid-column: span 6;
+    padding-inline: var(--space-4);
+    border-inline: 1px solid var(--line);
+  }
 }
 
 /* The rule above each outcome is a track with a filled segment; the segment
@@ -893,7 +701,7 @@ a.wordmark:hover .wordmark-accent {
 }
 
 .outcome-grid li::after {
-  background: linear-gradient(90deg, var(--brand-600), var(--brand-400));
+  background: var(--brand-600);
   transform-origin: left;
   scale: 0.34 1;
   transition: scale var(--dur-4) var(--ease-out);
@@ -906,7 +714,7 @@ a.wordmark:hover .wordmark-accent {
 
 .outcome-number {
   display: block;
-  color: var(--brand-300);
+  color: var(--brand-700);
   font-size: 1.75rem;
   font-weight: 700;
   letter-spacing: -0.03em;
@@ -917,6 +725,14 @@ a.wordmark:hover .wordmark-accent {
 
 .outcome-grid li:hover .outcome-number {
   color: var(--brand-600);
+}
+
+.capability-tag {
+  color: var(--brand-700);
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
 }
 
 .outcome-grid h3 {
@@ -961,7 +777,22 @@ a.wordmark:hover .wordmark-accent {
 
 @media (min-width: 62rem) {
   .capabilities {
-    grid-template-columns: repeat(3, 1fr);
+    grid-template-columns: repeat(12, minmax(0, 1fr));
+  }
+
+  .capability {
+    grid-column: span 4;
+  }
+
+  .capability:nth-child(1),
+  .capability:nth-child(4) {
+    grid-column: span 5;
+    padding: var(--space-5);
+  }
+
+  .capability:nth-child(3),
+  .capability:nth-child(6) {
+    grid-column: span 3;
   }
 }
 
@@ -983,7 +814,7 @@ a.wordmark:hover .wordmark-accent {
   border-color: var(--brand-200);
   box-shadow:
     var(--shadow-3),
-    0 0 0 4px rgb(199 210 254 / 32%);
+    0 0 0 4px rgb(246 197 169 / 36%);
   translate: 0 -3px;
 }
 
@@ -1003,7 +834,7 @@ a.wordmark:hover .wordmark-accent {
   height: 2.5rem;
   border-radius: 12px;
   border: 1px solid var(--brand-100);
-  background: linear-gradient(145deg, var(--brand-50), var(--surface));
+  background: var(--brand-50);
   color: var(--brand-600);
   box-shadow: inset 0 1px 0 rgb(255 255 255 / 90%);
   transition:
@@ -1015,7 +846,7 @@ a.wordmark:hover .wordmark-accent {
 
 .capability:hover .capability-icon,
 .role:hover .role-icon {
-  background: linear-gradient(145deg, var(--brand-500), var(--brand-700));
+  background: var(--brand-600);
   border-color: var(--brand-600);
   color: var(--text-inverse);
   scale: 1.06;
@@ -1059,7 +890,7 @@ a.wordmark:hover .wordmark-accent {
   padding: var(--space-4);
   border: 1px solid var(--line);
   border-radius: var(--radius);
-  background: linear-gradient(180deg, var(--surface), var(--soft));
+  background: var(--soft);
   box-shadow: var(--shadow-1);
   transition:
     border-color var(--dur-2) var(--ease-out),
@@ -1072,7 +903,7 @@ a.wordmark:hover .wordmark-accent {
   border-color: var(--brand-200);
   box-shadow:
     var(--shadow-2),
-    0 0 0 4px rgb(199 210 254 / 30%);
+    0 0 0 4px rgb(246 197 169 / 34%);
   translate: 0 -3px;
 }
 
@@ -1119,7 +950,7 @@ a.wordmark:hover .wordmark-accent {
   border-color: var(--brand-200);
   box-shadow:
     var(--shadow-2),
-    0 0 0 4px rgb(199 210 254 / 28%);
+    0 0 0 4px rgb(246 197 169 / 32%);
 }
 
 .faq summary {
@@ -1233,18 +1064,7 @@ a.wordmark:hover .wordmark-accent {
 .trust-section {
   position: relative;
   isolation: isolate;
-  background:
-    radial-gradient(
-      36rem 26rem at 12% 28%,
-      rgb(99 102 241 / 22%),
-      transparent 70%
-    ),
-    radial-gradient(
-      30rem 24rem at 92% 88%,
-      rgb(67 56 202 / 20%),
-      transparent 72%
-    ),
-    var(--nav);
+  background: var(--nav);
   color: var(--text-on-nav);
   border-bottom: 0;
 }
@@ -1255,7 +1075,7 @@ a.wordmark:hover .wordmark-accent {
 }
 
 .trust-section .section-intro > p:last-child {
-  color: #b8c4d5;
+  color: var(--text-on-nav-soft);
 }
 
 .trust-layout {
@@ -1291,8 +1111,8 @@ a.wordmark:hover .wordmark-accent {
 }
 
 .trust-list li:hover {
-  background: rgb(22 40 68 / 88%);
-  border-color: rgb(129 140 248 / 48%);
+  background: rgb(38 60 55 / 88%);
+  border-color: rgb(233 162 125 / 52%);
   box-shadow: 0 16px 34px -22px rgb(2 6 23 / 95%);
   translate: 0 -2px;
 }
@@ -1304,8 +1124,8 @@ a.wordmark:hover .wordmark-accent {
   width: 2rem;
   height: 2rem;
   border-radius: 10px;
-  border: 1px solid rgb(129 140 248 / 32%);
-  background: rgb(79 70 229 / 20%);
+  border: 1px solid rgb(233 162 125 / 35%);
+  background: rgb(157 74 49 / 22%);
   color: var(--brand-300);
   transition:
     background var(--dur-2) var(--ease-out),
@@ -1313,8 +1133,8 @@ a.wordmark:hover .wordmark-accent {
 }
 
 .trust-list li:hover .trust-icon {
-  background: rgb(99 102 241 / 40%);
-  color: #e0e7ff;
+  background: rgb(190 98 66 / 45%);
+  color: #fff4ec;
 }
 
 .trust-icon .icon {
@@ -1329,7 +1149,7 @@ a.wordmark:hover .wordmark-accent {
 }
 
 .trust-list li > span:not(.trust-icon) {
-  color: #b8c4d5;
+  color: var(--text-on-nav-soft);
   font-size: 0.875rem;
 }
 
@@ -1346,9 +1166,9 @@ a.wordmark:hover .wordmark-accent {
 
 .integration-strip li {
   padding: var(--space-1) var(--space-3);
-  border: 1px solid #334966;
+  border: 1px solid #49635b;
   border-radius: 999px;
-  color: #dbe3ef;
+  color: #d9e2dc;
   font-size: 0.875rem;
   font-weight: 600;
   transition:
@@ -1359,8 +1179,8 @@ a.wordmark:hover .wordmark-accent {
 }
 
 .integration-strip li:hover {
-  background: rgb(99 102 241 / 18%);
-  border-color: rgb(129 140 248 / 55%);
+  background: rgb(190 98 66 / 18%);
+  border-color: rgb(233 162 125 / 55%);
   color: var(--text-inverse);
   translate: 0 -2px;
 }
@@ -1503,9 +1323,7 @@ a.wordmark:hover .wordmark-accent {
   padding: var(--space-5);
   border: 1px solid var(--brand-100);
   border-radius: var(--radius-xl);
-  background:
-    radial-gradient(28rem 16rem at 6% 0%, rgb(99 102 241 / 12%), transparent),
-    linear-gradient(150deg, var(--brand-50), var(--surface) 72%);
+  background: var(--brand-50);
   box-shadow: var(--shadow-1);
 }
 
@@ -1683,13 +1501,7 @@ blockquote p:last-child {
 /* --- footer ------------------------------------------------------------- */
 
 .site-footer {
-  background:
-    radial-gradient(
-      40rem 20rem at 50% 0%,
-      rgb(99 102 241 / 12%),
-      transparent 70%
-    ),
-    var(--nav);
+  background: var(--nav);
   color: var(--text-on-nav);
   padding-block: var(--space-6) var(--space-4);
 }
@@ -1716,7 +1528,7 @@ blockquote p:last-child {
 }
 
 .site-footer a {
-  color: #dbe3ef;
+  color: #d9e2dc;
   text-decoration: none;
   transition:
     color var(--dur-1) var(--ease-out),
@@ -1793,12 +1605,12 @@ blockquote p:last-child {
     max-width: 44rem;
   }
 
-  .product-visual {
+  .hero-image {
     max-width: 42rem;
     rotate: none;
   }
 
-  .product-visual:hover {
+  .hero-image:hover {
     translate: none;
   }
 
@@ -1847,7 +1659,7 @@ blockquote p:last-child {
   }
 
   .hero {
-    padding-block: var(--space-6);
+    padding-block: var(--space-5);
   }
 
   .hero-layout {
@@ -1876,14 +1688,6 @@ blockquote p:last-child {
 @media (max-width: 23rem) {
   .site-nav a[href="#roles"] {
     display: none;
-  }
-
-  .visual-caption {
-    display: grid;
-  }
-
-  .visual-metrics {
-    grid-template-columns: 1fr;
   }
 }
 

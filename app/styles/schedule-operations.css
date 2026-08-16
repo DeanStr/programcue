@@ -528,7 +528,7 @@ body.dark-mode .program-cue-api-reference .scalar-api-reference {
   border: 1px solid var(--border-strong);
   border-radius: var(--radius-sm);
   background: rgba(255, 255, 255, 0.96);
-  box-shadow: 0 6px 18px rgba(15, 23, 42, 0.08);
+  box-shadow: 0 6px 18px rgba(19, 32, 31, 0.09);
   color: #1e293b;
   font-size: var(--text-2xs);
   font-weight: var(--weight-bold);
@@ -541,7 +541,7 @@ body.dark-mode .program-cue-api-reference .scalar-api-reference {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: var(--space-3);
-  background: linear-gradient(135deg, #fff, #f8faff);
+  background: var(--surface);
   border-color: var(--brand-200);
 }
 .comms-provider-strip > span {
@@ -583,7 +583,7 @@ body.dark-mode .program-cue-api-reference .scalar-api-reference {
 }
 .comms-production-layout .template-item:hover {
   border-color: var(--brand-200);
-  background: #f8faff;
+  background: var(--soft);
 }
 .comms-production-layout .template-item small {
   display: block;

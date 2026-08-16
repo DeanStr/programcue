@@ -3,7 +3,7 @@
   /* Flat, and one hairline. The gradient was invisible and the rail beside it
      is flat, so the two dark surfaces now read as one band. */
   background: var(--nav);
-  border-bottom: 1px solid #1e293b;
+  border-bottom: 1px solid var(--nav-border);
   color: var(--soft);
 }
 .app-admin .event-switcher {
@@ -12,7 +12,7 @@
   color: var(--soft);
 }
 .app-admin .event-switcher small {
-  color: #a9b8cc;
+  color: var(--nav-text-muted);
 }
 .app-admin .event-thumb {
   background: var(--nav-control);
@@ -22,11 +22,11 @@
 .app-admin .command-trigger {
   background: var(--nav-2);
   border-color: var(--nav-border);
-  color: #b8c5d8;
+  color: var(--nav-text-muted);
 }
 .app-admin .command-trigger kbd {
   background: var(--nav);
-  border-color: #334155;
+  border-color: var(--nav-control-border);
   color: var(--nav-text);
 }
 .app-admin .topbar .icon-btn {

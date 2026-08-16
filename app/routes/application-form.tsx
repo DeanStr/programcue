@@ -603,6 +603,7 @@ export default function ApplicationForm({ loaderData }: Route.ComponentProps) {
   const brandStyle = {
     "--event-accent": accentPalette.accent,
     "--accent-ink": accentPalette.ink,
+    "--accent-on-solid": accentPalette.onAccent,
   } as CSSProperties;
 
   if (!claimRequested && !applicant) {

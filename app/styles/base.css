@@ -11,6 +11,15 @@ body {
   color: var(--ink);
   font-size: var(--text-sm);
   line-height: 1.45;
+  font-feature-settings: "cv05", "cv11";
+  -webkit-font-smoothing: antialiased;
+}
+h1,
+h2,
+h3 {
+  font-family: var(--font-display);
+  letter-spacing: var(--tracking-snug);
+  text-wrap: balance;
 }
 button,
 input,
@@ -81,6 +90,7 @@ a {
      own inline padding instead. */
   padding: var(--space-5) 0;
   z-index: 60;
+  box-shadow: 12px 0 32px rgba(19, 32, 31, 0.08);
 }
 .brand {
   display: flex;
@@ -113,10 +123,20 @@ a {
   --brand-mark-accent: var(--event-accent);
 }
 .event-branded .btn.primary {
-  background: linear-gradient(
-    135deg,
-    color-mix(in srgb, var(--event-accent) 72%, #111b3f),
-    color-mix(in srgb, var(--event-accent) 82%, var(--brand-900))
+  background: var(--accent-ink, var(--brand-700));
+  border-color: var(--accent-ink, var(--brand-700));
+  color: var(--accent-on-solid, var(--text-inverse));
+}
+.event-branded .btn.primary:hover {
+  background: color-mix(
+    in srgb,
+    var(--accent-ink, var(--brand-700)) 86%,
+    var(--ink)
+  );
+  border-color: color-mix(
+    in srgb,
+    var(--accent-ink, var(--brand-700)) 86%,
+    var(--ink)
   );
 }
 .event-branded .speaker-top,
@@ -253,6 +273,7 @@ a {
   gap: var(--space-4);
   padding: var(--space-3) var(--space-5);
   z-index: 50;
+  box-shadow: 0 5px 18px rgba(19, 32, 31, 0.035);
 }
 .event-switcher {
   display: flex;
@@ -383,13 +404,14 @@ a {
 .btn:hover,
 .icon-btn:hover {
   border-color: var(--brand-200);
-  background: #f8faff;
+  background: var(--brand-50);
 }
 /* Nothing in the product acknowledged pointer-down, which is the main reason
    a fast interface reads as unresponsive. */
 .btn:active,
 .icon-btn:active {
   transform: translateY(1px);
+  scale: 0.985;
 }
 .btn.primary {
   /* Flat, not a gradient: state is never encoded in a gradient, and opacity
@@ -618,6 +640,14 @@ a {
   letter-spacing: var(--tracking-tight);
   text-wrap: balance;
 }
+
+/* Operational surfaces are instruments, not publications. They keep the UI
+   sans face so dense labels, form controls and headings share one scanning
+   rhythm; event-branded public pages retain their own heading treatment. */
+.app-admin :is(h1, h2, h3),
+.speaker-shell :is(h1, h2, h3) {
+  font-family: var(--font) !important;
+}
 .page-head p {
   margin: var(--space-2) 0 0;
   max-width: 78ch;
@@ -638,6 +668,9 @@ a {
   border: 1px solid var(--border);
   border-radius: var(--radius);
   box-shadow: var(--elev-1);
+  transition:
+    border-color var(--dur-fast) var(--ease-out),
+    box-shadow var(--dur-fast) var(--ease-out);
 }
 .card.pad {
   padding: var(--space-5);
@@ -871,24 +904,16 @@ a {
   color: var(--state-bad-text);
 }
 .status.info {
-  background: #dbeafe;
-  color: #1e40af;
+  background: var(--brand-50);
+  color: var(--brand-700);
 }
 .status.ai {
-  background: #ede9fe;
-  color: #5b21b6;
+  background: var(--brand-100);
+  color: var(--brand-700);
 }
 .status.neutral {
   background: #f1f5f9;
   color: var(--text-secondary);
-}
-.status::before {
-  content: "";
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: currentColor;
-  opacity: 0.75;
 }
 .progress {
   height: 7px;

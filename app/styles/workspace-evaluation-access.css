@@ -30,12 +30,7 @@
 .pc-eval-ground {
   background:
     radial-gradient(circle at 88% 10%, var(--hero-glow), transparent 40%),
-    linear-gradient(
-      150deg,
-      var(--hero-ink-1),
-      var(--hero-ink-2) 58%,
-      var(--brand-900)
-    );
+    var(--hero-ink-1);
   color: var(--text-inverse);
 }
 .pc-eval-gate-intro {

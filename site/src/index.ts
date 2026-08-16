@@ -16,7 +16,7 @@ const READ_METHODS = new Set(["GET", "HEAD"]);
 /* Exact hash of the canonical brand-mark.svg style block. This permits its
    adaptive light/dark fills without allowing arbitrary inline site styles. */
 const BRAND_MARK_STYLE_HASH =
-  "'sha256-y0BNy4M/KDhas6W22Ivuu4JFcXstAw0DS7LRMKA75k8='";
+  "'sha256-C3DS9DdL4RO7UUpPEXe6B3WvuiBlK47oTcLxu5sSJ1Q='";
 
 const CONTENT_SECURITY_POLICY = [
   "default-src 'self'",

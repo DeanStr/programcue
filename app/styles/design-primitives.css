@@ -199,11 +199,11 @@
   align-items: flex-start;
   gap: var(--space-2);
   padding: var(--space-3) var(--space-3);
-  border: 1px solid #bfdbfe;
-  border-left: 4px solid var(--blue);
+  border: 1px solid var(--brand-200);
+  border-left: 4px solid var(--brand-600);
   border-radius: var(--radius-sm);
-  background: #f8fbff;
-  color: #1e3a8a;
+  background: var(--brand-50);
+  color: var(--brand-700);
 }
 .pc-status-notice.is-success {
   border-color: #bbf7d0;
@@ -254,12 +254,7 @@
   padding: var(--space-7);
   background:
     radial-gradient(circle at 84% 20%, var(--hero-glow), transparent 32%),
-    linear-gradient(
-      130deg,
-      var(--hero-ink-1),
-      var(--hero-ink-2) 55%,
-      var(--brand-900)
-    );
+    var(--hero-ink-1);
   border: 0;
   color: #fff;
   box-shadow: 0 24px 55px rgba(30, 41, 79, 0.22);

@@ -221,7 +221,7 @@
   width: min(520px, 94vw);
   background: var(--surface);
   z-index: 220;
-  box-shadow: -18px 0 50px rgba(15, 23, 42, 0.18);
+  box-shadow: -18px 0 50px rgba(19, 32, 31, 0.18);
   overflow: auto;
 }
 .drawer-head {

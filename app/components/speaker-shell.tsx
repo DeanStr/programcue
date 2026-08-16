@@ -10,6 +10,7 @@ import {
 import { Form, Link, NavLink, useLocation } from "react-router";
 
 import { BrandMark } from "~/components/brand-mark";
+import { programmeAccentPalette } from "~/modules/programme/programme-presentation";
 
 export function SpeakerShell({
   children,
@@ -38,10 +39,17 @@ export function SpeakerShell({
   const eventSelectionHref = `/events/select?${new URLSearchParams({
     returnTo: `${location.pathname}${location.search}${location.hash}`,
   })}`;
+  const accentPalette = programmeAccentPalette(event.brandAccent);
   return (
     <div
       className="speaker-shell event-branded"
-      style={{ "--event-accent": event.brandAccent } as React.CSSProperties}
+      style={
+        {
+          "--event-accent": accentPalette.accent,
+          "--accent-ink": accentPalette.ink,
+          "--accent-on-solid": accentPalette.onAccent,
+        } as React.CSSProperties
+      }
     >
       <header className="speaker-top">
         <NavLink

@@ -40,7 +40,11 @@ test(
     await expect(
       page.getByRole("link", { name: "GitHub", exact: true }),
     ).toHaveAttribute("href", "https://github.com/DeanStr/programcue");
-    await expect(page.getByText("Illustrative event workspace")).toBeVisible();
+    await expect(
+      page.getByRole("img", {
+        name: "Program Cue schedule planner showing sessions placed across rooms and times.",
+      }),
+    ).toBeVisible();
 
     await openReady(page, "/terms");
     await expect(page.locator("main")).toContainText(
@@ -80,7 +84,7 @@ test(
       );
       await expect(page.locator(".accent")).toHaveCSS(
         "fill",
-        scheme === "dark" ? "rgb(129, 140, 248)" : "rgb(79, 70, 229)",
+        scheme === "dark" ? "rgb(233, 162, 125)" : "rgb(157, 74, 49)",
       );
     }
   },

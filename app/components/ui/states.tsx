@@ -1,4 +1,4 @@
-import { CheckCircle2, Inbox, LoaderCircle, type LucideIcon } from "lucide-react";
+import { CheckCircle2, Inbox, type LucideIcon } from "lucide-react";
 import type { ReactNode } from "react";
 
 import { cn } from "~/lib/cn";
@@ -58,7 +58,7 @@ export function PendingState({
       aria-busy="true"
     >
       <div className="pc-pending-label">
-        <LoaderCircle className="pc-spin" aria-hidden size={17} /> {label}
+        {label}
       </div>
       <div aria-hidden className="pc-skeleton-stack">
         {Array.from({ length: rows }, (_, index) => (

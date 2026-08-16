@@ -34,14 +34,14 @@
 }
 .data-table tbody th[scope="row"] {
   padding: var(--space-3);
-  border-bottom: 1px solid #edf1f6;
+  border-bottom: 1px solid var(--line);
   vertical-align: middle;
   text-align: left;
   font-weight: var(--weight-semibold);
 }
 .data-table td {
   padding: var(--space-3);
-  border-bottom: 1px solid #edf1f6;
+  border-bottom: 1px solid var(--line);
   vertical-align: middle;
 }
 .data-table tr:hover td {

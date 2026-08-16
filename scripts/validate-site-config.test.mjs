@@ -106,6 +106,38 @@ describe("published pages", () => {
     assert.deepEqual(validateSitePages(), []);
   });
 
+  test("the homepage product contract permits copy changes but retains its scope", () => {
+    const revisedCopyIssues = brokenSite(({ replace }) =>
+      replace(
+        "index.html",
+        "Keep submissions, reviews, speakers, scheduling and publication\n              connected from the first proposal to the live programme.",
+        "Program Cue connects submissions, reviews and speakers through one\n              programme workflow, from proposal to publication.",
+      ),
+    );
+    const disconnectedIssues = brokenSite(({ replace }) =>
+      replace(
+        "index.html",
+        "connected from the first proposal to the live programme.",
+        "coordinated from the first proposal to the live programme.",
+      ),
+    );
+    const missingCapabilityIssues = brokenSite(({ read, write }) =>
+      write(
+        "index.html",
+        read("index.html").replaceAll(/communications?/gi, "messages"),
+      ),
+    );
+
+    assert.deepEqual(revisedCopyIssues, []);
+    assert.ok(reports(disconnectedIssues, "connected workflow"));
+    assert.ok(
+      reports(
+        missingCapabilityIssues,
+        "essential product capabilities: communications",
+      ),
+    );
+  });
+
   test("a footer that drops a sibling page is rejected", () => {
     const issues = brokenSite(({ replace }) =>
       replace(
@@ -293,6 +325,18 @@ describe("published pages", () => {
   test("losing the social sharing image is rejected", () => {
     const issues = brokenSite(({ remove }) => remove("social-card.png"));
     assert.ok(reports(issues, "social sharing image"));
+  });
+
+  test("losing an image referenced by a published page is rejected", () => {
+    const issues = brokenSite(({ remove }) =>
+      remove("images/programme-schedule-workspace.png"),
+    );
+    assert.ok(
+      reports(
+        issues,
+        "references a missing asset: /images/programme-schedule-workspace.png",
+      ),
+    );
   });
 
   test("a malformed social sharing image is rejected", () => {

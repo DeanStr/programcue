@@ -1,10 +1,10 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
   <style>
     .ink { fill: #111827; }
-    .accent { fill: #4f46e5; }
+    .accent { fill: #9d4a31; }
     @media (prefers-color-scheme: dark) {
       .ink { fill: #f9fafb; }
-      .accent { fill: #818cf8; }
+      .accent { fill: #e9a27d; }
     }
   </style>
   <path class="ink" d="M3 3h10v4H7v6H3V3Z"/>

@@ -24,16 +24,18 @@
 
 :root {
   color-scheme: light;
-  --brand-50: #eef2ff;
-  --brand-100: #e0e7ff;
-  --brand-200: #c7d2fe;
-  --brand-300: #a5b4fc;
-  --brand-400: #818cf8;
-  --brand-500: #6366f1;
-  --brand-600: #4f46e5;
-  --brand-700: #4338ca;
-  --brand-900: #312e81;
-  --violet: #7c3aed;
+  /* A restrained copper makes emphasis feel deliberate rather than like a
+     default SaaS treatment. Semantic state colours remain independent. */
+  --brand-50: #fff4ec;
+  --brand-100: #fce1d0;
+  --brand-200: #f6c5a9;
+  --brand-300: #e9a27d;
+  --brand-400: #d9805c;
+  --brand-500: #be6242;
+  --brand-600: #9d4a31;
+  --brand-700: #783220;
+  --brand-900: #522116;
+  --violet: #9d4a31;
   --teal: #0d9488;
   --green: #16a34a;
   --amber: #d97706;
@@ -41,27 +43,30 @@
   --blue: #2563eb;
   --orange: #c2410c;
   --cyan: #0e7490;
-  --ink: #0f172a;
-  --muted: #617188;
-  --muted-on-surface: #5b6b81;
+  --ink: #182522;
+  --muted: #61716c;
+  --muted-on-surface: #586760;
   /* 4.76:1 on white, 4.39:1 on --canvas. Was #94a3b8 at 2.56:1, below AA. */
-  --muted-2: #64748b;
-  --line: #e2e8f0;
-  --soft: #f8fafc;
-  --canvas: #f3f6fb;
-  --nav: #091426;
-  --nav-2: #101e35;
-  --nav-text: #cbd5e1;
-  --nav-text-muted: #aebbd0;
-  --nav-border: #263750;
-  --nav-scrollbar: #2b3d59;
-  --nav-control: #1b2b45;
-  --nav-control-border: #33455f;
+  --muted-2: #67756f;
+  --line: #e0e1d8;
+  --soft: #faf9f5;
+  --canvas: #f4f4ef;
+  --nav: #13201f;
+  --nav-2: #1b2e2b;
+  --nav-text: #d7dfd7;
+  --nav-text-muted: #b9c8c1;
+  --nav-border: #36504a;
+  --nav-scrollbar: #416059;
+  --nav-control: #263c37;
+  --nav-control-border: #49635b;
   --nav-control-text: var(--line);
-  --nav-active: #4f46e5;
+  --nav-active: var(--brand-500);
   --font:
     "Inter Variable", Inter, ui-sans-serif, system-ui, -apple-system,
     BlinkMacSystemFont, "Segoe UI", sans-serif;
+  /* Use the self-hosted variable face for display text too. A browser-owned
+     serif stack rendered visibly differently across platforms. */
+  --font-display: var(--font);
   --sidebar: 230px;
   --topbar: 70px;
 
@@ -86,9 +91,9 @@
   /* The one dark gradient ground in the product: the design-system hero and
      the evaluation surfaces. Held as tokens because two files were painting
      the same three values by hand. */
-  --hero-ink-1: #0b1428;
-  --hero-ink-2: #172554;
-  --hero-glow: rgba(129, 140, 248, 0.42);
+  --hero-ink-1: #13201f;
+  --hero-ink-2: #1b2e2b;
+  --hero-glow: rgba(190, 98, 66, 0.34);
 
   /* --- State on dark grounds ---------------------------------------------
      The *-solid values are tuned to clear 3:1 against light tracks and go
@@ -99,7 +104,7 @@
 
   /* --- Semantic text ----------------------------------------------------- */
   --text-primary: var(--ink);
-  --text-secondary: #475569; /* 7.58:1 on white */
+  --text-secondary: #485a55; /* 7.58:1 on white */
   --text-tertiary: var(--muted-on-surface); /* 5.43:1 on white */
   --text-inverse: #fff;
   --text-accent: var(--brand-700);
@@ -126,11 +131,11 @@
   --state-info-solid: var(--brand-600);
   --state-info-text: var(--brand-700);
   --state-info-surface: var(--brand-50);
-  --track: #e8edf5;
+  --track: #e8eae3;
 
   /* --- Borders ----------------------------------------------------------- */
   --border: var(--line);
-  --border-strong: #cbd5e1;
+  --border-strong: #c6cbc1;
   --border-accent: var(--brand-200);
 
   /* --- Focus -------------------------------------------------------------
@@ -148,12 +153,12 @@
      A card on canvas = 1px border + --elev-1. A panel inside a card = sunken
      tint, no border, no shadow. A popover = --elev-3 and no border. */
   --elev-0: none;
-  --elev-1: 0 1px 2px rgba(15, 23, 42, 0.06), 0 1px 1px rgba(15, 23, 42, 0.04);
-  --elev-2: 0 2px 4px rgba(15, 23, 42, 0.06), 0 4px 10px rgba(15, 23, 42, 0.05);
+  --elev-1: 0 1px 2px rgba(19, 32, 31, 0.06), 0 1px 1px rgba(19, 32, 31, 0.04);
+  --elev-2: 0 2px 4px rgba(19, 32, 31, 0.06), 0 4px 10px rgba(19, 32, 31, 0.05);
   --elev-3:
-    0 4px 8px rgba(15, 23, 42, 0.07), 0 12px 24px rgba(15, 23, 42, 0.08);
+    0 4px 8px rgba(19, 32, 31, 0.07), 0 12px 24px rgba(19, 32, 31, 0.08);
   --elev-4:
-    0 8px 16px rgba(15, 23, 42, 0.08), 0 24px 48px rgba(15, 23, 42, 0.12);
+    0 8px 16px rgba(19, 32, 31, 0.08), 0 24px 48px rgba(19, 32, 31, 0.12);
   --shadow: var(--elev-3);
   /* An overlay floats above the whole document, so it is one step beyond the
      page scale rather than another --elev-4 surface. */
