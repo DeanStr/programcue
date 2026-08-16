@@ -100,7 +100,7 @@
      nearly black against navy. These are their counterparts for status dots
      and marks painted on --surface-inverse or --surface-nav. */
   --state-good-on-dark: #5ee6a8;
-  --state-warn-on-dark: #fbbf24;
+  --state-warn-on-dark: #facc15;
 
   /* --- Semantic text ----------------------------------------------------- */
   --text-primary: var(--ink);
@@ -111,19 +111,22 @@
 
   /* --- State -------------------------------------------------------------
      Two weights per state, because a fill and a label have different jobs.
-     *-solid paints graphical objects and clears 3:1 against the #e8edf5 track
+     *-solid paints graphical objects and clears 3:1 against the #e8eae3 track
      (--green and --amber themselves do not: 2.80:1 and 2.71:1).
      *-text paints labels and clears 4.5:1 on white. */
   --state-good-solid: #15803d;
   --state-good-text: #166534;
   --state-good-surface: #dcfce7;
-  --state-warn-solid: #b45309;
-  --state-warn-text: #92400e;
-  --state-warn-surface: #fef3c7;
-  --state-warn-surface-subtle: #fffbeb;
+  /* Warning is deliberately gold rather than orange-brown. Copper owns brand
+     and informational emphasis; a separate hue keeps operational risk legible
+     at a glance without borrowing the red family used for failures. */
+  --state-warn-solid: #8a6500;
+  --state-warn-text: #6f5200;
+  --state-warn-surface: #fff8c5;
+  --state-warn-surface-subtle: #fffdf0;
   /* The counterpart to --state-bad-border, which already existed. Three files
      were typing this value by hand. */
-  --state-warn-border: #fde68a;
+  --state-warn-border: #d4a72c;
   --state-bad-solid: #dc2626;
   --state-bad-text: #991b1b;
   --state-bad-surface: #fee2e2;

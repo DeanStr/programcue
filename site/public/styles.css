@@ -555,7 +555,9 @@ a.wordmark:hover .wordmark-accent {
 .hero-image {
   margin: 0;
   overflow: hidden;
-  aspect-ratio: 16 / 10;
+  /* Match the native product capture so interface geometry is neither cropped
+     nor stretched in the most prominent proof point on the page. */
+  aspect-ratio: 16 / 9;
   border: 1px solid rgb(233 162 125 / 24%);
   border-radius: var(--radius-lg);
   box-shadow:
