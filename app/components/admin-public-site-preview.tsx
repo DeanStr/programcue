@@ -240,7 +240,10 @@ export function AdminPublicSitePreview({
       </div>
       <section
         className={`public-site-preview-frame${mobilePreview ? " is-mobile" : ""}`}
+        aria-label="Public site preview"
         data-public-theme={configuration.theme}
+        // biome-ignore lint/a11y/noNoninteractiveTabindex: This scrollable preview must be keyboard-focusable so users can reach overflow content.
+        tabIndex={0}
         style={
           {
             "--event-accent": palette.accent,

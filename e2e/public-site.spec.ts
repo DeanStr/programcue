@@ -98,7 +98,10 @@ test("organisers compose, preview and publish the bounded public event site", as
     "data-public-theme",
     "dark",
   );
-  const previewFrame = page.locator(".public-site-preview-frame");
+  const previewFrame = page.getByRole("region", {
+    name: "Public site preview",
+  });
+  await expect(previewFrame).toHaveAttribute("tabindex", "0");
   await expect(previewFrame.getByText("Explore the programme")).toBeVisible();
   await expect(
     previewFrame.getByRole("link", { name: "Explore the programme" }),
