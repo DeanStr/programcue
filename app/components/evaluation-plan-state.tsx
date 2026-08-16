@@ -87,12 +87,15 @@ function ReviewerAiSettingCard() {
           />
           <span>
             <strong>Allow reviewer-requested AI suggestions</strong>
-            Sends reviewer-visible fields from the immutable source snapshot
-            and the current scorecard to the organisation’s configured AI
-            provider.
+            Sends reviewer-visible fields from the immutable source snapshot and
+            the current scorecard to the organisation’s configured AI provider.
           </span>
         </label>
-        <button className="btn" disabled={navigation.state !== "idle"}>
+        <button
+          type="submit"
+          className="btn"
+          disabled={navigation.state !== "idle"}
+        >
           Save reviewer AI setting
         </button>
       </Form>

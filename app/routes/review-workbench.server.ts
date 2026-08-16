@@ -5,17 +5,16 @@ import {
   redirect,
 } from "react-router";
 import { ZodError } from "zod";
-
-import { ensureDemoEvaluationData } from "~/modules/evaluations/demo.server";
-import {
-  ReviewerAiSuggestionService,
-  ReviewerAiSuggestionStateError,
-} from "~/modules/ai/reviewer-ai-suggestion.server";
 import { AiContextTooLargeError } from "~/modules/ai/ai-assistant-errors";
 import {
   AiConfigurationError,
   AiProviderError,
 } from "~/modules/ai/openai-responses-provider.server";
+import {
+  ReviewerAiSuggestionService,
+  ReviewerAiSuggestionStateError,
+} from "~/modules/ai/reviewer-ai-suggestion.server";
+import { ensureDemoEvaluationData } from "~/modules/evaluations/demo.server";
 import {
   EvaluationRevisionConflictError,
   EvaluationService,
@@ -122,17 +121,12 @@ export async function action({ request, context }: ActionFunctionArgs) {
   }
   try {
     if (intent === "generate-reviewer-ai-suggestion") {
-      await new ReviewerAiSuggestionService(env).generate(
-        viewer,
-        {
-          assignmentId: values.get("assignmentId"),
-          retryFailedOperationId: values.get("failedOperationId") || undefined,
-          duplicateRiskAcknowledged:
-            values.get("duplicateRiskAcknowledged") === "true"
-              ? true
-              : undefined,
-        },
-      );
+      await new ReviewerAiSuggestionService(env).generate(viewer, {
+        assignmentId: values.get("assignmentId"),
+        retryFailedOperationId: values.get("failedOperationId") || undefined,
+        duplicateRiskAcknowledged:
+          values.get("duplicateRiskAcknowledged") === "true" ? true : undefined,
+      });
       return { ok: true, message: "Advisory reviewer suggestions generated." };
     }
     if (intent === "dismiss-reviewer-ai-suggestion") {

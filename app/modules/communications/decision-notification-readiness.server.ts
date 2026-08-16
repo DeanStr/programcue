@@ -1,10 +1,10 @@
-import { z } from "zod";
+import type { z } from "zod";
 
 import { templateContentSchema } from "./communication-schema";
 import { emailDeliveryIssue } from "./email-deliverability";
 import {
-  requireEmailProviderConfiguration,
   type EmailProviderConfiguration,
+  requireEmailProviderConfiguration,
 } from "./email-provider.server";
 
 type DecisionTemplateRow = {

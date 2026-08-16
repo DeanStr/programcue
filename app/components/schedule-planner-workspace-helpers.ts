@@ -209,11 +209,15 @@ export function isAutoPlacementPreview(
     value.placements
       .filter(isRecord)
       .map((placement) => placement.sessionId)
-      .filter((sessionId): sessionId is string => typeof sessionId === "string"),
+      .filter(
+        (sessionId): sessionId is string => typeof sessionId === "string",
+      ),
   );
   if (
     selectedSessionIds.size !== value.selectedSessionIds.length ||
-    [...selectedSessionIds].some((sessionId) => !proposedSessionIds.has(sessionId))
+    [...selectedSessionIds].some(
+      (sessionId) => !proposedSessionIds.has(sessionId),
+    )
   )
     return false;
   return value.placements.every((placement) => {

@@ -9,8 +9,8 @@ import {
 import { calculateRubricWeightedScore } from "./evaluation-rules";
 import {
   conflictDeclarationSchema,
-  reviewerAiCriterionSuggestionsSchema,
   reviewDraftSchema,
+  reviewerAiCriterionSuggestionsSchema,
 } from "./evaluation-schema";
 import { EvaluationServiceFoundation } from "./evaluation-service-foundation.server";
 import { reviewableSubmissionSql } from "./evaluation-submission-review-eligibility.server";
@@ -323,7 +323,7 @@ export class EvaluationReviewSubmissionWorkflows extends EvaluationServiceFounda
           "This AI suggestion is unavailable for this review assignment.",
         );
       }
-      let suggestions;
+      let suggestions: z.infer<typeof reviewerAiCriterionSuggestionsSchema>;
       try {
         suggestions = reviewerAiCriterionSuggestionsSchema.parse(
           JSON.parse(row.suggestionsJson),
@@ -388,26 +388,24 @@ export class EvaluationReviewSubmissionWorkflows extends EvaluationServiceFounda
     );
     const unchangedImportedCriterionIds = suggestion
       ? suggestion.suggestions
-          .filter(
-            (item) => {
-              if (
-                item.suggestedValue === null ||
-                !importedCriterionIds.includes(item.criterionId)
-              ) {
-                return false;
-              }
-              const response = responses[item.criterionId];
-              const persistedValue =
-                criterionInputTypeById.get(item.criterionId) === "yes_no"
-                  ? response === true
-                    ? "yes"
-                    : response === false
-                      ? "no"
-                      : ""
-                  : String(response ?? "");
-              return persistedValue === item.suggestedValue;
-            },
-          )
+          .filter((item) => {
+            if (
+              item.suggestedValue === null ||
+              !importedCriterionIds.includes(item.criterionId)
+            ) {
+              return false;
+            }
+            const response = responses[item.criterionId];
+            const persistedValue =
+              criterionInputTypeById.get(item.criterionId) === "yes_no"
+                ? response === true
+                  ? "yes"
+                  : response === false
+                    ? "no"
+                    : ""
+                : String(response ?? "");
+            return persistedValue === item.suggestedValue;
+          })
           .map((item) => item.criterionId)
       : [];
     if (

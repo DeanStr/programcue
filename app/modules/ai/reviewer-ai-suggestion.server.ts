@@ -1,18 +1,17 @@
 import { z } from "zod";
-
-import { EvaluationService } from "~/modules/evaluations/evaluation-service.server";
 import { reviewerAiCriterionSuggestionsSchema } from "~/modules/evaluations/evaluation-schema";
+import { EvaluationService } from "~/modules/evaluations/evaluation-service.server";
 import { reviewableSubmissionSql } from "~/modules/evaluations/evaluation-submission-review-eligibility.server";
 import type { Viewer } from "~/platform/auth/authorize.server";
+import { AiContextTooLargeError } from "./ai-assistant-errors";
+import { resolveAiProvider } from "./ai-provider.server";
+import { providerKeys, sha256 } from "./ai-review-assessment-support.server";
 import {
+  type AiModelProvider,
   AiProviderError,
   openAiFunctionCalls,
   openAiOutputText,
-  type AiModelProvider,
 } from "./openai-responses-provider.server";
-import { resolveAiProvider } from "./ai-provider.server";
-import { AiContextTooLargeError } from "./ai-assistant-errors";
-import { providerKeys, sha256 } from "./ai-review-assessment-support.server";
 
 const MAX_CONTEXT_CHARACTERS = 60_000;
 const GENERATION_LEASE_SECONDS = 5 * 60;
@@ -319,7 +318,10 @@ export class ReviewerAiSuggestionService {
         crypto.randomUUID(),
         viewer.personId,
         operationId,
-        JSON.stringify({ enabled: parsed.enabled, revision: parsed.revision + 1 }),
+        JSON.stringify({
+          enabled: parsed.enabled,
+          revision: parsed.revision + 1,
+        }),
         viewer.eventId,
         viewer.organisationId,
         parsed.enabled ? 1 : 0,
@@ -392,7 +394,12 @@ export class ReviewerAiSuggestionService {
     viewer: Viewer,
     rawAssignmentId: unknown,
   ): Promise<ReviewerAiSuggestionRetry | null> {
-    const assignmentId = z.string().trim().min(1).max(200).parse(rawAssignmentId);
+    const assignmentId = z
+      .string()
+      .trim()
+      .min(1)
+      .max(200)
+      .parse(rawAssignmentId);
     await this.recoverInterruptedOperation(viewer, assignmentId);
     return this.env.DB.prepare(
       `SELECT operation.id AS operationId,
@@ -845,7 +852,9 @@ export class ReviewerAiSuggestionService {
         viewer,
         operationId,
         claimToken,
-        new Error("The reviewer AI request could not record its audit evidence."),
+        new Error(
+          "The reviewer AI request could not record its audit evidence.",
+        ),
         true,
       );
       throw new Error(

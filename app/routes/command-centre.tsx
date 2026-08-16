@@ -524,9 +524,10 @@ export default function CommandCentre({ loaderData }: Route.ComponentProps) {
                         <EventDateTime
                           epochSeconds={session.startsAt}
                           timeZone={loaderData.eventTimezone}
+                          className="command-session-time"
                           focusable={false}
                         >
-                          <span className="command-session-time pc-num">
+                          <span className="pc-num">
                             {new Intl.DateTimeFormat("en", {
                               hour: "numeric",
                               minute: "2-digit",

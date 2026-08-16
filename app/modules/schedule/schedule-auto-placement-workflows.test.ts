@@ -9,7 +9,6 @@ import {
 import {
   ScheduleIdempotencyConflictError,
   ScheduleNotFoundError,
-  ScheduleRevisionConflictError,
   ScheduleService,
 } from "./schedule-service.server";
 import {

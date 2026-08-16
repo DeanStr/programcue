@@ -289,6 +289,7 @@
   flex: none;
   font-weight: var(--weight-bold);
   min-width: 66px;
+  white-space: nowrap;
 }
 .command-session-title {
   flex: 1 1 auto;

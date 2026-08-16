@@ -7,12 +7,12 @@ import type { Viewer } from "~/platform/auth/authorize.server";
 import { ensureDemoData } from "~/platform/demo/seed.server";
 import { processCommunicationSend } from "../../../workers/queue/communication-send";
 import { EvaluationDecisionService } from "./evaluation-decision-service.server";
-import { ensureEvaluationDecisionTemplateFixture } from "./evaluation-test-fixtures";
 import {
   EvaluationRevisionConflictError,
   EvaluationService,
   EvaluationStateError,
 } from "./evaluation-service.server";
+import { ensureEvaluationDecisionTemplateFixture } from "./evaluation-test-fixtures";
 
 const admin: Viewer = {
   personId: "person-demo-admin",

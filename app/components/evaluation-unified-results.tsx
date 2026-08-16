@@ -494,7 +494,10 @@ export function EvaluationUnifiedResults() {
                                       I understand the prior notification cannot
                                       be recalled.
                                     </label>
-                                    <button className="btn small danger">
+                                    <button
+                                      type="submit"
+                                      className="btn small danger"
+                                    >
                                       Confirm reopen
                                     </button>
                                   </Form>

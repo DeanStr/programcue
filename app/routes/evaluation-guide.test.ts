@@ -218,9 +218,7 @@ describe("production evaluation guide", () => {
     expect(
       unlockedGuide.identities.find((identity) => identity.key === "reviewer"),
     ).toMatchObject({
-      whatToTry: expect.stringContaining(
-        "save an independent rubric response",
-      ),
+      whatToTry: expect.stringContaining("save an independent rubric response"),
     });
 
     const selected = await action({
@@ -834,9 +832,7 @@ describe("production evaluation guide", () => {
     await expect(readReviewer()).resolves.toMatchObject({
       label: "Assigned reviewer",
       destination: "/review/workbench",
-      whatToTry: expect.stringContaining(
-        "save an independent rubric response",
-      ),
+      whatToTry: expect.stringContaining("save an independent rubric response"),
       primaryActionLabel: "Open Sam's assigned review",
       progress: { clean: false, title: "Review assigned" },
     });
@@ -860,9 +856,7 @@ describe("production evaluation guide", () => {
     await expect(readReviewer()).resolves.toMatchObject({
       label: "Reviewer with draft review",
       destination: "/review/workbench",
-      whatToTry: expect.stringContaining(
-        "Generate or inspect AI suggestions",
-      ),
+      whatToTry: expect.stringContaining("Generate or inspect AI suggestions"),
       primaryActionLabel: "Continue Sam's review",
       progress: { clean: false, title: "Review draft in progress" },
     });

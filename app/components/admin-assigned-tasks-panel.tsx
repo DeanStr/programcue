@@ -365,7 +365,11 @@ export function AdminAssignedTasksPanel({
                             required
                           />
                         </label>
-                        <button className="btn small" disabled={busy}>
+                        <button
+                          type="submit"
+                          className="btn small"
+                          disabled={busy}
+                        >
                           Confirm extension
                         </button>
                       </Form>

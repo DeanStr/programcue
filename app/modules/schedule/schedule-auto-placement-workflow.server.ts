@@ -3,11 +3,9 @@ import {
   AUTO_ENTRY_PREFIX,
   type AutoPlacementPreview,
   type AutoPlacementProposal,
-  type AutoPlacementUnplaced,
   canonicalAutoPlacementPlan,
   canonicalAutoPlacementSessionRevisions,
   computeAutoPlacements,
-  plannedAutoEntryId,
   revalidateSelectedAutoPlacements,
 } from "./schedule-auto-placement";
 import { scheduleConflictInsert } from "./schedule-conflict-statement.server";

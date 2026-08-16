@@ -147,8 +147,8 @@ function ReviewerAiSuggestionPanel() {
               {suggestion.stale
                 ? "AI suggestions need regeneration"
                 : suggestion.status === "imported"
-                ? "AI suggestions imported into this draft"
-                : "AI suggestions ready for review"}
+                  ? "AI suggestions imported into this draft"
+                  : "AI suggestions ready for review"}
             </strong>
             <span>
               {suggestion.stale
@@ -175,8 +175,7 @@ function ReviewerAiSuggestionPanel() {
             return (
               <div className="validation-item" key={item.criterionId}>
                 <strong>
-                  {criterion.name}:{" "}
-                  {item.suggestedValue ?? "Rationale only"}
+                  {criterion.name}: {item.suggestedValue ?? "Rationale only"}
                 </strong>
                 <span>{item.rationale}</span>
                 <small>
@@ -211,7 +210,7 @@ function ReviewerAiSuggestionPanel() {
                   name="suggestionId"
                   value={suggestion.id}
                 />
-                <button className="btn" disabled={pending}>
+                <button type="submit" className="btn" disabled={pending}>
                   Dismiss suggestions
                 </button>
               </fetcher.Form>
@@ -260,7 +259,7 @@ function ReviewerAiSuggestionPanel() {
               </label>
             </>
           ) : null}
-          <button className="btn" disabled={pending}>
+          <button type="submit" className="btn" disabled={pending}>
             <Sparkles aria-hidden size={14} />
             {pending
               ? "Generating criterion suggestions…"

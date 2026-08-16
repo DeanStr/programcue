@@ -3,12 +3,12 @@ import { beforeEach, describe, expect, it } from "vitest";
 
 import type { Viewer } from "~/platform/auth/authorize.server";
 import { ensureDemoEvaluationData } from "./demo.server";
-import { ensureEvaluationDecisionTemplateFixture } from "./evaluation-test-fixtures";
 import {
   EvaluationRevisionConflictError,
   EvaluationService,
   EvaluationStateError,
 } from "./evaluation-service.server";
+import { ensureEvaluationDecisionTemplateFixture } from "./evaluation-test-fixtures";
 
 const admin: Viewer = {
   personId: "person-demo-admin",

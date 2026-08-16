@@ -366,11 +366,11 @@ export default function FormBuilder({ loaderData }: Route.ComponentProps) {
           <span>
             The public application currently{" "}
             {publishedCloseDate
-              ? "closes " + publishedCloseDate
+              ? `closes ${publishedCloseDate}`
               : "has no closing date"}
             . Save this draft, then publish the new version to make the{" "}
             {input.closeDate
-              ? input.closeDate + " closing date"
+              ? `${input.closeDate} closing date`
               : "removal of the closing date"}{" "}
             live.
           </span>
