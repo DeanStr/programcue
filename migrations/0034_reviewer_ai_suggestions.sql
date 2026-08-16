@@ -1,3 +1,4 @@
+-- Reviewer-requested AI suggestions and their event-level consent setting.
 CREATE TABLE event_ai_review_settings (
   event_id TEXT PRIMARY KEY REFERENCES events(id) ON DELETE CASCADE,
   enabled INTEGER NOT NULL DEFAULT 0 CHECK (enabled IN (0,1)),
