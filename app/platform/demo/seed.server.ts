@@ -3,6 +3,8 @@ import {
   DEMO_IDENTITIES,
   DEMO_IDENTITY,
   DEMO_ORGANISATION_ID,
+  DEMO_VENUE_ADDRESS,
+  DEMO_VENUE_MAP_URL,
   SBEK_SECOND_SPEAKER,
 } from "./demo-identities";
 import { DEFAULT_EVENT_BRAND_ACCENT } from "~/lib/brand";
@@ -85,7 +87,8 @@ export async function ensureDemoData(env: CloudflareEnvironment) {
       `
       INSERT OR IGNORE INTO events (
         id, organisation_id, name, slug, timezone, starts_at, ends_at,
-        venue_name, city, description, brand_accent, brand_draft_accent,
+        venue_name, city, venue_address, venue_map_url, description,
+        brand_accent, brand_draft_accent,
         repository_provider,
         session_formats_json,
         retention_months, submission_access_mode, allow_anonymous_drafts,
@@ -94,7 +97,7 @@ export async function ensureDemoData(env: CloudflareEnvironment) {
       ) VALUES (
         ?, ?, 'Future of Events 2027', 'future-of-events-2027', 'America/Toronto',
         unixepoch('2027-05-20T00:00:00Z'), unixepoch('2027-05-22T23:59:59Z'),
-        'Metro Toronto Convention Centre', 'Toronto',
+        'Metro Toronto Convention Centre', 'Toronto', ?, ?,
         'The conference for modern event professionals.', ?, ?, 'd1',
         ?, 24, 'email_verified', 1, 1, ?, 1, ?, unixepoch(), unixepoch()
       )
@@ -102,6 +105,8 @@ export async function ensureDemoData(env: CloudflareEnvironment) {
     ).bind(
       DEMO_EVENT_ID,
       DEMO_ORGANISATION_ID,
+      DEMO_VENUE_ADDRESS,
+      DEMO_VENUE_MAP_URL,
       DEFAULT_EVENT_BRAND_ACCENT,
       DEFAULT_EVENT_BRAND_ACCENT,
       INITIAL_EVENT_SESSION_FORMATS_JSON,

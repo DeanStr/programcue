@@ -4,6 +4,10 @@ export const DEMO_RESET_CONFIRMATION = "Future of Events 2027";
 export const DEMO_R2_PREFIX = `private/events/${DEMO_EVENT_ID}/`;
 export const DEMO_ASSISTANT_FIXTURE_MODEL = "demo-fixture-no-provider-call";
 export const DEMO_IDENTITY_COOKIE = "program_cue_demo_identity";
+export const DEMO_VENUE_ADDRESS =
+  "255 Front Street West, Toronto, ON M5V 2W6, Canada";
+export const DEMO_VENUE_MAP_URL =
+  "https://www.google.com/maps/search/?api=1&query=Metro%20Toronto%20Convention%20Centre%2C%20255%20Front%20Street%20West%2C%20Toronto";
 
 export const DEMO_IDENTITY = {
   personId: "person-demo-admin",

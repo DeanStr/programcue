@@ -144,8 +144,10 @@ curl --silent --output /dev/null --write-out '%{http_code}\n' \
 
 The fixture combines two useful data states:
 
-- Jordan Lee and Priya Shah retain populated review and speaker records for
-  human exploration.
+- Morgan Chen, Jordan Lee, Taylor Brooks and Priya Shah retain a separate populated
+  showcase cohort for human exploration: two completed reviews with visible
+  score spread, one committee discussion, one published decision, one public
+  speaker-profile revision and one active named programme embed.
 - Jordan Alvarez, Priya Raman, Marcus Okafor and Sam Whitfield use the exact
   SBEK identities and begin without evaluator-created submissions,
   assignments, accepted-speaker access or tasks.
@@ -155,7 +157,8 @@ verified Resend sender, five published communication templates (`Speaker task
 reminder`, `Reviewer reminder`, `Speaker welcome`, `Submission confirmation`
 and `Proposal decision`), and dated showcase tasks. Task reminders snapshot
 `{{task.dueDate}}` in the event timezone and fail if a selected task has no due
-date. The `Active speakers` audience is driven by event workflow state and
+date. The canonical event also carries a venue address and HTTPS map link. The
+`Active speakers` audience is driven by event workflow state and
 includes prospects, invited speakers and confirmed speakers while excluding
 declined or withdrawn people.
 

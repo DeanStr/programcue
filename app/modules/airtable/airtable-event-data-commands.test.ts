@@ -2,6 +2,10 @@ import { env } from "cloudflare:test";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { Viewer } from "~/platform/auth/authorize.server";
+import {
+  DEMO_VENUE_ADDRESS,
+  DEMO_VENUE_MAP_URL,
+} from "~/platform/demo/demo-identities";
 import { ensureDemoData } from "~/platform/demo/seed.server";
 import { ensureDemoProgramme } from "~/platform/demo/seed.server";
 import { ensureJudgedDemoWorkflow } from "~/platform/demo/demo-reset.server";
@@ -473,8 +477,8 @@ describe("Airtable authoritative room repository", () => {
       expect(external).toBeDefined();
       const payload = JSON.parse(String(external!.fields["Payload JSON"]));
       expect(payload).toMatchObject({
-        venue_address: null,
-        venue_map_url: null,
+        venue_address: DEMO_VENUE_ADDRESS,
+        venue_map_url: DEMO_VENUE_MAP_URL,
         programme_hero_image_url: null,
       });
       payload.session_formats_json = JSON.stringify([

@@ -5,10 +5,15 @@ import { DEFAULT_EVENT_BRAND_ACCENT } from "~/lib/brand";
 import { AiAssistantService } from "~/modules/ai/ai-assistant-service.server";
 import { assistantProposalMetadataSchema } from "~/modules/ai/ai-tools.server";
 import { CommunicationService } from "~/modules/communications/communication-service.server";
+import { EvaluationService } from "~/modules/evaluations/evaluation-service.server";
+import { ProgrammeEmbedService } from "~/modules/programme/programme-embed-service.server";
 import { eventLocalCalendarDate } from "~/modules/schedule/schedule-time";
+import { readSpeakerProfileHistory } from "~/modules/speakers/speaker-profile-revision.server";
 import type { Viewer } from "~/platform/auth/authorize.server";
 import {
   DEMO_ASSISTANT_FIXTURE_MODEL,
+  DEMO_VENUE_ADDRESS,
+  DEMO_VENUE_MAP_URL,
   SBEK_FIXTURE_PEOPLE,
 } from "~/platform/demo/demo-identities";
 import { ensureDemoData } from "./seed.server";
@@ -218,11 +223,17 @@ describe("complete evaluator demo reset", () => {
     expect(reset.objectCount).toBe(2);
     expect(reset.baseline).toMatchObject({
       submissions: 2,
-      assignments: 2,
+      assignments: 3,
       publishedSchedules: 1,
       canonicalEventConfiguration: 1,
       canonicalOrganisationMemberships: 1,
       publishedTemplates: 5,
+      showcaseCompletedReviews: 2,
+      showcaseReviewScoreSpread: 1,
+      showcaseDiscussionMessages: 1,
+      showcasePublishedDecisions: 1,
+      showcaseProfileRevisions: 1,
+      showcaseManagedEmbeds: 1,
       sbekPeople: 4,
       sbekReviewerMemberships: 0,
       sbekReviewerAssignments: 0,
@@ -284,8 +295,8 @@ describe("complete evaluator demo reset", () => {
       participantLogoUrl: null,
       participantWelcomeText: null,
       participantSupportUrl: null,
-      venueAddress: null,
-      venueMapUrl: null,
+      venueAddress: DEMO_VENUE_ADDRESS,
+      venueMapUrl: DEMO_VENUE_MAP_URL,
       programmeHeroImageUrl: null,
       firstFormat: "keynote",
       headshotMaximumBytes: 10 * 1_048_576,
@@ -294,6 +305,119 @@ describe("complete evaluator demo reset", () => {
       endsAt: Date.parse("2027-05-22T23:59:59Z") / 1_000,
       timezone: "America/Toronto",
     });
+    await expect(
+      new ProgrammeEmbedService(testEnvironment).list(demoAdministrator),
+    ).resolves.toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          name: "Main website agenda",
+          slug: "main-agenda",
+          status: "active",
+          revision: 2,
+          createdByName: "Morgan Chen",
+          updatedByName: "Morgan Chen",
+          configuration: expect.objectContaining({
+            surface: "schedule",
+            density: "compact",
+          }),
+        }),
+      ]),
+    );
+    await expect(
+      new ProgrammeEmbedService(testEnvironment).getPublic(
+        "future-of-events-2027",
+        "main-agenda",
+      ),
+    ).resolves.toMatchObject({
+      status: "active",
+      configuration: expect.objectContaining({ surface: "schedule" }),
+    });
+    await expect(
+      readSpeakerProfileHistory(testEnvironment, {
+        organisationId: DEMO_ORGANISATION_ID,
+        eventId: DEMO_EVENT_ID,
+        personId: "person-demo-speaker",
+      }),
+    ).resolves.toEqual([
+      expect.objectContaining({
+        id: "demo-showcase-profile-revision-1",
+        profileRevision: 1,
+        displayName: "Priya Shah",
+        publicationStatus: "published",
+        recordedByName: "Morgan Chen",
+      }),
+    ]);
+    const evaluation = new EvaluationService(testEnvironment);
+    const evaluationWorkspace =
+      await evaluation.getAdminWorkspace(demoAdministrator);
+    expect(
+      evaluationWorkspace.assignments
+        .filter(
+          (assignment) =>
+            assignment.submissionId === "demo-evaluation-submission-calm" &&
+            assignment.reviewStatus === "submitted",
+        )
+        .map((assignment) => ({
+          status: assignment.status,
+          revision: assignment.revision,
+          score: assignment.weightedScore,
+          recommendation: assignment.recommendation,
+        })),
+    ).toEqual([
+      {
+        status: "submitted",
+        revision: 2,
+        score: 4.55,
+        recommendation: "accept",
+      },
+      {
+        status: "submitted",
+        revision: 2,
+        score: 2.25,
+        recommendation: "reject",
+      },
+    ]);
+    await expect(
+      evaluation.listDiscussion(demoAdministrator, {
+        roundId: "demo-evaluation-round",
+        targetType: "submission",
+        targetId: "demo-evaluation-submission-calm",
+      }),
+    ).resolves.toMatchObject({
+      writable: true,
+      messages: [
+        expect.objectContaining({
+          id: "demo-showcase-discussion-1",
+          authorPersonId: "person-demo-chair",
+        }),
+      ],
+    });
+    await expect(
+      testEnvironment.DB.prepare(
+        `SELECT decision.decided_by_person_id AS decidedByPersonId,
+                submission.status AS submissionStatus,
+                submission.revision AS submissionRevision
+           FROM submission_decisions decision
+           JOIN submissions submission
+             ON submission.id = decision.submission_id
+            AND submission.event_id = decision.event_id
+          WHERE decision.id = 'demo-showcase-decision-waitlist'`,
+      ).first(),
+    ).resolves.toEqual({
+      decidedByPersonId: "person-demo-owner",
+      submissionStatus: "waitlisted",
+      submissionRevision: 3,
+    });
+    await expect(
+      testEnvironment.DB.prepare(
+        `SELECT COUNT(*) AS count
+           FROM audit_events
+          WHERE id LIKE 'audit-demo-showcase-%'
+            AND event_id = ?`,
+      )
+        .bind(DEMO_EVENT_ID)
+        .first<{ count: number }>(),
+    ).resolves.toEqual({ count: 7 });
     const form = await testEnvironment.DB.prepare(
       `SELECT closes_at AS closesAt
          FROM form_definitions
@@ -731,7 +855,7 @@ describe("complete evaluator demo reset", () => {
         DEMO_RESET_CONFIRMATION,
       ),
     ).resolves.toMatchObject({
-      baseline: { submissions: 2, assignments: 2 },
+      baseline: { submissions: 2, assignments: 3 },
     });
     await expect(
       testEnvironment.DB.prepare(
