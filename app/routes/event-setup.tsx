@@ -13,7 +13,7 @@ import {
 import {
   EventAdministratorAlreadyActiveError,
   EventAdministratorNotFoundError,
-  EventPublishedProgrammeSlugError,
+  EventPublishedPublicUrlError,
   EventPublishedScheduleConflictError,
   EventResourceConfigurationError,
   EventRevisionConflictError,
@@ -430,7 +430,7 @@ export async function action({ request, context }: Route.ActionArgs) {
       error instanceof EventSessionFormatInUseError ||
       error instanceof EventResourceConfigurationError ||
       error instanceof EventPublishedScheduleConflictError ||
-      error instanceof EventPublishedProgrammeSlugError ||
+      error instanceof EventPublishedPublicUrlError ||
       error instanceof EventBrandingOwnershipError ||
       error instanceof EventPublicSiteConflictError ||
       error instanceof EventRepositoryMigrationRequiredError ||

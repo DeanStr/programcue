@@ -780,6 +780,12 @@ until the public dependency is withdrawn. The organizer sees branding, site
 and programme publication state together even though their publication
 boundaries remain independent.
 
+The event public slug becomes immutable when either the public site or programme
+is first published. Event Setup applies that rule in validation, in the atomic
+event update predicate and when classifying a rejected concurrent write, so a
+site-only launch cannot leave shared homepage, fixed-page or social-card URLs
+behind after a rename.
+
 The site draft and ordered sponsor rows are read in one D1 statement so they
 belong to one database snapshot. The final site-and-sponsor snapshot is
 schema-validated and written directly by the guarded publication statement;
@@ -792,9 +798,13 @@ snapshot corruption, missing visible references and invalid published branding
 fail with a non-cacheable error rather than dropping content or substituting
 Program Cue presentation defaults.
 
-Every site, sponsor and recording mutation carries a browser-created UUID into
-the existing durable idempotency ledger. The ledger binds that command identity
-to the exact validated payload and committed result: an exact replay returns
+Every site, sponsor and recording mutation carries a UUID into the existing
+durable idempotency ledger. Consequential publish, withdrawal and removal UUIDs
+are derived from the actor, event and exact entity generation, so a lost
+response, revalidation or reload retries the same intent; a changed revision or
+completed lifecycle transition creates a different intent. The ledger binds
+that command identity to the exact validated payload and committed result: an
+exact replay returns
 the original entity or revision and event-change cursor without another
 mutation or audit row, while reuse with changed details returns a conflict. The
 command claim, domain mutation, audit/change evidence and durable response
@@ -806,7 +816,8 @@ HTTPS URLs only; saving is explicitly neither upload nor publication. A separate
 confirmed recording publication copies its draft fields, requires its session
 in the published programme, and exposes it only after both the event and session
 have ended. Organisers can withdraw the public recording immediately without
-discarding its editable draft. A later schedule cannot make the recording
+discarding its editable draft, even while unrelated site-editor changes remain
+unsaved. A later schedule cannot make the recording
 silently disappear: preflight and the atomic schedule-publication statement
 require every published recording's session to remain eligible. Optional
 external caption and transcript resources are rendered beside the recording.
@@ -830,11 +841,18 @@ site publication revision, so canonical event, programme, branding, sponsor and
 editorial changes invalidate the representation together.
 
 The programme and fixed event pages share one event header, navigation and
-footer contract. The publication confirmation reports added and removed
-sections, fixed pages, featured records and sponsors, plus ordering, theme and
-editorial changes. The administrator route retains one loader/action and splits
-only its concrete editor, sponsor, recording and preview panels; no generic CMS
-component or block framework is introduced.
+footer contract. With a published site, the root is explicitly Event home while
+All sessions and Speakers use their dedicated programme routes; editorial pages
+are peers under an accessible Event navigation label. The publication
+confirmation reports added and removed sections, fixed pages, featured records
+and sponsors, plus ordering, theme and editorial changes. The administrator
+route retains one loader/action and splits only its concrete editor, sponsor,
+recording and preview panels; no generic CMS component or block framework is
+introduced.
+
+The public-site editor uses the shared navigation and before-unload blocker for
+its client-held configuration. Internal navigation, event switching and closing
+the page therefore require an explicit discard decision while edits are unsaved.
 
 Light, dark and system themes are a controlled public-surface choice, including
 managed programme embeds. They switch a closed event-site token set; arbitrary

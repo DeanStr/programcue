@@ -13,6 +13,7 @@ import { cloudflareContext } from "~/platform/cloudflare-context";
 import { loader as publicProgrammePageLoader } from "~/routes/public-programme";
 import { PublicRecordingService } from "./public-recording-service.server";
 import { defaultPublicSiteDraft } from "./public-site";
+import { publicSiteCommandIdForIntent } from "./public-site-command.server";
 import {
   PublicSiteCommandConflictError,
   PublicSiteRevisionConflictError,
@@ -76,6 +77,27 @@ beforeEach(async () => {
 });
 
 describe("public event site publication", () => {
+  it("keeps consequential command identities stable for one entity generation", async () => {
+    const first = await publicSiteCommandIdForIntent(
+      viewer,
+      "publish-recording:recording-1:2:none:operation-1",
+    );
+    const replay = await publicSiteCommandIdForIntent(
+      viewer,
+      "publish-recording:recording-1:2:none:operation-1",
+    );
+    const nextGeneration = await publicSiteCommandIdForIntent(
+      viewer,
+      "publish-recording:recording-1:2:2:operation-2",
+    );
+
+    expect(first).toMatch(
+      /^[0-9a-f]{8}-[0-9a-f]{4}-5[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/u,
+    );
+    expect(replay).toBe(first);
+    expect(nextGeneration).not.toBe(first);
+  });
+
   it("converges exact command replays and rejects changed payload reuse", async () => {
     const service = new PublicSiteService(publicSiteEnv);
     const configuration = publishableSite();

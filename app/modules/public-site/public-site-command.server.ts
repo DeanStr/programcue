@@ -53,6 +53,31 @@ async function sha256(value: string) {
   ).join("");
 }
 
+/**
+ * Consequential UI commands keep one identity for the exact domain generation
+ * they describe. A lost response, harmless loader refresh, or full-page retry
+ * therefore reaches the durable replay record instead of creating a new
+ * command. The key must change when the underlying entity generation changes.
+ */
+export async function publicSiteCommandIdForIntent(
+  viewer: Pick<Viewer, "organisationId" | "eventId" | "personId">,
+  intentKey: string,
+) {
+  const hex = await sha256(
+    JSON.stringify([
+      "public-site-command-intent-v1",
+      viewer.organisationId,
+      viewer.eventId,
+      viewer.personId,
+      intentKey,
+    ]),
+  );
+  const variant = ((Number.parseInt(hex[16]!, 16) & 0b0011) | 0b1000).toString(
+    16,
+  );
+  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-5${hex.slice(13, 16)}-${variant}${hex.slice(17, 20)}-${hex.slice(20, 32)}`;
+}
+
 async function readStoredCommand(
   env: CloudflareEnvironment,
   viewer: Viewer,

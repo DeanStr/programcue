@@ -11,7 +11,7 @@ import { DEMO_IDENTITIES } from "~/platform/demo/demo-identities";
 import { ensureDemoData } from "~/platform/demo/seed.server";
 import {
   D1EventRepository,
-  EventPublishedProgrammeSlugError,
+  EventPublishedPublicUrlError,
   EventPublishedScheduleConflictError,
   EventResourceConfigurationError,
   EventRevisionConflictError,
@@ -902,11 +902,131 @@ describe("Event Setup D1 service", () => {
         ...inputFrom(current),
         publicSlug: `renamed-${crypto.randomUUID().slice(0, 8)}`,
       }),
-    ).rejects.toBeInstanceOf(EventPublishedProgrammeSlugError);
+    ).rejects.toBeInstanceOf(EventPublishedPublicUrlError);
 
     await expect(service.getSetup(viewer)).resolves.toMatchObject({
       publicSlug: current.publicSlug,
       revision: current.revision,
+    });
+  });
+
+  it("locks the event slug after public-site publication without a programme", async () => {
+    const testEnv = env as unknown as CloudflareEnvironment;
+    await ensureDemoData(testEnv);
+    const service = new EventService(testEnv);
+    await testEnv.DB.prepare(
+      "UPDATE events SET programme_published_at = NULL WHERE id = ? AND organisation_id = ?",
+    )
+      .bind(viewer.eventId, viewer.organisationId)
+      .run();
+    const current = await service.getSetup(viewer);
+    const configuration = defaultPublicSiteDraft();
+    await testEnv.DB.prepare(
+      "DELETE FROM event_public_sites WHERE event_id = ? AND organisation_id = ?",
+    )
+      .bind(viewer.eventId, viewer.organisationId)
+      .run();
+    await testEnv.DB.prepare(
+      `INSERT INTO event_public_sites (
+         event_id, organisation_id, draft_json, draft_revision,
+         published_json, published_revision, published_at,
+         last_updated_by_person_id, last_operation_id
+       ) VALUES (?, ?, ?, 1, ?, 1, unixepoch(), ?, ?)`,
+    )
+      .bind(
+        viewer.eventId,
+        viewer.organisationId,
+        JSON.stringify(configuration),
+        JSON.stringify({ ...configuration, sponsors: [] }),
+        viewer.personId,
+        crypto.randomUUID(),
+      )
+      .run();
+
+    await expect(
+      service.saveSetup(viewer, {
+        ...inputFrom(current),
+        publicSlug: `renamed-${crypto.randomUUID().slice(0, 8)}`,
+      }),
+    ).rejects.toBeInstanceOf(EventPublishedPublicUrlError);
+
+    await expect(service.getSetup(viewer)).resolves.toMatchObject({
+      publicSlug: current.publicSlug,
+      revision: current.revision,
+    });
+  });
+
+  it("rejects a slug change when site publication wins the write race", async () => {
+    const testEnv = env as unknown as CloudflareEnvironment;
+    await ensureDemoData(testEnv);
+    await testEnv.DB.batch([
+      testEnv.DB.prepare(
+        "UPDATE events SET programme_published_at = NULL WHERE id = ? AND organisation_id = ?",
+      ).bind(viewer.eventId, viewer.organisationId),
+      testEnv.DB.prepare(
+        "DELETE FROM event_public_sites WHERE event_id = ? AND organisation_id = ?",
+      ).bind(viewer.eventId, viewer.organisationId),
+    ]);
+    const service = new EventService(testEnv);
+    const current = await service.getSetup(viewer);
+    const configuration = defaultPublicSiteDraft();
+    let publicationInserted = false;
+    const racingDatabase = new Proxy(testEnv.DB, {
+      get(target, property) {
+        if (property === "batch") {
+          return async (statements: D1PreparedStatement[]) => {
+            if (!publicationInserted) {
+              publicationInserted = true;
+              await testEnv.DB.batch([
+                testEnv.DB.prepare(
+                  `INSERT INTO event_public_sites (
+                     event_id, organisation_id, draft_json, draft_revision,
+                     published_json, published_revision, published_at,
+                     last_updated_by_person_id, last_operation_id
+                   ) VALUES (?, ?, ?, 1, ?, 1, unixepoch(), ?, ?)`,
+                ).bind(
+                  viewer.eventId,
+                  viewer.organisationId,
+                  JSON.stringify(configuration),
+                  JSON.stringify({ ...configuration, sponsors: [] }),
+                  viewer.personId,
+                  crypto.randomUUID(),
+                ),
+                testEnv.DB.prepare(
+                  "UPDATE events SET revision = revision + 1 WHERE id = ? AND organisation_id = ?",
+                ).bind(viewer.eventId, viewer.organisationId),
+              ]);
+            }
+            return target.batch(statements);
+          };
+        }
+        const value = Reflect.get(target, property);
+        return typeof value === "function" ? value.bind(target) : value;
+      },
+    });
+    const racingEnvironment = new Proxy(testEnv, {
+      get(target, property) {
+        return property === "DB"
+          ? racingDatabase
+          : Reflect.get(target, property);
+      },
+    });
+
+    await expect(
+      new D1EventRepository(racingEnvironment).saveSetup(
+        viewer.organisationId,
+        viewer.eventId,
+        viewer.personId,
+        {
+          ...inputFrom(current),
+          publicSlug: `raced-${crypto.randomUUID().slice(0, 8)}`,
+        },
+      ),
+    ).rejects.toBeInstanceOf(EventPublishedPublicUrlError);
+    expect(publicationInserted).toBe(true);
+    await expect(service.getSetup(viewer)).resolves.toMatchObject({
+      publicSlug: current.publicSlug,
+      revision: current.revision + 1,
     });
   });
 

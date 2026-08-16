@@ -56,6 +56,20 @@ test("organisers compose, preview and publish the bounded public event site", as
     .getByLabel("Restricted Markdown")
     .fill("Thanks to the organisations supporting this event.");
 
+  await page
+    .getByRole("complementary", { name: "Primary navigation" })
+    .getByRole("link", { name: "Speakers", exact: true })
+    .click();
+  const unsavedDialog = page.getByRole("dialog", {
+    name: "Leave without saving the public site?",
+  });
+  await expect(unsavedDialog).toBeVisible();
+  await unsavedDialog.getByRole("button", { name: "Keep editing" }).click();
+  await expect(page).toHaveURL(/\/admin\/site$/u);
+  await expect(page.getByLabel("Tagline")).toHaveValue(
+    "One destination for the whole event.",
+  );
+
   await page.getByRole("button", { name: "Mobile" }).click();
   await expect(page.locator(".public-site-preview-frame")).toHaveClass(
     /is-mobile/,
@@ -86,7 +100,7 @@ test("organisers compose, preview and publish the bounded public event site", as
   ).toBeDisabled();
   await expect(
     page.getByText(
-      "Save the homepage and page edits before managing sponsors or recordings.",
+      "Save the homepage and page edits before changing sponsors or recording drafts. Published recordings can still be withdrawn.",
     ),
   ).toBeVisible();
   await page.getByRole("button", { name: "Save site draft" }).click();
@@ -149,6 +163,15 @@ test("organisers compose, preview and publish the bounded public event site", as
         getComputedStyle(element).getPropertyValue("--event-accent").trim(),
       ),
   ).toBe(previewAccent);
+  const eventNavigation = page
+    .getByRole("navigation", { name: "Event navigation" })
+    .first();
+  await expect(
+    eventNavigation.getByRole("link", { name: "Event home" }),
+  ).toHaveAttribute("aria-current", "page");
+  await expect(
+    eventNavigation.getByRole("link", { name: "All sessions" }),
+  ).toHaveAttribute("href", "/public/programme/future-of-events-2027/sessions");
 
   await page.getByRole("link", { name: "About", exact: true }).click();
   await expect(page).toHaveURL(
@@ -157,10 +180,7 @@ test("organisers compose, preview and publish the bounded public event site", as
   await expect(page.getByRole("heading", { name: "Why attend" })).toBeVisible();
   await expect(
     page.getByRole("link", { name: "All sessions" }),
-  ).toHaveAttribute(
-    "href",
-    "/public/programme/future-of-events-2027#programme",
-  );
+  ).toHaveAttribute("href", "/public/programme/future-of-events-2027/sessions");
   const fixedPageResponse = await page.request.get(page.url());
   const fixedPageEtag = fixedPageResponse.headers().etag;
   expect(fixedPageResponse.headers()["cache-control"]).toContain("public");
@@ -170,7 +190,17 @@ test("organisers compose, preview and publish the bounded public event site", as
   });
   expect(notModified.status()).toBe(304);
 
-  await page.getByRole("link", { name: "Sponsors", exact: true }).click();
+  await page.getByRole("link", { name: "All sessions" }).first().click();
+  await expect(page).toHaveURL(
+    /\/public\/programme\/future-of-events-2027\/sessions$/u,
+  );
+  await expect(
+    page.getByRole("link", { name: "All sessions" }).first(),
+  ).toHaveAttribute("aria-current", "page");
+  await page
+    .getByRole("link", { name: "Sponsors", exact: true })
+    .first()
+    .click();
   await expect(page.getByRole("heading", { name: "Community" })).toBeVisible();
   await expect(page.getByText("Example Partner")).toBeVisible();
 

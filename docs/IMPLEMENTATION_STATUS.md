@@ -782,6 +782,9 @@ this AIA-08 production slice.
   site publication, are materialized only when visible, and are revalidated in
   both the schedule preflight and atomic schedule compare-and-set. A conflicting
   schedule stays unpublished rather than silently dropping homepage content.
+  Event Setup locks the public slug after either site or programme publication,
+  including at its atomic write boundary, so a pre-programme site launch cannot
+  invalidate shared public URLs.
   Site publication also atomically rechecks canonical description/venue
   dependencies; public loaders repeat the checks, and Event Setup blocks removal
   of content required by the live site. Fixed editorial page ETags combine the
@@ -789,8 +792,10 @@ this AIA-08 production slice.
   revision. Invalid persisted snapshots or branding return a non-cacheable
   error; they do not disappear or receive a product-colour/placeholder fallback.
 - **Replay and snapshot integrity:** Every public-site, sponsor and recording
-  form submits a stable command UUID. The existing D1 idempotency ledger binds
-  it to the exact validated payload and durable result; exact replays converge
+  form submits a stable command UUID. Consequential command identities remain
+  stable for the exact site or record generation across response loss,
+  revalidation and reload. The existing D1 idempotency ledger binds each
+  identity to the exact validated payload and durable result; exact replays converge
   without duplicate revisions, entities or audit rows, while changed-payload
   reuse conflicts. Site publication reads the site draft and ordered sponsors
   in one SQL snapshot before its revision compare-and-set. The confirmation
@@ -809,7 +814,8 @@ this AIA-08 production slice.
   Optional external captions and transcripts are linked beside the recording.
   Schedule publication preflight and its atomic guard prevent a published
   recording's session from disappearing silently. Withdrawal removes public
-  access immediately while retaining the editable draft. Disabled post-event
+  access immediately while retaining the editable draft, even with unrelated
+  unsaved site-editor changes. Disabled post-event
   mode does not serialize recording data. No upload, hosting, caption generation
   or rights-management success is claimed.
 - **Themes and verification:** Public pages and managed embeds accept only
@@ -818,9 +824,11 @@ this AIA-08 production slice.
   programme contrast contract. Focused unit/Worker coverage verifies fixed
   composition, URL constraints, immutable snapshots, stale-write behavior,
   sponsor snapshots and edits, featured-record and recording schedule blocking,
-  recording resources/timing and a real Images WebP render.
+  recording resources/timing, independent withdrawal and a real Images WebP
+  render. Unsaved client configuration blocks navigation and tab closure.
   `e2e/public-site.spec.ts` passes the complete organizer-to-public Chromium
-  workflow, including conditional fixed-page caching, and `/admin/site` passes
+  workflow, including discard confirmation, Event home/programme navigation and
+  conditional fixed-page caching, and `/admin/site` passes
   the WCAG A/AA axe sweep at phone, tablet and desktop widths. The complete local
   core gate also passes, including TypeScript, production builds, the Agents
   Durable Object test, recovery, migration/contracts and synchronized OpenAPI

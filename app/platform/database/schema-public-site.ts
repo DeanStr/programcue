@@ -122,6 +122,26 @@ export const eventSiteSponsors = sqliteTable(
     ),
     check("event_site_sponsors_revision", sql`${table.revision} > 0`),
     check("event_site_sponsors_position", sql`${table.position} >= 0`),
+    check(
+      "event_site_sponsors_name",
+      sql`length(trim(${table.name})) BETWEEN 1 AND 120`,
+    ),
+    check(
+      "event_site_sponsors_tier",
+      sql`length(trim(${table.tier})) BETWEEN 1 AND 80`,
+    ),
+    check(
+      "event_site_sponsors_website_url",
+      sql`${table.websiteUrl} IS NULL OR length(${table.websiteUrl}) <= 2048`,
+    ),
+    check(
+      "event_site_sponsors_logo_url",
+      sql`${table.logoUrl} IS NULL OR length(${table.logoUrl}) <= 2048`,
+    ),
+    check(
+      "event_site_sponsors_description",
+      sql`${table.description} IS NULL OR length(${table.description}) <= 1000`,
+    ),
   ],
 );
 
@@ -174,8 +194,44 @@ export const eventSessionRecordings = sqliteTable(
       sql`${table.draftRevision} > 0`,
     ),
     check(
+      "event_session_recordings_draft_title",
+      sql`length(trim(${table.draftTitle})) BETWEEN 1 AND 160`,
+    ),
+    check(
+      "event_session_recordings_draft_recording_url",
+      sql`length(${table.draftRecordingUrl}) <= 2048`,
+    ),
+    check(
+      "event_session_recordings_draft_captions_url",
+      sql`${table.draftCaptionsUrl} IS NULL OR length(${table.draftCaptionsUrl}) <= 2048`,
+    ),
+    check(
+      "event_session_recordings_draft_transcript_url",
+      sql`${table.draftTranscriptUrl} IS NULL OR length(${table.draftTranscriptUrl}) <= 2048`,
+    ),
+    check(
+      "event_session_recordings_published_revision",
+      sql`${table.publishedRevision} IS NULL OR ${table.publishedRevision} > 0`,
+    ),
+    check(
       "event_session_recordings_publication_tuple",
       sql`(${table.publishedTitle} IS NULL AND ${table.publishedRecordingUrl} IS NULL AND ${table.publishedCaptionsUrl} IS NULL AND ${table.publishedTranscriptUrl} IS NULL AND ${table.publishedRevision} IS NULL AND ${table.publishedAt} IS NULL) OR (${table.publishedTitle} IS NOT NULL AND ${table.publishedRecordingUrl} IS NOT NULL AND ${table.publishedRevision} > 0 AND ${table.publishedAt} IS NOT NULL)`,
+    ),
+    check(
+      "event_session_recordings_published_title",
+      sql`${table.publishedTitle} IS NULL OR length(trim(${table.publishedTitle})) BETWEEN 1 AND 160`,
+    ),
+    check(
+      "event_session_recordings_published_recording_url",
+      sql`${table.publishedRecordingUrl} IS NULL OR length(${table.publishedRecordingUrl}) <= 2048`,
+    ),
+    check(
+      "event_session_recordings_published_captions_url",
+      sql`${table.publishedCaptionsUrl} IS NULL OR length(${table.publishedCaptionsUrl}) <= 2048`,
+    ),
+    check(
+      "event_session_recordings_published_transcript_url",
+      sql`${table.publishedTranscriptUrl} IS NULL OR length(${table.publishedTranscriptUrl}) <= 2048`,
     ),
   ],
 );

@@ -34,6 +34,7 @@ export type PublicRecordingWorkspaceItem = {
   publishedTranscriptUrl: string | null;
   publishedRevision: number | null;
   publishedAt: number | null;
+  lastOperationId: string;
 };
 
 export type PublishedPublicRecording = {
@@ -74,7 +75,8 @@ export class PublicRecordingService {
               recording.published_captions_url AS publishedCaptionsUrl,
               recording.published_transcript_url AS publishedTranscriptUrl,
               recording.published_revision AS publishedRevision,
-              recording.published_at AS publishedAt
+              recording.published_at AS publishedAt,
+              recording.last_operation_id AS lastOperationId
          FROM event_session_recordings recording
          JOIN sessions session
            ON session.id = recording.session_id

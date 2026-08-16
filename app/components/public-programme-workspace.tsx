@@ -282,7 +282,7 @@ function PublicProgrammeFilters({ model }: { model: PublicProgrammeModel }) {
     clearedSavedFilterNotice,
   } = model;
   return (
-    <div className="public-filters-bar">
+    <div className="public-filters-bar" id="programme">
       {clearedSavedFilterNotice ? (
         <p className="validation-item info" role="status">
           {clearedSavedFilterNotice}
@@ -1104,7 +1104,7 @@ export function PublicProgrammeWorkspace({
             </div>
           ) : (
             <>
-              <div className="public-content" id="programme">
+              <div className="public-content">
                 {homeSurface && loaderData.site ? (
                   <PublicSiteHome
                     event={programme.event}

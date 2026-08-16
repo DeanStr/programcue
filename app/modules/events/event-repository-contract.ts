@@ -161,12 +161,12 @@ export class EventPublishedScheduleConflictError extends Error {
   }
 }
 
-export class EventPublishedProgrammeSlugError extends Error {
+export class EventPublishedPublicUrlError extends Error {
   constructor() {
     super(
-      "The public slug is locked after programme publication so existing public, embed, API and calendar URLs remain valid.",
+      "The public slug is locked after public-site or programme publication so existing public, page, social-card, embed, API and calendar URLs remain valid.",
     );
-    this.name = "EventPublishedProgrammeSlugError";
+    this.name = "EventPublishedPublicUrlError";
   }
 }
 

@@ -7,7 +7,7 @@ import { parseSessionFormatsConfiguration } from "./event-configuration";
 import {
   type EventAdministrator,
   EventConfigurationError,
-  EventPublishedProgrammeSlugError,
+  EventPublishedPublicUrlError,
   EventPublishedScheduleConflictError,
   type EventRepository,
   EventResourceConfigurationError,
@@ -221,7 +221,14 @@ export class D1EventRepository implements EventRepository {
               EXISTS (
                 SELECT 1 FROM schedule_versions
                  WHERE event_id = events.id AND status = 'published'
-              ) AS hasPublishedSchedule
+              ) AS hasPublishedSchedule,
+              EXISTS (
+                SELECT 1 FROM event_public_sites site
+                 WHERE site.event_id = events.id
+                   AND site.organisation_id = events.organisation_id
+                   AND site.published_json IS NOT NULL
+                   AND site.published_at IS NOT NULL
+              ) AS hasPublishedSite
          FROM events
         WHERE id = ? AND organisation_id = ?`,
     )
@@ -235,6 +242,7 @@ export class D1EventRepository implements EventRepository {
         startsAt: number;
         endsAt: number;
         hasPublishedSchedule: number;
+        hasPublishedSite: number;
       }>();
     if (!current || current.revision !== input.revision)
       throw new EventRevisionConflictError();
@@ -246,8 +254,8 @@ export class D1EventRepository implements EventRepository {
         .bind(input.publicSlug, eventId)
         .first();
       if (conflictingSlug) throw new EventSlugConflictError();
-      if (current.programmePublishedAt !== null)
-        throw new EventPublishedProgrammeSlugError();
+      if (current.programmePublishedAt !== null || current.hasPublishedSite)
+        throw new EventPublishedPublicUrlError();
     }
     if (
       current.hasPublishedSchedule &&
@@ -461,7 +469,18 @@ export class D1EventRepository implements EventRepository {
                file_policy_json = ?,
                revision = revision + 1, last_operation_id = ?, last_updated_by_person_id = ?, updated_at = unixepoch()
          WHERE id = ? AND organisation_id = ? AND revision = ?
-           AND (programme_published_at IS NULL OR slug = ?)
+           AND (
+             slug = ? OR (
+               programme_published_at IS NULL
+               AND NOT EXISTS (
+                 SELECT 1 FROM event_public_sites site
+                  WHERE site.event_id = events.id
+                    AND site.organisation_id = events.organisation_id
+                    AND site.published_json IS NOT NULL
+                    AND site.published_at IS NOT NULL
+               )
+             )
+           )
            AND (
              (timezone = ? AND starts_at = ? AND ends_at = ?)
              OR NOT EXISTS (
@@ -725,7 +744,14 @@ export class D1EventRepository implements EventRepository {
                  EXISTS (
                    SELECT 1 FROM schedule_versions
                     WHERE event_id = events.id AND status = 'published'
-                 ) AS hasPublishedSchedule
+                 ) AS hasPublishedSchedule,
+                 EXISTS (
+                   SELECT 1 FROM event_public_sites site
+                    WHERE site.event_id = events.id
+                      AND site.organisation_id = events.organisation_id
+                      AND site.published_json IS NOT NULL
+                      AND site.published_at IS NOT NULL
+                 ) AS hasPublishedSite
             FROM events
            WHERE id = ? AND organisation_id = ?
         `,
@@ -739,7 +765,15 @@ export class D1EventRepository implements EventRepository {
             startsAt: number;
             endsAt: number;
             hasPublishedSchedule: number;
+            hasPublishedSite: number;
           }>();
+        if (
+          current &&
+          current.slug !== input.publicSlug &&
+          (current.programmePublishedAt !== null || current.hasPublishedSite)
+        ) {
+          throw new EventPublishedPublicUrlError();
+        }
         if (
           current?.revision === input.revision &&
           current.slug !== input.publicSlug
@@ -750,8 +784,6 @@ export class D1EventRepository implements EventRepository {
             .bind(input.publicSlug, eventId)
             .first();
           if (conflictingSlug) throw new EventSlugConflictError();
-          if (current.programmePublishedAt !== null)
-            throw new EventPublishedProgrammeSlugError();
         }
         if (
           current?.revision === input.revision &&

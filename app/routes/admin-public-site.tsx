@@ -13,7 +13,8 @@ import { AdminPublicSiteEditor } from "~/components/admin-public-site-editor";
 import { AdminPublicSitePreview } from "~/components/admin-public-site-preview";
 import { AdminPublicSiteRecordings } from "~/components/admin-public-site-recordings";
 import { AdminPublicSiteSponsors } from "~/components/admin-public-site-sponsors";
-import { useConfirm } from "~/components/ui/confirm-dialog";
+import { ConfirmDialog, useConfirm } from "~/components/ui/confirm-dialog";
+import { useUnsavedChanges } from "~/components/ui/use-unsaved-changes";
 import type { PublicRecordingWorkspaceItem } from "~/modules/public-site/public-recording-service.server";
 import { PublicRecordingService } from "~/modules/public-site/public-recording-service.server";
 import {
@@ -22,6 +23,7 @@ import {
   type PublicSiteSponsor,
   type PublishedPublicSiteSnapshot,
 } from "~/modules/public-site/public-site";
+import { publicSiteCommandIdForIntent } from "~/modules/public-site/public-site-command.server";
 import {
   PublicSiteCommandConflictError,
   PublicSiteNotFoundError,
@@ -130,15 +132,55 @@ function publicationChangeSummary(input: {
   return changes.length ? changes : ["No public content changes detected."];
 }
 
+function sitePublishCommandKey(
+  draftRevision: number,
+  publishedRevision: number | null,
+) {
+  return `publish-site:${draftRevision}:${publishedRevision ?? "none"}`;
+}
+
+function sponsorDeleteCommandKey(id: string, revision: number) {
+  return `delete-sponsor:${id}:${revision}`;
+}
+
+function recordingCommandKey(
+  intent: "publish" | "unpublish",
+  recording: PublicRecordingWorkspaceItem,
+) {
+  return `${intent}-recording:${recording.id}:${recording.draftRevision}:${recording.publishedRevision ?? "none"}:${recording.lastOperationId}`;
+}
+
 export async function loader({ request, context }: Route.LoaderArgs) {
   const { env } = getCloudflareContext(context);
   const viewer = await requireCurrentEventRole(request, env, [
     "owner",
     "administrator",
   ]);
+  const workspace = await new PublicSiteService(env).getWorkspace(viewer);
+  const commandKeys = [
+    sitePublishCommandKey(
+      workspace.draft.revision,
+      workspace.published?.revision ?? null,
+    ),
+    ...workspace.sponsors.map((sponsor) =>
+      sponsorDeleteCommandKey(sponsor.id, sponsor.revision),
+    ),
+    ...workspace.recordings.flatMap((recording) => [
+      recordingCommandKey("publish", recording),
+      recordingCommandKey("unpublish", recording),
+    ]),
+  ];
   return {
-    ...(await new PublicSiteService(env).getWorkspace(viewer)),
+    ...workspace,
     publicOrigin: new URL(request.url).origin,
+    consequentialCommandIds: Object.fromEntries(
+      await Promise.all(
+        commandKeys.map(async (key) => [
+          key,
+          await publicSiteCommandIdForIntent(viewer, key),
+        ]),
+      ),
+    ),
   };
 }
 
@@ -356,12 +398,26 @@ export default function AdminPublicSite({ loaderData }: Route.ComponentProps) {
   const newerDraftAvailable = loaderData.draft.revision !== draftBase.revision;
   const secondaryActionsBlocked = unsaved || newerDraftAvailable;
   const busy = navigation.state !== "idle";
+  const blocker = useUnsavedChanges(unsaved);
+
+  function consequentialCommandId(key: string) {
+    const id = loaderData.consequentialCommandIds[key];
+    if (!id)
+      throw new Error(
+        "The public-site action identity is unavailable for this revision. Refresh before trying again.",
+      );
+    return id;
+  }
 
   function blockSecondaryMutation(event: FormEvent<HTMLDivElement>) {
     const form = event.target as HTMLFormElement;
     if (!(form instanceof HTMLFormElement)) return;
     const intent = String(new FormData(form).get("intent") ?? "");
-    if (intent !== "save-site" && secondaryActionsBlocked)
+    if (
+      intent !== "save-site" &&
+      intent !== "unpublish-recording" &&
+      secondaryActionsBlocked
+    )
       event.preventDefault();
   }
 
@@ -396,7 +452,12 @@ export default function AdminPublicSite({ loaderData }: Route.ComponentProps) {
         submit(
           {
             intent: "publish-site",
-            commandId: crypto.randomUUID(),
+            commandId: consequentialCommandId(
+              sitePublishCommandKey(
+                draftBase.revision,
+                loaderData.published?.revision ?? null,
+              ),
+            ),
             revision: String(draftBase.revision),
             confirmed: "true",
           },
@@ -420,7 +481,9 @@ export default function AdminPublicSite({ loaderData }: Route.ComponentProps) {
         submit(
           {
             intent: "delete-sponsor",
-            commandId: crypto.randomUUID(),
+            commandId: consequentialCommandId(
+              sponsorDeleteCommandKey(id, revision),
+            ),
             id,
             revision: String(revision),
             confirmed: "true",
@@ -445,7 +508,9 @@ export default function AdminPublicSite({ loaderData }: Route.ComponentProps) {
         submit(
           {
             intent: "publish-recording",
-            commandId: crypto.randomUUID(),
+            commandId: consequentialCommandId(
+              recordingCommandKey("publish", recording),
+            ),
             id: recording.id,
             revision: String(recording.draftRevision),
             confirmed: "true",
@@ -457,7 +522,6 @@ export default function AdminPublicSite({ loaderData }: Route.ComponentProps) {
 
   function unpublishRecording(recording: PublicRecordingWorkspaceItem) {
     const title = recording.publishedTitle ?? recording.draftTitle;
-    if (secondaryActionsBlocked) return;
     confirm(
       {
         title: `Withdraw ${title}?`,
@@ -471,7 +535,9 @@ export default function AdminPublicSite({ loaderData }: Route.ComponentProps) {
         submit(
           {
             intent: "unpublish-recording",
-            commandId: crypto.randomUUID(),
+            commandId: consequentialCommandId(
+              recordingCommandKey("unpublish", recording),
+            ),
             id: recording.id,
             revision: String(recording.draftRevision),
             confirmed: "true",
@@ -484,6 +550,16 @@ export default function AdminPublicSite({ loaderData }: Route.ComponentProps) {
   return (
     <>
       {dialog}
+      {blocker.state === "blocked" ? (
+        <ConfirmDialog
+          title="Leave without saving the public site?"
+          description="The homepage, page, theme, ordering or featured-record changes on this page have not been saved."
+          confirmLabel="Leave and discard"
+          cancelLabel="Keep editing"
+          onCancel={() => blocker.reset()}
+          onConfirm={() => blocker.proceed()}
+        />
+      ) : null}
       <div className="page-head">
         <div>
           <span className="pc-page-eyebrow">Published experience</span>
@@ -535,7 +611,7 @@ export default function AdminPublicSite({ loaderData }: Route.ComponentProps) {
         <div className="validation-item warn mb" role="status">
           {newerDraftAvailable
             ? "A newer saved site draft is available. Save will report a revision conflict; refresh before managing sponsors or recordings."
-            : "Save the homepage and page edits before managing sponsors or recordings."}
+            : "Save the homepage and page edits before changing sponsors or recording drafts. Published recordings can still be withdrawn."}
         </div>
       ) : null}
 

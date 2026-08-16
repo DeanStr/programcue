@@ -133,7 +133,7 @@ export function AdminPublicSiteRecordings({
               <button
                 className="btn small danger"
                 type="button"
-                disabled={blocked || busy}
+                disabled={busy}
                 onClick={() => onUnpublish(recording)}
               >
                 Withdraw

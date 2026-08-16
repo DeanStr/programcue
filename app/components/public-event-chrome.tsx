@@ -44,21 +44,39 @@ export function PublicEventHeader({
   const links: EventNavigationLink[] = [
     ...(programme
       ? [
+          ...(site
+            ? [
+                {
+                  key: "home",
+                  label: "Event home",
+                  href: programmeHref,
+                  active: activeSurface === "overview" && !activePage,
+                  routed: true,
+                },
+              ]
+            : []),
           {
             key: "sessions",
             label: "All sessions",
-            href: overviewSurface ? "#programme" : `${programmeHref}#programme`,
-            active: Boolean(overviewSurface && !activePage),
-            routed: false,
+            href: site
+              ? publicProgrammeSurfacePath(slug, "sessions")
+              : overviewSurface
+                ? "#programme"
+                : `${programmeHref}#programme`,
+            active: site
+              ? activeSurface === "sessions"
+              : Boolean(overviewSurface && !activePage),
+            routed: Boolean(site),
           },
           {
             key: "speakers",
             label: "Speakers",
-            href: overviewSurface
-              ? "#speakers"
-              : publicProgrammeSurfacePath(slug, "speakers"),
+            href:
+              site || !overviewSurface
+                ? publicProgrammeSurfacePath(slug, "speakers")
+                : "#speakers",
             active: activeSurface === "speakers",
-            routed: false,
+            routed: Boolean(site || !overviewSurface),
           },
           ...(["agenda", "schedule", "gallery"] as const).map((surface) => ({
             key: surface,
@@ -139,12 +157,15 @@ export function PublicEventHeader({
         )}
         <span className="public-brand-name">{event.name}</span>
       </Link>
-      <nav className="public-nav" aria-label="Programme">
+      <nav
+        className="public-nav"
+        aria-label={site ? "Event navigation" : "Programme"}
+      >
         {links.map((link) => navigationLink(link))}
       </nav>
       <details className="public-mobile-nav" ref={mobileNavigationRef}>
         <summary className="btn small">Browse</summary>
-        <nav aria-label="Programme sections">
+        <nav aria-label={site ? "Event navigation" : "Programme sections"}>
           {links.map((link) =>
             navigationLink(link, () =>
               mobileNavigationRef.current?.removeAttribute("open"),
