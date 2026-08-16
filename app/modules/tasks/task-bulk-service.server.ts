@@ -1,4 +1,5 @@
 import { ZodError, z } from "zod";
+import { requireValue } from "~/lib/required-value";
 
 import { AirtableProviderBoundary } from "~/modules/airtable/airtable-provider-boundary.server";
 import type { Viewer } from "~/platform/auth/authorize.server";
@@ -481,7 +482,10 @@ export class TaskBulkService {
       );
       const speakerById = new Map(speakers.results.map((row) => [row.id, row]));
       for (const personId of parsed.recordIds) {
-        const speaker = speakerById.get(personId)!;
+        const speaker = requireValue(
+          speakerById.get(personId),
+          "Required speakerById.get(personId) is unavailable.",
+        );
         const alreadyAssigned = existingKeys.has(`${personId}:${template.id}`);
         items.push({
           id: crypto.randomUUID(),
@@ -552,7 +556,10 @@ export class TaskBulkService {
       }
       const taskById = new Map(selected.results.map((task) => [task.id, task]));
       for (const taskId of parsed.recordIds) {
-        const task = taskById.get(taskId)!;
+        const task = requireValue(
+          taskById.get(taskId),
+          "Required taskById.get(taskId) is unavailable.",
+        );
         let status: "pending" | "skipped" | "failed" = "pending";
         let errorCode: string | null = null;
         let errorMessage: string | null = null;
@@ -917,11 +924,20 @@ export class TaskBulkService {
         if (operation.summary.action === "assign_template") {
           const result = await taskService.assignTemplate(
             viewer,
-            item.result.templateId!,
-            item.result.personId!,
+            requireValue(
+              item.result.templateId,
+              "Required item.result.templateId is unavailable.",
+            ),
+            requireValue(
+              item.result.personId,
+              "Required item.result.personId is unavailable.",
+            ),
             item.id,
             {
-              targetRevision: item.result.expectedRevision!,
+              targetRevision: requireValue(
+                item.result.expectedRevision,
+                "Required item.result.expectedRevision is unavailable.",
+              ),
               templateAssignments: item.result.expectedTemplateAssignments,
               templates: operation.expectedTemplates,
             },

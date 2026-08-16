@@ -9,6 +9,7 @@ import { useConfirm } from "~/components/ui/confirm-dialog";
 import { DomainStatusBadge } from "~/components/ui/domain-status-badge";
 import { EmptyState } from "~/components/ui/states";
 import { fieldLabel } from "~/lib/record-labels";
+import { requireValue } from "~/lib/required-value";
 import { shortReference } from "~/lib/short-reference";
 import {
   operationItemLink as itemLink,
@@ -616,7 +617,12 @@ export function OperationDetailPanel({
                                 <input
                                   type="hidden"
                                   name="operationId"
-                                  value={loaderData.selectedOperation!.id}
+                                  value={
+                                    requireValue(
+                                      loaderData.selectedOperation,
+                                      "Required loaderData.selectedOperation is unavailable.",
+                                    ).id
+                                  }
                                 />
                                 <input
                                   type="hidden"
@@ -658,7 +664,12 @@ export function OperationDetailPanel({
                                 <input
                                   type="hidden"
                                   name="operationId"
-                                  value={loaderData.selectedOperation!.id}
+                                  value={
+                                    requireValue(
+                                      loaderData.selectedOperation,
+                                      "Required loaderData.selectedOperation is unavailable.",
+                                    ).id
+                                  }
                                 />
                                 <input
                                   type="hidden"

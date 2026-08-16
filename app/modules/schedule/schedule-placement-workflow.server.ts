@@ -1,3 +1,4 @@
+import { requireValue } from "~/lib/required-value";
 import type { Viewer } from "~/platform/auth/authorize.server";
 import { scheduleConflictInsert } from "./schedule-conflict-statement.server";
 import {
@@ -789,7 +790,14 @@ export class SchedulePlacementWorkflow {
       throw new ScheduleRevisionConflictError();
 
     const current = metadata.next
-      ? workspace.entries.find((entry) => entry.id === metadata.next!.id)
+      ? workspace.entries.find(
+          (entry) =>
+            entry.id ===
+            requireValue(
+              metadata.next,
+              "Required metadata.next is unavailable.",
+            ).id,
+        )
       : null;
     if (
       metadata.next &&
@@ -806,8 +814,16 @@ export class SchedulePlacementWorkflow {
       !metadata.next &&
       workspace.entries.some(
         (entry) =>
-          entry.id === metadata.previous!.id ||
-          entry.sessionId === metadata.previous!.sessionId,
+          entry.id ===
+            requireValue(
+              metadata.previous,
+              "Required metadata.previous is unavailable.",
+            ).id ||
+          entry.sessionId ===
+            requireValue(
+              metadata.previous,
+              "Required metadata.previous is unavailable.",
+            ).sessionId,
       )
     ) {
       throw new ScheduleUndoUnavailableError();
@@ -816,15 +832,32 @@ export class SchedulePlacementWorkflow {
     const restoredEntries = metadata.previous
       ? metadata.next
         ? workspace.entries.map((entry) =>
-            entry.id === metadata.next!.id
-              ? { ...metadata.previous!, revision: entry.revision + 1 }
+            entry.id ===
+            requireValue(
+              metadata.next,
+              "Required metadata.next is unavailable.",
+            ).id
+              ? {
+                  ...requireValue(
+                    metadata.previous,
+                    "Required metadata.previous is unavailable.",
+                  ),
+                  revision: entry.revision + 1,
+                }
               : entry,
           )
         : [
             ...workspace.entries,
             { ...metadata.previous, revision: metadata.previous.revision + 1 },
           ]
-      : workspace.entries.filter((entry) => entry.id !== metadata.next!.id);
+      : workspace.entries.filter(
+          (entry) =>
+            entry.id !==
+            requireValue(
+              metadata.next,
+              "Required metadata.next is unavailable.",
+            ).id,
+        );
     const prospective: ScheduleWorkspace = {
       ...workspace,
       entries: restoredEntries,
@@ -869,7 +902,16 @@ export class SchedulePlacementWorkflow {
           metadata.next.endsAt,
           metadata.next.revision,
         ]
-      : [metadata.previous!.id, metadata.previous!.sessionId];
+      : [
+          requireValue(
+            metadata.previous,
+            "Required metadata.previous is unavailable.",
+          ).id,
+          requireValue(
+            metadata.previous,
+            "Required metadata.previous is unavailable.",
+          ).sessionId,
+        ];
     const statements: D1PreparedStatement[] = [
       this.env.DB.prepare(
         `
@@ -971,14 +1013,20 @@ export class SchedulePlacementWorkflow {
              )
         `,
         ).bind(
-          metadata.next!.id,
+          requireValue(metadata.next, "Required metadata.next is unavailable.")
+            .id,
           viewer.eventId,
           parsed.scheduleVersionId,
-          metadata.next!.sessionId,
-          metadata.next!.roomId,
-          metadata.next!.startsAt,
-          metadata.next!.endsAt,
-          metadata.next!.revision,
+          requireValue(metadata.next, "Required metadata.next is unavailable.")
+            .sessionId,
+          requireValue(metadata.next, "Required metadata.next is unavailable.")
+            .roomId,
+          requireValue(metadata.next, "Required metadata.next is unavailable.")
+            .startsAt,
+          requireValue(metadata.next, "Required metadata.next is unavailable.")
+            .endsAt,
+          requireValue(metadata.next, "Required metadata.next is unavailable.")
+            .revision,
           parsed.scheduleVersionId,
           viewer.eventId,
           operationId,
@@ -1022,7 +1070,10 @@ export class SchedulePlacementWorkflow {
       `,
       ).bind(
         metadata.previous ? "scheduled" : "unscheduled",
-        (metadata.previous ?? metadata.next)!.sessionId,
+        requireValue(
+          metadata.previous ?? metadata.next,
+          "Required (metadata.previous ?? metadata.next) is unavailable.",
+        ).sessionId,
         viewer.eventId,
         parsed.scheduleVersionId,
         viewer.eventId,
@@ -1045,7 +1096,10 @@ export class SchedulePlacementWorkflow {
         viewer.organisationId,
         viewer.eventId,
         viewer.personId,
-        (metadata.previous ?? metadata.next)!.id,
+        requireValue(
+          metadata.previous ?? metadata.next,
+          "Required (metadata.previous ?? metadata.next) is unavailable.",
+        ).id,
         JSON.stringify({ undoneToken: parsed.undoToken }),
         parsed.scheduleVersionId,
         viewer.eventId,
@@ -1068,9 +1122,15 @@ export class SchedulePlacementWorkflow {
         }
       : null;
     return {
-      entryId: (metadata.previous ?? metadata.next)!.id,
+      entryId: requireValue(
+        metadata.previous ?? metadata.next,
+        "Required (metadata.previous ?? metadata.next) is unavailable.",
+      ).id,
       scheduleRevision: parsed.scheduleRevision + 1,
-      sessionId: (metadata.previous ?? metadata.next)!.sessionId,
+      sessionId: requireValue(
+        metadata.previous ?? metadata.next,
+        "Required (metadata.previous ?? metadata.next) is unavailable.",
+      ).sessionId,
       restoredPlacement,
     };
   }

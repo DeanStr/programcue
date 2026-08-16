@@ -686,7 +686,7 @@ export class EvaluationDecisionService {
     const speakerInvitations = acceptedSpeakers.results
       .map((speaker, index) => ({
         ...speaker,
-        membershipId: speakerMemberships[index]!.membershipId,
+        membershipId: speakerMemberships[index].membershipId,
       }))
       .filter(
         (speaker) =>
@@ -857,7 +857,7 @@ export class EvaluationDecisionService {
         payload: { decisionId },
       };
       try {
-        await operationsQueue!.send(message);
+        await operationsQueue.send(message);
       } catch (error) {
         notificationStatus = "queue_failed";
         await this.env.DB.prepare(
@@ -891,7 +891,7 @@ export class EvaluationDecisionService {
         speakerInvitationStatus = "queued";
         for (const plan of speakerInvitationPlans) {
           try {
-            await operationsQueue!.send(plan.message);
+            await operationsQueue.send(plan.message);
           } catch (error) {
             await persistAcceptedSpeakerQueueFailure(this.env, plan, error);
             speakerInvitationStatus = "queue_failed";

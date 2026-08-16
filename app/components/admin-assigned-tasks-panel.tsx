@@ -191,7 +191,7 @@ export function AdminAssignedTasksPanel({
                         {task.evidence[0].details.responses
                           ? task.formFields.map((field) => {
                               const value =
-                                task.evidence[0]!.details.responses?.[field.id];
+                                task.evidence[0].details.responses?.[field.id];
                               if (value === undefined) return null;
                               return (
                                 <p key={field.id}>

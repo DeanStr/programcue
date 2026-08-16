@@ -118,8 +118,8 @@ export function planSubmittedRevisionSpeakers(input: {
   );
   if (
     primary.length !== 1 ||
-    primary[0]!.personId !== input.applicant.personId ||
-    primary[0]!.email.toLowerCase() !== input.applicant.email.toLowerCase()
+    primary[0].personId !== input.applicant.personId ||
+    primary[0].email.toLowerCase() !== input.applicant.email.toLowerCase()
   ) {
     throw new Error(
       `Submission ${input.submissionId} has an invalid primary-speaker relationship.`,

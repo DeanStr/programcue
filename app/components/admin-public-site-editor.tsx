@@ -25,7 +25,7 @@ function SiteSectionControls({
       const next = [...current.sectionOrder];
       const target = index + direction;
       if (target < 0 || target >= next.length) return current;
-      [next[index], next[target]] = [next[target]!, next[index]!];
+      [next[index], next[target]] = [next[target], next[index]];
       return { ...current, sectionOrder: next };
     });
   }

@@ -112,5 +112,5 @@ export async function requireScorecardSourceRoundId(
       );
     }
   }
-  return sourceRounds.results[0]!.sourceRoundId;
+  return sourceRounds.results[0].sourceRoundId;
 }

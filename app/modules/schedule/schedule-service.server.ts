@@ -1,3 +1,4 @@
+import { requireValue } from "~/lib/required-value";
 import { AirtableProgrammeRepository } from "~/modules/airtable/airtable-programme-repository.server";
 import {
   AirtableProviderBoundary,
@@ -587,7 +588,10 @@ export class ScheduleService {
         this.conflictInsert(
           viewer.eventId,
           id,
-          clonedEntryIds.get(entryId)!,
+          requireValue(
+            clonedEntryIds.get(entryId),
+            "Required clonedEntryIds.get(entryId) is unavailable.",
+          ),
           {
             ...conflict,
             conflictingEntryId: conflict.conflictingEntryId
@@ -1180,7 +1184,9 @@ export class ScheduleService {
         "Schedule publication committed without an event change cursor.",
       );
     }
-    const changeSequence = Number(change!.sequence);
+    const changeSequence = Number(
+      requireValue(change, "Required change is unavailable.").sequence,
+    );
 
     let calendar: SchedulePublicationResult["calendar"];
     try {

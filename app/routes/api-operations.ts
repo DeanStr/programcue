@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { requireValue } from "~/lib/required-value";
 import {
   ApiError,
   apiFailure,
@@ -55,7 +56,12 @@ export async function loader({ request, params, context }: Route.LoaderArgs) {
       })),
       nextCursor:
         result.hasMore && page.length
-          ? encodePrivateCursor(page.at(-1)!.createdAt, page.at(-1)!.id)
+          ? encodePrivateCursor(
+              requireValue(page.at(-1), "Required page.at(-1) is unavailable.")
+                .createdAt,
+              requireValue(page.at(-1), "Required page.at(-1) is unavailable.")
+                .id,
+            )
           : null,
       correlationId: correlationId(request),
     });

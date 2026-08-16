@@ -3,6 +3,7 @@ import { Form, Link, useSubmit } from "react-router";
 import { useConfirm } from "~/components/ui/confirm-dialog";
 import { DomainStatusBadge } from "~/components/ui/domain-status-badge";
 import { EmptyState } from "~/components/ui/states";
+import { requireValue } from "~/lib/required-value";
 import type { CommunicationsCentreLoaderData } from "~/routes/communications-centre";
 import {
   communicationCategoryLabel,
@@ -189,7 +190,10 @@ export function CommunicationDeliveryHealth({
     health.scope.kind === "event" ? health.scope.period : "recent";
   const pageQuery = (offset: number) =>
     `/admin/communications?${new URLSearchParams({
-      deliveryCommunication: selected!.id,
+      deliveryCommunication: requireValue(
+        selected,
+        "Required selected is unavailable.",
+      ).id,
       deliveryOffset: String(offset),
     })}#communications-health`;
   return (

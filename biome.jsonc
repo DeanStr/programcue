@@ -50,6 +50,23 @@
   },
   "overrides": [
     {
+      "includes": [
+        "app/**/*.ts",
+        "app/**/*.tsx",
+        "!app/**/*.test.ts",
+        "!app/**/*.test.tsx",
+        "!app/**/*.spec.ts",
+        "!app/**/*.spec.tsx",
+      ],
+      "linter": {
+        "rules": {
+          "style": {
+            "noNonNullAssertion": "error",
+          },
+        },
+      },
+    },
+    {
       "includes": ["**/*.jsonc"],
       "json": {
         "formatter": {

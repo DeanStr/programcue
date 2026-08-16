@@ -1,3 +1,4 @@
+import { requireValue } from "~/lib/required-value";
 import { type FormField, MAX_FORM_FIELDS } from "./submission-schema";
 
 function fieldIdFromLabel(fields: FormField[], label: string) {
@@ -70,7 +71,10 @@ export function conditionalFieldOrderIssue(fields: FormField[]) {
       return `Cannot reorder fields: “${field.label}” depends on the missing field “${field.condition.fieldId}”.`;
     }
     if (dependencyIndex >= index) {
-      const dependency = fields[dependencyIndex]!;
+      const dependency = requireValue(
+        fields[dependencyIndex],
+        "Required fields[dependencyIndex] is unavailable.",
+      );
       return `Cannot reorder fields: “${field.label}” must remain after “${dependency.label}” because its condition depends on that field.`;
     }
   }
@@ -126,7 +130,12 @@ function flattenSectionGroups(
   groups: Map<string, FormField[]>,
   sectionIds: string[],
 ) {
-  return sectionIds.flatMap((sectionId) => groups.get(sectionId)!);
+  return sectionIds.flatMap((sectionId) =>
+    requireValue(
+      groups.get(sectionId),
+      "Required groups.get(sectionId) is unavailable.",
+    ),
+  );
 }
 
 export function insertFormFieldAtTarget(
@@ -156,12 +165,18 @@ export function moveFormFieldToTarget(
   const groups = fieldsGroupedBySection(fields, sectionIds);
   const targetFields = requireInsertionTarget(groups, target);
   const sourceSectionId = sectionIds.find((sectionId) =>
-    groups.get(sectionId)!.some((field) => field.id === fieldId),
+    requireValue(
+      groups.get(sectionId),
+      "Required groups.get(sectionId) is unavailable.",
+    ).some((field) => field.id === fieldId),
   );
   if (!sourceSectionId) {
     throw new Error(`Cannot move missing form field “${fieldId}”.`);
   }
-  const sourceFields = groups.get(sourceSectionId)!;
+  const sourceFields = requireValue(
+    groups.get(sourceSectionId),
+    "Required groups.get(sourceSectionId) is unavailable.",
+  );
   const sourceIndex = sourceFields.findIndex((field) => field.id === fieldId);
   const [field] = sourceFields.splice(sourceIndex, 1);
   if (!field) throw new Error(`Cannot move missing form field “${fieldId}”.`);

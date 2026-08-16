@@ -304,7 +304,7 @@ export class AcceptedCoSpeakerWorkflows extends SubmissionServiceFoundation {
     );
     const speakerSnapshot = JSON.stringify([
       ...existingSpeakers.results.map((speaker) => ({
-        ...submittedByEmail.get(speaker.email.toLowerCase())!,
+        ...submittedByEmail.get(speaker.email.toLowerCase()),
         roleLabel: speaker.roleLabel,
         isPrimary: Boolean(speaker.isPrimary),
       })),

@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { requireValue } from "~/lib/required-value";
 import type { Viewer } from "~/platform/auth/authorize.server";
 import { WebhookService } from "~/platform/operations/webhook-service.server";
 import {
@@ -40,7 +41,10 @@ export class TaskAdministrationWorkflows extends TaskServiceFoundation {
           .max(1_000),
       })
       .parse(rawInput);
-    const dueAt = fixedDateEndEpoch(input.dueDate, event.timezone)!;
+    const dueAt = requireValue(
+      fixedDateEndEpoch(input.dueDate, event.timezone),
+      "Required fixedDateEndEpoch(input.dueDate, event.timezone) is unavailable.",
+    );
     if (dueAt <= Math.floor(Date.now() / 1_000)) {
       throw new TaskStateError("Choose a future deadline extension date.");
     }

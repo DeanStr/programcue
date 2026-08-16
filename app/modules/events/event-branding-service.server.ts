@@ -1,3 +1,4 @@
+import { requireValue } from "~/lib/required-value";
 import {
   AirtableEventDataRepository,
   type AirtableProjectionCommandToken,
@@ -448,7 +449,10 @@ export class EventBrandingService {
         images,
         kind,
         file,
-        detectedContentType: detected!,
+        detectedContentType: requireValue(
+          detected,
+          "Required detected is unavailable.",
+        ),
       });
     } catch (error) {
       throw new EventBrandingAssetError(

@@ -205,11 +205,11 @@ export function mapStatement(
         AND ${eventClaimGuard()}`,
   ).bind(
     ...mappings.flatMap((mapping) => [mapping.id, mapping.pseudonymId]),
-    mappings[0]!.eventId,
+    mappings[0].eventId,
     ...mappings.map((mapping) => mapping.id),
-    mappings[0]!.eventId,
-    mappings[0]!.organisationId,
-    mappings[0]!.operationId,
+    mappings[0].eventId,
+    mappings[0].organisationId,
+    mappings[0].operationId,
   );
 }
 

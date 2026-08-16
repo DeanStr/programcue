@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { requireValue } from "~/lib/required-value";
 
 export const resourceEmbedProviderValues = [
   "youtube",
@@ -439,7 +440,13 @@ export function externalEmbedPresentation(
     ? new URL(`https://www.google.com/maps/embed/v1/${embed.mode}`)
     : null;
   if (embedUrl) {
-    embedUrl.searchParams.set("key", configuration.googleMapsApiKey!);
+    embedUrl.searchParams.set(
+      "key",
+      requireValue(
+        configuration.googleMapsApiKey,
+        "Required configuration.googleMapsApiKey is unavailable.",
+      ),
+    );
     embedUrl.searchParams.set("q", embed.query);
   }
   return {

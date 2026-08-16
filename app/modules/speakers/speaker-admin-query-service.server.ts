@@ -553,24 +553,23 @@ export class SpeakerAdminQueryService {
     if (!summary) {
       throw new Error("Speaker readiness summary could not be read.");
     }
-    const malformedInvitation = pendingInvitations.results.find(
-      (invitation) => invitation.expiresAt === null,
-    );
-    if (malformedInvitation) {
-      throw new Error(
-        `Pending speaker invitation ${malformedInvitation.id} is missing its required expiry.`,
-      );
-    }
     return {
       speakers: speakers.results.slice(0, pageSize),
       eventTimezone: event.timezone,
       page,
       hasNext: speakers.results.length > pageSize,
-      pendingInvitations: pendingInvitations.results.map((invitation) => ({
-        ...invitation,
-        expiresAt: invitation.expiresAt!,
-        expired: Boolean(invitation.expired),
-      })),
+      pendingInvitations: pendingInvitations.results.map((invitation) => {
+        if (invitation.expiresAt === null) {
+          throw new Error(
+            `Pending speaker invitation ${invitation.id} is missing its required expiry.`,
+          );
+        }
+        return {
+          ...invitation,
+          expiresAt: invitation.expiresAt,
+          expired: Boolean(invitation.expired),
+        };
+      }),
       summary: {
         knownSpeakers: Number(summary.knownSpeakers),
         readySpeakers: Number(summary.readySpeakers),

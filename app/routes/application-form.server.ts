@@ -1,5 +1,6 @@
 import { data, redirect } from "react-router";
 import { ZodError } from "zod";
+import { requireValue } from "~/lib/required-value";
 import { PublicProgrammeService } from "~/modules/programme/public-programme-service.server";
 import {
   ApplicantConfigurationError,
@@ -576,7 +577,7 @@ async function handlePublicApplicationIntent({
       const result = await signOutSession(env, request);
       if (!result.ok) return result;
       const returnTo = claimedSignOutContext
-        ? `/apply/${encodeURIComponent(slug)}?${new URLSearchParams({ claimedSpeaker: claimedSpeakerId! })}`
+        ? `/apply/${encodeURIComponent(slug)}?${new URLSearchParams({ claimedSpeaker: requireValue(claimedSpeakerId, "Required claimedSpeakerId is unavailable.") })}`
         : `/apply/${encodeURIComponent(slug)}`;
       const headers = new Headers(result.headers);
       headers.append("set-cookie", applicantCookie);

@@ -107,7 +107,7 @@ export function parseStrictQuery<T>(
         `${key} may only be supplied once`,
       );
     }
-    values[key] = entries[0]!;
+    values[key] = entries[0];
   }
   const parsed = schema.safeParse(values);
   if (!parsed.success) {

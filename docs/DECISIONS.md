@@ -14,8 +14,12 @@ The initial configuration keeps Biome's recommended preset but explicitly
 disables rules already violated by the pre-adoption source. Those exceptions
 record migration debt rather than approval of the affected patterns. They are
 to be removed in focused behavior-preserving batches with the relevant tests,
-not hidden through broad per-file suppressions. Import organization remains
-disabled until its repository-wide baseline can be reviewed independently.
+not hidden through broad per-file suppressions. Import organization is enabled
+after its repository-wide baseline review. Non-null assertions are
+prohibited in application production files; required values must instead be
+narrowed by control flow or checked with an explicit fail-fast invariant.
+Assertions in test and browser fixtures remain recorded migration debt for a
+separate batch.
 Generated build, Worker and route artifacts are excluded. The generated public
 OpenAPI document and package lock retain their owning generators rather than
 being rewritten by the formatter.

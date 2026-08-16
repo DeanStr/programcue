@@ -264,7 +264,7 @@ export abstract class ScheduleSessionResourcesWorkflow extends ScheduleContentWo
       snapshotUpdated,
       historyInserted,
     ] = results;
-    const audit = results[auditIndex]!;
+    const audit = results[auditIndex];
     if (
       (eventUpdated.meta.changes ?? 0) !== 1 ||
       (versionUpdated.meta.changes ?? 0) !== 1 ||

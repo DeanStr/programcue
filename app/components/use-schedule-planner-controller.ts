@@ -72,7 +72,7 @@ export function useSchedulePlannerController(
   );
 
   const [selectedDay, setSelectedDay] = useState(() => {
-    if (!focusedEntry) return eventDays[0]!;
+    if (!focusedEntry) return eventDays[0];
     const focusedDate = eventLocalCalendarDate(
       focusedEntry.startsAt,
       workspace.event.timezone,
@@ -80,7 +80,7 @@ export function useSchedulePlannerController(
     return (
       eventDays.find(
         (eventDay) => eventBoundaryCalendarDate(eventDay) === focusedDate,
-      ) ?? eventDays[0]!
+      ) ?? eventDays[0]
     );
   });
 
@@ -253,7 +253,7 @@ export function useSchedulePlannerController(
   const defaultQuickStart =
     allPlacementSlots.find(
       (slot) => localHour(slot, workspace.event.timezone) === 9,
-    ) ?? allPlacementSlots[0]!;
+    ) ?? allPlacementSlots[0];
 
   const [quickSessionId, setQuickSessionId] = useState(
     initialQuickSession?.id ?? "",

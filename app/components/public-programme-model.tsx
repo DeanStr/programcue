@@ -245,6 +245,10 @@ export function usePublicProgrammeModel(loaderData: PublicProgrammeLoaderData) {
     [programme.sessions],
   );
   const requestedInitialDay = initialPublicSearch.current.get("day") ?? "";
+  const requestedInitialTrack = initialPublicSearch.current.get("track") ?? "";
+  const requestedInitialFormat =
+    initialPublicSearch.current.get("format") ?? "";
+  const requestedInitialRoom = initialPublicSearch.current.get("room") ?? "";
   const [day, setDay] = useState(
     !embedded && days.includes(requestedInitialDay)
       ? requestedInitialDay
@@ -255,22 +259,22 @@ export function usePublicProgrammeModel(loaderData: PublicProgrammeLoaderData) {
   const [track, setTrackState] = useState(
     embedded
       ? (embedOptions.track ?? "")
-      : tracks.includes(initialPublicSearch.current.get("track") ?? "")
-        ? initialPublicSearch.current.get("track")!
+      : tracks.includes(requestedInitialTrack)
+        ? requestedInitialTrack
         : "",
   );
   const [format, setFormatState] = useState(
     embedded
       ? (embedOptions.format ?? "")
-      : formats.includes(initialPublicSearch.current.get("format") ?? "")
-        ? initialPublicSearch.current.get("format")!
+      : formats.includes(requestedInitialFormat)
+        ? requestedInitialFormat
         : "",
   );
   const [room, setRoomState] = useState(
     embedded
       ? (embedOptions.room ?? "")
-      : rooms.includes(initialPublicSearch.current.get("room") ?? "")
-        ? initialPublicSearch.current.get("room")!
+      : rooms.includes(requestedInitialRoom)
+        ? requestedInitialRoom
         : "",
   );
   const [clearedSavedFilterNotice, setClearedSavedFilterNotice] = useState("");

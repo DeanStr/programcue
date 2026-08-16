@@ -61,7 +61,7 @@ function decodeXmlText(value: string) {
 
 function xmlElement(source: string, name: string) {
   const match = source.match(new RegExp(`<${name}>([\\s\\S]*?)</${name}>`));
-  return match ? decodeXmlText(match[1]!.trim()) : null;
+  return match ? decodeXmlText(match[1].trim()) : null;
 }
 
 function parseR2ListParts(
@@ -78,7 +78,7 @@ function parseR2ListParts(
     );
   const parts: Array<{ PartNumber: number; Size: number; ETag: string }> = [];
   for (const match of xml.matchAll(/<Part>([\s\S]*?)<\/Part>/g)) {
-    const source = match[1]!;
+    const source = match[1];
     const partNumber = Number(xmlElement(source, "PartNumber"));
     const size = Number(xmlElement(source, "Size"));
     const etag = xmlElement(source, "ETag");
@@ -106,7 +106,7 @@ function parseR2ListParts(
   }
   parts.sort((left, right) => left.PartNumber - right.PartNumber);
   parts.forEach((part, index) => {
-    if (index > 0 && parts[index - 1]!.PartNumber === part.PartNumber)
+    if (index > 0 && parts[index - 1].PartNumber === part.PartNumber)
       throw new FileMultipartStateError(
         "R2 returned duplicate multipart part metadata.",
       );

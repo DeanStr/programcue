@@ -1,3 +1,4 @@
+import { requireValue } from "~/lib/required-value";
 import {
   acceptanceTaskPlanBindings,
   acceptanceTaskPlanCteSql,
@@ -606,16 +607,28 @@ export class SubmissionCoSpeakerRepository {
                   personId: applicant.personId,
                 },
                 submissionId: invitation.submissionId,
-                sessionId: invitation.sessionId!,
-                decisionId: invitation.acceptanceDecisionId!,
+                sessionId: requireValue(
+                  invitation.sessionId,
+                  "Required invitation.sessionId is unavailable.",
+                ),
+                decisionId: requireValue(
+                  invitation.acceptanceDecisionId,
+                  "Required invitation.acceptanceDecisionId is unavailable.",
+                ),
                 materializationOperationId: operationId,
               }),
               buildAcceptedClaimPropagationAuditStatement(this.env, {
                 organisationId: invitation.organisationId,
                 eventId: invitation.eventId,
                 submissionId: invitation.submissionId,
-                sessionId: invitation.sessionId!,
-                decisionId: invitation.acceptanceDecisionId!,
+                sessionId: requireValue(
+                  invitation.sessionId,
+                  "Required invitation.sessionId is unavailable.",
+                ),
+                decisionId: requireValue(
+                  invitation.acceptanceDecisionId,
+                  "Required invitation.acceptanceDecisionId is unavailable.",
+                ),
                 speakerId: invitationId,
                 personId: applicant.personId,
                 operationId,
@@ -625,7 +638,10 @@ export class SubmissionCoSpeakerRepository {
               buildAcceptedDirectClaimPropagationAuditStatement(this.env, {
                 organisationId: invitation.organisationId,
                 eventId: invitation.eventId,
-                sessionId: invitation.sessionId!,
+                sessionId: requireValue(
+                  invitation.sessionId,
+                  "Required invitation.sessionId is unavailable.",
+                ),
                 speakerId: invitationId,
                 personId: applicant.personId,
                 operationId,

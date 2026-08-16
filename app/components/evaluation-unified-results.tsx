@@ -364,7 +364,7 @@ export function EvaluationUnifiedResults() {
                                                       ? criterionId
                                                       : criterionNames.get(
                                                           criterionId,
-                                                        )!}
+                                                        )}
                                                   </dt>
                                                   <dd>
                                                     {typeof value === "boolean"

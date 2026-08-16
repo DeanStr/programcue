@@ -49,7 +49,7 @@ function safeEqual(left: string, right: string) {
   if (leftBytes.length !== rightBytes.length) return false;
   let difference = 0;
   for (let index = 0; index < leftBytes.length; index += 1) {
-    difference |= leftBytes[index]! ^ rightBytes[index]!;
+    difference |= leftBytes[index] ^ rightBytes[index];
   }
   return difference === 0;
 }

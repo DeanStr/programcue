@@ -1,3 +1,4 @@
+import { requireValue } from "~/lib/required-value";
 import type { Viewer } from "~/platform/auth/authorize.server";
 import {
   AUTO_ENTRY_PREFIX,
@@ -478,7 +479,10 @@ export class ScheduleAutoPlacementWorkflow {
       AutoPlacementProposal & { entryId: string }
     > = [];
     for (const placement of revalidatedPlacements) {
-      const entryId = entryIds.get(placement.sessionId)!;
+      const entryId = requireValue(
+        entryIds.get(placement.sessionId),
+        "Required entryIds.get(placement.sessionId) is unavailable.",
+      );
       const resolvedWarnings = placement.warnings.map((conflict) => {
         const plannedId = conflict.conflictingEntryId;
         const plannedSessionId = plannedId?.startsWith(AUTO_ENTRY_PREFIX)

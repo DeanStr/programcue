@@ -1,3 +1,4 @@
+import { requireValue } from "~/lib/required-value";
 import type { Viewer } from "~/platform/auth/authorize.server";
 import { EvaluationStateError } from "./evaluation-errors";
 import {
@@ -79,7 +80,10 @@ function decodeCursor(value: string | undefined, target: DiscussionTarget) {
     if (
       decoded.version !== 1 ||
       !Number.isSafeInteger(decoded.createdAt) ||
-      decoded.createdAt! < 0 ||
+      requireValue(
+        decoded.createdAt,
+        "Required decoded.createdAt is unavailable.",
+      ) < 0 ||
       typeof decoded.id !== "string" ||
       !decoded.id.length ||
       decoded.id.length > 200 ||
@@ -89,7 +93,13 @@ function decodeCursor(value: string | undefined, target: DiscussionTarget) {
     ) {
       throw new Error("invalid cursor shape");
     }
-    return { createdAt: decoded.createdAt!, id: decoded.id };
+    return {
+      createdAt: requireValue(
+        decoded.createdAt,
+        "Required decoded.createdAt is unavailable.",
+      ),
+      id: decoded.id,
+    };
   } catch {
     throw new Response("Discussion page cursor is invalid.", { status: 400 });
   }

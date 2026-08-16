@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useActionData } from "react-router";
+import { requireValue } from "~/lib/required-value";
 import {
   defaultProgrammeEmbedConfiguration,
   managedProgrammeEmbedUrl,
@@ -116,7 +117,10 @@ export function useProgrammeEmbedBuilder({
     selectedEmbed && outputConfiguration
       ? output === "iframe"
         ? programmeIframeSnippet(
-            selectedManagedUrl!,
+            requireValue(
+              selectedManagedUrl,
+              "Required selectedManagedUrl is unavailable.",
+            ),
             `${eventName} ${selectedEmbed.name}`,
             outputConfiguration.height,
           )

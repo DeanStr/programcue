@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { requireValue } from "~/lib/required-value";
 import type { PublicForm } from "./applicant-session.server";
 import { routeEvaluationCoSpeakerEmails } from "./evaluation-co-speaker-email-routing.server";
 import { SubmissionApplicantEventService } from "./submission-applicant-events.server";
@@ -293,7 +294,8 @@ export class SubmissionApplicantWorkflows extends SubmissionServiceFoundation {
       availability,
       selectedCanRevise:
         Boolean(selected) &&
-        selected!.status === "submitted" &&
+        requireValue(selected, "Required selected is unavailable.").status ===
+          "submitted" &&
         revisionAvailability.accepting,
     };
   }

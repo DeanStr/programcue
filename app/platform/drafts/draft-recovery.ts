@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { requireValue } from "~/lib/required-value";
 
 import {
   assessDraftSnapshot,
@@ -285,7 +286,10 @@ export function useDraftRecovery<T>({
       if (!writerId.current || !operationGuard.isCurrent(operation)) return;
       const now = Date.now();
       const snapshot: DraftSnapshot<T> = {
-        ...scopeRef.current!,
+        ...requireValue(
+          scopeRef.current,
+          "Required scopeRef.current is unavailable.",
+        ),
         key,
         schemaVersion: DRAFT_RECOVERY_SCHEMA_VERSION,
         serverRevision: revision,

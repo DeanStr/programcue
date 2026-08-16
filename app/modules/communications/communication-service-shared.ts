@@ -1,3 +1,4 @@
+import { requireValue } from "~/lib/required-value";
 import {
   type AudienceType,
   type CommunicationCategory,
@@ -250,7 +251,10 @@ export function assertMergeAudienceCompatible(
   audienceType: AudienceType,
 ) {
   const incompatible = sourceVariables(template).filter((variable) => {
-    const requirement = sourceVariableRequirements[variable]!;
+    const requirement = requireValue(
+      sourceVariableRequirements[variable],
+      "Required sourceVariableRequirements[variable] is unavailable.",
+    );
     return (
       !requirement.audiences.has(audienceType) ||
       !requirement.categories.has(template.category)
@@ -327,11 +331,17 @@ export async function snapshotSourceValues(
           "A published decision required by this audience is unavailable. Preview again.",
         );
       }
-      const values = snapshots.get(row.id)!;
+      const values = requireValue(
+        snapshots.get(row.id),
+        "Required snapshots.get(row.id) is unavailable.",
+      );
       if (variables.includes("submission.title"))
         values["submission.title"] = row.title;
       if (variables.includes("decision.outcome"))
-        values["decision.outcome"] = row.decisionOutcome!;
+        values["decision.outcome"] = requireValue(
+          row.decisionOutcome,
+          "Required row.decisionOutcome is unavailable.",
+        );
       if (variables.includes("decision.rationale"))
         values["decision.rationale"] = row.rationale ?? "";
       if (variables.includes("decision.feedback")) {
@@ -382,7 +392,10 @@ export async function snapshotSourceValues(
       );
     }
     for (const row of rows.results) {
-      const values = snapshots.get(row.id)!;
+      const values = requireValue(
+        snapshots.get(row.id),
+        "Required snapshots.get(row.id) is unavailable.",
+      );
       if (variables.includes("task.title")) values["task.title"] = row.title;
       if (variables.includes("task.dueDate")) {
         if (row.dueAt === null) {

@@ -513,12 +513,12 @@ export abstract class ScheduleSessionEditorWorkflow extends ScheduleSessionResou
       }
       throw error;
     }
-    const eventUpdated = results[2]!;
-    const versionUpdated = results[3]!;
-    const sessionUpdated = results[4]!;
-    const snapshotUpdated = results[5]!;
-    const historyInserted = results[6]!;
-    const entryUpdated = scheduledEntry ? results[7]! : null;
+    const eventUpdated = results[2];
+    const versionUpdated = results[3];
+    const sessionUpdated = results[4];
+    const snapshotUpdated = results[5];
+    const historyInserted = results[6];
+    const entryUpdated = scheduledEntry ? results[7] : null;
     if (
       (eventUpdated.meta.changes ?? 0) !== 1 ||
       (versionUpdated.meta.changes ?? 0) !== 1 ||

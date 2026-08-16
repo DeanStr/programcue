@@ -1,3 +1,4 @@
+import { requireValue } from "~/lib/required-value";
 import { unacceptedEventParticipantEmails } from "~/modules/speakers/speaker-invitation.server";
 import type { Viewer } from "~/platform/auth/authorize.server";
 import { WebhookService } from "~/platform/operations/webhook-service.server";
@@ -30,7 +31,10 @@ export class SubmissionManualApplicationCommands extends SubmissionAdministratio
       input,
     );
     if (prepared.replay) return prepared.replay.entityId;
-    const command = prepared.command!;
+    const command = requireValue(
+      prepared.command,
+      "Required prepared.command is unavailable.",
+    );
     const event = await this.env.DB.prepare(
       `SELECT id FROM events WHERE id = ? AND organisation_id = ?`,
     )
@@ -68,7 +72,12 @@ export class SubmissionManualApplicationCommands extends SubmissionAdministratio
     const tracksById = new Map(
       tracksResult.results.map((track) => [track.id, track]),
     );
-    const tracks = uniqueTrackIds.map((trackId) => tracksById.get(trackId)!);
+    const tracks = uniqueTrackIds.map((trackId) =>
+      requireValue(
+        tracksById.get(trackId),
+        "Required tracksById.get(trackId) is unavailable.",
+      ),
+    );
     const uniqueTeamIds = [...new Set(input.routedTeamIds)];
     const teamsResult = uniqueTeamIds.length
       ? await this.env.DB.prepare(
@@ -87,7 +96,12 @@ export class SubmissionManualApplicationCommands extends SubmissionAdministratio
     const teamsById = new Map(
       teamsResult.results.map((team) => [team.id, team]),
     );
-    const teams = uniqueTeamIds.map((teamId) => teamsById.get(teamId)!);
+    const teams = uniqueTeamIds.map((teamId) =>
+      requireValue(
+        teamsById.get(teamId),
+        "Required teamsById.get(teamId) is unavailable.",
+      ),
+    );
     const formatSnapshot =
       await this.getConfiguredSessionFormatSnapshotD1(viewer);
     const configuredFormat = formatSnapshot.formats.find(

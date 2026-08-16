@@ -20,6 +20,7 @@ import {
 } from "~/components/ui/domain-status-badge";
 import { EmptyState } from "~/components/ui/states";
 import { useUnsavedChanges } from "~/components/ui/use-unsaved-changes";
+import { requireValue } from "~/lib/required-value";
 import { adminRecordBreadcrumbHandle } from "~/modules/administration/admin-route-breadcrumb";
 import { maximumMegabytes } from "~/modules/files/file-policy";
 import { ensureDemoSpeakerData } from "~/modules/speakers/demo.server";
@@ -360,7 +361,10 @@ export default function AdminSpeakerDetail({
                   {headshot.downloadFilename} · uploaded by{" "}
                   {headshot.downloadUploaderName} ·{" "}
                   {formatTimestamp(
-                    headshot.downloadUploadedAt!,
+                    requireValue(
+                      headshot.downloadUploadedAt,
+                      "Required headshot.downloadUploadedAt is unavailable.",
+                    ),
                     event.timezone,
                   )}
                 </p>

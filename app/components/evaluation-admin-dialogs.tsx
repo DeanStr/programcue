@@ -525,7 +525,7 @@ export function DecisionDialog() {
   const [sessionTrackId, setSessionTrackId] = useState("");
   const [sessionFormatKey, setSessionFormatKey] = useState("");
   const defaultSessionTrackId =
-    selected?.tracks.length === 1 ? selected.tracks[0]!.id : "";
+    selected?.tracks.length === 1 ? selected.tracks[0].id : "";
   const selectedSessionTrack = selected?.tracks.find(
     (track) => track.id === sessionTrackId,
   );

@@ -68,7 +68,7 @@ export function airtableAndFormula(...expressions: string[]) {
       "At least one Airtable formula expression is required.",
     );
   return expressions.length === 1
-    ? expressions[0]!
+    ? expressions[0]
     : `AND(${expressions.join(",")})`;
 }
 

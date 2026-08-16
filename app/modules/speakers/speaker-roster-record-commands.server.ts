@@ -533,17 +533,18 @@ export class SpeakerRosterRecordCommands {
           }
         : null;
     }
-    const routing = row.routedEmail
-      ? {
-          enteredEmail: row.enteredEmail,
-          routedEmail: row.routedEmail,
-          personId: row.evaluatorAliasPersonId!,
-        }
-      : null;
-    if (routing && !routing.personId) {
-      throw new SpeakerAdminIntegrityError(
-        "The evaluator email routing audit is incomplete.",
-      );
+    let routing: EvaluatorEmailRouting | null = null;
+    if (row.routedEmail) {
+      if (!row.evaluatorAliasPersonId) {
+        throw new SpeakerAdminIntegrityError(
+          "The evaluator email routing audit is incomplete.",
+        );
+      }
+      routing = {
+        enteredEmail: row.enteredEmail,
+        routedEmail: row.routedEmail,
+        personId: row.evaluatorAliasPersonId,
+      };
     }
     return {
       personId: row.personId,

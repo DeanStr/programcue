@@ -1,3 +1,4 @@
+import { requireValue } from "~/lib/required-value";
 import type { Viewer } from "~/platform/auth/authorize.server";
 import {
   decodePrivateCursor,
@@ -92,8 +93,16 @@ export class ApiParticipantResourceReader {
       nextCursor:
         rows.length > input.limit && visible.length
           ? encodePrivateCursor(
-              visible.at(-1)!.sort,
-              String(visible.at(-1)!.id),
+              requireValue(
+                visible.at(-1),
+                "Required visible.at(-1) is unavailable.",
+              ).sort,
+              String(
+                requireValue(
+                  visible.at(-1),
+                  "Required visible.at(-1) is unavailable.",
+                ).id,
+              ),
             )
           : null,
     };

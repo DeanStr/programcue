@@ -1,3 +1,4 @@
+import { requireValue } from "~/lib/required-value";
 import { PublicProgrammeService } from "~/modules/programme/public-programme-service.server";
 import { PublishedPublicSiteInvariantError } from "~/modules/public-site/public-site-errors";
 import { publishedPublicSiteInvariantResponse } from "~/modules/public-site/public-site-presentation";
@@ -88,7 +89,7 @@ export async function loader({ request, params, context }: Route.LoaderArgs) {
     ? `${speaker.displayName} is speaking`
     : site.event.name;
   const subtitle = speaker
-    ? session!.title
+    ? requireValue(session, "Required session is unavailable.").title
     : site.configuration.tagline || site.event.description || "Public event";
   const place = [site.event.venue, site.event.city].filter(Boolean).join(" · ");
   const eventContext = [

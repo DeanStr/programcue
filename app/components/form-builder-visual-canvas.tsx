@@ -15,6 +15,7 @@ import {
 import { CSS } from "@dnd-kit/utilities";
 import { GripVertical } from "lucide-react";
 import { type CSSProperties, Fragment, useState } from "react";
+import { requireValue } from "~/lib/required-value";
 
 import {
   conditionalFieldOrderIssue,
@@ -357,7 +358,10 @@ export function FormBuilderVisualCanvas({
   }
 
   function addField(type: FormField["type"]) {
-    const section = input.schema.sections.at(-1)!;
+    const section = requireValue(
+      input.schema.sections.at(-1),
+      "Required input.schema.sections.at(-1) is unavailable.",
+    );
     const sectionFieldCount = input.schema.fields.filter(
       (field) => field.sectionId === section.id,
     ).length;

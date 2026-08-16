@@ -9,6 +9,7 @@ import {
   onlyClientSearchParametersChanged,
   PUBLIC_PROGRAMME_CLIENT_SEARCH_PARAMETERS,
 } from "~/lib/client-search-revalidation";
+import { requireValue } from "~/lib/required-value";
 import {
   ProgrammeEmbedConfigurationError,
   parseProgrammeEmbedSearchParameters,
@@ -158,7 +159,7 @@ export const meta: Route.MetaFunction = ({ loaderData }) => {
   if (generatedShareImage) {
     generatedShareImage.searchParams.set(
       "v",
-      `${loaderData.programme.contentRevision}-${loaderData.site!.contentRevision}-${loaderData.site!.revision}`,
+      `${loaderData.programme.contentRevision}-${requireValue(loaderData.site, "Required loaderData.site is unavailable.").contentRevision}-${requireValue(loaderData.site, "Required loaderData.site is unavailable.").revision}`,
     );
   }
   const shareImage =
@@ -529,7 +530,10 @@ export async function loader({ request, params, context }: Route.LoaderArgs) {
     {
       headers: {
         ...(embedded
-          ? embeddedCacheHeaders!
+          ? requireValue(
+              embeddedCacheHeaders,
+              "Required embeddedCacheHeaders is unavailable.",
+            )
           : { "cache-control": "private, no-store" }),
       },
     },

@@ -234,7 +234,7 @@ export class EvaluationReviewerWorkspaceWorkflows extends EvaluationServiceFound
             targetId: assignment.submissionId,
             reference: blindedReviewing
               ? "Proposal · blinded"
-              : submissionReference!,
+              : submissionReference,
             title:
               summaryAnswer(answers.title) ??
               (blindedReviewing
@@ -261,7 +261,7 @@ export class EvaluationReviewerWorkspaceWorkflows extends EvaluationServiceFound
           targetId: assignment.sessionId,
           reference: blindedReviewing
             ? "Session · blinded"
-            : `Session · ${sessionReference!}`,
+            : `Session · ${sessionReference}`,
           title: blindedReviewing ? "Blinded session" : snapshot.title,
           category: blindedReviewing ? null : snapshot.trackName,
           format: snapshot.format,

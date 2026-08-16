@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { requireValue } from "~/lib/required-value";
 
 import type { Viewer } from "~/platform/auth/authorize.server";
 import { CalendarStateError } from "./calendar-errors";
@@ -226,7 +227,7 @@ export class CalendarAdministrationService {
       .first<{ total: number }>();
     if ((active?.total ?? 0) > 0)
       throw new CalendarStateError(
-        `Cancel the ${active!.total} active direct calendar invitation${active!.total === 1 ? "" : "s"} in every event before disconnecting this shared account.`,
+        `Cancel the ${requireValue(active, "Required active is unavailable.").total} active direct calendar invitation${requireValue(active, "Required active is unavailable.").total === 1 ? "" : "s"} in every event before disconnecting this shared account.`,
       );
     const result = await this.env.DB.batch([
       this.env.DB.prepare(
@@ -287,7 +288,7 @@ export class CalendarAdministrationService {
         .first<{ total: number }>();
       if ((racedActive?.total ?? 0) > 0)
         throw new CalendarStateError(
-          `Cancel the ${racedActive!.total} active direct calendar invitation${racedActive!.total === 1 ? "" : "s"} in every event before disconnecting this shared account.`,
+          `Cancel the ${requireValue(racedActive, "Required racedActive is unavailable.").total} active direct calendar invitation${requireValue(racedActive, "Required racedActive is unavailable.").total === 1 ? "" : "s"} in every event before disconnecting this shared account.`,
         );
       throw new CalendarStateError(
         "Only a connected calendar account can be disconnected.",

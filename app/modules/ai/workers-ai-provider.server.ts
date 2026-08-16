@@ -234,7 +234,7 @@ function normalizeChatCompletion(
       parsed.data.id,
     );
   }
-  const choice = parsed.data.choices[0]!;
+  const choice = parsed.data.choices[0];
   const providerRequestId = parsed.data.id;
   const toolCalls = choice.message.tool_calls ?? [];
   if (choice.finish_reason === "length") {

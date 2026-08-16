@@ -5,6 +5,7 @@ import {
 import type { Viewer } from "~/platform/auth/authorize.server";
 import {
   parseResourceDocument,
+  type TiptapNode,
   validateResourceDocumentEmbedStructure,
 } from "./resource-content";
 import { resourceEmbedConfiguration } from "./resource-embed-policy";
@@ -69,7 +70,7 @@ export class ResourceParticipantService extends ResourceServiceBase {
     if (requestedPage && !selected) {
       throw new Response("Published resource not found", { status: 404 });
     }
-    let document = null;
+    let selectedPage = null;
     if (selected) {
       const content = await this.env.DB.prepare(
         `SELECT document_json AS documentJson
@@ -85,6 +86,7 @@ export class ResourceParticipantService extends ResourceServiceBase {
           "the published version content is missing",
         );
       }
+      let document: TiptapNode;
       try {
         document = parseResourceDocument(JSON.parse(content.documentJson));
         validateResourceDocumentEmbedStructure(document);
@@ -94,13 +96,6 @@ export class ResourceParticipantService extends ResourceServiceBase {
           "the published version contains invalid content",
         );
       }
-    }
-    let attachments: Array<{
-      id: string;
-      filename: string;
-      sizeBytes: number;
-    }> = [];
-    if (selected) {
       const rows = await this.env.DB.prepare(
         `
         SELECT fa.id, fv.original_filename AS filename, fv.size_bytes AS sizeBytes
@@ -113,20 +108,18 @@ export class ResourceParticipantService extends ResourceServiceBase {
       )
         .bind(selected.versionId)
         .all<{ id: string; filename: string; sizeBytes: number }>();
-      attachments = rows.results;
+      selectedPage = {
+        ...selected,
+        acknowledgementRequired: Boolean(selected.acknowledgementRequired),
+        acknowledged: Boolean(selected.acknowledged),
+        document,
+        attachments: rows.results,
+      };
     }
     return {
       embedConfiguration: resourceEmbedConfiguration(this.env),
       pages: pages.results,
-      selected: selected
-        ? {
-            ...selected,
-            acknowledgementRequired: Boolean(selected.acknowledgementRequired),
-            acknowledged: Boolean(selected.acknowledged),
-            document: document!,
-            attachments,
-          }
-        : null,
+      selected: selectedPage,
     };
   }
 

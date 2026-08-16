@@ -523,7 +523,7 @@ export abstract class ParticipantRetentionExecution extends ParticipantRetention
       return { duplicate: true, complete: true, state: preview };
     }
     if (preview.blockers.length > 0)
-      throw new ParticipantRetentionStateError(preview.blockers[0]!);
+      throw new ParticipantRetentionStateError(preview.blockers[0]);
     const limit = z
       .number()
       .int()
@@ -572,7 +572,7 @@ export abstract class ParticipantRetentionExecution extends ParticipantRetention
       return { duplicate: false, complete: false, state: afterBatch };
     }
     if (afterBatch.blockers.length > 0)
-      throw new ParticipantRetentionStateError(afterBatch.blockers[0]!);
+      throw new ParticipantRetentionStateError(afterBatch.blockers[0]);
     const finalised = await this.finalise(viewer, afterBatch);
     return {
       duplicate: finalised.duplicate,

@@ -31,6 +31,7 @@ import {
 import { PublicProgrammeSurfaceContent } from "~/components/public-programme-surfaces";
 import { PublicSiteHome } from "~/components/public-site-content";
 import { TurnstileWidget } from "~/components/turnstile-widget";
+import { requireValue } from "~/lib/required-value";
 import {
   formatProgrammeDuration,
   formatProgrammeEventDay,
@@ -593,8 +594,16 @@ function ItineraryPanel({ model }: { model: PublicProgrammeModel }) {
               const sessionSpeakers = session.speakerIds.map(
                 (speakerId, index) => ({
                   id: speakerId,
-                  name: session.speakerNames[index]!,
-                  affiliation: speakerAffiliation(speakerById.get(speakerId)!),
+                  name: requireValue(
+                    session.speakerNames[index],
+                    "Required session.speakerNames[index] is unavailable.",
+                  ),
+                  affiliation: speakerAffiliation(
+                    requireValue(
+                      speakerById.get(speakerId),
+                      "Required speakerById.get(speakerId) is unavailable.",
+                    ),
+                  ),
                 }),
               );
               return (
@@ -752,7 +761,14 @@ function SessionDetailPanel({ model }: { model: PublicProgrammeModel }) {
         <p className="validation-item warn">
           <strong>Schedule conflict</strong>
           <span>
-            Overlaps {selectedConflicts[0]!.title}, already in your itinerary.
+            Overlaps{" "}
+            {
+              requireValue(
+                selectedConflicts[0],
+                "Required selectedConflicts[0] is unavailable.",
+              ).title
+            }
+            , already in your itinerary.
           </span>
         </p>
       ) : null}
@@ -773,8 +789,14 @@ function SessionDetailPanel({ model }: { model: PublicProgrammeModel }) {
           <div className="session-detail-speakers">
             {selected.speakerIds.length ? (
               selected.speakerIds.map((speakerId, index) => {
-                const speaker = speakerById.get(speakerId)!;
-                const name = selected.speakerNames[index]!;
+                const speaker = requireValue(
+                  speakerById.get(speakerId),
+                  "Required speakerById.get(speakerId) is unavailable.",
+                );
+                const name = requireValue(
+                  selected.speakerNames[index],
+                  "Required selected.speakerNames[index] is unavailable.",
+                );
                 const affiliation = speakerAffiliation(speaker);
                 return (
                   <div className="session-detail-speaker" key={speakerId}>

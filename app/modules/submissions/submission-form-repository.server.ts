@@ -1,3 +1,4 @@
+import { requireValue } from "~/lib/required-value";
 import {
   closeDateToEpoch,
   type FormRow,
@@ -291,8 +292,14 @@ export class SubmissionFormRepository {
           formId,
           eventId,
           operation.operationId,
-          input.revision! + 1,
-          input.draftRevision! + 1,
+          requireValue(
+            input.revision,
+            "Required input.revision is unavailable.",
+          ) + 1,
+          requireValue(
+            input.draftRevision,
+            "Required input.draftRevision is unavailable.",
+          ) + 1,
         )
         .first();
       if (recovered) return;
@@ -349,7 +356,10 @@ export class SubmissionFormRepository {
         input.draftRevision,
         formId,
         eventId,
-        input.revision! + 1,
+        requireValue(
+          input.revision,
+          "Required input.revision is unavailable.",
+        ) + 1,
         saveId,
       ),
       this.env.DB.prepare(
@@ -374,10 +384,16 @@ export class SubmissionFormRepository {
         JSON.stringify({ version: workspace.draftVersion.versionNumber }),
         formId,
         eventId,
-        input.revision! + 1,
+        requireValue(
+          input.revision,
+          "Required input.revision is unavailable.",
+        ) + 1,
         saveId,
         workspace.draftVersion.id,
-        input.draftRevision! + 1,
+        requireValue(
+          input.draftRevision,
+          "Required input.draftRevision is unavailable.",
+        ) + 1,
       ),
     ]);
     if (
@@ -402,8 +418,14 @@ export class SubmissionFormRepository {
             formId,
             eventId,
             operation.operationId,
-            input.revision! + 1,
-            input.draftRevision! + 1,
+            requireValue(
+              input.revision,
+              "Required input.revision is unavailable.",
+            ) + 1,
+            requireValue(
+              input.draftRevision,
+              "Required input.draftRevision is unavailable.",
+            ) + 1,
           )
           .first();
         if (recovered) return;

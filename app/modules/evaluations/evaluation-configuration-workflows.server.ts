@@ -415,7 +415,7 @@ export class EvaluationConfigurationWorkflows extends EvaluationServiceFoundatio
     );
     const results = await this.env.DB.batch(statements);
     const changed = results[0];
-    const audited = results.at(-1)!;
+    const audited = results.at(-1);
     if (
       (changed?.meta.changes ?? 0) !== 1 ||
       (audited?.meta.changes ?? 0) !== 1

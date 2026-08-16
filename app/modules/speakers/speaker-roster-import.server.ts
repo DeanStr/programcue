@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { requireValue } from "~/lib/required-value";
 
 import {
   existingPersonOrganisationRelationshipSql,
@@ -203,8 +204,16 @@ export class SpeakerRosterImportService {
     const emails = new Set<string>();
     for (const [index, row] of parsed.rows.entries()) {
       const candidate = importRowSchema.safeParse({
-        name: row[mapping.name!],
-        email: row[mapping.email!],
+        name: row[
+          requireValue(mapping.name, "Required mapping.name is unavailable.")
+        ],
+        email:
+          row[
+            requireValue(
+              mapping.email,
+              "Required mapping.email is unavailable.",
+            )
+          ],
         jobTitle: mapping.jobTitle ? row[mapping.jobTitle] : "",
         organisationName: mapping.organisationName
           ? row[mapping.organisationName]
@@ -330,7 +339,11 @@ export class SpeakerRosterImportService {
           workflowAction,
           workflowStatus:
             workflowAction === "retain"
-              ? existing!.workflowStatus!
+              ? requireValue(
+                  requireValue(existing, "Required existing is unavailable.")
+                    .workflowStatus,
+                  "Required existing.workflowStatus is unavailable.",
+                )
               : row.workflowStatus,
         },
       ];

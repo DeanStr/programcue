@@ -507,7 +507,7 @@ export class EvaluationResultsExportService extends EvaluationServiceFoundation 
       appendCsvLine(renderCsvLine(columns));
 
       for (const assignments of grouped.values()) {
-        const first = assignments[0]!;
+        const first = assignments[0];
         const criteria = criteriaByRound.get(first.roundId);
         if (!criteria?.length) {
           throw new Error(
@@ -630,7 +630,7 @@ export class EvaluationResultsExportService extends EvaluationServiceFoundation 
           recommendationEntries.length === 0
             ? ""
             : recommendationEntries.length === 1
-              ? recommendationEntries[0]![0]
+              ? recommendationEntries[0][0]
               : "mixed";
         const aggregateWeightedScore =
           weightedScores.length === 0

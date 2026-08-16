@@ -6,6 +6,7 @@ import {
   Sparkles,
 } from "lucide-react";
 import { Form, Link } from "react-router";
+import { requireValue } from "~/lib/required-value";
 
 import type {
   AiAssistantResult,
@@ -434,7 +435,7 @@ export function ProposalApproval({
                 ? `I reviewed the exact template and ${reminder.recipients.deliverable.length} deliverable recipients. I approve queueing this irreversible send.`
                 : proposal.toolName === "propose_task"
                   ? "I reviewed the exact change and approve creating this one task."
-                  : `${domainCopy!.confirmation} I approve this action.`}
+                  : `${requireValue(domainCopy, "Required domainCopy is unavailable.").confirmation} I approve this action.`}
             </span>
           </label>
           <button className="btn primary" type="submit">
@@ -445,7 +446,8 @@ export function ProposalApproval({
             ) : proposal.toolName === "propose_task" ? (
               "Approve and create task"
             ) : (
-              domainCopy!.button
+              requireValue(domainCopy, "Required domainCopy is unavailable.")
+                .button
             )}
           </button>
         </Form>

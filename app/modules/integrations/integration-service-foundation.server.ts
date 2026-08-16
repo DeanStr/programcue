@@ -178,13 +178,14 @@ export type ExistingRun = {
 
 export function splitName(displayName: string) {
   const parts = displayName.trim().split(/\s+/).filter(Boolean);
-  if (parts.length < 2)
+  const lastName = parts.at(-1);
+  if (parts.length < 2 || !lastName)
     throw new IntegrationStateError(
       `Speaker “${displayName}” needs both a first and last name for Accelevents. Update the speaker’s display name, then preview the export again.`,
     );
   return {
     firstName: parts.slice(0, -1).join(" "),
-    lastName: parts.at(-1)!,
+    lastName,
   };
 }
 

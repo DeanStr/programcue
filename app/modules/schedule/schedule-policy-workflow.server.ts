@@ -1,3 +1,4 @@
+import { requireValue } from "~/lib/required-value";
 import type { Viewer } from "~/platform/auth/authorize.server";
 import { ScheduleRevisionConflictError } from "./schedule-errors";
 import { ScheduleNotesWorkflow } from "./schedule-notes-workflow.server";
@@ -134,7 +135,10 @@ export abstract class SchedulePolicyWorkflow extends ScheduleNotesWorkflow {
         ...conflicts.map(({ entryId, conflict }) =>
           this.conflictInsert(
             viewer.eventId,
-            workspace.version!.id,
+            requireValue(
+              workspace.version,
+              "Required workspace.version is unavailable.",
+            ).id,
             entryId,
             conflict,
             operationId,

@@ -1,4 +1,5 @@
 import type { z } from "zod";
+import { requireValue } from "~/lib/required-value";
 import type { Viewer } from "~/platform/auth/authorize.server";
 import { WebhookService } from "~/platform/operations/webhook-service.server";
 import { ParticipantTaskWorkflowFoundation } from "./participant-task-workflow-foundation.server";
@@ -129,7 +130,8 @@ export class ParticipantTaskEvidenceCommands extends ParticipantTaskWorkflowFoun
           eventType: "task.updated",
           taskId: input.taskId,
           operationId:
-            ownedTask.lastOperationId ?? `evidence:${asset!.evidenceId}`,
+            ownedTask.lastOperationId ??
+            `evidence:${requireValue(asset, "Required asset is unavailable.").evidenceId}`,
           data: { action: "file_evidence_attached", status: ownedTask.status },
         },
       );
@@ -335,7 +337,8 @@ export class ParticipantTaskEvidenceCommands extends ParticipantTaskWorkflowFoun
             eventType: "task.updated",
             taskId: input.taskId,
             operationId:
-              currentTask.lastOperationId ?? `evidence:${asset!.evidenceId}`,
+              currentTask.lastOperationId ??
+              `evidence:${requireValue(asset, "Required asset is unavailable.").evidenceId}`,
             data: {
               action: "file_evidence_attached",
               status: currentTask.status,

@@ -1,5 +1,6 @@
 import { type ReactNode, useEffect, useState } from "react";
 import { Link } from "react-router";
+import { requireValue } from "~/lib/required-value";
 
 import type {
   FormField,
@@ -323,7 +324,10 @@ export function FieldSettingsPanel({
                   onChange={(event) =>
                     patchField({
                       condition: {
-                        ...selected.condition!,
+                        ...requireValue(
+                          selected.condition,
+                          "Required selected.condition is unavailable.",
+                        ),
                         equals: event.target.value,
                       },
                     })

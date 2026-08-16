@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { requireValue } from "~/lib/required-value";
 
 import type { AuditOrigin } from "~/platform/audit/audit-contract";
 import type { Viewer } from "~/platform/auth/authorize.server";
@@ -481,8 +482,10 @@ export class WebhookService {
           `,
           ).bind(
             crypto.randomUUID(),
-            auditActor!.kind,
-            auditActor!.origin,
+            requireValue(auditActor, "Required auditActor is unavailable.")
+              .kind,
+            requireValue(auditActor, "Required auditActor is unavailable.")
+              .origin,
             viewer.organisationId,
             viewer.eventId,
             viewer.personId,
@@ -687,7 +690,10 @@ export class WebhookService {
         continue;
       }
       try {
-        await operationsQueue!.send(candidate.message);
+        await requireValue(
+          operationsQueue,
+          "Required operationsQueue is unavailable.",
+        ).send(candidate.message);
         await this.env.DB.prepare(
           `UPDATE operation_jobs SET dispatched_at = COALESCE(dispatched_at, unixepoch()),
                   updated_at = unixepoch()

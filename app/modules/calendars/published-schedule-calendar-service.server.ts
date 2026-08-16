@@ -1,3 +1,4 @@
+import { requireValue } from "~/lib/required-value";
 import { CalendarStateError } from "./calendar-errors";
 import {
   type CalendarQueueActor,
@@ -231,7 +232,14 @@ export class PublishedScheduleCalendarService {
           left.key < right.key ? -1 : left.key > right.key ? 1 : 0,
         );
     const remainingTargets = options.afterTarget
-      ? targets.filter((target) => target.key > options.afterTarget!)
+      ? targets.filter(
+          (target) =>
+            target.key >
+            requireValue(
+              options.afterTarget,
+              "Required options.afterTarget is unavailable.",
+            ),
+        )
       : targets;
     const batchTargets = remainingTargets.slice(
       0,

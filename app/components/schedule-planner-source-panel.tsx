@@ -3,6 +3,7 @@ import { CSS } from "@dnd-kit/utilities";
 import { useEffect, useState } from "react";
 import { Link, useSearchParams } from "react-router";
 import { EmptyState } from "~/components/ui/states";
+import { requireValue } from "~/lib/required-value";
 import { SessionCopyAction } from "~/modules/ai/contextual-ai-actions";
 import type { ScheduleSession } from "~/modules/schedule/schedule-service.server";
 import type {
@@ -192,12 +193,22 @@ export function ScheduleSourcePanel({
             <input
               type="hidden"
               name="scheduleVersionId"
-              value={workspace.version!.id}
+              value={
+                requireValue(
+                  workspace.version,
+                  "Required workspace.version is unavailable.",
+                ).id
+              }
             />
             <input
               type="hidden"
               name="scheduleRevision"
-              value={workspace.version!.revision}
+              value={
+                requireValue(
+                  workspace.version,
+                  "Required workspace.version is unavailable.",
+                ).revision
+              }
             />
             {workspace.sessions.length > 15 || sessionQuery.trim() ? (
               <label className="label">
@@ -349,12 +360,22 @@ export function ScheduleSourcePanel({
             <input
               type="hidden"
               name="scheduleVersionId"
-              value={workspace.version!.id}
+              value={
+                requireValue(
+                  workspace.version,
+                  "Required workspace.version is unavailable.",
+                ).id
+              }
             />
             <input
               type="hidden"
               name="scheduleRevision"
-              value={workspace.version!.revision}
+              value={
+                requireValue(
+                  workspace.version,
+                  "Required workspace.version is unavailable.",
+                ).revision
+              }
             />
             <input type="hidden" name="sessionId" value={quickSession.id} />
             <input

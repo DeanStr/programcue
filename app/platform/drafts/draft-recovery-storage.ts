@@ -1,3 +1,4 @@
+import { requireValue } from "~/lib/required-value";
 import {
   DRAFT_RECOVERY_SCHEMA_VERSION,
   type DraftSnapshot,
@@ -25,7 +26,10 @@ function openDatabase() {
     request.addEventListener("upgradeneeded", () => {
       const database = request.result;
       const store = database.objectStoreNames.contains(OBJECT_STORE)
-        ? request.transaction!.objectStore(OBJECT_STORE)
+        ? requireValue(
+            request.transaction,
+            "Required request.transaction is unavailable.",
+          ).objectStore(OBJECT_STORE)
         : database.createObjectStore(OBJECT_STORE, { keyPath: "key" });
       if (!store.indexNames.contains(EXPIRY_INDEX))
         store.createIndex(EXPIRY_INDEX, "expiresAt");

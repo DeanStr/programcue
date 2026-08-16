@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { requireValue } from "~/lib/required-value";
 
 import { AirtableProviderBoundary } from "~/modules/airtable/airtable-provider-boundary.server";
 import { WebhookService } from "~/platform/operations/webhook-service.server";
@@ -187,8 +188,14 @@ function toApiTask(row: ApiTaskRow, dependencyIds: string[]): ApiTask {
     dueAt: apiTimestamp(row.dueAt),
     submittedAt: apiTimestamp(row.submittedAt),
     completedAt: apiTimestamp(row.completedAt),
-    createdAt: apiTimestamp(row.createdAt)!,
-    updatedAt: apiTimestamp(row.updatedAt)!,
+    createdAt: requireValue(
+      apiTimestamp(row.createdAt),
+      "Required apiTimestamp(row.createdAt) is unavailable.",
+    ),
+    updatedAt: requireValue(
+      apiTimestamp(row.updatedAt),
+      "Required apiTimestamp(row.updatedAt) is unavailable.",
+    ),
     dependencyIds,
   };
 }
@@ -405,7 +412,12 @@ export class ApiTaskService {
       ),
       nextCursor:
         tasks.results.length > limit
-          ? encodeTaskCursor(pageRows.at(-1)!)
+          ? encodeTaskCursor(
+              requireValue(
+                pageRows.at(-1),
+                "Required pageRows.at(-1) is unavailable.",
+              ),
+            )
           : null,
     };
   }

@@ -1,4 +1,5 @@
 import { ZodError } from "zod";
+import { requireValue } from "~/lib/required-value";
 import { CommunicationService } from "~/modules/communications/communication-service.server";
 import {
   verifyResendWebhook,
@@ -97,7 +98,7 @@ export async function action({ request, context }: Route.ActionArgs) {
     result = await new CommunicationService(env).reconcileResendEvent(
       payload,
       raw,
-      webhookId!,
+      requireValue(webhookId, "Required webhookId is unavailable."),
     );
   } catch (error) {
     if (error instanceof ZodError) {

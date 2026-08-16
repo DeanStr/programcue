@@ -187,7 +187,7 @@ export class DataExportService {
     if (rows.length > EXPORT_LIMIT)
       throw new EventExportTooLargeError(resource);
     const columns = rows.length
-      ? Object.keys(rows[0]!)
+      ? Object.keys(rows[0])
       : this.emptyColumns(resource);
     const csv = renderCsv(columns, rows);
     const csvSha256 = await exportSnapshotHash(csv);

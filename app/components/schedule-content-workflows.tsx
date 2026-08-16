@@ -1,11 +1,11 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useFetcher } from "react-router";
-
 import {
   DraftRecoveryFeedback,
   DraftRecoveryStatus,
 } from "~/components/draft-recovery-feedback";
 import { CharacterCount } from "~/components/ui/character-count";
+import { requireValue } from "~/lib/required-value";
 import type {
   ScheduleSession,
   ScheduleWorkspace,
@@ -121,7 +121,12 @@ function ScheduleNotesEditor({
         setServerError("The server saved notes without returning a revision.");
         return;
       }
-      setScheduleRevision(result.scheduleRevision!);
+      setScheduleRevision(
+        requireValue(
+          result.scheduleRevision,
+          "Required result.scheduleRevision is unavailable.",
+        ),
+      );
       if (submittedNotesRef.current === notesRef.current) {
         setSavedNotes(notesRef.current);
         setSaved(true);

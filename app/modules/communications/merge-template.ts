@@ -13,7 +13,7 @@ export class UnknownMergeVariableError extends Error {
 
 export function mergeTemplateVariables(template: string) {
   return [...template.matchAll(new RegExp(VARIABLE_PATTERN.source, "g"))]
-    .map((match) => match[1]!)
+    .map((match) => match[1])
     .filter(
       (variable, index, variables) => variables.indexOf(variable) === index,
     );

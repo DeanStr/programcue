@@ -473,7 +473,7 @@ export class EvaluationRoundAdvanceWorkflow extends EvaluationServiceFoundation 
     }
     statements.push(...preparedWebhook.statements);
     const results = await this.env.DB.batch(statements);
-    const claimed = results[domainStatementIndex]!;
+    const claimed = results[domainStatementIndex];
     if ((claimed.meta.changes ?? 0) !== 1) {
       const replay = await this.recoverApiCommand(commandState.prepared);
       if (replay) return replay;

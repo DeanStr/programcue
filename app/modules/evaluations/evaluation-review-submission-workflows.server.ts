@@ -268,7 +268,7 @@ export class EvaluationReviewSubmissionWorkflows extends EvaluationServiceFounda
       const suggestedClosedValues = new Map(
         suggestion.suggestions
           .filter((item) => item.suggestedValue !== null)
-          .map((item) => [item.criterionId, item.suggestedValue!]),
+          .map((item) => [item.criterionId, item.suggestedValue]),
       );
       if (importedCriterionIds.some((id) => !suggestedClosedValues.has(id))) {
         throw new EvaluationValidationError(
@@ -914,11 +914,11 @@ export class EvaluationReviewSubmissionWorkflows extends EvaluationServiceFounda
       }
       throw error;
     });
-    const saved = batchResults[0]!;
+    const saved = batchResults[0];
     const suggestionImported = suggestionImportStatement
       ? batchResults[1]
       : null;
-    const assignmentUpdated = batchResults[suggestionImportStatement ? 2 : 1]!;
+    const assignmentUpdated = batchResults[suggestionImportStatement ? 2 : 1];
     if (
       suggestionImportStatement &&
       (suggestionImported?.meta.changes ?? 0) !== 1

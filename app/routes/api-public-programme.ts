@@ -29,7 +29,7 @@ function escapeHtml(value: string) {
       '"': "&quot;",
       "'": "&#39;",
     };
-    return escaped[character]!;
+    return escaped[character];
   });
 }
 

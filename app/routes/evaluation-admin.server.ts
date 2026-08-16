@@ -1,5 +1,6 @@
 import type { LoaderFunctionArgs } from "react-router";
 import { z } from "zod";
+import { requireValue } from "~/lib/required-value";
 import { AiReviewAssessmentService } from "~/modules/ai/ai-review-assessment.server";
 import { ReviewerAiSuggestionService } from "~/modules/ai/reviewer-ai-suggestion.server";
 import { ensureDemoEvaluationData } from "~/modules/evaluations/demo.server";
@@ -99,7 +100,10 @@ export function parseHistoricalReviewRevision(input: {
   if (
     !historicalEvidenceIdSchema.safeParse(input.scorecardId).success ||
     !Number.isInteger(input.scorecardVersion) ||
-    input.scorecardVersion! < 1
+    requireValue(
+      input.scorecardVersion,
+      "Required input.scorecardVersion is unavailable.",
+    ) < 1
   ) {
     throw new Error(
       `Review revision ${input.id} contains invalid scorecard identity evidence.`,
@@ -108,7 +112,10 @@ export function parseHistoricalReviewRevision(input: {
   const criteria = parseRevisionEvidence(
     input.id,
     "criteria",
-    input.criteriaSnapshotJson!,
+    requireValue(
+      input.criteriaSnapshotJson,
+      "Required input.criteriaSnapshotJson is unavailable.",
+    ),
     historicalCriteriaSchema,
   );
   const criterionIds = criteria.map((criterion) => criterion.id);
@@ -412,7 +419,10 @@ export async function loader({ request, context }: LoaderFunctionArgs) {
           scores = parsed as Record<string, string | number | boolean>;
         }
         aggregate.reviews.push({
-          reviewId: assignment.reviewId!,
+          reviewId: requireValue(
+            assignment.reviewId,
+            "Required assignment.reviewId is unavailable.",
+          ),
           assignmentId: assignment.id,
           evaluatorName: assignment.evaluatorName,
           weightedScore: assignment.weightedScore,

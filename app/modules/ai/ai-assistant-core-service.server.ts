@@ -503,7 +503,7 @@ Lead with the answer, include material uncertainty, and end with the safest conc
             `${provider.providerName} exceeded the ${MAX_TOOL_CALLS}-tool-call limit for one assistant request.`,
           );
         }
-        const call = calls[0]!;
+        const call = calls[0];
         if (call.name.startsWith("propose_") && proposals.length > 0) {
           throw new AiToolPermissionError(
             "Only one consequential write preview is allowed per assistant request.",

@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { requireValue } from "~/lib/required-value";
 import { findSessionFormatConfiguration } from "~/modules/events/event-configuration";
 import type { Viewer } from "~/platform/auth/authorize.server";
 import {
@@ -74,9 +75,15 @@ export class SubmissionFormWorkflows extends SubmissionServiceFoundation {
     formats: Array<{ key: string; label: string }>,
   ): SaveFormInput {
     const schema = structuredClone(DEFAULT_FORM_SCHEMA);
-    const trackField = schema.fields.find((field) => field.id === "category")!;
+    const trackField = requireValue(
+      schema.fields.find((field) => field.id === "category"),
+      'Required schema.fields.find((field) => field.id === "category") is unavailable.',
+    );
     trackField.options = tracks.map((track) => track.name);
-    const formatField = schema.fields.find((field) => field.id === "format")!;
+    const formatField = requireValue(
+      schema.fields.find((field) => field.id === "format"),
+      'Required schema.fields.find((field) => field.id === "format") is unavailable.',
+    );
     formatField.options = formats.map((format) => format.label);
     return {
       name: "Call for Speakers",
@@ -182,9 +189,10 @@ export class SubmissionFormWorkflows extends SubmissionServiceFoundation {
     },
   ) {
     const input = saveFormSchema.parse(rawInput);
-    const categoryField = input.schema.fields.find(
-      (field) => field.id === "category",
-    )!;
+    const categoryField = requireValue(
+      input.schema.fields.find((field) => field.id === "category"),
+      'Required input.schema.fields.find( (field) => field.id === "category", ) is unavailable.',
+    );
     const configuredTracks = await this.listRoutingTracks(viewer);
     const tracksByName = new Map<string, Array<{ id: string; name: string }>>();
     for (const track of configuredTracks) {
@@ -202,7 +210,7 @@ export class SubmissionFormWorkflows extends SubmissionServiceFoundation {
             : `Track name “${name}” is ambiguous. Give every event track a unique name before using it in a form.`,
         );
       }
-      return matches[0]!;
+      return requireValue(matches[0], "Required matches[0] is unavailable.");
     });
     if (
       selectedTracks.length !== configuredTracks.length ||
@@ -216,9 +224,10 @@ export class SubmissionFormWorkflows extends SubmissionServiceFoundation {
     }
     const { formats: configuredFormats } =
       await this.getConfiguredSessionFormatSnapshotD1(viewer);
-    const formatField = input.schema.fields.find(
-      (field) => field.id === "format",
-    )!;
+    const formatField = requireValue(
+      input.schema.fields.find((field) => field.id === "format"),
+      'Required input.schema.fields.find( (field) => field.id === "format", ) is unavailable.',
+    );
     let resolvedKeys: string[];
     try {
       resolvedKeys = formatField.options.map((option) => {
@@ -435,9 +444,12 @@ export class SubmissionFormWorkflows extends SubmissionServiceFoundation {
         "Set and save an access password before publishing this form.",
       );
     }
-    const trackField = workspace.draftVersion.schema.fields.find(
-      (field) => field.id === "category",
-    )!;
+    const trackField = requireValue(
+      workspace.draftVersion.schema.fields.find(
+        (field) => field.id === "category",
+      ),
+      'Required workspace.draftVersion.schema.fields.find( (field) => field.id === "category", ) is unavailable.',
+    );
     if (trackField.options.length === 0) {
       throw new SubmissionStateError(
         "Configure at least one selectable event track before publishing this form.",

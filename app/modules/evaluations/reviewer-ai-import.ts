@@ -8,16 +8,16 @@ export function buildUnansweredReviewerAiImport(
   suggestions: ReviewerAiImportSuggestion[],
 ) {
   const importedScores = Object.fromEntries(
-    suggestions
-      .filter(
-        (suggestion) =>
-          suggestion.suggestedValue !== null &&
-          String(currentScores[suggestion.criterionId] ?? "").trim() === "",
-      )
-      .map((suggestion) => [
-        suggestion.criterionId,
-        suggestion.suggestedValue!,
-      ]),
+    suggestions.flatMap((suggestion) => {
+      const value = suggestion.suggestedValue;
+      if (
+        value === null ||
+        String(currentScores[suggestion.criterionId] ?? "").trim() !== ""
+      ) {
+        return [];
+      }
+      return [[suggestion.criterionId, value] as const];
+    }),
   );
   return {
     scores: { ...currentScores, ...importedScores },

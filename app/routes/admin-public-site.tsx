@@ -15,6 +15,7 @@ import { AdminPublicSiteRecordings } from "~/components/admin-public-site-record
 import { AdminPublicSiteSponsors } from "~/components/admin-public-site-sponsors";
 import { ConfirmDialog, useConfirm } from "~/components/ui/confirm-dialog";
 import { useUnsavedChanges } from "~/components/ui/use-unsaved-changes";
+import { requireValue } from "~/lib/required-value";
 import type { PublicRecordingWorkspaceItem } from "~/modules/public-site/public-recording-service.server";
 import { PublicRecordingService } from "~/modules/public-site/public-recording-service.server";
 import {
@@ -292,7 +293,10 @@ export async function action({ request, context }: Route.ActionArgs) {
             : undefined,
         message: realtimeFailure
           ? `${labels[intent]} ${realtimeFailure.message}`
-          : labels[intent]!,
+          : requireValue(
+              labels[intent],
+              "Required labels[intent] is unavailable.",
+            ),
       },
       realtimeFailure ? { status: 207 } : undefined,
     );

@@ -19,6 +19,7 @@ import {
 import { useConfirm } from "~/components/ui/confirm-dialog";
 import { PageHeader } from "~/components/ui/page-header";
 import { StatusBadge } from "~/components/ui/status-badge";
+import { requireValue } from "~/lib/required-value";
 import { AiProviderSettingsService } from "~/modules/ai/ai-provider.server";
 import {
   emailProviderConfigurationIssue,
@@ -234,8 +235,14 @@ export async function loader({ request, context }: Route.LoaderArgs) {
       ? {
           identityKey: selected.identityKey,
           name: selected.identity.name,
-          role: selectedState!.role,
-          destination: selectedState!.destination,
+          role: requireValue(
+            selectedState,
+            "Required selectedState is unavailable.",
+          ).role,
+          destination: requireValue(
+            selectedState,
+            "Required selectedState is unavailable.",
+          ).destination,
           cohort: selected.identity.cohort,
         }
       : null,

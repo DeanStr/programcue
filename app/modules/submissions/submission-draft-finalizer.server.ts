@@ -557,7 +557,7 @@ export class SubmissionDraftFinalizer {
           directSessionId,
           form.eventId,
           payload.submissionId,
-          options.trackSelections[0]!.trackId,
+          options.trackSelections[0].trackId,
           title,
           directSessionSlug(title, directSessionId),
           String(payload.answers.description ?? "").trim() || null,

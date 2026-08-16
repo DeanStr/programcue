@@ -1,3 +1,4 @@
+import { requireValue } from "~/lib/required-value";
 import type { Viewer } from "~/platform/auth/authorize.server";
 import {
   type FailedGenerationResult,
@@ -406,11 +407,20 @@ export class AiReviewAssessmentReader {
         visibleAttempts.push({
           ...base,
           status: "running",
-          requestedByName: attempt.requestedByName!,
-          startedAt: attempt.startedAt!,
+          requestedByName: requireValue(
+            attempt.requestedByName,
+            "Required attempt.requestedByName is unavailable.",
+          ),
+          startedAt: requireValue(
+            attempt.startedAt,
+            "Required attempt.startedAt is unavailable.",
+          ),
           recoveryRequired:
             attempt.resultJson !== null ||
-            attempt.claimExpiresAt! <= epochSeconds(this.now()),
+            requireValue(
+              attempt.claimExpiresAt,
+              "Required attempt.claimExpiresAt is unavailable.",
+            ) <= epochSeconds(this.now()),
         });
         continue;
       }
@@ -423,9 +433,15 @@ export class AiReviewAssessmentReader {
       visibleAttempts.push({
         ...base,
         status: "failed",
-        lastError: attempt.lastError!,
+        lastError: requireValue(
+          attempt.lastError,
+          "Required attempt.lastError is unavailable.",
+        ),
         providerRequestId: failure.providerRequestId ?? null,
-        failedAt: attempt.completedAt!,
+        failedAt: requireValue(
+          attempt.completedAt,
+          "Required attempt.completedAt is unavailable.",
+        ),
       });
     }
     return visibleAttempts;

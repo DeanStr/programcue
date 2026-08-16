@@ -1,3 +1,4 @@
+import { requireValue } from "~/lib/required-value";
 import { AirtableProviderBoundary } from "~/modules/airtable/airtable-provider-boundary.server";
 import { parseEventFilePolicy } from "~/modules/files/file-policy";
 import type { Viewer } from "~/platform/auth/authorize.server";
@@ -148,7 +149,14 @@ export class ResourceAuthoringService extends ResourceServiceBase {
     let document: TiptapNode | null = null;
     if (selected) {
       try {
-        document = parseResourceDocument(JSON.parse(selected.documentJson!));
+        document = parseResourceDocument(
+          JSON.parse(
+            requireValue(
+              selected.documentJson,
+              "Required selected.documentJson is unavailable.",
+            ),
+          ),
+        );
         validateResourceDocumentEmbedStructure(document);
       } catch {
         throw new ResourceInvariantError(
@@ -168,7 +176,10 @@ export class ResourceAuthoringService extends ResourceServiceBase {
         ? {
             ...selected,
             acknowledgementRequired: Boolean(selected.acknowledgementRequired),
-            document: document!,
+            document: requireValue(
+              document,
+              "Required document is unavailable.",
+            ),
             attachments,
             audiencePersonIds,
             publicationImpact,

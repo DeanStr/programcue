@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { requireValue } from "~/lib/required-value";
 import type { Viewer } from "~/platform/auth/authorize.server";
 import {
   type PreparedWebhookEvent,
@@ -321,8 +322,14 @@ export class TaskTemplateWorkflows extends TaskServiceFoundation {
         ),
       );
     }
-    const hotel = resolved.get("speaker_travel_hotel_v1")!;
-    const flight = resolved.get("speaker_travel_flight_v1")!;
+    const hotel = requireValue(
+      resolved.get("speaker_travel_hotel_v1"),
+      'Required resolved.get("speaker_travel_hotel_v1") is unavailable.',
+    );
+    const flight = requireValue(
+      resolved.get("speaker_travel_flight_v1"),
+      'Required resolved.get("speaker_travel_flight_v1") is unavailable.',
+    );
     return {
       hotelTemplateId: hotel.id,
       flightTemplateId: flight.id,
@@ -764,7 +771,13 @@ export class TaskTemplateWorkflows extends TaskServiceFoundation {
     };
 
     await visit(rootTemplateId);
-    return { ordered, root: planned.get(rootTemplateId)! };
+    return {
+      ordered,
+      root: requireValue(
+        planned.get(rootTemplateId),
+        "Required planned.get(rootTemplateId) is unavailable.",
+      ),
+    };
   }
 
   private async returnExistingAssignment(

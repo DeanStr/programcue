@@ -1,3 +1,4 @@
+import { requireValue } from "~/lib/required-value";
 import { materializePublishedResourceAcknowledgementsForSession } from "~/modules/resources/resource-service.server";
 import type { Viewer } from "~/platform/auth/authorize.server";
 import type { AcceptedSpeakerInvitationPlan } from "./accepted-speaker-invitation.server";
@@ -607,7 +608,8 @@ export function buildDecisionStatements(input: {
             sessionId,
             viewer.eventId,
             submission.id,
-            sessionTrack!.id,
+            requireValue(sessionTrack, "Required sessionTrack is unavailable.")
+              .id,
             sessionTitle,
             slug,
             sessionDescription,
@@ -617,8 +619,10 @@ export function buildDecisionStatements(input: {
             viewer.eventId,
             submission.id,
             viewer.eventId,
-            sessionTrack!.id,
-            sessionTrack!.name,
+            requireValue(sessionTrack, "Required sessionTrack is unavailable.")
+              .id,
+            requireValue(sessionTrack, "Required sessionTrack is unavailable.")
+              .name,
           ),
           env.DB.prepare(
             `

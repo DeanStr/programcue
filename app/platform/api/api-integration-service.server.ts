@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { requireValue } from "~/lib/required-value";
 import { ApiError, type ApiPrincipal } from "./api.server";
 import {
   decodePrivateCursor,
@@ -165,8 +166,16 @@ export class ApiIntegrationService {
       nextCursor:
         rows.length > input.limit && visible.length
           ? encodePrivateCursor(
-              visible.at(-1)!.sort,
-              String(visible.at(-1)!.id),
+              requireValue(
+                visible.at(-1),
+                "Required visible.at(-1) is unavailable.",
+              ).sort,
+              String(
+                requireValue(
+                  visible.at(-1),
+                  "Required visible.at(-1) is unavailable.",
+                ).id,
+              ),
             )
           : null,
     };

@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { requireValue } from "~/lib/required-value";
 import { reviewerAiCriterionSuggestionsSchema } from "~/modules/evaluations/evaluation-schema";
 import { EvaluationService } from "~/modules/evaluations/evaluation-service.server";
 import { reviewableSubmissionSql } from "~/modules/evaluations/evaluation-submission-review-eligibility.server";
@@ -152,7 +153,10 @@ function validateGeneratedSuggestions(
   }
   const knownEvidence = new Set(evidenceFieldIds);
   for (const item of parsed.data.criteria) {
-    const criterion = criterionById.get(item.criterionId)!;
+    const criterion = requireValue(
+      criterionById.get(item.criterionId),
+      "Required criterionById.get(item.criterionId) is unavailable.",
+    );
     if (
       new Set(item.evidenceFieldIds).size !== item.evidenceFieldIds.length ||
       item.evidenceFieldIds.some((id) => !knownEvidence.has(id))

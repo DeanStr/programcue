@@ -1,3 +1,5 @@
+import { requireValue } from "~/lib/required-value";
+
 type ProgrammeRecord = {
   startsAt: number | null;
   visibility: string;
@@ -53,7 +55,11 @@ function relativeLuminance(colour: RgbColour) {
     const value = channel / 255;
     return value <= 0.04045 ? value / 12.92 : ((value + 0.055) / 1.055) ** 2.4;
   });
-  return red! * 0.2126 + green! * 0.7152 + blue! * 0.0722;
+  return (
+    requireValue(red, "Required red is unavailable.") * 0.2126 +
+    requireValue(green, "Required green is unavailable.") * 0.7152 +
+    requireValue(blue, "Required blue is unavailable.") * 0.0722
+  );
 }
 
 function contrastRatio(left: RgbColour, right: RgbColour) {
@@ -143,13 +149,23 @@ function sortableSpeakerParts(displayName: string) {
     .filter(Boolean);
   while (
     parts.length > 1 &&
-    SPEAKER_SUFFIXES.has(parts.at(-1)!.toLocaleLowerCase("en"))
+    SPEAKER_SUFFIXES.has(
+      requireValue(
+        parts.at(-1),
+        "Required parts.at(-1) is unavailable.",
+      ).toLocaleLowerCase("en"),
+    )
   ) {
     parts.pop();
   }
   while (
     parts.length > 1 &&
-    SPEAKER_HONORIFICS.has(parts[0]!.toLocaleLowerCase("en"))
+    SPEAKER_HONORIFICS.has(
+      requireValue(
+        parts[0],
+        "Required parts[0] is unavailable.",
+      ).toLocaleLowerCase("en"),
+    )
   ) {
     parts.shift();
   }

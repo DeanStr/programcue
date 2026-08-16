@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { requireValue } from "~/lib/required-value";
 
 import { communicationTriggerConfigurationSchema } from "~/modules/communications/communication-schema";
 import { parseSessionFormatsConfiguration } from "~/modules/events/event-configuration";
@@ -307,7 +308,10 @@ export function buildEventClonePlan(
             `Room ${index + 1} contains invalid resource configuration.`,
           );
         return {
-          id: roomIds.get(room.id)!,
+          id: requireValue(
+            roomIds.get(room.id),
+            "Required roomIds.get(room.id) is unavailable.",
+          ),
           name: room.name,
           building: room.building,
           level: room.level,
@@ -322,7 +326,10 @@ export function buildEventClonePlan(
   );
   const formSlugs = new Map(
     forms.results.map((row) => {
-      const id = formIds.get(row.id)!;
+      const id = requireValue(
+        formIds.get(row.id),
+        "Required formIds.get(row.id) is unavailable.",
+      );
       return [row.id, cloneFormSlug(input.slug, row.name, id)];
     }),
   );

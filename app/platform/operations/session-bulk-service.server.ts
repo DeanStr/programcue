@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { requireValue } from "~/lib/required-value";
 
 import type { Viewer } from "~/platform/auth/authorize.server";
 
@@ -352,7 +353,10 @@ export class SessionBulkService {
           }
         : {
             id: crypto.randomUUID(),
-            name: parsed.tagName!,
+            name: requireValue(
+              parsed.tagName,
+              "Required parsed.tagName is unavailable.",
+            ),
             colourToken: parsed.colourToken,
             creates: true,
           };
@@ -371,10 +375,18 @@ export class SessionBulkService {
 
       if (parsed.action === "add_tag") {
         if (hasTag) status = "skipped";
-        else afterTags = sorted([...tagNames, tag!.name]);
+        else
+          afterTags = sorted([
+            ...tagNames,
+            requireValue(tag, "Required tag is unavailable.").name,
+          ]);
       } else if (parsed.action === "remove_tag") {
         if (!hasTag) status = "skipped";
-        else afterTags = tagNames.filter((name) => name !== tag!.name);
+        else
+          afterTags = tagNames.filter(
+            (name) =>
+              name !== requireValue(tag, "Required tag is unavailable.").name,
+          );
       } else if (parsed.action === "archive") {
         if (session.status === "archived" && session.previousStatus) {
           status = "skipped";

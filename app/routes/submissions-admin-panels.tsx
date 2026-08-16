@@ -546,9 +546,9 @@ export function AdminCreationForm(props: AdminCreationFormProps) {
   const [applicationSpeakers, setApplicationSpeakers] = useState<
     SubmissionAdminSpeakerInput[]
   >([{ name: "", email: "", biography: "" }]);
-  const [directFormat, setDirectFormat] = useState(sessionFormats[0]!.key);
+  const [directFormat, setDirectFormat] = useState(sessionFormats[0].key);
   const [directDuration, setDirectDuration] = useState(
-    sessionFormats[0]!.defaultDurationMinutes,
+    sessionFormats[0].defaultDurationMinutes,
   );
   return (
     <div className="stack">
@@ -599,7 +599,7 @@ export function AdminCreationForm(props: AdminCreationFormProps) {
                 <select
                   className="select"
                   name="format"
-                  defaultValue={sessionFormats[0]!.key}
+                  defaultValue={sessionFormats[0].key}
                 >
                   {sessionFormats.map((format) => (
                     <option key={format.key} value={format.key}>

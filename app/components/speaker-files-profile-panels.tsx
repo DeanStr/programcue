@@ -7,7 +7,6 @@ import {
 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Form, Link, useSubmit } from "react-router";
-
 import { DirectMultipartUpload } from "~/components/direct-multipart-upload";
 import type { SpeakerPortal } from "~/components/speaker-dashboard-panel-shared";
 import { SpeakerProfileHistory } from "~/components/speaker-profile-history";
@@ -15,6 +14,7 @@ import { CharacterCount } from "~/components/ui/character-count";
 import { ConfirmDialog, useConfirm } from "~/components/ui/confirm-dialog";
 import { DomainStatusBadge } from "~/components/ui/domain-status-badge";
 import { useUnsavedChanges } from "~/components/ui/use-unsaved-changes";
+import { requireValue } from "~/lib/required-value";
 import { maximumMegabytes } from "~/modules/files/file-policy";
 import {
   formatSpeakerXHandleInput,
@@ -258,7 +258,7 @@ export function SpeakerProfilePanel({
             </strong>
             <p className="subtle">
               {headshot
-                ? `${headshot.downloadFilename} · uploaded ${formatUploadTimestamp(headshot.downloadUploadedAt!, portal.event.timezone)}`
+                ? `${headshot.downloadFilename} · uploaded ${formatUploadTimestamp(requireValue(headshot.downloadUploadedAt, "Required headshot.downloadUploadedAt is unavailable."), portal.event.timezone)}`
                 : "Upload a JPG, PNG or WebP file for organiser review and your published profile."}
             </p>
           </div>

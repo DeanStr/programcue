@@ -15,7 +15,7 @@ const crcTable = (() => {
 function crc32(current: number, chunk: Uint8Array) {
   let value = current;
   for (const byte of chunk)
-    value = crcTable[(value ^ byte) & 0xff]! ^ (value >>> 8);
+    value = crcTable[(value ^ byte) & 0xff] ^ (value >>> 8);
   return value >>> 0;
 }
 

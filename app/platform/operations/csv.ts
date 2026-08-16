@@ -23,7 +23,7 @@ export function parseCsv(input: string): ParsedCsv {
   let quotedFieldClosed = false;
 
   for (let index = 0; index < source.length; index += 1) {
-    const character = source[index]!;
+    const character = source[index];
     if (quoted) {
       if (character === '"') {
         if (source[index + 1] === '"') {
@@ -83,7 +83,7 @@ export function parseCsv(input: string): ParsedCsv {
   if (record.some((value) => value.length > 0)) records.push(record);
   if (!records.length) throw new CsvParseError("The CSV file is empty.");
 
-  const headers = records[0]!.map((header) => header.trim());
+  const headers = records[0].map((header) => header.trim());
   if (!headers.length || headers.some((header) => !header)) {
     throw new CsvParseError("Every CSV column must have a header.");
   }

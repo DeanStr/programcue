@@ -8,12 +8,12 @@ import {
   useState,
 } from "react";
 import { Link, useFetcher } from "react-router";
-
 import {
   DraftRecoveryFeedback,
   DraftRecoveryStatus,
 } from "~/components/draft-recovery-feedback";
 import { CharacterCount } from "~/components/ui/character-count";
+import { requireValue } from "~/lib/required-value";
 import type {
   ScheduleSession,
   ScheduleWorkspace,
@@ -198,8 +198,18 @@ function useSessionContentEditorState({
         setServerError("The server saved content without returning revisions.");
         return;
       }
-      setServerRevision(result.revision!);
-      setScheduleRevision(result.scheduleRevision!);
+      setServerRevision(
+        requireValue(
+          result.revision,
+          "Required result.revision is unavailable.",
+        ),
+      );
+      setScheduleRevision(
+        requireValue(
+          result.scheduleRevision,
+          "Required result.scheduleRevision is unavailable.",
+        ),
+      );
       setWarning(result.warning ?? null);
       const submitted = submittedRef.current;
       if (

@@ -286,18 +286,25 @@ export class PublicSiteService {
     const draft = site
       ? parsePublicSiteDraft(site.draftJson)
       : defaultPublicSiteDraft();
+    let published = null;
+    if (site?.publishedJson) {
+      if (site.publishedRevision === null || site.publishedAt === null) {
+        throw new PublishedPublicSiteInvariantError(
+          "The published event site is missing required publication metadata.",
+        );
+      }
+      published = {
+        configuration: parsePublishedPublicSiteSnapshot(site.publishedJson),
+        revision: site.publishedRevision,
+        publishedAt: site.publishedAt,
+      };
+    }
     return {
       event,
       publicEvent,
       publicEventContentRevision: await publicSiteContentRevision(publicEvent),
       draft: { configuration: draft, revision: site?.draftRevision ?? 0 },
-      published: site?.publishedJson
-        ? {
-            configuration: parsePublishedPublicSiteSnapshot(site.publishedJson),
-            revision: site.publishedRevision!,
-            publishedAt: site.publishedAt!,
-          }
-        : null,
+      published,
       hasUnpublishedChanges:
         site !== null &&
         (site.publishedRevision === null ||

@@ -174,7 +174,7 @@ export class SubmissionDirectSessionCommands extends SubmissionAdministrationCom
         `Invite ${unavailableEmails.join(", ")} to the event and wait for acceptance before attaching that existing identity to a direct session.`,
       );
     }
-    const command = prepared.command!;
+    const command = prepared.command;
     const sessionId = crypto.randomUUID();
     const slug = `${slugify(input.title)}-${sessionId.slice(0, 6)}`;
     const auditEventId = crypto.randomUUID();

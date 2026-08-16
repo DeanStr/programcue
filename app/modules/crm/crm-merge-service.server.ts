@@ -36,8 +36,8 @@ export class CrmMergeService {
       .all<{ id: string; name: string }>();
     if (
       candidates.results.length !== 2 ||
-      candidates.results[0]!.name.trim().toLocaleLowerCase() !==
-        candidates.results[1]!.name.trim().toLocaleLowerCase()
+      candidates.results[0].name.trim().toLocaleLowerCase() !==
+        candidates.results[1].name.trim().toLocaleLowerCase()
     ) {
       throw new CrmStateError(
         "Only two same-name contacts in this organisation can be merged.",

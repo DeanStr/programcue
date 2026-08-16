@@ -96,7 +96,7 @@ export function ResourceExternalEmbedEditor({
   function move(index: number, direction: -1 | 1) {
     const next = [...embeds];
     const destination = index + direction;
-    [next[index], next[destination]] = [next[destination]!, next[index]!];
+    [next[index], next[destination]] = [next[destination], next[index]];
     commit(next);
   }
 

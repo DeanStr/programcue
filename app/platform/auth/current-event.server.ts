@@ -107,7 +107,7 @@ export function chooseInitialEvent(
   const configured = configuredDefaultEventId?.trim();
   if (configured && events.some((event) => event.eventId === configured))
     return configured;
-  return events.length === 1 ? events[0]!.eventId : null;
+  return events.length === 1 ? events[0].eventId : null;
 }
 
 export async function listAuthorisedEvents(

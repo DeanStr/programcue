@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { requireValue } from "~/lib/required-value";
 import type { Viewer } from "~/platform/auth/authorize.server";
 import {
   ResponseBodyTooLargeError,
@@ -507,7 +508,10 @@ export async function resolveAiProvider(
   if (provider === "openai") {
     return new OpenAiResponsesProvider(
       {
-        apiKey: env.OPENAI_API_KEY!.trim(),
+        apiKey: requireValue(
+          env.OPENAI_API_KEY,
+          "Required env.OPENAI_API_KEY is unavailable.",
+        ).trim(),
         model,
         endpoint: env.OPENAI_RESPONSES_URL?.trim() || undefined,
       },
@@ -516,7 +520,10 @@ export async function resolveAiProvider(
   }
   return new AnthropicMessagesProvider(
     {
-      apiKey: env.ANTHROPIC_API_KEY!.trim(),
+      apiKey: requireValue(
+        env.ANTHROPIC_API_KEY,
+        "Required env.ANTHROPIC_API_KEY is unavailable.",
+      ).trim(),
       endpoint: env.ANTHROPIC_MESSAGES_URL?.trim() || undefined,
     },
     model,

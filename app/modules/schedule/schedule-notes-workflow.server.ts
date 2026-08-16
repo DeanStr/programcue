@@ -196,8 +196,8 @@ export abstract class ScheduleNotesWorkflow extends ScheduleSessionEditorWorkflo
       ),
     ]);
     if (
-      (results[2]!.meta.changes ?? 0) !== 1 ||
-      (results[3]!.meta.changes ?? 0) !== 1
+      (results[2].meta.changes ?? 0) !== 1 ||
+      (results[3].meta.changes ?? 0) !== 1
     ) {
       const racedReplay = await this.replayEditorCommand(
         viewer,

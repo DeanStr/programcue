@@ -1,6 +1,7 @@
 import { md5 } from "@noble/hashes/legacy.js";
 import AwsS3, { type AwsS3Part } from "@uppy/aws-s3";
 import Uppy from "@uppy/core";
+import { requireValue } from "~/lib/required-value";
 
 import { UserFacingError } from "~/platform/user-facing-error";
 
@@ -321,14 +322,23 @@ async function validateResumedParts(file: File, parts: AwsS3Part[]) {
   for (const part of parts) {
     if (
       !Number.isInteger(part.PartNumber) ||
-      part.PartNumber! < 1 ||
+      requireValue(
+        part.PartNumber,
+        "Required part.PartNumber is unavailable.",
+      ) < 1 ||
       typeof part.ETag !== "string" ||
       !Number.isInteger(part.Size)
     )
       throw new MultipartResponseContractError(
         "Stored part metadata for the resumed upload is invalid.",
       );
-    const start = (part.PartNumber! - 1) * DIRECT_MULTIPART_PART_SIZE_BYTES;
+    const start =
+      (requireValue(
+        part.PartNumber,
+        "Required part.PartNumber is unavailable.",
+      ) -
+        1) *
+      DIRECT_MULTIPART_PART_SIZE_BYTES;
     const end = Math.min(file.size, start + DIRECT_MULTIPART_PART_SIZE_BYTES);
     if (start >= file.size || part.Size !== end - start)
       throw new MultipartResponseContractError(
@@ -499,7 +509,13 @@ export async function createProgramCueMultipartSession({
           throw new MultipartResponseContractError(
             "The upload client produced invalid completion data.",
           );
-        return { partNumber: part.PartNumber!, etag: part.ETag };
+        return {
+          partNumber: requireValue(
+            part.PartNumber,
+            "Required part.PartNumber is unavailable.",
+          ),
+          etag: part.ETag,
+        };
       });
       const completed = await request<{ upload: ProgramCueUploadCompletion }>(
         "complete",

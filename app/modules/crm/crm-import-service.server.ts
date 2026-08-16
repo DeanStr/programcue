@@ -1,4 +1,5 @@
 import type { z } from "zod";
+import { requireValue } from "~/lib/required-value";
 import type { OrganisationAdministrator } from "~/platform/auth/organisation.server";
 import { CsvParseError, parseCsv } from "~/platform/operations/csv";
 import {
@@ -59,8 +60,16 @@ export class CrmImportService {
     const emails = new Set<string>();
     parsed.rows.forEach((row, index) => {
       const candidate = createCrmContactSchema.safeParse({
-        name: row[mapping.name!],
-        email: row[mapping.email!],
+        name: row[
+          requireValue(mapping.name, "Required mapping.name is unavailable.")
+        ],
+        email:
+          row[
+            requireValue(
+              mapping.email,
+              "Required mapping.email is unavailable.",
+            )
+          ],
         jobTitle: mapping.jobTitle ? row[mapping.jobTitle] : "",
         organisationName: mapping.organisationName
           ? row[mapping.organisationName]

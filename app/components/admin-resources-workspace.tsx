@@ -6,7 +6,6 @@ import {
   Plus,
 } from "lucide-react";
 import { Form, Link } from "react-router";
-
 import { BrandMark } from "~/components/brand-mark";
 import { Dialog } from "~/components/dialog";
 import {
@@ -19,6 +18,7 @@ import {
 } from "~/components/draft-recovery-feedback";
 import { useConfirm } from "~/components/ui/confirm-dialog";
 import { DerivedSlugField } from "~/components/ui/derived-slug-field";
+import { requireValue } from "~/lib/required-value";
 import { maximumMegabytes } from "~/modules/files/file-policy";
 import { emptyResourceExternalEmbedDraft } from "~/modules/resources/resource-recovery";
 import { UserFacingError } from "~/platform/user-facing-error";
@@ -559,18 +559,38 @@ function ResourceEditorPanel() {
             )}
             {(editing.publicationImpact?.tasksWaived ?? 0) > 0 ? (
               <li>
-                Waive {editing.publicationImpact!.tasksWaived} existing
-                acknowledgement task
-                {editing.publicationImpact!.tasksWaived === 1 ? "" : "s"}.
+                Waive{" "}
+                {
+                  requireValue(
+                    editing.publicationImpact,
+                    "Required editing.publicationImpact is unavailable.",
+                  ).tasksWaived
+                }{" "}
+                existing acknowledgement task
+                {requireValue(
+                  editing.publicationImpact,
+                  "Required editing.publicationImpact is unavailable.",
+                ).tasksWaived === 1
+                  ? ""
+                  : "s"}
+                .
               </li>
             ) : null}
             {(editing.publicationImpact?.templateDependenciesRemoved ?? 0) >
             0 ? (
               <li>
                 Remove acknowledgement as a prerequisite from{" "}
-                {editing.publicationImpact!.templateDependenciesRemoved} active
-                task template
-                {editing.publicationImpact!.templateDependenciesRemoved === 1
+                {
+                  requireValue(
+                    editing.publicationImpact,
+                    "Required editing.publicationImpact is unavailable.",
+                  ).templateDependenciesRemoved
+                }{" "}
+                active task template
+                {requireValue(
+                  editing.publicationImpact,
+                  "Required editing.publicationImpact is unavailable.",
+                ).templateDependenciesRemoved === 1
                   ? ""
                   : "s"}
                 .

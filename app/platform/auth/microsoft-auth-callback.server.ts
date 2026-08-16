@@ -1,4 +1,5 @@
 import type { BetterAuthPlugin } from "better-auth";
+import { requireValue } from "~/lib/required-value";
 
 export const MICROSOFT_AUTH_CALLBACK_PATH = "/api/auth/callback/microsoft";
 
@@ -358,7 +359,10 @@ export async function consumeMicrosoftCallbackRelay(
   if (payload.code !== undefined) {
     internalURL.searchParams.set("code", payload.code);
   } else {
-    internalURL.searchParams.set("error", payload.error!);
+    internalURL.searchParams.set(
+      "error",
+      requireValue(payload.error, "Required payload.error is unavailable."),
+    );
     if (payload.errorDescription) {
       internalURL.searchParams.set(
         "error_description",

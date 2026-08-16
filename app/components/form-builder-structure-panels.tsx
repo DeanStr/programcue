@@ -1,5 +1,6 @@
 import { ChevronDown, ChevronUp } from "lucide-react";
 import { CharacterCount } from "~/components/ui/character-count";
+import { requireValue } from "~/lib/required-value";
 
 import {
   conditionalFieldOrderIssue,
@@ -42,14 +43,22 @@ export function FormStructurePanel({
   function moveFieldAt(index: number, direction: -1 | 1) {
     const target = index + direction;
     if (target < 0 || target >= fields.length) return;
-    if (fields[index]!.sectionId !== fields[target]!.sectionId) {
+    if (
+      requireValue(fields[index], "Required fields[index] is unavailable.")
+        .sectionId !==
+      requireValue(fields[target], "Required fields[target] is unavailable.")
+        .sectionId
+    ) {
       onOperationBlocked(
         "Use the field's Section setting to move it between sections.",
       );
       return;
     }
     const next = [...fields];
-    [next[index], next[target]] = [next[target]!, next[index]!];
+    [next[index], next[target]] = [
+      requireValue(next[target], "Required next[target] is unavailable."),
+      requireValue(next[index], "Required next[index] is unavailable."),
+    ];
     const issue = conditionalFieldOrderIssue(next);
     if (issue) {
       onOperationBlocked(issue);
@@ -90,7 +99,13 @@ export function FormStructurePanel({
     const target = index + direction;
     if (target < 0 || target >= input.schema.sections.length) return;
     const sections = [...input.schema.sections];
-    [sections[index], sections[target]] = [sections[target]!, sections[index]!];
+    [sections[index], sections[target]] = [
+      requireValue(
+        sections[target],
+        "Required sections[target] is unavailable.",
+      ),
+      requireValue(sections[index], "Required sections[index] is unavailable."),
+    ];
     const orderedFields = sections.flatMap((section) =>
       fields.filter((field) => field.sectionId === section.id),
     );
@@ -104,7 +119,10 @@ export function FormStructurePanel({
 
   function removeSection(index: number) {
     if (input.schema.sections.length === 1) return;
-    const removed = input.schema.sections[index]!;
+    const removed = requireValue(
+      input.schema.sections[index],
+      "Required input.schema.sections[index] is unavailable.",
+    );
     const assignedFields = fields.filter(
       (field) => field.sectionId === removed.id,
     );
@@ -252,9 +270,12 @@ export function FormStructurePanel({
                   <span className="fb-field-kind">
                     {formFieldTypeLabel(field.type)} ·{" "}
                     {
-                      input.schema.sections.find(
-                        (section) => section.id === field.sectionId,
-                      )!.title
+                      requireValue(
+                        input.schema.sections.find(
+                          (section) => section.id === field.sectionId,
+                        ),
+                        "Required input.schema.sections.find( (section) => section.id === field.sectionId, ) is unavailable.",
+                      ).title
                     }
                   </span>
                   {field.condition ? (
