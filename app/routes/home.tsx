@@ -57,7 +57,7 @@ export default function Home({ loaderData }: Route.ComponentProps) {
     <main
       className="design-board"
       id="main"
-      style={{ minHeight: "100vh", display: "grid", placeItems: "center" }}
+      style={{ minHeight: "100dvh", display: "grid", placeItems: "center" }}
     >
       <section
         className="card pad"
@@ -67,7 +67,7 @@ export default function Home({ loaderData }: Route.ComponentProps) {
           <BrandMark />
           <span>Program Cue</span>
         </div>
-        <span className="pc-page-eyebrow">Account ready</span>
+        <span className="tiny subtle">Account ready</span>
         <h1>No workspace access yet</h1>
         <p>
           Your account is signed in, but it has not been granted access to an

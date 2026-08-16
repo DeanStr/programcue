@@ -151,6 +151,7 @@
   border: 1px solid var(--line);
   border-radius: var(--radius-lg);
   background: var(--surface-editorial);
+  color: var(--ink);
   box-shadow: var(--elev-2);
 }
 .public-site-preview-frame.is-mobile {
@@ -232,16 +233,16 @@
 .public-site-home {
   grid-column: 1 / -1;
   display: grid;
-  gap: var(--space-6);
+  gap: clamp(var(--space-6), 6vw, var(--space-10));
   margin-bottom: var(--space-8);
 }
 .public-site-section {
-  padding: clamp(var(--space-5), 4vw, var(--space-8));
-  border: 1px solid var(--border-editorial);
-  border-radius: var(--radius-lg);
-  background: var(--surface);
+  min-width: 0;
 }
-.public-site-preview-frame .public-site-section {
+.public-site-preview-frame
+  .public-site-section:not(.public-site-introduction):not(
+    .public-site-statistics-section
+  ):not(.public-site-venue-section) {
   padding: var(--space-5);
 }
 .public-site-section-heading {
@@ -262,11 +263,48 @@
   font-size: var(--text-lg);
   line-height: var(--leading-relaxed);
 }
+.public-site-introduction {
+  padding: clamp(var(--space-5), 5vw, var(--space-9));
+  border: 1px solid var(--accent-line);
+  border-radius: var(--radius-lg);
+  background: color-mix(in srgb, var(--event-accent) 6%, var(--surface));
+}
+.public-site-speakers,
+.public-site-sessions {
+  padding-top: var(--space-2);
+}
+.public-site-statistics-section {
+  display: grid;
+  grid-template-columns: minmax(0, 0.7fr) minmax(0, 1.3fr);
+  align-items: end;
+  gap: clamp(var(--space-5), 6vw, var(--space-10));
+  padding: clamp(var(--space-5), 4vw, var(--space-8)) 0;
+  border-block: 1px solid var(--border-editorial);
+}
+.public-site-statistics-section .public-site-section-heading {
+  margin: 0;
+}
+.public-site-venue-section {
+  display: grid;
+  grid-template-columns: minmax(0, 0.7fr) minmax(0, 1.3fr);
+  gap: clamp(var(--space-5), 6vw, var(--space-10));
+  padding-block: clamp(var(--space-5), 4vw, var(--space-8));
+}
+.public-site-venue-section .public-site-section-heading {
+  margin: 0;
+}
+.public-site-faq-section {
+  width: min(100%, 840px);
+  margin-inline: 0 auto;
+}
 .public-site-actions {
   display: flex;
   flex-wrap: wrap;
   gap: var(--space-2);
   margin-top: var(--space-5);
+}
+.public-site-introduction .public-site-actions {
+  margin-top: var(--space-6);
 }
 .public-site-feature-grid {
   display: grid;
@@ -364,6 +402,11 @@
 .public-site-venue address {
   color: var(--muted-on-surface);
   font-style: normal;
+}
+.public-site-venue-section > .public-site-venue {
+  padding: var(--space-5);
+  border-radius: var(--radius-lg);
+  background: var(--surface-sunken);
 }
 .public-site-faq {
   display: grid;
@@ -502,6 +545,13 @@
   }
 }
 @media (max-width: 680px) {
+  .public-site-feature-grid {
+    grid-template-columns: 1fr;
+  }
+  .public-site-statistics-section,
+  .public-site-venue-section {
+    grid-template-columns: minmax(0, 1fr);
+  }
   .public-site-publication-grid {
     grid-template-columns: 1fr;
   }
@@ -522,9 +572,6 @@
   .public-site-record-editor {
     grid-template-columns: 1fr;
   }
-  .public-site-feature-grid {
-    grid-template-columns: 1fr;
-  }
   .public-site-preview-content-control {
     width: 100%;
   }
@@ -532,4 +579,25 @@
     flex: 1;
     min-width: 0;
   }
+}
+
+/* Preview remains a real rendering of the same page at a constrained width.
+   These compact paddings preserve the distinct layouts instead of restoring a
+   generic card treatment inside the editor frame. */
+.public-site-preview-frame .public-site-introduction {
+  padding: var(--space-5);
+}
+.public-site-preview-frame .public-site-venue-section {
+  padding-block: var(--space-5);
+}
+.public-site-preview-frame .public-site-statistics-section {
+  padding: var(--space-5) 0;
+}
+
+/* The editor renders a narrow frame inside a desktop viewport. Mirror the
+   public mobile breakpoint explicitly so its preview remains faithful. */
+.public-site-preview-frame.is-mobile .public-site-feature-grid,
+.public-site-preview-frame.is-mobile .public-site-statistics-section,
+.public-site-preview-frame.is-mobile .public-site-venue-section {
+  grid-template-columns: minmax(0, 1fr);
 }

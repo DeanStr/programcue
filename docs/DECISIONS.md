@@ -1141,6 +1141,27 @@ rewritten.
 
 ## Cross-surface visual language decision
 
+### Taste-led surface refinement
+
+Program Cue remains an operations product. Application surfaces therefore
+prioritise compact information density, restrained visual variation and motion
+only when it communicates state or spatial change. Dense review, scheduling
+and administration workflows stay calm and scannable instead of adopting
+landing-page composition or decorative animation. The existing self-hosted
+Inter face, semantic tokens and accessible component primitives remain the one
+application design system; no second UI library is introduced.
+
+The anonymous event site has a lower density and may use the event's supplied
+hero image and accent. Its bounded homepage distinguishes its content jobs:
+an introduction panel, restrained featured-record grids, plain statistics, a
+venue panel and a narrow FAQ. Featured speaker and session selections are
+user-controlled and may contain up to twelve records, so their grid remains
+content-driven rather than relying on a fixed bento arrangement. This avoids a
+repeated row of generic cards while retaining the published content model and
+organiser-controlled section order. Public light, dark and system themes remain
+event-site choices; a global application theme remains deferred for the reason
+documented below.
+
 The public site and every application shell use the same restrained
 ink-and-copper product palette: warm canvas and paper surfaces, tinted
 elevation, and copper for product emphasis. Event-branded public programme and

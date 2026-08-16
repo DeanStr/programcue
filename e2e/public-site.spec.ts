@@ -172,6 +172,20 @@ test("organisers compose, preview and publish the bounded public event site", as
   await expect(
     previewFrame.getByRole("link", { name: "Explore the programme" }),
   ).toHaveCount(0);
+  for (const section of [
+    ".public-site-statistics-section",
+    ".public-site-venue-section",
+  ]) {
+    await expect(
+      previewFrame
+        .locator(section)
+        .evaluate(
+          (element) =>
+            getComputedStyle(element).gridTemplateColumns.split(" ").length,
+        ),
+    ).resolves.toBe(1);
+  }
+  await expect(previewFrame).toHaveScreenshot("public-site-preview-mobile.png");
   const previewAccent = await previewFrame.evaluate((element) =>
     getComputedStyle(element).getPropertyValue("--event-accent").trim(),
   );
@@ -347,6 +361,15 @@ test("organisers compose, preview and publish the bounded public event site", as
       .locator(".public-top")
       .evaluate((element) => element.scrollWidth <= element.clientWidth),
   ).toBe(true);
+  await expect(page.locator(".public-shell")).toHaveScreenshot(
+    "published-public-site-desktop.png",
+  );
+
+  await page.setViewportSize({ width: 390, height: 844 });
+  await expect(page.locator(".public-shell")).toHaveScreenshot(
+    "published-public-site-mobile.png",
+  );
+  await page.setViewportSize({ width: 1440, height: 1000 });
 
   await page.setViewportSize({ width: 900, height: 720 });
   await expect(page.locator(".public-nav")).toBeHidden();
@@ -401,6 +424,41 @@ test("organisers compose, preview and publish the bounded public event site", as
   await expect(
     page.getByRole("link", { name: "All sessions" }).first(),
   ).toHaveAttribute("aria-current", "page");
+  const heroActionContrast = await page
+    .locator(".hero")
+    .getByRole("link", { name: "Add to calendar (.ics)" })
+    .evaluate((element) => {
+      const rgb = (value: string) =>
+        value
+          .match(/[\d.]+/gu)!
+          .slice(0, 3)
+          .map(Number);
+      const luminance = (value: string) => {
+        const [red, green, blue] = rgb(value).map((channel) => {
+          const normalised = channel / 255;
+          return normalised <= 0.04045
+            ? normalised / 12.92
+            : ((normalised + 0.055) / 1.055) ** 2.4;
+        });
+        return red * 0.2126 + green * 0.7152 + blue * 0.0722;
+      };
+      const contrast = (left: string, right: string) => {
+        const lighter = Math.max(luminance(left), luminance(right));
+        const darker = Math.min(luminance(left), luminance(right));
+        return (lighter + 0.05) / (darker + 0.05);
+      };
+      const actionStyle = getComputedStyle(element);
+      const heroStyle = getComputedStyle(element.closest(".hero")!);
+      return {
+        boundary: contrast(
+          actionStyle.backgroundColor,
+          heroStyle.backgroundColor,
+        ),
+        text: contrast(actionStyle.color, actionStyle.backgroundColor),
+      };
+    });
+  expect(heroActionContrast.text).toBeGreaterThanOrEqual(4.5);
+  expect(heroActionContrast.boundary).toBeGreaterThanOrEqual(3);
   const pageNavigation = page
     .getByRole("navigation", { name: "Event navigation" })
     .first();

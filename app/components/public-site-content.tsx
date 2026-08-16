@@ -145,7 +145,10 @@ export function PublicSiteHome({
     React.ReactNode
   > = {
     introduction: (
-      <HomeSection title={configuration.introductionHeading}>
+      <HomeSection
+        title={configuration.introductionHeading}
+        className="public-site-introduction"
+      >
         <p className="public-site-lede">{event.description}</p>
         <div className="public-site-actions">
           {event.application ? (
@@ -181,7 +184,7 @@ export function PublicSiteHome({
       </HomeSection>
     ),
     featured_speakers: (
-      <HomeSection title="Featured speakers">
+      <HomeSection title="Featured speakers" className="public-site-speakers">
         <div className="public-site-feature-grid">
           {featuredSpeakers.map((speaker) => (
             <PreviewSafeLink
@@ -209,7 +212,7 @@ export function PublicSiteHome({
       </HomeSection>
     ),
     featured_sessions: (
-      <HomeSection title="Featured sessions">
+      <HomeSection title="Featured sessions" className="public-site-sessions">
         <div className="public-site-feature-grid sessions">
           {featuredSessions.map((session) => (
             <PreviewSafeLink
@@ -233,7 +236,10 @@ export function PublicSiteHome({
       </HomeSection>
     ),
     statistics: (
-      <HomeSection title="At a glance">
+      <HomeSection
+        title="At a glance"
+        className="public-site-statistics-section"
+      >
         <dl className="public-site-statistics">
           {statistics.map((statistic) => (
             <div key={statistic.label}>
@@ -245,7 +251,7 @@ export function PublicSiteHome({
       </HomeSection>
     ),
     venue: (
-      <HomeSection title="Venue">
+      <HomeSection title="Venue" className="public-site-venue-section">
         <div className="public-site-venue">
           <MapPin aria-hidden />
           <div>
@@ -265,7 +271,10 @@ export function PublicSiteHome({
       </HomeSection>
     ),
     faq: (
-      <HomeSection title="Frequently asked questions">
+      <HomeSection
+        title="Frequently asked questions"
+        className="public-site-faq-section"
+      >
         <div className="public-site-faq">
           {configuration.faqItems.map((item) => (
             <details key={item.id}>

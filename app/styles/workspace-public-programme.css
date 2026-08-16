@@ -390,6 +390,9 @@
   position: relative;
   min-width: 0;
 }
+.hero .public-site-tagline {
+  color: rgba(255, 255, 255, 0.86);
+}
 /* The column bounds the line, not a ch measure: a ch cap landed the demo event
    name exactly on the wrap boundary, so the masthead was one line with the
    fallback font and two with Inter, and the page changed height as the webfont
@@ -419,13 +422,13 @@
 .hero-actions {
   margin: var(--space-6) 0 0;
 }
-/* White on the panel rather than the accent button: the hero ground is already
-   built from the customer's accent, so another branded button would compete
-   with the event masthead instead of reading as its action. */
+/* The hero is intentionally dark in every event theme, so its action keeps a
+   theme-independent light surface and dark ink. Theme surface tokens can be
+   almost identical to this panel in dark mode. */
 .hero-action {
   border-color: transparent;
   background: white;
-  color: var(--ink);
+  color: var(--hero-ink-1);
 }
 .hero-action:hover {
   border-color: transparent;
