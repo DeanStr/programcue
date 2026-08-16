@@ -19,9 +19,15 @@ import {
   publicSpeakerProfilePath,
 } from "~/modules/programme/programme-presentation";
 import type { PublishedProgramme } from "~/modules/programme/public-programme-types";
-import type { PublishedPublicSiteSnapshot } from "~/modules/public-site/public-site";
+import type {
+  PublicSitePageType,
+  PublishedPublicSiteSnapshot,
+} from "~/modules/public-site/public-site";
 import { PublishedPublicSiteInvariantError } from "~/modules/public-site/public-site-errors";
-import { resolvePublicSitePresentation } from "~/modules/public-site/public-site-presentation";
+import {
+  publicVenueLabel,
+  resolvePublicSitePresentation,
+} from "~/modules/public-site/public-site-presentation";
 import type {
   PublicSiteEvent,
   PublishedPublicSite,
@@ -341,6 +347,110 @@ export function PublicSiteHome({
       ) : null}
     </div>
   );
+}
+
+export function PublicSitePageContent({
+  event,
+  configuration,
+  page,
+  preview = false,
+}: {
+  event: PublicSiteEvent;
+  configuration: PublishedPublicSiteSnapshot;
+  page: PublicSitePageType;
+  preview?: boolean;
+}) {
+  const pageConfiguration = configuration.pages[page];
+  if (page === "faq") {
+    return (
+      <>
+        {pageConfiguration.body ? (
+          <RestrictedMarkdown>{pageConfiguration.body}</RestrictedMarkdown>
+        ) : null}
+        <div className="public-site-faq">
+          {configuration.faqItems.map((item) => (
+            <details key={item.id}>
+              <summary>{item.question}</summary>
+              <RestrictedMarkdown>{item.answer}</RestrictedMarkdown>
+            </details>
+          ))}
+        </div>
+      </>
+    );
+  }
+  if (page === "venue") {
+    return (
+      <>
+        {pageConfiguration.body ? (
+          <RestrictedMarkdown>{pageConfiguration.body}</RestrictedMarkdown>
+        ) : null}
+        <div className="public-site-venue">
+          <MapPin aria-hidden />
+          <div>
+            {publicVenueLabel(event) !== event.venueAddress?.trim() ? (
+              <strong>{publicVenueLabel(event)}</strong>
+            ) : null}
+            {event.venueAddress ? (
+              <address>{event.venueAddress}</address>
+            ) : null}
+            {event.venueMapUrl ? (
+              <PreviewSafeLink href={event.venueMapUrl} preview={preview}>
+                Open map <ExternalLink aria-hidden size={13} />
+              </PreviewSafeLink>
+            ) : null}
+          </div>
+        </div>
+      </>
+    );
+  }
+  if (page === "sponsors") {
+    const tiers = new Map<string, typeof configuration.sponsors>();
+    for (const sponsor of configuration.sponsors) {
+      tiers.set(sponsor.tier, [...(tiers.get(sponsor.tier) ?? []), sponsor]);
+    }
+    return (
+      <>
+        {pageConfiguration.body ? (
+          <RestrictedMarkdown>{pageConfiguration.body}</RestrictedMarkdown>
+        ) : null}
+        {[...tiers.entries()].map(([tier, sponsors]) => (
+          <section className="public-site-sponsor-tier" key={tier}>
+            <h2>{tier}</h2>
+            <div className="public-site-sponsor-grid">
+              {sponsors.map((sponsor) => (
+                <div className="public-site-sponsor-card" key={sponsor.id}>
+                  {sponsor.logoUrl ? (
+                    <img
+                      src={sponsor.logoUrl}
+                      alt=""
+                      referrerPolicy="no-referrer"
+                    />
+                  ) : null}
+                  <strong>{sponsor.name}</strong>
+                  {sponsor.description ? (
+                    <small>{sponsor.description}</small>
+                  ) : null}
+                  {sponsor.websiteUrl ? (
+                    <PreviewSafeLink
+                      className="public-site-sponsor-link"
+                      href={sponsor.websiteUrl}
+                      preview={preview}
+                    >
+                      Visit sponsor <ExternalLink aria-hidden size={13} />
+                    </PreviewSafeLink>
+                  ) : null}
+                </div>
+              ))}
+            </div>
+          </section>
+        ))}
+      </>
+    );
+  }
+  const body =
+    pageConfiguration.body ||
+    (page === "about" ? (event.description ?? "") : "");
+  return <RestrictedMarkdown>{body}</RestrictedMarkdown>;
 }
 
 export function PublicEventSiteWorkspace({

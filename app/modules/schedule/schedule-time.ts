@@ -112,7 +112,40 @@ export function eventLocalEndOfDayEpoch(
   boundaryEpoch: number,
   timezone: string,
 ) {
-  return eventLocalTimeEpoch(boundaryEpoch + 24 * 60 * 60, timezone, 0) - 1;
+  return eventLocalExclusiveEndEpoch(boundaryEpoch, timezone) - 1;
+}
+
+export function eventLocalExclusiveEndEpoch(
+  boundaryEpoch: number,
+  timezone: string,
+) {
+  const eventDate = eventBoundaryCalendarDate(boundaryEpoch);
+  const nominalNextDay =
+    Date.parse(`${eventDate}T00:00:00Z`) / 1_000 + 24 * 60 * 60;
+  let before = nominalNextDay - 36 * 60 * 60;
+  let after = nominalNextDay + 36 * 60 * 60;
+
+  if (
+    eventLocalCalendarDate(before, timezone) > eventDate ||
+    eventLocalCalendarDate(after, timezone) <= eventDate
+  ) {
+    throw new Error(
+      `The end of event date ${eventDate} cannot be resolved in ${timezone}.`,
+    );
+  }
+
+  // Find the first real instant after the event's final local calendar date.
+  // Some IANA zones advance at 00:00, so requiring that wall-clock time to
+  // exist would reject an otherwise valid event date.
+  while (after - before > 1) {
+    const candidate = Math.floor((before + after) / 2);
+    if (eventLocalCalendarDate(candidate, timezone) > eventDate) {
+      after = candidate;
+    } else {
+      before = candidate;
+    }
+  }
+  return after;
 }
 
 export function eventDayHourlySlots(

@@ -2,7 +2,11 @@ import { ClipboardCopy, Monitor, Smartphone } from "lucide-react";
 import type { CSSProperties } from "react";
 import { useState } from "react";
 
-import { PublicSiteHome } from "~/components/public-site-content";
+import { publicSitePageLabels } from "~/components/admin-public-site-constants";
+import {
+  PublicSiteHome,
+  PublicSitePageContent,
+} from "~/components/public-site-content";
 import {
   defaultProgrammeEmbedConfiguration,
   programmeEmbedUrl,
@@ -10,9 +14,11 @@ import {
 } from "~/modules/programme/programme-embed-configuration";
 import { programmeAccentPalette } from "~/modules/programme/programme-presentation";
 import type { PublishedProgramme } from "~/modules/programme/public-programme-types";
-import type {
-  PublicSiteDraft,
-  PublishedPublicSiteSnapshot,
+import {
+  PUBLIC_SITE_PAGE_TYPES,
+  type PublicSiteDraft,
+  type PublicSitePageType,
+  type PublishedPublicSiteSnapshot,
 } from "~/modules/public-site/public-site";
 import type { PublicSiteEvent } from "~/modules/public-site/public-site-service.server";
 
@@ -178,6 +184,9 @@ export function AdminPublicSitePreview({
   onPublish: () => void;
 }) {
   const [mobilePreview, setMobilePreview] = useState(false);
+  const [previewContent, setPreviewContent] = useState<
+    "home" | PublicSitePageType
+  >("home");
   const draftPreview = {
     configuration: { ...configuration, sponsors: draftSponsors },
     recordings: [],
@@ -189,8 +198,29 @@ export function AdminPublicSitePreview({
       <div
         className="branding-preview-toolbar"
         role="toolbar"
-        aria-label="Preview viewport"
+        aria-label="Public site preview controls"
       >
+        <label className="public-site-preview-content-control">
+          <span>Preview</span>
+          <select
+            className="field"
+            aria-label="Preview content"
+            value={previewContent}
+            onChange={(event) =>
+              setPreviewContent(
+                event.target.value as "home" | PublicSitePageType,
+              )
+            }
+          >
+            <option value="home">Homepage</option>
+            {PUBLIC_SITE_PAGE_TYPES.map((page) => (
+              <option key={page} value={page}>
+                {publicSitePageLabels[page]} page
+                {configuration.pages[page].enabled ? "" : " (disabled)"}
+              </option>
+            ))}
+          </select>
+        </label>
         <button
           className={!mobilePreview ? "btn small active" : "btn small"}
           type="button"
@@ -221,14 +251,33 @@ export function AdminPublicSitePreview({
       >
         <header>
           <strong>{event.name}</strong>
-          <small>{configuration.tagline}</small>
+          <small>
+            {previewContent === "home"
+              ? configuration.tagline
+              : configuration.pages[previewContent].enabled
+                ? `${publicSitePageLabels[previewContent]} page`
+                : `${publicSitePageLabels[previewContent]} page · Not enabled for publication`}
+          </small>
         </header>
-        <PublicSiteHome
-          event={event}
-          programme={programme}
-          site={draftPreview}
-          preview
-        />
+        {previewContent === "home" ? (
+          <PublicSiteHome
+            event={event}
+            programme={programme}
+            site={draftPreview}
+            preview
+          />
+        ) : (
+          <div className="public-site-page public-site-page-preview">
+            <p className="pc-page-eyebrow">{event.name}</p>
+            <h1>{configuration.pages[previewContent].title}</h1>
+            <PublicSitePageContent
+              event={event}
+              configuration={draftPreview.configuration}
+              page={previewContent}
+              preview
+            />
+          </div>
+        )}
       </section>
       <section className="card pad">
         <div>

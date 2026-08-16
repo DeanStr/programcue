@@ -8,6 +8,7 @@ import {
   eventDayUsableScheduleSlots,
   eventLocalCalendarDate,
   eventLocalEndOfDayEpoch,
+  eventLocalExclusiveEndEpoch,
   eventLocalTimeEpoch,
 } from "./schedule-time";
 
@@ -54,6 +55,27 @@ describe("event-local schedule time", () => {
         eventLocalEndOfDayEpoch(boundary, "Australia/Melbourne") * 1_000,
       ).toISOString(),
     ).toBe("2025-05-20T13:59:59.000Z");
+  });
+
+  it("uses the first valid instant when the following local midnight is skipped", () => {
+    const santiagoBoundary = Date.parse("2026-09-05T23:59:59Z") / 1_000;
+
+    expect(
+      new Date(
+        eventLocalExclusiveEndEpoch(santiagoBoundary, "America/Santiago") *
+          1_000,
+      ).toISOString(),
+    ).toBe("2026-09-06T04:00:00.000Z");
+  });
+
+  it("resolves an end-of-day marker at the maximum positive IANA offset", () => {
+    const boundary = Date.parse("2026-05-20T23:59:59Z") / 1_000;
+
+    expect(
+      new Date(
+        eventLocalExclusiveEndEpoch(boundary, "Pacific/Kiritimati") * 1_000,
+      ).toISOString(),
+    ).toBe("2026-05-20T10:00:00.000Z");
   });
 
   it("fails when a requested wall-clock time does not exist", () => {

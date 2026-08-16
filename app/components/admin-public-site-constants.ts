@@ -19,3 +19,11 @@ export const publicSitePageDescriptions: Record<PublicSitePageType, string> = {
   "code-of-conduct": "The attendee-facing behavior and reporting policy.",
   sponsors: "An optional introduction followed by structured sponsor records.",
 };
+
+export const publicSitePageLabels: Record<PublicSitePageType, string> = {
+  about: "About",
+  faq: "FAQ",
+  venue: "Venue",
+  "code-of-conduct": "Code of Conduct",
+  sponsors: "Sponsors",
+};

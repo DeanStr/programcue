@@ -58,6 +58,29 @@ describe("public event site rules", () => {
     ).toThrow(/exactly once/i);
   });
 
+  it("requires enabled page navigation labels to be unambiguous", () => {
+    const duplicate = defaultPublicSiteDraft();
+    duplicate.pages.about.enabled = true;
+    duplicate.pages.about.navigationLabel = "Event details";
+    duplicate.pages.faq.enabled = true;
+    duplicate.pages.faq.navigationLabel = "event DETAILS";
+    expect(() => publicSiteDraftSchema.parse(duplicate)).toThrow(
+      /navigation labels must be unique/i,
+    );
+
+    const reserved = defaultPublicSiteDraft();
+    reserved.pages.about.enabled = true;
+    reserved.pages.about.navigationLabel = "sPeAkErS";
+    expect(() => publicSiteDraftSchema.parse(reserved)).toThrow(
+      /cannot use an event navigation label/i,
+    );
+
+    reserved.pages.about.enabled = false;
+    expect(publicSiteDraftSchema.parse(reserved).pages.about.enabled).toBe(
+      false,
+    );
+  });
+
   it("accepts a draft with every editorial field at its declared limit", () => {
     const escapedCharacter = "\u0000";
     const maximumId = (index: number) =>

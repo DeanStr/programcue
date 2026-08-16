@@ -8,7 +8,10 @@ import {
   scheduleTestEnv,
   scheduleTestViewer as viewer,
 } from "~/modules/schedule/schedule-service-test-fixture";
-import { eventLocalTimeEpoch } from "~/modules/schedule/schedule-time";
+import {
+  eventLocalExclusiveEndEpoch,
+  eventLocalTimeEpoch,
+} from "~/modules/schedule/schedule-time";
 import { ensureDemoSubmissionForm } from "~/modules/submissions/demo-submissions.server";
 import { cloudflareContext } from "~/platform/cloudflare-context";
 import { loader as publicProgrammePageLoader } from "~/routes/public-programme";
@@ -687,19 +690,34 @@ describe("public event site publication", () => {
       confirmed: "true",
     });
     const event = await env.DB.prepare(
-      "SELECT ends_at AS endsAt FROM events WHERE id = ?",
+      "SELECT ends_at AS endsAt, timezone FROM events WHERE id = ?",
     )
       .bind(viewer.eventId)
-      .first<{ endsAt: number }>();
+      .first<{ endsAt: number; timezone: string }>();
 
     expect(
       (await service.getPublished("future-of-events-2027", startsAt))
         ?.recordings,
     ).toEqual([]);
-    const afterEvent = Math.max(event!.endsAt, startsAt + 3_600) + 1;
+    const eventLocalExclusiveEnd = eventLocalExclusiveEndEpoch(
+      event!.endsAt,
+      event!.timezone,
+    );
     expect(
-      (await service.getPublished("future-of-events-2027", afterEvent))
-        ?.recordings,
+      (
+        await service.getPublished(
+          "future-of-events-2027",
+          eventLocalExclusiveEnd - 1,
+        )
+      )?.recordings,
+    ).toEqual([]);
+    expect(
+      (
+        await service.getPublished(
+          "future-of-events-2027",
+          eventLocalExclusiveEnd,
+        )
+      )?.recordings,
     ).toEqual([]);
 
     configuration.postEvent.enabled = true;
@@ -714,8 +732,12 @@ describe("public event site publication", () => {
       confirmed: "true",
     });
     expect(
-      (await service.getPublished("future-of-events-2027", afterEvent))
-        ?.recordings,
+      (
+        await service.getPublished(
+          "future-of-events-2027",
+          eventLocalExclusiveEnd,
+        )
+      )?.recordings,
     ).toEqual([
       expect.objectContaining({
         id: recording.id,
@@ -731,8 +753,12 @@ describe("public event site publication", () => {
       confirmed: "true",
     });
     expect(
-      (await service.getPublished("future-of-events-2027", afterEvent))
-        ?.recordings,
+      (
+        await service.getPublished(
+          "future-of-events-2027",
+          eventLocalExclusiveEnd,
+        )
+      )?.recordings,
     ).toEqual([]);
   });
 

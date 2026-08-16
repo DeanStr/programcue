@@ -8,6 +8,7 @@ import {
 } from "~/modules/programme/programme-presentation";
 import type { PublishedProgramme } from "~/modules/programme/public-programme-types";
 import {
+  PUBLIC_EVENT_NAVIGATION_LABELS,
   PUBLIC_SITE_PAGE_TYPES,
   type PublicSitePageType,
   type PublishedPublicSiteSnapshot,
@@ -44,7 +45,7 @@ export function PublicEventHeader({
   const programmeHref = `/public/programme/${slug}`;
   const homeLink: EventNavigationLink = {
     key: "home",
-    label: "Event home",
+    label: PUBLIC_EVENT_NAVIGATION_LABELS.home,
     href: programmeHref,
     active: programme
       ? activeSurface === "overview" && !activePage
@@ -56,7 +57,7 @@ export function PublicEventHeader({
         ...(site ? [homeLink] : []),
         {
           key: "sessions",
-          label: "All sessions",
+          label: PUBLIC_EVENT_NAVIGATION_LABELS.sessions,
           href: site
             ? publicProgrammeSurfacePath(slug, "sessions")
             : overviewSurface
@@ -69,7 +70,7 @@ export function PublicEventHeader({
         },
         {
           key: "speakers",
-          label: "Speakers",
+          label: PUBLIC_EVENT_NAVIGATION_LABELS.speakers,
           href:
             site || !overviewSurface
               ? publicProgrammeSurfacePath(slug, "speakers")
@@ -82,12 +83,7 @@ export function PublicEventHeader({
   const programmeOverflowLinks: EventNavigationLink[] = programme
     ? (["agenda", "schedule", "gallery"] as const).map((surface) => ({
         key: surface,
-        label:
-          surface === "agenda"
-            ? "Day agenda"
-            : surface === "schedule"
-              ? "Full schedule"
-              : "Speaker Gallery",
+        label: PUBLIC_EVENT_NAVIGATION_LABELS[surface],
         href: publicProgrammeSurfacePath(slug, surface),
         active: activeSurface === surface,
         routed: true,
@@ -194,7 +190,11 @@ export function PublicEventHeader({
       {itinerary ? (
         <a className="btn public-itinerary-link" href={itineraryHref}>
           <Heart aria-hidden="true" size={15} />
-          <span>{itinerary.shared ? "Shared itinerary" : "My itinerary"}</span>
+          <span>
+            {itinerary.shared
+              ? PUBLIC_EVENT_NAVIGATION_LABELS.sharedItinerary
+              : PUBLIC_EVENT_NAVIGATION_LABELS.itinerary}
+          </span>
           <span className="status info">{itinerary.savedCount}</span>
         </a>
       ) : null}

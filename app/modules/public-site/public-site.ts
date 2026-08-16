@@ -19,6 +19,17 @@ export const PUBLIC_SITE_PAGE_TYPES = [
   "sponsors",
 ] as const;
 
+export const PUBLIC_EVENT_NAVIGATION_LABELS = {
+  home: "Event home",
+  sessions: "All sessions",
+  speakers: "Speakers",
+  agenda: "Day agenda",
+  schedule: "Full schedule",
+  gallery: "Speaker Gallery",
+  itinerary: "My itinerary",
+  sharedItinerary: "Shared itinerary",
+} as const;
+
 export type PublicSiteSectionType = (typeof PUBLIC_SITE_SECTION_TYPES)[number];
 export type PublicSitePageType = (typeof PUBLIC_SITE_PAGE_TYPES)[number];
 
@@ -110,6 +121,38 @@ const publicSitePageSchema = z.object({
   ),
 });
 
+const reservedNavigationLabels = new Set(
+  Object.values(PUBLIC_EVENT_NAVIGATION_LABELS).map((label) =>
+    label.toLocaleLowerCase("en-US"),
+  ),
+);
+
+const publicSitePagesSchema = z
+  .object({
+    about: publicSitePageSchema,
+    faq: publicSitePageSchema,
+    venue: publicSitePageSchema,
+    "code-of-conduct": publicSitePageSchema,
+    sponsors: publicSitePageSchema,
+  })
+  .superRefine((pages, context) => {
+    const labels = new Set(reservedNavigationLabels);
+    for (const page of PUBLIC_SITE_PAGE_TYPES) {
+      const configuration = pages[page];
+      if (!configuration.enabled) continue;
+      const label = configuration.navigationLabel.toLocaleLowerCase("en-US");
+      if (labels.has(label)) {
+        context.addIssue({
+          code: "custom",
+          path: [page, "navigationLabel"],
+          message:
+            "Enabled page navigation labels must be unique and cannot use an event navigation label.",
+        });
+      }
+      labels.add(label);
+    }
+  });
+
 export const publicSiteDraftSchema = z.object({
   schemaVersion: z.literal(1),
   tagline: boundedText(180, "Tagline must be 180 characters or fewer."),
@@ -131,13 +174,7 @@ export const publicSiteDraftSchema = z.object({
   faqItems: z
     .array(publicSiteFaqItemSchema)
     .max(12, "A public event site can contain at most 12 FAQ entries."),
-  pages: z.object({
-    about: publicSitePageSchema,
-    faq: publicSitePageSchema,
-    venue: publicSitePageSchema,
-    "code-of-conduct": publicSitePageSchema,
-    sponsors: publicSitePageSchema,
-  }),
+  pages: publicSitePagesSchema,
   postEvent: z.object({
     enabled: z.boolean(),
     heading: boundedText(

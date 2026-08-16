@@ -759,7 +759,10 @@ cannot add arbitrary routes, HTML, scripts or layout blocks. Editorial bodies
 use a deliberately restricted Markdown subset. Credentialed, non-HTTPS or
 invalid Markdown links are rejected when the draft is saved; rendering repeats
 the same link restriction as defense in depth rather than silently repairing
-published copy.
+published copy. Enabled fixed pages must have case-insensitively unique
+navigation labels and cannot reuse built-in event/programme destination
+labels. The reservation applies before programme publication so a later
+programme launch cannot introduce ambiguous links without changing the site.
 
 The saved site draft and immutable published site snapshot have an independent
 compare-and-set revision and lifecycle. An event site may publish before its
@@ -819,7 +822,10 @@ only through the site snapshot. Recordings accept external credential-free
 HTTPS URLs only; saving is explicitly neither upload nor publication. A separate
 confirmed recording publication copies its draft fields, requires its session
 in the published programme, and exposes it only after both the event and session
-have ended. Organisers can withdraw the public recording immediately without
+have ended. The event boundary is the first valid instant after its final local
+calendar date in the configured IANA timezone; this is normally midnight, while
+zones that skip midnight resolve to the transition's next valid instant. The UTC
+date marker is never treated as that instant. Organisers can withdraw the public recording immediately without
 discarding its editable draft, even while unrelated site-editor changes remain
 unsaved. A later schedule cannot make the recording
 silently disappear: preflight and the atomic schedule-publication statement
@@ -851,11 +857,14 @@ primary destinations stay visible on wide screens; agenda, schedule, gallery
 and the five bounded editorial pages live in one keyboard-accessible Browse
 popover whose labels wrap. At tablet widths all destinations use the existing
 Browse disclosure, so navigation capacity does not depend on label length or
-JavaScript width measurement. The publication confirmation reports added and
-removed sections, fixed pages, featured records and sponsors, plus ordering,
-theme and editorial changes. The administrator route retains one loader/action
-and splits only its concrete editor, sponsor, recording and preview panels; no
-generic CMS component or block framework is introduced.
+JavaScript width measurement. The desktop/mobile preview selects the homepage
+or any of the five fixed pages; fixed-page previews and public routes share one
+page-content renderer, and disabled pages remain previewable with an explicit
+unpublished label. The publication confirmation reports added and removed
+sections, fixed pages, featured records and sponsors, plus ordering, theme and
+editorial changes. The administrator route retains one loader/action and splits
+only its concrete editor, sponsor, recording and preview panels; no generic CMS
+component or block framework is introduced.
 
 The canonical CFP projection carries one coherent application link and
 availability state. It derives accepting, closed and submission-limit-reached

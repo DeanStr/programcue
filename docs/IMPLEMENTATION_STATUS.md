@@ -770,10 +770,13 @@ this AIA-08 production slice.
   introduction, featured speakers, featured sessions, published-programme
   statistics, venue/map and FAQ. Organisers can hide them and use keyboard-
   accessible Move up/Move down controls. Desktop/mobile previews use the same
-  renderer as the public homepage. About, FAQ, Venue, Code of Conduct and
-  Sponsors are the only optional pages; content uses restricted Markdown with
-  no arbitrary HTML or routes. Invalid or credentialed Markdown links fail
-  draft validation and remain sanitized at render time as defense in depth.
+  renderer as the public homepage and can select any fixed page through the
+  public page-content renderer; disabled pages are explicitly identified.
+  About, FAQ, Venue, Code of Conduct and Sponsors are the only optional pages;
+  content uses restricted Markdown with no arbitrary HTML or routes. Enabled
+  page navigation labels are case-insensitively unique and cannot reuse built-in
+  destinations. Invalid or credentialed Markdown links fail draft validation
+  and remain sanitized at render time as defense in depth.
 - **Canonical data and publication integrity:** The visible event description,
   venue/address/map, published support URL and CFP action continue to come from
   Event Setup, Branding and the published form. The CFP projection applies the
@@ -818,7 +821,10 @@ this AIA-08 production slice.
   rendered as WebP by the required Images binding; the route returns an explicit
   503 without it and uses programme/site revisioned URLs. External HTTPS
   recording drafts have a separate confirmed publication boundary, require a
-  currently published session, and appear only after the event and session end.
+  currently published session, and appear only after the first valid instant
+  following the final event-local date and the session end. The configured IANA
+  timezone, including zones that skip midnight during a transition, rather than
+  the stored UTC calendar marker, defines that event boundary.
   Optional external captions and transcripts are linked beside the recording.
   Schedule publication preflight and its atomic guard prevent a published
   recording's session from disappearing silently. Withdrawal removes public
@@ -836,9 +842,10 @@ this AIA-08 production slice.
   render. Unsaved client configuration blocks navigation and tab closure.
   `e2e/public-site.spec.ts` passes the complete organizer-to-public Chromium
   workflow, including discard confirmation, Event home/programme navigation,
-  40-character labels without header overflow and conditional fixed-page
-  caching. The shared header keeps primary destinations visible, puts variants
-  and editorial pages in Browse, and collapses fully at tablet width.
+  homepage/fixed-page desktop/mobile preview selection, 40-character labels
+  without header overflow and conditional fixed-page caching. The shared header
+  keeps primary destinations visible, puts variants and editorial pages in
+  Browse, and collapses fully at tablet width.
   `/admin/site` passes
   the WCAG A/AA axe sweep at phone, tablet and desktop widths. The complete local
   core gate also passes, including TypeScript, production builds, the Agents

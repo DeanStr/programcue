@@ -76,6 +76,20 @@ test("organisers compose, preview and publish the bounded public event site", as
     "One destination for the whole event.",
   );
 
+  await expect(
+    page.getByLabel("Preview content").locator("option"),
+  ).toHaveCount(6);
+  await page.getByLabel("Preview content").selectOption("about");
+  await expect(
+    page
+      .locator(".public-site-preview-frame")
+      .getByRole("heading", { name: "Why attend" }),
+  ).toBeVisible();
+  await page.getByLabel("Preview content").selectOption("code-of-conduct");
+  await expect(
+    page.locator(".public-site-preview-frame > header"),
+  ).toContainText("Not enabled for publication");
+  await page.getByLabel("Preview content").selectOption("home");
   await page.getByRole("button", { name: "Mobile" }).click();
   await expect(page.locator(".public-site-preview-frame")).toHaveClass(
     /is-mobile/,
