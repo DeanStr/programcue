@@ -65,6 +65,7 @@ export function useDraftRecovery<T>({
   payload,
   dirty,
   onRestore,
+  isPayloadCompatible,
   enabled = true,
   debounceMs = 500,
   ttlMs = DRAFT_RECOVERY_TTL_MS,
@@ -146,11 +147,14 @@ export function useDraftRecovery<T>({
           setState(navigator.onLine ? "idle" : "offline");
           return;
         }
-        if (assessment === "incompatible") {
+        if (
+          assessment === "incompatible" ||
+          (isPayloadCompatible && !isPayloadCompatible(snapshot.payload))
+        ) {
           setCandidate(snapshot);
-          setState("conflict");
+          setState("incompatible");
           setMessage(
-            "This browser draft was created by an incompatible editor version. Keep the server version or discard the local snapshot.",
+            "This browser draft is incompatible with the current editor. Keep the server version or discard the local snapshot.",
           );
           return;
         }
@@ -192,7 +196,7 @@ export function useDraftRecovery<T>({
         );
       }
     },
-    [key, operationGuard, revision],
+    [isPayloadCompatible, key, operationGuard, revision],
   );
 
   useEffect(() => {

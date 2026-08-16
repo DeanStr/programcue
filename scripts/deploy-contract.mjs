@@ -1,4 +1,4 @@
-export const REQUIRED_PRODUCTION_SECRET_NAMES = Object.freeze([
+const ALWAYS_REQUIRED_PRODUCTION_SECRET_NAMES = Object.freeze([
   "BETTER_AUTH_SECRET",
   "ANONYMOUS_ITINERARY_SECRET",
   "RESEND_API_KEY",
@@ -23,6 +23,43 @@ export const REQUIRED_PRODUCTION_SECRET_NAMES = Object.freeze([
   "EVALUATION_ACCESS_CODE",
   "EVALUATION_SESSION_SECRET",
 ]);
+
+export function requiredProductionSecretNames(resourceEmbedProviders) {
+  if (
+    typeof resourceEmbedProviders !== "string" ||
+    !resourceEmbedProviders.trim()
+  ) {
+    throw new TypeError(
+      "Production resource embed providers must be configured before validating secrets.",
+    );
+  }
+  const configured = resourceEmbedProviders.trim();
+  const providers =
+    configured === "none"
+      ? []
+      : configured.split(",").map((provider) => provider.trim());
+  const allowed = new Set(["youtube", "vimeo", "google_maps"]);
+  if (
+    providers.some((provider) => !allowed.has(provider)) ||
+    new Set(providers).size !== providers.length
+  ) {
+    throw new TypeError(
+      "Production resource embed providers are invalid; secret requirements cannot be determined.",
+    );
+  }
+  return [
+    ...ALWAYS_REQUIRED_PRODUCTION_SECRET_NAMES,
+    ...(providers.includes("google_maps")
+      ? ["GOOGLE_MAPS_EMBED_API_KEY"]
+      : []),
+  ];
+}
+
+// The checked-in production profile enables Google Maps. This exported
+// inventory remains the documentation contract for that profile.
+export const REQUIRED_PRODUCTION_SECRET_NAMES = Object.freeze(
+  requiredProductionSecretNames("youtube,vimeo,google_maps"),
+);
 
 export const CHECKED_IN_SECRET_NAMES = Object.freeze([
   ...REQUIRED_PRODUCTION_SECRET_NAMES,

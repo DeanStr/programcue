@@ -72,7 +72,8 @@ declare global {
     FILE_SCANNER_WEBHOOK_SECRET?: string;
     FILE_SCANNER_API_URL?: string;
     FILE_SCANNER_DISPATCH_SECRET?: string;
-    RESOURCE_EMBED_ORIGINS?: string;
+    RESOURCE_EMBED_PROVIDERS?: string;
+    GOOGLE_MAPS_EMBED_API_KEY?: string;
     R2_ACCOUNT_ID?: string;
     R2_BUCKET_NAME?: string;
     R2_ACCESS_KEY_ID?: string;
@@ -105,7 +106,7 @@ function secure(
   applySecurityHeaders(
     headers,
     typeof appEnvironment === "string" ? appEnvironment : undefined,
-    env.RESOURCE_EMBED_ORIGINS,
+    env.RESOURCE_EMBED_PROVIDERS,
   );
   applyPrivateWorkspaceCachePolicy(headers, pathname);
   for (const [name, value] of apiCorsHeaders(request, env))

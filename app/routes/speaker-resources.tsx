@@ -7,6 +7,7 @@ import {
 } from "lucide-react";
 import { data, Form, Link, useActionData, useNavigation } from "react-router";
 
+import { ResourceDocument } from "~/components/resource-document";
 import type { Route } from "./+types/speaker-resources";
 import { useSpeakerWorkspace } from "~/components/speaker-workspace-context";
 import {
@@ -165,9 +166,9 @@ export default function SpeakerResources({ loaderData }: Route.ComponentProps) {
               }).format(new Date(selected.publishedAt * 1_000))}{" "}
               ({timezone}) · version {selected.versionNumber}
             </p>
-            <div
-              className="resource-rendered"
-              dangerouslySetInnerHTML={{ __html: selected.renderedHtml }}
+            <ResourceDocument
+              document={selected.document}
+              configuration={workspace.embedConfiguration}
             />
             {selected.attachments.length ? (
               <section className="card pad mt resource-attachments">

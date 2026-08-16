@@ -1,5 +1,5 @@
 import { requiresProductionSecurity } from "~/platform/runtime-environment.server";
-import { parseResourceEmbedOrigins } from "~/modules/resources/resource-embed-policy";
+import { resourceEmbedFrameOrigins } from "~/modules/resources/resource-embed-policy";
 
 export const SECURITY_HEADERS = {
   "x-content-type-options": "nosniff",
@@ -30,10 +30,10 @@ export function applyPrivateWorkspaceCachePolicy(
   }
 }
 
-function contentSecurityPolicy(resourceEmbedOrigins: unknown) {
+function contentSecurityPolicy(resourceEmbedProviders: unknown) {
   let origins: string[] = [];
   try {
-    origins = parseResourceEmbedOrigins(resourceEmbedOrigins);
+    origins = resourceEmbedFrameOrigins(resourceEmbedProviders);
   } catch {
     // Runtime readiness reports invalid production configuration. Security
     // headers still fail closed while that error response is being produced.
@@ -49,13 +49,13 @@ function contentSecurityPolicy(resourceEmbedOrigins: unknown) {
 export function applySecurityHeaders(
   headers: Headers,
   environment: string | undefined,
-  resourceEmbedOrigins: unknown,
+  resourceEmbedProviders: unknown,
 ) {
   for (const [name, value] of Object.entries(SECURITY_HEADERS))
     headers.set(name, value);
   headers.set(
     "content-security-policy",
-    contentSecurityPolicy(resourceEmbedOrigins),
+    contentSecurityPolicy(resourceEmbedProviders),
   );
   if (requiresProductionSecurity(environment)) {
     headers.set("strict-transport-security", "max-age=31536000");

@@ -286,7 +286,6 @@ describe("versioned administration commands", () => {
         type: "doc",
         content: [{ type: "paragraph" }],
       },
-      embedUrls: [],
     };
     const undeclaredResourceField = await command(
       "administrator",

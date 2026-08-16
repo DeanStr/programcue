@@ -216,13 +216,19 @@ wrangler secret put R2_SECRET_ACCESS_KEY
 wrangler secret put D1_REST_API_TOKEN
 wrangler secret put EVALUATION_ACCESS_CODE
 wrangler secret put EVALUATION_SESSION_SECRET
+wrangler secret put GOOGLE_MAPS_EMBED_API_KEY
 ```
 
-Before each release, verify the production URLs, sender and origin allowlists in
-both Wrangler profiles. `RESOURCE_EMBED_ORIGINS` is a
-comma-separated list of exact HTTPS origins; the current explicit value `none`
-rejects every external resource embed. Release the tested checkout with the
-single ordered entry point:
+Before each release, verify the production URLs, sender and embed
+configuration in both Wrangler profiles. `RESOURCE_EMBED_PROVIDERS` is either
+`none` or a comma-separated selection of `youtube`, `vimeo` and `google_maps`.
+Program Cue derives the exact CSP origins and iframe capabilities from its typed
+provider registry; operators do not enter origins. Google Maps additionally
+requires `GOOGLE_MAPS_EMBED_API_KEY`, restricted to the Maps Embed API and the
+Program Cue HTTP referrers in Google Cloud. The production profile enables all
+three providers, so deployment fails its secret inventory and runtime readiness
+checks until that restricted key is installed. Release the tested checkout with
+the single ordered entry point:
 
 ```bash
 npm run deploy

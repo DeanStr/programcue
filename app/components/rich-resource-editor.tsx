@@ -1,6 +1,6 @@
 import { EditorContent, useEditor } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
-import { useEffect, useMemo } from "react";
+import { useEffect, useMemo, useRef } from "react";
 import type { TiptapNode } from "~/modules/resources/resource-content";
 
 function editorDocument(document: TiptapNode) {
@@ -18,6 +18,8 @@ export function RichResourceEditor({
   onChange: (value: TiptapNode) => void;
 }) {
   const initial = useMemo(() => editorDocument(document), [document]);
+  const documentRef = useRef(document);
+  documentRef.current = document;
   const editor = useEditor({
     extensions: [StarterKit],
     content: initial,
@@ -29,8 +31,18 @@ export function RichResourceEditor({
         "aria-multiline": "true",
       },
     },
-    onUpdate: ({ editor: current }) =>
-      onChange(current.getJSON() as TiptapNode),
+    onUpdate: ({ editor: current }) => {
+      const nextDocument = current.getJSON() as TiptapNode;
+      onChange({
+        ...nextDocument,
+        content: [
+          ...(nextDocument.content ?? []),
+          ...(documentRef.current.content ?? []).filter(
+            (node) => node.type === "embed",
+          ),
+        ],
+      });
+    },
   });
   useEffect(() => {
     if (editor && JSON.stringify(editor.getJSON()) !== JSON.stringify(initial))

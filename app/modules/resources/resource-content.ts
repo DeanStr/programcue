@@ -1,6 +1,12 @@
 import { z } from "zod";
 
-import { allowedResourceEmbedUrl } from "./resource-embed-policy";
+import {
+  assertExternalEmbedEnabled,
+  externalEmbedPresentation,
+  parseExternalEmbed,
+  type ExternalEmbed,
+  type ResourceEmbedConfiguration,
+} from "./resource-embed-policy";
 
 type TiptapMark = { type: string; attrs?: Record<string, any> };
 export type TiptapNode = {
@@ -121,10 +127,10 @@ export function parseResourceDocument(raw: unknown): TiptapNode {
 
 function renderChildren(
   node: TiptapNode,
-  allowedEmbedOrigins: readonly string[],
+  configuration: ResourceEmbedConfiguration,
 ) {
   return (node.content ?? [])
-    .map((child) => renderNode(child, allowedEmbedOrigins))
+    .map((child) => renderNode(child, configuration))
     .join("");
 }
 
@@ -146,40 +152,38 @@ function renderText(node: TiptapNode) {
 
 function renderNode(
   node: TiptapNode,
-  allowedEmbedOrigins: readonly string[],
+  configuration: ResourceEmbedConfiguration,
 ): string {
   switch (node.type) {
     case "doc":
-      return renderChildren(node, allowedEmbedOrigins);
+      return renderChildren(node, configuration);
     case "text":
       return renderText(node);
     case "paragraph":
-      return `<p>${renderChildren(node, allowedEmbedOrigins)}</p>`;
+      return `<p>${renderChildren(node, configuration)}</p>`;
     case "heading": {
       const level = Math.min(4, Math.max(2, Number(node.attrs?.level) || 2));
-      return `<h${level}>${renderChildren(node, allowedEmbedOrigins)}</h${level}>`;
+      return `<h${level}>${renderChildren(node, configuration)}</h${level}>`;
     }
     case "bulletList":
-      return `<ul>${renderChildren(node, allowedEmbedOrigins)}</ul>`;
+      return `<ul>${renderChildren(node, configuration)}</ul>`;
     case "orderedList":
-      return `<ol>${renderChildren(node, allowedEmbedOrigins)}</ol>`;
+      return `<ol>${renderChildren(node, configuration)}</ol>`;
     case "listItem":
-      return `<li>${renderChildren(node, allowedEmbedOrigins)}</li>`;
+      return `<li>${renderChildren(node, configuration)}</li>`;
     case "blockquote":
-      return `<blockquote>${renderChildren(node, allowedEmbedOrigins)}</blockquote>`;
+      return `<blockquote>${renderChildren(node, configuration)}</blockquote>`;
     case "codeBlock":
-      return `<pre><code>${renderChildren(node, allowedEmbedOrigins)}</code></pre>`;
+      return `<pre><code>${renderChildren(node, configuration)}</code></pre>`;
     case "horizontalRule":
       return "<hr>";
     case "hardBreak":
       return "<br>";
     case "embed": {
-      const src = allowedResourceEmbedUrl(node.attrs?.src, allowedEmbedOrigins);
-      const title =
-        typeof node.attrs?.title === "string"
-          ? node.attrs.title.slice(0, 160)
-          : "Embedded resource";
-      return `<iframe class="resource-embed" title="${escapeHtml(title)}" sandbox="" referrerpolicy="no-referrer" loading="lazy" src="${escapeHtml(src)}"></iframe>`;
+      const embed = parseExternalEmbed(node.attrs);
+      assertExternalEmbedEnabled(embed, configuration);
+      const presentation = externalEmbedPresentation(embed, configuration);
+      return `<section class="resource-external-embed resource-external-embed--inert"><p><strong>${escapeHtml(presentation.contentLabel)}</strong></p><p>External content loads only after the speaker chooses to open it.</p><a href="${escapeHtml(presentation.sourceUrl)}" rel="noreferrer noopener">${escapeHtml(presentation.sourceLabel)}</a></section>`;
     }
     default:
       throw new ResourceContentError(
@@ -190,31 +194,69 @@ function renderNode(
 
 export function renderResourceDocument(
   document: TiptapNode,
-  allowedEmbedOrigins: readonly string[],
+  configuration: ResourceEmbedConfiguration,
 ) {
-  return renderNode(document, allowedEmbedOrigins);
+  validateResourceDocumentEmbeds(document, configuration);
+  return renderNode(document, configuration);
 }
 
-export function appendEmbeds(
+export function resourceDocumentEmbeds(document: TiptapNode) {
+  return (document.content ?? [])
+    .filter((node) => node.type === "embed")
+    .map((node) => parseExternalEmbed(node.attrs));
+}
+
+export function replaceResourceDocumentEmbeds(
   document: TiptapNode,
-  embedUrls: string[],
-  allowedEmbedOrigins: readonly string[],
+  embeds: readonly ExternalEmbed[],
 ) {
-  const embeds = embedUrls.filter(Boolean).map(
-    (src) =>
-      ({
-        type: "embed",
-        attrs: {
-          src: allowedResourceEmbedUrl(src, allowedEmbedOrigins),
-          title: "Embedded reference",
-        },
-      }) satisfies TiptapNode,
-  );
+  if (embeds.length > 8) {
+    throw new ResourceContentError(
+      "A resource can contain at most eight external video or map blocks.",
+    );
+  }
   return parseResourceDocument({
     ...document,
     content: [
       ...(document.content ?? []).filter((node) => node.type !== "embed"),
-      ...embeds,
+      ...embeds.map(
+        (embed) =>
+          ({
+            type: "embed",
+            attrs: parseExternalEmbed(embed),
+          }) satisfies TiptapNode,
+      ),
     ],
   });
+}
+
+export function validateResourceDocumentEmbeds(
+  document: TiptapNode,
+  configuration: ResourceEmbedConfiguration,
+) {
+  validateResourceDocumentEmbedStructure(document);
+  for (const embed of resourceDocumentEmbeds(document))
+    assertExternalEmbedEnabled(embed, configuration);
+}
+
+export function validateResourceDocumentEmbedStructure(document: TiptapNode) {
+  let count = 0;
+  const visit = (node: TiptapNode, depth: number) => {
+    if (node.type === "embed") {
+      if (depth !== 1 || node.content?.length) {
+        throw new ResourceContentError(
+          "External video and map blocks must be top-level resource blocks.",
+        );
+      }
+      count += 1;
+      if (count > 8) {
+        throw new ResourceContentError(
+          "A resource can contain at most eight external video or map blocks.",
+        );
+      }
+      parseExternalEmbed(node.attrs);
+    }
+    for (const child of node.content ?? []) visit(child, depth + 1);
+  };
+  visit(document, 0);
 }

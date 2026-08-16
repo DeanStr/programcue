@@ -2,7 +2,10 @@ import { data, redirect } from "react-router";
 import { ZodError } from "zod";
 
 import { ResourceContentError } from "~/modules/resources/resource-content";
-import { ResourceEmbedUrlError } from "~/modules/resources/resource-embed-policy";
+import {
+  ResourceEmbedConfigurationError,
+  ResourceEmbedInputError,
+} from "~/modules/resources/resource-embed-policy";
 import {
   ResourceAudienceError,
   ResourceRevisionConflictError,
@@ -54,7 +57,8 @@ function actionError(error: unknown) {
     return error.issues[0]?.message ?? "Review the resource fields.";
   if (
     error instanceof ResourceContentError ||
-    error instanceof ResourceEmbedUrlError ||
+    error instanceof ResourceEmbedInputError ||
+    error instanceof ResourceEmbedConfigurationError ||
     error instanceof ResourceAudienceError ||
     error instanceof ResourceRevisionConflictError ||
     error instanceof ResourceSlugConflictError ||
@@ -94,6 +98,11 @@ export async function action({ request, context }: Route.ActionArgs) {
           "Resource version published and acknowledgement tasks synchronised.",
       });
     }
+    if (String(form.get("externalEmbedDraft") ?? "").trim()) {
+      throw new InvalidResourcePayloadError(
+        "Add or clear the unfinished video or map before saving.",
+      );
+    }
     let rawDocument: unknown;
     try {
       rawDocument = JSON.parse(String(form.get("documentJson") ?? ""));
@@ -115,10 +124,6 @@ export async function action({ request, context }: Route.ActionArgs) {
         ? "true"
         : "false",
       document: rawDocument,
-      embedUrls: String(form.get("embedUrls") ?? "")
-        .split(/\r?\n/)
-        .map((value) => value.trim())
-        .filter(Boolean),
     });
     const realtimeFailure = await recordRouteChange(env, viewer, {
       entityType: "resource_page",

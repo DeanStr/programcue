@@ -233,10 +233,12 @@ Production deliberately sets `EMBED_FRAME_ANCESTORS=*` only on public
 `/embed/*` responses so an evaluator or customer site at an unknown origin can
 frame a published programme. Other application responses retain
 `frame-ancestors 'self'`. This inbound framing policy is separate from
-`RESOURCE_EMBED_ORIGINS`: organiser-authored resource frames inside Program Cue
-remain limited to configured exact HTTPS origins, and production currently uses
-`none`. The auto-resize widget also accepts height messages only from the exact
-Program Cue embed origin and matching frame window.
+`RESOURCE_EMBED_PROVIDERS`: organiser-authored resource blocks inside Program
+Cue remain limited to typed YouTube, Vimeo and Google Maps integrations whose
+exact origins are derived from code; production enables all three and requires
+a restricted Google Maps Embed API key. The
+auto-resize widget also accepts height messages only from the exact Program Cue
+embed origin and matching frame window.
 
 ### Exact evaluator email aliases
 

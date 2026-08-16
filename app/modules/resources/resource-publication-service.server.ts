@@ -5,6 +5,11 @@ import {
 } from "~/modules/airtable/airtable-provider-boundary.server";
 import { ResourceServiceBase } from "./resource-service-base.server";
 import {
+  parseResourceDocument,
+  validateResourceDocumentEmbeds,
+} from "./resource-content";
+import { resourceEmbedConfiguration } from "./resource-embed-policy";
+import {
   participantAudienceSql,
   ResourceAudienceError,
   ResourceRevisionConflictError,
@@ -479,9 +484,13 @@ export class ResourcePublicationService extends ResourceServiceBase {
       SELECT rp.id, rp.revision, rv.title, rv.slug, rv.category,
              rv.audience_scope AS audienceScope,
              rv.acknowledgement_required AS acknowledgementRequired,
-             rv.id AS versionId, rv.version_number AS versionNumber
+             rv.id AS versionId, rv.version_number AS versionNumber,
+             rv.document_json AS documentJson
         FROM resource_pages rp
-        JOIN resource_page_versions rv ON rv.resource_page_id = rp.id AND rv.status = 'draft'
+        JOIN resource_page_versions rv
+          ON rv.resource_page_id = rp.id
+         AND rv.event_id = rp.event_id
+         AND rv.status = 'draft'
        WHERE rp.id = ? AND rp.event_id = ?
        ORDER BY rv.version_number DESC LIMIT 1
     `,
@@ -532,6 +541,11 @@ export class ResourcePublicationService extends ResourceServiceBase {
     const page = await this.getDraftForPublish(viewer, pageId);
     if (!page || page.revision !== revision)
       throw new ResourceRevisionConflictError();
+    const document = parseResourceDocument(JSON.parse(page.documentJson));
+    validateResourceDocumentEmbeds(
+      document,
+      resourceEmbedConfiguration(this.env),
+    );
     const operationId = command.operationId;
     const acknowledgementTemplateId = `resource-ack:${page.id}`;
     const eligibleIds = page.acknowledgementRequired

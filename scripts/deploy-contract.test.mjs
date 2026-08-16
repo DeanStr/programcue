@@ -7,6 +7,7 @@ import { fileURLToPath } from "node:url";
 import {
   CHECKED_IN_SECRET_NAMES,
   REQUIRED_PRODUCTION_SECRET_NAMES,
+  requiredProductionSecretNames,
 } from "./deploy-contract.mjs";
 import {
   readDeploymentConfigs,
@@ -193,52 +194,50 @@ test("production embed frame ancestors allow the public wildcard and reject inva
   );
 });
 
-test("resource embed origins are explicit exact HTTPS origins", () => {
+test("resource embed providers are explicit supported identifiers", () => {
   const configs = readDeploymentConfigs();
-  configs.production.vars.RESOURCE_EMBED_ORIGINS =
-    "https://docs.google.com,https://player.vimeo.com";
+  configs.production.vars.RESOURCE_EMBED_PROVIDERS =
+    "youtube,vimeo,google_maps";
   assert.deepEqual(
     validateDeploymentConfigs(configs).filter(({ message }) =>
-      message.includes("RESOURCE_EMBED_ORIGINS"),
+      message.includes("RESOURCE_EMBED_PROVIDERS"),
     ),
     [],
   );
 
-  configs.production.vars.RESOURCE_EMBED_ORIGINS =
-    "https://docs.google.com/document,https://docs.google.com";
+  configs.production.vars.RESOURCE_EMBED_PROVIDERS = "youtube,unknown";
   assert.ok(
     validateDeploymentConfigs(configs).some(
       ({ profile, kind, message }) =>
         profile === "production" &&
         kind === "configuration" &&
-        message.includes("exact HTTPS origins"),
+        message.includes("youtube, vimeo and google_maps"),
     ),
   );
 
-  configs.production.vars.RESOURCE_EMBED_ORIGINS = "https://docs.google.com,";
+  configs.production.vars.RESOURCE_EMBED_PROVIDERS = "youtube,youtube";
   assert.ok(
     validateDeploymentConfigs(configs).some(
       ({ profile, kind, message }) =>
         profile === "production" &&
         kind === "configuration" &&
-        message.includes("1-16 exact HTTPS origins"),
+        message.includes("duplicate providers"),
     ),
   );
 
-  configs.production.vars.RESOURCE_EMBED_ORIGINS = "none";
+  configs.production.vars.RESOURCE_EMBED_PROVIDERS = "none";
   assert.deepEqual(
     validateDeploymentConfigs(configs).filter(({ message }) =>
-      message.includes("RESOURCE_EMBED_ORIGINS"),
+      message.includes("RESOURCE_EMBED_PROVIDERS"),
     ),
     [],
   );
 
-  configs.production.vars.RESOURCE_EMBED_ORIGINS = " none ";
-  assert.deepEqual(
-    validateDeploymentConfigs(configs).filter(({ message }) =>
-      message.includes("RESOURCE_EMBED_ORIGINS"),
+  configs.production.vars.RESOURCE_EMBED_PROVIDERS = " none ";
+  assert.ok(
+    validateDeploymentConfigs(configs).some(({ message }) =>
+      message.includes("RESOURCE_EMBED_PROVIDERS"),
     ),
-    [],
   );
 });
 
@@ -283,6 +282,18 @@ test("production secret inventory is centralized, unique, and fail-closed", asyn
     () => missingRequiredSecretNames({}),
     /expected a secret inventory array/u,
   );
+  assert.equal(
+    requiredProductionSecretNames("youtube,vimeo").includes(
+      "GOOGLE_MAPS_EMBED_API_KEY",
+    ),
+    false,
+  );
+  assert.equal(
+    requiredProductionSecretNames("google_maps").includes(
+      "GOOGLE_MAPS_EMBED_API_KEY",
+    ),
+    true,
+  );
 
   const readinessSource = await readFile(
     new URL("../app/platform/runtime-readiness.server.ts", import.meta.url),
@@ -306,6 +317,19 @@ test("production secret inventory is centralized, unique, and fail-closed", asyn
   runtimeNames.push(
     ...Array.from(
       evaluationReadinessValues[1].matchAll(/"([A-Z0-9_]+)"/gu),
+      (match) => match[1],
+    ),
+  );
+  const googleMapsReadinessValues = readinessSource.match(
+    /const requiredGoogleMapsValues = \[([\s\S]*?)\] as const;/u,
+  );
+  assert.ok(
+    googleMapsReadinessValues,
+    "Google Maps runtime readiness value inventory is missing",
+  );
+  runtimeNames.push(
+    ...Array.from(
+      googleMapsReadinessValues[1].matchAll(/"([A-Z0-9_]+)"/gu),
       (match) => match[1],
     ),
   );

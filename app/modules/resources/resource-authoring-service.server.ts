@@ -5,12 +5,12 @@ import {
 } from "~/modules/airtable/airtable-provider-boundary.server";
 import { parseEventFilePolicy } from "~/modules/files/file-policy";
 import {
-  appendEmbeds,
   parseResourceDocument,
   renderResourceDocument,
+  validateResourceDocumentEmbedStructure,
   type TiptapNode,
 } from "./resource-content";
-import { parseResourceEmbedOrigins } from "./resource-embed-policy";
+import { resourceEmbedConfiguration } from "./resource-embed-policy";
 import { ResourceAttachmentAuthoringService } from "./resource-attachment-authoring-service.server";
 import { ResourcePublicationService } from "./resource-publication-service.server";
 import { ResourceServiceBase } from "./resource-service-base.server";
@@ -41,9 +41,7 @@ export class ResourceAuthoringService extends ResourceServiceBase {
 
   async getAdminWorkspace(viewer: Viewer, selectedId?: string | null) {
     await this.airtable.assertReadable(viewer);
-    const resourceEmbedOrigins = parseResourceEmbedOrigins(
-      this.env.RESOURCE_EMBED_ORIGINS,
-    );
+    const embedConfiguration = resourceEmbedConfiguration(this.env);
     const previewEvent = await this.env.DB.prepare(
       `SELECT name, brand_accent AS brandAccent,
               file_policy_json AS filePolicyJson
@@ -154,6 +152,7 @@ export class ResourceAuthoringService extends ResourceServiceBase {
     if (selected) {
       try {
         document = parseResourceDocument(JSON.parse(selected.documentJson!));
+        validateResourceDocumentEmbedStructure(document);
       } catch {
         throw new ResourceInvariantError(
           selected.id,
@@ -162,7 +161,7 @@ export class ResourceAuthoringService extends ResourceServiceBase {
       }
     }
     return {
-      resourceEmbedOrigins,
+      embedConfiguration,
       previewEvent: {
         ...previewEventSummary,
         filePolicy: parseEventFilePolicy(filePolicyJson),
@@ -203,15 +202,9 @@ export class ResourceAuthoringService extends ResourceServiceBase {
       ))
     )
       throw new ResourceAudienceError();
-    const resourceEmbedOrigins = parseResourceEmbedOrigins(
-      this.env.RESOURCE_EMBED_ORIGINS,
-    );
-    const document = appendEmbeds(
-      parseResourceDocument(parsed.document),
-      parsed.embedUrls,
-      resourceEmbedOrigins,
-    );
-    const renderedHtml = renderResourceDocument(document, resourceEmbedOrigins);
+    const embedConfiguration = resourceEmbedConfiguration(this.env);
+    const document = parseResourceDocument(parsed.document);
+    const renderedHtml = renderResourceDocument(document, embedConfiguration);
     const audienceIdsJson = JSON.stringify(parsed.audiencePersonIds);
     if (!parsed.id) {
       const pageId = command?.pageId ?? crypto.randomUUID();

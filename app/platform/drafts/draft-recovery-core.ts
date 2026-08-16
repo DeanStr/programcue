@@ -26,6 +26,7 @@ export type DraftRecoveryState =
   | "saved"
   | "offline"
   | "retry_required"
+  | "incompatible"
   | "restore_available"
   | "restored"
   | "conflict";
@@ -101,6 +102,7 @@ export type UseDraftRecoveryOptions<T> = {
   payload: T;
   dirty: boolean;
   onRestore(payload: T): void;
+  isPayloadCompatible?(payload: unknown): payload is T;
   enabled?: boolean;
   debounceMs?: number;
   ttlMs?: number;

@@ -58,7 +58,7 @@ const commonVariableNames = [
   "TURNSTILE_SITE_KEY",
   "CORS_ALLOWED_ORIGINS",
   "EMBED_FRAME_ANCESTORS",
-  "RESOURCE_EMBED_ORIGINS",
+  "RESOURCE_EMBED_PROVIDERS",
 ];
 const productionVariableNames = new Set([
   ...commonVariableNames,
@@ -145,62 +145,34 @@ function productionUrl(profile, name, value, issues) {
   }
 }
 
-function resourceEmbedOrigins(profile, value, issues) {
-  const normalizedValue = value.trim();
-  if (!normalizedValue || normalizedValue.toLowerCase() === "none") return [];
-  const requested = normalizedValue.split(",").map((origin) => origin.trim());
+function resourceEmbedProviders(profile, value, issues) {
+  if (value === "none") return [];
+  const allowed = new Set(["youtube", "vimeo", "google_maps"]);
+  const requested = value.split(",").map((provider) => provider.trim());
   if (
-    !requested.length ||
-    requested.some((origin) => !origin) ||
-    requested.length > 16
+    !value ||
+    requested.some((provider) => !allowed.has(provider)) ||
+    requested.length > allowed.size
   ) {
     issues.push(
       issue(
         profile,
         "configuration",
-        'RESOURCE_EMBED_ORIGINS must contain 1-16 exact HTTPS origins, or "none".',
+        'RESOURCE_EMBED_PROVIDERS must be "none" or a comma-separated selection of youtube, vimeo and google_maps.',
       ),
     );
     return [];
   }
-  const normalized = [];
-  for (const origin of requested) {
-    let url;
-    try {
-      url = new URL(origin);
-    } catch {
-      url = null;
-    }
-    if (
-      !url ||
-      url.protocol !== "https:" ||
-      url.username ||
-      url.password ||
-      url.pathname !== "/" ||
-      url.search ||
-      url.hash
-    ) {
-      issues.push(
-        issue(
-          profile,
-          "configuration",
-          "RESOURCE_EMBED_ORIGINS entries must be exact HTTPS origins without credentials, paths, queries or fragments.",
-        ),
-      );
-      continue;
-    }
-    normalized.push(url.origin);
-  }
-  if (new Set(normalized).size !== normalized.length) {
+  if (new Set(requested).size !== requested.length) {
     issues.push(
       issue(
         profile,
         "configuration",
-        "RESOURCE_EMBED_ORIGINS must not contain duplicate origins.",
+        "RESOURCE_EMBED_PROVIDERS must not contain duplicate providers.",
       ),
     );
   }
-  return normalized;
+  return requested;
 }
 
 function validateVariableInventory(profile, variables, allowed, issues) {
@@ -302,9 +274,9 @@ function validateCommonProfile(profile, config, spec, issues) {
   for (const name of commonVariableNames) {
     requiredVariable(profile, variables, name, issues);
   }
-  resourceEmbedOrigins(
+  resourceEmbedProviders(
     profile,
-    String(variables.RESOURCE_EMBED_ORIGINS ?? ""),
+    String(variables.RESOURCE_EMBED_PROVIDERS ?? ""),
     issues,
   );
   if (
@@ -648,14 +620,11 @@ function validateProduction(config, issues) {
       productionUrl(profile, "EMBED_FRAME_ANCESTORS", origin, issues);
     }
   }
-  const embedOrigins = resourceEmbedOrigins(
+  resourceEmbedProviders(
     profile,
-    String(variables.RESOURCE_EMBED_ORIGINS ?? ""),
+    String(variables.RESOURCE_EMBED_PROVIDERS ?? ""),
     [],
   );
-  for (const origin of embedOrigins) {
-    productionUrl(profile, "RESOURCE_EMBED_ORIGINS", origin, issues);
-  }
 
   const turnstileSiteKey = requiredVariable(
     profile,

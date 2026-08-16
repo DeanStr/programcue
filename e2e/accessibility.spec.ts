@@ -360,7 +360,7 @@ test("representative surfaces have one primary main landmark and unique ids", as
   }
 });
 
-test("resource authoring exposes the rich editor and formatting state", async ({
+test("resource authoring exposes typed click-to-load video and map blocks", async ({
   page,
 }) => {
   await waitForInterface(page, "/admin/resources");
@@ -370,6 +370,79 @@ test("resource authoring exposes the rich editor and formatting state", async ({
   await expect(editor).toHaveAttribute("aria-multiline", "true");
   await expect(page.getByRole("button", { name: "Bold" })).toHaveAttribute(
     "aria-pressed",
+  );
+
+  await page
+    .getByLabel("YouTube or Vimeo link")
+    .fill("https://youtu.be/dQw4w9WgXcQ?t=42");
+  await page.getByRole("button", { name: "Add video" }).click();
+  const video = page.locator(
+    ".resource-live-preview .resource-external-embed--youtube",
+  );
+  await expect(video).toContainText("YouTube video");
+  await expect(video.getByRole("link", { name: /Open on YouTube/ })).toHaveAttribute(
+    "href",
+    "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
+  );
+  await video.getByRole("button", { name: "Load video from YouTube" }).click();
+  await expect(video.locator("iframe")).toHaveAttribute(
+    "src",
+    "https://www.youtube-nocookie.com/embed/dQw4w9WgXcQ",
+  );
+  await expect(video.locator("iframe")).toHaveAttribute(
+    "sandbox",
+    "allow-scripts allow-same-origin",
+  );
+
+  await page.getByRole("button", { name: "Map", exact: true }).click();
+  await page.getByRole("textbox", { name: "Venue or address" }).fill(
+    "Barbican Centre, London",
+  );
+  await page.getByRole("button", { name: "Add map" }).click();
+  const map = page.locator(
+    ".resource-live-preview .resource-external-embed--google_maps",
+  );
+  await expect(map).toContainText("Map of Barbican Centre, London");
+  await expect(
+    map.getByRole("link", { name: /Open in Google Maps/ }),
+  ).toBeVisible();
+  await page
+    .getByRole("button", { name: "Move Google Maps block up" })
+    .click();
+  await expect(video.locator("iframe")).toHaveCount(0);
+  await expect(
+    video.getByRole("button", { name: "Load video from YouTube" }),
+  ).toBeVisible();
+  await expect(
+    map.getByRole("button", { name: "Load map from Google Maps" }),
+  ).toBeVisible();
+  await map.getByRole("button", { name: "Load map from Google Maps" }).click();
+  await expect(map.locator("iframe")).toHaveAttribute(
+    "src",
+    /https:\/\/www\.google\.com\/maps\/embed\/v1\/place\?.*q=Barbican\+Centre%2C\+London/,
+  );
+  await expect(map.locator("iframe")).toHaveAttribute(
+    "sandbox",
+    "allow-scripts allow-same-origin allow-popups",
+  );
+
+  await page.getByRole("button", { name: "Video", exact: true }).click();
+  await page
+    .getByLabel("YouTube or Vimeo link")
+    .fill("https://youtu.be/aqz-KE-bpKQ");
+  await expect(page.locator('input[name="externalEmbedDraft"]')).toHaveValue(
+    "https://youtu.be/aqz-KE-bpKQ",
+  );
+  await page.getByRole("button", { name: "Map", exact: true }).click();
+  await expect(page.locator('input[name="externalEmbedDraft"]')).toHaveValue(
+    "",
+  );
+  await page
+    .getByRole("textbox", { name: "Venue or address" })
+    .fill("Unfinished venue");
+  await page.getByRole("button", { name: "Video", exact: true }).click();
+  await expect(page.locator('input[name="externalEmbedDraft"]')).toHaveValue(
+    "",
   );
 });
 

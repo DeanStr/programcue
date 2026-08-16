@@ -11,7 +11,7 @@ describe("Worker security headers", () => {
     applySecurityHeaders(
       production,
       "production",
-      "https://docs.google.com,https://player.vimeo.com",
+      "youtube,vimeo,google_maps",
     );
     expect(production.get("strict-transport-security")).toBe(
       "max-age=31536000",
@@ -32,7 +32,7 @@ describe("Worker security headers", () => {
       "img-src 'self' data: blob: https:",
     );
     expect(production.get("content-security-policy")).toContain(
-      "frame-src 'self' https://challenges.cloudflare.com https://docs.google.com https://player.vimeo.com",
+      "frame-src 'self' https://challenges.cloudflare.com https://www.youtube-nocookie.com https://player.vimeo.com https://www.google.com",
     );
     expect(production.get("content-security-policy")).not.toContain(
       "frame-src https:",
@@ -54,9 +54,9 @@ describe("Worker security headers", () => {
     );
   });
 
-  it("fails closed when resource embed origin configuration is invalid", () => {
+  it("fails closed when resource embed provider configuration is invalid", () => {
     const headers = new Headers();
-    applySecurityHeaders(headers, "production", "https://example.com/path");
+    applySecurityHeaders(headers, "production", "unknown");
     expect(headers.get("content-security-policy")).toContain(
       "frame-src 'self' https://challenges.cloudflare.com;",
     );

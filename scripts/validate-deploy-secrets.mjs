@@ -1,13 +1,20 @@
 import { spawnSync } from "node:child_process";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { unstable_readConfig } from "wrangler";
 
-import { REQUIRED_PRODUCTION_SECRET_NAMES } from "./deploy-contract.mjs";
+import {
+  REQUIRED_PRODUCTION_SECRET_NAMES,
+  requiredProductionSecretNames,
+} from "./deploy-contract.mjs";
 import { resolvePackageExecutable } from "./package-executable.mjs";
 
 const SECRET_INVENTORY_TIMEOUT_MS = 60_000;
 
-export function missingRequiredSecretNames(records) {
+export function missingRequiredSecretNames(
+  records,
+  requiredNames = REQUIRED_PRODUCTION_SECRET_NAMES,
+) {
   if (!Array.isArray(records)) {
     throw new TypeError(
       "Production secret validation expected a secret inventory array.",
@@ -18,9 +25,7 @@ export function missingRequiredSecretNames(records) {
       .map((record) => (typeof record?.name === "string" ? record.name : null))
       .filter(Boolean),
   );
-  return REQUIRED_PRODUCTION_SECRET_NAMES.filter(
-    (name) => !configured.has(name),
-  );
+  return requiredNames.filter((name) => !configured.has(name));
 }
 
 function run() {
@@ -75,8 +80,16 @@ function run() {
   }
 
   let missing;
+  let requiredNames;
   try {
-    missing = missingRequiredSecretNames(records);
+    const config = unstable_readConfig(
+      { config: resolve("wrangler.jsonc") },
+      { hideWarnings: true },
+    );
+    requiredNames = requiredProductionSecretNames(
+      config.vars?.RESOURCE_EMBED_PROVIDERS,
+    );
+    missing = missingRequiredSecretNames(records, requiredNames);
   } catch (error) {
     console.error(error instanceof Error ? error.message : String(error));
     process.exitCode = 1;
@@ -90,7 +103,7 @@ function run() {
     return;
   }
   console.log(
-    `Production secret validation passed (${REQUIRED_PRODUCTION_SECRET_NAMES.length} required names present).`,
+    `Production secret validation passed (${requiredNames.length} required names present).`,
   );
 }
 

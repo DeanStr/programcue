@@ -1068,7 +1068,6 @@ describe("Submissions D1 vertical slice", () => {
             },
           ],
         },
-        embedUrls: [],
       });
       const resourceDraft = (
         await resourceService.getAdminWorkspace(viewer, resourceId)

@@ -47,7 +47,9 @@ export default defineProject({
           FILE_SCANNER_API_URL: "https://scanner.example.test/jobs",
           FILE_SCANNER_DISPATCH_SECRET:
             "test-scanner-dispatch-secret-at-least-32-characters",
-          RESOURCE_EMBED_ORIGINS: "https://example.com,https://docs.google.com",
+          RESOURCE_EMBED_PROVIDERS: "youtube,vimeo,google_maps",
+          GOOGLE_MAPS_EMBED_API_KEY:
+            "test-google-maps-embed-key-1234567890",
           R2_ACCOUNT_ID: "test-account-id",
           R2_BUCKET_NAME: "program-cue-test-files",
           R2_ACCESS_KEY_ID: "test-r2-access-key",

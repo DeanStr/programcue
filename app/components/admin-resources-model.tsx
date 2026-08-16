@@ -10,10 +10,17 @@ import {
 } from "react";
 import { useActionData, useNavigation } from "react-router";
 import {
-  appendEmbeds,
-  renderResourceDocument,
+  parseResourceDocument,
+  validateResourceDocumentEmbedStructure,
   type TiptapNode,
 } from "~/modules/resources/resource-content";
+import {
+  emptyResourceExternalEmbedDraft,
+  isResourceRecoveryPayload,
+  parseResourceRecoveryPayload,
+  type ResourceExternalEmbedDraft,
+  type ResourceRecoveryPayload,
+} from "~/modules/resources/resource-recovery";
 import {
   clearDraftRecoveryScope,
   useDraftRecovery,
@@ -43,17 +50,6 @@ type ResourceAudienceScope = NonNullable<
   AdminResourcesData["selected"]
 >["audienceScope"];
 
-type ResourceRecoveryPayload = {
-  title: string;
-  slug: string;
-  category: string;
-  audienceScope: ResourceAudienceScope;
-  audiencePersonIds: string[];
-  acknowledgementRequired: boolean;
-  document: TiptapNode;
-  embedUrls: string;
-};
-
 type ResourceAdminModel = {
   loaderData: AdminResourcesData;
   actionData: AdminResourcesActionData | undefined;
@@ -62,6 +58,8 @@ type ResourceAdminModel = {
   selected: AdminResourcesData["selected"];
   document: TiptapNode;
   setDocument: Dispatch<SetStateAction<TiptapNode>>;
+  externalEmbedDraft: ResourceExternalEmbedDraft;
+  setExternalEmbedDraft: Dispatch<SetStateAction<ResourceExternalEmbedDraft>>;
   creating: boolean;
   setCreating: Dispatch<SetStateAction<boolean>>;
   audienceScope: ResourceAudienceScope;
@@ -72,8 +70,6 @@ type ResourceAdminModel = {
   setSlug: Dispatch<SetStateAction<string>>;
   category: string;
   setCategory: Dispatch<SetStateAction<string>>;
-  embedUrls: string;
-  setEmbedUrls: Dispatch<SetStateAction<string>>;
   audiencePersonIds: string[];
   setAudiencePersonIds: Dispatch<SetStateAction<string[]>>;
   acknowledgementRequired: boolean;
@@ -85,7 +81,7 @@ type ResourceAdminModel = {
   previewViewport: "mobile" | "desktop";
   setPreviewViewport: Dispatch<SetStateAction<"mobile" | "desktop">>;
   recoveryPayload: ResourceRecoveryPayload;
-  resourcePreview: { html: string; error: string | null };
+  resourcePreview: { error: string | null };
   restoreDraft(payload: ResourceRecoveryPayload): void;
   editing: AdminResourcesData["selected"];
   editorKey: string;
@@ -97,14 +93,6 @@ export const emptyResourceDocument: TiptapNode = {
   content: [{ type: "paragraph" }],
 };
 
-function embeddedUrls(document: TiptapNode) {
-  return (document.content ?? [])
-    .filter((node) => node.type === "embed")
-    .map((node) => String(node.attrs?.src ?? ""))
-    .filter(Boolean)
-    .join("\n");
-}
-
 export function useResourceAdminState(
   loaderData: AdminResourcesData,
 ): ResourceAdminModel {
@@ -115,6 +103,9 @@ export function useResourceAdminState(
   const [document, setDocument] = useState<TiptapNode>(
     selected?.document ?? emptyResourceDocument,
   );
+  const [externalEmbedDraft, setExternalEmbedDraft] = useState(
+    emptyResourceExternalEmbedDraft,
+  );
   const [creating, setCreating] = useState(!selected);
   const [audienceScope, setAudienceScope] = useState(
     selected?.audienceScope ?? "all_speakers",
@@ -122,9 +113,6 @@ export function useResourceAdminState(
   const [title, setTitle] = useState(selected?.title ?? "");
   const [slug, setSlug] = useState(selected?.slug ?? "");
   const [category, setCategory] = useState(selected?.category ?? "");
-  const [embedUrls, setEmbedUrls] = useState(
-    selected ? embeddedUrls(selected.document) : "",
-  );
   const [audiencePersonIds, setAudiencePersonIds] = useState<string[]>(
     selected?.audiencePersonIds ?? [],
   );
@@ -136,7 +124,7 @@ export function useResourceAdminState(
   const [previewViewport, setPreviewViewport] = useState<"mobile" | "desktop">(
     "desktop",
   );
-  const recoveryPayload = useMemo(
+  const recoveryPayload: ResourceRecoveryPayload = useMemo(
     () => ({
       title,
       slug,
@@ -145,7 +133,7 @@ export function useResourceAdminState(
       audiencePersonIds,
       acknowledgementRequired,
       document,
-      embedUrls,
+      externalEmbedDraft,
     }),
     [
       acknowledgementRequired,
@@ -153,35 +141,27 @@ export function useResourceAdminState(
       audienceScope,
       category,
       document,
-      embedUrls,
+      externalEmbedDraft,
       slug,
       title,
     ],
   );
   const resourcePreview = useMemo(() => {
     try {
-      const urls = embedUrls
-        .split(/\r?\n/)
-        .map((value) => value.trim())
-        .filter(Boolean);
-      return {
-        html: renderResourceDocument(
-          appendEmbeds(document, urls, loaderData.resourceEmbedOrigins),
-          loaderData.resourceEmbedOrigins,
-        ),
-        error: null,
-      };
+      const parsedDocument = parseResourceDocument(document);
+      validateResourceDocumentEmbedStructure(parsedDocument);
+      return { error: null };
     } catch (error) {
       return {
-        html: "",
         error:
           error instanceof Error
             ? error.message
             : "The resource preview could not be rendered.",
       };
     }
-  }, [document, embedUrls, loaderData.resourceEmbedOrigins]);
-  const restoreDraft = useCallback((payload: typeof recoveryPayload) => {
+  }, [document]);
+  const restoreDraft = useCallback((rawPayload: ResourceRecoveryPayload) => {
+    const payload = parseResourceRecoveryPayload(rawPayload);
     setTitle(payload.title);
     setSlug(payload.slug);
     setCategory(payload.category);
@@ -189,7 +169,7 @@ export function useResourceAdminState(
     setAudiencePersonIds(payload.audiencePersonIds);
     setAcknowledgementRequired(payload.acknowledgementRequired);
     setDocument(payload.document);
-    setEmbedUrls(payload.embedUrls);
+    setExternalEmbedDraft(payload.externalEmbedDraft);
     setDirty(true);
   }, []);
   const editing = creating ? null : selected;
@@ -204,6 +184,7 @@ export function useResourceAdminState(
     payload: recoveryPayload,
     dirty,
     onRestore: restoreDraft,
+    isPayloadCompatible: isResourceRecoveryPayload,
   });
   useEffect(() => {
     setDocument(selected?.document ?? emptyResourceDocument);
@@ -212,9 +193,9 @@ export function useResourceAdminState(
     setTitle(selected?.title ?? "");
     setSlug(selected?.slug ?? "");
     setCategory(selected?.category ?? "");
-    setEmbedUrls(selected ? embeddedUrls(selected.document) : "");
     setAudiencePersonIds(selected?.audiencePersonIds ?? []);
     setAcknowledgementRequired(selected?.acknowledgementRequired ?? false);
+    setExternalEmbedDraft(emptyResourceExternalEmbedDraft);
     setDirty(false);
     setPublishConfirmationOpen(false);
   }, [selected?.id, selected?.versionId]);
@@ -248,6 +229,8 @@ export function useResourceAdminState(
     selected,
     document,
     setDocument,
+    externalEmbedDraft,
+    setExternalEmbedDraft,
     creating,
     setCreating,
     audienceScope,
@@ -258,8 +241,6 @@ export function useResourceAdminState(
     setSlug,
     category,
     setCategory,
-    embedUrls,
-    setEmbedUrls,
     audiencePersonIds,
     setAudiencePersonIds,
     acknowledgementRequired,

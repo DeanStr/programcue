@@ -2,7 +2,10 @@ import {
   requireRuntimeMode,
   requiresProductionSecurity,
 } from "~/platform/runtime-environment.server";
-import { parseResourceEmbedOrigins } from "~/modules/resources/resource-embed-policy";
+import {
+  parseResourceEmbedProviders,
+  resourceEmbedConfiguration,
+} from "~/modules/resources/resource-embed-policy";
 
 const requiredProductionBindings = [
   "DB",
@@ -28,7 +31,7 @@ const requiredProductionValues = [
   "FILE_SCANNER_API_URL",
   "CORS_ALLOWED_ORIGINS",
   "EMBED_FRAME_ANCESTORS",
-  "RESOURCE_EMBED_ORIGINS",
+  "RESOURCE_EMBED_PROVIDERS",
   "BETTER_AUTH_SECRET",
   "ANONYMOUS_ITINERARY_SECRET",
   "RESEND_API_KEY",
@@ -51,6 +54,8 @@ const requiredProductionValues = [
   "R2_SECRET_ACCESS_KEY",
   "D1_REST_API_TOKEN",
 ] as const;
+
+const requiredGoogleMapsValues = ["GOOGLE_MAPS_EMBED_API_KEY"] as const;
 
 const requiredProductionEvaluationValues = [
   "EVALUATION_ACCESS_CODE",
@@ -90,7 +95,7 @@ export function requireProductionRuntimeReadiness(
   const evaluationValues = runtime.evaluation
     ? requiredProductionEvaluationValues
     : [];
-  const invalid = [
+  const invalid: string[] = [
     ...requiredProductionBindings.filter((name) => !values[name]),
     ...requiredProductionValues.filter(
       (name) => !configuredString(values, name),
@@ -158,10 +163,20 @@ export function requireProductionRuntimeReadiness(
   if (values.EMAIL_PROVIDER !== "resend") {
     invalid.push("EMAIL_PROVIDER");
   }
+  let embedProviders = null;
   try {
-    parseResourceEmbedOrigins(values.RESOURCE_EMBED_ORIGINS);
+    embedProviders = parseResourceEmbedProviders(
+      values.RESOURCE_EMBED_PROVIDERS,
+    );
   } catch {
-    invalid.push("RESOURCE_EMBED_ORIGINS");
+    invalid.push("RESOURCE_EMBED_PROVIDERS");
+  }
+  if (embedProviders?.includes("google_maps")) {
+    try {
+      resourceEmbedConfiguration(values);
+    } catch {
+      invalid.push(...requiredGoogleMapsValues);
+    }
   }
   if (invalid.length) {
     throw new ProductionReadinessConfigurationError(

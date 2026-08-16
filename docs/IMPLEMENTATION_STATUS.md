@@ -199,8 +199,20 @@ consumes the ordinary hashed, D1-backed IP limit. No other event or production
 action that ordinarily requires Turnstile receives that exception. Production's
 wildcard `EMBED_FRAME_ANCESTORS` is applied only to published `/embed/*`
 responses; private application responses retain `frame-ancestors 'self'`, and
-resources framed inside Program Cue remain limited to exact
-`RESOURCE_EMBED_ORIGINS` entries (`none` in the production profile).
+external resources inside Program Cue are limited to typed YouTube, Vimeo and
+Google Maps blocks selected through `RESOURCE_EMBED_PROVIDERS` (all three in the
+production profile). Their exact `frame-src` origins and sandbox/permission
+contracts are derived from code. Speakers receive inert click-to-load cards and
+a permanent ordinary provider link; disabling a provider is enforced at save
+and publication while already-published content degrades to an explanatory
+link card. Google Maps uses place/search parameters and additionally requires a
+restricted Maps Embed API key; arbitrary map share links are not accepted. The
+production profile selects all three providers, but installing/restricting the
+real Google credential and live-provider acceptance remain operator work; no
+external-provider success is claimed here. Development and demonstration
+profiles select only YouTube and Vimeo; opting into Maps without a valid key is
+a configuration error rather than a degraded link-only mode. The browser-test
+profile opts into Maps explicitly with an ephemeral test key.
 
 The operator reset is organisation-scoped because optional evaluation scenarios
 create events and contacts. It restores the canonical event, clears and

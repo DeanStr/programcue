@@ -3,7 +3,6 @@ import {
   BookOpenCheck,
   CheckCircle2,
   ExternalLink,
-  Globe2,
   Plus,
 } from "lucide-react";
 import { Form, Link } from "react-router";
@@ -20,8 +19,11 @@ import {
 } from "~/components/draft-recovery-feedback";
 import { useConfirm } from "~/components/ui/confirm-dialog";
 import { maximumMegabytes } from "~/modules/files/file-policy";
+import { emptyResourceExternalEmbedDraft } from "~/modules/resources/resource-recovery";
 import { UserFacingError } from "~/platform/user-facing-error";
 import { RichResourceEditor } from "./rich-resource-editor";
+import { ResourceDocument } from "./resource-document";
+import { ResourceExternalEmbedEditor } from "./resource-external-embed-editor";
 import {
   type AdminResourcesData,
   emptyResourceDocument as emptyDocument,
@@ -261,8 +263,8 @@ function ResourceAuthoringPanel() {
     loaderData,
     document,
     setDocument,
-    embedUrls,
-    setEmbedUrls,
+    externalEmbedDraft,
+    setExternalEmbedDraft,
     setDirty,
     editorKey,
   } = useResourceAdminModel();
@@ -279,27 +281,19 @@ function ResourceAuthoringPanel() {
           }}
         />
       </div>
-      <aside>
-        <label className="label">
-          Approved HTTPS embeds
-          <textarea
-            className="textarea"
-            name="embedUrls"
-            value={embedUrls}
-            onChange={(event) => {
-              setEmbedUrls(event.target.value);
-              setDirty(true);
-            }}
-            placeholder="One HTTPS URL per line"
-            rows={6}
-          />
-        </label>
-        <p className="help">
-          <Globe2 aria-hidden size={13} /> Embeds render in a sandbox without
-          scripts, forms, popups or parent navigation. Allowed origins:{" "}
-          {loaderData.resourceEmbedOrigins.join(", ") || "none"}.
-        </p>
-      </aside>
+      <ResourceExternalEmbedEditor
+        document={document}
+        configuration={loaderData.embedConfiguration}
+        draft={externalEmbedDraft}
+        onChange={(next) => {
+          setDocument(next);
+          setDirty(true);
+        }}
+        onDraftChange={(next) => {
+          setExternalEmbedDraft(next);
+          setDirty(true);
+        }}
+      />
     </div>
   );
 }
@@ -307,6 +301,7 @@ function ResourceAuthoringPanel() {
 function ResourcePreviewPanel() {
   const {
     loaderData,
+    document,
     title,
     category,
     previewViewport,
@@ -370,9 +365,9 @@ function ResourcePreviewPanel() {
           <div className="speaker-resource-content">
             <span className="pill">{category.trim() || "General"}</span>
             <h2>{title.trim() || "Untitled resource"}</h2>
-            <div
-              className="resource-rendered"
-              dangerouslySetInnerHTML={{ __html: resourcePreview.html }}
+            <ResourceDocument
+              document={document}
+              configuration={loaderData.embedConfiguration}
             />
           </div>
         </article>
@@ -632,12 +627,12 @@ function ResourceAdministrationLayout() {
 function ResourceAdminHeader() {
   const {
     setDocument,
+    setExternalEmbedDraft,
     setCreating,
     setAudienceScope,
     setTitle,
     setSlug,
     setCategory,
-    setEmbedUrls,
     setAudiencePersonIds,
     setAcknowledgementRequired,
     setDirty,
@@ -648,8 +643,9 @@ function ResourceAdminHeader() {
         <span className="pc-page-eyebrow">Speaker knowledge</span>
         <h1>Resource pages</h1>
         <p>
-          Author versioned guidance with a constrained Tiptap editor, safe HTTPS
-          embeds and audience-scoped publication.
+          Author versioned guidance with a constrained editor, private
+          attachments, optional video or map blocks and audience-scoped
+          publication.
         </p>
       </div>
       <div className="page-actions">
@@ -668,11 +664,11 @@ function ResourceAdminHeader() {
           onClick={() => {
             setCreating(true);
             setDocument(emptyDocument);
+            setExternalEmbedDraft(emptyResourceExternalEmbedDraft);
             setAudienceScope("all_speakers");
             setTitle("");
             setSlug("");
             setCategory("");
-            setEmbedUrls("");
             setAudiencePersonIds([]);
             setAcknowledgementRequired(false);
             setDirty(false);

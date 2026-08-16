@@ -20,7 +20,6 @@ export const resourceInputSchema = z
       .union([z.literal("true"), z.literal("false"), z.boolean()])
       .transform((value) => value === true || value === "true"),
     document: z.unknown(),
-    embedUrls: z.array(z.string().trim().url().max(1_000)).max(8).default([]),
   })
   .superRefine((value, context) => {
     const uniqueAudience = new Set(value.audiencePersonIds);
@@ -116,6 +115,7 @@ export type ResourcePublishPage = {
   acknowledgementRequired: number;
   versionId: string;
   versionNumber: number;
+  documentJson: string;
 };
 
 export const successfulResourcePublishAttemptSql = `EXISTS (

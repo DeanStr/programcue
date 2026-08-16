@@ -13,11 +13,12 @@ import { ResourceAuthoringService } from "./resource-authoring-service.server";
 import {
   parseResourceDocument,
   renderResourceDocument,
+  resourceDocumentEmbeds,
 } from "./resource-content";
 import {
-  parseResourceEmbedOrigins,
+  parseResourceEmbedProviders,
   ResourceEmbedConfigurationError,
-  ResourceEmbedUrlError,
+  ResourceEmbedInputError,
 } from "./resource-embed-policy";
 import {
   ResourceAudienceError,
@@ -99,7 +100,6 @@ describe("speaker resource service", () => {
           type: "doc",
           content: [{ type: "paragraph" }],
         },
-        embedUrls: [],
       }),
     ).rejects.toBeInstanceOf(ResourceAudienceError);
     await expect(
@@ -123,7 +123,6 @@ describe("speaker resource service", () => {
       audienceScope: "all_speakers",
       acknowledgementRequired: false,
       document: { type: "doc", content: [{ type: "paragraph" }] },
-      embedUrls: [],
     });
     const draft = (await service.getAdminWorkspace(admin, pageId)).selected!;
     await service.publish(admin, pageId, draft.revision);
@@ -134,6 +133,49 @@ describe("speaker resource service", () => {
       name: "ResourceRevisionConflictError",
       message: "This published resource does not require acknowledgement.",
     });
+  });
+
+  it("does not misreport participant database failures as invalid content", async () => {
+    const testEnv = env as unknown as CloudflareEnvironment;
+    await ensureDemoSpeakerData(testEnv);
+    const service = new ResourceService(testEnv);
+    const slug = `participant-read-failure-${crypto.randomUUID()}`;
+    const pageId = await service.save(admin, {
+      title: "Participant read failure guide",
+      slug,
+      category: "Preparation",
+      audienceScope: "all_speakers",
+      acknowledgementRequired: false,
+      document: { type: "doc", content: [{ type: "paragraph" }] },
+    });
+    const draft = (await service.getAdminWorkspace(admin, pageId)).selected!;
+    await service.publish(admin, pageId, draft.revision);
+
+    const failingDb = new Proxy(testEnv.DB, {
+      get(target, property) {
+        if (property === "prepare") {
+          return (query: string) => {
+            if (query.includes("SELECT document_json AS documentJson")) {
+              throw new Error("D1 participant content read failed");
+            }
+            return target.prepare(query);
+          };
+        }
+        const value = Reflect.get(target, property);
+        return typeof value === "function" ? value.bind(target) : value;
+      },
+    });
+    const failingService = new ResourceService(
+      new Proxy(testEnv, {
+        get(target, property) {
+          return property === "DB" ? failingDb : Reflect.get(target, property);
+        },
+      }),
+    );
+
+    await expect(
+      failingService.getParticipantWorkspace(speaker, slug),
+    ).rejects.toThrow("D1 participant content read failed");
   });
 
   it("keeps speaker-wide resources private from a submitter without a session", async () => {
@@ -147,7 +189,6 @@ describe("speaker resource service", () => {
       audienceScope: "all_speakers",
       acknowledgementRequired: false,
       document: { type: "doc", content: [{ type: "paragraph" }] },
-      embedUrls: [],
     });
     const draft = (await service.getAdminWorkspace(admin, pageId)).selected!;
     await service.publish(admin, pageId, draft.revision);
@@ -190,7 +231,6 @@ describe("speaker resource service", () => {
           { type: "paragraph", content: [{ type: "text", text: "Read me" }] },
         ],
       },
-      embedUrls: [],
     });
     const draft = (await service.getAdminWorkspace(admin, pageId)).selected!;
     const racingEnv = withBatchRace(testEnv, async () => {
@@ -246,7 +286,6 @@ describe("speaker resource service", () => {
           { type: "paragraph", content: [{ type: "text", text: "Read me" }] },
         ],
       },
-      embedUrls: [],
     });
     const draft = (await service.getAdminWorkspace(admin, pageId)).selected!;
     const addedPersonId = `resource-added-speaker-${token}`;
@@ -351,7 +390,6 @@ describe("speaker resource service", () => {
           },
         ],
       },
-      embedUrls: [],
     });
     const firstDraft = (await service.getAdminWorkspace(admin, pageId))
       .selected!;
@@ -376,7 +414,6 @@ describe("speaker resource service", () => {
           },
         ],
       },
-      embedUrls: [],
     });
 
     await expect(
@@ -432,20 +469,43 @@ describe("speaker resource service", () => {
               },
             ],
           },
+          {
+            type: "embed",
+            attrs: {
+              provider: "youtube",
+              videoId: "dQw4w9WgXcQ",
+              sourceUrl:
+                "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
+            },
+          },
         ],
       },
-      embedUrls: ["https://example.com/reference"],
     });
     const draft = (await service.getAdminWorkspace(admin, pageId)).selected!;
+    const disabledProviderService = new ResourceService({
+      ...testEnv,
+      RESOURCE_EMBED_PROVIDERS: "none",
+    } as CloudflareEnvironment);
+    await expect(
+      disabledProviderService.publish(admin, pageId, draft.revision),
+    ).rejects.toThrow("YouTube embeds are no longer enabled");
     await service.publish(admin, pageId, draft.revision);
     const participant = await service.getParticipantWorkspace(
       speaker,
       "accessibility-guide-test",
     );
-    expect(participant.selected?.renderedHtml).toContain("readable text");
-    expect(participant.selected?.renderedHtml).toContain('sandbox=""');
-    expect(participant.selected?.renderedHtml).not.toContain("allow-forms");
-    expect(participant.selected?.renderedHtml).not.toContain("allow-popups");
+    expect(participant.selected?.document.content?.[0]?.content?.[0]?.text).toBe(
+      "Use large, readable text on every presentation slide.",
+    );
+    expect(resourceDocumentEmbeds(participant.selected!.document)).toEqual([
+      {
+        provider: "youtube",
+        videoId: "dQw4w9WgXcQ",
+        sourceUrl: "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
+      },
+    ]);
+    expect(participant.pages[0]).not.toHaveProperty("documentJson");
+    expect(participant.selected).not.toHaveProperty("documentJson");
     expect(participant.selected?.acknowledged).toBe(false);
 
     await service.acknowledge(
@@ -487,7 +547,6 @@ describe("speaker resource service", () => {
           },
         ],
       },
-      embedUrls: [],
     });
     const nextDraft = (await service.getAdminWorkspace(admin, pageId))
       .selected!;
@@ -526,7 +585,6 @@ describe("speaker resource service", () => {
           },
         ],
       },
-      embedUrls: [],
     });
     const firstDraft = (await service.getAdminWorkspace(admin, pageId))
       .selected!;
@@ -555,7 +613,6 @@ describe("speaker resource service", () => {
           },
         ],
       },
-      embedUrls: [],
     });
     const secondDraft = (await service.getAdminWorkspace(admin, pageId))
       .selected!;
@@ -623,7 +680,6 @@ describe("speaker resource service", () => {
           },
         ],
       },
-      embedUrls: [],
     });
     const firstDraft = (await service.getAdminWorkspace(admin, pageId))
       .selected!;
@@ -694,7 +750,6 @@ describe("speaker resource service", () => {
           },
         ],
       },
-      embedUrls: [],
     });
     const blockedDraft = (await service.getAdminWorkspace(admin, pageId))
       .selected!;
@@ -742,7 +797,6 @@ describe("speaker resource service", () => {
           },
         ],
       },
-      embedUrls: [],
     });
     const firstDraft = (await service.getAdminWorkspace(admin, pageId))
       .selected!;
@@ -793,7 +847,6 @@ describe("speaker resource service", () => {
       audienceScope: published.audienceScope,
       acknowledgementRequired: false,
       document: published.document,
-      embedUrls: [],
     });
     const draft = (await service.getAdminWorkspace(admin, pageId)).selected!;
     expect(draft.publicationImpact).toMatchObject({
@@ -872,7 +925,6 @@ describe("speaker resource service", () => {
           { type: "paragraph", content: [{ type: "text", text: "Briefing" }] },
         ],
       },
-      embedUrls: [],
     });
     const firstDraft = (await service.getAdminWorkspace(admin, pageId))
       .selected!;
@@ -904,7 +956,6 @@ describe("speaker resource service", () => {
       audiencePersonIds: [speaker.personId],
       acknowledgementRequired: true,
       document: published.document,
-      embedUrls: [],
     });
     const customDraft = (await service.getAdminWorkspace(admin, pageId))
       .selected!;
@@ -1007,7 +1058,6 @@ describe("speaker resource service", () => {
           { type: "paragraph", content: [{ type: "text", text: "Read me" }] },
         ],
       },
-      embedUrls: [],
     });
     const draft = (await service.getAdminWorkspace(admin, pageId)).selected!;
     const impact = draft.publicationImpact!;
@@ -1043,7 +1093,6 @@ describe("speaker resource service", () => {
           },
         ],
       },
-      embedUrls: [],
     });
     const draft = (await service.getAdminWorkspace(admin, pageId)).selected!;
 
@@ -1134,7 +1183,6 @@ describe("speaker resource service", () => {
           },
         ],
       },
-      embedUrls: [],
     });
     const firstDraft = (await service.getAdminWorkspace(admin, firstPageId))
       .selected!;
@@ -1150,7 +1198,6 @@ describe("speaker resource service", () => {
       audienceScope: published.audienceScope,
       acknowledgementRequired: false,
       document: published.document,
-      embedUrls: [],
     });
     const replacement = (await service.getAdminWorkspace(admin, firstPageId))
       .selected!;
@@ -1170,7 +1217,6 @@ describe("speaker resource service", () => {
         audienceScope: "all_speakers",
         acknowledgementRequired: false,
         document: { type: "doc", content: [{ type: "paragraph" }] },
-        embedUrls: [],
       }),
     ).rejects.toBeInstanceOf(ResourceSlugConflictError);
     expect(
@@ -1202,7 +1248,6 @@ describe("speaker resource service", () => {
           },
         ],
       },
-      embedUrls: [],
     });
     const secondDraft = (await service.getAdminWorkspace(admin, secondPageId))
       .selected!;
@@ -1255,7 +1300,6 @@ describe("speaker resource service", () => {
           },
         ],
       },
-      embedUrls: [],
     });
     const upload = await completeTestDirectUpload(
       testEnv,
@@ -1363,7 +1407,6 @@ describe("speaker resource service", () => {
           },
         ],
       },
-      embedUrls: [],
     });
     const upload = (name: string, marker: string) =>
       completeTestDirectUpload(
@@ -1441,7 +1484,6 @@ describe("speaker resource service", () => {
       audienceScope: published.audienceScope,
       acknowledgementRequired: false,
       document: published.document,
-      embedUrls: [],
     });
     const draft = (await resources.getAdminWorkspace(admin, pageId)).selected!;
     const second = await upload("draft.pdf", "new draft attachment bytes");
@@ -1492,7 +1534,7 @@ describe("speaker resource service", () => {
     ).rejects.toThrow("unavailable");
   });
 
-  it("escapes text and rejects executable or unapproved embed origins", async () => {
+  it("escapes text and rejects malformed or disabled provider blocks", () => {
     const safe = renderResourceDocument(
       parseResourceDocument({
         type: "doc",
@@ -1503,34 +1545,43 @@ describe("speaker resource service", () => {
           },
         ],
       }),
-      [],
+      { enabledProviders: [], googleMapsApiKey: null },
     );
     expect(safe).toContain("&lt;script&gt;");
     expect(() =>
       renderResourceDocument(
         parseResourceDocument({
           type: "doc",
-          content: [{ type: "embed", attrs: { src: "javascript:alert(1)" } }],
+          content: [
+            { type: "embed", attrs: { provider: "youtube", videoId: "bad" } },
+          ],
         }),
-        ["https://example.com"],
+        { enabledProviders: ["youtube"], googleMapsApiKey: null },
       ),
-    ).toThrow(ResourceEmbedUrlError);
+    ).toThrow(ResourceEmbedInputError);
 
-    expect(() => parseResourceEmbedOrigins("https://example.com,")).toThrow(
+    expect(() => parseResourceEmbedProviders("youtube,")).toThrow(
       ResourceEmbedConfigurationError,
     );
 
-    await ensureDemoSpeakerData(env as unknown as CloudflareEnvironment);
-    await expect(
-      new ResourceService(env as unknown as CloudflareEnvironment).save(admin, {
-        title: "Unapproved embed origin",
-        slug: "unapproved-embed-origin",
-        category: "Preparation",
-        audienceScope: "all_speakers",
-        acknowledgementRequired: false,
-        document: { type: "doc", content: [{ type: "paragraph" }] },
-        embedUrls: ["https://untrusted.example/reference"],
-      }),
-    ).rejects.toBeInstanceOf(ResourceEmbedUrlError);
+    expect(() =>
+      renderResourceDocument(
+        parseResourceDocument({
+          type: "doc",
+          content: [
+            {
+              type: "embed",
+              attrs: {
+                provider: "youtube",
+                videoId: "dQw4w9WgXcQ",
+                sourceUrl:
+                  "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
+              },
+            },
+          ],
+        }),
+        { enabledProviders: [], googleMapsApiKey: null },
+      ),
+    ).toThrow(ResourceEmbedInputError);
   });
 });

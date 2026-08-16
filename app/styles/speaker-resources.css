@@ -359,6 +359,81 @@
   background: var(--ink);
   color: var(--line);
 }
+.resource-external-embed {
+  overflow: hidden;
+  margin: var(--space-5) 0;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--soft);
+}
+.resource-external-embed-placeholder {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--space-3);
+  min-height: 150px;
+  padding: var(--space-5);
+  color: var(--ink);
+}
+.resource-external-embed-placeholder > svg {
+  color: var(--brand-600);
+}
+.resource-external-embed-placeholder p {
+  margin: var(--space-1) 0 0;
+  color: var(--muted);
+  font-size: var(--text-xs);
+}
+.resource-external-embed-link {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  padding: var(--space-2) var(--space-4);
+  border-top: 1px solid var(--line);
+  background: var(--surface);
+  font-size: var(--text-xs);
+}
+.resource-embed-editor {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  padding: var(--space-3);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--soft);
+}
+.resource-embed-kind,
+.resource-embed-row-actions {
+  display: flex;
+  gap: var(--space-1);
+  margin-top: var(--space-1);
+}
+.resource-embed-kind .btn[aria-pressed="true"] {
+  border-color: var(--brand-500);
+  background: var(--brand-50);
+  color: var(--brand-700);
+}
+.resource-embed-list {
+  display: grid;
+  gap: var(--space-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.resource-embed-list li {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-2);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+}
+.resource-embed-list small {
+  display: block;
+  overflow-wrap: anywhere;
+  color: var(--muted);
+}
 .resource-attachments {
   background: var(--soft);
 }
@@ -410,6 +485,12 @@
   grid-template-columns: minmax(0, 1fr) 260px;
   gap: var(--space-3);
   margin-top: var(--space-3);
+}
+@media (max-width: 600px) {
+  .resource-external-embed-placeholder,
+  .resource-embed-list li {
+    grid-template-columns: minmax(0, 1fr);
+  }
 }
 .resource-editor {
   border: 1px solid var(--line);

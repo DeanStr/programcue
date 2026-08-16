@@ -5,8 +5,14 @@ import {
 } from "~/modules/airtable/airtable-provider-boundary.server";
 import { ResourceServiceBase } from "./resource-service-base.server";
 import {
+  parseResourceDocument,
+  validateResourceDocumentEmbedStructure,
+} from "./resource-content";
+import { resourceEmbedConfiguration } from "./resource-embed-policy";
+import {
   participantAudienceSql,
   participantSpeakerAccessSql,
+  ResourceInvariantError,
   ResourceRevisionConflictError,
 } from "./resource-service-shared";
 
@@ -33,7 +39,7 @@ export class ResourceParticipantService extends ResourceServiceBase {
     const pages = await this.env.DB.prepare(
       `
       SELECT rp.id, rv.title, rv.slug, rv.category, rv.acknowledgement_required AS acknowledgementRequired,
-             rv.id AS versionId, rv.version_number AS versionNumber, rv.rendered_html AS renderedHtml,
+             rv.id AS versionId, rv.version_number AS versionNumber,
              rv.published_at AS publishedAt,
              CASE WHEN ack.id IS NULL THEN 0 ELSE 1 END AS acknowledged
         FROM resource_pages rp
@@ -53,7 +59,6 @@ export class ResourceParticipantService extends ResourceServiceBase {
         acknowledgementRequired: number;
         versionId: string;
         versionNumber: number;
-        renderedHtml: string;
         publishedAt: number;
         acknowledged: number;
       }>();
@@ -63,6 +68,32 @@ export class ResourceParticipantService extends ResourceServiceBase {
       : (pages.results[0] ?? null);
     if (requestedPage && !selected) {
       throw new Response("Published resource not found", { status: 404 });
+    }
+    let document = null;
+    if (selected) {
+      const content = await this.env.DB.prepare(
+        `SELECT document_json AS documentJson
+           FROM resource_page_versions
+          WHERE id = ? AND event_id = ? AND resource_page_id = ?
+            AND status = 'published'`,
+      )
+        .bind(selected.versionId, viewer.eventId, selected.id)
+        .first<{ documentJson: string }>();
+      if (!content) {
+        throw new ResourceInvariantError(
+          selected.id,
+          "the published version content is missing",
+        );
+      }
+      try {
+        document = parseResourceDocument(JSON.parse(content.documentJson));
+        validateResourceDocumentEmbedStructure(document);
+      } catch {
+        throw new ResourceInvariantError(
+          selected.id,
+          "the published version contains invalid content",
+        );
+      }
     }
     let attachments: Array<{
       id: string;
@@ -85,12 +116,14 @@ export class ResourceParticipantService extends ResourceServiceBase {
       attachments = rows.results;
     }
     return {
+      embedConfiguration: resourceEmbedConfiguration(this.env),
       pages: pages.results,
       selected: selected
         ? {
             ...selected,
             acknowledgementRequired: Boolean(selected.acknowledgementRequired),
             acknowledged: Boolean(selected.acknowledged),
+            document: document!,
             attachments,
           }
         : null,

@@ -12,6 +12,7 @@ const e2ePort = String(port);
 
 const signingSecret = randomBytes(48).toString("base64url");
 const itinerarySecret = randomBytes(48).toString("base64url");
+const googleMapsEmbedApiKey = `e2e-${randomBytes(24).toString("base64url")}`;
 const privateDirectory = await mkdtemp(join(tmpdir(), "program-cue-e2e-"));
 const variableFile = join(privateDirectory, "worker.env");
 // Keep the signing secret ephemeral even though the checked-in demo profile is
@@ -19,7 +20,7 @@ const variableFile = join(privateDirectory, "worker.env");
 // capture provider; an unavailable provider still fails visibly.
 await writeFile(
   variableFile,
-  `BETTER_AUTH_SECRET=${signingSecret}\nANONYMOUS_ITINERARY_SECRET=${itinerarySecret}\n`,
+  `BETTER_AUTH_SECRET=${signingSecret}\nANONYMOUS_ITINERARY_SECRET=${itinerarySecret}\nRESOURCE_EMBED_PROVIDERS=youtube,vimeo,google_maps\nGOOGLE_MAPS_EMBED_API_KEY=${googleMapsEmbedApiKey}\n`,
   {
     encoding: "utf8",
     mode: 0o600,

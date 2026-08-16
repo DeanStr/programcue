@@ -3728,14 +3728,6 @@ components:
               const: "false"
             - type: boolean
         document: {}
-        embedUrls:
-          default: []
-          maxItems: 8
-          type: array
-          items:
-            type: string
-            maxLength: 1000
-            format: uri
       required:
         - title
         - slug

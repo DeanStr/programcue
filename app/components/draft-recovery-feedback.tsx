@@ -10,13 +10,19 @@ const labels: Record<DraftRecoveryState, string> = {
   saved: "Saved locally",
   offline: "Offline",
   retry_required: "Retry required",
+  incompatible: "Incompatible draft",
   restore_available: "Restore available",
   restored: "Restored draft",
   conflict: "Draft conflict",
 };
 
 function statusClass(state: DraftRecoveryState) {
-  if (state === "retry_required" || state === "conflict") return "danger";
+  if (
+    state === "retry_required" ||
+    state === "incompatible" ||
+    state === "conflict"
+  )
+    return "danger";
   if (state === "offline" || state === "restore_available") return "warning";
   if (state === "saving" || state === "checking") return "info";
   return "success";
@@ -44,11 +50,15 @@ export function DraftRecoveryFeedback<T>({
 }) {
   const needsChoice =
     recovery.state === "restore_available" || recovery.state === "conflict";
-  if (!needsChoice && recovery.state !== "retry_required") return null;
+  const incompatible = recovery.state === "incompatible";
+  if (!needsChoice && !incompatible && recovery.state !== "retry_required")
+    return null;
   return (
     <div
       className={`validation-item ${recovery.state === "restore_available" ? "warn" : "error"} ${className}`.trim()}
-      role={recovery.state === "retry_required" ? "alert" : "status"}
+      role={
+        recovery.state === "retry_required" || incompatible ? "alert" : "status"
+      }
     >
       <strong>{labels[recovery.state]}</strong>
       <span>
@@ -69,6 +79,14 @@ export function DraftRecoveryFeedback<T>({
               Discard recovery copy
             </button>
           </>
+        ) : incompatible ? (
+          <button
+            className="btn small"
+            type="button"
+            onClick={() => void recovery.discard()}
+          >
+            Discard incompatible copy
+          </button>
         ) : (
           <>
             <button
