@@ -35,7 +35,9 @@
   --brand-600: #9d4a31;
   --brand-700: #783220;
   --brand-900: #522116;
-  --violet: #9d4a31;
+  /* Schedule formats are categorical, not brand or state. Keep keynote violet
+     independent from copper product emphasis and orange panel rails. */
+  --format-keynote-accent: #5b21b6;
   --teal: #0d9488;
   --green: #16a34a;
   --amber: #d97706;
@@ -92,7 +94,6 @@
      the evaluation surfaces. Held as tokens because two files were painting
      the same three values by hand. */
   --hero-ink-1: #13201f;
-  --hero-ink-2: #1b2e2b;
   --hero-glow: rgba(190, 98, 66, 0.34);
 
   /* --- State on dark grounds ---------------------------------------------

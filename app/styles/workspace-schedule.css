@@ -104,7 +104,7 @@
 }
 .session-card.keynote,
 .schedule-format-key .keynote {
-  --pc-format-rail: var(--violet);
+  --pc-format-rail: var(--format-keynote-accent);
 }
 .session-card.presentation,
 .schedule-format-key .presentation {

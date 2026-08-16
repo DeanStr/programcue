@@ -237,8 +237,8 @@
   line-height: var(--leading-snug);
   text-align: right;
 }
-/* White, not brand: indigo on navy is the one primary in the palette that
-   loses its job as the loudest object on the surface. */
+/* White, not brand: copper on the dark hero competes with its glow instead of
+   reading as the single loudest action on the surface. */
 .pc-eval-hero .btn.pc-eval-cta {
   border-color: transparent;
   background: var(--surface);

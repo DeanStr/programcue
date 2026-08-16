@@ -56,7 +56,7 @@ export const meta: Route.MetaFunction = () => [
     content:
       "Conference programme operations, submissions, reviews, speaker readiness, communications and scheduling.",
   },
-  { name: "theme-color", content: "#0b1428" },
+  { name: "theme-color", content: "#13201f" },
 ];
 
 export async function loader({ request, context }: Route.LoaderArgs) {
