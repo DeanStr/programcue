@@ -164,7 +164,7 @@ test.describe
         .getByRole("button", { name: /^\d+\s+Tracks/ })
         .click();
       const currentTracks = routing.getByRole("group", {
-        name: "Current Event Setup tracks",
+        name: "Current Event settings tracks",
       });
       await expect(
         currentTracks.getByRole("listitem").filter({

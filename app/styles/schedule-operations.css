@@ -563,7 +563,7 @@ body.dark-mode .program-cue-api-reference .scalar-api-reference {
   .download-container.download-both
   .download-button
   > span:not(.extension) {
-  color: #1e293b;
+  color: var(--text-primary);
 }
 .program-cue-api-reference
   .download-container.download-both
@@ -581,7 +581,7 @@ body.dark-mode .program-cue-api-reference .scalar-api-reference {
   border-radius: var(--radius-sm);
   background: rgba(255, 255, 255, 0.96);
   box-shadow: 0 6px 18px rgba(19, 32, 31, 0.09);
-  color: #1e293b;
+  color: var(--text-primary);
   font-size: var(--text-2xs);
   font-weight: var(--weight-bold);
   text-decoration: none;

@@ -135,7 +135,7 @@
   padding-block: var(--space-5);
 }
 .public-site-page-preview > h1 {
-  font-size: clamp(var(--text-2xl), 5vw, var(--text-4xl));
+  font-size: var(--display-2);
 }
 .public-site-copy-row {
   display: flex;

@@ -87,7 +87,9 @@ function fieldsGroupedBySection(fields: FormField[], sectionIds: string[]) {
   if (uniqueSectionIds.size !== sectionIds.length) {
     throw new Error("Form section IDs must be unique.");
   }
-  const groups = new Map(sectionIds.map((sectionId) => [sectionId, []]));
+  const groups = new Map<string, FormField[]>(
+    sectionIds.map((sectionId) => [sectionId, []]),
+  );
   for (const field of fields) {
     const sectionFields = groups.get(field.sectionId);
     if (!sectionFields) {
