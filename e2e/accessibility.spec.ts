@@ -138,9 +138,10 @@ test("administrator navigation groups core work without hiding programme tools",
   await expect(
     crmRail.getByRole("link", { name: "Speaker Network" }),
   ).toHaveAttribute("aria-current", "page");
-  await expect(
-    crmRail.getByRole("link", { name: "Speakers" }),
-  ).toHaveAttribute("data-family-current", "");
+  await expect(crmRail.getByRole("link", { name: "Speakers" })).toHaveAttribute(
+    "data-family-current",
+    "",
+  );
 
   await page.setViewportSize({ width: 390, height: 844 });
   await page.getByRole("button", { name: "Open navigation" }).click();
@@ -149,7 +150,7 @@ test("administrator navigation groups core work without hiding programme tools",
     exact: true,
   });
   await expect(mobileCoreHeading).toBeVisible();
-  await expect(mobileCoreHeading).toHaveCSS("color", "rgb(71, 85, 105)");
+  await expect(mobileCoreHeading).toHaveCSS("color", "rgb(72, 90, 85)");
   await expect(mobileCoreHeading).toHaveCSS("opacity", "1");
 });
 

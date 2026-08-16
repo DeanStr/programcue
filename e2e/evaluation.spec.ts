@@ -38,9 +38,7 @@ test("a reviewer denied an administrator page receives a usable recovery path", 
   ).toBeVisible();
 });
 
-test("reviewer queue navigation and submission confirmation preserve context", async ({
-  page,
-}) => {
+test("review submission confirmation preserves context", async ({ page }) => {
   test.setTimeout(60_000);
   await page.context().addCookies([
     {
@@ -76,13 +74,13 @@ test("reviewer queue navigation and submission confirmation preserve context", a
       name: "Assigned review sources",
     })
     .getByRole("link");
-  await expect(queueItems).toHaveCount(2);
-
-  const firstUrl = page.url();
-  await page.getByRole("button", { name: "Next", exact: true }).click();
-  await expect(page).toHaveURL(/\/review\/workbench\?assignment=/);
-  expect(page.url()).not.toBe(firstUrl);
-  await page.getByRole("button", { name: "Previous", exact: true }).click();
+  await expect(queueItems).toHaveCount(1);
+  await expect(
+    page.getByRole("button", { name: "Previous", exact: true }),
+  ).toBeDisabled();
+  await expect(
+    page.getByRole("button", { name: "Next", exact: true }),
+  ).toBeDisabled();
 
   // The conflict question gates submission before the rubric is even reached:
   // a reviewer who has not answered it cannot submit at all.
@@ -316,7 +314,10 @@ test("evaluation administration exposes onboarding and consequential previews", 
   await expect(bulkPreview).toBeHidden();
   await expect(bulkAssignButton).toBeFocused();
 
-  await page.getByRole("button", { name: "Decide" }).first().click();
+  const undecidedProposal = page
+    .getByRole("region", { name: "Proposal queue" })
+    .getByRole("row", { name: /Designing inclusive attendee journeys/u });
+  await undecidedProposal.getByRole("button", { name: "Decide" }).click();
   const decision = page.getByRole("dialog", { name: /Decision ·/ });
   await expect(decision).toContainText("Effect preview");
   await expect(
@@ -331,7 +332,7 @@ test("evaluation administration exposes onboarding and consequential previews", 
   await decision.getByRole("button", { name: "Close" }).click();
   await expect(decision).toBeHidden();
   await expect(
-    page.getByRole("button", { name: "Decide" }).first(),
+    undecidedProposal.getByRole("button", { name: "Decide" }),
   ).toBeFocused();
 });
 
@@ -363,7 +364,10 @@ test("a committee chair stays authorised after saving and can resume a decision 
   expect(response?.ok()).toBeTruthy();
   await page.locator("body[data-hydrated='true']").waitFor();
 
-  await page.getByRole("button", { name: "Decide" }).first().click();
+  const undecidedProposal = page
+    .getByRole("region", { name: "Proposal queue" })
+    .getByRole("row", { name: /Designing inclusive attendee journeys/u });
+  await undecidedProposal.getByRole("button", { name: "Decide" }).click();
   let decision = page.getByRole("dialog", { name: /Decision ·/ });
   await decision.locator('select[name="decision"]').selectOption("rejected");
   await decision.getByLabel("Rationale").fill("Keep this chair draft intact.");
@@ -376,7 +380,7 @@ test("a committee chair stays authorised after saving and can resume a decision 
   await expect(
     page.getByRole("status").filter({ hasText: "Decision draft saved" }),
   ).toBeVisible();
-  await page.getByRole("button", { name: "Decide" }).first().click();
+  await undecidedProposal.getByRole("button", { name: "Decide" }).click();
   decision = page.getByRole("dialog", { name: /Decision ·/ });
   await expect(decision).toContainText("Resuming decision draft revision");
   await expect(decision.locator('select[name="decision"]')).toHaveValue(

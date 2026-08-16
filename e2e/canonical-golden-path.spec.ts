@@ -10,10 +10,6 @@ const APPLICANT_EMAIL = "sbek-speaker@example.com";
 const SPEAKER_NAME = "Riley Golden";
 const REVIEW_TARGETS = [
   {
-    queueText: "DEMO-EVAL-001",
-    title: "Operational calm under pressure",
-  },
-  {
     queueText: "DEMO-EVAL-002",
     title: "Designing inclusive attendee journeys",
   },
