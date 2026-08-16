@@ -860,6 +860,9 @@ describe("production evaluation guide", () => {
     await expect(readReviewer()).resolves.toMatchObject({
       label: "Reviewer with draft review",
       destination: "/review/workbench",
+      whatToTry: expect.stringContaining(
+        "Generate or inspect AI suggestions",
+      ),
       primaryActionLabel: "Continue Sam's review",
       progress: { clean: false, title: "Review draft in progress" },
     });

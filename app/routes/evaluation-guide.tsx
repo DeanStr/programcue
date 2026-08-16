@@ -253,7 +253,8 @@ function reviewerPresentation(
         label,
         description: `Sam has review work in progress across ${itemCount(state.assignmentCount, "assignment")}.`,
         destination: "/review/workbench",
-        whatToTry: "Continue and submit Sam's saved review.",
+        whatToTry:
+          "Generate or inspect AI suggestions, then complete and submit Sam's saved review.",
         primaryActionLabel: "Continue Sam's review",
         progress: {
           clean: false,
