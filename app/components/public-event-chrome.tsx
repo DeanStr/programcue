@@ -257,7 +257,7 @@ export function PublicEventFooter({
             className="btn small"
             href={`/api/v1/public/events/${encodeURIComponent(event.slug)}/calendar.ics`}
           >
-            Add to calendar (.ics)
+            Add to calendar
           </a>
         ) : null}
         <p className="public-footer-secondary">Powered by Program Cue</p>

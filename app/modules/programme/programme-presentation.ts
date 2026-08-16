@@ -328,6 +328,28 @@ export function formatProgrammeTimeRange(
   return `${start}–${end}`;
 }
 
+/**
+ * A featured session is shown outside the day-grouped list, so nothing above it
+ * supplies the date that `formatProgrammeTimeRange` deliberately leaves out.
+ * This is the one attendee-facing string that states a day and a clock range
+ * together, and it stays short enough to sit on one line of a teaser: the
+ * compact range already appends the end date when a session crosses midnight,
+ * so only the start day is added here.
+ */
+export function formatProgrammeSessionDayTime(
+  startsAt: number,
+  endsAt: number,
+  timezone: string,
+) {
+  const day = new Intl.DateTimeFormat("en", {
+    weekday: "short",
+    month: "short",
+    day: "numeric",
+    timeZone: timezone,
+  }).format(new Date(startsAt * 1_000));
+  return `${day} · ${formatProgrammeTimeRange(startsAt, endsAt, timezone)}`;
+}
+
 export function formatProgrammeDuration(startsAt: number, endsAt: number) {
   const minutes = Math.max(0, Math.round((endsAt - startsAt) / 60));
   if (minutes < 60) return `${minutes} min`;

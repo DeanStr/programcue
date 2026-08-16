@@ -4,6 +4,7 @@ import {
   formatProgrammeDateTime,
   formatProgrammeDateTimeRange,
   formatProgrammeEventDay,
+  formatProgrammeSessionDayTime,
   formatProgrammeTimeRange,
   programmeAccentPalette,
   publicSessionDetailPath,
@@ -110,6 +111,26 @@ describe("programme presentation rules", () => {
         "America/Toronto",
       ),
     ).toBe("11:00 PM–Wed, May 21 · 1:00 AM");
+  });
+
+  it("states the day with the clock range for a featured session", () => {
+    expect(
+      formatProgrammeSessionDayTime(
+        Date.parse("2025-05-20T13:00:00Z") / 1_000,
+        Date.parse("2025-05-20T13:45:00Z") / 1_000,
+        "America/Toronto",
+      ),
+    ).toBe("Tue, May 20 · 9:00–9:45 AM");
+  });
+
+  it("names the start day in the event timezone, not the viewer's", () => {
+    expect(
+      formatProgrammeSessionDayTime(
+        Date.parse("2025-05-21T03:00:00Z") / 1_000,
+        Date.parse("2025-05-21T05:00:00Z") / 1_000,
+        "America/Toronto",
+      ),
+    ).toBe("Tue, May 20 · 11:00 PM–Wed, May 21 · 1:00 AM");
   });
 
   it("includes both offsets when a compact range crosses the repeated hour", () => {

@@ -230,20 +230,43 @@
   font-size: var(--text-lg);
   line-height: var(--leading-relaxed);
 }
+/* One editorial column: every section states its heading on top and the only
+   separator is a hairline. The homepage previously wrapped each section in an
+   identical card, which said the introduction, the statistics and the venue
+   were the same kind of thing.
+
+   The column is an inline-size container because the editor renders this exact
+   markup inside a 390px preview frame in a 1440px viewport. Every gap and
+   column count below answers to this column, never the viewport: viewport
+   units made the preview draw its gaps at 56px where a phone draws 24px, and
+   fit one more statistics column than a phone ever shows. */
 .public-site-home {
   grid-column: 1 / -1;
+  container-type: inline-size;
   display: grid;
-  gap: clamp(var(--space-6), 6vw, var(--space-10));
-  margin-bottom: var(--space-8);
+  margin-bottom: var(--space-4);
+}
+.public-site-home > * {
+  padding-block: clamp(var(--space-6), 5cqw, var(--space-10));
+}
+/* The view switch above the column belongs to the content under it, not to the
+   hero above it. At full section spacing the column opened 60px below the
+   switch and the switch sat 40px under the hero, so it read as the masthead's
+   tail rather than the page's control. */
+.public-site-home > :first-child {
+  padding-block-start: var(--space-5);
+}
+.public-site-home > * + * {
+  border-top: 1px solid var(--border-editorial);
+}
+/* The frame stands in for the viewport, so the published page's gutter belongs
+   inside it. Without it the preview ran content to the frame edge and measured
+   its sections against a column 38px wider than the same phone renders. */
+.public-site-preview-frame > .public-site-home {
+  padding-inline: var(--space-5);
 }
 .public-site-section {
   min-width: 0;
-}
-.public-site-preview-frame
-  .public-site-section:not(.public-site-introduction):not(
-    .public-site-statistics-section
-  ):not(.public-site-venue-section) {
-  padding: var(--space-5);
 }
 .public-site-section-heading {
   display: flex;
@@ -255,47 +278,20 @@
 .public-site-section-heading h2 {
   margin: 0;
   font-size: var(--text-2xl);
+  font-weight: var(--weight-semibold);
   letter-spacing: var(--tracking-tight);
 }
+/* The opening statement carries the introduction, so it is set a step above
+   body copy rather than a heading being set a step above its peers. Every
+   section heading stays the same size, because they are an index of the page
+   and reading one as more important than the others is not true. */
 .public-site-lede {
-  max-width: 70ch;
+  max-width: 38ch;
   margin: 0;
-  font-size: var(--text-lg);
-  line-height: var(--leading-relaxed);
-}
-.public-site-introduction {
-  padding: clamp(var(--space-5), 5vw, var(--space-9));
-  border: 1px solid var(--accent-line);
-  border-radius: var(--radius-lg);
-  background: color-mix(in srgb, var(--event-accent) 6%, var(--surface));
-}
-.public-site-speakers,
-.public-site-sessions {
-  padding-top: var(--space-2);
-}
-.public-site-statistics-section {
-  display: grid;
-  grid-template-columns: minmax(0, 0.7fr) minmax(0, 1.3fr);
-  align-items: end;
-  gap: clamp(var(--space-5), 6vw, var(--space-10));
-  padding: clamp(var(--space-5), 4vw, var(--space-8)) 0;
-  border-block: 1px solid var(--border-editorial);
-}
-.public-site-statistics-section .public-site-section-heading {
-  margin: 0;
-}
-.public-site-venue-section {
-  display: grid;
-  grid-template-columns: minmax(0, 0.7fr) minmax(0, 1.3fr);
-  gap: clamp(var(--space-5), 6vw, var(--space-10));
-  padding-block: clamp(var(--space-5), 4vw, var(--space-8));
-}
-.public-site-venue-section .public-site-section-heading {
-  margin: 0;
-}
-.public-site-faq-section {
-  width: min(100%, 840px);
-  margin-inline: 0 auto;
+  font-size: clamp(var(--text-xl), 3.1cqw, var(--text-2xl));
+  line-height: var(--leading-snug);
+  letter-spacing: var(--tracking-snug);
+  text-wrap: balance;
 }
 .public-site-actions {
   display: flex;
@@ -303,13 +299,51 @@
   gap: var(--space-2);
   margin-top: var(--space-5);
 }
-.public-site-introduction .public-site-actions {
-  margin-top: var(--space-6);
-}
+/* Three columns is a ceiling, not a hint, using the same track floor as the
+   application `.grid-N` primitive: whichever is larger of the minimum card and
+   an exact third of the row. Organisers choose up to twelve featured records,
+   so an uncapped `auto-fit` fitted four 210px columns at desktop width and left
+   five sessions reading as four cards and an orphan. */
 .public-site-feature-grid {
+  --feature-gap: var(--space-3);
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
-  gap: var(--space-3);
+  grid-template-columns: repeat(
+      auto-fit,
+      minmax(
+        max(
+          min(210px, 100%),
+          calc((100% - 2 * var(--feature-gap)) / 3 - 0.02px)
+        ),
+        1fr
+      )
+    );
+  gap: var(--feature-gap);
+}
+/* An index, not a wall of cards. These were tinted, bordered, rounded boxes —
+   the last decorated surface in a column that separates everything else by
+   rule, and a shape that claims each record is a destination in its own right.
+   A hairline above each entry does the same work without the weight, and reads
+   the same whether the organiser features one record or twelve.
+
+   Entry rules are lighter than the rules between sections. Both were drawn at
+   full strength from tokens that resolve to the same value in the dark theme,
+   so the page stated its structure and its contents in one voice. */
+.public-site-feature-grid,
+.public-site-faq {
+  --entry-rule: color-mix(in srgb, var(--line) 55%, transparent);
+}
+.public-site-feature-grid > * {
+  border-top: 1px solid var(--entry-rule);
+  transition: border-color var(--dur-base) var(--ease-out);
+}
+/* The rule above an entry is what says where the entry starts, so it is also
+   what answers when the pointer arrives. Nothing moves: a list of twelve
+   records that shifts under the cursor is a list you cannot read down. */
+.public-site-feature-grid > *:has(> a:hover),
+.public-site-feature-grid > *:has(> a:focus-visible),
+.public-site-feature-grid > a:hover,
+.public-site-feature-grid > a:focus-visible {
+  border-top-color: var(--event-accent);
 }
 .public-site-feature-card,
 .public-site-recording-card > a {
@@ -317,39 +351,64 @@
   align-items: center;
   gap: var(--space-3);
   min-width: 0;
-  padding: var(--space-3);
-  border: 1px solid var(--accent-line);
-  border-radius: var(--radius);
-  background: var(--accent-soft);
+  padding: var(--space-4) 0;
   color: var(--ink);
   text-decoration: none;
+  transition: color var(--dur-fast) var(--ease-out);
 }
 .public-site-recording-card {
   display: grid;
-  border: 1px solid var(--accent-line);
-  border-radius: var(--radius);
-  background: var(--accent-soft);
 }
 .public-site-recording-card > a {
-  border: 0;
-  background: transparent;
+  padding-bottom: var(--space-2);
+}
+a.public-site-feature-card:hover strong,
+a.public-site-feature-card:focus-visible strong,
+.public-site-recording-card > a:hover strong {
+  color: var(--accent-ink);
+  transition: color var(--dur-fast) var(--ease-out);
 }
 .public-site-recording-resources {
   display: flex;
   flex-wrap: wrap;
   gap: var(--space-3);
-  padding: 0 var(--space-3) var(--space-3);
+  padding-bottom: var(--space-4);
   font-size: var(--text-sm);
 }
+/* Faces are the most interesting thing an event has, and this page had been
+   printing them at 54px next to their own names. The portrait sizes with the
+   column so it stays a portrait on a phone and reads as one on a desktop. */
 .public-site-feature-card img {
-  width: 54px;
-  height: 54px;
+  width: var(--portrait);
+  height: var(--portrait);
   border-radius: 50%;
   object-fit: cover;
+  box-shadow: 0 0 0 1px var(--entry-rule);
+  transition: box-shadow var(--dur-base) var(--ease-out);
+}
+.public-site-feature-grid {
+  --portrait: 54px;
+}
+.public-site-feature-grid:not(.sessions) {
+  --portrait: clamp(56px, 7.6cqw, 76px);
 }
 .public-site-feature-card > svg {
   flex: none;
   color: var(--accent-ink);
+}
+/* A speaker without a photograph still holds the portrait's place, so a mixed
+   list keeps one left edge instead of stepping in and out of it. */
+.public-site-feature-grid:not(.sessions) .public-site-feature-card > svg {
+  width: var(--portrait);
+  height: var(--portrait);
+  padding: calc(var(--portrait) / 3.6);
+  border: 1px solid var(--line);
+  border-radius: 50%;
+  color: var(--muted-on-surface);
+}
+a.public-site-feature-card:hover img,
+a.public-site-feature-card:focus-visible img {
+  box-shadow: 0 0 0 2px var(--event-accent);
 }
 .public-site-feature-card span {
   display: grid;
@@ -362,29 +421,49 @@
 .public-site-feature-card small {
   color: var(--muted-on-surface);
 }
+/* A dateline. The featured sessions were the flattest entries on the page —
+   a title and a run of labels — and the one fact an attendee needs from a
+   session they are being offered was the fact the entry did not carry. */
+.public-site-feature-when {
+  font-size: var(--text-xs);
+  font-weight: var(--weight-semibold);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: var(--tracking-normal);
+  color: var(--accent-ink);
+}
+/* Four counts at most, set on the page rather than in tinted tiles: the tiles
+   were the only decorated surface in this column, and a tile grid turned a
+   narrow column into three boxes and an orphan. One row of equal columns
+   spreads the figures across the measure and never wraps. */
 .public-site-statistics {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
-  gap: var(--space-3);
+  grid-auto-flow: column;
+  grid-auto-columns: minmax(0, 1fr);
+  gap: var(--space-4);
   margin: 0;
 }
 .public-site-statistics div {
   display: grid;
   gap: var(--space-1);
-  padding: var(--space-4);
-  border-radius: var(--radius);
-  background: var(--accent-soft);
 }
 .public-site-statistics dt {
   color: var(--muted-on-surface);
   font-size: var(--text-sm);
   text-transform: capitalize;
 }
+/* The column's one moment of scale, and it is spent on the only content here
+   that is a number. Four counts set at reading size read as a sentence broken
+   into four; set at display size they read as the measure of the event, which
+   is what "at a glance" is asking them to be. The size answers to the column,
+   so the editor preview and a phone get the same relationship. */
 .public-site-statistics dd {
   grid-row: 1;
   margin: 0;
-  font-size: var(--text-3xl);
+  font-size: clamp(var(--text-3xl), 6.4cqw, 64px);
   font-weight: var(--weight-bold);
+  line-height: var(--leading-tight);
+  letter-spacing: var(--tracking-tight);
+  font-variant-numeric: tabular-nums;
   color: var(--accent-ink);
 }
 .public-site-venue {
@@ -403,23 +482,97 @@
   color: var(--muted-on-surface);
   font-style: normal;
 }
-.public-site-venue-section > .public-site-venue {
-  padding: var(--space-5);
-  border-radius: var(--radius-lg);
-  background: var(--surface-sunken);
+.public-site-venue .public-site-map-link {
+  display: inline-flex;
+  width: fit-content;
+  align-items: center;
+  gap: var(--space-1);
 }
+/* A disclosure list ruled like the rest of the column, rather than a stack of
+   rounded boxes. The browser's default triangle was the one piece of unstyled
+   chrome left on the page; the plus is drawn from two hairlines instead of
+   typeset, so it stays crisp at any size and takes the row's colour. */
 .public-site-faq {
   display: grid;
-  gap: var(--space-2);
 }
 .public-site-faq details {
-  padding: var(--space-3) var(--space-4);
-  border: 1px solid var(--border-editorial);
-  border-radius: var(--radius);
+  border-top: 1px solid var(--entry-rule);
+}
+.public-site-faq details:last-child {
+  border-bottom: 1px solid var(--entry-rule);
+}
+.public-site-faq details[open] {
+  padding-bottom: var(--space-3);
 }
 .public-site-faq summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-4);
+  padding: var(--space-4) 0;
   cursor: pointer;
+  list-style: none;
   font-weight: var(--weight-semibold);
+}
+.public-site-faq summary::-webkit-details-marker {
+  display: none;
+}
+/* The vertical stroke retracts into the horizontal one rather than being
+   swapped for it, so the mark reads as the row opening rather than as a
+   different mark appearing. Both strokes are background layers of one box, so
+   the whole gesture is an interpolation of `background-size`. */
+.public-site-faq summary::after {
+  content: "";
+  flex: none;
+  width: 12px;
+  height: 12px;
+  color: var(--muted-on-surface);
+  background-image:
+    linear-gradient(currentcolor, currentcolor),
+    linear-gradient(currentcolor, currentcolor);
+  background-position: center;
+  background-repeat: no-repeat;
+  background-size:
+    100% 1px,
+    1px 100%;
+  transition:
+    background-size var(--dur-base) var(--ease-out),
+    color var(--dur-fast) var(--ease-out);
+}
+.public-site-faq details[open] > summary::after {
+  background-size:
+    100% 1px,
+    1px 0%;
+}
+.public-site-faq summary {
+  transition: color var(--dur-fast) var(--ease-out);
+}
+.public-site-faq summary:hover,
+.public-site-faq summary:hover::after {
+  color: var(--accent-ink);
+}
+/* Where the browser can interpolate to an intrinsic size, the answer opens
+   instead of appearing. Everywhere else the row still just opens, which is the
+   behaviour `details` has always had. */
+@supports (interpolate-size: allow-keywords) {
+  .public-site-faq {
+    interpolate-size: allow-keywords;
+  }
+  .public-site-faq details::details-content {
+    block-size: 0;
+    overflow: clip;
+    transition:
+      block-size var(--dur-base) var(--ease-out),
+      content-visibility var(--dur-base) allow-discrete;
+  }
+  .public-site-faq details[open]::details-content {
+    block-size: auto;
+  }
+}
+.public-site-faq details > :not(summary) {
+  max-width: 70ch;
+  margin-block: 0 var(--space-3);
+  color: var(--text-secondary);
 }
 .public-site-markdown {
   max-width: 76ch;
@@ -431,23 +584,42 @@
 .public-site-markdown > :last-child {
   margin-bottom: 0;
 }
+/* Sponsors keep a tile, because a logo needs a frame to sit in and they are
+   supplied at every shape. Four columns is the ceiling, and the tracks are
+   filled rather than fitted, so one supporter is a supporter's tile rather
+   than a banner stretched across the page. */
 .public-site-sponsor-grid {
+  --sponsor-gap: var(--space-3);
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
-  gap: var(--space-3);
+  grid-template-columns: repeat(
+      auto-fill,
+      minmax(
+        max(
+          min(150px, 100%),
+          calc((100% - 3 * var(--sponsor-gap)) / 4 - 0.02px)
+        ),
+        1fr
+      )
+    );
+  gap: var(--sponsor-gap);
 }
 .public-site-sponsor-grid > a,
 .public-site-sponsor-grid > div {
   display: grid;
   place-items: center;
   gap: var(--space-2);
-  min-height: 130px;
+  min-height: 104px;
   padding: var(--space-4);
-  border: 1px solid var(--border-editorial);
+  border: 1px solid var(--line);
   border-radius: var(--radius);
   color: var(--ink);
   text-align: center;
   text-decoration: none;
+  transition: border-color var(--dur-base) var(--ease-out);
+}
+.public-site-sponsor-grid > a:hover,
+.public-site-sponsor-grid > a:focus-visible {
+  border-color: var(--event-accent);
 }
 .public-site-sponsor-card > a,
 .public-site-sponsor-link {
@@ -545,13 +717,6 @@
   }
 }
 @media (max-width: 680px) {
-  .public-site-feature-grid {
-    grid-template-columns: 1fr;
-  }
-  .public-site-statistics-section,
-  .public-site-venue-section {
-    grid-template-columns: minmax(0, 1fr);
-  }
   .public-site-publication-grid {
     grid-template-columns: 1fr;
   }
@@ -579,25 +744,4 @@
     flex: 1;
     min-width: 0;
   }
-}
-
-/* Preview remains a real rendering of the same page at a constrained width.
-   These compact paddings preserve the distinct layouts instead of restoring a
-   generic card treatment inside the editor frame. */
-.public-site-preview-frame .public-site-introduction {
-  padding: var(--space-5);
-}
-.public-site-preview-frame .public-site-venue-section {
-  padding-block: var(--space-5);
-}
-.public-site-preview-frame .public-site-statistics-section {
-  padding: var(--space-5) 0;
-}
-
-/* The editor renders a narrow frame inside a desktop viewport. Mirror the
-   public mobile breakpoint explicitly so its preview remains faithful. */
-.public-site-preview-frame.is-mobile .public-site-feature-grid,
-.public-site-preview-frame.is-mobile .public-site-statistics-section,
-.public-site-preview-frame.is-mobile .public-site-venue-section {
-  grid-template-columns: minmax(0, 1fr);
 }

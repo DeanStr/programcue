@@ -53,6 +53,8 @@ function PublicProgrammeViewNavigation({
 }) {
   const { surface, programme } = model;
   const speakerViews = ["speakers", "gallery"].includes(surface);
+  // The same condition the page uses to pick its main width.
+  const wideSurface = surface === "overview" || surface === "sessions";
   const views = speakerViews
     ? [
         {
@@ -85,7 +87,7 @@ function PublicProgrammeViewNavigation({
       ];
   return (
     <nav
-      className="public-view-navigation"
+      className={`public-view-navigation${wideSurface ? " is-wide" : ""}`}
       aria-label={speakerViews ? "Speaker views" : "Programme views"}
     >
       <span>{speakerViews ? "Speakers" : "Programme"}</span>
@@ -169,7 +171,7 @@ function PublicProgrammeHero({ model }: { model: PublicProgrammeModel }) {
               href={`/api/v1/public/events/${encodeURIComponent(programme.event.slug)}/calendar.ics`}
             >
               <CalendarDays aria-hidden="true" size={15} />
-              Add to calendar (.ics)
+              Add to calendar
             </a>
           </div>
         )}

@@ -67,7 +67,7 @@ export default function Home({ loaderData }: Route.ComponentProps) {
           <BrandMark />
           <span>Program Cue</span>
         </div>
-        <span className="tiny subtle">Account ready</span>
+        <span className="pc-page-eyebrow">Account ready</span>
         <h1>No workspace access yet</h1>
         <p>
           Your account is signed in, but it has not been granted access to an

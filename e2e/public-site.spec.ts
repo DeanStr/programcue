@@ -1,6 +1,27 @@
-import { expect, test } from "@playwright/test";
+import { expect, type Locator, test } from "@playwright/test";
 
 import { resetDemoEvent } from "./support/reset-demo-event";
+
+/* The editor renders the published homepage markup inside a 390px frame in a
+   desktop viewport, so the only way to say the frame behaves as a phone is to
+   compare what the two actually lay out. Column counts are the observable
+   difference: viewport-relative spacing fitted one more statistics column in
+   the preview than any phone shows. */
+async function homeColumnCounts(home: Locator) {
+  return home.evaluate((element) => {
+    const columns = (selector: string) => {
+      const parent = element.querySelector(selector);
+      if (!parent) return 0;
+      return new Set(
+        [...parent.children].map((child) => (child as HTMLElement).offsetLeft),
+      ).size;
+    };
+    return {
+      features: columns(".public-site-feature-grid"),
+      statistics: columns(".public-site-statistics"),
+    };
+  });
+}
 
 test.beforeEach(async ({ context, request }) => {
   await resetDemoEvent(request);
@@ -38,9 +59,23 @@ test("organisers compose, preview and publish the bounded public event site", as
   const firstSection = page.locator(".public-site-section-order > li").first();
   await firstSection.getByRole("button", { name: "Move down" }).focus();
   await page.keyboard.press("Enter");
-  await expect(
-    page.locator(".public-site-section-order > li").first(),
-  ).toContainText("Featured speakers");
+  const featuredSpeakerSection = page
+    .locator(".public-site-section-order > li")
+    .first();
+  await expect(featuredSpeakerSection).toContainText("Featured speakers");
+  await featuredSpeakerSection.getByRole("checkbox").check();
+  const featuredSessionSection = page
+    .locator(".public-site-section-order > li")
+    .filter({ hasText: "Featured sessions" });
+  await featuredSessionSection.getByRole("checkbox").check();
+  for (const legend of ["Featured speakers", "Featured sessions"]) {
+    const choices = page
+      .locator("fieldset.public-site-selection")
+      .filter({ has: page.locator("legend", { hasText: legend }) });
+    for (const choice of await choices.getByRole("checkbox").all()) {
+      await choice.check();
+    }
+  }
 
   for (const section of [
     "Featured speakers",
@@ -172,20 +207,27 @@ test("organisers compose, preview and publish the bounded public event site", as
   await expect(
     previewFrame.getByRole("link", { name: "Explore the programme" }),
   ).toHaveCount(0);
-  for (const section of [
-    ".public-site-statistics-section",
-    ".public-site-venue-section",
-  ]) {
-    await expect(
-      previewFrame
-        .locator(section)
-        .evaluate(
-          (element) =>
-            getComputedStyle(element).gridTemplateColumns.split(" ").length,
-        ),
-    ).resolves.toBe(1);
-  }
+  const previewColumnCounts = await homeColumnCounts(
+    previewFrame.locator(".public-site-home"),
+  );
+  expect(previewColumnCounts).toEqual({ features: 1, statistics: 4 });
   await expect(previewFrame).toHaveScreenshot("public-site-preview-mobile.png");
+  await page.getByLabel("Theme").selectOption("light");
+  await expect(previewFrame).toHaveAttribute("data-public-theme", "light");
+  const previewFaq = previewFrame
+    .locator(".public-site-faq details")
+    .filter({ hasText: "Priority question" });
+  await previewFaq.locator("summary").click();
+  await expect(previewFaq).toHaveAttribute("open", "");
+  await previewFaq.scrollIntoViewIfNeeded();
+  await expect(previewFrame).toHaveScreenshot(
+    "public-site-preview-mobile-light-faq-open.png",
+  );
+  await page.getByLabel("Theme").selectOption("dark");
+  await expect(previewFrame).toHaveAttribute("data-public-theme", "dark");
+  await previewFrame.evaluate((element) => {
+    element.scrollTop = 0;
+  });
   const previewAccent = await previewFrame.evaluate((element) =>
     getComputedStyle(element).getPropertyValue("--event-accent").trim(),
   );
@@ -361,13 +403,37 @@ test("organisers compose, preview and publish the bounded public event site", as
       .locator(".public-top")
       .evaluate((element) => element.scrollWidth <= element.clientWidth),
   ).toBe(true);
+  const publishedFaq = page
+    .locator(".public-site-faq details")
+    .filter({ hasText: "Priority question" });
+  await publishedFaq.locator("summary").click();
+  await expect(publishedFaq).toHaveAttribute("open", "");
+  await page.evaluate(() => window.scrollTo(0, 0));
   await expect(page.locator(".public-shell")).toHaveScreenshot(
     "published-public-site-desktop.png",
   );
+  const publishedHome = page.locator(".public-site-home");
+  /* The event header is sticky, so scrolling the homepage into view for an
+     element screenshot paints the header over its first section. The header is
+     covered by the public-programme baselines in visual.spec.ts. */
+  const hiddenHeader = await page.addStyleTag({
+    content: ".public-top { visibility: hidden !important; }",
+  });
+  await expect(publishedHome).toHaveScreenshot("public-site-home-desktop.png");
 
   await page.setViewportSize({ width: 390, height: 844 });
+  await hiddenHeader.evaluate((style) => style.parentNode?.removeChild(style));
+  await page.evaluate(() => window.scrollTo(0, 0));
   await expect(page.locator(".public-shell")).toHaveScreenshot(
     "published-public-site-mobile.png",
+  );
+  const mobileHiddenHeader = await page.addStyleTag({
+    content: ".public-top { visibility: hidden !important; }",
+  });
+  await expect(publishedHome).toHaveScreenshot("public-site-home-mobile.png");
+  expect(await homeColumnCounts(publishedHome)).toEqual(previewColumnCounts);
+  await mobileHiddenHeader.evaluate((style) =>
+    style.parentNode?.removeChild(style),
   );
   await page.setViewportSize({ width: 1440, height: 1000 });
 
@@ -426,7 +492,7 @@ test("organisers compose, preview and publish the bounded public event site", as
   ).toHaveAttribute("aria-current", "page");
   const heroActionContrast = await page
     .locator(".hero")
-    .getByRole("link", { name: "Add to calendar (.ics)" })
+    .getByRole("link", { name: "Add to calendar" })
     .evaluate((element) => {
       const rgb = (value: string) =>
         value

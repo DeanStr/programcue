@@ -1141,27 +1141,6 @@ rewritten.
 
 ## Cross-surface visual language decision
 
-### Taste-led surface refinement
-
-Program Cue remains an operations product. Application surfaces therefore
-prioritise compact information density, restrained visual variation and motion
-only when it communicates state or spatial change. Dense review, scheduling
-and administration workflows stay calm and scannable instead of adopting
-landing-page composition or decorative animation. The existing self-hosted
-Inter face, semantic tokens and accessible component primitives remain the one
-application design system; no second UI library is introduced.
-
-The anonymous event site has a lower density and may use the event's supplied
-hero image and accent. Its bounded homepage distinguishes its content jobs:
-an introduction panel, restrained featured-record grids, plain statistics, a
-venue panel and a narrow FAQ. Featured speaker and session selections are
-user-controlled and may contain up to twelve records, so their grid remains
-content-driven rather than relying on a fixed bento arrangement. This avoids a
-repeated row of generic cards while retaining the published content model and
-organiser-controlled section order. Public light, dark and system themes remain
-event-site choices; a global application theme remains deferred for the reason
-documented below.
-
 The public site and every application shell use the same restrained
 ink-and-copper product palette: warm canvas and paper surfaces, tinted
 elevation, and copper for product emphasis. Event-branded public programme and
@@ -1185,3 +1164,91 @@ and name submissions, reviews, speakers, communications, scheduling and
 publication, but its headline and supporting copy may evolve. Google OAuth
 review requires an accurate public product description; it does not make one
 internally approved sentence an external invariant.
+
+### Taste-led surface refinement
+
+Program Cue remains an operations product. Application surfaces therefore
+prioritise compact information density, restrained visual variation and motion
+only when it communicates state or spatial change. Dense review, scheduling
+and administration workflows stay calm and scannable instead of adopting
+landing-page composition or decorative animation. The existing self-hosted
+Inter face, semantic tokens and accessible component primitives remain the one
+application design system; no second UI library is introduced.
+
+The anonymous event site has a lower density and may use the event's supplied
+hero image and accent. Its bounded homepage is one editorial column: every
+section states its heading on top and a single hairline separates them. The
+homepage previously wrapped each section in an identical card, which said the
+introduction, the statistics and the venue were the same kind of thing; a
+sidenote-heading band for only some of them said the opposite twice on one
+page. Statistics are set on the page as one row of equal columns rather than in
+tinted tiles, since the tiles were the sole decorated surface in the column and
+a tile grid left an orphan box at most widths. Featured speaker and session
+selections are organiser-controlled and may hold up to twelve records, so their
+grid stays content-driven, capped at three columns by the same track floor as
+the application `.grid-N` primitive rather than by a fixed bento arrangement.
+The hero remains the one accent surface above the programme. Public light, dark
+and system themes remain event-site choices; a global application theme remains
+deferred for the reason documented above.
+
+Within that column the rule is the only structural device, and it carries two
+weights: full strength between sections, and a lighter mix between the entries
+inside one. Featured speakers, featured sessions and the FAQ were tinted,
+bordered, rounded boxes, which is the shape a page uses when it has nothing
+else to separate things with; a page that already rules its sections does not
+need it twice. The FAQ replaces the browser's default disclosure triangle with
+a plus drawn from two hairlines, so the one piece of unstyled chrome on a
+public page is gone. Repeated decorative marks are removed where the heading
+already says what the list holds — every entry under "Featured sessions" is a
+session, so a calendar icon on each one is noise — and kept where they carry
+information, such as a recording's play mark or a speaker's portrait.
+
+Restraint is not the same as having nothing to look at, so the column spends
+its scale in one place and spends it on content rather than ornament. The
+statistics are the only numbers on the page and they carry the display size;
+speaker portraits are sized to the column rather than printed at a thumbnail
+next to their own names; and the introduction's opening statement is set a step
+above body copy. All three answer to container units, so the editor preview and
+a phone get the same relationships rather than the same pixels. Nothing else in
+the column competes: no second accent surface, no ornament, no scale contrast
+that is not carrying information.
+
+A featured session states when it happens. It is the only place a session
+appears outside the day-grouped list, so nothing above it supplies the date
+that the compact time range deliberately omits, and the entries carried a title
+and a run of labels without the one fact an attendee needs from a session they
+are being offered. The day and clock range are resolved in the presentation
+module against the event timezone rather than rebuilt in a component from an
+epoch it cannot place, and they lead the entry as a dateline.
+
+Attendee-facing controls are named in an attendee's words. The calendar action
+read "Add to calendar (.ics)" on the event masthead and in the footer, which
+states a file extension to someone who wants a date in their diary. The label
+is the action; the file format is the browser's business.
+
+Motion is confined to state feedback and is expressed through the shared
+duration tokens, so `prefers-reduced-motion` already governs it. Hovering a
+featured record answers on the rule that marks where the record starts, on its
+title and on the portrait's ring — nothing moves, because a list of twelve
+records that shifts under the pointer is a list that cannot be read down. The
+FAQ marker retracts its vertical stroke into the horizontal one rather than
+being swapped for a different mark, and where the browser can interpolate to an
+intrinsic size the answer opens rather than appears.
+
+The hero is lit from one source. It previously layered a corner glow, a second
+glow from the opposite corner and a diagonal wash over both, so no part of the
+panel was ever the base colour and the result read as a stock gradient however
+carefully the stops were chosen. One light, falling to the base, leaves the
+masthead's own corner dark, gives the fine grid something to catch, and lets
+the panel state its own edge with an inset hairline rather than depending on a
+wash to separate it from the dark public canvas.
+
+The homepage column is an inline-size container, and its spacing and column
+counts are expressed in container units rather than viewport units. The editor
+renders that same markup inside a 390px preview frame in a desktop viewport,
+so viewport-relative rules made the preview draw gaps at more than twice the
+size a phone renders and fit one more statistics column than a phone shows.
+The frame also carries the published page's gutter, so the column the preview
+measures against is the column a phone measures against. A preview that is
+faithful by construction is worth more than mirrored breakpoints that have to
+be kept in step by hand.

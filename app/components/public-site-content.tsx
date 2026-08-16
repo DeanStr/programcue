@@ -145,10 +145,7 @@ export function PublicSiteHome({
     React.ReactNode
   > = {
     introduction: (
-      <HomeSection
-        title={configuration.introductionHeading}
-        className="public-site-introduction"
-      >
+      <HomeSection title={configuration.introductionHeading}>
         <p className="public-site-lede">{event.description}</p>
         <div className="public-site-actions">
           {event.application ? (
@@ -184,7 +181,7 @@ export function PublicSiteHome({
       </HomeSection>
     ),
     featured_speakers: (
-      <HomeSection title="Featured speakers" className="public-site-speakers">
+      <HomeSection title="Featured speakers">
         <div className="public-site-feature-grid">
           {featuredSpeakers.map((speaker) => (
             <PreviewSafeLink
@@ -212,7 +209,7 @@ export function PublicSiteHome({
       </HomeSection>
     ),
     featured_sessions: (
-      <HomeSection title="Featured sessions" className="public-site-sessions">
+      <HomeSection title="Featured sessions">
         <div className="public-site-feature-grid sessions">
           {featuredSessions.map((session) => (
             <PreviewSafeLink
@@ -221,8 +218,14 @@ export function PublicSiteHome({
               key={session.id}
               preview={preview}
             >
-              <CalendarDays aria-hidden />
+              {/* No leading icon: every entry in this list is a session, so a
+                  calendar mark on each one repeats what the heading said. The
+                  time leads instead, because it is the first thing an attendee
+                  needs from a session they are being offered. */}
               <span>
+                <small className="public-site-feature-when">
+                  {session.when}
+                </small>
                 <strong>{session.title}</strong>
                 <small>
                   {[session.track, session.format, session.room]
@@ -236,10 +239,7 @@ export function PublicSiteHome({
       </HomeSection>
     ),
     statistics: (
-      <HomeSection
-        title="At a glance"
-        className="public-site-statistics-section"
-      >
+      <HomeSection title="At a glance">
         <dl className="public-site-statistics">
           {statistics.map((statistic) => (
             <div key={statistic.label}>
@@ -251,7 +251,7 @@ export function PublicSiteHome({
       </HomeSection>
     ),
     venue: (
-      <HomeSection title="Venue" className="public-site-venue-section">
+      <HomeSection title="Venue">
         <div className="public-site-venue">
           <MapPin aria-hidden />
           <div>
@@ -262,7 +262,11 @@ export function PublicSiteHome({
               <address>{event.venueAddress}</address>
             ) : null}
             {event.venueMapUrl ? (
-              <PreviewSafeLink href={event.venueMapUrl} preview={preview}>
+              <PreviewSafeLink
+                className="public-site-map-link"
+                href={event.venueMapUrl}
+                preview={preview}
+              >
                 Open map <ExternalLink aria-hidden size={13} />
               </PreviewSafeLink>
             ) : null}
@@ -271,10 +275,7 @@ export function PublicSiteHome({
       </HomeSection>
     ),
     faq: (
-      <HomeSection
-        title="Frequently asked questions"
-        className="public-site-faq-section"
-      >
+      <HomeSection title="Frequently asked questions">
         <div className="public-site-faq">
           {configuration.faqItems.map((item) => (
             <details key={item.id}>
@@ -409,7 +410,11 @@ export function PublicSitePageContent({
               <address>{event.venueAddress}</address>
             ) : null}
             {event.venueMapUrl ? (
-              <PreviewSafeLink href={event.venueMapUrl} preview={preview}>
+              <PreviewSafeLink
+                className="public-site-map-link"
+                href={event.venueMapUrl}
+                preview={preview}
+              >
                 Open map <ExternalLink aria-hidden size={13} />
               </PreviewSafeLink>
             ) : null}

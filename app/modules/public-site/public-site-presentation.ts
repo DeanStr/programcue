@@ -1,3 +1,4 @@
+import { formatProgrammeSessionDayTime } from "~/modules/programme/programme-presentation";
 import type { PublishedProgramme } from "~/modules/programme/public-programme-types";
 import type { PublicSiteDraft } from "./public-site";
 import { PublishedPublicSiteInvariantError } from "./public-site-errors";
@@ -149,6 +150,9 @@ export function resolvePublicSitePresentation(
         return speaker;
       })
     : [];
+  /* The featured grid is the one place a session appears without a day heading
+     above it, so its time is resolved here against the event timezone rather
+     than left for a component to reconstruct from an epoch it cannot place. */
   const featuredSessions = configuration.sectionVisibility.featured_sessions
     ? configuration.featuredSessionIds.map((id) => {
         const session = sessionById.get(id);
@@ -156,7 +160,14 @@ export function resolvePublicSitePresentation(
           throw new PublishedPublicSiteInvariantError(
             `Featured session ${id} is not part of the current published programme.`,
           );
-        return session;
+        return {
+          ...session,
+          when: formatProgrammeSessionDayTime(
+            session.startsAt,
+            session.endsAt,
+            programme.event.timezone,
+          ),
+        };
       })
     : [];
 

@@ -258,6 +258,12 @@
   align-items: center;
   gap: var(--space-2);
 }
+/* The switch labels the page under it, so it holds that page's measure. The
+   overview and list surfaces are the wide ones, and the switch used to sit
+   70px inside their left edge on every one of them. */
+.public-view-navigation.is-wide {
+  width: min(1320px, calc(100% - 40px));
+}
 .public-view-navigation > span {
   margin-right: var(--space-2);
   color: var(--text-secondary);
@@ -271,6 +277,9 @@
   color: var(--text-secondary);
   font-size: var(--text-sm);
   font-weight: var(--weight-semibold);
+  transition:
+    border-color var(--dur-fast) var(--ease-out),
+    color var(--dur-fast) var(--ease-out);
 }
 .public-view-navigation a:hover {
   border-color: var(--accent-line);
@@ -333,27 +342,35 @@
   margin: var(--space-5) auto var(--space-8);
   width: min(1320px, calc(100% - 40px));
   border-radius: var(--radius-lg);
+  /* The panel names its own edge. Its base sits a shade above the dark public
+     canvas, so without a rule the masthead's unlit corner dissolved into the
+     page and only the accent corner said a panel was there. Drawn inset rather
+     than as a border: a border area is painted from a repeat of the background
+     image, which tiled the bright accent corner down the dark left edge. */
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.09);
   color: white;
   padding: var(--space-9) var(--space-8);
   position: relative;
   overflow: hidden;
   isolation: isolate;
   background-color: var(--surface-inverse);
+  /* One light source, from the top right, falling to the base colour. Three
+     overlapping accent washes used to cover the whole panel — a corner glow, a
+     second glow from the opposite corner and a diagonal over both — so no part
+     of it was ever clean and the result read as a stock gradient. A single
+     source leaves the masthead's own corner dark and gives the texture below
+     something to catch. */
   background-image:
     radial-gradient(
-      120% 130% at 88% 8%,
-      color-mix(in srgb, var(--event-accent) 92%, white) 0%,
-      transparent 58%
-    ),
-    radial-gradient(
-      90% 120% at 8% 100%,
-      color-mix(in srgb, var(--event-accent) 42%, var(--surface-inverse)) 0%,
-      transparent 62%
+      68% 116% at 97% -4%,
+      color-mix(in srgb, var(--event-accent) 88%, white) 0%,
+      color-mix(in srgb, var(--event-accent) 58%, var(--surface-inverse)) 34%,
+      transparent 70%
     ),
     linear-gradient(
-      135deg,
-      var(--surface-inverse) 0%,
-      color-mix(in srgb, var(--event-accent) 34%, var(--surface-inverse)) 100%
+      to top,
+      color-mix(in srgb, var(--surface-inverse) 65%, transparent) 0%,
+      transparent 52%
     );
 }
 /* The scrim is opaque where the type sits and clears to the photograph on the
@@ -371,27 +388,32 @@
   background-position: center;
   background-size: cover;
 }
-/* A fine grid, at the threshold of visibility. It gives the panel a surface
-   instead of a flat wash, which is what made the old hero read as a stock
-   gradient. */
+/* A fine grid that reads as the lit face of the panel rather than an idea of
+   one. Masked to the light source above and left visible: at 0.35 opacity over
+   0.055 lines it resolved to two percent white, which is a texture nobody has
+   ever seen. It is suppressed over a customer photograph, where a ruled
+   overlay is only ever damage. */
 .hero::before {
   content: "";
   position: absolute;
   inset: 0;
   z-index: -1;
-  opacity: 0.35;
   background-image:
-    linear-gradient(rgba(255, 255, 255, 0.055) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(255, 255, 255, 0.055) 1px, transparent 1px);
+    linear-gradient(rgba(255, 255, 255, 0.05) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.05) 1px, transparent 1px);
   background-size: 56px 56px;
-  mask-image: radial-gradient(120% 100% at 20% 0%, black, transparent 75%);
+  mask-image: radial-gradient(72% 110% at 97% -4%, black, transparent 72%);
+}
+.hero.has-image::before {
+  display: none;
 }
 .hero-body {
   position: relative;
   min-width: 0;
 }
 .hero .public-site-tagline {
-  color: rgba(255, 255, 255, 0.86);
+  max-width: 46ch;
+  color: rgba(255, 255, 255, 0.88);
 }
 /* The column bounds the line, not a ch measure: a ch cap landed the demo event
    name exactly on the wrap boundary, so the masthead was one line with the
@@ -405,12 +427,15 @@
   letter-spacing: var(--tracking-tight);
   text-wrap: balance;
 }
+/* Three steps, not two: the event name, then what it is, then where and when.
+   The tagline and the meta line were set at the same value, so the masthead
+   read as a title above one undifferentiated block. */
 .hero-meta {
   display: flex;
   flex-wrap: wrap;
   gap: var(--space-2) var(--space-5);
-  margin: 0;
-  color: rgba(255, 255, 255, 0.86);
+  margin: var(--space-4) 0 0;
+  color: rgba(255, 255, 255, 0.72);
   font-size: var(--text-sm);
   font-weight: var(--weight-medium);
 }
