@@ -136,11 +136,6 @@
   background: var(--state-warn-surface-subtle);
   color: var(--state-warn-text);
 }
-.drop-target {
-  outline: 2px dashed var(--brand-400);
-  outline-offset: -4px;
-  background: var(--brand-50) !important;
-}
 .conflict-panel {
   padding: var(--space-4);
 }

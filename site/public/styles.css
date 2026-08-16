@@ -378,6 +378,7 @@ a.wordmark:hover .wordmark-accent {
 
 /* --- buttons ------------------------------------------------------------ */
 
+/* biome-ignore lint/style/noDescendingSpecificity: Navigation button and content-flow selectors belong to independent contexts despite sharing terminal elements. */
 .btn {
   display: inline-flex;
   align-items: center;
@@ -1480,6 +1481,7 @@ blockquote {
   border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
 }
 
+/* biome-ignore lint/style/noDescendingSpecificity: Navigation button and content-flow selectors belong to independent contexts despite sharing terminal elements. */
 blockquote p:last-child {
   margin-bottom: 0;
 }
@@ -1704,10 +1706,15 @@ blockquote p:last-child {
   *,
   *::before,
   *::after {
+    /* biome-ignore lint/complexity/noImportantStyles: Reduced-motion preferences must override every site animation and transition declaration. */
     animation-duration: 1ms !important;
+    /* biome-ignore lint/complexity/noImportantStyles: Reduced-motion preferences must override every site animation and transition declaration. */
     animation-delay: 0ms !important;
+    /* biome-ignore lint/complexity/noImportantStyles: Reduced-motion preferences must override every site animation and transition declaration. */
     animation-iteration-count: 1 !important;
+    /* biome-ignore lint/complexity/noImportantStyles: Reduced-motion preferences must override every site animation and transition declaration. */
     transition-duration: 1ms !important;
+    /* biome-ignore lint/complexity/noImportantStyles: Reduced-motion preferences must override every site animation and transition declaration. */
     transition-delay: 0ms !important;
   }
 }

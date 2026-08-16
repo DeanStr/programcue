@@ -527,23 +527,23 @@
 /* --- Toasts --------------------------------------------------------------
    Themed from our own tokens rather than sonner's richColors palette, which
    ships its own greens and reds that do not match the status vocabulary. */
-.pc-toast {
-  border-radius: var(--radius-sm) !important;
-  border: 1px solid var(--line) !important;
-  background: var(--surface) !important;
-  color: var(--ink) !important;
-  box-shadow: var(--elev-3) !important;
-  font-family: var(--font) !important;
-  font-size: var(--text-xs) !important;
+.pc-toast[data-sonner-toast][data-styled="true"] {
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--line);
+  background: var(--surface);
+  color: var(--ink);
+  box-shadow: var(--elev-3);
+  font-family: var(--font);
+  font-size: var(--text-xs);
 }
-.pc-toast[data-type="success"] {
-  border-left: 3px solid var(--green) !important;
+.pc-toast[data-sonner-toast][data-styled="true"][data-type="success"] {
+  border-left: 3px solid var(--green);
 }
-.pc-toast[data-type="warning"] {
-  border-left: 3px solid var(--amber) !important;
+.pc-toast[data-sonner-toast][data-styled="true"][data-type="warning"] {
+  border-left: 3px solid var(--amber);
 }
-.pc-toast[data-type="error"] {
-  border-left: 3px solid var(--red) !important;
+.pc-toast[data-sonner-toast][data-styled="true"][data-type="error"] {
+  border-left: 3px solid var(--red);
 }
 
 /* --- Disclosure ----------------------------------------------------------

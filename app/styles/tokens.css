@@ -259,15 +259,20 @@
   *,
   *::before,
   *::after {
+    /* biome-ignore lint/complexity/noImportantStyles: Reduced-motion preferences must override animation declarations from every component stylesheet. */
     transition-duration: 1ms !important;
+    /* biome-ignore lint/complexity/noImportantStyles: Reduced-motion preferences must override animation declarations from every component stylesheet. */
     animation-duration: 1ms !important;
+    /* biome-ignore lint/complexity/noImportantStyles: Reduced-motion preferences must override animation declarations from every component stylesheet. */
     animation-iteration-count: 1 !important;
   }
   /* Loading signals stay legible: slowed, not stopped. Going static would
      leave a spinner looking like a frozen page. */
   .pc-spin,
   .pc-skeleton-stack span {
+    /* biome-ignore lint/complexity/noImportantStyles: Reduced-motion preferences must override animation declarations from every component stylesheet. */
     animation-duration: 2.4s !important;
+    /* biome-ignore lint/complexity/noImportantStyles: Reduced-motion preferences must override animation declarations from every component stylesheet. */
     animation-iteration-count: infinite !important;
   }
 }

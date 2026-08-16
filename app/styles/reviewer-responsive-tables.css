@@ -302,6 +302,7 @@
   padding: 0 var(--space-3);
   color: var(--text-tertiary);
 }
+/* biome-ignore lint/style/noDescendingSpecificity: Base, modifier, and forced-colour rules share element suffixes intentionally; state specificity preserves their distinct behavior. */
 .reviewer-shell .review-scale-option > span {
   display: flex;
   align-items: center;
@@ -414,6 +415,7 @@
   border-color: var(--brand-400);
   background: var(--brand-50);
 }
+/* biome-ignore lint/style/noDescendingSpecificity: Base, modifier, and forced-colour rules share element suffixes intentionally; state specificity preserves their distinct behavior. */
 .reviewer-shell .review-conflict-option > span {
   display: grid;
   gap: 1px;
@@ -730,6 +732,7 @@
 /* The chosen segment is a background fill, and the UA repaints backgrounds in
    High Contrast Mode. Without this the whole rubric reads as unscored. */
 @media (forced-colors: active) {
+  /* biome-ignore lint/style/noDescendingSpecificity: Base, modifier, and forced-colour rules share element suffixes intentionally; state specificity preserves their distinct behavior. */
   .reviewer-shell .review-scale-option > span {
     border: 1px solid CanvasText;
   }

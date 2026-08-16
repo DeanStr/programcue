@@ -53,12 +53,6 @@ body:has(.sidebar-is-collapsed) {
 .sidebar-is-collapsed .sidebar-collapse {
   text-align: center;
 }
-.schedule-drop.drop-target,
-.form-field-card.drop-target {
-  background: var(--brand-50) !important;
-  outline: 3px dashed var(--brand-500);
-  outline-offset: -4px;
-}
 /* Raised so the global focus ring is not clipped by neighbouring cards.
    The ring itself comes from :focus-visible in base.css. */
 .session-card:focus-visible {

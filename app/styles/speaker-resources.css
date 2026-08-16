@@ -682,6 +682,7 @@
   .file-version-row .status {
     grid-column: 2;
   }
+  /* biome-ignore lint/style/noDescendingSpecificity: The mobile content rule and device-preview rule apply distinct layout concerns despite sharing the content class. */
   .speaker-resource-content {
     overflow: hidden;
   }

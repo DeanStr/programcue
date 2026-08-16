@@ -239,6 +239,7 @@
   margin-top: var(--space-2);
 }
 
+/* biome-ignore lint/style/noDescendingSpecificity: The shared validation primitive supplies base layout while the earlier preview variant retains its scoped spacing override. */
 .validation-item {
   display: flex;
   align-items: center;

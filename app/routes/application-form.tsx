@@ -689,9 +689,9 @@ export default function ApplicationForm({ loaderData }: Route.ComponentProps) {
         ) : null}
         {applicant && !isEvaluationApplicant ? (
           <Form
+            className="application-account-actions"
             method="post"
             action={claimScopedAction}
-            style={{ marginLeft: "auto" }}
           >
             <input type="hidden" name="_intent" value="sign_out" />
             <button type="submit" className="btn">

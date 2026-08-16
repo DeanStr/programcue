@@ -43,6 +43,7 @@
     height: auto;
     flex-wrap: wrap;
   }
+  /* biome-ignore lint/style/noDescendingSpecificity: These selectors target independent application header and draft contexts, so their declarations do not compete. */
   .application-top > .subtle {
     flex: 1 1 120px;
     min-width: 0;
@@ -50,12 +51,12 @@
     text-overflow: ellipsis;
     white-space: nowrap;
   }
-  .application-top > form {
+  .application-top > .application-account-actions {
     width: 100%;
     min-width: 0;
-    margin-left: 0 !important;
+    margin-left: 0;
   }
-  .application-top > form .btn {
+  .application-top > .application-account-actions .btn {
     width: 100%;
     min-width: 0;
     overflow-wrap: anywhere;

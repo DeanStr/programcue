@@ -50,6 +50,7 @@
    a laptop sat in the one band that had no rail at all and showed the detail
    panel as a 1,240px-wide card. */
 @media (max-width: 1350px) {
+  /* biome-ignore lint/style/noDescendingSpecificity: Responsive rules intentionally follow embedded variants and narrower breakpoints while embedded specificity continues to win. */
   .public-main {
     grid-template-columns: minmax(0, 1fr) 320px;
     gap: var(--space-4);
@@ -57,12 +58,14 @@
   /* A laptop is wide enough for the rail and short enough that pinning it
      clipped the detail panel mid-sentence, so here the rail scrolls with the
      page instead of scrolling inside itself. */
+  /* biome-ignore lint/style/noDescendingSpecificity: Responsive rules intentionally follow embedded variants and narrower breakpoints while embedded specificity continues to win. */
   .public-main > aside {
     position: static;
     max-height: none;
     padding-bottom: 0;
     overflow: visible;
   }
+  /* biome-ignore lint/style/noDescendingSpecificity: Responsive rules intentionally follow embedded variants and narrower breakpoints while embedded specificity continues to win. */
   .hero {
     grid-template-columns: minmax(0, 1fr) minmax(0, 260px);
     gap: var(--space-6);
@@ -78,18 +81,22 @@
 /* Below the two-pane breakpoint the itinerary and session detail stop being a
    rail and become a section that follows the list. */
 @media (max-width: 900px) {
+  /* biome-ignore lint/style/noDescendingSpecificity: Responsive rules intentionally follow embedded variants and narrower breakpoints while embedded specificity continues to win. */
   .public-main,
   .public-main.public-surface-main {
     grid-template-columns: minmax(0, 1fr);
   }
   /* Stacked, the facet controls are tall enough that pinning them would hold
      half the viewport hostage for the whole scroll. */
+  /* biome-ignore lint/style/noDescendingSpecificity: Responsive rules intentionally follow embedded variants and narrower breakpoints while embedded specificity continues to win. */
   .public-filters-bar {
     position: static;
   }
+  /* biome-ignore lint/style/noDescendingSpecificity: Responsive rules intentionally follow embedded variants and narrower breakpoints while embedded specificity continues to win. */
   .programme-day-divider {
     top: 72px;
   }
+  /* biome-ignore lint/style/noDescendingSpecificity: Responsive rules intentionally follow embedded variants and narrower breakpoints while embedded specificity continues to win. */
   .public-main > aside {
     position: static;
     grid-template-columns: repeat(auto-fit, minmax(min(100%, 320px), 1fr));
@@ -111,6 +118,7 @@
   .session-save.wide {
     max-width: 320px;
   }
+  /* biome-ignore lint/style/noDescendingSpecificity: Responsive rules intentionally follow embedded variants and narrower breakpoints while embedded specificity continues to win. */
   .hero {
     grid-template-columns: minmax(0, 1fr);
     align-items: start;
@@ -150,13 +158,16 @@
     height: 112px;
     flex-basis: 112px;
   }
+  /* biome-ignore lint/style/noDescendingSpecificity: Responsive rules intentionally follow embedded variants and narrower breakpoints while embedded specificity continues to win. */
   .hero {
     padding: var(--space-7) var(--space-6);
   }
 }
 
 @media (max-width: 600px) {
+  /* biome-ignore lint/style/noDescendingSpecificity: Responsive rules intentionally follow embedded variants and narrower breakpoints while embedded specificity continues to win. */
   .public-surface-heading h1,
+  /* biome-ignore lint/style/noDescendingSpecificity: Responsive rules intentionally follow embedded variants and narrower breakpoints while embedded specificity continues to win. */
   .programme-day-divider {
     font-size: var(--text-xl);
   }
@@ -203,6 +214,7 @@
   }
   .programme-embed-output .segmented,
   .programme-embed-output .segmented .btn,
+  /* biome-ignore lint/style/noDescendingSpecificity: Responsive rules intentionally follow embedded variants and narrower breakpoints while embedded specificity continues to win. */
   .programme-embed-copy-row .btn {
     width: 100%;
   }
@@ -251,6 +263,7 @@
   .programme-row-affiliation > [aria-hidden="true"] {
     display: none;
   }
+  /* biome-ignore lint/style/noDescendingSpecificity: Responsive rules intentionally follow embedded variants and narrower breakpoints while embedded specificity continues to win. */
   .programme-row {
     grid-template-columns: minmax(0, 1fr);
     gap: var(--space-2);
@@ -277,6 +290,7 @@
     width: 100%;
     min-height: 40px;
   }
+  /* biome-ignore lint/style/noDescendingSpecificity: Responsive rules intentionally follow embedded variants and narrower breakpoints while embedded specificity continues to win. */
   .programme-entry-description {
     padding: 0;
   }

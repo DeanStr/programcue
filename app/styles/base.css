@@ -35,9 +35,11 @@ a {
   text-decoration: none;
 }
 .hidden {
+  /* biome-ignore lint/complexity/noImportantStyles: Visibility utilities must override component styles so hidden and screen-reader-only content cannot be exposed visually. */
   display: none !important;
 }
 .sr-only {
+  /* biome-ignore lint/complexity/noImportantStyles: Visibility utilities must override component styles so hidden and screen-reader-only content cannot be exposed visually. */
   position: absolute !important;
   width: 1px;
   height: 1px;
@@ -413,6 +415,7 @@ a {
   transform: translateY(1px);
   scale: 0.985;
 }
+/* biome-ignore lint/style/noDescendingSpecificity: Component and state variants intentionally precede shared primitives; their higher specificity preserves the intended override. */
 .btn.primary {
   /* Flat, not a gradient: state is never encoded in a gradient, and opacity
      on a gradient reads as lavender-primary rather than disabled. */
@@ -421,6 +424,7 @@ a {
   color: var(--text-inverse);
   box-shadow: var(--elev-2);
 }
+/* biome-ignore lint/style/noDescendingSpecificity: Component and state variants intentionally precede shared primitives; their higher specificity preserves the intended override. */
 .btn.primary:hover {
   background: var(--brand-700);
 }
@@ -646,7 +650,7 @@ a {
    rhythm; event-branded public pages retain their own heading treatment. */
 .app-admin :is(h1, h2, h3),
 .speaker-shell :is(h1, h2, h3) {
-  font-family: var(--font) !important;
+  font-family: var(--font);
 }
 .page-head p {
   margin: var(--space-2) 0 0;
@@ -688,6 +692,7 @@ a {
 .card h3 {
   margin: 0;
 }
+/* biome-ignore lint/style/noDescendingSpecificity: Component and state variants intentionally precede shared primitives; their higher specificity preserves the intended override. */
 .card-title {
   display: flex;
   align-items: center;
@@ -706,6 +711,7 @@ a {
 .card-title .right {
   margin-left: auto;
 }
+/* biome-ignore lint/style/noDescendingSpecificity: Component and state variants intentionally precede shared primitives; their higher specificity preserves the intended override. */
 .subtle {
   color: var(--muted);
 }
@@ -882,6 +888,7 @@ a {
 .rail-left {
   border-left: 3px solid var(--rail, var(--brand-600));
 }
+/* biome-ignore lint/style/noDescendingSpecificity: Component and state variants intentionally precede shared primitives; their higher specificity preserves the intended override. */
 .status {
   display: inline-flex;
   align-items: center;

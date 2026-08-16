@@ -160,6 +160,9 @@
   top: 84px;
   scroll-margin-top: 84px;
 }
+.application-account-actions {
+  margin-left: auto;
+}
 .cfp-access-card {
   padding: var(--space-6);
   border-top: 4px solid var(--event-accent);
@@ -259,6 +262,7 @@
   font-size: var(--text-xs);
   font-weight: var(--weight-bold);
 }
+/* biome-ignore lint/style/noDescendingSpecificity: These selectors target independent application content structures despite sharing element suffixes. */
 .cfp-example span,
 .cfp-required {
   color: var(--accent-ink);

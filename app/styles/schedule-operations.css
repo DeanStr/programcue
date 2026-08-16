@@ -401,6 +401,7 @@
   display: grid;
   gap: 2px;
 }
+/* biome-ignore lint/style/noDescendingSpecificity: These selectors belong to independent scoped components or explicit breakpoint overrides and do not form a competing cascade. */
 .command-progress-link small {
   display: block;
   font-size: var(--text-2xs);
@@ -443,6 +444,7 @@
   .command-agenda-link {
     grid-template-columns: 52px minmax(0, 1fr) auto;
   }
+  /* biome-ignore lint/style/noDescendingSpecificity: These selectors belong to independent scoped components or explicit breakpoint overrides and do not form a competing cascade. */
   .command-agenda-link > strong {
     display: none;
   }
@@ -556,6 +558,7 @@ body.dark-mode .program-cue-api-reference .scalar-api-reference {
 .comms-provider-strip > span:last-child {
   border-right: 0;
 }
+/* biome-ignore lint/style/noDescendingSpecificity: These selectors belong to independent scoped components or explicit breakpoint overrides and do not form a competing cascade. */
 .comms-provider-strip small {
   color: var(--muted);
 }
@@ -563,9 +566,11 @@ body.dark-mode .program-cue-api-reference .scalar-api-reference {
   grid-template-columns: 245px minmax(0, 1fr);
   align-items: start;
 }
+/* biome-ignore lint/style/noDescendingSpecificity: These selectors belong to independent scoped components or explicit breakpoint overrides and do not form a competing cascade. */
 .comms-production-layout > *,
 .comms-production-layout > .stack,
 .comms-confirm-panel,
+/* biome-ignore lint/style/noDescendingSpecificity: These selectors belong to independent scoped components or explicit breakpoint overrides and do not form a competing cascade. */
 .comms-preview-grid > * {
   min-width: 0;
 }
@@ -607,6 +612,7 @@ body.dark-mode .program-cue-api-reference .scalar-api-reference {
   min-width: 0;
   overflow-wrap: anywhere;
 }
+/* biome-ignore lint/style/noDescendingSpecificity: These selectors belong to independent scoped components or explicit breakpoint overrides and do not form a competing cascade. */
 .comms-recipient-email small {
   display: block;
   color: var(--muted);
@@ -718,6 +724,7 @@ body.dark-mode .program-cue-api-reference .scalar-api-reference {
   .comms-provider-strip {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
+  /* biome-ignore lint/style/noDescendingSpecificity: These selectors belong to independent scoped components or explicit breakpoint overrides and do not form a competing cascade. */
   .comms-provider-strip > span:nth-child(2) {
     border-right: 0;
   }
@@ -779,6 +786,7 @@ body.dark-mode .program-cue-api-reference .scalar-api-reference {
 }
 
 /* Keep the task table's intrinsic width inside its scroll container on narrow screens. */
+/* biome-ignore lint/style/noDescendingSpecificity: These selectors belong to independent scoped components or explicit breakpoint overrides and do not form a competing cascade. */
 .tasks-layout > * {
   min-width: 0;
 }
@@ -830,6 +838,7 @@ body.dark-mode .program-cue-api-reference .scalar-api-reference {
   font-size: var(--text-2xs);
   font-weight: var(--weight-bold);
 }
+/* biome-ignore lint/style/noDescendingSpecificity: These selectors belong to independent scoped components or explicit breakpoint overrides and do not form a competing cascade. */
 .file-history small {
   margin-top: var(--space-1);
 }

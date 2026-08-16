@@ -43,6 +43,7 @@
   padding-bottom: var(--space-3);
   border-bottom: 1px solid var(--border-editorial);
 }
+/* biome-ignore lint/style/noDescendingSpecificity: Component variants intentionally precede broader child rules; their higher specificity preserves the intended state and layout overrides. */
 .public-section-head h2 {
   margin: 0;
   font-size: var(--text-2xl);
@@ -547,6 +548,7 @@
   font-variant-numeric: tabular-nums;
   color: var(--muted-on-surface);
 }
+/* biome-ignore lint/style/noDescendingSpecificity: Component variants intentionally precede broader child rules; their higher specificity preserves the intended state and layout overrides. */
 .public-itinerary-day + .public-itinerary-day {
   margin-top: var(--space-7);
 }
@@ -611,6 +613,7 @@
     outline-offset: -2px;
   }
 }
+/* biome-ignore lint/style/noDescendingSpecificity: Component variants intentionally precede broader child rules; their higher specificity preserves the intended state and layout overrides. */
 .programme-row {
   display: grid;
   grid-template-columns: 124px minmax(0, 1fr);
@@ -647,6 +650,7 @@
   gap: var(--space-2);
   min-width: 0;
 }
+/* biome-ignore lint/style/noDescendingSpecificity: Component variants intentionally precede broader child rules; their higher specificity preserves the intended state and layout overrides. */
 .programme-row h3 {
   margin: 0;
   font-size: var(--text-lg);
@@ -655,6 +659,7 @@
   text-wrap: pretty;
 }
 .programme-entry:hover .programme-row h3,
+/* biome-ignore lint/style/noDescendingSpecificity: Component variants intentionally precede broader child rules; their higher specificity preserves the intended state and layout overrides. */
 .programme-row:focus-visible h3 {
   color: var(--accent-ink);
 }
@@ -676,6 +681,7 @@
   flex-wrap: wrap;
   gap: 0 var(--space-2);
 }
+/* biome-ignore lint/style/noDescendingSpecificity: Component variants intentionally precede broader child rules; their higher specificity preserves the intended state and layout overrides. */
 .programme-row-speaker .avatar {
   flex: none;
 }
@@ -823,6 +829,7 @@
 .public-empty {
   text-align: center;
 }
+/* biome-ignore lint/style/noDescendingSpecificity: Component variants intentionally precede broader child rules; their higher specificity preserves the intended state and layout overrides. */
 .public-empty h2 {
   margin-top: 0;
 }
@@ -853,6 +860,7 @@
   align-items: center;
   gap: var(--space-3);
 }
+/* biome-ignore lint/style/noDescendingSpecificity: Component variants intentionally precede broader child rules; their higher specificity preserves the intended state and layout overrides. */
 .public-speaker-card-identity h3 {
   margin: 0;
   font-size: var(--text-base);
@@ -904,6 +912,7 @@
   align-items: center;
   gap: var(--space-4);
 }
+/* biome-ignore lint/style/noDescendingSpecificity: Component variants intentionally precede broader child rules; their higher specificity preserves the intended state and layout overrides. */
 .public-speaker-profile-identity h2 {
   margin: var(--space-2) 0 0;
 }
@@ -1033,6 +1042,7 @@
   justify-content: space-between;
   gap: var(--space-4);
 }
+/* biome-ignore lint/style/noDescendingSpecificity: Component variants intentionally precede broader child rules; their higher specificity preserves the intended state and layout overrides. */
 .public-itinerary-title-row h2 {
   flex: 1 1 auto;
   max-width: var(--measure-prose);
@@ -1061,6 +1071,7 @@
 .public-itinerary-content {
   min-width: 0;
 }
+/* biome-ignore lint/style/noDescendingSpecificity: Component variants intentionally precede broader child rules; their higher specificity preserves the intended state and layout overrides. */
 .public-itinerary-content h2 {
   margin: 0 0 var(--space-2);
   font-size: var(--text-lg);
@@ -1149,6 +1160,7 @@
   padding-bottom: var(--space-4);
   border-bottom: 1px solid var(--line);
 }
+/* biome-ignore lint/style/noDescendingSpecificity: Component variants intentionally precede broader child rules; their higher specificity preserves the intended state and layout overrides. */
 .public-surface-detail-heading h2 {
   margin: 0;
   font-size: var(--text-xl);
@@ -1302,6 +1314,7 @@
   height: 144px;
   flex: 0 0 144px;
 }
+/* biome-ignore lint/style/noDescendingSpecificity: Component variants intentionally precede broader child rules; their higher specificity preserves the intended state and layout overrides. */
 .public-speaker-detail-heading h2 {
   margin: 3px 0 0;
   letter-spacing: var(--tracking-tight);
@@ -1309,6 +1322,7 @@
 .public-speaker-detail-heading .public-profile-actions {
   margin-top: var(--space-3);
 }
+/* biome-ignore lint/style/noDescendingSpecificity: Component variants intentionally precede broader child rules; their higher specificity preserves the intended state and layout overrides. */
 .public-speaker-detail > h3 {
   margin-top: var(--space-5);
   margin-bottom: var(--space-1);
@@ -1507,12 +1521,14 @@
   padding: var(--space-5);
   scroll-margin-top: 88px;
 }
+/* biome-ignore lint/style/noDescendingSpecificity: Component variants intentionally precede broader child rules; their higher specificity preserves the intended state and layout overrides. */
 .session-detail-panel h2 {
   margin: 0;
   font-size: var(--text-xl);
   line-height: var(--leading-snug);
   letter-spacing: var(--tracking-tight);
 }
+/* biome-ignore lint/style/noDescendingSpecificity: Component variants intentionally precede broader child rules; their higher specificity preserves the intended state and layout overrides. */
 .session-detail-panel > h3 {
   margin: var(--space-5) 0 var(--space-1);
   font-size: var(--text-sm);
@@ -1546,6 +1562,7 @@
   display: block;
   font-size: var(--text-sm);
 }
+/* biome-ignore lint/style/noDescendingSpecificity: Component variants intentionally precede broader child rules; their higher specificity preserves the intended state and layout overrides. */
 .session-detail-speaker-identity small {
   color: var(--muted-on-surface);
   font-size: var(--text-2xs);
@@ -1580,6 +1597,7 @@
 #programme-speaker-profile .stack a:not(.btn):focus-visible {
   text-decoration-thickness: 2px;
 }
+/* biome-ignore lint/style/noDescendingSpecificity: Component variants intentionally precede broader child rules; their higher specificity preserves the intended state and layout overrides. */
 .public-profile-actions {
   display: flex;
   gap: var(--space-2);
@@ -1596,6 +1614,7 @@
   color: var(--muted-on-surface);
   font-size: var(--text-2xs);
 }
+/* biome-ignore lint/style/noDescendingSpecificity: Component variants intentionally precede broader child rules; their higher specificity preserves the intended state and layout overrides. */
 .public-detail-list dd {
   margin: 0;
   font-size: var(--text-xs);
