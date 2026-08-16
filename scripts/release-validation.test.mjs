@@ -265,6 +265,17 @@ test("repository release commands and workflows enforce the ordered gates", asyn
   );
   assert.match(coreWorkflow, /pull_request:/u);
   assert.match(coreWorkflow, /npm run check:core/u);
+  assert.match(coreWorkflow, /dependency-audit:/u);
+  assert.match(coreWorkflow, /run: npm run security:dependencies/u);
+
+  const checkRunner = await readFile(
+    resolve(repositoryRoot, "scripts/run-checks.mjs"),
+    "utf8",
+  );
+  assert.match(
+    checkRunner,
+    /if \(mode === "--full"\)[\s\S]*\["run", "security:dependencies"\]/u,
+  );
 
   const releaseWorkflow = await readFile(
     resolve(repositoryRoot, ".github/workflows/release.yml"),

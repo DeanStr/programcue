@@ -142,8 +142,11 @@ project.
 merge or release gate.
 
 The checked-in `Core gate` GitHub Actions workflow runs independent dependency
-review, core and compact browser jobs for pull requests; core and browser also
-run on `main`. Configure these checks as
+audit, dependency review, core and compact browser jobs for pull requests;
+dependency audit, core and browser also run on `main`. The local core command is
+network-independent; the complete release gate and dedicated CI job fail closed
+on high/critical dependency advisories or an unavailable advisory service.
+Configure these checks as
 required in branch protection so the repository gate cannot be bypassed by a
 direct merge. Workflow dependencies are pinned to immutable revisions. The manually
 dispatched `Production release` workflow runs the complete browser gate, applies

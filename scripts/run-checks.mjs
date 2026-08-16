@@ -46,11 +46,6 @@ const coreRuns = await Promise.all([
         label: "configuration tests",
       },
       {
-        command: npmCommand,
-        args: ["run", "security:dependencies"],
-        label: "dependency vulnerability policy",
-      },
-      {
         command: "node",
         args: ["scripts/check-css-hygiene.mjs"],
         label: "CSS hygiene",
@@ -96,6 +91,18 @@ console.log(
 );
 for (const result of coreRuns) {
   console.log(`- ${result.label}: ${formatDuration(result.duration)}`);
+}
+
+if (mode === "--full") {
+  const dependencyAudit = await runProcess(
+    npmCommand,
+    ["run", "security:dependencies"],
+    {
+      cwd: repositoryRoot,
+      label: "dependency vulnerability policy",
+    },
+  );
+  if (dependencyAudit.code !== 0) process.exit(dependencyAudit.code);
 }
 
 if (mode !== "--core") {
