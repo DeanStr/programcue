@@ -127,6 +127,9 @@ test("branding draft previews and publishes across participant-facing surfaces",
     "/public/brand/future-of-events-2027/logo",
   );
   await expect(
+    page.getByRole("link", { name: "Product guide" }),
+  ).toHaveAttribute("href", "https://programcue.com/guide");
+  await expect(
     page.getByRole("link", { name: "Support", exact: true }),
   ).toHaveAttribute("href", "https://support.example.test/participants");
 });

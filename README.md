@@ -289,8 +289,9 @@ A failed, expired or ambiguous scan leaves the file quarantined.
 The public website is deployed separately with `npm run deploy:site`. It is a
 static-asset Worker in `site/` with no D1, R2, Queue, Durable Object or AI
 binding: it publishes the home page, `/privacy` and `/terms` that Google's OAuth
-verification reviewers must be able to read anonymously, so it deliberately
-shares no authorisation or readiness path with the application. Deployment
+verification reviewers must be able to read anonymously, plus a separate
+product guide at `/guide`. It deliberately shares no authorisation or
+readiness path with the application. Deployment
 requires the `programcue.com` and `www.programcue.com` Custom Domains to be
 attached to `program-cue-site`; `www` answers a 301 to the apex host.
 Plain-HTTP requests to either production hostname are also upgraded to the

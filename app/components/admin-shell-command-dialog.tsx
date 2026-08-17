@@ -19,6 +19,7 @@ import {
 } from "lucide-react";
 import type { RefObject } from "react";
 
+import { PRODUCT_GUIDE_URL } from "~/lib/product-guide";
 import type { CommandRecord } from "~/platform/operations/command-palette-service.server";
 import type {
   AdminCommandSearchScope,
@@ -251,6 +252,17 @@ export function AdminCommandDialog({
       label: "Keyboard shortcuts",
       meta: "?",
       run: () => setDialog("shortcuts"),
+    },
+    {
+      value: "help product guide documentation",
+      icon: BookOpen,
+      label: "Product guide",
+      description: "How to use Program Cue",
+      meta: "New tab",
+      run: () => {
+        closeDialog();
+        window.open(PRODUCT_GUIDE_URL, "_blank", "noopener,noreferrer");
+      },
     },
     {
       value: "help api documentation",

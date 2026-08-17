@@ -1,7 +1,9 @@
 import AxeBuilder from "@axe-core/playwright";
 import { expect, type Page, test } from "@playwright/test";
 
-const PUBLISHED_PAGES = ["/", "/privacy", "/terms"] as const;
+import { PUBLISHED_PAGES as SITE_PAGES } from "../../scripts/validate-site-config.mjs";
+
+const PUBLISHED_PAGES = SITE_PAGES.map((page) => page.path);
 
 async function openReady(page: Page, path: string) {
   const response = await page.goto(path);
@@ -169,4 +171,35 @@ test("privacy introduction and contents remain readable", async ({ page }) => {
     "public-privacy-contents.png",
   );
   await expectContained(page, "public privacy visual");
+});
+
+test("the product guide hub lists every topic and opens an article", async ({
+  page,
+}) => {
+  await openReady(page, "/guide");
+  await expect(
+    page.getByRole("heading", { level: 1, name: "Product guide" }),
+  ).toBeVisible();
+  const topicLinks = page.locator(".guide-card a");
+  await expect(topicLinks).toHaveCount(10);
+  await expect(
+    page.getByRole("heading", { name: "If you were asked to take part" }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("heading", { name: "If you run the event" }),
+  ).toBeVisible();
+  await expect(page.locator(".page-head")).toHaveScreenshot("public-guide.png");
+  await expectContained(page, "public guide visual");
+
+  await topicLinks.filter({ hasText: "Review assigned proposals" }).click();
+  await expect(page).toHaveURL(/\/guide\/reviewers\/?$/);
+  await expect(
+    page.getByRole("heading", {
+      level: 1,
+      name: "Review assigned proposals",
+    }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("link", { name: "Also Accounts and access" }),
+  ).toBeVisible();
 });

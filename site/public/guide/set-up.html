@@ -1,0 +1,238 @@
+<!doctype html>
+<html lang="en-AU">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Set up an event — Product guide — Program Cue</title>
+    <meta
+      name="description"
+      content="Create or clone a Program Cue event, configure rooms, tracks and formats, invite administrators and publish branding and the event website."
+    />
+    <link rel="canonical" href="https://programcue.com/guide/set-up" />
+    <meta name="robots" content="index, follow" />
+    <meta name="theme-color" content="#13201f" />
+    <link rel="icon" href="/brand-mark.svg" type="image/svg+xml" />
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="Program Cue" />
+    <meta
+      property="og:title"
+      content="Set up an event — Product guide — Program Cue"
+    />
+    <meta
+      property="og:description"
+      content="Configure a Program Cue event before you open the call for speakers."
+    />
+    <meta property="og:url" content="https://programcue.com/guide/set-up" />
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <a class="skip-link" href="#main">Skip to main content</a>
+
+    <header class="site-header">
+      <div class="shell header-inner">
+        <a class="wordmark" href="/" aria-label="Program Cue home">
+          <svg
+            class="wordmark-mark"
+            aria-hidden="true"
+            focusable="false"
+            viewBox="0 0 32 32"
+          >
+            <path class="wordmark-ink" d="M3 3h10v4H7v6H3V3Z" />
+            <path class="wordmark-accent" d="M19 3h10v10h-4V7h-6V3Z" />
+            <path class="wordmark-ink" d="M25 19h4v10H19v-4h6v-6Z" />
+            <path class="wordmark-ink" d="M3 19h4v6h6v4H3V19Z" />
+          </svg>
+          <span>Program Cue</span>
+        </a>
+        <nav class="site-nav" aria-label="Primary">
+          <a href="/guide" aria-current="page">Guide</a>
+          <a href="/privacy">Privacy</a>
+          <a href="/terms">Terms</a>
+          <a
+            class="btn btn-small"
+            href="https://app.programcue.com/sign-in"
+            aria-label="Sign in or create an account"
+            ><span class="nav-cta-wide">Sign in or create an account</span
+            ><span class="nav-cta-compact">Account</span></a
+          >
+        </nav>
+      </div>
+    </header>
+
+    <main id="main">
+      <div class="page-head">
+        <div class="shell">
+          <nav class="guide-crumb" aria-label="Breadcrumb">
+            <ol>
+              <li><a href="/guide">Product guide</a></li>
+              <li aria-current="page">Set up an event</li>
+            </ol>
+          </nav>
+          <h1>Set up an event</h1>
+          <p class="lead">
+            Owners and administrators define the event before intake opens:
+            dates, rooms, tracks, people, branding and the public event website.
+          </p>
+        </div>
+      </div>
+
+      <article class="legal">
+        <div class="shell">
+          <nav class="contents" aria-label="Contents">
+            <h2>Contents</h2>
+            <ol>
+              <li><a href="#create">Create or clone an event</a></li>
+              <li><a href="#settings">Event settings</a></li>
+              <li><a href="#people">Invite administrators</a></li>
+              <li><a href="#branding">Branding</a></li>
+              <li><a href="#website">Event website</a></li>
+              <li><a href="#command">Command Centre</a></li>
+            </ol>
+          </nav>
+
+          <h2 id="create">Create or clone an event</h2>
+          <p>
+            You can create or clone an event only after you already belong to an
+            organisation as an owner or administrator. Signing up does not
+            create that organisation. If you do not have one yet, see
+            <a href="/guide/accounts">Accounts and access</a>.
+          </p>
+          <ol>
+            <li>Open New event from the event chooser or the administration menu.</li>
+            <li>
+              Choose where this event’s records will live: Program Cue, or an
+              Airtable base that you want to treat as the source of truth.
+            </li>
+            <li>Confirm the choice. Nothing is created until you do.</li>
+          </ol>
+          <p>
+            Clone event copies a previous Program Cue event. Check the preview,
+            then confirm. The public web address uses the event slug, and that
+            slug must be unique.
+          </p>
+          <p>
+            If creation stops halfway, open Recover event repository. Program
+            Cue will not finish a stuck event in the background and call it
+            done.
+          </p>
+
+          <h2 id="settings">Event settings</h2>
+          <p>
+            Open Event settings and set the name, dates, timezone, venue, city
+            and public slug. Add rooms, tracks, session formats and durations
+            before you build the schedule.
+          </p>
+          <ul>
+            <li>
+              You cannot remove a room or track that still has sessions. Move
+              those sessions first.
+            </li>
+            <li>
+              If someone else saved while you were editing, you will be asked to
+              resolve the clash. The later save does not overwrite the earlier
+              one in silence.
+            </li>
+          </ul>
+
+          <h2 id="people">Invite administrators</h2>
+          <p>
+            Invite administrators from Event settings. You can invite them to
+            this event, or — if you are an owner — to every event in the
+            organisation. That dialog creates administrators, not owners. If
+            email is not set up, the invite stops and says so. It will not look
+            as if it was sent.
+          </p>
+          <p>
+            Removing an administrator depends on their scope. An event
+            administrator loses this event only. An organisation administrator
+            loses every event in the organisation. Their account remains.
+          </p>
+
+          <h2 id="branding">Branding</h2>
+          <p>
+            Open Branding to set the event mark, accent colour and the logo
+            speakers see. Program Cue prepares uploaded images before they are
+            used. Publishing branding asks you to confirm. Unpublished branding
+            stays in the workspace.
+          </p>
+
+          <h2 id="website">Event website</h2>
+          <p>
+            Open Event website to edit the public homepage, event information,
+            sponsors and recordings. Preview desktop and mobile, then publish
+            the whole site. Page visibility is saved in the draft and takes
+            effect on that publish. Recordings can be withdrawn on their own.
+            Visitors see the published version, not your draft.
+          </p>
+
+          <h2 id="command">Command Centre</h2>
+          <p>
+            Home in the administration menu opens Command Centre. It shows what
+            still needs action: overdue tasks, schedule clashes that block
+            publication, and similar work. Use it when you want the next job,
+            not a tour of every screen.
+          </p>
+
+          <nav class="guide-pager" aria-label="Guide">
+            <a class="guide-pager-prev" href="/guide/accounts"
+              ><span>Previous</span>Accounts and access</a
+            >
+            <a class="guide-pager-index" href="/guide"
+              ><span>Guide</span>All topics</a
+            >
+            <a class="guide-pager-next" href="/guide/applications"
+              ><span>Next</span>Applications</a
+            >
+          </nav>
+        </div>
+      </article>
+    </main>
+
+    <footer class="site-footer">
+      <div class="shell footer-inner">
+        <div class="footer-brand">
+          <span class="wordmark">
+            <svg
+              class="wordmark-mark"
+              aria-hidden="true"
+              focusable="false"
+              viewBox="0 0 32 32"
+            >
+              <path class="wordmark-ink" d="M3 3h10v4H7v6H3V3Z" />
+              <path class="wordmark-accent" d="M19 3h10v10h-4V7h-6V3Z" />
+              <path class="wordmark-ink" d="M25 19h4v10H19v-4h6v-6Z" />
+              <path class="wordmark-ink" d="M3 19h4v6h6v4H3V19Z" />
+            </svg>
+            <span>Program Cue</span>
+          </span>
+          <p>Program Cue is based in Victoria, Australia.</p>
+        </div>
+        <nav aria-label="Footer">
+          <h2>Site</h2>
+          <ul>
+            <li><a href="/">Home</a></li>
+            <li><a href="/guide">Product guide</a></li>
+            <li><a href="/privacy">Privacy policy</a></li>
+            <li><a href="/terms">Terms of service</a></li>
+          </ul>
+        </nav>
+        <div>
+          <h2>Contact</h2>
+          <ul>
+            <li>
+              <a href="mailto:support@programcue.com">support@programcue.com</a>
+            </li>
+            <li>
+              <a href="https://app.programcue.com/sign-in"
+                >Sign in or create an account</a
+              >
+            </li>
+          </ul>
+        </div>
+      </div>
+      <div class="shell footer-legal">
+        <p>© 2026 Program Cue.</p>
+      </div>
+    </footer>
+  </body>
+</html>

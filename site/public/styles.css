@@ -1400,7 +1400,7 @@ code {
 
 /* The shell keeps its full width so the legal text starts on the same left
    edge as the header wordmark; the reading measure is applied per block. */
-.legal .shell > * {
+.legal .shell > *:not(.guide-cards):not(.guide-pager) {
   max-width: var(--measure);
 }
 
@@ -1428,7 +1428,13 @@ code {
   margin-block: 0 var(--space-3);
 }
 
-.legal ul {
+.legal code {
+  font-size: 0.9em;
+  overflow-wrap: anywhere;
+}
+
+.legal ul,
+.legal ol {
   margin-block: 0 var(--space-3);
   padding-left: var(--space-4);
 }
@@ -1439,6 +1445,138 @@ code {
 
 .legal li:last-child {
   margin-bottom: 0;
+}
+
+.guide-crumb {
+  margin: 0 0 var(--space-3);
+  font-size: 0.875rem;
+  color: var(--text-tertiary);
+}
+
+.guide-crumb ol {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-1) var(--space-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.guide-crumb li:not(:last-child)::after {
+  content: "/";
+  margin-left: var(--space-2);
+  color: var(--text-tertiary);
+}
+
+.guide-crumb a {
+  color: var(--brand-700);
+}
+
+.guide-cards,
+.legal ul.guide-cards {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: var(--space-3);
+  margin: 0 0 var(--space-5);
+  padding: 0;
+  list-style: none;
+}
+
+.legal .guide-card {
+  margin: 0;
+  color: inherit;
+}
+
+@media (min-width: 38rem) {
+  .guide-cards,
+  .legal ul.guide-cards {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+.guide-card a {
+  display: block;
+  height: 100%;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: var(--space-4);
+  box-shadow: var(--shadow-1);
+  text-decoration: none;
+  color: inherit;
+  transition:
+    border-color var(--dur-2) var(--ease-out),
+    box-shadow var(--dur-2) var(--ease-out),
+    translate var(--dur-2) var(--ease-out);
+}
+
+.guide-card a:hover,
+.guide-card a:focus-visible {
+  border-color: var(--brand-200);
+  box-shadow:
+    var(--shadow-3),
+    0 0 0 4px rgb(246 197 169 / 36%);
+  translate: 0 -3px;
+}
+
+.guide-audience {
+  display: block;
+  color: var(--brand-700);
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  margin-bottom: var(--space-2);
+}
+
+.guide-card h3 {
+  font-size: 1.0625rem;
+  font-weight: 640;
+  margin: 0 0 var(--space-2);
+}
+
+.guide-card p {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: 0.9375rem;
+}
+
+.guide-pager {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  gap: var(--space-3);
+  align-items: start;
+  margin-top: var(--space-6);
+  padding-top: var(--space-4);
+  border-top: 1px solid var(--line);
+}
+
+.guide-pager a {
+  text-decoration: none;
+}
+
+.guide-pager-prev {
+  justify-self: start;
+}
+
+.guide-pager-index {
+  justify-self: center;
+  text-align: center;
+}
+
+.guide-pager-next {
+  justify-self: end;
+  text-align: right;
+}
+
+.guide-pager span {
+  display: block;
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: var(--text-tertiary);
+  margin-bottom: var(--space-1);
 }
 
 .contents {
@@ -1596,6 +1734,17 @@ blockquote p:last-child {
   .hero-actions .btn {
     width: 100%;
   }
+
+  .guide-pager {
+    grid-template-columns: 1fr;
+  }
+
+  .guide-pager-prev,
+  .guide-pager-index,
+  .guide-pager-next {
+    justify-self: stretch;
+    text-align: left;
+  }
 }
 
 @media (max-width: 60rem) {
@@ -1691,7 +1840,8 @@ blockquote p:last-child {
 }
 
 @media (max-width: 23rem) {
-  .site-nav a[href="#roles"] {
+  .site-nav a[href="#roles"],
+  .site-nav a[href="#capabilities"] {
     display: none;
   }
 }

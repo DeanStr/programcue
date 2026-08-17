@@ -138,6 +138,23 @@ describe("published pages", () => {
     );
   });
 
+  test("an unregistered guide article is rejected", () => {
+    const issues = brokenSite(({ write }) =>
+      write("guide/orphan.html", "<!doctype html><title>Orphan</title>\n"),
+    );
+    assert.ok(reports(issues, "guide/orphan.html must be listed"));
+  });
+
+  test("a homepage that drops the product guide is rejected", () => {
+    const issues = brokenSite(({ read, write }) =>
+      write(
+        "index.html",
+        read("index.html").replaceAll('href="/guide"', 'href="/handbook"'),
+      ),
+    );
+    assert.ok(reports(issues, "Home page must link to the product guide"));
+  });
+
   test("a footer that drops a sibling page is rejected", () => {
     const issues = brokenSite(({ replace }) =>
       replace(

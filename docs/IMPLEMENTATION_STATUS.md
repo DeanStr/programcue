@@ -38,24 +38,35 @@ claimed.
 
 ## Public website
 
-**Production foundation; deployed acceptance:** A separate
-static-asset Worker serves the anonymous `programcue.com` home, privacy, terms
-and not-found surfaces without application data bindings, cookies, scripts,
-analytics or an authorisation dependency. The homepage presents the combined
-sign-in/account-creation entry point, an explicitly illustrative programme
-readiness workflow, outcome-led capabilities, operational trust boundaries and
-the required Google integration disclosure. Configuration contracts cover both
-Custom Domains, canonical routing, crawlability, social metadata, content and
-anchor integrity, the declared Google scopes and Limited Use statement, and the
-absence of production data bindings. Focused Playwright coverage exercises the
-real Worker at desktop/mobile widths for reachability, keyboard skip navigation,
-WCAG A/AA checks, 320-pixel containment and reviewed homepage/privacy visuals.
+**Production foundation; deployed acceptance for the pre-guide surfaces:** A
+separate static-asset Worker serves the anonymous `programcue.com` home,
+privacy, terms, product guide and not-found surfaces without application data
+bindings, cookies, scripts, analytics or an authorisation dependency. The
+homepage presents the combined sign-in/account-creation entry point, an
+explicitly illustrative programme readiness workflow, outcome-led capabilities,
+operational trust boundaries and the required Google integration disclosure.
+The product guide at `/guide` is a static, task-oriented walkthrough. Role
+entry pages cover evaluators and speakers/submitters; organiser chapters
+cover accounts, event setup, applications, review, speakers, scheduling,
+communications and operations. It does not read event data. Signing up is
+described as login-only; a new conference workspace is requested through
+support, after which organisation owners and administrators can create
+further events. The administration command palette and the participant
+workspace link to that public guide without replacing an event support URL. Configuration
+contracts cover both Custom Domains, canonical routing, crawlability, social
+metadata, content and anchor integrity, the declared Google scopes and Limited
+Use statement, and the absence of production data bindings. Focused Playwright
+coverage exercises the real Worker at desktop/mobile widths for reachability,
+keyboard skip navigation, WCAG A/AA checks, 320-pixel containment and reviewed
+homepage/privacy/guide visuals.
 Release `303912c` is deployed as `program-cue-site` Worker version
 `b2b428fb-f1ec-4fcf-ab33-829cd59eb4a4` with both production Custom Domains.
 Live anonymous checks returned 200 for home, privacy, terms, robots and sitemap;
 the not-found surface returned 404; `www` and plain HTTP canonicalised in one
 301 to the secure apex URL; and HTML responses carried the checked CSP and
-HSTS. Cloudflare's zone-level managed robots policy prepends content signals
+HSTS. Those live checks predate the product guide pages; deployed acceptance
+for `/guide` and its articles is outstanding until the next `program-cue-site`
+release. Cloudflare's zone-level managed robots policy prepends content signals
 that allow ordinary search indexing while reserving AI training, then preserves
 the repository's allow-all and sitemap directives. The separate application
 health boundary remained HTTP 200 with `no-store`; this release did not deploy

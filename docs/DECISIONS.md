@@ -24,6 +24,20 @@ Generated build, Worker and route artifacts are excluded. The generated public
 OpenAPI document and package lock retain their owning generators rather than
 being rewritten by the formatter.
 
+## End-user product documentation
+
+End-user product help is published as static pages on `programcue.com/guide`,
+on the existing public-site Worker. Role entry pages cover evaluators and
+speakers or submitters. Organiser chapters follow the programme workflow.
+It is not a separate documentation product, not a GitHub wiki, and not the
+in-event speaker resources wiki. Signing up creates a login only; a first
+conference workspace is provisioned for the team, after which organisation
+owners and administrators can create further events. The signed-in
+administration command palette and the participant workspace open that public
+guide; they do not replace an event’s own support URL. Engineering status,
+decisions and recovery remain in `docs/`. The interactive API reference
+remains at `app.programcue.com/api/docs`.
+
 ## Licensing
 
 Program Cue is released under the GNU Affero General Public License version 3

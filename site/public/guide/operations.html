@@ -1,0 +1,241 @@
+<!doctype html>
+<html lang="en-AU">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Operations, API and integrations — Product guide — Program Cue</title>
+    <meta
+      name="description"
+      content="Watch Program Cue operations, import or export CSV, connect Airtable or Accelevents, and use the documented REST API."
+    />
+    <link rel="canonical" href="https://programcue.com/guide/operations" />
+    <meta name="robots" content="index, follow" />
+    <meta name="theme-color" content="#13201f" />
+    <link rel="icon" href="/brand-mark.svg" type="image/svg+xml" />
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="Program Cue" />
+    <meta
+      property="og:title"
+      content="Operations, API and integrations — Product guide — Program Cue"
+    />
+    <meta
+      property="og:description"
+      content="Check long-running jobs and connect Program Cue to the tools around the programme."
+    />
+    <meta property="og:url" content="https://programcue.com/guide/operations" />
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <a class="skip-link" href="#main">Skip to main content</a>
+
+    <header class="site-header">
+      <div class="shell header-inner">
+        <a class="wordmark" href="/" aria-label="Program Cue home">
+          <svg
+            class="wordmark-mark"
+            aria-hidden="true"
+            focusable="false"
+            viewBox="0 0 32 32"
+          >
+            <path class="wordmark-ink" d="M3 3h10v4H7v6H3V3Z" />
+            <path class="wordmark-accent" d="M19 3h10v10h-4V7h-6V3Z" />
+            <path class="wordmark-ink" d="M25 19h4v10H19v-4h6v-6Z" />
+            <path class="wordmark-ink" d="M3 19h4v6h6v4H3V19Z" />
+          </svg>
+          <span>Program Cue</span>
+        </a>
+        <nav class="site-nav" aria-label="Primary">
+          <a href="/guide" aria-current="page">Guide</a>
+          <a href="/privacy">Privacy</a>
+          <a href="/terms">Terms</a>
+          <a
+            class="btn btn-small"
+            href="https://app.programcue.com/sign-in"
+            aria-label="Sign in or create an account"
+            ><span class="nav-cta-wide">Sign in or create an account</span
+            ><span class="nav-cta-compact">Account</span></a
+          >
+        </nav>
+      </div>
+    </header>
+
+    <main id="main">
+      <div class="page-head">
+        <div class="shell">
+          <nav class="guide-crumb" aria-label="Breadcrumb">
+            <ol>
+              <li><a href="/guide">Product guide</a></li>
+              <li aria-current="page">Operations, API and integrations</li>
+            </ol>
+          </nav>
+          <h1>Operations, API and integrations</h1>
+          <p class="lead">
+            Check long-running jobs, import or export CSV, and connect Airtable,
+            Accelevents or the API. If a connection is missing, the workspace
+            says so.
+          </p>
+        </div>
+      </div>
+
+      <article class="legal">
+        <div class="shell">
+          <nav class="contents" aria-label="Contents">
+            <h2>Contents</h2>
+            <ol>
+              <li><a href="#operations">Operations</a></li>
+              <li><a href="#csv">CSV import and export</a></li>
+              <li><a href="#search">Search and saved views</a></li>
+              <li><a href="#api">API and webhooks</a></li>
+              <li><a href="#integrations">Integrations</a></li>
+              <li><a href="#assistant">Event assistant</a></li>
+            </ol>
+          </nav>
+
+          <h2 id="operations">Operations</h2>
+          <p>
+            Open Operations to watch imports, exports, sends and similar
+            batches. Open a job to see each item, then retry, cancel or skip
+            one. The status you see is the recorded result, not a spinner that
+            implies success.
+          </p>
+
+          <h2 id="csv">CSV import and export</h2>
+          <ol>
+            <li>Export a working copy, or start an import of speakers, sessions or results.</li>
+            <li>Check the preview of rows that will be created or changed.</li>
+            <li>Confirm before anything is written.</li>
+          </ol>
+          <p>
+            A bad row is marked invalid in the preview. You cannot confirm the
+            import until every row is valid. The good rows do not land on their
+            own.
+          </p>
+
+          <h2 id="search">Search and saved views</h2>
+          <p>
+            Use Search records and run commands to find records in the current
+            event or run a command. Saved views remember a filter on
+            Applications and similar lists. Search across the whole organisation
+            is for owners.
+          </p>
+
+          <h2 id="api">API and webhooks</h2>
+          <p>
+            Open API &amp; webhooks to create an event key or register a
+            webhook. The reference is
+            <a href="https://app.programcue.com/api/docs"
+              >app.programcue.com/api/docs</a
+            >.
+            Public paths return published data. Administration and participant
+            paths need the matching key or a signed-in session.
+          </p>
+          <p>
+            Retry a command with the same Idempotency-Key and Program Cue will
+            not apply it twice. A new key starts a new command. A webhook is
+            recorded before it is sent. A failed delivery stays failed until you
+            retry it.
+          </p>
+
+          <h2 id="integrations">Integrations</h2>
+          <ul>
+            <li>
+              <strong>Airtable</strong> can be the source of truth for an event
+              if you choose that when you create the event, or configure it
+              later. Preview the move and confirm it. If Airtable is not
+              connected, those actions stop and say so.
+            </li>
+            <li>
+              <strong>Accelevents</strong> can preview, dry-run, export, retry
+              and produce a reconciliation report. A dry run does not write to
+              Accelevents. A live export needs credentials.
+            </li>
+            <li>
+              <strong>Google</strong> and <strong>Microsoft</strong> cover
+              sign-in and optional calendars. See
+              <a href="/guide/accounts">Accounts and access</a>
+              and
+              <a href="/guide/communications">Communications and calendars</a>.
+            </li>
+            <li>
+              <strong>Resend</strong> sends production email once a verified
+              sender is in place.
+            </li>
+          </ul>
+          <p>
+            If a credential, permission or remote record is missing, the
+            workspace says so. It does not invent a successful result.
+          </p>
+
+          <h2 id="assistant">Event assistant</h2>
+          <p>
+            The event assistant can suggest a small change, such as a task
+            update, for you to approve. It cannot bypass your role, and it will
+            not apply a consequential change on its own. If AI is not set up,
+            the assistant is unavailable. It is not simulated.
+          </p>
+          <p>
+            For help with these connections, write to
+            <a href="mailto:support@programcue.com">support@programcue.com</a>.
+          </p>
+
+          <nav class="guide-pager" aria-label="Guide">
+            <a class="guide-pager-prev" href="/guide/communications"
+              ><span>Previous</span>Communications and calendars</a
+            >
+            <a class="guide-pager-index" href="/guide"
+              ><span>Guide</span>All topics</a
+            >
+            <span class="guide-pager-next" aria-hidden="true"></span>
+          </nav>
+        </div>
+      </article>
+    </main>
+
+    <footer class="site-footer">
+      <div class="shell footer-inner">
+        <div class="footer-brand">
+          <span class="wordmark">
+            <svg
+              class="wordmark-mark"
+              aria-hidden="true"
+              focusable="false"
+              viewBox="0 0 32 32"
+            >
+              <path class="wordmark-ink" d="M3 3h10v4H7v6H3V3Z" />
+              <path class="wordmark-accent" d="M19 3h10v10h-4V7h-6V3Z" />
+              <path class="wordmark-ink" d="M25 19h4v10H19v-4h6v-6Z" />
+              <path class="wordmark-ink" d="M3 19h4v6h6v4H3V19Z" />
+            </svg>
+            <span>Program Cue</span>
+          </span>
+          <p>Program Cue is based in Victoria, Australia.</p>
+        </div>
+        <nav aria-label="Footer">
+          <h2>Site</h2>
+          <ul>
+            <li><a href="/">Home</a></li>
+            <li><a href="/guide">Product guide</a></li>
+            <li><a href="/privacy">Privacy policy</a></li>
+            <li><a href="/terms">Terms of service</a></li>
+          </ul>
+        </nav>
+        <div>
+          <h2>Contact</h2>
+          <ul>
+            <li>
+              <a href="mailto:support@programcue.com">support@programcue.com</a>
+            </li>
+            <li>
+              <a href="https://app.programcue.com/sign-in"
+                >Sign in or create an account</a
+              >
+            </li>
+          </ul>
+        </div>
+      </div>
+      <div class="shell footer-legal">
+        <p>© 2026 Program Cue.</p>
+      </div>
+    </footer>
+  </body>
+</html>

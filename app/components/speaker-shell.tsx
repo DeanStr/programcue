@@ -10,6 +10,7 @@ import {
 import { Form, Link, NavLink, useLocation } from "react-router";
 
 import { BrandMark } from "~/components/brand-mark";
+import { PRODUCT_GUIDE_URL } from "~/lib/product-guide";
 import { programmeAccentPalette } from "~/modules/programme/programme-presentation";
 
 export function SpeakerShell({
@@ -83,6 +84,15 @@ export function SpeakerShell({
           <Link className="btn small" to={eventSelectionHref} reloadDocument>
             Switch event
           </Link>
+          <a
+            className="btn small"
+            href={PRODUCT_GUIDE_URL}
+            target="_blank"
+            rel="noopener noreferrer"
+            aria-label="Product guide"
+          >
+            Guide
+          </a>
           {event.participantSupportUrl ? (
             <a
               className="btn small"

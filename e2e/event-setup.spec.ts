@@ -297,6 +297,21 @@ test("the command palette uses path-based React Router navigation", async ({
   ).toBeVisible();
 });
 
+test("the command palette offers the public product guide without leaving the workspace", async ({
+  page,
+}) => {
+  await page.goto("/admin/event");
+  await page.locator("body[data-hydrated='true']").waitFor();
+  await page.getByRole("button", { name: /Search or run a command/ }).click();
+  await page
+    .getByRole("combobox", { name: "Program Cue commands" })
+    .fill("product guide");
+  await expect(
+    page.getByRole("option", { name: /Product guide/ }),
+  ).toBeVisible();
+  await expect(page).toHaveURL(/\/admin\/event$/);
+});
+
 test("the command palette resolves a room alias to the exact Event Setup record", async ({
   page,
 }) => {

@@ -47,7 +47,7 @@ describe("canonicalRedirectTarget", () => {
 
 describe("public site Worker", () => {
   it("serves the published pages with a 200 and no redirect", async () => {
-    for (const path of ["/", "/privacy", "/terms"]) {
+    for (const path of ["/", "/guide", "/privacy", "/terms"]) {
       const response = await get(`https://programcue.com${path}`);
       expect(response.status).toBe(200);
     }
