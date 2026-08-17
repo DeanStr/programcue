@@ -26,6 +26,8 @@ export function AdminTasksWorkspace({
   actionNotice?: {
     ok: boolean;
     message: string;
+    intent?: "create-template";
+    committed?: boolean;
     draft?: TaskTemplateDraftValues;
     errors?: Record<string, string[]>;
   } & TaskCompletionUndoNotice;

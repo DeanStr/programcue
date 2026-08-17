@@ -489,6 +489,14 @@ export class OperationService {
       UPDATE operation_jobs
          SET status = 'queued', last_error = NULL,
              claim_token = NULL, claim_expires_at = NULL,
+             content_zip_storage_cleaned_at = CASE
+               WHEN type = 'content.zip.export' THEN NULL
+               ELSE content_zip_storage_cleaned_at
+             END,
+             content_zip_storage_cleanup_claimed_at = CASE
+               WHEN type = 'content.zip.export' THEN NULL
+               ELSE content_zip_storage_cleanup_claimed_at
+             END,
              progress_total = CASE WHEN ? THEN 0 ELSE progress_total END,
              progress_completed = CASE WHEN ? OR ? THEN 0 ELSE progress_completed END,
              progress_failed = CASE WHEN ? OR ? THEN 0 ELSE progress_failed END,
@@ -498,6 +506,10 @@ export class OperationService {
              updated_at = unixepoch()
        WHERE id = ? AND event_id = ? AND organisation_id = ?
          AND payload_json = ?
+         AND (
+           type <> 'content.zip.export'
+           OR content_zip_storage_cleanup_claim IS NULL
+         )
          AND (
            status IN ('queue_failed','failed','partially_failed')
            OR (

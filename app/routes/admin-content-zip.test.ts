@@ -1,7 +1,13 @@
 import { env } from "cloudflare:test";
 import { RouterContextProvider } from "react-router";
 import { beforeEach, describe, expect, it } from "vitest";
-import { ZIP_EXPORT_TTL_SECONDS } from "~/modules/content/content-archive-service.server";
+import {
+  cleanupExpiredContentZipExports,
+  invalidateContentZipExportsForAsset,
+  ZIP_EXPORT_STORAGE_CLEANUP_CLAIM_LEASE_SECONDS,
+  ZIP_EXPORT_TTL_SECONDS,
+  zipExportObjectKey,
+} from "~/modules/content/content-archive-service.server";
 import { ContentManagementService } from "~/modules/content/content-management-service.server";
 import { ensureDemoSpeakerData } from "~/modules/speakers/demo.server";
 import { currentEventCookie } from "~/platform/auth/current-event.server";
@@ -11,6 +17,7 @@ import {
   DEMO_IDENTITIES,
   DEMO_ORGANISATION_ID,
 } from "~/platform/demo/demo-identities";
+import { OperationService } from "~/platform/operations/operation-service.server";
 import { processContentZipExport } from "../../workers/queue/content-zip-export-handler";
 import { action } from "./admin-content-zip";
 
@@ -212,44 +219,68 @@ describe("administrator content ZIP resource", () => {
       "second route ZIP transport evidence",
     );
 
-    const storedResult = await workerEnv.DB.prepare(
-      "SELECT result_json AS resultJson, completed_at AS completedAt FROM operation_jobs WHERE id = ?",
+    await workerEnv.DB.prepare(
+      `UPDATE operation_jobs
+          SET status = 'failed', result_json = NULL,
+              content_zip_storage_cleaned_at = NULL, completed_at = unixepoch()
+        WHERE id = ?`,
     )
       .bind(operationId)
-      .first<{ resultJson: string; completedAt: number }>();
-    if (!storedResult) throw new Error("The ZIP result was not persisted.");
-
-    const currentResult = JSON.parse(storedResult.resultJson) as {
-      objectEtag: string;
-      sizeBytes: number;
-      fileName: string;
-    };
-    const legacyObjectKey = `private/exports/${DEMO_EVENT_ID}/${operationId}.zip`;
-    await workerEnv.FILES.put(legacyObjectKey, zip);
-    await workerEnv.DB.prepare(
-      "UPDATE operation_jobs SET result_json = ? WHERE id = ?",
-    )
-      .bind(
-        JSON.stringify({
-          objectKey: legacyObjectKey,
-          objectEtag: currentResult.objectEtag,
-          sizeBytes: currentResult.sizeBytes,
-          fileName: currentResult.fileName,
-        }),
-        operationId,
-      )
       .run();
-    expect(
-      await new ContentManagementService(workerEnv).zipOperationStatus(
-        viewer,
-        operationId,
-      ),
-    ).toMatchObject({ status: "ready" });
-    const legacyDownloaded = await new ContentManagementService(
-      workerEnv,
-    ).downloadStoredZip(viewer, operationId);
-    expect(new Uint8Array(await legacyDownloaded.arrayBuffer())).toEqual(zip);
+    const retriedMessages: unknown[] = [];
+    const retryEnvironment = {
+      ...workerEnv,
+      OPERATIONS_QUEUE: {
+        send: async (message: unknown) => retriedMessages.push(message),
+      },
+    } as unknown as CloudflareEnvironment;
+    await workerEnv.DB.prepare(
+      `UPDATE operation_jobs
+          SET content_zip_storage_cleanup_claim = 'active-cleanup',
+              content_zip_storage_cleanup_claimed_at = unixepoch()
+        WHERE id = ?`,
+    )
+      .bind(operationId)
+      .run();
+    await expect(
+      new OperationService(retryEnvironment).retry(viewer, operationId),
+    ).rejects.toThrow("changed before it could be retried");
+    await workerEnv.DB.prepare(
+      `UPDATE operation_jobs
+          SET content_zip_storage_cleanup_claimed_at =
+                unixepoch() - ? - 1
+        WHERE id = ?`,
+    )
+      .bind(ZIP_EXPORT_STORAGE_CLEANUP_CLAIM_LEASE_SECONDS, operationId)
+      .run();
+    await cleanupExpiredContentZipExports(workerEnv);
+    const cleaned = await workerEnv.DB.prepare(
+      `SELECT content_zip_storage_cleaned_at AS cleanedAt
+         FROM operation_jobs WHERE id = ?`,
+    )
+      .bind(operationId)
+      .first<{ cleanedAt: number | null }>();
+    expect(cleaned?.cleanedAt).toEqual(expect.any(Number));
 
+    await new OperationService(retryEnvironment).retry(viewer, operationId);
+    expect(retriedMessages).toHaveLength(1);
+    await expect(
+      workerEnv.DB.prepare(
+        `SELECT status, content_zip_storage_cleaned_at AS cleanedAt
+           FROM operation_jobs WHERE id = ?`,
+      )
+        .bind(operationId)
+        .first(),
+    ).resolves.toEqual({ status: "queued", cleanedAt: null });
+
+    await processContentZipExport(retriedMessages[0], workerEnv);
+    const replacementResult = await workerEnv.DB.prepare(
+      "SELECT result_json AS resultJson FROM operation_jobs WHERE id = ?",
+    )
+      .bind(operationId)
+      .first<{ resultJson: string }>();
+    if (!replacementResult)
+      throw new Error("The replacement ZIP result was not persisted.");
     await workerEnv.DB.prepare(
       "UPDATE operation_jobs SET completed_at = ? WHERE id = ?",
     )
@@ -258,83 +289,19 @@ describe("administrator content ZIP resource", () => {
         operationId,
       )
       .run();
-    const replacement = await new ContentManagementService(
-      queuedEnvironment(),
-    ).queueZip(viewer, {
-      manifest: preview.manifest,
-      groupBy: preview.groupBy,
-      confirmed: true,
-    });
-    expect(replacement).toMatchObject({ status: "queued" });
-    expect(replacement.operationId).not.toBe(operationId);
-    const expiredObject = JSON.parse(storedResult.resultJson) as {
-      objectKey: string;
-    };
-    expect(await workerEnv.FILES.head(expiredObject.objectKey)).toBeNull();
-    const expired = await workerEnv.DB.prepare(
-      "SELECT status FROM operation_jobs WHERE id = ?",
-    )
-      .bind(operationId)
-      .first<{ status: string }>();
-    expect(expired?.status).toBe("failed");
-
-    const replacementOperation = await workerEnv.DB.prepare(
-      "SELECT payload_json AS payloadJson FROM operation_jobs WHERE id = ?",
-    )
-      .bind(replacement.operationId)
-      .first<{ payloadJson: string }>();
-    if (!replacementOperation)
-      throw new Error("The replacement ZIP operation was not persisted.");
-    await processContentZipExport(
-      JSON.parse(replacementOperation.payloadJson),
-      workerEnv,
-    );
-    const replacementResult = await workerEnv.DB.prepare(
-      "SELECT result_json AS resultJson FROM operation_jobs WHERE id = ?",
-    )
-      .bind(replacement.operationId)
-      .first<{ resultJson: string }>();
-    if (!replacementResult)
-      throw new Error("The replacement ZIP result was not persisted.");
-
-    await workerEnv.DB.prepare(
-      "UPDATE operation_jobs SET result_json = ? WHERE id = ?",
-    )
-      .bind("{}", replacement.operationId)
-      .run();
-    await expect(
-      new ContentManagementService(workerEnv).zipOperationStatus(
-        viewer,
-        replacement.operationId,
-      ),
-    ).rejects.toThrow("invalid durable result JSON");
-
-    await workerEnv.DB.prepare(
-      "UPDATE operation_jobs SET result_json = ? WHERE id = ?",
-    )
-      .bind(replacementResult.resultJson, replacement.operationId)
-      .run();
-    await workerEnv.DB.prepare(
-      "UPDATE file_versions SET released_at = NULL WHERE id = ?",
-    )
-      .bind(versionId)
-      .run();
-    await expect(
-      new ContentManagementService(workerEnv).downloadStoredZip(
-        viewer,
-        replacement.operationId,
-      ),
-    ).rejects.toMatchObject({ status: 410 });
-    const revoked = await workerEnv.DB.prepare(
-      "SELECT status FROM operation_jobs WHERE id = ?",
-    )
-      .bind(replacement.operationId)
-      .first<{ status: string }>();
-    expect(revoked?.status).toBe("failed");
+    await cleanupExpiredContentZipExports(workerEnv);
     const storedObject = JSON.parse(replacementResult.resultJson) as {
       objectKey: string;
     };
     expect(await workerEnv.FILES.head(storedObject.objectKey)).toBeNull();
+    await expect(
+      workerEnv.DB.prepare(
+        `SELECT status, content_zip_storage_cleaned_at AS cleanedAt
+           FROM operation_jobs WHERE id = ?`,
+      )
+        .bind(operationId)
+        .first(),
+    ).resolves.toEqual({ status: "failed", cleanedAt: expect.any(Number) });
   });
 
   it("reports missing ZIP storage and queue configuration explicitly", async () => {
@@ -388,5 +355,62 @@ describe("administrator content ZIP resource", () => {
     expect(await (storageError as Response).text()).toBe(
       "Private ZIP export storage is unavailable. Configure the FILES binding before retrying.",
     );
+  });
+
+  it("revokes an uninspectable event ZIP during file erasure", async () => {
+    const operationId = crypto.randomUUID();
+    const claimToken = crypto.randomUUID();
+    const objectKey = zipExportObjectKey(
+      viewer.eventId,
+      operationId,
+      claimToken,
+    );
+    const stored = await workerEnv.FILES.put(
+      objectKey,
+      new TextEncoder().encode("archive that must be erased"),
+    );
+    if (!stored) throw new Error("The ZIP test archive was not stored.");
+    await workerEnv.DB.prepare(
+      `INSERT INTO operation_jobs (
+         id, organisation_id, event_id, requested_by_person_id, type,
+         idempotency_key, correlation_id, status, payload_json, result_json,
+         progress_total, progress_completed, progress_failed, cancellable,
+         completed_at, created_at, updated_at
+       ) VALUES (?, ?, ?, ?, 'content.zip.export', ?, ?, 'completed', ?, ?,
+                 1, 1, 0, 0, unixepoch(), unixepoch(), unixepoch())`,
+    )
+      .bind(
+        operationId,
+        viewer.organisationId,
+        viewer.eventId,
+        viewer.personId,
+        `malformed-content-zip:${operationId}`,
+        crypto.randomUUID(),
+        JSON.stringify({}),
+        JSON.stringify({
+          objectKey,
+          objectEtag: stored.httpEtag,
+          sizeBytes: stored.size,
+          fileName: "programme-files-by-session.zip",
+          claimToken,
+        }),
+      )
+      .run();
+
+    await invalidateContentZipExportsForAsset(workerEnv, {
+      organisationId: viewer.organisationId,
+      eventId: viewer.eventId,
+      assetId: crypto.randomUUID(),
+    });
+
+    expect(await workerEnv.FILES.head(objectKey)).toBeNull();
+    await expect(
+      workerEnv.DB.prepare(
+        `SELECT status, content_zip_storage_cleaned_at AS cleanedAt
+           FROM operation_jobs WHERE id = ?`,
+      )
+        .bind(operationId)
+        .first(),
+    ).resolves.toEqual({ status: "failed", cleanedAt: expect.any(Number) });
   });
 });

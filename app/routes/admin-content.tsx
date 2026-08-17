@@ -6,9 +6,11 @@ import {
   Link,
   useActionData,
   useFetcher,
+  useLocation,
+  useNavigate,
   useNavigation,
 } from "react-router";
-import { ZodError } from "zod";
+import { ZodError, z } from "zod";
 import {
   DomainStatusBadge,
   statusPresentation,
@@ -38,18 +40,34 @@ async function administrator(
 
 export async function loader({ request, context }: Route.LoaderArgs) {
   const { env, viewer } = await administrator(request, context);
-  const rawPage = new URL(request.url).searchParams.get("filesPage");
+  const search = new URL(request.url).searchParams;
+  const rawPage = search.get("filesPage");
   if (
     rawPage !== null &&
     (!/^[1-9]\d*$/.test(rawPage) || !Number.isSafeInteger(Number(rawPage)))
   ) {
     throw new Response("filesPage must be a positive integer", { status: 400 });
   }
+  const rawZipOperation = search.get("zipOperation");
+  if (
+    rawZipOperation !== null &&
+    !z.uuid().safeParse(rawZipOperation).success
+  ) {
+    throw new Response("zipOperation must be a UUID", { status: 400 });
+  }
   try {
-    return await new ContentManagementService(env).getDashboard(
+    const service = new ContentManagementService(env);
+    const dashboard = await service.getDashboard(
       viewer,
       rawPage === null ? 1 : Number(rawPage),
     );
+    return {
+      ...dashboard,
+      zipOperation:
+        rawZipOperation === null
+          ? null
+          : await service.zipOperationStatus(viewer, rawZipOperation),
+    };
   } catch (error) {
     if (error instanceof ContentManagementStateError) {
       throw new Response(error.message, { status: error.status });
@@ -305,6 +323,8 @@ function FileVersionHistory({
 export default function AdminContent({ loaderData }: Route.ComponentProps) {
   const actionData = useActionData<typeof action>();
   const zipFetcher = useFetcher<typeof zipAction>();
+  const location = useLocation();
+  const navigate = useNavigate();
   const navigation = useNavigation();
   const zipPreviewManifest =
     actionData?.ok && "preview" in actionData
@@ -314,6 +334,20 @@ export default function AdminContent({ loaderData }: Route.ComponentProps) {
     if (zipPreviewManifest === null) return;
     zipFetcher.reset();
   }, [zipFetcher.reset, zipPreviewManifest]);
+  const zipOperationId =
+    zipFetcher.data && "operationId" in zipFetcher.data
+      ? zipFetcher.data.operationId
+      : loaderData.zipOperation?.operationId;
+  useEffect(() => {
+    if (!zipOperationId) return;
+    const search = new URLSearchParams(location.search);
+    if (search.get("zipOperation") === zipOperationId) return;
+    search.set("zipOperation", zipOperationId);
+    void navigate(
+      { pathname: location.pathname, search: `?${search.toString()}` },
+      { replace: true, preventScrollReset: true },
+    );
+  }, [location.pathname, location.search, navigate, zipOperationId]);
   const statusCounts = Object.fromEntries(
     ["draft", "in_review", "approved", "changes_requested"].map((status) => [
       status,
@@ -657,10 +691,18 @@ export default function AdminContent({ loaderData }: Route.ComponentProps) {
                 {zipFetcher.data.message}
               </p>
             ) : null}
-            {zipFetcher.data && "operationId" in zipFetcher.data ? (
-              <ZipExportProgress operationId={zipFetcher.data.operationId} />
-            ) : null}
           </zipFetcher.Form>
+        </section>
+      ) : null}
+      {zipOperationId ? (
+        <section className="card pad mt" aria-labelledby="zip-progress-title">
+          <div className="card-title">
+            <div>
+              <span className="pc-section-kicker">Stored archive</span>
+              <h2 id="zip-progress-title">ZIP export</h2>
+            </div>
+          </div>
+          <ZipExportProgress operationId={zipOperationId} />
         </section>
       ) : null}
     </>

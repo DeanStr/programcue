@@ -183,6 +183,7 @@ test("an invited speaker can explicitly choose the created event and see its tas
     .fill("Confirm the event participation details.");
   await createTemplate.getByRole("button", { name: "Create template" }).click();
   await expect(page.getByText("Task template created.")).toBeVisible();
+  await expect(createTemplate.getByLabel("Name")).toHaveValue("");
   const assignment = page.locator("section").filter({
     has: page.getByRole("heading", { name: "Assign a plan" }),
   });

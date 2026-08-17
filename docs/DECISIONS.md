@@ -155,7 +155,15 @@ every download. File erasure revokes matching exports before cleanup, and a
 lost Queue claim cannot publish its temporary object; completion is fenced by
 the claim token. Successful R2 cleanup records a terminal cleanup timestamp so
 scheduled retries advance past already-cleaned failures while still retrying a
-failed deletion.
+failed deletion. Cleanup first holds its own durable, five-minute reclaimable
+lease, which prevents a generic operation retry from racing deletion or
+inheriting a stale cleanup timestamp; the ZIP worker also clears the marker
+while claiming work. An
+uninspectable event-scoped ZIP is revoked during file erasure because its
+manifest cannot prove it excludes the erased file. The prior deterministic ZIP
+result/key format was not deployed, so this pre-release slice stores and reads
+only the current claim-token format. The Content URL retains a validated,
+event-scoped ZIP operation ID so polling and a ready download survive reload.
 
 ## Public programme workstream decisions
 

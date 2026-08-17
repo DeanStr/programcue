@@ -744,8 +744,12 @@ blocker.
 persisted source manifest and source ETags before every download, and are
 revoked and deleted when a referenced file is erased. The worker renews its
 claim while streaming and fences claim-specific objects on completion.
-Terminal cleanup records successful deletion and retries only rows whose
-cleanup marker is still absent.
+The Content URL retains a validated event-scoped ZIP operation so polling and
+download recovery survive reload. Terminal cleanup records successful deletion,
+uses a durable, reclaimable cleanup lease to exclude concurrent retry, and
+retries only rows whose cleanup marker is still absent; the worker clears that
+marker atomically when it claims a retry. An uninspectable event-scoped ZIP is conservatively
+revoked and deleted during file erasure.
   A speaker-scoped task file is attributed to its linked session only when
   exactly one event session matches that speaker; ambiguous relationships stay
   visibly unassigned instead of selecting an arbitrary session.

@@ -56,6 +56,10 @@ export const operationJobs = sqliteTable(
     startedAt: integer("started_at"),
     completedAt: integer("completed_at"),
     contentZipStorageCleanedAt: integer("content_zip_storage_cleaned_at"),
+    contentZipStorageCleanupClaim: text("content_zip_storage_cleanup_claim"),
+    contentZipStorageCleanupClaimedAt: integer(
+      "content_zip_storage_cleanup_claimed_at",
+    ),
     alertAcknowledgedAt: integer("alert_acknowledged_at"),
     alertAcknowledgedByPersonId: text(
       "alert_acknowledged_by_person_id",
@@ -104,6 +108,8 @@ export const operationJobs = sqliteTable(
         table.type,
         table.status,
         table.contentZipStorageCleanedAt,
+        table.contentZipStorageCleanupClaim,
+        table.contentZipStorageCleanupClaimedAt,
         table.completedAt,
         table.updatedAt,
       )

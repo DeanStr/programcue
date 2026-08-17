@@ -246,8 +246,20 @@ export async function action({ request, context }: Route.ActionArgs) {
         entityId: templateId,
         changeType: "created",
       });
-      if (realtimeFailure) return data(realtimeFailure, { status: 207 });
-      return data({ ok: true, message: "Task template created." });
+      if (realtimeFailure)
+        return data(
+          {
+            ...realtimeFailure,
+            committed: true,
+            intent: "create-template" as const,
+          },
+          { status: 207 },
+        );
+      return data({
+        ok: true,
+        intent: "create-template" as const,
+        message: "Task template created.",
+      });
     }
     if (intent === "assign") {
       const result = await service.assignTemplate(

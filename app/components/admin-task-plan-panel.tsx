@@ -21,6 +21,9 @@ export function AdminTaskPlanPanel({
   data: AdminTasksData;
   busy: boolean;
   actionNotice?: {
+    ok?: boolean;
+    committed?: boolean;
+    intent?: "create-template";
     draft?: TaskTemplateDraftValues;
     errors?: Record<string, string[]>;
   };
@@ -35,8 +38,15 @@ export function AdminTaskPlanPanel({
     normalizeTaskTemplateDraft(),
   );
   useEffect(() => {
-    if (actionNotice?.draft) setTemplateDraft(actionNotice.draft);
-  }, [actionNotice?.draft]);
+    if (actionNotice?.draft) {
+      setTemplateDraft(actionNotice.draft);
+    } else if (
+      actionNotice?.intent === "create-template" &&
+      (actionNotice.ok || actionNotice.committed)
+    ) {
+      setTemplateDraft(normalizeTaskTemplateDraft());
+    }
+  }, [actionNotice]);
   const updateTemplateDraft = <K extends keyof TaskTemplateDraftValues>(
     key: K,
     value: TaskTemplateDraftValues[K],

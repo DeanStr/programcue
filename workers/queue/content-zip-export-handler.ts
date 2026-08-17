@@ -117,7 +117,10 @@ export async function processContentZipExport(
         SET status = 'running', started_at = COALESCE(started_at, unixepoch()),
             attempt_count = attempt_count + 1, completed_at = NULL,
             last_error = NULL, claim_token = ?,
-            claim_expires_at = unixepoch() + ?, updated_at = unixepoch()
+            claim_expires_at = unixepoch() + ?,
+            content_zip_storage_cleaned_at = NULL,
+            content_zip_storage_cleanup_claimed_at = NULL,
+            updated_at = unixepoch()
       WHERE id = ? AND event_id = ? AND organisation_id = ?
         AND type = 'content.zip.export'
         AND (
@@ -224,7 +227,8 @@ export async function processContentZipExport(
       `UPDATE operation_jobs
           SET status = 'completed', progress_completed = 1,
               progress_failed = 0, result_json = ?, completed_at = unixepoch(),
-              claim_token = NULL, claim_expires_at = NULL, updated_at = unixepoch()
+              claim_token = NULL, claim_expires_at = NULL,
+              content_zip_storage_cleaned_at = NULL, updated_at = unixepoch()
         WHERE id = ? AND event_id = ? AND organisation_id = ?
           AND type = 'content.zip.export' AND status = 'running'
           AND claim_token = ?`,
