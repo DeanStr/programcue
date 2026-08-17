@@ -15,6 +15,21 @@ import {
   summarizeProgramme,
 } from "./programme-presentation";
 
+function mixHex(foreground: string, background: string, weight: number) {
+  const channel = (value: string, start: number) =>
+    Number.parseInt(value.slice(start, start + 2), 16);
+  return `#${[1, 3, 5]
+    .map((start) =>
+      Math.round(
+        channel(foreground, start) * weight +
+          channel(background, start) * (1 - weight),
+      )
+        .toString(16)
+        .padStart(2, "0"),
+    )
+    .join("")}`;
+}
+
 describe("programme presentation rules", () => {
   it("builds a server-resolvable public speaker profile path", () => {
     expect(publicSpeakerProfilePath("future/events", "speaker ? one")).toBe(
@@ -58,6 +73,8 @@ describe("programme presentation rules", () => {
       ink: "#4f46e5",
       onAccent: "#ffffff",
       onRawAccent: "#ffffff",
+      onDark: "#8d87ee",
+      onDarkSolid: "#0f172a",
     });
     expect(programmeAccentPalette("#ffffff")).toMatchObject({
       accent: "#ffffff",
@@ -66,8 +83,8 @@ describe("programme presentation rules", () => {
     expect(() => programmeAccentPalette("white")).toThrow(/six-digit/i);
   });
 
-  /* Controls use the derived ink while the statistics band uses the raw accent;
-     each surface needs its own readable foreground. */
+  /* Controls use the derived ink while solid accent fills use the raw colour;
+     dark-canvas ink is a third surface. Each needs its own readable foreground. */
   it("derives solid-accent ink that stays readable on any accent", () => {
     for (const accent of [
       "#9d4a31",
@@ -81,15 +98,33 @@ describe("programme presentation rules", () => {
       "#000000",
       "#808080",
       "#767676",
+      "#78969b",
     ]) {
-      const { ink, onAccent, onRawAccent } = programmeAccentPalette(accent);
+      const { ink, onAccent, onRawAccent, onDark, onDarkSolid } =
+        programmeAccentPalette(accent);
       expect(
         programmeContrastRatio(onRawAccent, accent),
       ).toBeGreaterThanOrEqual(4.5);
       expect(programmeContrastRatio(onAccent, ink)).toBeGreaterThanOrEqual(4.5);
+      const accentSoft = mixHex(accent, "#172220", 0.15);
+      expect(programmeContrastRatio(onDark, accentSoft)).toBeGreaterThanOrEqual(
+        4.75,
+      );
+      expect(programmeContrastRatio(onDark, "#1c2927")).toBeGreaterThanOrEqual(
+        4.75,
+      );
+      expect(programmeContrastRatio(onDark, "#101817")).toBeGreaterThanOrEqual(
+        4.75,
+      );
+      expect(
+        programmeContrastRatio(onDarkSolid, onDark),
+      ).toBeGreaterThanOrEqual(4.5);
     }
     expect(programmeAccentPalette("#facc15").onRawAccent).not.toBe("#ffffff");
     expect(programmeAccentPalette("#000000").onRawAccent).toBe("#ffffff");
+    expect(programmeAccentPalette("#000000").onDark).not.toBe("#000000");
+    expect(programmeAccentPalette("#9d4a31").onDark).not.toBe("#d7e4e1");
+    expect(programmeAccentPalette("#78969b").onDark).not.toBe("#78969b");
   });
 
   it("checks solid-accent contrast after converting the colour to hex", () => {

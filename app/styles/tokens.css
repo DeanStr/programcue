@@ -125,7 +125,9 @@
      from the event accent. Defaults keep the CSS contract valid before that
      route-owned inline palette is present. */
   --event-accent-light-ink: var(--brand-700);
+  --event-accent-dark-ink: var(--public-dark-accent-ink);
   --event-accent-on-solid: var(--text-inverse);
+  --event-control-on-dark: var(--public-dark-accent-on-solid);
 
   /* --- State -------------------------------------------------------------
      Two weights per state, because a fill and a label have different jobs.

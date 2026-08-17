@@ -4,6 +4,7 @@ export const nodeOnlyTestFiles = [
   "site/src/e2e-port.test.ts",
   "site/src/index.test.ts",
   "e2e/support/reset-demo-submissions.unit.ts",
+  "e2e/support/css-contrast.test.ts",
   "app/components/admin-public-site-editor.test.tsx",
   "app/components/admin-public-site-recordings.test.tsx",
   "app/components/admin-shell-dialogs.test.ts",

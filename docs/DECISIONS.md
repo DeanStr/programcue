@@ -1185,28 +1185,39 @@ system themes remain event-site choices; a global application theme remains
 deferred for the reason documented above.
 
 The homepage follows an editorial event hierarchy rather than a dashboard or a
-stack of cards. The introduction is a two-column proposition-and-explanation
-spread, speakers use large rectangular portraits on an open-ended accent field,
-and featured sessions form a numbered programme edit with a timetable rail.
-Statistics share one band, venue information uses a location rail,
-and section headings extend into a fading brand rule. Featured speakers,
-featured sessions and the FAQ do not enclose each record in a generic rounded
-container. The FAQ replaces the browser's default disclosure triangle with a
-plus drawn from two hairlines. Repeated marks are removed where the heading
-already supplies their meaning — every entry under "Featured sessions" is a
-session, so a calendar icon on each one is noise — and kept where they carry
-information, such as a recording's play mark or a speaker's portrait.
+stack of cards. The introduction is a kicker plus the organiser's sentence:
+the section label stays a label, and a short description takes display type
+instead of sitting in a two-column hole beside it. Speakers are a compact
+cast of circular portraits with an accent ring on a quiet wash, and featured
+sessions form a numbered programme edit with a timetable rail. Statistics reprise the
+masthead as a dark event panel — accent over the fixed near-black canvas,
+inset hairline, fine grid — with the four figures locked up by rules rather
+than dumped on a solid fill. Venue information uses a location rail, and
+section headings carry a fading brand rule underneath so a long title and a
+short title use the same device. Featured speakers, featured sessions and the
+FAQ do not enclose each record in a generic rounded container. The FAQ
+replaces the browser's default disclosure triangle with a plus drawn from two
+hairlines. Repeated marks are removed where the heading already supplies their
+meaning — every entry under "Featured sessions" is a session, so a calendar
+icon on each one is noise — and kept where they carry information, such as a
+recording's play mark or a speaker's portrait.
 
 Restraint is not the same as having nothing to look at, so scale is spent on
-content rather than ornament. Statistics retain a strong numeric step but stay
-subordinate to the event masthead and section headings; speaker portraits read
-as lineup photography rather than avatars; and the organiser's opening
-statement gets display hierarchy without becoming another hero. Speaker grids
-adapt explicitly for one-, two- and three-column lineups and all homepage
-relationships answer to the homepage container, so the editor preview and a
-phone get the same composition rather than the same pixels. Single-speaker
-lineups use the full field, inset panels share one corner language, and each
-featured entry has one visual marker rather than competing borders. The
+content rather than ornament. The glance panel is prominent because it is
+composed, not because it is a louder rectangle; speaker portraits stay faces
+you can recognise, not a poster of the only featured person; and the
+organiser's opening statement gets display hierarchy without becoming another
+hero. Speaker grids fill compact columns and all homepage relationships
+answer to the homepage container, so the editor preview and a phone get the
+same composition rather than the same pixels. A single featured speaker stays
+the size of one person: on a wide column the wash hugs the card so an 88px
+portrait does not sit in a field that looks like missing people. Inset panels
+share one corner language, and each featured entry has one visual marker
+rather than competing borders. The featured-speaker card names the profile it
+already opens, in body ink rather than accent ink, because that cue sits on a
+tinted wash; the later Speakers list keeps “View profile and sessions”
+because that list is the working directory. The venue's map control is the
+section's action, not a trailing text link. The
 "Full programme" seam names the transition from curated content to the working
 list, and repeated venue information is suppressed there.
 
@@ -1251,9 +1262,13 @@ faithful by construction is worth more than mirrored breakpoints that have to
 be kept in step by hand. Below the column breakpoint the statistics wrap two by
 two.
 
-Solid surfaces derive foregrounds from the colour actually painted. The raw
-event accent used by the statistics band and the contrast-safe accent ink used
-by controls have separate foreground tokens; both are checked after conversion
-to their final hexadecimal colours. Published browser coverage measures the
-rendered band, while presentation-rule tests exercise pale, dark and boundary
-accents.
+Solid surfaces derive foregrounds from the colour actually painted. Light
+paper, the dark `--accent-soft` fill and raw accent fills each have their
+own contrast-safe ink; dark theme uses that tint-safe ink rather than a
+fixed mint, so track pills and itinerary times stay the event colour on the
+15% mix they actually sit on. Small text on a decorative wash stays on body
+ink. Tokens are checked after conversion to their final hexadecimal colours.
+Published browser coverage measures the glance panel against its first
+accent stop, including the worst-case white accent, with a parser that accepts
+`color(srgb …)`, while presentation-rule tests exercise pale, dark and
+boundary accents.

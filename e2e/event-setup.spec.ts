@@ -52,9 +52,10 @@ test("Event Setup saves through D1 and survives a reload", async ({ page }) => {
     await expect(
       page.getByText("105 Princes' Boulevard, Toronto, ON"),
     ).toBeVisible();
-    await expect(
-      page.getByRole("link", { name: /View venue map/ }),
-    ).toHaveAttribute("href", "https://maps.example.test/beanfield-centre");
+    await expect(page.getByRole("link", { name: /Open map/ })).toHaveAttribute(
+      "href",
+      "https://maps.example.test/beanfield-centre",
+    );
   } finally {
     await page.context().addCookies([
       {

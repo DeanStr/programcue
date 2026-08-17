@@ -36,6 +36,7 @@ import {
   formatProgrammeDuration,
   formatProgrammeEventDay,
   formatProgrammeTimeRange,
+  programmeAccentCssVars,
   programmeAccentPalette,
   publicProgrammeSurfacePath,
   publicSessionDetailPath,
@@ -1119,14 +1120,7 @@ export function PublicProgrammeWorkspace({
           ? embedOptions.theme
           : (loaderData.site?.configuration.theme ?? "system")
       }
-      style={
-        {
-          "--event-accent": accentPalette.accent,
-          "--event-accent-light-ink": accentPalette.ink,
-          "--event-accent-on-solid": accentPalette.onRawAccent,
-          "--event-control-on-solid": accentPalette.onAccent,
-        } as CSSProperties
-      }
+      style={programmeAccentCssVars(accentPalette) as CSSProperties}
     >
       {!embedded ? (
         <PublicEventHeader

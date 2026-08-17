@@ -21,6 +21,13 @@ type RgbColour = readonly [red: number, green: number, blue: number];
 const PROGRAMME_SURFACE_INK: RgbColour = [15, 23, 42];
 const PROGRAMME_SURFACE_WHITE: RgbColour = [255, 255, 255];
 const PROGRAMME_SURFACE_BLACK: RgbColour = [0, 0, 0];
+/* Same hex as `--public-dark-surface`. Dark-theme `--accent-soft` is a 15%
+   accent tint of this ground, and that pair is what track pills and the
+   itinerary time actually paint. A dark accent darkens the tint below
+   raised; a mid accent lightens it above. Ink has to clear both. */
+const PROGRAMME_DARK_SURFACE: RgbColour = [23, 34, 32];
+const PROGRAMME_DARK_SURFACE_RAISED: RgbColour = [28, 41, 39];
+const DARK_ACCENT_SOFT_WEIGHT = 0.15;
 /* A margin above the 4.5:1 requirement, for text set on a pale tint. */
 const SOFT_SURFACE_CONTRAST = 4.75;
 /* The requirement itself. No margin is available here: the worst accent for
@@ -103,10 +110,37 @@ function inkOnSolid(surface: RgbColour): RgbColour {
   return PROGRAMME_SURFACE_BLACK;
 }
 
+function darkAccentSoft(accent: RgbColour): RgbColour {
+  return mixColour(accent, PROGRAMME_DARK_SURFACE, DARK_ACCENT_SOFT_WEIGHT);
+}
+
+/** Lighten an accent until it can sit on every dark surface that uses it. */
+function inkOnDark(accent: RgbColour): RgbColour {
+  const surfaces = [darkAccentSoft(accent), PROGRAMME_DARK_SURFACE_RAISED];
+  const readableOnDarkSurfaces = (candidate: RgbColour) =>
+    surfaces.every(
+      (surface) => contrastRatio(candidate, surface) >= SOFT_SURFACE_CONTRAST,
+    );
+  if (readableOnDarkSurfaces(accent)) {
+    return roundColour(accent);
+  }
+  for (let step = 0; step <= 100; step += 1) {
+    const candidate = roundColour(
+      mixColour(PROGRAMME_SURFACE_WHITE, accent, step / 100),
+    );
+    if (readableOnDarkSurfaces(candidate)) {
+      return candidate;
+    }
+  }
+  return PROGRAMME_SURFACE_WHITE;
+}
+
 /**
  * Event branding accepts any six-digit colour, including colours that cannot
  * carry readable text. Keep the customer's exact accent for decoration, but
- * derive separate text colours for the pale control colour and raw accent.
+ * derive separate text colours for pale light surfaces, the dark
+ * `--accent-soft` fill, and solid accent fills. Small text on a decorative
+ * wash is not this ink's job.
  */
 export function programmeAccentPalette(value: string) {
   const accent = parseHexColour(value);
@@ -127,11 +161,27 @@ export function programmeAccentPalette(value: string) {
       break;
     }
   }
+  const onDark = inkOnDark(accent);
   return {
     accent: formatHexColour(accent),
     ink: formatHexColour(ink),
     onAccent: formatHexColour(inkOnSolid(roundColour(ink))),
     onRawAccent: formatHexColour(inkOnSolid(accent)),
+    onDark: formatHexColour(onDark),
+    onDarkSolid: formatHexColour(inkOnSolid(onDark)),
+  };
+}
+
+export function programmeAccentCssVars(
+  palette: ReturnType<typeof programmeAccentPalette>,
+) {
+  return {
+    "--event-accent": palette.accent,
+    "--event-accent-light-ink": palette.ink,
+    "--event-accent-dark-ink": palette.onDark,
+    "--event-accent-on-solid": palette.onRawAccent,
+    "--event-control-on-solid": palette.onAccent,
+    "--event-control-on-dark": palette.onDarkSolid,
   };
 }
 

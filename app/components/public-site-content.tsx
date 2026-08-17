@@ -15,6 +15,7 @@ import { eventHeroImagePath } from "~/components/public-programme-model";
 import { RestrictedMarkdown } from "~/components/restricted-markdown";
 import {
   formatProgrammeEventDay,
+  programmeAccentCssVars,
   programmeAccentPalette,
   publicSessionDetailPath,
   publicSpeakerProfilePath,
@@ -79,6 +80,41 @@ function PreviewSafeLink({
     <a className={className} href={href} rel="noreferrer">
       {children}
     </a>
+  );
+}
+
+function PublicVenueDetails({
+  venueLabel,
+  venueAddress,
+  venueMapUrl,
+  preview,
+}: {
+  venueLabel: string | undefined;
+  venueAddress: string | null | undefined;
+  venueMapUrl: string | null | undefined;
+  preview: boolean;
+}) {
+  return (
+    <div className="public-site-venue">
+      <div className="public-site-venue-place">
+        <MapPin aria-hidden />
+        <div>
+          {venueLabel && venueLabel !== venueAddress?.trim() ? (
+            <strong>{venueLabel}</strong>
+          ) : null}
+          {venueAddress ? <address>{venueAddress}</address> : null}
+        </div>
+      </div>
+      {venueMapUrl ? (
+        <PreviewSafeLink
+          className="btn primary public-site-map-link"
+          href={venueMapUrl}
+          preview={preview}
+        >
+          Open map <ExternalLink aria-hidden size={13} />
+        </PreviewSafeLink>
+      ) : null}
+    </div>
   );
 }
 
@@ -147,7 +183,9 @@ export function PublicSiteHome({
     introduction: (
       <HomeSection
         title={configuration.introductionHeading}
-        className="public-site-introduction"
+        className={`public-site-introduction${
+          (event.description?.trim().length ?? 0) < 140 ? " is-compact" : ""
+        }`}
       >
         <p className="public-site-lede">{event.description}</p>
         <div className="public-site-actions">
@@ -205,6 +243,9 @@ export function PublicSiteHome({
                     .filter(Boolean)
                     .join(" · ")}
                 </small>
+                <span className="public-site-speaker-profile-cue">
+                  View profile
+                </span>
               </span>
             </PreviewSafeLink>
           ))}
@@ -258,26 +299,12 @@ export function PublicSiteHome({
     ),
     venue: (
       <HomeSection title="Venue" className="public-site-venue-section">
-        <div className="public-site-venue">
-          <MapPin aria-hidden />
-          <div>
-            {venueLabel !== event.venueAddress?.trim() ? (
-              <strong>{venueLabel}</strong>
-            ) : null}
-            {event.venueAddress ? (
-              <address>{event.venueAddress}</address>
-            ) : null}
-            {event.venueMapUrl ? (
-              <PreviewSafeLink
-                className="public-site-map-link"
-                href={event.venueMapUrl}
-                preview={preview}
-              >
-                Open map <ExternalLink aria-hidden size={13} />
-              </PreviewSafeLink>
-            ) : null}
-          </div>
-        </div>
+        <PublicVenueDetails
+          preview={preview}
+          venueAddress={event.venueAddress}
+          venueLabel={venueLabel}
+          venueMapUrl={event.venueMapUrl}
+        />
       </HomeSection>
     ),
     faq: (
@@ -409,26 +436,12 @@ export function PublicSitePageContent({
         {pageConfiguration.body ? (
           <RestrictedMarkdown>{pageConfiguration.body}</RestrictedMarkdown>
         ) : null}
-        <div className="public-site-venue">
-          <MapPin aria-hidden />
-          <div>
-            {publicVenueLabel(event) !== event.venueAddress?.trim() ? (
-              <strong>{publicVenueLabel(event)}</strong>
-            ) : null}
-            {event.venueAddress ? (
-              <address>{event.venueAddress}</address>
-            ) : null}
-            {event.venueMapUrl ? (
-              <PreviewSafeLink
-                className="public-site-map-link"
-                href={event.venueMapUrl}
-                preview={preview}
-              >
-                Open map <ExternalLink aria-hidden size={13} />
-              </PreviewSafeLink>
-            ) : null}
-          </div>
-        </div>
+        <PublicVenueDetails
+          preview={preview}
+          venueAddress={event.venueAddress}
+          venueLabel={publicVenueLabel(event)}
+          venueMapUrl={event.venueMapUrl}
+        />
       </>
     );
   }
@@ -495,14 +508,7 @@ export function PublicEventSiteWorkspace({
     <div
       className="public-shell event-branded"
       data-public-theme={configuration.theme}
-      style={
-        {
-          "--event-accent": palette.accent,
-          "--event-accent-light-ink": palette.ink,
-          "--event-accent-on-solid": palette.onRawAccent,
-          "--event-control-on-solid": palette.onAccent,
-        } as CSSProperties
-      }
+      style={programmeAccentCssVars(palette) as CSSProperties}
     >
       <PublicEventHeader event={event} programme={null} site={configuration} />
       <section

@@ -12,7 +12,10 @@ import {
   programmeEmbedUrl,
   programmeIframeSnippet,
 } from "~/modules/programme/programme-embed-configuration";
-import { programmeAccentPalette } from "~/modules/programme/programme-presentation";
+import {
+  programmeAccentCssVars,
+  programmeAccentPalette,
+} from "~/modules/programme/programme-presentation";
 import type { PublishedProgramme } from "~/modules/programme/public-programme-types";
 import {
   PUBLIC_SITE_PAGE_TYPES,
@@ -246,14 +249,7 @@ export function AdminPublicSitePreview({
         data-public-theme={configuration.theme}
         // biome-ignore lint/a11y/noNoninteractiveTabindex: This scrollable preview must be keyboard-focusable so users can reach overflow content.
         tabIndex={0}
-        style={
-          {
-            "--event-accent": palette.accent,
-            "--event-accent-light-ink": palette.ink,
-            "--event-accent-on-solid": palette.onRawAccent,
-            "--event-control-on-solid": palette.onAccent,
-          } as CSSProperties
-        }
+        style={programmeAccentCssVars(palette) as CSSProperties}
       >
         <header>
           <strong>{event.name}</strong>

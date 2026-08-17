@@ -6,7 +6,10 @@ import {
 } from "~/components/public-event-chrome";
 import { PublicSitePageContent } from "~/components/public-site-content";
 import { restrictedMarkdownPlainText } from "~/components/restricted-markdown";
-import { programmeAccentPalette } from "~/modules/programme/programme-presentation";
+import {
+  programmeAccentCssVars,
+  programmeAccentPalette,
+} from "~/modules/programme/programme-presentation";
 import { PublicProgrammeService } from "~/modules/programme/public-programme-service.server";
 import {
   PUBLIC_SITE_PAGE_TYPES,
@@ -123,14 +126,7 @@ export default function PublicSitePage(props: Route.ComponentProps) {
     <div
       className="public-shell event-branded public-site-page-shell"
       data-public-theme={site.configuration.theme}
-      style={
-        {
-          "--event-accent": palette.accent,
-          "--event-accent-light-ink": palette.ink,
-          "--event-accent-on-solid": palette.onRawAccent,
-          "--event-control-on-solid": palette.onAccent,
-        } as CSSProperties
-      }
+      style={programmeAccentCssVars(palette) as CSSProperties}
     >
       <PublicEventHeader
         event={site.event}

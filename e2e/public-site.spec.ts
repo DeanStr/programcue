@@ -1,5 +1,6 @@
 import { expect, type Locator, test } from "@playwright/test";
 
+import { cssColourContrastRatio } from "./support/css-contrast";
 import { resetDemoEvent } from "./support/reset-demo-event";
 
 /* The editor renders the published homepage markup inside a 390px frame in a
@@ -7,32 +8,27 @@ import { resetDemoEvent } from "./support/reset-demo-event";
    compare what the two actually lay out. Column counts are the observable
    difference: viewport-relative spacing fitted one more statistics column in
    the preview than any phone shows. */
-/* WCAG 2 contrast between two `rgb()` strings read off the rendered page. Event
-   accents are customer data and the homepage paints text directly on one, so
-   the guarantee is measured where the text lands rather than asserted from a
-   token that a stylesheet is free to dilute. */
-function contrastRatio(left: string, right: string) {
-  const luminance = (value: string) => {
-    const [red, green, blue] = (value.match(/[\d.]+/gu) ?? [])
-      .slice(0, 3)
-      .map((channel) => {
-        const normalised = Number(channel) / 255;
-        return normalised <= 0.04045
-          ? normalised / 12.92
-          : ((normalised + 0.055) / 1.055) ** 2.4;
-      });
-    return (red ?? 0) * 0.2126 + (green ?? 0) * 0.7152 + (blue ?? 0) * 0.0722;
-  };
-  const lighter = Math.max(luminance(left), luminance(right));
-  const darker = Math.min(luminance(left), luminance(right));
-  return (lighter + 0.05) / (darker + 0.05);
-}
+/* WCAG 2 contrast for colours read off the rendered page. Event accents are
+   customer data and the homepage paints text on mixed fills, so the guarantee
+   is measured where the text lands. Chromium serialises those mixes as
+   `color(srgb …)`; the shared parser is what stops that looking near-black. */
 
 async function paintedColours(locator: Locator) {
   return locator.evaluate((element) => {
     const style = getComputedStyle(element);
     return { ink: style.color, background: style.backgroundColor };
   });
+}
+
+async function resolvedColorMix(locator: Locator, mix: string) {
+  return locator.evaluate((element, value) => {
+    const probe = document.createElement("span");
+    probe.style.backgroundColor = value;
+    element.appendChild(probe);
+    const color = getComputedStyle(probe).backgroundColor;
+    probe.remove();
+    return color;
+  }, mix);
 }
 
 async function homeColumnCounts(home: Locator) {
@@ -403,6 +399,14 @@ test("organisers compose, preview and publish the bounded public event site", as
     ).status(),
   ).toBe(400);
   await page.goto("/public/programme/future-of-events-2027");
+  const featuredSpeaker = page.locator(
+    ".public-site-speakers a.public-site-feature-card",
+  );
+  await expect(featuredSpeaker).toContainText("View profile");
+  await expect(featuredSpeaker).toHaveAttribute(
+    "href",
+    /\/public\/programme\/future-of-events-2027\?speaker=/u,
+  );
   await expect(page.locator(".public-shell")).toHaveAttribute(
     "data-public-theme",
     "dark",
@@ -447,19 +451,28 @@ test("organisers compose, preview and publish the bounded public event site", as
   const headingSizes = await page
     .locator(".public-site-section-heading h2")
     .evaluateAll((headings) =>
-      headings.map((heading) =>
-        Number.parseFloat(getComputedStyle(heading).fontSize),
-      ),
+      headings
+        .filter((heading) => {
+          const section = heading.closest(".public-site-section");
+          return (
+            !section?.classList.contains("public-site-introduction") &&
+            !section?.classList.contains("public-site-statistics-section")
+          );
+        })
+        .map((heading) =>
+          Number.parseFloat(getComputedStyle(heading).fontSize),
+        ),
     );
   expect(headingSizes.length).toBeGreaterThan(1);
   for (const size of headingSizes) expect(size).toBeGreaterThanOrEqual(28);
 
-  /* The statistics band is painted in the undiluted event accent, which is the
-     largest solid-accent surface the product has. Both the figures and their
-     labels have to clear AA against whatever colour the organiser entered —
-     the labels were mixed 78% towards the band and measured 4.37:1. */
-  const statisticsBand = await paintedColours(
-    page.locator(".public-site-statistics-section"),
+  /* The glance panel is a dark event surface. `backgroundColor` is only the
+     canvas under the gradient; the first figures sit on the 28% accent stop.
+     Resolve that mix in the page so a louder fill cannot pass against #101817. */
+  const statisticsBand = page.locator(".public-site-statistics-section");
+  const glanceStop = await resolvedColorMix(
+    statisticsBand,
+    "color-mix(in srgb, var(--event-accent) 28%, var(--public-dark-canvas))",
   );
   const statisticLabel = await paintedColours(
     page.locator(".public-site-statistics dt").first(),
@@ -468,10 +481,42 @@ test("organisers compose, preview and publish the bounded public event site", as
     page.locator(".public-site-statistics dd").first(),
   );
   expect(
-    contrastRatio(statisticLabel.ink, statisticsBand.background),
+    cssColourContrastRatio(statisticLabel.ink, glanceStop),
   ).toBeGreaterThanOrEqual(4.5);
   expect(
-    contrastRatio(statisticFigure.ink, statisticsBand.background),
+    cssColourContrastRatio(statisticFigure.ink, glanceStop),
+  ).toBeGreaterThanOrEqual(4.5);
+  /* White on the canvas, or on a `color(srgb)` stop parsed as 0–255, is ~18:1.
+     The painted brown stop is about 10:1. An upper bound is what says we did
+     not measure near-black again. */
+  expect(cssColourContrastRatio(statisticFigure.ink, glanceStop)).toBeLessThan(
+    15,
+  );
+  await statisticsBand.evaluate((element) => {
+    (element as HTMLElement).style.setProperty("--event-accent", "#ffffff");
+  });
+  const paleAccentGlanceStop = await resolvedColorMix(
+    statisticsBand,
+    "color-mix(in srgb, var(--event-accent) 28%, var(--public-dark-canvas))",
+  );
+  expect(
+    cssColourContrastRatio(statisticLabel.ink, paleAccentGlanceStop),
+  ).toBeGreaterThanOrEqual(4.5);
+  expect(
+    cssColourContrastRatio(statisticFigure.ink, paleAccentGlanceStop),
+  ).toBeGreaterThanOrEqual(4.5);
+  await statisticsBand.evaluate((element) => {
+    (element as HTMLElement).style.removeProperty("--event-accent");
+  });
+  const speakerCue = await paintedColours(
+    page.locator(".public-site-speaker-profile-cue").first(),
+  );
+  const speakerWash = await resolvedColorMix(
+    page.locator(".public-site-speakers"),
+    "color-mix(in srgb, var(--event-accent) 12%, var(--surface))",
+  );
+  expect(
+    cssColourContrastRatio(speakerCue.ink, speakerWash),
   ).toBeGreaterThanOrEqual(4.5);
 
   /* The homepage states the venue on its own rail, so the programme's sidebar
@@ -602,10 +647,10 @@ test("organisers compose, preview and publish the bounded public event site", as
   );
   const hero = await paintedColours(page.locator(".hero"));
   expect(
-    contrastRatio(heroAction.ink, heroAction.background),
+    cssColourContrastRatio(heroAction.ink, heroAction.background),
   ).toBeGreaterThanOrEqual(4.5);
   expect(
-    contrastRatio(heroAction.background, hero.background),
+    cssColourContrastRatio(heroAction.background, hero.background),
   ).toBeGreaterThanOrEqual(3);
   const pageNavigation = page
     .getByRole("navigation", { name: "Event navigation" })
