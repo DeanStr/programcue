@@ -42,6 +42,11 @@ export abstract class ParticipantRetentionExecution extends ParticipantRetention
              WHERE event_id = events.id AND status = 'published'
           )
           AND NOT EXISTS (
+            SELECT 1 FROM event_public_site_references reference
+             WHERE reference.event_id = events.id
+               AND reference.kind = 'speaker'
+          )
+          AND NOT EXISTS (
             SELECT 1 FROM file_assets asset
              WHERE asset.event_id = events.id
                AND NOT EXISTS (

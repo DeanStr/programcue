@@ -620,6 +620,9 @@ describe("Airtable authoritative room repository", () => {
               SET method = 'CANCEL', status = 'cancelled'
             WHERE event_id = ? AND method <> 'CANCEL'`,
         ).bind(owner.eventId),
+        testEnv.DB.prepare(
+          "DELETE FROM event_public_sites WHERE event_id = ?",
+        ).bind(owner.eventId),
       ]);
       const provider = fakeAirtable();
       const rooms = new AirtableRoomRepository(testEnv, {

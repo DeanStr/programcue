@@ -445,6 +445,9 @@ export abstract class ParticipantRetentionAnalysis extends ParticipantRetentionF
                 completion.metadata_json AS completionMetadata,
                 (SELECT COUNT(*) FROM form_definitions form
                   WHERE form.event_id = event.id AND form.status = 'published') AS publishedForms,
+                (SELECT COUNT(*) FROM event_public_site_references reference
+                  WHERE reference.event_id = event.id
+                    AND reference.kind = 'speaker') AS featuredSpeakerReferences,
                 (SELECT COUNT(*) FROM file_assets asset
                   WHERE asset.event_id = event.id
                     AND NOT EXISTS (
@@ -506,6 +509,7 @@ export abstract class ParticipantRetentionAnalysis extends ParticipantRetentionF
           completedAt: number | null;
           completionMetadata: string | null;
           publishedForms: number;
+          featuredSpeakerReferences: number;
           pendingFiles: number;
           activeOperations: number;
           activeCommunications: number;
@@ -551,6 +555,10 @@ export abstract class ParticipantRetentionAnalysis extends ParticipantRetentionF
     if (count(state.publishedForms) > 0)
       blockers.push(
         `${count(state.publishedForms)} public form${count(state.publishedForms) === 1 ? " is" : "s are"} still published. Close or archive every public form first.`,
+      );
+    if (count(state.featuredSpeakerReferences) > 0)
+      blockers.push(
+        `${count(state.featuredSpeakerReferences)} featured speaker${count(state.featuredSpeakerReferences) === 1 ? " remains" : "s remain"} on the published event site. Remove ${count(state.featuredSpeakerReferences) === 1 ? "that speaker" : "those speakers"} before anonymising participant data.`,
       );
     if (count(state.pendingFiles) > 0)
       blockers.push(

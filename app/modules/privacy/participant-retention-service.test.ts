@@ -978,6 +978,41 @@ describe("participant retention", () => {
     ).rejects.toBeInstanceOf(ParticipantRetentionStateError);
   });
 
+  it("requires featured speakers to be removed from the published event site", async () => {
+    const seeded = await seedExpiredRetentionEvent();
+    const service = new ParticipantRetentionService(seeded.testEnv);
+    await seeded.testEnv.DB.batch([
+      seeded.testEnv.DB.prepare(
+        `INSERT INTO event_public_sites (
+           event_id, organisation_id, draft_json, published_json,
+           published_revision, published_at, last_updated_by_person_id,
+           last_operation_id
+         ) VALUES (?, ?, '{}', '{}', 1, unixepoch(), 'person-demo-owner', ?)`,
+      ).bind(
+        seeded.eventId,
+        organisationId,
+        id("privacy-public-site-operation"),
+      ),
+      seeded.testEnv.DB.prepare(
+        `INSERT INTO event_public_site_references (
+           event_id, organisation_id, kind, record_id, site_revision
+         ) VALUES (?, ?, 'speaker', ?, 1)`,
+      ).bind(seeded.eventId, organisationId, seeded.exclusiveId),
+    ]);
+
+    const preview = await service.preview(seeded.owner);
+    expect(preview.canRun).toBe(false);
+    expect(preview.blockers).toContain(
+      "1 featured speaker remains on the published event site. Remove that speaker before anonymising participant data.",
+    );
+    await expect(
+      service.anonymiseExpiredParticipants(seeded.owner, {
+        confirmation: "Expired privacy event",
+        acknowledged: true,
+      }),
+    ).rejects.toBeInstanceOf(ParticipantRetentionStateError);
+  });
+
   it("serialises concurrent confirmations into one completion without duplicate subjects", async () => {
     const seeded = await seedExpiredRetentionEvent();
     const service = new ParticipantRetentionService(seeded.testEnv);
