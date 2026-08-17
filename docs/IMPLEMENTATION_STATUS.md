@@ -825,7 +825,18 @@ revoked and deleted during file erasure.
   conditionally verifies its critical table columns, foreign-key definitions,
   indexes, trigger predicates and managed-embed theme migration once migration
   0037 appears in the remote ledger, rather than treating that ledger row alone
-  as schema evidence.
+  as schema evidence. Migration `0039_featured_speaker_relationship_guards.sql`
+  adds the matching last-relationship guards on `session_speakers` visibility
+  changes and deletes; the release validator requires those triggers only after
+  0039 is applied. Migration
+  `0040_align_featured_speaker_session_guard.sql` is deliberate semantic
+  alignment, not stronger publication protection: it recreates the session-
+  status trigger so session hide and relationship hide use the same live
+  programme-membership rule as `0039` and the current `getPublished()` speaker
+  projection. Confirmation remains a site/schedule publish-time check.
+  Approved public schedule content remains the separate `0021` immutable-
+  publication invariant; the lightweight featured-ID reader does not
+  reproduce that full snapshot-integrity query.
 - **Independent event-home lifecycle:** A bounded site can publish before an
   agenda for CFP promotion. Introduction, venue, FAQ, sponsor and fixed-page
   content use the canonical event projection; featured speakers, featured
@@ -867,9 +878,19 @@ revoked and deleted during file erasure.
   invalidate shared public URLs.
   Site publication also atomically rechecks canonical description/venue
   dependencies; public loaders repeat the checks, and Event Setup blocks removal
-  of content required by the live site. Fixed editorial page ETags combine the
-  request resource, programme/branding content identity and site publication
-  revision. Fixed-page loader representations omit the dynamic recording list,
+  of content required by the live site. Fixed editorial pages and generic event
+  social cards load the published site and a D1 programme-version presence
+  check; they do not materialize the full published programme or read Airtable.
+  Featured IDs still fail closed against current D1 programme membership
+  when those homepage sections are enabled. That membership check follows the
+  public speaker projection (public relationship, published profile, published
+  public session and content visibility). It does not re-check confirmation or
+  reproduce `getPublished()`'s approved-content snapshot integrity query;
+  approval remains enforced by migration `0021`. Fixed editorial page ETags combine the
+  request resource, site content identity, site publication revision and the
+  current D1 published-programme version identity, so a later programme
+  publish cannot 304 stale nav or footer chrome. Generic social-card URLs
+  remain site-revisioned because those images do not include programme chrome. Fixed-page loader representations omit the dynamic recording list,
   which they do not render; the programme homepage that can render recordings
   remains private and non-cacheable because it also carries visitor itinerary
   state. Invalid persisted snapshots or branding return a non-cacheable
@@ -894,9 +915,12 @@ revoked and deleted during file erasure.
   enabled content. Published-session status and public visibility are part of
   site publication, recording publication and recording-read eligibility; the
   baseline triggers block direct session changes that would invalidate a
-  featured record or published recording and block demotion of a featured
-  speaker profile. Public loaders remain fail-closed instead of dropping
-  referenced content.
+  featured record or published recording, block demotion of a featured
+  speaker profile, and block hiding a session or hiding or deleting a
+  relationship when it is the last public published-programme membership for a
+  featured speaker. A remaining public pending relationship is sufficient.
+  Public loaders remain
+  fail-closed instead of dropping referenced content.
 - **Repository authority boundary:** Editorial site configuration, fixed pages
   and sponsors remain D1 control-plane workflow state for D1- or
   Airtable-authoritative events. Featured session/speaker references and
@@ -912,7 +936,9 @@ revoked and deleted during file erasure.
   suggested announcement, escaped programme iframe and existing speaker share
   links, and can inspect the actual unfurl. Event and speaker social cards are
   rendered as WebP by the required Images binding; the route returns an explicit
-  503 without it and uses programme/site revisioned URLs. External HTTPS
+  503 without it. Generic event cards use site revisioned URLs and do not read
+  the programme snapshot; speaker cards still use programme/site revisioned
+  URLs. External HTTPS
   recording drafts have a separate confirmed publication boundary, require a
   currently published session, and appear only after the first valid instant
   following the final event-local date and the session end. The configured IANA

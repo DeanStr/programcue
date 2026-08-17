@@ -843,10 +843,21 @@ published programme. Site publication and schedule publication both recheck
 that invariant inside their D1 compare-and-set boundary; an incompatible
 schedule remains a draft and the previous public programme remains live. Hidden
 selections are not hard references. Published-session status is part of the
-same eligibility contract used by the canonical programme. A database guard
-prevents a referenced session, the last eligible session for a featured
-speaker, or a session with a published recording from leaving published status
-or public visibility until the public dependency is withdrawn. A featured
+same eligibility contract used by the canonical programme. After publication,
+this worktree keeps the existing live split: site and schedule publication
+still require confirmed participation, while the public programme projection
+keeps a public pending relationship in `getPublished()`. That is the current
+architecture, not a claim that pending speakers should remain public forever.
+Live featured-speaker mutation guards therefore follow programme membership so
+session hide and relationship hide agree. Approved public schedule content is
+a separate invariant, preserved by the immutable-publication guards in
+migration `0021`; featured-speaker relationship checks do not re-implement
+that snapshot-integrity count. A database
+guard prevents a referenced session, the last public published-programme
+relationship for a featured speaker, or a session with a published recording
+from leaving published status or public visibility until the public dependency
+is withdrawn. The same last-relationship rule applies to hiding a session and
+to hiding or deleting a `session_speakers` row. A featured
 speaker's canonical profile cannot return to draft while any published site
 references it; another session cannot compensate because profile publication is
 global to the person. These guards remain authoritative under concurrent writes,

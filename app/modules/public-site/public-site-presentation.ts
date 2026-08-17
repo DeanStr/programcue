@@ -46,13 +46,20 @@ export function validatePublicSiteCanonicalEvent(
   return venueLabel;
 }
 
-export function resolvePublicSitePresentation(
+export function publicSiteRequiresPublishedProgramme(
   configuration: PublicSiteDraft,
-  event: CanonicalPublicEvent,
-  programme: PublishedProgramme | null,
 ) {
-  const venueLabel = validatePublicSiteCanonicalEvent(configuration, event);
+  return (
+    configuration.sectionVisibility.featured_speakers ||
+    configuration.sectionVisibility.featured_sessions ||
+    configuration.sectionVisibility.statistics ||
+    configuration.postEvent.enabled
+  );
+}
 
+export function validatePublicSiteConfiguration(
+  configuration: PublicSiteDraft,
+) {
   if (
     configuration.sectionVisibility.faq &&
     configuration.faqItems.length === 0
@@ -106,14 +113,17 @@ export function resolvePublicSitePresentation(
       "Post-event mode requires a heading.",
     );
   }
+}
 
-  if (
-    !programme &&
-    (configuration.sectionVisibility.featured_speakers ||
-      configuration.sectionVisibility.featured_sessions ||
-      configuration.sectionVisibility.statistics ||
-      configuration.postEvent.enabled)
-  ) {
+export function resolvePublicSitePresentation(
+  configuration: PublicSiteDraft,
+  event: CanonicalPublicEvent,
+  programme: PublishedProgramme | null,
+) {
+  const venueLabel = validatePublicSiteCanonicalEvent(configuration, event);
+  validatePublicSiteConfiguration(configuration);
+
+  if (!programme && publicSiteRequiresPublishedProgramme(configuration)) {
     throw new PublishedPublicSiteInvariantError(
       "Featured speakers, featured sessions, statistics and post-event recordings require a published programme.",
     );
@@ -151,6 +161,18 @@ export function resolvePublicSitePresentation(
     : [];
 
   return { featuredSpeakers, featuredSessions, venueLabel };
+}
+
+export function publishedSocialCardRevision(input: {
+  siteContentRevision: string;
+  siteRevision: number;
+  programmeContentRevision?: string | null;
+  speakerId?: string | null;
+}) {
+  if (input.speakerId && input.programmeContentRevision) {
+    return `${input.programmeContentRevision}-${input.siteContentRevision}-${input.siteRevision}`;
+  }
+  return `${input.siteContentRevision}-${input.siteRevision}`;
 }
 
 export function publishedPublicSiteInvariantResponse() {

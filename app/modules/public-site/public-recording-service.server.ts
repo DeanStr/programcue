@@ -638,14 +638,18 @@ export class PublicRecordingService {
               recording.published_transcript_url AS transcriptUrl,
               content.title AS sessionTitle,
               (
-                SELECT json_group_array(person.display_name)
-                  FROM session_speakers relation
-                  JOIN people person ON person.id = relation.person_id
-                 WHERE relation.event_id = recording.event_id
-                   AND relation.session_id = recording.session_id
-                   AND relation.visibility = 'public'
-                   AND relation.participation_status = 'confirmed'
-                   AND person.profile_status = 'published'
+                SELECT json_group_array(ordered.display_name)
+                  FROM (
+                    SELECT person.display_name
+                      FROM session_speakers relation
+                      JOIN people person ON person.id = relation.person_id
+                     WHERE relation.event_id = recording.event_id
+                       AND relation.session_id = recording.session_id
+                       AND relation.visibility = 'public'
+                       AND relation.participation_status = 'confirmed'
+                       AND person.profile_status = 'published'
+                     ORDER BY relation.position, relation.person_id
+                  ) ordered
               ) AS speakerNames
          FROM event_session_recordings recording
          JOIN schedule_versions version

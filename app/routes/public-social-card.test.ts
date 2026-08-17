@@ -91,6 +91,19 @@ describe("generated public social cards", () => {
     expect(response.status).toBe(404);
   });
 
+  it("rejects a programme-versioned generic card cache key", async () => {
+    const [programme, site] = await Promise.all([
+      new PublicProgrammeService(testEnv).getPublished("future-of-events-2027"),
+      new PublicSiteService(testEnv).getPublished("future-of-events-2027"),
+    ]);
+    const staleGeneric = `${programme!.contentRevision}-${site!.contentRevision}-${site!.revision}`;
+    const response = await responseFor(
+      testEnv,
+      `?v=${encodeURIComponent(staleGeneric)}`,
+    );
+    expect(response.status).toBe(404);
+  });
+
   it("does not render current content under a stale revision cache key", async () => {
     const response = await responseFor(testEnv, "?v=stale-1");
     expect(response.status).toBe(404);
@@ -102,15 +115,30 @@ describe("generated public social cards", () => {
     );
   });
 
-  it("serves the exact full programme and site revision as immutable", async () => {
+  it("serves the exact site revision as immutable for a generic event card", async () => {
+    const site = await new PublicSiteService(testEnv).getPublished(
+      "future-of-events-2027",
+    );
+    const version = `${site!.contentRevision}-${site!.revision}`;
+    const response = await responseFor(
+      testEnv,
+      `?v=${encodeURIComponent(version)}`,
+    );
+    expect(response.status).toBe(200);
+    expect(response.headers.get("cache-control")).toContain("immutable");
+  });
+
+  it("serves the exact programme and site revision as immutable for a speaker card", async () => {
     const [programme, site] = await Promise.all([
       new PublicProgrammeService(testEnv).getPublished("future-of-events-2027"),
       new PublicSiteService(testEnv).getPublished("future-of-events-2027"),
     ]);
+    const speakerId = programme!.speakers[0]?.id;
+    expect(speakerId).toBeTruthy();
     const version = `${programme!.contentRevision}-${site!.contentRevision}-${site!.revision}`;
     const response = await responseFor(
       testEnv,
-      `?v=${encodeURIComponent(version)}`,
+      `?speaker=${encodeURIComponent(speakerId!)}&v=${encodeURIComponent(version)}`,
     );
     expect(response.status).toBe(200);
     expect(response.headers.get("cache-control")).toContain("immutable");

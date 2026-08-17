@@ -20,6 +20,7 @@ import {
   type PublicSitePageType,
   type PublishedPublicSiteSnapshot,
 } from "~/modules/public-site/public-site";
+import { publishedSocialCardRevision } from "~/modules/public-site/public-site-presentation";
 import type { PublicSiteEvent } from "~/modules/public-site/public-site-service.server";
 
 function PromotionTools({
@@ -51,9 +52,10 @@ function PromotionTools({
   const socialCardUrl = new URL(`${publicUrl}/social-card.webp`);
   socialCardUrl.searchParams.set(
     "v",
-    programme
-      ? `${programme.contentRevision}-${siteContentRevision}-${siteRevision}`
-      : `${siteContentRevision}-${siteRevision}`,
+    publishedSocialCardRevision({
+      siteContentRevision,
+      siteRevision,
+    }),
   );
 
   async function copy(label: string, value: string) {

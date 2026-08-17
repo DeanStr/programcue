@@ -1,6 +1,7 @@
 import { env } from "cloudflare:test";
 import { RouterContextProvider } from "react-router";
 import { beforeEach, describe, expect, it } from "vitest";
+import { PublicProgrammeService } from "~/modules/programme/public-programme-service.server";
 import { ScheduleService } from "~/modules/schedule/schedule-service.server";
 import {
   approveScheduledTestContent,
@@ -19,7 +20,11 @@ import { loader as publicSitePageLoader } from "~/routes/public-site-page";
 import { PublicRecordingService } from "./public-recording-service.server";
 import { defaultPublicSiteDraft } from "./public-site";
 import { publicSiteCommandIdForIntent } from "./public-site-command.server";
-import { PublishedPublicSiteInvariantError } from "./public-site-errors";
+import {
+  PUBLIC_SITE_SPEAKER_RELATIONSHIP_CONSTRAINT,
+  PublishedPublicSiteInvariantError,
+} from "./public-site-errors";
+import { resolvePublicSitePresentation } from "./public-site-presentation";
 import {
   PublicSiteCommandConflictError,
   PublicSiteIntegrityError,
@@ -72,7 +77,10 @@ function withSuppressedStatement(
   };
 }
 
-async function publishProgramme(sessionId = "schedule-test-one") {
+async function publishProgramme(
+  sessionId: string | ReadonlyArray<string> = "schedule-test-one",
+) {
+  const sessionIds = typeof sessionId === "string" ? [sessionId] : sessionId;
   const schedule = new ScheduleService(publicSiteEnv);
   const versionId = await schedule.createDraft(viewer);
   let workspace = await schedule.getWorkspace(viewer);
@@ -81,14 +89,17 @@ async function publishProgramme(sessionId = "schedule-test-one") {
     workspace.event.timezone,
     9,
   );
-  await schedule.place(viewer, {
-    scheduleVersionId: versionId,
-    scheduleRevision: workspace.version!.revision,
-    sessionId,
-    roomId: "main",
-    startsAt,
-    endsAt: startsAt + 3_600,
-  });
+  for (const [index, id] of sessionIds.entries()) {
+    await schedule.place(viewer, {
+      scheduleVersionId: versionId,
+      scheduleRevision: workspace.version!.revision,
+      sessionId: id,
+      roomId: index === 0 ? "main" : "301a",
+      startsAt: startsAt + index * 3_600,
+      endsAt: startsAt + (index + 1) * 3_600,
+    });
+    workspace = await schedule.getWorkspace(viewer);
+  }
   await approveScheduledTestContent(versionId);
   workspace = await schedule.getWorkspace(viewer);
   await schedule.publish(viewer, {
@@ -96,6 +107,24 @@ async function publishProgramme(sessionId = "schedule-test-one") {
     scheduleRevision: workspace.version!.revision,
   });
   return { schedule, versionId, startsAt };
+}
+
+async function publishFeaturedSpeakerSite(personId = "person-demo-speaker") {
+  const site = new PublicSiteService(publicSiteEnv);
+  const configuration = publishableSite();
+  configuration.sectionVisibility.featured_speakers = true;
+  configuration.featuredSpeakerIds = [personId];
+  const saved = await site.saveDraft(viewer, {
+    commandId: crypto.randomUUID(),
+    revision: 0,
+    configurationJson: JSON.stringify(configuration),
+  });
+  await site.publish(viewer, {
+    commandId: crypto.randomUUID(),
+    revision: saved.revision,
+    confirmed: "true",
+  });
+  return site;
 }
 
 function publishableSite() {
@@ -592,6 +621,73 @@ describe("public event site publication", () => {
       throw new Error("Published fixed page returned a raw response.");
     expect(fixedPage.data.site).not.toHaveProperty("recordings");
     expect(fixedPage.init?.headers).toHaveProperty("etag");
+  });
+
+  it("changes the fixed-page cache validator when a programme is later published", async () => {
+    const preProgrammeEnv = new Proxy(publicSiteEnv, {
+      get(target, property, receiver) {
+        if (property === "DEMO_MODE") return "false";
+        return Reflect.get(target, property, receiver);
+      },
+    });
+    const service = new PublicSiteService(preProgrammeEnv);
+    const configuration = publishableSite();
+    configuration.sectionVisibility.statistics = false;
+    configuration.pages.about.enabled = true;
+    configuration.pages.about.body = "Pre-programme editorial copy.";
+    const saved = await service.saveDraft(viewer, {
+      commandId: crypto.randomUUID(),
+      revision: 0,
+      configurationJson: JSON.stringify(configuration),
+    });
+    await service.publish(viewer, {
+      commandId: crypto.randomUUID(),
+      revision: saved.revision,
+      confirmed: "true",
+    });
+    const context = new RouterContextProvider();
+    context.set(cloudflareContext, {
+      env: preProgrammeEnv,
+      ctx: {} as ExecutionContext,
+    });
+    const before = await publicSitePageLoader({
+      request: new Request(
+        "https://programcue.test/public/programme/future-of-events-2027/pages/about",
+      ),
+      params: { slug: "future-of-events-2027", page: "about" },
+      context,
+    } as never);
+    if (before instanceof Response)
+      throw new Error("Pre-programme fixed page returned a raw response.");
+    expect(before.data.hasPublishedProgramme).toBe(false);
+    const beforeEtag =
+      before.init?.headers &&
+      typeof before.init.headers === "object" &&
+      "etag" in before.init.headers
+        ? before.init.headers.etag
+        : undefined;
+    expect(beforeEtag).toEqual(expect.any(String));
+
+    await publishProgramme();
+
+    const after = await publicSitePageLoader({
+      request: new Request(
+        "https://programcue.test/public/programme/future-of-events-2027/pages/about",
+      ),
+      params: { slug: "future-of-events-2027", page: "about" },
+      context,
+    } as never);
+    if (after instanceof Response)
+      throw new Error("Post-programme fixed page returned a raw response.");
+    expect(after.data.hasPublishedProgramme).toBe(true);
+    const afterEtag =
+      after.init?.headers &&
+      typeof after.init.headers === "object" &&
+      "etag" in after.init.headers
+        ? after.init.headers.etag
+        : undefined;
+    expect(afterEtag).toEqual(expect.any(String));
+    expect(afterEtag).not.toEqual(beforeEtag);
   });
 
   it("fails before storing D1-bound site or recording drafts for Airtable authority", async () => {
@@ -1121,6 +1217,276 @@ describe("public event site publication", () => {
         .bind("schedule-test-one", viewer.eventId)
         .run(),
     ).rejects.toThrow(/withdraw public-site references/i);
+  });
+
+  it("blocks hiding or deleting the last public relationship for a featured speaker", async () => {
+    await publishProgramme();
+    await publishFeaturedSpeakerSite();
+
+    await expect(
+      env.DB.prepare(
+        `UPDATE session_speakers
+            SET visibility = 'private'
+          WHERE session_id = ? AND event_id = ? AND person_id = ?`,
+      )
+        .bind("schedule-test-one", viewer.eventId, "person-demo-speaker")
+        .run(),
+    ).rejects.toThrow(PUBLIC_SITE_SPEAKER_RELATIONSHIP_CONSTRAINT);
+    await expect(
+      env.DB.prepare(
+        `DELETE FROM session_speakers
+          WHERE session_id = ? AND event_id = ? AND person_id = ?`,
+      )
+        .bind("schedule-test-one", viewer.eventId, "person-demo-speaker")
+        .run(),
+    ).rejects.toThrow(PUBLIC_SITE_SPEAKER_RELATIONSHIP_CONSTRAINT);
+    expect(
+      await env.DB.prepare(
+        `SELECT visibility FROM session_speakers
+          WHERE session_id = ? AND event_id = ? AND person_id = ?`,
+      )
+        .bind("schedule-test-one", viewer.eventId, "person-demo-speaker")
+        .first(),
+    ).toEqual({ visibility: "public" });
+  });
+
+  it("allows relationship changes when another public published relationship remains", async () => {
+    await env.DB.prepare(
+      `INSERT OR IGNORE INTO session_speakers (
+         session_id, event_id, person_id, position, role_label,
+         participation_status, participation_confirmed_at, visibility
+       ) VALUES (
+         'schedule-test-two', ?, 'person-demo-speaker', 1, 'Speaker',
+         'confirmed', unixepoch(), 'public'
+       )`,
+    )
+      .bind(viewer.eventId)
+      .run();
+    await publishProgramme(["schedule-test-one", "schedule-test-two"]);
+    await publishFeaturedSpeakerSite();
+
+    await env.DB.prepare(
+      `UPDATE session_speakers
+          SET visibility = 'private'
+        WHERE session_id = ? AND event_id = ? AND person_id = ?`,
+    )
+      .bind("schedule-test-one", viewer.eventId, "person-demo-speaker")
+      .run();
+    await env.DB.prepare(
+      `DELETE FROM session_speakers
+        WHERE session_id = ? AND event_id = ? AND person_id = ?`,
+    )
+      .bind("schedule-test-one", viewer.eventId, "person-demo-speaker")
+      .run();
+
+    expect(
+      await env.DB.prepare(
+        `SELECT visibility FROM session_speakers
+          WHERE session_id = ? AND event_id = ? AND person_id = ?`,
+      )
+        .bind("schedule-test-two", viewer.eventId, "person-demo-speaker")
+        .first(),
+    ).toEqual({ visibility: "public" });
+  });
+
+  it("treats a pending public relationship as a remaining published-programme alternative", async () => {
+    await publishProgramme(["schedule-test-one", "schedule-test-two"]);
+    await env.DB.prepare(
+      `INSERT INTO session_speakers (
+         session_id, event_id, person_id, position, role_label,
+         participation_status, participation_confirmed_at, visibility
+       ) VALUES (
+         'schedule-test-two', ?, 'person-demo-speaker', 20, 'Speaker',
+         'pending', NULL, 'public'
+       )
+       ON CONFLICT(session_id, person_id) DO UPDATE SET
+         participation_status = 'pending',
+         participation_confirmed_at = NULL,
+         visibility = 'public'`,
+    )
+      .bind(viewer.eventId)
+      .run();
+    await publishFeaturedSpeakerSite();
+
+    await env.DB.prepare(
+      "UPDATE sessions SET visibility = 'private' WHERE id = ? AND event_id = ?",
+    )
+      .bind("schedule-test-one", viewer.eventId)
+      .run();
+    await env.DB.prepare(
+      `UPDATE session_speakers
+          SET visibility = 'private'
+        WHERE session_id = ? AND event_id = ? AND person_id = ?`,
+    )
+      .bind("schedule-test-one", viewer.eventId, "person-demo-speaker")
+      .run();
+
+    expect(
+      await env.DB.prepare(
+        "SELECT visibility FROM sessions WHERE id = ? AND event_id = ?",
+      )
+        .bind("schedule-test-one", viewer.eventId)
+        .first(),
+    ).toEqual({ visibility: "private" });
+    expect(
+      await env.DB.prepare(
+        `SELECT visibility, participation_status AS participationStatus
+           FROM session_speakers
+          WHERE session_id = ? AND event_id = ? AND person_id = ?`,
+      )
+        .bind("schedule-test-two", viewer.eventId, "person-demo-speaker")
+        .first(),
+    ).toEqual({ visibility: "public", participationStatus: "pending" });
+
+    const programme = await new PublicProgrammeService(
+      publicSiteEnv,
+    ).getPublished("future-of-events-2027");
+    const speaker = programme?.speakers.find(
+      (candidate) => candidate.id === "person-demo-speaker",
+    );
+    expect(speaker).toBeDefined();
+    expect(speaker?.sessionIds).toEqual(["schedule-test-two"]);
+
+    const site = await new PublicSiteService(publicSiteEnv).getPublished(
+      "future-of-events-2027",
+    );
+    expect(
+      resolvePublicSitePresentation(
+        site!.configuration,
+        site!.event,
+        programme,
+      ).featuredSpeakers.map((featured) => featured.id),
+    ).toEqual(["person-demo-speaker"]);
+
+    const context = new RouterContextProvider();
+    context.set(cloudflareContext, {
+      env: publicSiteEnv,
+      ctx: {} as ExecutionContext,
+    });
+    const homepage = await publicProgrammePageLoader({
+      request: new Request(
+        "https://programcue.test/public/programme/future-of-events-2027",
+      ),
+      params: { slug: "future-of-events-2027" },
+      context,
+    } as never);
+    if (homepage instanceof Response)
+      throw new Error(
+        `Published homepage returned HTTP ${homepage.status} after the pending alternative remained.`,
+      );
+    expect(homepage.data).not.toMatchObject({ eventSiteOnly: true });
+  });
+
+  it("serves fixed editorial pages without reading an Airtable programme snapshot", async () => {
+    await publishProgramme();
+    const service = new PublicSiteService(publicSiteEnv);
+    const configuration = publishableSite();
+    configuration.pages.about.enabled = true;
+    configuration.pages.about.body = "Fixed editorial copy.";
+    const saved = await service.saveDraft(viewer, {
+      commandId: crypto.randomUUID(),
+      revision: 0,
+      configurationJson: JSON.stringify(configuration),
+    });
+    await service.publish(viewer, {
+      commandId: crypto.randomUUID(),
+      revision: saved.revision,
+      confirmed: "true",
+    });
+    await env.DB.prepare(
+      "UPDATE events SET repository_provider = 'airtable' WHERE id = ? AND organisation_id = ?",
+    )
+      .bind(viewer.eventId, viewer.organisationId)
+      .run();
+
+    try {
+      const context = new RouterContextProvider();
+      context.set(cloudflareContext, {
+        env: publicSiteEnv,
+        ctx: {} as ExecutionContext,
+      });
+      const fixedPage = await publicSitePageLoader({
+        request: new Request(
+          "https://programcue.test/public/programme/future-of-events-2027/pages/about",
+        ),
+        params: { slug: "future-of-events-2027", page: "about" },
+        context,
+      } as never);
+      if (fixedPage instanceof Response)
+        throw new Error("Published fixed page returned a raw response.");
+      expect(fixedPage.data.hasPublishedProgramme).toBe(true);
+      expect(fixedPage.data.site.configuration.pages.about.body).toBe(
+        "Fixed editorial copy.",
+      );
+    } finally {
+      await env.DB.prepare(
+        "UPDATE events SET repository_provider = 'd1' WHERE id = ? AND organisation_id = ?",
+      )
+        .bind(viewer.eventId, viewer.organisationId)
+        .run();
+    }
+  });
+
+  it("orders published recording speaker names by relationship position", async () => {
+    await publishProgramme();
+    await env.DB.batch([
+      env.DB.prepare(`
+        INSERT INTO people (
+          id, email, display_name, email_verified, profile_status, created_at, updated_at
+        ) VALUES (
+          'recording-speaker-late', 'recording-speaker-late@example.com',
+          'Later Recording Speaker', 1, 'published', unixepoch(), unixepoch()
+        )
+      `),
+      env.DB.prepare(`
+        INSERT INTO people (
+          id, email, display_name, email_verified, profile_status, created_at, updated_at
+        ) VALUES (
+          'recording-speaker-early', 'recording-speaker-early@example.com',
+          'Earlier Recording Speaker', 1, 'published', unixepoch(), unixepoch()
+        )
+      `),
+      env.DB.prepare(
+        `INSERT INTO session_speakers (
+           session_id, event_id, person_id, position,
+           participation_status, participation_confirmed_at, visibility
+         ) VALUES ('schedule-test-one', ?, 'recording-speaker-late', 20,
+                   'confirmed', unixepoch(), 'public')`,
+      ).bind(viewer.eventId),
+      env.DB.prepare(
+        `INSERT INTO session_speakers (
+           session_id, event_id, person_id, position,
+           participation_status, participation_confirmed_at, visibility
+         ) VALUES ('schedule-test-one', ?, 'recording-speaker-early', 10,
+                   'confirmed', unixepoch(), 'public')`,
+      ).bind(viewer.eventId),
+    ]);
+    const recordings = new PublicRecordingService(publicSiteEnv);
+    const recording = await recordings.saveDraft(viewer, {
+      commandId: crypto.randomUUID(),
+      id: "",
+      sessionId: "schedule-test-one",
+      revision: 0,
+      title: "Ordered speakers",
+      recordingUrl: "https://video.example.test/ordered",
+      captionsUrl: "",
+      transcriptUrl: "",
+    });
+    await recordings.publish(viewer, {
+      commandId: crypto.randomUUID(),
+      id: recording.id,
+      revision: 1,
+      confirmed: "true",
+    });
+    const published = await recordings.getPublishedForEvent(
+      viewer.eventId,
+      viewer.organisationId,
+      Number.MAX_SAFE_INTEGER,
+    );
+    expect(published[0]?.speakerNames.slice(-2)).toEqual([
+      "Earlier Recording Speaker",
+      "Later Recording Speaker",
+    ]);
   });
 
   it("rejects enabled sections that would publish empty content", async () => {

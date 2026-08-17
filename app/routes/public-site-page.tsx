@@ -12,6 +12,7 @@ import {
   PUBLIC_SITE_PAGE_TYPES,
   type PublicSitePageType,
 } from "~/modules/public-site/public-site";
+import { publishedSocialCardRevision } from "~/modules/public-site/public-site-presentation";
 import { getValidatedPublishedPublicSite } from "~/modules/public-site/validated-public-site.server";
 import {
   publishedProgrammeCacheHeaders,
@@ -30,10 +31,21 @@ export async function loader({ request, params, context }: Route.LoaderArgs) {
   const slug = params.slug ?? "";
   const page = parsePage(params.page);
   const { env } = getCloudflareContext(context);
-  const programme = await new PublicProgrammeService(env).getPublished(slug);
-  const site = await getValidatedPublishedPublicSite(env, slug, programme);
+  const publishedVersion = await new PublicProgrammeService(
+    env,
+  ).findPublishedVersion(slug);
+  const site = await getValidatedPublishedPublicSite(
+    env,
+    slug,
+    undefined,
+    undefined,
+    publishedVersion,
+  );
   if (!site?.configuration.pages[page].enabled)
     throw new Response("Public event page not found", { status: 404 });
+  const programmeRevision = publishedVersion
+    ? `${publishedVersion.version.id}:${publishedVersion.version.versionNumber}:${publishedVersion.version.publishedAt}`
+    : "none";
   const canonicalUrl = new URL(
     `/public/programme/${encodeURIComponent(site.event.slug)}/pages/${encodeURIComponent(page)}`,
     request.url,
@@ -44,14 +56,15 @@ export async function loader({ request, params, context }: Route.LoaderArgs) {
   );
   socialCardUrl.searchParams.set(
     "v",
-    programme
-      ? `${programme.contentRevision}-${site.contentRevision}-${site.revision}`
-      : `${site.contentRevision}-${site.revision}`,
+    publishedSocialCardRevision({
+      siteContentRevision: site.contentRevision,
+      siteRevision: site.revision,
+    }),
   );
   const cacheHeaders = await publishedProgrammeCacheHeaders(
     request,
-    programme ?? site,
-    `public-site-${site.contentRevision}-${site.revision}`,
+    site,
+    `public-site-${site.contentRevision}-${site.revision}-${programmeRevision}`,
   );
   if (publishedProgrammeNotModified(request, cacheHeaders.etag)) {
     return new Response(null, { status: 304, headers: cacheHeaders });
@@ -59,7 +72,8 @@ export async function loader({ request, params, context }: Route.LoaderArgs) {
   const { recordings: _recordings, ...fixedPageSite } = site;
   return data(
     {
-      programme,
+      hasPublishedProgramme: publishedVersion !== null,
+      programmeVersion: publishedVersion?.version ?? null,
       site: fixedPageSite,
       page,
       canonicalUrl,
@@ -102,7 +116,8 @@ export const meta: Route.MetaFunction = ({ loaderData }) => {
 };
 
 export default function PublicSitePage(props: Route.ComponentProps) {
-  const { programme, site, page } = props.loaderData;
+  const { hasPublishedProgramme, programmeVersion, site, page } =
+    props.loaderData;
   const palette = programmeAccentPalette(site.event.brandAccent);
   return (
     <div
@@ -118,7 +133,8 @@ export default function PublicSitePage(props: Route.ComponentProps) {
     >
       <PublicEventHeader
         event={site.event}
-        programme={programme}
+        programme={null}
+        hasPublishedProgramme={hasPublishedProgramme}
         site={site.configuration}
         activePage={page}
       />
@@ -131,7 +147,11 @@ export default function PublicSitePage(props: Route.ComponentProps) {
           page={page}
         />
       </main>
-      <PublicEventFooter event={site.event} programme={programme} />
+      <PublicEventFooter
+        event={site.event}
+        programme={null}
+        programmeVersion={programmeVersion}
+      />
     </div>
   );
 }

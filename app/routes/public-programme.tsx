@@ -34,6 +34,7 @@ import {
   PublishedProgrammeItineraryNotFoundError,
   PublishedProgrammeSessionNotFoundError,
 } from "~/modules/programme/public-programme-service.server";
+import { publishedSocialCardRevision } from "~/modules/public-site/public-site-presentation";
 import { getValidatedPublishedPublicSite } from "~/modules/public-site/validated-public-site.server";
 import { eventLocalCalendarDate } from "~/modules/schedule/schedule-time";
 import {
@@ -115,7 +116,13 @@ export const meta: Route.MetaFunction = ({ loaderData }) => {
       `/public/programme/${encodeURIComponent(event.slug)}/social-card.webp`,
       loaderData.canonicalUrl,
     );
-    socialCard.searchParams.set("v", `${contentRevision}-${revision}`);
+    socialCard.searchParams.set(
+      "v",
+      publishedSocialCardRevision({
+        siteContentRevision: contentRevision,
+        siteRevision: revision,
+      }),
+    );
     return [
       { title: event.name },
       { name: "description", content: description },
@@ -161,9 +168,18 @@ export const meta: Route.MetaFunction = ({ loaderData }) => {
     );
   }
   if (generatedShareImage) {
+    const site = requireValue(
+      loaderData.site,
+      "Required loaderData.site is unavailable.",
+    );
     generatedShareImage.searchParams.set(
       "v",
-      `${loaderData.programme.contentRevision}-${requireValue(loaderData.site, "Required loaderData.site is unavailable.").contentRevision}-${requireValue(loaderData.site, "Required loaderData.site is unavailable.").revision}`,
+      publishedSocialCardRevision({
+        siteContentRevision: site.contentRevision,
+        siteRevision: site.revision,
+        programmeContentRevision: loaderData.programme.contentRevision,
+        speakerId: loaderData.speakerShare?.speakerId,
+      }),
     );
   }
   const shareImage =

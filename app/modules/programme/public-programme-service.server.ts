@@ -10,6 +10,7 @@ import {
 } from "./public-itinerary-service.server";
 import type {
   PublishedProgramme,
+  PublishedProgrammeVersion,
   PublishedSession,
   PublishedSpeaker,
   PublishedSpeakerPreview,
@@ -27,6 +28,7 @@ export {
 } from "./public-itinerary-service.server";
 export type {
   PublishedProgramme,
+  PublishedProgrammeVersion,
   PublishedSession,
   PublishedSpeaker,
   PublishedSpeakerPreview,
@@ -434,6 +436,52 @@ export class PublicProgrammeService {
         { id: publication.versionId },
         speakers,
       ),
+    };
+  }
+
+  async findPublishedVersion(
+    slug: string,
+  ): Promise<PublishedProgrammeVersion | null> {
+    await ensureDemoProgramme(this.env);
+    const row = await this.env.DB.prepare(
+      `
+      SELECT event.id AS eventId, event.slug,
+             version.id AS versionId,
+             version.version_number AS versionNumber,
+             version.published_at AS publishedAt
+        FROM events event
+        JOIN schedule_versions version
+          ON version.id = (
+            SELECT candidate.id
+              FROM schedule_versions candidate
+             WHERE candidate.event_id = event.id
+               AND candidate.status = 'published'
+             ORDER BY candidate.published_at DESC,
+                      candidate.version_number DESC
+             LIMIT 1
+          )
+         AND version.event_id = event.id
+       WHERE event.slug = ? AND event.activation_status = 'active'
+         AND event.programme_published_at IS NOT NULL
+    `,
+    )
+      .bind(slug)
+      .first<{
+        eventId: string;
+        slug: string;
+        versionId: string;
+        versionNumber: number;
+        publishedAt: number;
+      }>();
+    if (!row) return null;
+    return {
+      eventId: row.eventId,
+      slug: row.slug,
+      version: {
+        id: row.versionId,
+        versionNumber: row.versionNumber,
+        publishedAt: row.publishedAt,
+      },
     };
   }
 

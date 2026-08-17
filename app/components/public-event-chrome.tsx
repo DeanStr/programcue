@@ -29,6 +29,7 @@ export function PublicEventHeader({
   activeSurface,
   activePage,
   itinerary,
+  hasPublishedProgramme = programme !== null,
 }: {
   event: PublishedProgramme["event"];
   programme: PublishedProgramme | null;
@@ -36,6 +37,7 @@ export function PublicEventHeader({
   activeSurface?: PublicProgrammeSurface;
   activePage?: PublicSitePageType;
   itinerary?: { shared: boolean; savedCount: number };
+  hasPublishedProgramme?: boolean;
 }) {
   const mobileNavigationRef = useRef<HTMLDetailsElement>(null);
   const overflowNavigationRef = useRef<HTMLDetailsElement>(null);
@@ -47,12 +49,12 @@ export function PublicEventHeader({
     key: "home",
     label: PUBLIC_EVENT_NAVIGATION_LABELS.home,
     href: programmeHref,
-    active: programme
+    active: hasPublishedProgramme
       ? activeSurface === "overview" && !activePage
       : !activePage,
     routed: true,
   };
-  const programmePrimaryLinks: EventNavigationLink[] = programme
+  const programmePrimaryLinks: EventNavigationLink[] = hasPublishedProgramme
     ? [
         ...(site ? [homeLink] : []),
         {
@@ -80,7 +82,7 @@ export function PublicEventHeader({
         },
       ]
     : [homeLink];
-  const programmeOverflowLinks: EventNavigationLink[] = programme
+  const programmeOverflowLinks: EventNavigationLink[] = hasPublishedProgramme
     ? (["agenda", "schedule", "gallery"] as const).map((surface) => ({
         key: surface,
         label: PUBLIC_EVENT_NAVIGATION_LABELS[surface],
@@ -225,15 +227,17 @@ export function PublicEventHeader({
 export function PublicEventFooter({
   event,
   programme,
+  programmeVersion = programme?.version ?? null,
 }: {
   event: PublishedProgramme["event"];
   programme: PublishedProgramme | null;
+  programmeVersion?: PublishedProgramme["version"] | null;
 }) {
-  const published = programme
+  const published = programmeVersion
     ? new Intl.DateTimeFormat("en", {
         dateStyle: "long",
         timeZone: event.timezone,
-      }).format(new Date(programme.version.publishedAt * 1_000))
+      }).format(new Date(programmeVersion.publishedAt * 1_000))
     : null;
   return (
     <footer className="public-footer">
@@ -242,13 +246,13 @@ export function PublicEventFooter({
           Event dates and times use {event.timezone}.
         </p>
         <p className="public-footer-secondary">
-          {programme
-            ? `Programme version ${programme.version.versionNumber} · published ${published}`
+          {programmeVersion
+            ? `Programme version ${programmeVersion.versionNumber} · published ${published}`
             : `${event.startDate}${event.startDate === event.endDate ? "" : ` – ${event.endDate}`}`}
         </p>
       </div>
       <div className="public-footer-actions">
-        {programme ? (
+        {programmeVersion ? (
           <a
             className="btn small"
             href={`/api/v1/public/events/${encodeURIComponent(event.slug)}/calendar.ics`}

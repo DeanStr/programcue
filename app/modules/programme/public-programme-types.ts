@@ -30,6 +30,12 @@ export type PublishedSpeakerPreview = Pick<
   "id" | "displayName" | "imageUrl" | "organisationName" | "jobTitle"
 >;
 
+export type PublishedProgrammeVersion = {
+  eventId: string;
+  slug: string;
+  version: { id: string; versionNumber: number; publishedAt: number };
+};
+
 export type PublishedProgramme = {
   event: {
     id: string;

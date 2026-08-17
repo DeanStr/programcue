@@ -7,8 +7,11 @@ import { validateReleaseStateEvidence } from "./validate-release-state.mjs";
 import {
   lastImmutableMigrationName,
   publicSiteMigrationName,
+  publicSiteProgrammeMembershipGuardMigrationName,
+  publicSiteRelationshipGuardMigrationName,
   requiredBrandAssetColumns,
   requiredBrandSchemaObjects,
+  requiredFeaturedSpeakerRelationshipObjects,
   requiredPublicSiteColumns,
   requiredPublicSiteForeignKeys,
   requiredPublicSiteSchemaObjects,
@@ -27,6 +30,14 @@ const migrations = [
   "0034_reviewer_ai_suggestions.sql",
   reviewerAiMigrationName,
   publicSiteMigrationName,
+];
+const relationshipGuardMigrations = [
+  ...migrations,
+  publicSiteRelationshipGuardMigrationName,
+];
+const programmeMembershipGuardMigrations = [
+  ...relationshipGuardMigrations,
+  publicSiteProgrammeMembershipGuardMigrationName,
 ];
 const repositoryRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 
@@ -99,9 +110,24 @@ function remoteEvidence(appliedMigrations = migrations) {
                 ? "CREATE INDEX idx_event_session_recordings_public ON event_session_recordings(event_id, published_at, session_id) WHERE published_at IS NOT NULL"
                 : name ===
                     "prevent_referenced_public_session_eligibility_change"
-                  ? "CREATE TRIGGER prevent_referenced_public_session_eligibility_change BEFORE UPDATE OF status, visibility ON sessions WHEN NEW.status <> 'published' OR NEW.visibility <> 'public' AND EXISTS (SELECT 1 FROM event_public_site_references reference WHERE reference.kind = 'session' OR reference.kind = 'speaker' AND participation_status = 'confirmed' AND content_status = 'approved') OR EXISTS (SELECT 1 FROM event_session_recordings recording WHERE recording.published_at IS NOT NULL) BEGIN SELECT 1; END"
+                  ? appliedMigrations.includes(
+                      publicSiteProgrammeMembershipGuardMigrationName,
+                    )
+                    ? "CREATE TRIGGER prevent_referenced_public_session_eligibility_change BEFORE UPDATE OF status, visibility ON sessions WHEN NEW.status <> 'published' OR NEW.visibility <> 'public' AND EXISTS (SELECT 1 FROM event_public_site_references reference WHERE reference.kind = 'session' OR reference.kind = 'speaker' AND relation.visibility = 'public' AND profile_status = 'published' AND session_id <> OLD.id) OR EXISTS (SELECT 1 FROM event_session_recordings recording WHERE recording.published_at IS NOT NULL) BEGIN SELECT 1; END"
+                    : "CREATE TRIGGER prevent_referenced_public_session_eligibility_change BEFORE UPDATE OF status, visibility ON sessions WHEN NEW.status <> 'published' OR NEW.visibility <> 'public' AND EXISTS (SELECT 1 FROM event_public_site_references reference WHERE reference.kind = 'session' OR reference.kind = 'speaker' AND participation_status = 'confirmed' AND content_status = 'approved') OR EXISTS (SELECT 1 FROM event_session_recordings recording WHERE recording.published_at IS NOT NULL) BEGIN SELECT 1; END"
                   : "CREATE TRIGGER prevent_referenced_public_speaker_profile_demotion BEFORE UPDATE OF profile_status ON people WHEN OLD.profile_status = 'published' AND NEW.profile_status <> 'published' AND reference.kind = 'speaker' AND EXISTS (SELECT 1 FROM event_public_site_references) BEGIN SELECT 1; END",
         })),
+        ...[...requiredFeaturedSpeakerRelationshipObjects].map(
+          ([name, type]) => ({
+            name,
+            type,
+            sql:
+              name ===
+              "prevent_referenced_public_speaker_relationship_visibility_change"
+                ? "CREATE TRIGGER prevent_referenced_public_speaker_relationship_visibility_change BEFORE UPDATE OF visibility ON session_speakers WHEN OLD.visibility = 'public' AND NEW.visibility <> 'public' AND EXISTS (SELECT 1 FROM event_public_site_references reference WHERE reference.kind = 'speaker') AND session_id <> OLD.session_id BEGIN SELECT RAISE(ABORT, 'Remove this featured speaker from published event sites before hiding or removing their final public session relationship'); END"
+                : "CREATE TRIGGER prevent_referenced_public_speaker_relationship_delete BEFORE DELETE ON session_speakers WHEN OLD.visibility = 'public' AND EXISTS (SELECT 1 FROM event_public_site_references reference WHERE reference.kind = 'speaker') AND session_id <> OLD.session_id BEGIN SELECT RAISE(ABORT, 'Remove this featured speaker from published event sites before hiding or removing their final public session relationship'); END",
+          }),
+        ),
       ],
     },
     { success: true, results: columnEvidence(requiredReviewerAiReviewColumns) },
@@ -232,6 +258,92 @@ test("remote schema validation requires the exact migration ledger and deployed 
     "CREATE TRIGGER prevent_referenced_public_session_eligibility_change BEFORE UPDATE ON sessions BEGIN SELECT 1; END";
   assert.throws(
     () => validateRemoteSchemaEvidence(stalePublicSiteTrigger, migrations),
+    /public-session eligibility trigger has the wrong protection contract/u,
+  );
+
+  assert.deepEqual(
+    validateRemoteSchemaEvidence(
+      remoteEvidence(relationshipGuardMigrations),
+      relationshipGuardMigrations,
+    ),
+    {
+      migrationCount: 7,
+      pendingMigrationCount: 0,
+      brandingColumnCount: 7,
+      brandingObjectCount: 11,
+      reviewerAiColumnCount: 12,
+      reviewerAiObjectCount: 14,
+      publicSiteColumnCount: 28,
+      publicSiteObjectCount: 6,
+      publicSiteForeignKeyCount: 9,
+    },
+  );
+
+  const missingRelationshipTrigger = remoteEvidence(
+    relationshipGuardMigrations,
+  );
+  missingRelationshipTrigger[2].results =
+    missingRelationshipTrigger[2].results.filter(
+      ({ name }) =>
+        name !== "prevent_referenced_public_speaker_relationship_delete",
+    );
+  assert.throws(
+    () =>
+      validateRemoteSchemaEvidence(
+        missingRelationshipTrigger,
+        relationshipGuardMigrations,
+      ),
+    /missing required trigger prevent_referenced_public_speaker_relationship_delete/u,
+  );
+
+  const staleRelationshipTrigger = remoteEvidence(relationshipGuardMigrations);
+  staleRelationshipTrigger[2].results.find(
+    ({ name }) =>
+      name ===
+      "prevent_referenced_public_speaker_relationship_visibility_change",
+  ).sql =
+    "CREATE TRIGGER prevent_referenced_public_speaker_relationship_visibility_change BEFORE UPDATE ON session_speakers BEGIN SELECT 1; END";
+  assert.throws(
+    () =>
+      validateRemoteSchemaEvidence(
+        staleRelationshipTrigger,
+        relationshipGuardMigrations,
+      ),
+    /featured-speaker relationship visibility trigger has the wrong protection contract/u,
+  );
+
+  assert.deepEqual(
+    validateRemoteSchemaEvidence(
+      remoteEvidence(programmeMembershipGuardMigrations),
+      programmeMembershipGuardMigrations,
+    ),
+    {
+      migrationCount: 8,
+      pendingMigrationCount: 0,
+      brandingColumnCount: 7,
+      brandingObjectCount: 11,
+      reviewerAiColumnCount: 12,
+      reviewerAiObjectCount: 14,
+      publicSiteColumnCount: 28,
+      publicSiteObjectCount: 6,
+      publicSiteForeignKeyCount: 9,
+    },
+  );
+
+  const staleAlignedSessionTrigger = remoteEvidence(
+    programmeMembershipGuardMigrations,
+  );
+  staleAlignedSessionTrigger[2].results.find(
+    ({ name }) =>
+      name === "prevent_referenced_public_session_eligibility_change",
+  ).sql =
+    "CREATE TRIGGER prevent_referenced_public_session_eligibility_change BEFORE UPDATE OF status, visibility ON sessions WHEN NEW.status <> 'published' OR NEW.visibility <> 'public' AND EXISTS (SELECT 1 FROM event_public_site_references reference WHERE reference.kind = 'session' OR reference.kind = 'speaker' AND participation_status = 'confirmed' AND content_status = 'approved') OR EXISTS (SELECT 1 FROM event_session_recordings recording WHERE recording.published_at IS NOT NULL) BEGIN SELECT 1; END";
+  assert.throws(
+    () =>
+      validateRemoteSchemaEvidence(
+        staleAlignedSessionTrigger,
+        programmeMembershipGuardMigrations,
+      ),
     /public-session eligibility trigger has the wrong protection contract/u,
   );
 

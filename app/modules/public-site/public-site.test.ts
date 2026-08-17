@@ -16,7 +16,10 @@ import {
   siteSaveInputSchema,
   sponsorInputSchema,
 } from "./public-site";
-import { resolvePublicSitePresentation } from "./public-site-presentation";
+import {
+  publishedSocialCardRevision,
+  resolvePublicSitePresentation,
+} from "./public-site-presentation";
 
 describe("public event site rules", () => {
   it("uses the canonical submission availability rule for public CTA state", () => {
@@ -360,5 +363,23 @@ describe("public event site rules", () => {
       featuredSessions: [],
       venueLabel: undefined,
     });
+  });
+
+  it("versions generic social cards from the site snapshot only", () => {
+    expect(
+      publishedSocialCardRevision({
+        siteContentRevision: "site-hash",
+        siteRevision: 3,
+        programmeContentRevision: "programme-hash",
+      }),
+    ).toBe("site-hash-3");
+    expect(
+      publishedSocialCardRevision({
+        siteContentRevision: "site-hash",
+        siteRevision: 3,
+        programmeContentRevision: "programme-hash",
+        speakerId: "person-1",
+      }),
+    ).toBe("programme-hash-site-hash-3");
   });
 });

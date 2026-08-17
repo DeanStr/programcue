@@ -1132,6 +1132,11 @@ describe("published programme and itinerary", () => {
     await expect(service.getPublished(eventId)).rejects.toThrow(
       /configure and validate an airtable repository/i,
     );
+    await expect(service.findPublishedVersion(eventId)).resolves.toMatchObject({
+      eventId,
+      slug: eventId,
+      version: { id: versionId, versionNumber: 1 },
+    });
   });
 
   it("rejects deleting content for a published public entry", async () => {

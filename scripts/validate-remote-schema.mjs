@@ -11,6 +11,10 @@ export const lastImmutableMigrationName =
   "0032_event_brand_asset_normalization.sql";
 export const reviewerAiMigrationName = "0036_reviewer_ai_hardening.sql";
 export const publicSiteMigrationName = "0037_public_event_site.sql";
+export const publicSiteRelationshipGuardMigrationName =
+  "0039_featured_speaker_relationship_guards.sql";
+export const publicSiteProgrammeMembershipGuardMigrationName =
+  "0040_align_featured_speaker_session_guard.sql";
 
 export const requiredBrandAssetColumns = new Map([
   ["width_px", { type: "INTEGER", notnull: 0, defaultValue: null }],
@@ -142,6 +146,14 @@ export const requiredPublicSiteSchemaObjects = new Map([
   ["idx_event_session_recordings_public", "index"],
   ["prevent_referenced_public_session_eligibility_change", "trigger"],
   ["prevent_referenced_public_speaker_profile_demotion", "trigger"],
+]);
+
+export const requiredFeaturedSpeakerRelationshipObjects = new Map([
+  [
+    "prevent_referenced_public_speaker_relationship_visibility_change",
+    "trigger",
+  ],
+  ["prevent_referenced_public_speaker_relationship_delete", "trigger"],
 ]);
 
 export const requiredPublicSiteForeignKeys = [
@@ -383,6 +395,21 @@ export function validateRemoteSchemaEvidence(
   const publicSiteApplied = appliedMigrationNames.includes(
     publicSiteMigrationName,
   );
+  const featuredSpeakerRelationshipGuardsApplied =
+    appliedMigrationNames.includes(publicSiteRelationshipGuardMigrationName);
+  const programmeMembershipGuardsApplied = appliedMigrationNames.includes(
+    publicSiteProgrammeMembershipGuardMigrationName,
+  );
+  if (featuredSpeakerRelationshipGuardsApplied && !publicSiteApplied) {
+    throw new Error(
+      "Remote D1 applied featured-speaker relationship guards without the public event-site baseline.",
+    );
+  }
+  if (programmeMembershipGuardsApplied && !publicSiteApplied) {
+    throw new Error(
+      "Remote D1 aligned the featured-speaker session guard without the public event-site baseline.",
+    );
+  }
   if (publicSiteApplied) {
     const publicSiteColumnRows = successfulResults(
       response[8],
@@ -432,21 +459,27 @@ export function validateRemoteSchemaEvidence(
       (row) =>
         row.name === "prevent_referenced_public_session_eligibility_change",
     );
-    if (
-      typeof sessionTrigger?.sql !== "string" ||
-      !/BEFORE\s+UPDATE\s+OF\s+status\s*,\s*visibility\s+ON\s+sessions/iu.test(
-        sessionTrigger.sql,
-      ) ||
-      !/event_public_site_references/iu.test(sessionTrigger.sql) ||
-      !/event_session_recordings/iu.test(sessionTrigger.sql) ||
-      !/NEW\.status\s*<>\s*'published'/iu.test(sessionTrigger.sql) ||
-      !/NEW\.visibility\s*<>\s*'public'/iu.test(sessionTrigger.sql) ||
-      !/reference\.kind\s*=\s*'session'/iu.test(sessionTrigger.sql) ||
-      !/reference\.kind\s*=\s*'speaker'/iu.test(sessionTrigger.sql) ||
-      !/participation_status\s*=\s*'confirmed'/iu.test(sessionTrigger.sql) ||
-      !/content_status\s*=\s*'approved'/iu.test(sessionTrigger.sql) ||
-      !/recording\.published_at\s+IS\s+NOT\s+NULL/iu.test(sessionTrigger.sql)
-    ) {
+    const sessionTriggerSql =
+      typeof sessionTrigger?.sql === "string" ? sessionTrigger.sql : "";
+    const sessionTriggerHasBaseline =
+      /BEFORE\s+UPDATE\s+OF\s+status\s*,\s*visibility\s+ON\s+sessions/iu.test(
+        sessionTriggerSql,
+      ) &&
+      /event_public_site_references/iu.test(sessionTriggerSql) &&
+      /event_session_recordings/iu.test(sessionTriggerSql) &&
+      /NEW\.status\s*<>\s*'published'/iu.test(sessionTriggerSql) &&
+      /NEW\.visibility\s*<>\s*'public'/iu.test(sessionTriggerSql) &&
+      /reference\.kind\s*=\s*'session'/iu.test(sessionTriggerSql) &&
+      /reference\.kind\s*=\s*'speaker'/iu.test(sessionTriggerSql) &&
+      /recording\.published_at\s+IS\s+NOT\s+NULL/iu.test(sessionTriggerSql);
+    const sessionTriggerMatchesLiveProgramme = programmeMembershipGuardsApplied
+      ? /session_id\s*<>\s*OLD\.id/iu.test(sessionTriggerSql) &&
+        /profile_status\s*=\s*'published'/iu.test(sessionTriggerSql) &&
+        /relation\.visibility\s*=\s*'public'/iu.test(sessionTriggerSql) &&
+        !/participation_status\s*=\s*'confirmed'/iu.test(sessionTriggerSql)
+      : /participation_status\s*=\s*'confirmed'/iu.test(sessionTriggerSql) &&
+        /content_status\s*=\s*'approved'/iu.test(sessionTriggerSql);
+    if (!sessionTriggerHasBaseline || !sessionTriggerMatchesLiveProgramme) {
       throw new Error(
         "Remote D1 public-session eligibility trigger has the wrong protection contract.",
       );
@@ -468,6 +501,69 @@ export function validateRemoteSchemaEvidence(
       throw new Error(
         "Remote D1 featured-speaker profile trigger has the wrong protection contract.",
       );
+    }
+    if (featuredSpeakerRelationshipGuardsApplied) {
+      for (const [name, type] of requiredFeaturedSpeakerRelationshipObjects) {
+        if (objects.get(name) !== type) {
+          throw new Error(`Remote D1 is missing required ${type} ${name}.`);
+        }
+      }
+      const relationshipVisibilityTrigger = objectRows.find(
+        (row) =>
+          row.name ===
+          "prevent_referenced_public_speaker_relationship_visibility_change",
+      );
+      if (
+        typeof relationshipVisibilityTrigger?.sql !== "string" ||
+        !/BEFORE\s+UPDATE\s+OF\s+visibility\s+ON\s+session_speakers/iu.test(
+          relationshipVisibilityTrigger.sql,
+        ) ||
+        !/event_public_site_references/iu.test(
+          relationshipVisibilityTrigger.sql,
+        ) ||
+        !/reference\.kind\s*=\s*'speaker'/iu.test(
+          relationshipVisibilityTrigger.sql,
+        ) ||
+        !/OLD\.visibility\s*=\s*'public'/iu.test(
+          relationshipVisibilityTrigger.sql,
+        ) ||
+        !/NEW\.visibility\s*<>\s*'public'/iu.test(
+          relationshipVisibilityTrigger.sql,
+        ) ||
+        !/session_id\s*<>\s*OLD\.session_id/iu.test(
+          relationshipVisibilityTrigger.sql,
+        ) ||
+        !/RAISE\s*\(\s*ABORT\s*,/iu.test(relationshipVisibilityTrigger.sql)
+      ) {
+        throw new Error(
+          "Remote D1 featured-speaker relationship visibility trigger has the wrong protection contract.",
+        );
+      }
+      const relationshipDeleteTrigger = objectRows.find(
+        (row) =>
+          row.name === "prevent_referenced_public_speaker_relationship_delete",
+      );
+      if (
+        typeof relationshipDeleteTrigger?.sql !== "string" ||
+        !/BEFORE\s+DELETE\s+ON\s+session_speakers/iu.test(
+          relationshipDeleteTrigger.sql,
+        ) ||
+        !/event_public_site_references/iu.test(relationshipDeleteTrigger.sql) ||
+        !/reference\.kind\s*=\s*'speaker'/iu.test(
+          relationshipDeleteTrigger.sql,
+        ) ||
+        !/OLD\.visibility\s*=\s*'public'/iu.test(
+          relationshipDeleteTrigger.sql,
+        ) ||
+        !/session_id\s*<>\s*OLD\.session_id/iu.test(
+          relationshipDeleteTrigger.sql,
+        ) ||
+        !/RAISE\s*\(\s*ABORT\s*,/iu.test(relationshipDeleteTrigger.sql)
+      ) {
+        throw new Error(
+          "Remote D1 featured-speaker relationship delete trigger has the wrong protection contract.",
+        );
+      }
     }
     const publicSiteForeignKeys = successfulResults(
       response[9],
@@ -538,7 +634,10 @@ export function validateRemoteSchemaEvidence(
         )
       : 0,
     publicSiteObjectCount: publicSiteApplied
-      ? requiredPublicSiteSchemaObjects.size
+      ? requiredPublicSiteSchemaObjects.size +
+        (featuredSpeakerRelationshipGuardsApplied
+          ? requiredFeaturedSpeakerRelationshipObjects.size
+          : 0)
       : 0,
     publicSiteForeignKeyCount: publicSiteApplied
       ? requiredPublicSiteForeignKeys.length
@@ -555,6 +654,7 @@ function run() {
     ...requiredBrandSchemaObjects.keys(),
     ...requiredReviewerAiSchemaObjects.keys(),
     ...requiredPublicSiteSchemaObjects.keys(),
+    ...requiredFeaturedSpeakerRelationshipObjects.keys(),
   ]
     .map((name) => `'${name.replaceAll("'", "''")}'`)
     .join(", ");

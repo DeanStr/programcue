@@ -1,7 +1,10 @@
 import { requireValue } from "~/lib/required-value";
 import { PublicProgrammeService } from "~/modules/programme/public-programme-service.server";
 import { PublishedPublicSiteInvariantError } from "~/modules/public-site/public-site-errors";
-import { publishedPublicSiteInvariantResponse } from "~/modules/public-site/public-site-presentation";
+import {
+  publishedPublicSiteInvariantResponse,
+  publishedSocialCardRevision,
+} from "~/modules/public-site/public-site-presentation";
 import { getValidatedPublishedPublicSite } from "~/modules/public-site/validated-public-site.server";
 import { getCloudflareContext } from "~/platform/cloudflare-context";
 import type { Route } from "./+types/public-social-card";
@@ -47,12 +50,6 @@ export async function loader({ request, params, context }: Route.LoaderArgs) {
       headers: { "cache-control": "no-store" },
     });
   const slug = params.slug ?? "";
-  const programme = await new PublicProgrammeService(env).getPublished(slug);
-  const site = await getValidatedPublishedPublicSite(env, slug, programme);
-  if (!site)
-    throw new Response("Published public event site not found", {
-      status: 404,
-    });
   const searchParams = new URL(request.url).searchParams;
   for (const name of new Set(searchParams.keys())) {
     if (
@@ -61,13 +58,24 @@ export async function loader({ request, params, context }: Route.LoaderArgs) {
     )
       throw new Response("Unsupported social-card parameter", { status: 400 });
   }
+  const speakerId = searchParams.get("speaker");
+  const programme = speakerId
+    ? await new PublicProgrammeService(env).getPublished(slug)
+    : null;
+  const site = await getValidatedPublishedPublicSite(env, slug, programme);
+  if (!site)
+    throw new Response("Published public event site not found", {
+      status: 404,
+    });
   const requestedVersion = searchParams.get("v");
-  const currentVersion = programme
-    ? `${programme.contentRevision}-${site.contentRevision}-${site.revision}`
-    : `${site.contentRevision}-${site.revision}`;
+  const currentVersion = publishedSocialCardRevision({
+    siteContentRevision: site.contentRevision,
+    siteRevision: site.revision,
+    programmeContentRevision: programme?.contentRevision,
+    speakerId,
+  });
   if (requestedVersion !== null && requestedVersion !== currentVersion)
     throw new Response("Social-card revision not found", { status: 404 });
-  const speakerId = searchParams.get("speaker");
   const speaker =
     speakerId && programme
       ? programme.speakers.find((candidate) => candidate.id === speakerId)
@@ -117,7 +125,7 @@ export async function loader({ request, params, context }: Route.LoaderArgs) {
     <text x="122" y="126" fill="#c9d4d2" font-family="Inter,Arial,sans-serif" font-size="30" font-weight="650">${xml(speaker ? site.event.name : eventContext)}</text>
     ${titleLines.map((line, index) => `<text x="122" y="${235 + index * 76}" fill="#ffffff" font-family="Inter,Arial,sans-serif" font-size="64" font-weight="800">${xml(line)}</text>`).join("")}
     ${subtitleLines.map((line, index) => `<text x="122" y="${445 + index * 42}" fill="#c9d4d2" font-family="Inter,Arial,sans-serif" font-size="30">${xml(line)}</text>`).join("")}
-    <text x="122" y="570" fill="${xml(accent)}" font-family="Inter,Arial,sans-serif" font-size="24" font-weight="700">${programme ? "PUBLIC EVENT PROGRAMME" : "PUBLIC EVENT"}</text>
+    <text x="122" y="570" fill="${xml(accent)}" font-family="Inter,Arial,sans-serif" font-size="24" font-weight="700">${speaker ? "PUBLIC EVENT PROGRAMME" : "PUBLIC EVENT"}</text>
   </svg>`;
   try {
     const rendered = await env.IMAGES.input(

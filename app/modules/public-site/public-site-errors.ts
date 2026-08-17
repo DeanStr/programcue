@@ -54,6 +54,9 @@ export const PUBLIC_SITE_SESSION_ELIGIBILITY_CONSTRAINT =
 export const PUBLIC_SITE_SPEAKER_PROFILE_CONSTRAINT =
   "Remove this featured speaker from published event sites before unpublishing their profile";
 
+export const PUBLIC_SITE_SPEAKER_RELATIONSHIP_CONSTRAINT =
+  "Remove this featured speaker from published event sites before hiding or removing their final public session relationship";
+
 export function isPublicSiteDatabaseConstraint(
   error: unknown,
   constraint: string,
