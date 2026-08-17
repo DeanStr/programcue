@@ -119,6 +119,38 @@ test("public programme clears a pinned session when session filters change", asy
   await expect(detailTitle).toHaveText("AI in Event Operations");
 });
 
+test("migrates legacy public session hash links to canonical detail URLs", async ({
+  page,
+}) => {
+  await page.goto(
+    "/public/programme/future-of-events-2027#session-future-attendee-engagement",
+  );
+  await page.locator("body[data-hydrated='true']").waitFor();
+
+  await expect(page).toHaveURL(
+    "/public/programme/future-of-events-2027/sessions?session=demo-session-1",
+  );
+  await expect(page.locator(".session-detail-panel h2")).toHaveText(
+    "The Future of Attendee Engagement",
+  );
+});
+
+test("clears a pinned session excluded by filters in a loaded URL", async ({
+  page,
+}) => {
+  await waitForInterface(
+    page,
+    "/public/programme/future-of-events-2027/sessions?session=demo-session-1&track=AI%20%26%20Innovation",
+  );
+
+  await expect(page).not.toHaveURL(/session=/u);
+  await expect(page).toHaveURL(/track=AI(?:\+|%20)%26(?:\+|%20)Innovation/u);
+  await expect(page.locator(".session-detail-panel h2")).toHaveText(
+    "AI in Event Operations",
+  );
+  await expect(page.locator(".programme-row")).toHaveCount(2);
+});
+
 test("public session detail exposes its canonical share link", async ({
   page,
 }) => {

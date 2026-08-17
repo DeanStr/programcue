@@ -103,23 +103,32 @@ test("schedule and programme render the event calendar date and timezone", async
   );
   expect(calendar.ok()).toBeTruthy();
   const unfoldedCalendar = (await calendar.text()).replace(/\r?\n[ \t]/g, "");
-  const sessionUrls = unfoldedCalendar
-    .split(/\r?\n/)
-    .filter((line) => /^URL(?:;[^:]*)?:/.test(line))
-    .map((line) => line.slice(line.indexOf(":") + 1));
-  expect(sessionUrls).toHaveLength(5);
-  for (const sessionUrl of sessionUrls) {
-    expect(sessionUrl).toMatch(
+  const calendarEvents = unfoldedCalendar
+    .split("BEGIN:VEVENT")
+    .slice(1)
+    .map((event) => ({
+      summary: event.match(/^SUMMARY:(.+)$/m)?.[1],
+      url: event.match(/^URL(?:;[^:]*)?:(.+)$/m)?.[1],
+    }));
+  expect(calendarEvents).toHaveLength(5);
+  for (const { summary, url } of calendarEvents) {
+    expect(summary).toBeTruthy();
+    expect(url).toMatch(
       /^https?:\/\/[^/]+\/public\/programme\/future-of-events-2027\/sessions\?session=[a-z0-9-]+$/,
     );
   }
-  const linkedSession = new URL(sessionUrls.at(-1)!);
-  await page.goto("/admin/event");
+  const linkedEvent = calendarEvents.find(
+    (event) => event.summary === "Community and Connection",
+  );
+  expect(linkedEvent).toBeDefined();
+  const linkedSession = new URL(linkedEvent!.url!);
   await waitForInterface(
     page,
     `${linkedSession.pathname}${linkedSession.search}`,
   );
-  await expect(page.locator(".session-detail-panel h2")).toBeVisible();
+  await expect(page.locator(".session-detail-panel h2")).toHaveText(
+    linkedEvent!.summary!,
+  );
 
   const hydrationErrors: string[] = [];
   page.on("console", (message) => {

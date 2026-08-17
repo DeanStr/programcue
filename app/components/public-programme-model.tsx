@@ -489,6 +489,29 @@ export function usePublicProgrammeModel(loaderData: PublicProgrammeLoaderData) {
   useEffect(() => {
     if (embedded) return;
     if (pendingClientSearches.current.delete(location.search)) return;
+    if (location.hash.startsWith("#session-")) {
+      const legacySessionSlug = location.hash.slice("#session-".length);
+      const linkedSession = programme.sessions.find(
+        (session) => session.slug === legacySessionSlug,
+      );
+      if (linkedSession) {
+        const search = new URLSearchParams(location.search);
+        search.delete("speaker");
+        search.set("session", linkedSession.id);
+        void navigate(
+          {
+            pathname: publicProgrammeSurfacePath(
+              programme.event.slug,
+              "sessions",
+            ),
+            search: `?${search}`,
+            hash: "",
+          },
+          { replace: true, preventScrollReset: true },
+        );
+        return;
+      }
+    }
     const search = new URLSearchParams(location.search);
     const cleaned = clearUnavailablePublicProgrammeFacets(search, {
       day: days,
@@ -539,6 +562,8 @@ export function usePublicProgrammeModel(loaderData: PublicProgrammeLoaderData) {
     location.pathname,
     location.search,
     navigate,
+    programme.event.slug,
+    programme.sessions,
     rooms,
     tracks,
   ]);
@@ -586,15 +611,54 @@ export function usePublicProgrammeModel(loaderData: PublicProgrammeLoaderData) {
     sessionFocusOverride === undefined
       ? loaderData.sessionFocusId
       : sessionFocusOverride;
-  const selected =
-    effectiveSessionFocusId !== null
-      ? (programme.sessions.find(
+  const focusedSession =
+    effectiveSessionFocusId === null
+      ? null
+      : (programme.sessions.find(
           (session) => session.id === effectiveSessionFocusId,
-        ) ?? null)
-      : (visible.find((session) => session.id === selectedId) ??
-        visible[0] ??
-        null);
+        ) ?? null);
+  const focusedSessionIsVisible =
+    focusedSession !== null &&
+    visible.some((session) => session.id === focusedSession.id);
+  const selected = focusedSessionIsVisible
+    ? focusedSession
+    : (visible.find((session) => session.id === selectedId) ??
+      visible[0] ??
+      null);
   const visibleSessionIds = new Set(visible.map((session) => session.id));
+  useEffect(() => {
+    if (
+      embedded ||
+      sessionFocusOverride !== undefined ||
+      loaderData.sessionFocusId === null ||
+      focusedSessionIsVisible
+    ) {
+      return;
+    }
+    const search = new URLSearchParams(location.search);
+    if (search.get("session") !== loaderData.sessionFocusId) return;
+    search.delete("session");
+    const nextSearch = search.size ? `?${search}` : "";
+    setSessionFocusOverride(null);
+    pendingClientSearches.current.add(nextSearch);
+    void navigate(
+      {
+        pathname: location.pathname,
+        search: nextSearch,
+        hash: location.hash,
+      },
+      { replace: true, preventScrollReset: true },
+    );
+  }, [
+    embedded,
+    loaderData.sessionFocusId,
+    location.hash,
+    location.pathname,
+    location.search,
+    navigate,
+    sessionFocusOverride,
+    focusedSessionIsVisible,
+  ]);
   const facetSpeakerIds = new Set(
     sessionsMatchingFacets.flatMap((session) => session.speakerIds),
   );
