@@ -238,6 +238,9 @@ test("organisers compose, preview and publish the bounded public event site", as
      statistic 87px, which is narrower than "Event Days" sets, so one label
      wrapped and the row of figures sat on a ragged baseline. */
   expect(previewColumnCounts).toEqual({ features: 1, statistics: 2 });
+  await previewFrame.evaluate((element) => {
+    element.scrollTop = 0;
+  });
   await expect(previewFrame).toHaveScreenshot("public-site-preview-mobile.png");
   await page.getByLabel("Theme").selectOption("light");
   await expect(previewFrame).toHaveAttribute("data-public-theme", "light");
