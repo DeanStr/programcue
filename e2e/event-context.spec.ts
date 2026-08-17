@@ -206,6 +206,8 @@ test("an invited speaker can explicitly choose the created event and see its tas
   await expect(page).toHaveURL(/\/participant\/dashboard$/);
   await expect(page.getByText(eventName, { exact: true })).toBeVisible();
   await page.goto("/participant/tasks");
-  await expect(page.getByRole("heading", { name: "My tasks" })).toBeVisible();
+  await expect(
+    page.getByRole("heading", { name: "Tasks", exact: true, level: 1 }),
+  ).toBeVisible();
   await expect(page.getByText(taskName, { exact: true })).toBeVisible();
 });
