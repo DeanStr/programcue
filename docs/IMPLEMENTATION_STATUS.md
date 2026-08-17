@@ -1269,10 +1269,13 @@ capacity restored. The ready application reports image digest
 all scanner slots remained inactive after rollout. That source exits a ready
 container after one admitted scan, reduces the provider idle fallback to five
 minutes and adds an independent in-process graceful-shutdown trigger after
-forty minutes. Thirteen focused
-container tests, including a real local HTTP-server shutdown, pass. A fresh
-post-cutover production file scan and subsequent inactive-state observation
-remain outstanding acceptance evidence.
+forty minutes. Thirteen focused container tests, including a real local
+HTTP-server shutdown, pass. A fresh post-cutover production upload completed
+its scan on the first attempt: D1 recorded a clean verdict and release, while
+the deterministic `scanner-slot-0` was observed running container version 12
+in London and then inactive. All four bounded scanner slots were still inactive
+in the delayed follow-up reading. The exact acceptance file was then permanently
+erased through the participant UI and its D1 asset was tombstoned.
 
 Live provider acceptance covers an owner Turnstile/Resend magic-link flow,
 tracked Resend delivered and bounced receipts, Google and hardened Microsoft
