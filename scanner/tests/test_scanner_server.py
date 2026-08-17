@@ -1,5 +1,6 @@
 import importlib.util
 import io
+import json
 import pathlib
 import tempfile
 import unittest
@@ -187,6 +188,88 @@ class ScannerServerContractTests(unittest.TestCase):
             },
             {"Retry-After": "15"},
         )
+
+    def test_ready_scan_shuts_down_container_after_response(self):
+        handler = object.__new__(scanner.ScannerHandler)
+        handler._json = mock.Mock()
+        handler.path = "/scan"
+        handler.headers = {
+            "Content-Type": "application/json",
+            "Content-Length": "2",
+        }
+        handler.rfile = io.BytesIO(b"{}")
+        handler.server = mock.Mock()
+        verdict = {
+            "verdict": "clean",
+            "engine": "clamav",
+            "engineVersion": "1.4.6",
+            "signatureVersion": "28087/Sun Aug 9 06:24:56 2026",
+            "scannedBytes": 4,
+            "durationMs": 20,
+        }
+
+        with (
+            mock.patch.object(scanner, "clamav_ready", return_value=True),
+            mock.patch.object(scanner, "execute_scan", return_value=verdict),
+            mock.patch.object(scanner, "shutdown_server") as shutdown,
+        ):
+            handler.do_POST()
+
+        handler._json.assert_called_once_with(200, verdict)
+        shutdown.assert_called_once_with(
+            handler.server,
+            "scan_request_finished",
+        )
+
+    def test_ready_scan_stops_the_real_http_server(self):
+        server = scanner.ThreadingHTTPServer(
+            ("127.0.0.1", 0),
+            scanner.ScannerHandler,
+        )
+        server_thread = scanner.threading.Thread(target=server.serve_forever)
+        server_thread.start()
+        verdict = {
+            "verdict": "clean",
+            "engine": "clamav",
+            "engineVersion": "1.4.6",
+            "signatureVersion": "28087/Sun Aug 9 06:24:56 2026",
+            "scannedBytes": 4,
+            "durationMs": 20,
+        }
+        request = scanner.urllib.request.Request(
+            f"http://127.0.0.1:{server.server_port}/scan",
+            data=b"{}",
+            headers={"Content-Type": "application/json"},
+            method="POST",
+        )
+
+        try:
+            with (
+                mock.patch.object(scanner, "clamav_ready", return_value=True),
+                mock.patch.object(scanner, "execute_scan", return_value=verdict),
+                scanner.urllib.request.urlopen(request, timeout=2) as response,
+            ):
+                self.assertEqual(json.loads(response.read()), verdict)
+            server_thread.join(timeout=2)
+            self.assertFalse(server_thread.is_alive())
+        finally:
+            server.shutdown()
+            server.server_close()
+            server_thread.join(timeout=2)
+
+    def test_lifetime_guard_is_daemonized_and_started(self):
+        server = mock.Mock()
+        timer = mock.Mock()
+        with mock.patch.object(scanner.threading, "Timer", return_value=timer) as factory:
+            self.assertIs(scanner.start_lifetime_guard(server), timer)
+
+        factory.assert_called_once_with(
+            scanner.MAX_CONTAINER_LIFETIME_SECONDS,
+            scanner.shutdown_server,
+            args=(server, "maximum_lifetime"),
+        )
+        self.assertTrue(timer.daemon)
+        timer.start.assert_called_once_with()
 
 
 if __name__ == "__main__":

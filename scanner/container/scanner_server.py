@@ -22,12 +22,47 @@ MAX_FILE_BYTES = 1_073_741_824
 MAX_REQUEST_BYTES = 24_000
 DOWNLOAD_TIMEOUT_SECONDS = 600
 SCAN_TIMEOUT_SECONDS = 720
+# The Cloudflare Container idle alarm remains the ordinary shutdown path, but
+# the scanner process also owns a hard ceiling. A provider alarm failure must
+# never leave an otherwise idle, metered ClamAV VM running indefinitely.
+MAX_CONTAINER_LIFETIME_SECONDS = 40 * 60
 CHUNK_BYTES = 1024 * 1024
 SCAN_DIRECTORY = Path("/tmp/program-cue-scans")
 READINESS_FILE = Path("/tmp/program-cue-scanner-ready")
 INTERCEPTION_CA = Path("/etc/cloudflare/certs/cloudflare-containers-ca.crt")
 IDENTIFIER = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:-]{0,199}$")
 SCAN_LOCK = threading.BoundedSemaphore(1)
+
+
+def log_shutdown(reason: str) -> None:
+    print(
+        json.dumps(
+            {
+                "level": "info",
+                "subsystem": "file-scanner-container",
+                "event": "shutdown-requested",
+                "reason": reason,
+            },
+            separators=(",", ":"),
+        ),
+        flush=True,
+    )
+
+
+def shutdown_server(server: ThreadingHTTPServer, reason: str) -> None:
+    log_shutdown(reason)
+    server.shutdown()
+
+
+def start_lifetime_guard(server: ThreadingHTTPServer) -> threading.Timer:
+    timer = threading.Timer(
+        MAX_CONTAINER_LIFETIME_SECONDS,
+        shutdown_server,
+        args=(server, "maximum_lifetime"),
+    )
+    timer.daemon = True
+    timer.start()
+    return timer
 
 
 class ContractError(Exception):
@@ -322,6 +357,7 @@ class ScannerHandler(BaseHTTPRequestHandler):
                 {"Retry-After": "15"},
             )
             return
+        should_shutdown = False
         try:
             if not clamav_ready():
                 self._json(
@@ -333,6 +369,10 @@ class ScannerHandler(BaseHTTPRequestHandler):
                     {"Retry-After": "15"},
                 )
                 return
+            # A ready instance handles at most one admitted scan before it
+            # exits. This makes scale-to-zero independent of the provider's
+            # idle-alarm path while busy and cold-start retries remain safe.
+            should_shutdown = True
             try:
                 raw_body = self.rfile.read(int(content_length))
                 payload = json.loads(raw_body.decode("utf-8"))
@@ -387,6 +427,8 @@ class ScannerHandler(BaseHTTPRequestHandler):
                     "error": "The container scan failed.",
                 })
         finally:
+            if should_shutdown:
+                shutdown_server(self.server, "scan_request_finished")
             SCAN_LOCK.release()
 
     def log_message(self, format: str, *args: Any) -> None:
@@ -401,7 +443,12 @@ def main() -> None:
     if not re.fullmatch(r"[a-z0-9][a-z0-9.-]{1,61}[a-z0-9]", expected_bucket):
         raise SystemExit("EXPECTED_R2_BUCKET is missing or invalid.")
     server = ThreadingHTTPServer(("0.0.0.0", 8080), ScannerHandler)
-    server.serve_forever()
+    lifetime_guard = start_lifetime_guard(server)
+    try:
+        server.serve_forever()
+    finally:
+        lifetime_guard.cancel()
+        server.server_close()
 
 
 if __name__ == "__main__":

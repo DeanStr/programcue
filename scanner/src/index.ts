@@ -89,7 +89,7 @@ export class FileScannerContainer extends Container<ScannerEnvironment> {
   defaultPort = 8080;
   interceptHttps = true;
   pingEndpoint = "scanner/ping";
-  sleepAfter = "15m";
+  sleepAfter = "5m";
   enableInternet = false;
   allowedHosts = [
     this.env.R2_OBJECT_HOST ?? "invalid.invalid",
