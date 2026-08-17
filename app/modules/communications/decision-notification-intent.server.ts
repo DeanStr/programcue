@@ -7,6 +7,39 @@ import {
 import { formatEventDateMarkers, renderMergeTemplate } from "./merge-template";
 
 export const DECISION_NOTIFICATION_RENDER_CONTRACT_VERSION = 1;
+export const MAX_OUTBOUND_REVIEWER_FEEDBACK_CHARS = 64_000;
+export const MAX_DECISION_NOTIFICATION_INTENT_BYTES = 1_000_000;
+export const OUTBOUND_REVIEWER_FEEDBACK_TOO_LONG_MESSAGE =
+  "Included reviewer feedback is too long to send with this decision. Shorten the applicant-facing comments or release the decision without reviewer feedback.";
+export const DECISION_NOTIFICATION_INTENT_TOO_LARGE_MESSAGE =
+  "The decision email is too large to store safely. Shorten or exclude reviewer feedback, then try again.";
+
+function utf8ByteLength(value: string) {
+  return new TextEncoder().encode(value).byteLength;
+}
+
+export function decisionNotificationIntentStorageError(input: {
+  feedback: string[];
+  sourceValuesJson?: string;
+  contentSnapshotJson?: string;
+  queuePayloadJson?: string;
+}) {
+  const feedback = input.feedback.join("\n\n");
+  if (feedback.length > MAX_OUTBOUND_REVIEWER_FEEDBACK_CHARS) {
+    return OUTBOUND_REVIEWER_FEEDBACK_TOO_LONG_MESSAGE;
+  }
+  const durableBytes = [
+    input.sourceValuesJson,
+    input.contentSnapshotJson,
+    input.queuePayloadJson,
+  ]
+    .filter((value): value is string => typeof value === "string")
+    .reduce((total, value) => total + utf8ByteLength(value), 0);
+  if (durableBytes > MAX_DECISION_NOTIFICATION_INTENT_BYTES) {
+    return DECISION_NOTIFICATION_INTENT_TOO_LARGE_MESSAGE;
+  }
+  return null;
+}
 
 async function sha256(value: string) {
   const digest = await crypto.subtle.digest(
@@ -78,16 +111,25 @@ export async function prepareDecisionNotificationIntent(
   | { error: string; intent: null }
   | { error: null; intent: DecisionNotificationIntent }
 > {
+  const feedbackError = decisionNotificationIntentStorageError({
+    feedback: input.feedback,
+  });
+  if (feedbackError) return { error: feedbackError, intent: null };
   const readiness = await inspectDecisionNotificationReadiness(env, {
     organisationId: input.viewer.organisationId,
     eventId: input.viewer.eventId,
     recipientAddress: input.recipientAddress,
   });
   if (readiness.error) return { error: readiness.error, intent: null };
-  return {
-    error: null,
-    intent: await intentFromReadiness(input, readiness),
-  };
+  const intent = await intentFromReadiness(input, readiness);
+  const storageError = decisionNotificationIntentStorageError({
+    feedback: input.feedback,
+    sourceValuesJson: intent.sourceValuesJson,
+    contentSnapshotJson: intent.contentSnapshotJson,
+    queuePayloadJson: intent.queuePayloadJson,
+  });
+  if (storageError) return { error: storageError, intent: null };
+  return { error: null, intent };
 }
 
 async function intentFromReadiness(

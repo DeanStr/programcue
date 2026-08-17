@@ -558,5 +558,81 @@ describe("Submissions D1 vertical slice", () => {
         operationStatus: "queue_failed",
       });
     });
+
+    it("fails an invalid durable submission payload once with explicit recovery guidance", async () => {
+      const { testEnv } = await publishedForm();
+      const token = crypto.randomUUID();
+      const submissionId = `invalid-snapshot-submission-${token}`;
+      const operationId = `invalid-snapshot-submission-notification-${token}`;
+      const communicationId = `invalid-snapshot-submission-communication-${token}`;
+      const idempotencyKey = `submission-confirmation:${submissionId}`;
+      const message = {
+        type: "submission.notification" as const,
+        operationId,
+        communicationId,
+        submissionId,
+        eventId: viewer.eventId,
+        organisationId: viewer.organisationId,
+        idempotencyKey,
+      };
+      await testEnv.DB.batch([
+        testEnv.DB.prepare(
+          `INSERT INTO operation_jobs (
+             id, organisation_id, event_id, requested_by_person_id, type,
+             idempotency_key, correlation_id, status, payload_json
+           ) VALUES (?, ?, ?, ?, 'submission.notification', ?, ?, 'queued', ?)`,
+        ).bind(
+          operationId,
+          viewer.organisationId,
+          viewer.eventId,
+          viewer.personId,
+          idempotencyKey,
+          token,
+          JSON.stringify({ ...message, type: "not-a-submission-notification" }),
+        ),
+        testEnv.DB.prepare(
+          `INSERT INTO communications (
+             id, event_id, operation_id, idempotency_key, kind, channel, status,
+             audience_json, content_snapshot_json, recipient_count,
+             created_by_person_id, created_at, updated_at
+           ) VALUES (?, ?, ?, ?, 'transactional', 'email', 'queued', ?, '{}', 1,
+                     ?, unixepoch(), unixepoch())`,
+        ).bind(
+          communicationId,
+          viewer.eventId,
+          operationId,
+          idempotencyKey,
+          JSON.stringify({ pendingMaterialization: true }),
+          viewer.personId,
+        ),
+      ]);
+
+      await processSubmissionNotification(message, testEnv);
+      const terminal = await testEnv.DB.prepare(
+        `SELECT operation.status AS operationStatus,
+                operation.last_error AS lastError,
+                communication.status AS communicationStatus
+           FROM operation_jobs operation
+           JOIN communications communication
+             ON communication.operation_id = operation.id
+          WHERE operation.id = ? AND operation.event_id = ?`,
+      )
+        .bind(operationId, viewer.eventId)
+        .first<{
+          operationStatus: string;
+          lastError: string;
+          communicationStatus: string;
+        }>();
+      expect(terminal).toMatchObject({
+        operationStatus: "failed",
+        lastError: expect.stringContaining(
+          "durable submission notification snapshot is invalid",
+        ),
+        communicationStatus: "failed",
+      });
+      await expect(
+        processSubmissionNotification(message, testEnv),
+      ).resolves.toBeUndefined();
+    });
   });
 });

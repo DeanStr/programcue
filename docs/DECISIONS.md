@@ -682,7 +682,10 @@ invalidation subsystem remain excluded.
   of pinned intent is the existing participant-retention workflow's exact,
   one-way pseudonymisation and redaction contract; it also removes the original
   rendered subject and body hash evidence that must not outlive the event's
-  retention period.
+  retention period. Outbound reviewer feedback is capped well below D1's 2 MB
+  string and row limits; oversized feedback is rejected with a specific request
+  to shorten or exclude it, and the durable notification JSON must stay under
+  1 MB of UTF-8.
 - **Setup-bounded readiness:** operational readiness may expose useful partial
   progress, but the overall percentage cannot exceed the proportion of complete
   setup phases. A new event therefore cannot claim full readiness while most

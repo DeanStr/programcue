@@ -1665,5 +1665,41 @@ describe("Communications D1 vertical slice", () => {
         failureCode: "recipient_unsubscribed",
       });
     });
+
+    it("rejects included reviewer feedback that exceeds the durable email budget", async () => {
+      const { testEnv } = await communicationEnvironment();
+      const event = await env.DB.prepare(
+        `SELECT name, brand_accent AS brandAccent, starts_at AS startsAt,
+                ends_at AS endsAt
+           FROM events WHERE id = ?`,
+      )
+        .bind(viewer.eventId)
+        .first<{
+          name: string;
+          brandAccent: string;
+          startsAt: number;
+          endsAt: number;
+        }>();
+      if (!event) throw new Error("Test event is unavailable.");
+      await expect(
+        prepareDecisionNotificationIntent(testEnv, {
+          viewer,
+          decisionId: "decision-feedback-limit",
+          operationId: "operation-feedback-limit",
+          submissionId: "submission-feedback-limit",
+          submissionTitle: "A measured proposal",
+          decision: "rejected",
+          rationale: "The programme is already full.",
+          feedback: ["x".repeat(64_001)],
+          recipientPersonId: "person-demo-submitter",
+          recipientAddress: "alex.submitter@example.com",
+          recipientName: "Alex Morgan",
+          event,
+        }),
+      ).resolves.toMatchObject({
+        error: expect.stringMatching(/too long to send/i),
+        intent: null,
+      });
+    });
   });
 });

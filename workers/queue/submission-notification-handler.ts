@@ -7,6 +7,9 @@ import { processCommunicationSend } from "./communication-send";
 import type { QueueProviderDependencies } from "./handler-types";
 import { markTriggerFailure } from "./notification-failure";
 
+const INVALID_SUBMISSION_NOTIFICATION_FAILURE =
+  "The durable submission notification snapshot is invalid and cannot be delivered safely. Ask the applicant to submit again or contact them through an explicitly reviewed communication.";
+
 const submissionNotificationMessageSchema = z.object({
   type: z.literal("submission.notification"),
   operationId: z.string().min(1),
@@ -26,6 +29,7 @@ export async function processSubmissionNotification(
   const operation = await env.DB.prepare(
     `
     SELECT o.id, o.status, o.requested_by_person_id AS requestedByPersonId,
+           o.last_error AS lastError,
            o.payload_json AS payloadJson
       FROM operation_jobs o
       JOIN events e ON e.id = o.event_id AND e.organisation_id = ?
@@ -37,6 +41,7 @@ export async function processSubmissionNotification(
       id: string;
       status: string;
       requestedByPersonId: string | null;
+      lastError: string | null;
       payloadJson: string;
     }>();
   if (!operation)
@@ -45,6 +50,12 @@ export async function processSubmissionNotification(
     );
   if (operation.status === "completed" || operation.status === "cancelled")
     return;
+  if (
+    ["failed", "partially_failed"].includes(operation.status) &&
+    operation.lastError === INVALID_SUBMISSION_NOTIFICATION_FAILURE
+  ) {
+    return;
+  }
   let savedMessage: ReturnType<
     typeof submissionNotificationMessageSchema.parse
   >;
@@ -53,7 +64,13 @@ export async function processSubmissionNotification(
       JSON.parse(operation.payloadJson),
     );
   } catch {
-    throw new Error("The durable submission notification payload is invalid.");
+    await markTriggerFailure(
+      env,
+      message,
+      INVALID_SUBMISSION_NOTIFICATION_FAILURE,
+      message.communicationId,
+    );
+    return;
   }
   if (JSON.stringify(savedMessage) !== JSON.stringify(message)) {
     throw new Error(
