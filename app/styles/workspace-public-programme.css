@@ -21,7 +21,7 @@
   --accent-soft: color-mix(in srgb, var(--event-accent) 8%, white);
   --accent-line: color-mix(in srgb, var(--event-accent) 26%, var(--line));
   --accent-ink: var(--event-accent-light-ink);
-  --accent-on-solid: var(--event-accent-on-solid);
+  --accent-on-solid: var(--event-control-on-solid, var(--text-inverse));
 }
 .public-shell {
   display: flex;
@@ -289,6 +289,20 @@
   border-color: var(--accent-line);
   background: var(--accent-soft);
   color: var(--accent-ink);
+}
+/* The seam between the curated homepage and the filterable programme. It holds
+   the homepage column's measure so its rule continues the run of rules above
+   it, and its heading is deliberately a step below those: it names the zone the
+   reader has arrived in, it does not own a section of its own. The size is
+   stated rather than derived from container width, because the heading sits
+   outside the homepage container. */
+.public-programme-seam {
+  width: min(1320px, calc(100% - 40px));
+  margin: 0 auto;
+  padding-block: var(--space-7) var(--space-4);
+}
+.public-programme-seam .public-site-section-heading h2 {
+  font-size: var(--text-2xl);
 }
 .public-mobile-nav > summary {
   list-style: none;

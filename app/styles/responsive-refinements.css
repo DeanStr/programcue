@@ -170,6 +170,16 @@
   .hero {
     width: calc(100% - 24px);
   }
+  /* The homepage column is a page-level column like the two above it, so it
+     takes the page's gutter. Holding the desktop 20px here inset the curated
+     sections 8px further than the masthead and the programme they sit between,
+     which showed as three left edges down one phone screen. The editor preview
+     carries the same gutter as its own padding, so this stays the only
+     viewport rule the column answers to. */
+  .public-site-home,
+  .public-programme-seam {
+    width: calc(100% - 24px);
+  }
 }
 @media (max-width: 760px) {
   :root {

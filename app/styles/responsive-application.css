@@ -34,8 +34,13 @@
   margin-top: var(--space-1);
 }
 @media (max-width: 1024px) {
+  /* Restores the event name that `.brand span` hides for the application
+     sidebar. It must not be a flex container: `text-overflow: ellipsis` has no
+     effect on one, so at 390px "Future of Events 2027" was sliced through the
+     middle of a digit with no ellipsis and no clearance to the button beside
+     it, rather than truncated. */
   .public-top .brand span {
-    display: inline-flex;
+    display: inline-block;
   }
 }
 @media (max-width: 760px) {

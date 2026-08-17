@@ -540,11 +540,29 @@ function VenuePanel({ model }: { model: PublicProgrammeModel }) {
           rel="noopener noreferrer"
         >
           <MapPin aria-hidden size={14} />
-          View venue map
+          Open map
           <span className="sr-only"> (opens in a new tab)</span>
         </a>
       ) : null}
     </section>
+  );
+}
+
+/**
+ * The curated homepage and the filterable programme are different kinds of
+ * surface — an edit and a working list — and on the overview they meet with no
+ * announcement. The change from open editorial rules to bordered cards then
+ * reads as the page contradicting itself rather than as a second zone
+ * beginning. This names the seam, in the heading language the homepage above it
+ * already uses.
+ */
+function ProgrammeSeamHeading() {
+  return (
+    <div className="public-site-section public-programme-seam">
+      <div className="public-site-section-heading">
+        <h2>Full programme</h2>
+      </div>
+    </div>
   );
 }
 
@@ -1081,6 +1099,15 @@ export function PublicProgrammeWorkspace({
   const overviewSurface =
     loaderData.surface === "overview" || loaderData.surface === "sessions";
   const homeSurface = loaderData.surface === "overview";
+  const homeConfiguration =
+    homeSurface && loaderData.site ? loaderData.site.configuration : null;
+  /* The curated homepage states the venue on a rail of its own. Leaving the
+     sidebar card in place printed the same address twice on one page, under two
+     headings, with two different words for the same map link. */
+  const homeStatesVenue = Boolean(
+    homeConfiguration?.sectionOrder.includes("venue") &&
+      homeConfiguration.sectionVisibility.venue,
+  );
   const accentPalette = programmeAccentPalette(
     embedOptions.accent ?? programme.event.brandAccent,
   );
@@ -1096,7 +1123,8 @@ export function PublicProgrammeWorkspace({
         {
           "--event-accent": accentPalette.accent,
           "--event-accent-light-ink": accentPalette.ink,
-          "--event-accent-on-solid": accentPalette.onAccent,
+          "--event-accent-on-solid": accentPalette.onRawAccent,
+          "--event-control-on-solid": accentPalette.onAccent,
         } as CSSProperties
       }
     >
@@ -1117,11 +1145,14 @@ export function PublicProgrammeWorkspace({
         <PublicProgrammeHero model={model} />
         {!embedded ? <PublicProgrammeViewNavigation model={model} /> : null}
         {homeSurface && loaderData.site ? (
-          <PublicSiteHome
-            event={programme.event}
-            programme={programme}
-            site={loaderData.site}
-          />
+          <>
+            <PublicSiteHome
+              event={programme.event}
+              programme={programme}
+              site={loaderData.site}
+            />
+            <ProgrammeSeamHeading />
+          </>
         ) : null}
         <div
           className={`public-main${!overviewSurface ? " public-surface-main" : ""}`}
@@ -1163,7 +1194,9 @@ export function PublicProgrammeWorkspace({
               <aside id="itinerary">
                 {!embedded ? <ItineraryPanel model={model} /> : null}
                 <SessionDetailPanel model={model} />
-                {!embedded ? <VenuePanel model={model} /> : null}
+                {!embedded && !homeStatesVenue ? (
+                  <VenuePanel model={model} />
+                ) : null}
               </aside>
               <OverviewSpeakers model={model} />
             </>

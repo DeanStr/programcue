@@ -250,7 +250,8 @@ export function AdminPublicSitePreview({
           {
             "--event-accent": palette.accent,
             "--event-accent-light-ink": palette.ink,
-            "--event-accent-on-solid": palette.onAccent,
+            "--event-accent-on-solid": palette.onRawAccent,
+            "--event-control-on-solid": palette.onAccent,
           } as CSSProperties
         }
       >

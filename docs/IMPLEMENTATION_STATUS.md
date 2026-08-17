@@ -1001,7 +1001,14 @@ revoked and deleted during file erasure.
   keeps primary destinations visible, groups programme variants and editorial
   pages inside Browse, and collapses fully at tablet width. Direct session-detail
   URLs are server-validated and fail explicitly for duplicate, mixed, embedded
-  or unavailable selections.
+  or unavailable selections. The homepage's statistics band is painted in the
+  undiluted event accent, which is the product's largest solid-accent surface;
+  `programmeAccentPalette` derives a separate ink for it rather than reusing the
+  control foreground, and unit coverage checks representative pale, dark and
+  rounding-boundary accents at 4.5:1. The published page measures the band's figures and labels
+  against the colour actually painted, holds a floor under the homepage section
+  headings so an unresolvable size token cannot silently collapse them to the
+  inherited value, and keeps desktop light and dark homepage baselines.
   `/admin/site` passes
   the WCAG A/AA axe sweep at phone, tablet and desktop widths. The complete local
   core gate also passes, including TypeScript, production builds, the Agents

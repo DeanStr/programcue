@@ -1188,7 +1188,7 @@ The homepage follows an editorial event hierarchy rather than a dashboard or a
 stack of cards. The introduction is a two-column proposition-and-explanation
 spread, speakers use large rectangular portraits on an open-ended accent field,
 and featured sessions form a numbered programme edit with a timetable rail.
-Statistics share one square-edged band, venue information uses a location rail,
+Statistics share one band, venue information uses a location rail,
 and section headings extend into a fading brand rule. Featured speakers,
 featured sessions and the FAQ do not enclose each record in a generic rounded
 container. The FAQ replaces the browser's default disclosure triangle with a
@@ -1204,7 +1204,11 @@ as lineup photography rather than avatars; and the organiser's opening
 statement gets display hierarchy without becoming another hero. Speaker grids
 adapt explicitly for one-, two- and three-column lineups and all homepage
 relationships answer to the homepage container, so the editor preview and a
-phone get the same composition rather than the same pixels.
+phone get the same composition rather than the same pixels. Single-speaker
+lineups use the full field, inset panels share one corner language, and each
+featured entry has one visual marker rather than competing borders. The
+"Full programme" seam names the transition from curated content to the working
+list, and repeated venue information is suppressed there.
 
 A featured session states when it happens. It is the only place a session
 appears outside the day-grouped list, so nothing above it supplies the date
@@ -1244,4 +1248,12 @@ size a phone renders and fit one more statistics column than a phone shows.
 The frame also carries the published page's gutter, so the column the preview
 measures against is the column a phone measures against. A preview that is
 faithful by construction is worth more than mirrored breakpoints that have to
-be kept in step by hand.
+be kept in step by hand. Below the column breakpoint the statistics wrap two by
+two.
+
+Solid surfaces derive foregrounds from the colour actually painted. The raw
+event accent used by the statistics band and the contrast-safe accent ink used
+by controls have separate foreground tokens; both are checked after conversion
+to their final hexadecimal colours. Published browser coverage measures the
+rendered band, while presentation-rule tests exercise pale, dark and boundary
+accents.

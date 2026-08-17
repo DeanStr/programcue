@@ -7,6 +7,7 @@ import {
   formatProgrammeSessionDayTime,
   formatProgrammeTimeRange,
   programmeAccentPalette,
+  programmeContrastRatio,
   publicSessionDetailPath,
   publicSpeakerProfilePath,
   sortPublishedSpeakers,
@@ -56,13 +57,46 @@ describe("programme presentation rules", () => {
       accent: "#4f46e5",
       ink: "#4f46e5",
       onAccent: "#ffffff",
+      onRawAccent: "#ffffff",
     });
     expect(programmeAccentPalette("#ffffff")).toMatchObject({
       accent: "#ffffff",
-      onAccent: "#ffffff",
     });
     expect(programmeAccentPalette("#ffffff").ink).not.toBe("#ffffff");
     expect(() => programmeAccentPalette("white")).toThrow(/six-digit/i);
+  });
+
+  /* Controls use the derived ink while the statistics band uses the raw accent;
+     each surface needs its own readable foreground. */
+  it("derives solid-accent ink that stays readable on any accent", () => {
+    for (const accent of [
+      "#9d4a31",
+      "#4f46e5",
+      "#0f766e",
+      "#e11d48",
+      "#f97316",
+      "#facc15",
+      "#84cc16",
+      "#ffffff",
+      "#000000",
+      "#808080",
+      "#767676",
+    ]) {
+      const { ink, onAccent, onRawAccent } = programmeAccentPalette(accent);
+      expect(
+        programmeContrastRatio(onRawAccent, accent),
+      ).toBeGreaterThanOrEqual(4.5);
+      expect(programmeContrastRatio(onAccent, ink)).toBeGreaterThanOrEqual(4.5);
+    }
+    expect(programmeAccentPalette("#facc15").onRawAccent).not.toBe("#ffffff");
+    expect(programmeAccentPalette("#000000").onRawAccent).toBe("#ffffff");
+  });
+
+  it("checks solid-accent contrast after converting the colour to hex", () => {
+    const { onRawAccent } = programmeAccentPalette("#0070fb");
+    expect(
+      programmeContrastRatio(onRawAccent, "#0070fb"),
+    ).toBeGreaterThanOrEqual(4.5);
   });
 
   it("orders speakers by surname with deterministic honorific and suffix handling", () => {

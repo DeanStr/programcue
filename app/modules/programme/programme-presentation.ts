@@ -20,6 +20,13 @@ type RgbColour = readonly [red: number, green: number, blue: number];
 
 const PROGRAMME_SURFACE_INK: RgbColour = [15, 23, 42];
 const PROGRAMME_SURFACE_WHITE: RgbColour = [255, 255, 255];
+const PROGRAMME_SURFACE_BLACK: RgbColour = [0, 0, 0];
+/* A margin above the 4.5:1 requirement, for text set on a pale tint. */
+const SOFT_SURFACE_CONTRAST = 4.75;
+/* The requirement itself. No margin is available here: the worst accent for
+   this choice reaches 4.58:1 against the better of white and black, so asking
+   for more would be asking for a colour that does not exist. */
+const ON_ACCENT_CONTRAST = 4.5;
 
 function parseHexColour(value: string): RgbColour {
   if (!/^#[0-9a-f]{6}$/iu.test(value)) {
@@ -36,6 +43,10 @@ function formatHexColour(colour: RgbColour) {
   return `#${colour
     .map((channel) => Math.round(channel).toString(16).padStart(2, "0"))
     .join("")}`;
+}
+
+function roundColour(colour: RgbColour): RgbColour {
+  return [Math.round(colour[0]), Math.round(colour[1]), Math.round(colour[2])];
 }
 
 function mixColour(
@@ -62,16 +73,40 @@ function relativeLuminance(colour: RgbColour) {
   );
 }
 
+export function programmeContrastRatio(left: string, right: string) {
+  return contrastRatio(parseHexColour(left), parseHexColour(right));
+}
+
 function contrastRatio(left: RgbColour, right: RgbColour) {
   const light = Math.max(relativeLuminance(left), relativeLuminance(right));
   const dark = Math.min(relativeLuminance(left), relativeLuminance(right));
   return (light + 0.05) / (dark + 0.05);
 }
 
+/** Derive readable text for a final, rounded solid surface colour. */
+function inkOnSolid(surface: RgbColour): RgbColour {
+  if (contrastRatio(PROGRAMME_SURFACE_WHITE, surface) >= ON_ACCENT_CONTRAST) {
+    return PROGRAMME_SURFACE_WHITE;
+  }
+  for (let step = 0; step <= 100; step += 1) {
+    const candidate = roundColour(
+      mixColour(
+        PROGRAMME_SURFACE_INK,
+        PROGRAMME_SURFACE_BLACK,
+        (100 - step) / 100,
+      ),
+    );
+    if (contrastRatio(candidate, surface) >= ON_ACCENT_CONTRAST) {
+      return candidate;
+    }
+  }
+  return PROGRAMME_SURFACE_BLACK;
+}
+
 /**
  * Event branding accepts any six-digit colour, including colours that cannot
  * carry readable text. Keep the customer's exact accent for decoration, but
- * derive separate text colours for pale surfaces and solid accent controls.
+ * derive separate text colours for the pale control colour and raw accent.
  */
 export function programmeAccentPalette(value: string) {
   const accent = parseHexColour(value);
@@ -84,8 +119,9 @@ export function programmeAccentPalette(value: string) {
       (100 - step) / 100,
     );
     if (
-      contrastRatio(candidate, PROGRAMME_SURFACE_WHITE) >= 4.75 &&
-      contrastRatio(candidate, softSurface) >= 4.75
+      contrastRatio(candidate, PROGRAMME_SURFACE_WHITE) >=
+        SOFT_SURFACE_CONTRAST &&
+      contrastRatio(candidate, softSurface) >= SOFT_SURFACE_CONTRAST
     ) {
       ink = candidate;
       break;
@@ -94,7 +130,8 @@ export function programmeAccentPalette(value: string) {
   return {
     accent: formatHexColour(accent),
     ink: formatHexColour(ink),
-    onAccent: formatHexColour(PROGRAMME_SURFACE_WHITE),
+    onAccent: formatHexColour(inkOnSolid(roundColour(ink))),
+    onRawAccent: formatHexColour(inkOnSolid(accent)),
   };
 }
 

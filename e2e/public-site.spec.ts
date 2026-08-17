@@ -7,6 +7,34 @@ import { resetDemoEvent } from "./support/reset-demo-event";
    compare what the two actually lay out. Column counts are the observable
    difference: viewport-relative spacing fitted one more statistics column in
    the preview than any phone shows. */
+/* WCAG 2 contrast between two `rgb()` strings read off the rendered page. Event
+   accents are customer data and the homepage paints text directly on one, so
+   the guarantee is measured where the text lands rather than asserted from a
+   token that a stylesheet is free to dilute. */
+function contrastRatio(left: string, right: string) {
+  const luminance = (value: string) => {
+    const [red, green, blue] = (value.match(/[\d.]+/gu) ?? [])
+      .slice(0, 3)
+      .map((channel) => {
+        const normalised = Number(channel) / 255;
+        return normalised <= 0.04045
+          ? normalised / 12.92
+          : ((normalised + 0.055) / 1.055) ** 2.4;
+      });
+    return (red ?? 0) * 0.2126 + (green ?? 0) * 0.7152 + (blue ?? 0) * 0.0722;
+  };
+  const lighter = Math.max(luminance(left), luminance(right));
+  const darker = Math.min(luminance(left), luminance(right));
+  return (lighter + 0.05) / (darker + 0.05);
+}
+
+async function paintedColours(locator: Locator) {
+  return locator.evaluate((element) => {
+    const style = getComputedStyle(element);
+    return { ink: style.color, background: style.backgroundColor };
+  });
+}
+
 async function homeColumnCounts(home: Locator) {
   return home.evaluate((element) => {
     const columns = (selector: string) => {
@@ -210,7 +238,10 @@ test("organisers compose, preview and publish the bounded public event site", as
   const previewColumnCounts = await homeColumnCounts(
     previewFrame.locator(".public-site-home"),
   );
-  expect(previewColumnCounts).toEqual({ features: 1, statistics: 4 });
+  /* Two by two, not one row of four: at a phone's measure four columns give a
+     statistic 87px, which is narrower than "Event Days" sets, so one label
+     wrapped and the row of figures sat on a ragged baseline. */
+  expect(previewColumnCounts).toEqual({ features: 1, statistics: 2 });
   await expect(previewFrame).toHaveScreenshot("public-site-preview-mobile.png");
   await page.getByLabel("Theme").selectOption("light");
   await expect(previewFrame).toHaveAttribute("data-public-theme", "light");
@@ -408,6 +439,51 @@ test("organisers compose, preview and publish the bounded public event site", as
     .filter({ hasText: "Priority question" });
   await publishedFaq.locator("summary").click();
   await expect(publishedFaq).toHaveAttribute("open", "");
+  /* Section headings are headings. An unresolvable custom property makes a
+     whole `clamp()` invalid at computed-value time and `font-size` silently
+     falls back to the inherited value, which had every heading below the
+     introduction rendering at 14px on every desktop while the container query
+     kept them correct on a phone. */
+  const headingSizes = await page
+    .locator(".public-site-section-heading h2")
+    .evaluateAll((headings) =>
+      headings.map((heading) =>
+        Number.parseFloat(getComputedStyle(heading).fontSize),
+      ),
+    );
+  expect(headingSizes.length).toBeGreaterThan(1);
+  for (const size of headingSizes) expect(size).toBeGreaterThanOrEqual(28);
+
+  /* The statistics band is painted in the undiluted event accent, which is the
+     largest solid-accent surface the product has. Both the figures and their
+     labels have to clear AA against whatever colour the organiser entered —
+     the labels were mixed 78% towards the band and measured 4.37:1. */
+  const statisticsBand = await paintedColours(
+    page.locator(".public-site-statistics-section"),
+  );
+  const statisticLabel = await paintedColours(
+    page.locator(".public-site-statistics dt").first(),
+  );
+  const statisticFigure = await paintedColours(
+    page.locator(".public-site-statistics dd").first(),
+  );
+  expect(
+    contrastRatio(statisticLabel.ink, statisticsBand.background),
+  ).toBeGreaterThanOrEqual(4.5);
+  expect(
+    contrastRatio(statisticFigure.ink, statisticsBand.background),
+  ).toBeGreaterThanOrEqual(4.5);
+
+  /* The homepage states the venue on its own rail, so the programme's sidebar
+     card stands down rather than printing the same address twice on one page. */
+  await expect(page.locator(".public-site-venue")).toHaveCount(1);
+  await expect(page.locator(".public-venue")).toHaveCount(0);
+  /* The curated homepage and the filterable programme are different surfaces;
+     the seam between them is named rather than left as an unannounced change
+     of visual language. */
+  await expect(
+    page.getByRole("heading", { name: "Full programme" }),
+  ).toBeVisible();
   await page.evaluate(() => window.scrollTo(0, 0));
   await expect(page.locator(".public-shell")).toHaveScreenshot(
     "published-public-site-desktop.png",
@@ -420,6 +496,19 @@ test("organisers compose, preview and publish the bounded public event site", as
     content: ".public-top { visibility: hidden !important; }",
   });
   await expect(publishedHome).toHaveScreenshot("public-site-home-desktop.png");
+  /* Light is an event-site choice, and the homepage leans on a dark canvas:
+     a near-black masthead, an accent field behind the speakers and a solid
+     accent band. A baseline in the other theme is what says those surfaces
+     were composed for both. */
+  await page.locator(".public-shell").evaluate((element) => {
+    element.setAttribute("data-public-theme", "light");
+  });
+  await expect(publishedHome).toHaveScreenshot(
+    "public-site-home-desktop-light.png",
+  );
+  await page.locator(".public-shell").evaluate((element) => {
+    element.setAttribute("data-public-theme", "dark");
+  });
 
   await page.setViewportSize({ width: 390, height: 844 });
   await hiddenHeader.evaluate((style) => style.parentNode?.removeChild(style));
@@ -432,6 +521,24 @@ test("organisers compose, preview and publish the bounded public event site", as
   });
   await expect(publishedHome).toHaveScreenshot("public-site-home-mobile.png");
   expect(await homeColumnCounts(publishedHome)).toEqual(previewColumnCounts);
+  /* The event name is truncated rather than sliced. `text-overflow` does
+     nothing to a flex container, so a display value chosen for the application
+     sidebar cut "Future of Events 2027" through a digit here. */
+  const brandName = page.locator(".public-brand-name");
+  expect(
+    await brandName.evaluate((element) => {
+      const style = getComputedStyle(element);
+      return {
+        overflowing: element.scrollWidth > element.clientWidth,
+        display: style.display,
+        textOverflow: style.textOverflow,
+      };
+    }),
+  ).toEqual({
+    overflowing: true,
+    display: "block",
+    textOverflow: "ellipsis",
+  });
   await mobileHiddenHeader.evaluate((style) =>
     style.parentNode?.removeChild(style),
   );
@@ -490,41 +597,16 @@ test("organisers compose, preview and publish the bounded public event site", as
   await expect(
     page.getByRole("link", { name: "All sessions" }).first(),
   ).toHaveAttribute("aria-current", "page");
-  const heroActionContrast = await page
-    .locator(".hero")
-    .getByRole("link", { name: "Add to calendar" })
-    .evaluate((element) => {
-      const rgb = (value: string) =>
-        value
-          .match(/[\d.]+/gu)!
-          .slice(0, 3)
-          .map(Number);
-      const luminance = (value: string) => {
-        const [red, green, blue] = rgb(value).map((channel) => {
-          const normalised = channel / 255;
-          return normalised <= 0.04045
-            ? normalised / 12.92
-            : ((normalised + 0.055) / 1.055) ** 2.4;
-        });
-        return red * 0.2126 + green * 0.7152 + blue * 0.0722;
-      };
-      const contrast = (left: string, right: string) => {
-        const lighter = Math.max(luminance(left), luminance(right));
-        const darker = Math.min(luminance(left), luminance(right));
-        return (lighter + 0.05) / (darker + 0.05);
-      };
-      const actionStyle = getComputedStyle(element);
-      const heroStyle = getComputedStyle(element.closest(".hero")!);
-      return {
-        boundary: contrast(
-          actionStyle.backgroundColor,
-          heroStyle.backgroundColor,
-        ),
-        text: contrast(actionStyle.color, actionStyle.backgroundColor),
-      };
-    });
-  expect(heroActionContrast.text).toBeGreaterThanOrEqual(4.5);
-  expect(heroActionContrast.boundary).toBeGreaterThanOrEqual(3);
+  const heroAction = await paintedColours(
+    page.locator(".hero").getByRole("link", { name: "Add to calendar" }),
+  );
+  const hero = await paintedColours(page.locator(".hero"));
+  expect(
+    contrastRatio(heroAction.ink, heroAction.background),
+  ).toBeGreaterThanOrEqual(4.5);
+  expect(
+    contrastRatio(heroAction.background, hero.background),
+  ).toBeGreaterThanOrEqual(3);
   const pageNavigation = page
     .getByRole("navigation", { name: "Event navigation" })
     .first();

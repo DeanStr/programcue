@@ -127,7 +127,8 @@ export default function PublicSitePage(props: Route.ComponentProps) {
         {
           "--event-accent": palette.accent,
           "--event-accent-light-ink": palette.ink,
-          "--event-accent-on-solid": palette.onAccent,
+          "--event-accent-on-solid": palette.onRawAccent,
+          "--event-control-on-solid": palette.onAccent,
         } as CSSProperties
       }
     >
