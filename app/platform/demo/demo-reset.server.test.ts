@@ -418,17 +418,34 @@ describe("complete evaluator demo reset", () => {
         testEnvironment.DB.prepare(
           `SELECT decision.decided_by_person_id AS decidedByPersonId,
                 submission.status AS submissionStatus,
-                submission.revision AS submissionRevision
+                submission.revision AS submissionRevision,
+                operation.status AS notificationOperationStatus,
+                communication.status AS communicationStatus,
+                delivery.status AS deliveryStatus,
+                delivery.failure_code AS deliveryFailureCode
            FROM submission_decisions decision
            JOIN submissions submission
              ON submission.id = decision.submission_id
             AND submission.event_id = decision.event_id
+           JOIN operation_jobs operation
+             ON operation.id = decision.notification_operation_id
+            AND operation.event_id = decision.event_id
+           JOIN communications communication
+             ON communication.operation_id = operation.id
+            AND communication.event_id = decision.event_id
+           JOIN communication_deliveries delivery
+             ON delivery.communication_id = communication.id
+            AND delivery.event_id = decision.event_id
           WHERE decision.id = 'demo-showcase-decision-waitlist'`,
         ).first(),
       ).resolves.toEqual({
         decidedByPersonId: "person-demo-owner",
         submissionStatus: "waitlisted",
         submissionRevision: 3,
+        notificationOperationStatus: "cancelled",
+        communicationStatus: "cancelled",
+        deliveryStatus: "cancelled",
+        deliveryFailureCode: "DEMO_FIXTURE_NOT_DISPATCHED",
       });
       await expect(
         testEnvironment.DB.prepare(

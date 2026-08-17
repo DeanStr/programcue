@@ -61,6 +61,128 @@ ALTER TABLE submission_decisions
 -- Existing releases remain explicitly unlinked: their historical Queue work
 -- did not capture the complete pinned render and delivery evidence required by
 -- this contract, so linking it here would overstate the available provenance.
+-- Mark that closed historical set now; the publication sentinel below must not
+-- infer legacy status from a NULL link that a new malformed release could also
+-- create.
+INSERT OR IGNORE INTO audit_events (
+  id, actor_kind, origin, metadata_version, organisation_id, event_id,
+  action, entity_type, entity_id, metadata_json, created_at
+)
+SELECT 'migration-0039-decision-notification-unlinked:' || decision.id,
+       'system', 'internal', 1, event.organisation_id, decision.event_id,
+       'decision.notification.legacy_unlinked', 'submission_decision',
+       decision.id,
+       json_object(
+         'reason', 'release predates pinned notification evidence',
+         'deliveryOutcome', 'not asserted by migration'
+       ),
+       unixepoch()
+  FROM submission_decisions decision
+  JOIN events event ON event.id = decision.event_id
+ WHERE decision.status = 'published'
+   AND decision.notification_operation_id IS NULL;
+
+CREATE TRIGGER decision_notification_legacy_unlinked_set_closed
+BEFORE INSERT ON audit_events
+WHEN NEW.action = 'decision.notification.legacy_unlinked'
+BEGIN
+  SELECT RAISE(ABORT, 'legacy unlinked decision notification set is closed');
+END;
+
+-- A running legacy operation may already have crossed the provider boundary,
+-- so require it to drain before migration. Unclaimed legacy work cannot be
+-- rendered safely by the new contract and is cancelled with durable evidence.
+CREATE TABLE migration_0039_decision_notification_guard (
+  legacy_running_notifications_must_drain INTEGER NOT NULL
+    CHECK (legacy_running_notifications_must_drain = 1)
+);
+
+INSERT INTO migration_0039_decision_notification_guard (
+  legacy_running_notifications_must_drain
+)
+SELECT 0
+  FROM operation_jobs operation
+ WHERE operation.type = 'decision.notification'
+   AND operation.status = 'running'
+   AND json_type(operation.payload_json, '$.communicationId') IS NULL
+ LIMIT 1;
+
+DROP TABLE migration_0039_decision_notification_guard;
+
+INSERT OR IGNORE INTO audit_events (
+  id, actor_kind, origin, metadata_version, organisation_id, event_id,
+  action, entity_type, entity_id, correlation_id, metadata_json, created_at
+)
+SELECT 'migration-0039-decision-notification-cancelled:' || operation.id,
+       'system', 'internal', 1, operation.organisation_id, operation.event_id,
+       'decision.notification.legacy_cancelled', 'operation_job', operation.id,
+       operation.correlation_id,
+       json_object(
+         'reason', 'legacy intent lacks pinned communication and delivery evidence',
+         'previousStatus', operation.status,
+         'deliveryOutcome', 'not asserted by migration'
+       ),
+       unixepoch()
+  FROM operation_jobs operation
+ WHERE operation.type = 'decision.notification'
+   AND operation.status IN (
+     'queued','queue_failed','received','retrying','failed','partially_failed'
+   )
+   AND json_type(operation.payload_json, '$.communicationId') IS NULL;
+
+UPDATE communication_deliveries
+   SET status = 'cancelled', updated_at = unixepoch()
+ WHERE status IN ('queued','failed','sending')
+   AND communication_id IN (
+     SELECT communication.id
+       FROM communications communication
+       JOIN operation_jobs operation
+         ON operation.id = communication.operation_id
+        AND operation.event_id = communication.event_id
+      WHERE operation.type = 'decision.notification'
+        AND operation.status IN (
+          'queued','queue_failed','received','retrying','failed','partially_failed'
+        )
+        AND json_type(operation.payload_json, '$.communicationId') IS NULL
+   );
+
+UPDATE communications
+   SET status = 'cancelled', cancelled_at = unixepoch(), updated_at = unixepoch()
+ WHERE status IN ('draft','scheduled','queued','failed','partially_failed','sending')
+   AND operation_id IN (
+     SELECT operation.id
+       FROM operation_jobs operation
+      WHERE operation.type = 'decision.notification'
+        AND operation.status IN (
+          'queued','queue_failed','received','retrying','failed','partially_failed'
+        )
+        AND json_type(operation.payload_json, '$.communicationId') IS NULL
+   );
+
+UPDATE operation_items
+   SET status = 'skipped', error_code = 'LEGACY_INTENT_RETIRED',
+       error_message =
+         'The pre-migration decision notification lacked pinned delivery evidence.',
+       completed_at = unixepoch(), updated_at = unixepoch()
+ WHERE status IN ('pending','failed','running')
+   AND operation_id IN (
+     SELECT operation.id
+       FROM operation_jobs operation
+      WHERE operation.type = 'decision.notification'
+        AND operation.status IN (
+          'queued','queue_failed','received','retrying','failed','partially_failed'
+        )
+        AND json_type(operation.payload_json, '$.communicationId') IS NULL
+   );
+
+UPDATE operation_jobs
+   SET status = 'cancelled', last_error = NULL, claim_token = NULL,
+       claim_expires_at = NULL, completed_at = unixepoch(), updated_at = unixepoch()
+ WHERE type = 'decision.notification'
+   AND status IN (
+     'queued','queue_failed','received','retrying','failed','partially_failed'
+   )
+   AND json_type(payload_json, '$.communicationId') IS NULL;
 
 CREATE UNIQUE INDEX ux_submission_decisions_notification_operation
   ON submission_decisions(notification_operation_id)
@@ -232,14 +354,21 @@ CREATE TRIGGER decision_published_notification_graph_required
 BEFORE INSERT ON audit_events
 WHEN NEW.action = 'decision.published'
 AND NOT EXISTS (
-  -- Releases created before this migration are deliberately unlinked because
-  -- their historical work cannot prove the complete pinned-intent contract.
+  -- Only the closed set marked while this migration ran may remain unlinked.
   SELECT 1
     FROM submission_decisions legacy_decision
    WHERE legacy_decision.id = NEW.entity_id
      AND legacy_decision.event_id = NEW.event_id
      AND legacy_decision.status = 'published'
      AND legacy_decision.notification_operation_id IS NULL
+     AND EXISTS (
+       SELECT 1 FROM audit_events legacy_marker
+        WHERE legacy_marker.organisation_id = NEW.organisation_id
+          AND legacy_marker.event_id = NEW.event_id
+          AND legacy_marker.action = 'decision.notification.legacy_unlinked'
+          AND legacy_marker.entity_type = 'submission_decision'
+          AND legacy_marker.entity_id = legacy_decision.id
+     )
   UNION ALL
   SELECT 1
     FROM submission_decisions decision

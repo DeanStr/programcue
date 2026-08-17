@@ -998,8 +998,9 @@ async function resetProductionEvaluationFixtureWithAuthority(
         DEMO_ORGANISATION_ID,
       ),
       env.DB.prepare(
-        `DELETE FROM sender_profiles
-          WHERE id = ? AND event_id = ?`,
+        `UPDATE sender_profiles
+            SET status = 'disabled', updated_at = unixepoch()
+          WHERE id = ? AND event_id = ? AND status = 'verified'`,
       ).bind(DEMO_DECISION_SENDER_ID, DEMO_EVENT_ID),
       env.DB.prepare(
         `INSERT INTO sender_profiles (

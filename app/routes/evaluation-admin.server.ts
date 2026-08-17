@@ -655,7 +655,12 @@ export async function loader({ request, context }: LoaderFunctionArgs) {
     : { results: [] };
   const releasedDecisionRowCounts = new Map<string, number>();
   for (const row of rawDecisionHistoryRows.results) {
-    if (!["published", "superseded", "revoked"].includes(row.status)) continue;
+    if (
+      row.publishedAt === null ||
+      !["published", "superseded", "revoked"].includes(row.status)
+    ) {
+      continue;
+    }
     releasedDecisionRowCounts.set(
       row.id,
       (releasedDecisionRowCounts.get(row.id) ?? 0) + 1,
@@ -671,7 +676,10 @@ export async function loader({ request, context }: LoaderFunctionArgs) {
   }
   const decisionHistoryRows = {
     results: rawDecisionHistoryRows.results.map((row) => {
-      if (!["published", "superseded", "revoked"].includes(row.status)) {
+      if (
+        row.publishedAt === null ||
+        !["published", "superseded", "revoked"].includes(row.status)
+      ) {
         return { ...row, notificationEvidenceState: "not_applicable" as const };
       }
       if (row.notificationOperationId === null) {

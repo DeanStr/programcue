@@ -4,17 +4,21 @@ import { communicationContentSnapshotSchema } from "./communication-delivery-bat
 import { processCommunicationSend } from "./communication-send";
 import type { QueueProviderDependencies } from "./handler-types";
 
-const decisionNotificationMessageSchema = z
+const legacyDecisionNotificationMessageSchema = z
   .object({
     type: z.literal("decision.notification"),
     operationId: z.string().min(1),
-    communicationId: z.string().min(1),
     eventId: z.string().min(1),
     organisationId: z.string().min(1),
     idempotencyKey: z.string().min(8),
     payload: z.object({ decisionId: z.string().min(1) }).strict(),
   })
   .strict();
+
+const decisionNotificationMessageSchema =
+  legacyDecisionNotificationMessageSchema
+    .extend({ communicationId: z.string().min(1) })
+    .strict();
 
 const decisionNotificationAudienceSchema = z
   .object({
@@ -51,6 +55,7 @@ const decisionNotificationContentSnapshotSchema =
 
 type DecisionNotificationOperation = {
   status: string;
+  decisionStatus: string;
   payloadJson: string;
   audienceJson: string;
   contentSnapshotJson: string;
@@ -85,6 +90,46 @@ function parsePinnedDecisionIntent(operation: DecisionNotificationOperation) {
     throw new Error(
       "The durable decision notification is missing its pinned render contract.",
     );
+  }
+}
+
+async function isCancelledLegacyDecisionNotification(
+  input: unknown,
+  env: CloudflareEnvironment,
+) {
+  const parsed = legacyDecisionNotificationMessageSchema.safeParse(input);
+  if (!parsed.success) return false;
+  const operation = await env.DB.prepare(
+    `SELECT operation.payload_json AS payloadJson
+       FROM operation_jobs operation
+       JOIN events event
+         ON event.id = operation.event_id
+        AND event.organisation_id = operation.organisation_id
+       JOIN audit_events cancellation
+         ON cancellation.organisation_id = operation.organisation_id
+        AND cancellation.event_id = operation.event_id
+        AND cancellation.action = 'decision.notification.legacy_cancelled'
+        AND cancellation.entity_type = 'operation_job'
+        AND cancellation.entity_id = operation.id
+      WHERE operation.id = ? AND operation.event_id = ?
+        AND operation.organisation_id = ?
+        AND operation.type = 'decision.notification'
+        AND operation.status = 'cancelled'`,
+  )
+    .bind(
+      parsed.data.operationId,
+      parsed.data.eventId,
+      parsed.data.organisationId,
+    )
+    .first<{ payloadJson: string }>();
+  if (!operation) return false;
+  try {
+    const saved = legacyDecisionNotificationMessageSchema.parse(
+      JSON.parse(operation.payloadJson),
+    );
+    return JSON.stringify(saved) === JSON.stringify(parsed.data);
+  } catch {
+    return false;
   }
 }
 
@@ -147,9 +192,15 @@ export async function processDecisionNotification(
   env: CloudflareEnvironment,
   dependencies: QueueProviderDependencies = {},
 ) {
-  const message = decisionNotificationMessageSchema.parse(input);
+  const parsedMessage = decisionNotificationMessageSchema.safeParse(input);
+  if (!parsedMessage.success) {
+    if (await isCancelledLegacyDecisionNotification(input, env)) return;
+    throw parsedMessage.error;
+  }
+  const message = parsedMessage.data;
   const operation = await env.DB.prepare(
-    `SELECT operation.status, operation.payload_json AS payloadJson,
+    `SELECT operation.status, decision.status AS decisionStatus,
+            operation.payload_json AS payloadJson,
             communication.audience_json AS audienceJson,
             communication.content_snapshot_json AS contentSnapshotJson,
             communication.template_version_id AS templateVersionId,
@@ -162,7 +213,7 @@ export async function processDecisionNotification(
        JOIN submission_decisions decision
          ON decision.notification_operation_id = operation.id
         AND decision.event_id = operation.event_id
-        AND decision.id = ? AND decision.status = 'published'
+        AND decision.id = ?
        JOIN communications communication
          ON communication.operation_id = operation.id
         AND communication.event_id = operation.event_id
@@ -202,6 +253,11 @@ export async function processDecisionNotification(
   }
   if (operation.status === "completed" || operation.status === "cancelled") {
     return;
+  }
+  if (operation.decisionStatus !== "published") {
+    throw new Error(
+      "The decision notification is active for a decision that is not released.",
+    );
   }
   await assertPinnedDecisionIntent(env, message, operation);
   await processCommunicationSend(

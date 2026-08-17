@@ -664,7 +664,14 @@ invalidation subsystem remain excluded.
   incomplete pinned contract before provider delivery; generic communication
   compatibility is not used as a decision fallback. Releases created before
   this complete evidence contract remain explicitly unlinked rather than being
-  backfilled with partial provenance. The worker still rechecks global/provider suppression, unsubscribe state,
+  backfilled with partial provenance; a migration-time audit marks that closed
+  historical set so a new NULL-linked release cannot claim the exemption.
+  Migration `0039` refuses to run while a legacy decision notification is
+  actively sending; queued and failed legacy Queue intents are cancelled and
+  audited because they cannot be upgraded honestly to the pinned contract. A
+  stale Queue delivery for one of those exact
+  migration-cancelled operations is acknowledged without sending. The worker
+  still rechecks global/provider suppression, unsubscribe state,
   provider readiness and current sender validity at send time. Chair evidence
   follows the retained operation-to-communication-to-delivery relationships
   after participant redaction rather than relying on erased audience/source

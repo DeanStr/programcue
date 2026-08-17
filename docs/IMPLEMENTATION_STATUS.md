@@ -660,7 +660,13 @@ template/recipient/sender changes and send-time suppression. Decision-specific
 database insert guards and Queue validation now fail before provider delivery
 when the pinned render, sender or recipient evidence is incomplete. Existing
 releases without that complete contract remain explicitly pre-migration rather
-than receiving partial backfilled provenance. The result loader likewise rejects
+than receiving partial backfilled provenance; a migration-time audit marks that
+closed historical set, and the database rejects new NULL-linked release audits.
+Migration `0039` blocks on a legacy notification already crossing the provider
+boundary, and cancels and audits queued or failed legacy notification work that
+cannot satisfy the new pinned contract; the Queue acknowledges only an exact
+migration-cancelled legacy
+payload without sending it. The result loader likewise rejects
 a broken new decision-to-operation-to-delivery chain instead of displaying it as
 legacy or substituting placeholder evidence, while retained evidence follows
 the immutable operation and communication relationships after audience/source

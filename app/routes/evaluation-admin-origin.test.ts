@@ -111,6 +111,47 @@ beforeEach(async () => {
 });
 
 describe("evaluation administration results", () => {
+  it("does not classify a superseded draft as released notification evidence", async () => {
+    const decisionId = `evaluation-admin-superseded-draft-${crypto.randomUUID()}`;
+    await workerEnv.DB.prepare(
+      `INSERT INTO submission_decisions (
+         id, event_id, submission_id, round_id, revision_number, status,
+         decision, decided_by_person_id, rationale,
+         notification_feedback_json, effect_preview_json,
+         decided_at, published_at
+       ) VALUES (?, 'evt-foe-2025', 'demo-evaluation-submission-calm', NULL,
+                 1, 'superseded', 'waitlisted', 'person-demo-admin',
+                 'A draft replaced before release.', '[]', '{}', unixepoch(), NULL)`,
+    )
+      .bind(decisionId)
+      .run();
+
+    try {
+      const result = await loader({
+        request: loaderRequest(),
+        params: {},
+        context: context(),
+      } as never);
+      expect(
+        result.results
+          .find(
+            (submission) => submission.id === "demo-evaluation-submission-calm",
+          )
+          ?.decisionHistory.find((decision) => decision.id === decisionId),
+      ).toMatchObject({
+        status: "superseded",
+        publishedAt: null,
+        notificationEvidenceState: "not_applicable",
+      });
+    } finally {
+      await workerEnv.DB.prepare(
+        "DELETE FROM submission_decisions WHERE id = ? AND event_id = 'evt-foe-2025'",
+      )
+        .bind(decisionId)
+        .run();
+    }
+  });
+
   it("includes no-review releases in decision history so they can be corrected", async () => {
     const decisionId = `evaluation-admin-unscoped-${crypto.randomUUID()}`;
     await workerEnv.DB.batch([

@@ -316,6 +316,84 @@ describe("Communications D1 vertical slice", () => {
   });
 
   describe("additional workflow coverage", () => {
+    it("acknowledges a migration-cancelled legacy decision notification", async () => {
+      const { testEnv } = await communicationEnvironment();
+      const token = crypto.randomUUID().slice(0, 8);
+      const operationId = `legacy-decision-operation-${token}`;
+      const message = {
+        type: "decision.notification" as const,
+        operationId,
+        eventId: viewer.eventId,
+        organisationId: viewer.organisationId,
+        idempotencyKey: `legacy-decision-${token}`,
+        payload: { decisionId: `legacy-decision-${token}` },
+      };
+      await env.DB.batch([
+        env.DB.prepare(
+          `INSERT INTO operation_jobs (
+             id, organisation_id, event_id, requested_by_person_id, type,
+             idempotency_key, correlation_id, status, payload_json,
+             completed_at, created_at, updated_at
+           ) VALUES (?, ?, ?, ?, 'decision.notification', ?, ?, 'cancelled', ?,
+                     unixepoch(), unixepoch(), unixepoch())`,
+        ).bind(
+          operationId,
+          viewer.organisationId,
+          viewer.eventId,
+          viewer.personId,
+          message.idempotencyKey,
+          `legacy-decision-correlation-${token}`,
+          JSON.stringify(message),
+        ),
+        env.DB.prepare(
+          `INSERT INTO audit_events (
+             id, actor_kind, origin, metadata_version, organisation_id,
+             event_id, action, entity_type, entity_id, correlation_id,
+             metadata_json, created_at
+           ) VALUES (?, 'system', 'internal', 1, ?, ?,
+                     'decision.notification.legacy_cancelled', 'operation_job',
+                     ?, ?, ?, unixepoch())`,
+        ).bind(
+          `legacy-decision-cancelled-${token}`,
+          viewer.organisationId,
+          viewer.eventId,
+          operationId,
+          `legacy-decision-correlation-${token}`,
+          JSON.stringify({
+            reason: "legacy intent lacks pinned communication evidence",
+          }),
+        ),
+      ]);
+      let acknowledgements = 0;
+      const retries: QueueRetryOptions[] = [];
+      const queueMessage = {
+        id: `legacy-decision-message-${token}`,
+        timestamp: new Date(),
+        attempts: 1,
+        body: message,
+        ack() {
+          acknowledgements += 1;
+        },
+        retry(options?: QueueRetryOptions) {
+          retries.push(options ?? {});
+        },
+      } satisfies Message;
+
+      await handleProgramCueQueueMessage(queueMessage, testEnv);
+
+      expect(acknowledgements).toBe(1);
+      expect(retries).toEqual([]);
+      await expect(
+        env.DB.prepare(
+          "SELECT status, attempt_count AS attemptCount FROM operation_jobs WHERE id = ?",
+        )
+          .bind(operationId)
+          .first(),
+      ).resolves.toEqual({ status: "cancelled", attemptCount: 0 });
+    });
+  });
+
+  describe("additional workflow coverage", () => {
     it("rejects notification bodies that substitute a same-event domain entity", async () => {
       const { testEnv } = await communicationEnvironment();
       const decisionOperationId = `decision-payload-${crypto.randomUUID()}`;

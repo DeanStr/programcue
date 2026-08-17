@@ -579,7 +579,8 @@ export function EvaluationUnifiedResults() {
                                     {decision.rationale
                                       ? ` · ${decision.rationale}`
                                       : ""}
-                                    {[
+                                    {decision.publishedAt !== null &&
+                                    [
                                       "published",
                                       "superseded",
                                       "revoked",

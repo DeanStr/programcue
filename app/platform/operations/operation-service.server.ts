@@ -76,6 +76,11 @@ export {
 } from "./operation-service-support.server";
 
 const retryableOperationTypes = new Set<string>(genericRetryableOperationTypes);
+const communicationDeliveryRetryOperationTypes = new Set([
+  "communication.send",
+  "decision.notification",
+  "submission.notification",
+]);
 
 export class OperationService {
   constructor(private readonly env: CloudflareEnvironment) {}
@@ -468,7 +473,9 @@ export class OperationService {
     );
     let message = savedMessage;
     let communicationId: string | null = null;
-    if (operation.type === "communication.send") {
+    const retriesCommunicationDelivery =
+      communicationDeliveryRetryOperationTypes.has(operation.type);
+    if (retriesCommunicationDelivery) {
       communicationId =
         typeof savedMessage.communicationId === "string" &&
         savedMessage.communicationId.length > 0
@@ -476,11 +483,13 @@ export class OperationService {
           : null;
       if (!communicationId) {
         throw new OperationStateError(
-          "The saved communication operation is missing its communication identity and cannot be retried.",
+          "The saved notification operation is missing its communication identity and cannot be retried.",
         );
       }
-      message = { ...savedMessage };
-      delete message.includeFailed;
+      if (operation.type === "communication.send") {
+        message = { ...savedMessage };
+        delete message.includeFailed;
+      }
     }
     if (operation.type === "file.scan.dispatch") {
       const parsed = fileScanQueueMessageSchema.safeParse(savedMessage);
@@ -545,11 +554,11 @@ export class OperationService {
     ).bind(
       restartCalendarFanout,
       restartCalendarFanout,
-      operation.type === "communication.send",
+      retriesCommunicationDelivery,
       restartCalendarFanout,
-      operation.type === "communication.send",
+      retriesCommunicationDelivery,
       restartCalendarFanout,
-      operation.type === "communication.send",
+      retriesCommunicationDelivery,
       operation.type === "communication.send",
       JSON.stringify(message),
       operationId,
@@ -567,10 +576,16 @@ export class OperationService {
                 WHERE operation_id = ? AND entity_type = 'communication_delivery'
                   AND status IN ('failed','running')
                   AND EXISTS (
+                    SELECT 1 FROM communication_deliveries delivery
+                     WHERE delivery.id = operation_items.entity_id
+                       AND delivery.communication_id = ?
+                       AND delivery.event_id = ?
+                  )
+                  AND EXISTS (
                     SELECT 1 FROM operation_jobs operation
                      WHERE operation.id = operation_items.operation_id
                        AND operation.event_id = ? AND operation.organisation_id = ?
-                       AND operation.type = 'communication.send'
+                       AND operation.type = ?
                        AND operation.payload_json = ?
                        AND (
                          operation.status IN ('queue_failed','failed','partially_failed')
@@ -581,8 +596,11 @@ export class OperationService {
                   )`,
             ).bind(
               operationId,
+              communicationId,
+              viewer.eventId,
               viewer.eventId,
               viewer.organisationId,
+              operation.type,
               operation.payloadJson,
             ),
             this.env.DB.prepare(
@@ -595,7 +613,7 @@ export class OperationService {
                     SELECT 1 FROM operation_jobs operation
                      WHERE operation.id = ? AND operation.event_id = communication_deliveries.event_id
                        AND operation.organisation_id = ?
-                       AND operation.type = 'communication.send'
+                       AND operation.type = ?
                        AND operation.payload_json = ?
                        AND (
                          operation.status IN ('queue_failed','failed','partially_failed')
@@ -609,6 +627,7 @@ export class OperationService {
               viewer.eventId,
               operationId,
               viewer.organisationId,
+              operation.type,
               operation.payloadJson,
             ),
             this.env.DB.prepare(
@@ -621,7 +640,7 @@ export class OperationService {
                      WHERE operation.id = communications.operation_id
                        AND operation.event_id = communications.event_id
                        AND operation.organisation_id = ?
-                       AND operation.type = 'communication.send'
+                       AND operation.type = ?
                        AND operation.payload_json = ?
                        AND (
                          operation.status IN ('queue_failed','failed','partially_failed')
@@ -635,6 +654,7 @@ export class OperationService {
               viewer.eventId,
               operationId,
               viewer.organisationId,
+              operation.type,
               operation.payloadJson,
             ),
             operationUpdate,

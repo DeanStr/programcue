@@ -512,6 +512,99 @@ describe("persisted AI first-pass review assessments", () => {
     );
   });
 
+  it("allows a fresh attempt for a new immutable revision with unchanged content", async () => {
+    const create = vi
+      .fn<(request: OpenAiResponsesRequest) => Promise<OpenAiResponse>>()
+      .mockRejectedValueOnce(
+        new AiProviderError("Workers AI request failed with status 503.", 503),
+      )
+      .mockResolvedValueOnce(
+        structuredResponse(validAssessment(), "same-content-revision-response"),
+      );
+    const service = new AiReviewAssessmentService(
+      env as unknown as CloudflareEnvironment,
+      { provider: workersAiProvider(create) },
+    );
+
+    await expect(service.generate(admin, generationInput())).rejects.toThrow(
+      /status 503/i,
+    );
+    const revision = await env.DB.prepare(
+      `SELECT revision.id, revision.form_version_id AS formVersionId,
+              revision.revision_number AS revisionNumber,
+              revision.answers_json AS answersJson,
+              revision.speaker_snapshot_json AS speakerSnapshotJson
+         FROM submission_revisions revision
+        WHERE revision.event_id = ? AND revision.submission_id = ?
+          AND revision.save_kind = 'submitted'
+        ORDER BY revision.revision_number DESC, revision.id DESC
+        LIMIT 1`,
+    )
+      .bind(admin.eventId, SUBMISSION_ID)
+      .first<{
+        id: string;
+        formVersionId: string;
+        revisionNumber: number;
+        answersJson: string;
+        speakerSnapshotJson: string;
+      }>();
+    if (!revision)
+      throw new Error("Submitted revision fixture is unavailable.");
+    const nextRevisionId = `same-content-revision-${crypto.randomUUID()}`;
+    await env.DB.batch([
+      env.DB.prepare(
+        `UPDATE submissions SET revision = revision + 1
+          WHERE id = ? AND event_id = ? AND revision = ?`,
+      ).bind(SUBMISSION_ID, admin.eventId, revision.revisionNumber),
+      env.DB.prepare(
+        `INSERT INTO submission_revisions (
+           id, event_id, submission_id, form_version_id, revision_number,
+           answers_json, speaker_snapshot_json, save_kind,
+           saved_by_person_id, idempotency_key, created_at
+         ) VALUES (?, ?, ?, ?, ?, ?, ?, 'submitted', ?, ?, unixepoch())`,
+      ).bind(
+        nextRevisionId,
+        admin.eventId,
+        SUBMISSION_ID,
+        revision.formVersionId,
+        revision.revisionNumber + 1,
+        revision.answersJson,
+        revision.speakerSnapshotJson,
+        admin.personId,
+        nextRevisionId,
+      ),
+    ]);
+
+    try {
+      await expect(
+        service.generate(admin, generationInput()),
+      ).resolves.toMatchObject({
+        submissionRevisionId: nextRevisionId,
+        submissionRevisionNumber: revision.revisionNumber + 1,
+        providerResponseId: "same-content-revision-response",
+      });
+      expect(create).toHaveBeenCalledTimes(2);
+    } finally {
+      await env.DB.batch([
+        env.DB.prepare(
+          "DELETE FROM ai_review_assessments WHERE submission_revision_id = ?",
+        ).bind(nextRevisionId),
+        env.DB.prepare(
+          "DELETE FROM submission_revisions WHERE id = ? AND event_id = ?",
+        ).bind(nextRevisionId, admin.eventId),
+        env.DB.prepare(
+          `UPDATE submissions SET revision = ?
+            WHERE id = ? AND event_id = ? AND revision = ?`,
+        ).bind(
+          revision.revisionNumber,
+          SUBMISSION_ID,
+          admin.eventId,
+          revision.revisionNumber + 1,
+        ),
+      ]);
+    }
+  });
+
   it("allows only one explicit retry attempt to reach the provider", async () => {
     let releaseRetry!: (response: OpenAiResponse) => void;
     let markRetryStarted!: () => void;

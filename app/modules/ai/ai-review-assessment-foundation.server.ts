@@ -310,6 +310,8 @@ export class AiReviewAssessmentFoundation {
       | "roundRevision"
       | "scorecardId"
       | "scorecardVersion"
+      | "submissionRevisionId"
+      | "submissionRevisionNumber"
     > & {
       sourceSnapshotSha256: string;
       modelInputSha256: string;
@@ -317,7 +319,7 @@ export class AiReviewAssessmentFoundation {
     },
   ) {
     return `ai-review-assessment-target:${await sha256(
-      `${target.roundId}\u0000${target.submissionId}\u0000${target.roundRevision}\u0000${target.scorecardId}\u0000${target.scorecardVersion}\u0000${target.sourceSnapshotSha256}\u0000${target.modelInputSha256}\u0000${target.promptVersion}`,
+      `${target.roundId}\u0000${target.submissionId}\u0000${target.roundRevision}\u0000${target.scorecardId}\u0000${target.scorecardVersion}\u0000${target.submissionRevisionId}\u0000${target.submissionRevisionNumber}\u0000${target.sourceSnapshotSha256}\u0000${target.modelInputSha256}\u0000${target.promptVersion}`,
     )}`;
   }
 }

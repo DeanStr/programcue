@@ -3,6 +3,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import type { Viewer } from "~/platform/auth/authorize.server";
 import { ensureDemoData } from "~/platform/demo/seed.server";
+import { OperationService } from "~/platform/operations/operation-service.server";
 import {
   handleProgramCueQueueMessage,
   processCommunicationSend,
@@ -1240,7 +1241,7 @@ describe("Communications D1 vertical slice", () => {
 
   describe("provider delivery workflows", () => {
     it("sends the recipient and template pinned at decision release exactly once", async () => {
-      const { testEnv } = await communicationEnvironment();
+      const { testEnv, sent } = await communicationEnvironment();
       const service = new CommunicationService(testEnv);
       const template = await service.saveTemplate(viewer, {
         name: "Decision notification",
@@ -1499,28 +1500,103 @@ describe("Communications D1 vertical slice", () => {
           requests.push(
             JSON.parse(String(init?.body)) as Record<string, unknown>,
           );
+          if (requests.length === 1) {
+            return Response.json(
+              { name: "rate_limited", message: "Retry the request." },
+              { status: 429 },
+            );
+          }
           return Response.json({ id: "resend-decision-001" });
         },
       );
+      await env.DB.batch([
+        env.DB.prepare(
+          "UPDATE submission_decisions SET status = 'superseded' WHERE id = ?",
+        ).bind(decisionId),
+        env.DB.prepare(
+          `UPDATE operation_jobs
+              SET status = 'cancelled', completed_at = unixepoch()
+            WHERE id = ?`,
+        ).bind(operationId),
+      ]);
       await processDecisionNotification(message, testEnv, { email: provider });
+      expect(requests).toHaveLength(0);
+      await env.DB.batch([
+        env.DB.prepare(
+          "UPDATE submission_decisions SET status = 'published' WHERE id = ?",
+        ).bind(decisionId),
+        env.DB.prepare(
+          `UPDATE operation_jobs
+              SET status = 'queued', completed_at = NULL
+            WHERE id = ?`,
+        ).bind(operationId),
+      ]);
       await processDecisionNotification(message, testEnv, { email: provider });
       expect(requests).toHaveLength(1);
-      expect(providerKeys[0]).toMatch(
+      expect(
+        await env.DB.prepare(
+          `SELECT o.status AS operationStatus, c.status AS communicationStatus,
+                  d.status AS deliveryStatus, oi.status AS itemStatus
+             FROM operation_jobs o
+             JOIN communications c ON c.operation_id = o.id
+             JOIN communication_deliveries d ON d.communication_id = c.id
+             JOIN operation_items oi
+               ON oi.operation_id = o.id AND oi.entity_id = d.id
+            WHERE o.id = ?`,
+        )
+          .bind(operationId)
+          .first(),
+      ).toEqual({
+        operationStatus: "failed",
+        communicationStatus: "failed",
+        deliveryStatus: "failed",
+        itemStatus: "failed",
+      });
+
+      await new OperationService(testEnv).retry(viewer, operationId);
+      expect(sent).toEqual([message]);
+      expect(
+        await env.DB.prepare(
+          `SELECT o.status AS operationStatus, c.status AS communicationStatus,
+                  d.status AS deliveryStatus, d.failure_code AS failureCode,
+                  oi.status AS itemStatus, oi.error_code AS itemErrorCode
+             FROM operation_jobs o
+             JOIN communications c ON c.operation_id = o.id
+             JOIN communication_deliveries d ON d.communication_id = c.id
+             JOIN operation_items oi
+               ON oi.operation_id = o.id AND oi.entity_id = d.id
+            WHERE o.id = ?`,
+        )
+          .bind(operationId)
+          .first(),
+      ).toEqual({
+        operationStatus: "queued",
+        communicationStatus: "queued",
+        deliveryStatus: "queued",
+        failureCode: null,
+        itemStatus: "pending",
+        itemErrorCode: null,
+      });
+      await processDecisionNotification(sent[0], testEnv, { email: provider });
+      await processDecisionNotification(sent[0], testEnv, { email: provider });
+      expect(requests).toHaveLength(2);
+      expect(new Set(providerKeys).size).toBe(1);
+      expect(providerKeys[1]).toMatch(
         /^programcue:communication-delivery:v1:[0-9a-f]{64}$/,
       );
-      expect(requests[0]).toMatchObject({
+      expect(requests[1]).toMatchObject({
         from: `${intent.senderFromName} <${intent.senderFromEmail}>`,
         to: ["alex.submitter@example.com"],
         subject: "Your proposal was accepted",
       });
-      expect(JSON.stringify(requests[0])).toContain(
+      expect(JSON.stringify(requests[1])).toContain(
         "A strong fit for this audience.",
       );
-      expect(JSON.stringify(requests[0])).toContain(
+      expect(JSON.stringify(requests[1])).toContain(
         "Clarify the intended experience level",
       );
-      expect(JSON.stringify(requests[0])).not.toContain("changed@example.com");
-      expect(JSON.stringify(requests[0])).not.toContain("Changed subject");
+      expect(JSON.stringify(requests[1])).not.toContain("changed@example.com");
+      expect(JSON.stringify(requests[1])).not.toContain("Changed subject");
       expect(
         await env.DB.prepare(
           `
@@ -1570,7 +1646,7 @@ describe("Communications D1 vertical slice", () => {
         ).bind(intent.operationItemId),
       ]);
       await processDecisionNotification(message, testEnv, { email: provider });
-      expect(requests).toHaveLength(1);
+      expect(requests).toHaveLength(2);
       expect(
         await env.DB.prepare(
           `SELECT o.status AS operationStatus,

@@ -1,4 +1,5 @@
 import { DEFAULT_EVENT_BRAND_ACCENT } from "~/lib/brand";
+import { prepareDecisionNotificationIntent } from "~/modules/communications/decision-notification-intent.server";
 import { requireEmailProviderConfiguration } from "~/modules/communications/email-provider.server";
 import { ensureDemoEvaluationData } from "~/modules/evaluations/demo.server";
 import { INITIAL_EVENT_SESSION_FORMATS_JSON } from "~/modules/events/event-configuration";
@@ -423,6 +424,65 @@ async function resetMutableIdentity(env: CloudflareEnvironment) {
 // applicant and reviewer remain absent from these records by construction and
 // are independently verified as clean in baselineEvidence.
 async function seedShowcaseCohort(env: CloudflareEnvironment) {
+  const notificationOperationId =
+    "demo-showcase-decision-notification-operation";
+  const showcaseRationale =
+    "Waitlisted after committee moderation because the reviewers disagreed on evidence and delivery scope.";
+  const notificationContext = await env.DB.prepare(
+    `SELECT submission.title, submission.submitter_person_id AS recipientPersonId,
+            COALESCE(person.email, submission.submitter_email) AS recipientAddress,
+            COALESCE(person.display_name, submission.submitter_email) AS recipientName,
+            event.name AS eventName, event.brand_accent AS brandAccent,
+            event.starts_at AS startsAt, event.ends_at AS endsAt
+       FROM submissions submission
+       JOIN events event
+         ON event.id = submission.event_id AND event.organisation_id = ?
+       LEFT JOIN people person ON person.id = submission.submitter_person_id
+      WHERE submission.id = ? AND submission.event_id = ?`,
+  )
+    .bind(DEMO_ORGANISATION_ID, DEMO_SHOWCASE_SUBMISSION_ID, DEMO_EVENT_ID)
+    .first<{
+      title: string;
+      recipientPersonId: string | null;
+      recipientAddress: string | null;
+      recipientName: string | null;
+      eventName: string;
+      brandAccent: string;
+      startsAt: number;
+      endsAt: number;
+    }>();
+  if (!notificationContext) {
+    throw new Error("The showcase notification context is unavailable.");
+  }
+  const preparedNotification = await prepareDecisionNotificationIntent(env, {
+    viewer: {
+      organisationId: DEMO_ORGANISATION_ID,
+      eventId: DEMO_EVENT_ID,
+    },
+    decisionId: DEMO_SHOWCASE_DECISION_ID,
+    operationId: notificationOperationId,
+    submissionId: DEMO_SHOWCASE_SUBMISSION_ID,
+    submissionTitle: notificationContext.title,
+    decision: "waitlisted",
+    rationale: showcaseRationale,
+    feedback: [],
+    recipientPersonId: notificationContext.recipientPersonId,
+    recipientAddress: notificationContext.recipientAddress,
+    recipientName: notificationContext.recipientName,
+    event: {
+      name: notificationContext.eventName,
+      brandAccent: notificationContext.brandAccent,
+      startsAt: notificationContext.startsAt,
+      endsAt: notificationContext.endsAt,
+    },
+  });
+  if (!preparedNotification.intent) {
+    throw new Error(preparedNotification.error);
+  }
+  const notificationIntent = {
+    ...preparedNotification.intent,
+    correlationId: "demo-showcase-decision-notification-correlation",
+  };
   const positiveScores = JSON.stringify({
     "demo-evaluation-criterion-relevance": 5,
     "demo-evaluation-criterion-substance": 5,
@@ -639,28 +699,150 @@ async function seedShowcaseCohort(env: CloudflareEnvironment) {
       DEMO_SHOWCASE_TIMESTAMP - 100,
     ),
     env.DB.prepare(
+      `INSERT OR IGNORE INTO operation_jobs (
+         id, organisation_id, event_id, requested_by_person_id, type,
+         idempotency_key, correlation_id, status, payload_json,
+         progress_completed, progress_total, created_at, updated_at
+       ) VALUES (?, ?, ?, ?, 'decision.notification', ?, ?, 'queued', ?, 0, 1,
+                 ?, ?)`,
+    ).bind(
+      notificationIntent.operationId,
+      DEMO_ORGANISATION_ID,
+      DEMO_EVENT_ID,
+      DEMO_IDENTITIES.owner.personId,
+      notificationIntent.operationIdempotencyKey,
+      notificationIntent.correlationId,
+      notificationIntent.queuePayloadJson,
+      DEMO_SHOWCASE_TIMESTAMP,
+      DEMO_SHOWCASE_TIMESTAMP,
+    ),
+    env.DB.prepare(
       `INSERT OR IGNORE INTO submission_decisions (
          id, event_id, submission_id, round_id, revision_number, status,
          decision, decided_by_person_id, rationale,
          notification_feedback_json, effect_preview_json, idempotency_key,
-         decided_at, published_at
+         notification_operation_id, decided_at, published_at
        ) VALUES (?, ?, ?, ?, 1, 'published', 'waitlisted', ?, ?, '[]', ?,
-                 'demo-showcase:decision', ?, ?)`,
+                 'demo-showcase:decision', ?, ?, ?)`,
     ).bind(
       DEMO_SHOWCASE_DECISION_ID,
       DEMO_EVENT_ID,
       DEMO_SHOWCASE_SUBMISSION_ID,
       DEMO_SHOWCASE_ROUND_ID,
       DEMO_IDENTITIES.owner.personId,
-      "Waitlisted after committee moderation because the reviewers disagreed on evidence and delivery scope.",
+      showcaseRationale,
       JSON.stringify({
         submissionId: DEMO_SHOWCASE_SUBMISSION_ID,
         fromStatus: "in_review",
         toStatus: "waitlisted",
         notificationReleased: false,
       }),
+      notificationIntent.operationId,
       DEMO_SHOWCASE_TIMESTAMP,
       DEMO_SHOWCASE_TIMESTAMP,
+    ),
+    env.DB.prepare(
+      `INSERT OR IGNORE INTO communications (
+         id, event_id, template_version_id, sender_profile_id, operation_id,
+         idempotency_key, kind, channel, status, audience_json,
+         content_snapshot_json, recipient_count, queued_at,
+         created_by_person_id, created_at, updated_at
+       ) VALUES (?, ?, ?, ?, ?, ?, 'transactional', 'email', 'queued', ?, ?, 1,
+                 ?, ?, ?, ?)`,
+    ).bind(
+      notificationIntent.communicationId,
+      DEMO_EVENT_ID,
+      notificationIntent.templateVersionId,
+      notificationIntent.senderProfileId,
+      notificationIntent.operationId,
+      notificationIntent.operationIdempotencyKey,
+      notificationIntent.audienceJson,
+      notificationIntent.contentSnapshotJson,
+      DEMO_SHOWCASE_TIMESTAMP,
+      DEMO_IDENTITIES.owner.personId,
+      DEMO_SHOWCASE_TIMESTAMP,
+      DEMO_SHOWCASE_TIMESTAMP,
+    ),
+    env.DB.prepare(
+      `INSERT OR IGNORE INTO communication_deliveries (
+         id, event_id, communication_id, person_id, recipient_address,
+         recipient_name, source_id, source_values_json, channel, provider,
+         idempotency_key, status, rendered_subject, rendered_body_sha256,
+         created_at, updated_at
+       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'email', ?, ?, 'queued', ?, ?, ?, ?)`,
+    ).bind(
+      notificationIntent.deliveryId,
+      DEMO_EVENT_ID,
+      notificationIntent.communicationId,
+      notificationIntent.recipientPersonId,
+      notificationIntent.recipientAddress,
+      notificationIntent.recipientName,
+      DEMO_SHOWCASE_SUBMISSION_ID,
+      notificationIntent.sourceValuesJson,
+      notificationIntent.senderProvider,
+      notificationIntent.deliveryIdempotencyKey,
+      notificationIntent.renderedSubject,
+      notificationIntent.renderedBodySha256,
+      DEMO_SHOWCASE_TIMESTAMP,
+      DEMO_SHOWCASE_TIMESTAMP,
+    ),
+    env.DB.prepare(
+      `INSERT OR IGNORE INTO operation_items (
+         id, operation_id, item_key, entity_type, entity_id, status,
+         result_json, updated_at
+       ) VALUES (?, ?, ?, 'communication_delivery', ?, 'pending', ?, ?)`,
+    ).bind(
+      notificationIntent.operationItemId,
+      notificationIntent.operationId,
+      notificationIntent.deliveryIdempotencyKey,
+      notificationIntent.deliveryId,
+      JSON.stringify({ sourceId: DEMO_SHOWCASE_SUBMISSION_ID }),
+      DEMO_SHOWCASE_TIMESTAMP,
+    ),
+    env.DB.prepare(
+      `INSERT OR IGNORE INTO audit_events (
+         id, actor_kind, origin, metadata_version, organisation_id, event_id,
+         actor_person_id, action, entity_type, entity_id, correlation_id,
+         metadata_json, created_at
+       ) VALUES (?, 'person', 'internal', 1, ?, ?, ?,
+                 'decision.notification.prepared', 'communication', ?, ?, ?, ?)`,
+    ).bind(
+      `decision-notification-prepared:${notificationIntent.operationId}`,
+      DEMO_ORGANISATION_ID,
+      DEMO_EVENT_ID,
+      DEMO_IDENTITIES.owner.personId,
+      notificationIntent.communicationId,
+      notificationIntent.operationId,
+      JSON.stringify({
+        decisionId: DEMO_SHOWCASE_DECISION_ID,
+        operationId: notificationIntent.operationId,
+        templateVersionId: notificationIntent.templateVersionId,
+        deliveryId: notificationIntent.deliveryId,
+        renderedSubject: notificationIntent.renderedSubject,
+        renderedBodySha256: notificationIntent.renderedBodySha256,
+      }),
+      DEMO_SHOWCASE_TIMESTAMP,
+    ),
+    env.DB.prepare(
+      `INSERT INTO event_changes (
+         event_id, entity_type, entity_id, change_type, correlation_id, created_at
+       ) SELECT ?, 'communication', ?, 'created', ?, ?
+          WHERE NOT EXISTS (
+            SELECT 1 FROM event_changes existing
+             WHERE existing.event_id = ?
+               AND existing.entity_type = 'communication'
+               AND existing.entity_id = ?
+               AND existing.change_type = 'created'
+               AND existing.correlation_id = ?
+          )`,
+    ).bind(
+      DEMO_EVENT_ID,
+      notificationIntent.communicationId,
+      notificationIntent.correlationId,
+      DEMO_SHOWCASE_TIMESTAMP,
+      DEMO_EVENT_ID,
+      notificationIntent.communicationId,
+      notificationIntent.correlationId,
     ),
     env.DB.prepare(
       `UPDATE submissions
@@ -750,16 +932,6 @@ async function seedShowcaseCohort(env: CloudflareEnvironment) {
         timestamp: DEMO_SHOWCASE_TIMESTAMP - 100,
       },
       {
-        id: "audit-demo-showcase-decision",
-        actor: DEMO_IDENTITIES.owner.personId,
-        action: "decision.published",
-        table: "submission_decisions",
-        entityType: "submission_decision",
-        entityId: DEMO_SHOWCASE_DECISION_ID,
-        metadata: { decision: "waitlisted" },
-        timestamp: DEMO_SHOWCASE_TIMESTAMP,
-      },
-      {
         id: "audit-demo-showcase-profile-revision",
         actor: DEMO_IDENTITIES.owner.personId,
         action: "speaker.admin.profile.updated",
@@ -810,6 +982,138 @@ async function seedShowcaseCohort(env: CloudflareEnvironment) {
         audit.timestamp,
         audit.entityId,
       ),
+    ),
+    env.DB.prepare(
+      `INSERT INTO audit_events (
+         id, actor_kind, origin, metadata_version, organisation_id, event_id,
+         actor_person_id, action, entity_type, entity_id, metadata_json,
+         created_at
+       ) SELECT 'audit-demo-showcase-decision', 'person', 'internal', 1,
+                ?, ?, ?, 'decision.published', 'submission_decision', ?, ?, ?
+          WHERE EXISTS (
+            SELECT 1 FROM submission_decisions decision
+             WHERE decision.id = ? AND decision.event_id = ?
+               AND decision.status = 'published'
+               AND decision.notification_operation_id = ?
+          )
+            AND NOT EXISTS (
+              SELECT 1 FROM audit_events existing
+               WHERE existing.id = 'audit-demo-showcase-decision'
+            )`,
+    ).bind(
+      DEMO_ORGANISATION_ID,
+      DEMO_EVENT_ID,
+      DEMO_IDENTITIES.owner.personId,
+      DEMO_SHOWCASE_DECISION_ID,
+      JSON.stringify({
+        decision: "waitlisted",
+        notificationOperationId: notificationIntent.operationId,
+        demonstrationOnly: true,
+      }),
+      DEMO_SHOWCASE_TIMESTAMP,
+      DEMO_SHOWCASE_DECISION_ID,
+      DEMO_EVENT_ID,
+      notificationIntent.operationId,
+    ),
+    env.DB.prepare(
+      `UPDATE communication_deliveries
+          SET status = 'cancelled',
+              failure_code = 'DEMO_FIXTURE_NOT_DISPATCHED',
+              failure_message =
+                'Demonstration fixture only; no provider request was made.',
+              updated_at = ?
+        WHERE id = ? AND event_id = ? AND communication_id = ?
+          AND status = 'queued'
+          AND EXISTS (
+            SELECT 1 FROM audit_events audit
+             WHERE audit.id = 'audit-demo-showcase-decision'
+               AND audit.action = 'decision.published'
+          )`,
+    ).bind(
+      DEMO_SHOWCASE_TIMESTAMP,
+      notificationIntent.deliveryId,
+      DEMO_EVENT_ID,
+      notificationIntent.communicationId,
+    ),
+    env.DB.prepare(
+      `UPDATE operation_items
+          SET status = 'skipped', error_code = 'DEMO_FIXTURE_NOT_DISPATCHED',
+              error_message =
+                'Demonstration fixture only; no provider request was made.',
+              completed_at = ?, updated_at = ?
+        WHERE id = ? AND operation_id = ? AND status = 'pending'
+          AND EXISTS (
+            SELECT 1 FROM communication_deliveries delivery
+             WHERE delivery.id = operation_items.entity_id
+               AND delivery.status = 'cancelled'
+          )`,
+    ).bind(
+      DEMO_SHOWCASE_TIMESTAMP,
+      DEMO_SHOWCASE_TIMESTAMP,
+      notificationIntent.operationItemId,
+      notificationIntent.operationId,
+    ),
+    env.DB.prepare(
+      `UPDATE communications
+          SET status = 'cancelled', cancelled_at = ?, updated_at = ?
+        WHERE id = ? AND event_id = ? AND operation_id = ?
+          AND status = 'queued'
+          AND EXISTS (
+            SELECT 1 FROM communication_deliveries delivery
+             WHERE delivery.communication_id = communications.id
+               AND delivery.status = 'cancelled'
+          )`,
+    ).bind(
+      DEMO_SHOWCASE_TIMESTAMP,
+      DEMO_SHOWCASE_TIMESTAMP,
+      notificationIntent.communicationId,
+      DEMO_EVENT_ID,
+      notificationIntent.operationId,
+    ),
+    env.DB.prepare(
+      `UPDATE operation_jobs
+          SET status = 'cancelled', completed_at = ?, updated_at = ?
+        WHERE id = ? AND event_id = ? AND organisation_id = ?
+          AND type = 'decision.notification' AND status = 'queued'
+          AND EXISTS (
+            SELECT 1 FROM communications communication
+             WHERE communication.operation_id = operation_jobs.id
+               AND communication.status = 'cancelled'
+          )`,
+    ).bind(
+      DEMO_SHOWCASE_TIMESTAMP,
+      DEMO_SHOWCASE_TIMESTAMP,
+      notificationIntent.operationId,
+      DEMO_EVENT_ID,
+      DEMO_ORGANISATION_ID,
+    ),
+    env.DB.prepare(
+      `INSERT OR IGNORE INTO audit_events (
+         id, actor_kind, origin, metadata_version, organisation_id, event_id,
+         action, entity_type, entity_id, correlation_id, metadata_json,
+         created_at
+       ) SELECT 'decision-notification-demo-not-dispatched:' || ?,
+                'system', 'internal', 1, ?, ?,
+                'decision.notification.demo_not_dispatched', 'communication',
+                ?, ?, ?, ?
+          WHERE EXISTS (
+            SELECT 1 FROM operation_jobs operation
+             WHERE operation.id = ? AND operation.event_id = ?
+               AND operation.status = 'cancelled'
+          )`,
+    ).bind(
+      notificationIntent.operationId,
+      DEMO_ORGANISATION_ID,
+      DEMO_EVENT_ID,
+      notificationIntent.communicationId,
+      notificationIntent.operationId,
+      JSON.stringify({
+        decisionId: DEMO_SHOWCASE_DECISION_ID,
+        reason: "demonstration fixture; no provider request was made",
+      }),
+      DEMO_SHOWCASE_TIMESTAMP,
+      notificationIntent.operationId,
+      DEMO_EVENT_ID,
     ),
     env.DB.prepare(
       `INSERT INTO people (id, email, display_name, profile_status)
