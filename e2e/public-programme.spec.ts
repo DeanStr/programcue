@@ -148,6 +148,31 @@ test("public programme exposes speaker affiliations and a closable profile panel
   await expect(page.locator("#programme-speaker-profile")).toHaveCount(0);
   await expect(profileLink).toBeFocused();
 
+  // A direct session URL is temporarily replaced by the speaker profile URL;
+  // closing the profile must restore the session that the visitor opened.
+  await waitForInterface(
+    page,
+    "/public/programme/future-of-events-2027/sessions?session=demo-session-1",
+  );
+  const directSessionProfileLink = page.getByRole("link", {
+    name: "View Priya Shah’s profile",
+  });
+  await directSessionProfileLink.click();
+  await expect(page).toHaveURL(
+    /\/public\/programme\/future-of-events-2027\/sessions\?speaker=person-demo-speaker(?:#.*)?$/u,
+  );
+  await page.getByRole("button", { name: "Close profile" }).click();
+  await expect(page).toHaveURL(
+    /\/public\/programme\/future-of-events-2027\/sessions\?session=demo-session-1$/u,
+  );
+  await expect(
+    page.getByRole("heading", {
+      name: "The Future of Attendee Engagement",
+      exact: true,
+      level: 2,
+    }),
+  ).toBeVisible();
+
   // A shared profile URL has no opener recorded in component state, so close
   // falls back to its visible speaker-card link instead of dropping focus.
   await page.goto(

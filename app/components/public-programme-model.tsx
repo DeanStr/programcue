@@ -324,6 +324,7 @@ export function usePublicProgrammeModel(loaderData: PublicProgrammeLoaderData) {
     useState(false);
   const speakerProfileRef = useRef<HTMLElement | null>(null);
   const speakerProfileReturnFocusRef = useRef<HTMLElement | null>(null);
+  const speakerProfileReturnSessionRef = useRef<string | null>(null);
   const visibleEmbedControls = new Set(embedOptions.controls);
   const visibleEmbedFields = new Set(embedOptions.fields);
   const publicSearchWithPendingQueries = useCallback(() => {
@@ -693,6 +694,9 @@ export function usePublicProgrammeModel(loaderData: PublicProgrammeLoaderData) {
       return;
     }
     const search = publicSearchWithPendingQueries();
+    const sessionId = search.get("session");
+    if (sessionId) speakerProfileReturnSessionRef.current = sessionId;
+    search.delete("session");
     search.set("speaker", speakerId);
     const nextSearch = `?${search}`;
     pendingClientSearches.current.add(nextSearch);
@@ -738,9 +742,12 @@ export function usePublicProgrammeModel(loaderData: PublicProgrammeLoaderData) {
     }
     const search = publicSearchWithPendingQueries();
     search.delete("speaker");
+    const returnSessionId = speakerProfileReturnSessionRef.current;
+    if (returnSessionId) search.set("session", returnSessionId);
     const nextSearch = search.size ? `?${search}` : "";
     pendingClientSearches.current.add(nextSearch);
     speakerProfileReturnFocusRef.current = null;
+    speakerProfileReturnSessionRef.current = null;
     void Promise.resolve(
       navigate(
         {

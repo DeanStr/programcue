@@ -411,12 +411,16 @@ export function SchedulePublicationDialog({
               {blockerCount} publication{" "}
               {blockerCount === 1 ? "blocker" : "blockers"}
             </strong>
-            <span>Resolve every item below before publishing.</span>
+            <span>
+              Publication is blocked. Resolve every item below before
+              publishing.
+            </span>
           </div>
         ) : (
           <div className="validation-item ok">
-            No publication blockers found. Every invariant will be revalidated
-            on confirmation.
+            Every scheduled public session has a public content snapshot. No
+            publication blockers found. Every invariant is revalidated before
+            publication.
           </div>
         )}
         {preview.blockers.emptySchedule ? (
@@ -436,7 +440,7 @@ export function SchedulePublicationDialog({
         ) : null}
         {preview.blockers.contentApproval.length ? (
           <div className="validation-item error">
-            <strong>Content approval required</strong>
+            <strong>Content is not marked Approved</strong>
             <ul>
               {preview.blockers.contentApproval.map((session) => (
                 <li key={session.sessionId}>
