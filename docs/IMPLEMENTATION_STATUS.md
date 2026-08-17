@@ -765,7 +765,11 @@ this AIA-08 production slice.
   add event-scoped site, published-reference, sponsor and recording tables with
   organisation/event foreign-key isolation. Audit and event-change evidence is
   conditional on the exact committed operation. The migration validates and
-  applies locally; it has not been applied to production.
+  applies locally; it has not been applied to production. The release validator
+  conditionally verifies its critical table columns, foreign-key definitions,
+  indexes, trigger predicates and managed-embed theme migration once migration
+  0037 appears in the remote ledger, rather than treating that ledger row alone
+  as schema evidence.
 - **Independent event-home lifecycle:** A bounded site can publish before an
   agenda for CFP promotion. Introduction, venue, FAQ, sponsor and fixed-page
   content use the canonical event projection; featured speakers, featured
@@ -805,7 +809,10 @@ this AIA-08 production slice.
   dependencies; public loaders repeat the checks, and Event Setup blocks removal
   of content required by the live site. Fixed editorial page ETags combine the
   request resource, programme/branding content identity and site publication
-  revision. Invalid persisted snapshots or branding return a non-cacheable
+  revision. Fixed-page loader representations omit the dynamic recording list,
+  which they do not render; the programme homepage that can render recordings
+  remains private and non-cacheable because it also carries visitor itinerary
+  state. Invalid persisted snapshots or branding return a non-cacheable
   error; they do not disappear or receive a product-colour/placeholder fallback.
 - **Replay and snapshot integrity:** Every public-site, sponsor and recording
   form submits a stable command UUID. Consequential command identities remain
@@ -813,7 +820,15 @@ this AIA-08 production slice.
   revalidation and reload. The existing D1 idempotency ledger binds each
   identity to the exact validated payload and durable result; exact replays converge
   without duplicate revisions, entities or audit rows, while changed-payload
-  reuse conflicts. Site publication reads the site draft and ordered sponsors
+  reuse conflicts. Every command has a final operation-specific D1 batch guard
+  requiring its complete domain state, exact audit/change evidence, positive
+  cursor and durable response; site publication additionally requires the exact
+  featured-reference graph and next event projection revision, sponsor mutations
+  require the parent's exact next draft revision, and recording
+  publication/withdrawal require the next event projection revision.
+  Fault-injection coverage independently suppresses audit,
+  event-change, completion, featured-reference, parent-site and event-projection
+  statements and verifies complete rollback. Site publication reads the site draft and ordered sponsors
   in one SQL snapshot before its revision compare-and-set. The confirmation
   names additions and removals rather than listing only the replacement's
   enabled content. Published-session status and public visibility are part of
@@ -822,6 +837,17 @@ this AIA-08 production slice.
   featured record or published recording and block demotion of a featured
   speaker profile. Public loaders remain fail-closed instead of dropping
   referenced content.
+- **Repository authority boundary:** Editorial site configuration, fixed pages
+  and sponsors remain D1 control-plane workflow state for D1- or
+  Airtable-authoritative events. Featured session/speaker references and
+  post-event recordings require D1 programme authority until the existing
+  Airtable immutable publication mapping carries a provider-bound eligibility
+  manifest. The server rejects unsupported draft/publication writes before
+  provider work and rechecks authority in the atomic mutation; the UI prevents
+  new unsupported selections while allowing their removal even when absent from
+  the current programme, provider-incompatible public snapshots fail closed, and published
+  recordings retain an explicit withdrawal path. No D1 programme fallback is
+  used for Airtable-authoritative events.
 - **Promotion and post-event tools:** The organizer can copy the public URL,
   suggested announcement, escaped programme iframe and existing speaker share
   links, and can inspect the actual unfurl. Event and speaker social cards are

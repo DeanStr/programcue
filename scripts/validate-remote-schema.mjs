@@ -10,6 +10,7 @@ const REMOTE_SCHEMA_TIMEOUT_MS = 60_000;
 export const lastImmutableMigrationName =
   "0032_event_brand_asset_normalization.sql";
 export const reviewerAiMigrationName = "0036_reviewer_ai_hardening.sql";
+export const publicSiteMigrationName = "0037_public_event_site.sql";
 
 export const requiredBrandAssetColumns = new Map([
   ["width_px", { type: "INTEGER", notnull: 0, defaultValue: null }],
@@ -76,6 +77,145 @@ export const requiredReviewerAiSchemaObjects = new Map([
   ["review_revisions_ai_suggestion_provenance_update", "trigger"],
 ]);
 
+export const requiredPublicSiteColumns = new Map([
+  [
+    "event_public_sites",
+    new Map([
+      ["event_id", { type: "TEXT", notnull: 0, defaultValue: null, pk: 1 }],
+      ["organisation_id", { type: "TEXT", notnull: 1, defaultValue: null }],
+      ["draft_json", { type: "TEXT", notnull: 1, defaultValue: null }],
+      ["draft_revision", { type: "INTEGER", notnull: 1, defaultValue: "1" }],
+      ["published_json", { type: "TEXT", notnull: 0, defaultValue: null }],
+      [
+        "published_revision",
+        { type: "INTEGER", notnull: 0, defaultValue: null },
+      ],
+      ["published_at", { type: "INTEGER", notnull: 0, defaultValue: null }],
+      ["last_operation_id", { type: "TEXT", notnull: 1, defaultValue: null }],
+    ]),
+  ],
+  [
+    "event_public_site_references",
+    new Map([
+      ["event_id", { type: "TEXT", notnull: 1, defaultValue: null, pk: 1 }],
+      ["organisation_id", { type: "TEXT", notnull: 1, defaultValue: null }],
+      ["kind", { type: "TEXT", notnull: 1, defaultValue: null, pk: 2 }],
+      ["record_id", { type: "TEXT", notnull: 1, defaultValue: null, pk: 3 }],
+      ["site_revision", { type: "INTEGER", notnull: 1, defaultValue: null }],
+    ]),
+  ],
+  [
+    "event_site_sponsors",
+    new Map([
+      ["id", { type: "TEXT", notnull: 0, defaultValue: null, pk: 1 }],
+      ["organisation_id", { type: "TEXT", notnull: 1, defaultValue: null }],
+      ["event_id", { type: "TEXT", notnull: 1, defaultValue: null }],
+      ["revision", { type: "INTEGER", notnull: 1, defaultValue: "1" }],
+      ["last_operation_id", { type: "TEXT", notnull: 1, defaultValue: null }],
+    ]),
+  ],
+  [
+    "event_session_recordings",
+    new Map([
+      ["id", { type: "TEXT", notnull: 0, defaultValue: null, pk: 1 }],
+      ["organisation_id", { type: "TEXT", notnull: 1, defaultValue: null }],
+      ["event_id", { type: "TEXT", notnull: 1, defaultValue: null }],
+      ["session_id", { type: "TEXT", notnull: 1, defaultValue: null }],
+      ["draft_revision", { type: "INTEGER", notnull: 1, defaultValue: "1" }],
+      ["published_title", { type: "TEXT", notnull: 0, defaultValue: null }],
+      [
+        "published_recording_url",
+        { type: "TEXT", notnull: 0, defaultValue: null },
+      ],
+      [
+        "published_revision",
+        { type: "INTEGER", notnull: 0, defaultValue: null },
+      ],
+      ["published_at", { type: "INTEGER", notnull: 0, defaultValue: null }],
+      ["last_operation_id", { type: "TEXT", notnull: 1, defaultValue: null }],
+    ]),
+  ],
+]);
+
+export const requiredPublicSiteSchemaObjects = new Map([
+  ["idx_event_site_sponsors_order", "index"],
+  ["idx_event_session_recordings_public", "index"],
+  ["prevent_referenced_public_session_eligibility_change", "trigger"],
+  ["prevent_referenced_public_speaker_profile_demotion", "trigger"],
+]);
+
+export const requiredPublicSiteForeignKeys = [
+  {
+    tableName: "event_public_sites",
+    targetTable: "events",
+    columns: [
+      ["event_id", "id"],
+      ["organisation_id", "organisation_id"],
+    ],
+    onDelete: "CASCADE",
+  },
+  {
+    tableName: "event_public_sites",
+    targetTable: "people",
+    columns: [["last_updated_by_person_id", "id"]],
+    onDelete: "NO ACTION",
+  },
+  {
+    tableName: "event_public_site_references",
+    targetTable: "events",
+    columns: [
+      ["event_id", "id"],
+      ["organisation_id", "organisation_id"],
+    ],
+    onDelete: "CASCADE",
+  },
+  {
+    tableName: "event_public_site_references",
+    targetTable: "event_public_sites",
+    columns: [["event_id", "event_id"]],
+    onDelete: "CASCADE",
+  },
+  {
+    tableName: "event_site_sponsors",
+    targetTable: "events",
+    columns: [
+      ["event_id", "id"],
+      ["organisation_id", "organisation_id"],
+    ],
+    onDelete: "CASCADE",
+  },
+  {
+    tableName: "event_site_sponsors",
+    targetTable: "people",
+    columns: [["last_updated_by_person_id", "id"]],
+    onDelete: "NO ACTION",
+  },
+  {
+    tableName: "event_session_recordings",
+    targetTable: "events",
+    columns: [
+      ["event_id", "id"],
+      ["organisation_id", "organisation_id"],
+    ],
+    onDelete: "CASCADE",
+  },
+  {
+    tableName: "event_session_recordings",
+    targetTable: "sessions",
+    columns: [
+      ["session_id", "id"],
+      ["event_id", "event_id"],
+    ],
+    onDelete: "CASCADE",
+  },
+  {
+    tableName: "event_session_recordings",
+    targetTable: "people",
+    columns: [["last_updated_by_person_id", "id"]],
+    onDelete: "NO ACTION",
+  },
+];
+
 function validateColumns(rows, requiredColumns, tableName) {
   const columns = new Map(rows.map((row) => [row.name, row]));
   for (const [name, expected] of requiredColumns) {
@@ -84,7 +224,8 @@ function validateColumns(rows, requiredColumns, tableName) {
       !column ||
       column.type !== expected.type ||
       column.notnull !== expected.notnull ||
-      column.dflt_value !== expected.defaultValue
+      column.dflt_value !== expected.defaultValue ||
+      (Object.hasOwn(expected, "pk") && column.pk !== expected.pk)
     ) {
       throw new Error(
         `Remote D1 ${tableName}.${name} is missing or has the wrong contract.`,
@@ -126,7 +267,7 @@ export function validateRemoteSchemaEvidence(
   localMigrationNames,
   { allowPendingMigrations = false } = {},
 ) {
-  if (!Array.isArray(response) || response.length !== 8) {
+  if (!Array.isArray(response) || response.length !== 11) {
     throw new Error(
       "Remote D1 schema validation returned an unexpected result set.",
     );
@@ -239,6 +380,144 @@ export function validateRemoteSchemaEvidence(
     }
   }
 
+  const publicSiteApplied = appliedMigrationNames.includes(
+    publicSiteMigrationName,
+  );
+  if (publicSiteApplied) {
+    const publicSiteColumnRows = successfulResults(
+      response[8],
+      "public-site columns",
+    );
+    for (const [tableName, requiredColumns] of requiredPublicSiteColumns) {
+      validateColumns(
+        publicSiteColumnRows.filter((row) => row.tableName === tableName),
+        requiredColumns,
+        tableName,
+      );
+    }
+    for (const [name, type] of requiredPublicSiteSchemaObjects) {
+      if (objects.get(name) !== type) {
+        throw new Error(`Remote D1 is missing required ${type} ${name}.`);
+      }
+    }
+    const objectRows = successfulResults(response[2], "schema objects");
+    const sponsorIndex = objectRows.find(
+      (row) => row.name === "idx_event_site_sponsors_order",
+    );
+    if (
+      typeof sponsorIndex?.sql !== "string" ||
+      !/ON\s+event_site_sponsors\s*\(\s*event_id\s*,\s*tier\s*,\s*position\s*,\s*name\s*,\s*id\s*\)/iu.test(
+        sponsorIndex.sql,
+      )
+    ) {
+      throw new Error(
+        "Remote D1 public-site sponsor index has the wrong ordering contract.",
+      );
+    }
+    const recordingIndex = objectRows.find(
+      (row) => row.name === "idx_event_session_recordings_public",
+    );
+    if (
+      typeof recordingIndex?.sql !== "string" ||
+      !/ON\s+event_session_recordings\s*\(\s*event_id\s*,\s*published_at\s*,\s*session_id\s*\)/iu.test(
+        recordingIndex.sql,
+      ) ||
+      !/WHERE\s+published_at\s+IS\s+NOT\s+NULL/iu.test(recordingIndex.sql)
+    ) {
+      throw new Error(
+        "Remote D1 public recording index is missing its published-row predicate.",
+      );
+    }
+    const sessionTrigger = objectRows.find(
+      (row) =>
+        row.name === "prevent_referenced_public_session_eligibility_change",
+    );
+    if (
+      typeof sessionTrigger?.sql !== "string" ||
+      !/BEFORE\s+UPDATE\s+OF\s+status\s*,\s*visibility\s+ON\s+sessions/iu.test(
+        sessionTrigger.sql,
+      ) ||
+      !/event_public_site_references/iu.test(sessionTrigger.sql) ||
+      !/event_session_recordings/iu.test(sessionTrigger.sql) ||
+      !/NEW\.status\s*<>\s*'published'/iu.test(sessionTrigger.sql) ||
+      !/NEW\.visibility\s*<>\s*'public'/iu.test(sessionTrigger.sql) ||
+      !/reference\.kind\s*=\s*'session'/iu.test(sessionTrigger.sql) ||
+      !/reference\.kind\s*=\s*'speaker'/iu.test(sessionTrigger.sql) ||
+      !/participation_status\s*=\s*'confirmed'/iu.test(sessionTrigger.sql) ||
+      !/content_status\s*=\s*'approved'/iu.test(sessionTrigger.sql) ||
+      !/recording\.published_at\s+IS\s+NOT\s+NULL/iu.test(sessionTrigger.sql)
+    ) {
+      throw new Error(
+        "Remote D1 public-session eligibility trigger has the wrong protection contract.",
+      );
+    }
+    const speakerTrigger = objectRows.find(
+      (row) =>
+        row.name === "prevent_referenced_public_speaker_profile_demotion",
+    );
+    if (
+      typeof speakerTrigger?.sql !== "string" ||
+      !/BEFORE\s+UPDATE\s+OF\s+profile_status\s+ON\s+people/iu.test(
+        speakerTrigger.sql,
+      ) ||
+      !/event_public_site_references/iu.test(speakerTrigger.sql) ||
+      !/reference\.kind\s*=\s*'speaker'/iu.test(speakerTrigger.sql) ||
+      !/OLD\.profile_status\s*=\s*'published'/iu.test(speakerTrigger.sql) ||
+      !/NEW\.profile_status\s*<>\s*'published'/iu.test(speakerTrigger.sql)
+    ) {
+      throw new Error(
+        "Remote D1 featured-speaker profile trigger has the wrong protection contract.",
+      );
+    }
+    const publicSiteForeignKeys = successfulResults(
+      response[9],
+      "public-site foreign keys",
+    );
+    const foreignKeyGroups = new Map();
+    for (const row of publicSiteForeignKeys) {
+      const key = JSON.stringify([row.tableName, row.id]);
+      const group = foreignKeyGroups.get(key) ?? [];
+      group.push(row);
+      foreignKeyGroups.set(key, group);
+    }
+    for (const {
+      tableName,
+      targetTable,
+      columns,
+      onDelete,
+    } of requiredPublicSiteForeignKeys) {
+      if (
+        ![...foreignKeyGroups.values()].some((unorderedRows) => {
+          const rows = [...unorderedRows].sort(
+            (left, right) => Number(left.seq) - Number(right.seq),
+          );
+          return (
+            rows.length === columns.length &&
+            rows.every(
+              (row, index) =>
+                row.tableName === tableName &&
+                row.table === targetTable &&
+                row.on_delete === onDelete &&
+                row.seq === index &&
+                row.from === columns[index][0] &&
+                row.to === columns[index][1],
+            )
+          );
+        })
+      ) {
+        throw new Error(
+          `Remote D1 ${tableName} is missing its required foreign key (${columns.map(([from]) => from).join(", ")}) to ${targetTable} (${columns.map(([, to]) => to).join(", ")}).`,
+        );
+      }
+    }
+    const embedRows = successfulResults(response[10], "managed embed themes");
+    if (embedRows.length !== 1 || embedRows[0]?.invalidCount !== 0) {
+      throw new Error(
+        "Remote D1 managed programme embeds retain a missing or invalid theme.",
+      );
+    }
+  }
+
   return {
     migrationCount: appliedMigrationNames.length,
     pendingMigrationCount:
@@ -252,6 +531,18 @@ export function validateRemoteSchemaEvidence(
     reviewerAiObjectCount: reviewerAiApplied
       ? requiredReviewerAiSchemaObjects.size
       : 0,
+    publicSiteColumnCount: publicSiteApplied
+      ? [...requiredPublicSiteColumns.values()].reduce(
+          (count, columns) => count + columns.size,
+          0,
+        )
+      : 0,
+    publicSiteObjectCount: publicSiteApplied
+      ? requiredPublicSiteSchemaObjects.size
+      : 0,
+    publicSiteForeignKeyCount: publicSiteApplied
+      ? requiredPublicSiteForeignKeys.length
+      : 0,
   };
 }
 
@@ -263,9 +554,22 @@ function run() {
   const objectNames = [
     ...requiredBrandSchemaObjects.keys(),
     ...requiredReviewerAiSchemaObjects.keys(),
+    ...requiredPublicSiteSchemaObjects.keys(),
   ]
     .map((name) => `'${name.replaceAll("'", "''")}'`)
     .join(", ");
+  const publicSiteColumnQuery = [...requiredPublicSiteColumns.keys()]
+    .map(
+      (tableName) =>
+        `SELECT '${tableName}' AS tableName, name, type, "notnull", dflt_value, pk FROM pragma_table_info('${tableName}')`,
+    )
+    .join(" UNION ALL ");
+  const publicSiteForeignKeyQuery = [...requiredPublicSiteColumns.keys()]
+    .map(
+      (tableName) =>
+        `SELECT '${tableName}' AS tableName, id, seq, "table", "from", "to", on_delete FROM pragma_foreign_key_list('${tableName}')`,
+    )
+    .join(" UNION ALL ");
   const command = [
     "SELECT name FROM d1_migrations ORDER BY id",
     "PRAGMA table_info(event_brand_assets)",
@@ -275,6 +579,11 @@ function run() {
     "PRAGMA table_info(reviewer_ai_suggestions)",
     "PRAGMA quick_check",
     "PRAGMA foreign_key_check",
+    publicSiteColumnQuery,
+    publicSiteForeignKeyQuery,
+    `SELECT COUNT(*) AS invalidCount FROM programme_embeds
+      WHERE json_extract(configuration_json, '$.theme') IS NULL
+         OR json_extract(configuration_json, '$.theme') NOT IN ('light','dark','system')`,
   ].join("; ");
   const result = spawnSync(
     resolvePackageExecutable("wrangler", "wrangler"),
@@ -322,7 +631,7 @@ function run() {
     );
   } else {
     console.log(
-      `Remote D1 schema validation passed (${evidence.migrationCount} migrations, ${evidence.brandingColumnCount} branding columns, ${evidence.brandingObjectCount} branding indexes/triggers, ${evidence.reviewerAiColumnCount} reviewer-AI columns and ${evidence.reviewerAiObjectCount} reviewer-AI indexes/triggers).`,
+      `Remote D1 schema validation passed (${evidence.migrationCount} migrations, ${evidence.brandingColumnCount} branding columns, ${evidence.brandingObjectCount} branding indexes/triggers, ${evidence.reviewerAiColumnCount} reviewer-AI columns, ${evidence.reviewerAiObjectCount} reviewer-AI indexes/triggers, ${evidence.publicSiteColumnCount} public-site columns, ${evidence.publicSiteObjectCount} public-site indexes/triggers and ${evidence.publicSiteForeignKeyCount} public-site foreign keys).`,
     );
   }
 }

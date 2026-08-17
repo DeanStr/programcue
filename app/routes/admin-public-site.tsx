@@ -27,6 +27,7 @@ import {
 import { publicSiteCommandIdForIntent } from "~/modules/public-site/public-site-command.server";
 import {
   PublicSiteCommandConflictError,
+  PublicSiteIntegrityError,
   PublicSiteNotFoundError,
   PublicSiteRevisionConflictError,
   PublicSiteService,
@@ -324,6 +325,15 @@ export async function action({ request, context }: Route.ActionArgs) {
       return data<ActionResponse>(
         { ok: false, message: error.message },
         { status: error instanceof PublicSiteNotFoundError ? 404 : 422 },
+      );
+    if (error instanceof PublicSiteIntegrityError)
+      return data<ActionResponse>(
+        {
+          ok: false,
+          message:
+            "The action could not be completed safely. No changes were saved.",
+        },
+        { status: 500 },
       );
     throw error;
   }
@@ -656,6 +666,9 @@ export default function AdminPublicSite({ loaderData }: Route.ComponentProps) {
             draftRevision={draftBase.revision}
             serializedConfiguration={serialized}
             programme={loaderData.programme}
+            programmeReferencesAvailable={
+              loaderData.event.repositoryProvider === "d1"
+            }
             unsaved={unsaved}
             busy={busy}
             saving={busy && navigation.formData?.get("intent") === "save-site"}
@@ -672,6 +685,9 @@ export default function AdminPublicSite({ loaderData }: Route.ComponentProps) {
           <AdminPublicSiteRecordings
             recordings={loaderData.recordings}
             programme={loaderData.programme}
+            programmeFeaturesAvailable={
+              loaderData.event.repositoryProvider === "d1"
+            }
             blocked={secondaryActionsBlocked}
             busy={busy}
             onPublish={publishRecording}

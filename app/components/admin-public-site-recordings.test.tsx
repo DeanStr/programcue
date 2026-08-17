@@ -39,6 +39,7 @@ describe("public-site recording controls", () => {
             <AdminPublicSiteRecordings
               recordings={[publishedRecording]}
               programme={null}
+              programmeFeaturesAvailable
               blocked
               busy={false}
               onPublish={() => undefined}
@@ -52,6 +53,36 @@ describe("public-site recording controls", () => {
     const markup = renderToStaticMarkup(<RouterProvider router={router} />);
 
     expect(button(markup, "Save recording draft")).toContain("disabled");
+    expect(button(markup, "Withdraw")).not.toContain("disabled");
+  });
+
+  it("fails closed for Airtable editing while retaining withdrawal", () => {
+    const router = createMemoryRouter(
+      [
+        {
+          path: "/admin/site",
+          element: (
+            <AdminPublicSiteRecordings
+              recordings={[publishedRecording]}
+              programme={null}
+              programmeFeaturesAvailable={false}
+              blocked={false}
+              busy={false}
+              onPublish={() => undefined}
+              onUnpublish={() => undefined}
+            />
+          ),
+        },
+      ],
+      { initialEntries: ["/admin/site"] },
+    );
+    const markup = renderToStaticMarkup(<RouterProvider router={router} />);
+
+    expect(markup).toContain(
+      "unavailable for this event&#x27;s programme source",
+    );
+    expect(button(markup, "Save recording draft")).toContain("disabled");
+    expect(button(markup, "Publish update")).toContain("disabled");
     expect(button(markup, "Withdraw")).not.toContain("disabled");
   });
 });

@@ -15,17 +15,62 @@ import {
 import { ensureDemoSubmissionForm } from "~/modules/submissions/demo-submissions.server";
 import { cloudflareContext } from "~/platform/cloudflare-context";
 import { loader as publicProgrammePageLoader } from "~/routes/public-programme";
+import { loader as publicSitePageLoader } from "~/routes/public-site-page";
 import { PublicRecordingService } from "./public-recording-service.server";
 import { defaultPublicSiteDraft } from "./public-site";
 import { publicSiteCommandIdForIntent } from "./public-site-command.server";
+import { PublishedPublicSiteInvariantError } from "./public-site-errors";
 import {
   PublicSiteCommandConflictError,
+  PublicSiteIntegrityError,
   PublicSiteRevisionConflictError,
   PublicSiteService,
   PublicSiteValidationError,
 } from "./public-site-service.server";
 
 const publicSiteEnv = scheduleTestEnv as CloudflareEnvironment;
+
+function withSuppressedStatement(
+  testEnv: CloudflareEnvironment,
+  pattern: RegExp,
+) {
+  let suppressed = 0;
+  const faultingDb = new Proxy(testEnv.DB, {
+    get(target, property) {
+      if (property === "prepare") {
+        return (query: string) => {
+          const statement = target.prepare(query);
+          if (suppressed > 0 || !pattern.test(query)) return statement;
+          suppressed += 1;
+          return new Proxy(statement, {
+            get(statementTarget, statementProperty) {
+              if (statementProperty === "bind") {
+                return () =>
+                  target.prepare(
+                    "UPDATE people SET display_name = display_name WHERE 0",
+                  );
+              }
+              const value = Reflect.get(statementTarget, statementProperty);
+              return typeof value === "function"
+                ? value.bind(statementTarget)
+                : value;
+            },
+          });
+        };
+      }
+      const value = Reflect.get(target, property);
+      return typeof value === "function" ? value.bind(target) : value;
+    },
+  });
+  return {
+    env: new Proxy(testEnv, {
+      get(target, property) {
+        return property === "DB" ? faultingDb : Reflect.get(target, property);
+      },
+    }),
+    suppressed: () => suppressed,
+  };
+}
 
 async function publishProgramme(sessionId = "schedule-test-one") {
   const schedule = new ScheduleService(publicSiteEnv);
@@ -140,7 +185,7 @@ describe("public event site publication", () => {
 
   it("deduplicates sponsor and recording creation commands", async () => {
     const service = new PublicSiteService(publicSiteEnv);
-    await service.saveDraft(viewer, {
+    const site = await service.saveDraft(viewer, {
       commandId: crypto.randomUUID(),
       revision: 0,
       configurationJson: JSON.stringify(publishableSite()),
@@ -180,11 +225,270 @@ describe("public event site publication", () => {
     const counts = await env.DB.prepare(
       `SELECT
          (SELECT COUNT(*) FROM event_site_sponsors WHERE event_id = ?) AS sponsors,
-         (SELECT COUNT(*) FROM event_session_recordings WHERE event_id = ?) AS recordings`,
+         (SELECT COUNT(*) FROM event_session_recordings WHERE event_id = ?) AS recordings,
+         (SELECT draft_revision FROM event_public_sites WHERE event_id = ?) AS siteRevision`,
     )
-      .bind(viewer.eventId, viewer.eventId)
+      .bind(viewer.eventId, viewer.eventId, viewer.eventId)
       .first();
-    expect(counts).toEqual({ sponsors: 1, recordings: 1 });
+    expect(counts).toEqual({
+      sponsors: 1,
+      recordings: 1,
+      siteRevision: site.revision + 1,
+    });
+  });
+
+  it.each([
+    ["audit insertion", /INSERT INTO audit_events/u],
+    ["event-change insertion", /INSERT INTO event_changes/u],
+    [
+      "command completion",
+      /UPDATE idempotency_records\s+SET status = 'completed'/u,
+    ],
+  ])(
+    "rolls back a site draft when its %s is suppressed",
+    async (_, pattern) => {
+      const fault = withSuppressedStatement(publicSiteEnv, pattern);
+      const commandId = crypto.randomUUID();
+      const auditCount = await env.DB.prepare(
+        `SELECT COUNT(*) AS count FROM audit_events
+          WHERE event_id = ? AND action = 'public_site.draft_saved'`,
+      )
+        .bind(viewer.eventId)
+        .first<{ count: number }>();
+
+      await expect(
+        new PublicSiteService(fault.env).saveDraft(viewer, {
+          commandId,
+          revision: 0,
+          configurationJson: JSON.stringify(publishableSite()),
+        }),
+      ).rejects.toBeInstanceOf(PublicSiteIntegrityError);
+
+      expect(fault.suppressed()).toBe(1);
+      expect(
+        await env.DB.prepare(
+          `SELECT
+           (SELECT COUNT(*) FROM event_public_sites WHERE event_id = ?) AS sites,
+           (SELECT COUNT(*) FROM audit_events
+             WHERE event_id = ? AND action = 'public_site.draft_saved') AS audits,
+           (SELECT COUNT(*) FROM idempotency_records
+             WHERE event_id = ? AND scope = 'public_site.draft.save'
+               AND idempotency_key = ?) AS commands`,
+        )
+          .bind(viewer.eventId, viewer.eventId, viewer.eventId, commandId)
+          .first(),
+      ).toEqual({ sites: 0, audits: auditCount?.count, commands: 0 });
+    },
+  );
+
+  it.each([
+    [
+      "featured-reference insertion",
+      /INSERT INTO event_public_site_references/u,
+    ],
+    [
+      "event projection update",
+      /UPDATE events\s+SET revision = revision \+ 1/u,
+    ],
+  ])(
+    "rolls back site publication when its %s is suppressed",
+    async (_, pattern) => {
+      await publishProgramme();
+      const service = new PublicSiteService(publicSiteEnv);
+      const configuration = publishableSite();
+      configuration.sectionVisibility.featured_sessions = true;
+      configuration.featuredSessionIds = ["schedule-test-one"];
+      const saved = await service.saveDraft(viewer, {
+        commandId: crypto.randomUUID(),
+        revision: 0,
+        configurationJson: JSON.stringify(configuration),
+      });
+      const before = await env.DB.prepare(
+        `SELECT revision, public_projection_revision AS publicProjectionRevision
+         FROM events WHERE id = ?`,
+      )
+        .bind(viewer.eventId)
+        .first();
+      const fault = withSuppressedStatement(publicSiteEnv, pattern);
+
+      await expect(
+        new PublicSiteService(fault.env).publish(viewer, {
+          commandId: crypto.randomUUID(),
+          revision: saved.revision,
+          confirmed: "true",
+        }),
+      ).rejects.toBeInstanceOf(PublicSiteIntegrityError);
+
+      expect(fault.suppressed()).toBe(1);
+      expect(
+        await env.DB.prepare(
+          `SELECT published_json AS publishedJson,
+                (SELECT COUNT(*) FROM event_public_site_references
+                  WHERE event_id = site.event_id) AS referenceCount
+           FROM event_public_sites site WHERE event_id = ?`,
+        )
+          .bind(viewer.eventId)
+          .first(),
+      ).toEqual({ publishedJson: null, referenceCount: 0 });
+      expect(
+        await env.DB.prepare(
+          `SELECT revision, public_projection_revision AS publicProjectionRevision
+           FROM events WHERE id = ?`,
+        )
+          .bind(viewer.eventId)
+          .first(),
+      ).toEqual(before);
+    },
+  );
+
+  it("rolls back a sponsor when the parent site revision update is suppressed", async () => {
+    const service = new PublicSiteService(publicSiteEnv);
+    const saved = await service.saveDraft(viewer, {
+      commandId: crypto.randomUUID(),
+      revision: 0,
+      configurationJson: JSON.stringify(publishableSite()),
+    });
+    const fault = withSuppressedStatement(
+      publicSiteEnv,
+      /UPDATE event_public_sites\s+SET draft_revision = draft_revision \+ 1/u,
+    );
+
+    await expect(
+      new PublicSiteService(fault.env).saveSponsor(viewer, {
+        commandId: crypto.randomUUID(),
+        id: "",
+        revision: 0,
+        name: "Incomplete sponsor",
+        tier: "Community",
+        websiteUrl: "",
+        logoUrl: "",
+        description: "",
+        position: 0,
+      }),
+    ).rejects.toBeInstanceOf(PublicSiteIntegrityError);
+
+    expect(fault.suppressed()).toBe(1);
+    expect(
+      await env.DB.prepare(
+        `SELECT draft_revision AS draftRevision,
+                (SELECT COUNT(*) FROM event_site_sponsors
+                  WHERE event_id = site.event_id) AS sponsorCount
+           FROM event_public_sites site WHERE event_id = ?`,
+      )
+        .bind(viewer.eventId)
+        .first(),
+    ).toEqual({ draftRevision: saved.revision, sponsorCount: 0 });
+  });
+
+  it("rolls back recording publication when its event projection is suppressed", async () => {
+    await publishProgramme();
+    const recordings = new PublicRecordingService(publicSiteEnv);
+    const recording = await recordings.saveDraft(viewer, {
+      commandId: crypto.randomUUID(),
+      id: "",
+      sessionId: "schedule-test-one",
+      revision: 0,
+      title: "Incomplete recording",
+      recordingUrl: "https://video.example.test/incomplete",
+      captionsUrl: "",
+      transcriptUrl: "",
+    });
+    const before = await env.DB.prepare(
+      `SELECT revision, public_projection_revision AS publicProjectionRevision
+         FROM events WHERE id = ?`,
+    )
+      .bind(viewer.eventId)
+      .first();
+    const fault = withSuppressedStatement(
+      publicSiteEnv,
+      /UPDATE events\s+SET revision = revision \+ 1/u,
+    );
+
+    await expect(
+      new PublicRecordingService(fault.env).publish(viewer, {
+        commandId: crypto.randomUUID(),
+        id: recording.id,
+        revision: 1,
+        confirmed: "true",
+      }),
+    ).rejects.toBeInstanceOf(PublicSiteIntegrityError);
+
+    expect(fault.suppressed()).toBe(1);
+    expect(
+      await env.DB.prepare(
+        `SELECT published_at AS publishedAt, published_revision AS publishedRevision
+           FROM event_session_recordings WHERE id = ?`,
+      )
+        .bind(recording.id)
+        .first(),
+    ).toEqual({ publishedAt: null, publishedRevision: null });
+    expect(
+      await env.DB.prepare(
+        `SELECT revision, public_projection_revision AS publicProjectionRevision
+           FROM events WHERE id = ?`,
+      )
+        .bind(viewer.eventId)
+        .first(),
+    ).toEqual(before);
+  });
+
+  it("rolls back recording withdrawal when its event projection is suppressed", async () => {
+    await publishProgramme();
+    const recordings = new PublicRecordingService(publicSiteEnv);
+    const recording = await recordings.saveDraft(viewer, {
+      commandId: crypto.randomUUID(),
+      id: "",
+      sessionId: "schedule-test-one",
+      revision: 0,
+      title: "Published recording",
+      recordingUrl: "https://video.example.test/published",
+      captionsUrl: "",
+      transcriptUrl: "",
+    });
+    await recordings.publish(viewer, {
+      commandId: crypto.randomUUID(),
+      id: recording.id,
+      revision: 1,
+      confirmed: "true",
+    });
+    const before = await env.DB.prepare(
+      `SELECT revision, public_projection_revision AS publicProjectionRevision
+         FROM events WHERE id = ?`,
+    )
+      .bind(viewer.eventId)
+      .first();
+    const fault = withSuppressedStatement(
+      publicSiteEnv,
+      /UPDATE events\s+SET revision = revision \+ 1/u,
+    );
+
+    await expect(
+      new PublicRecordingService(fault.env).unpublish(viewer, {
+        commandId: crypto.randomUUID(),
+        id: recording.id,
+        revision: 1,
+        confirmed: "true",
+      }),
+    ).rejects.toBeInstanceOf(PublicSiteIntegrityError);
+
+    expect(fault.suppressed()).toBe(1);
+    expect(
+      await env.DB.prepare(
+        `SELECT published_at IS NOT NULL AS published,
+                published_revision AS publishedRevision
+           FROM event_session_recordings WHERE id = ?`,
+      )
+        .bind(recording.id)
+        .first(),
+    ).toEqual({ published: 1, publishedRevision: 1 });
+    expect(
+      await env.DB.prepare(
+        `SELECT revision, public_projection_revision AS publicProjectionRevision
+           FROM events WHERE id = ?`,
+      )
+        .bind(viewer.eventId)
+        .first(),
+    ).toEqual(before);
   });
 
   it("publishes an event site before its programme when programme sections are hidden", async () => {
@@ -238,6 +542,207 @@ describe("public event site publication", () => {
     expect(routeResult.init?.headers).toMatchObject({
       "cache-control": "public, max-age=0, s-maxage=0, must-revalidate",
     });
+  });
+
+  it("keeps programme home live and omits recordings from fixed-page cache representations", async () => {
+    await publishProgramme();
+    const service = new PublicSiteService(publicSiteEnv);
+    const configuration = publishableSite();
+    configuration.pages.about.enabled = true;
+    configuration.pages.about.body = "Fixed editorial copy.";
+    const saved = await service.saveDraft(viewer, {
+      commandId: crypto.randomUUID(),
+      revision: 0,
+      configurationJson: JSON.stringify(configuration),
+    });
+    await service.publish(viewer, {
+      commandId: crypto.randomUUID(),
+      revision: saved.revision,
+      confirmed: "true",
+    });
+    const context = new RouterContextProvider();
+    context.set(cloudflareContext, {
+      env: publicSiteEnv,
+      ctx: {} as ExecutionContext,
+    });
+
+    const homepage = await publicProgrammePageLoader({
+      request: new Request(
+        "https://programcue.test/public/programme/future-of-events-2027",
+        { headers: { "if-none-match": '"obsolete-recording-revision"' } },
+      ),
+      params: { slug: "future-of-events-2027" },
+      context,
+    } as never);
+    if (homepage instanceof Response)
+      throw new Error("Published programme homepage returned a raw response.");
+    expect(homepage.init?.headers).toMatchObject({
+      "cache-control": "private, no-store",
+    });
+    expect(homepage.init?.headers).not.toHaveProperty("etag");
+
+    const fixedPage = await publicSitePageLoader({
+      request: new Request(
+        "https://programcue.test/public/programme/future-of-events-2027/pages/about",
+      ),
+      params: { slug: "future-of-events-2027", page: "about" },
+      context,
+    } as never);
+    if (fixedPage instanceof Response)
+      throw new Error("Published fixed page returned a raw response.");
+    expect(fixedPage.data.site).not.toHaveProperty("recordings");
+    expect(fixedPage.init?.headers).toHaveProperty("etag");
+  });
+
+  it("fails before storing D1-bound site or recording drafts for Airtable authority", async () => {
+    const configuration = publishableSite();
+    configuration.sectionVisibility.featured_sessions = true;
+    configuration.featuredSessionIds = ["schedule-test-one"];
+    const saved = await new PublicSiteService(publicSiteEnv).saveDraft(viewer, {
+      commandId: crypto.randomUUID(),
+      revision: 0,
+      configurationJson: JSON.stringify(configuration),
+    });
+    await env.DB.prepare(
+      "UPDATE events SET repository_provider = 'airtable' WHERE id = ? AND organisation_id = ?",
+    )
+      .bind(viewer.eventId, viewer.organisationId)
+      .run();
+    try {
+      await expect(
+        new PublicSiteService(publicSiteEnv).saveDraft(viewer, {
+          commandId: crypto.randomUUID(),
+          revision: saved.revision,
+          configurationJson: JSON.stringify(configuration),
+        }),
+      ).rejects.toThrow(/unavailable for this event's programme source/u);
+      await expect(
+        new PublicSiteService(publicSiteEnv).publish(viewer, {
+          commandId: crypto.randomUUID(),
+          revision: saved.revision,
+          confirmed: "true",
+        }),
+      ).rejects.toThrow(/unavailable for this event's programme source/u);
+      await expect(
+        new PublicRecordingService(publicSiteEnv).saveDraft(viewer, {
+          commandId: crypto.randomUUID(),
+          id: "",
+          sessionId: "schedule-test-one",
+          revision: 0,
+          title: "Provider-mismatched recording",
+          recordingUrl: "https://video.example.test/provider-mismatch",
+          captionsUrl: "",
+          transcriptUrl: "",
+        }),
+      ).rejects.toThrow(/unavailable for this event's programme source/u);
+
+      expect(
+        await env.DB.prepare(
+          `SELECT
+             (SELECT COUNT(*) FROM event_public_sites
+               WHERE event_id = ? AND published_json IS NOT NULL) AS publishedSites,
+             (SELECT COUNT(*) FROM event_session_recordings WHERE event_id = ?) AS recordings`,
+        )
+          .bind(viewer.eventId, viewer.eventId)
+          .first(),
+      ).toEqual({ publishedSites: 0, recordings: 0 });
+    } finally {
+      await env.DB.prepare(
+        "UPDATE events SET repository_provider = 'd1' WHERE id = ? AND organisation_id = ?",
+      )
+        .bind(viewer.eventId, viewer.organisationId)
+        .run();
+    }
+  });
+
+  it("rejects hidden featured programme IDs for Airtable authority", async () => {
+    const configuration = publishableSite();
+    expect(configuration.sectionVisibility.featured_sessions).toBe(false);
+    expect(configuration.sectionVisibility.featured_speakers).toBe(false);
+    configuration.featuredSessionIds = ["schedule-test-one"];
+    configuration.featuredSpeakerIds = ["person-demo-speaker"];
+    await env.DB.prepare(
+      "UPDATE events SET repository_provider = 'airtable' WHERE id = ? AND organisation_id = ?",
+    )
+      .bind(viewer.eventId, viewer.organisationId)
+      .run();
+
+    try {
+      await expect(
+        new PublicSiteService(publicSiteEnv).saveDraft(viewer, {
+          commandId: crypto.randomUUID(),
+          revision: 0,
+          configurationJson: JSON.stringify(configuration),
+        }),
+      ).rejects.toThrow(/unavailable for this event's programme source/u);
+      expect(
+        await env.DB.prepare(
+          "SELECT COUNT(*) AS count FROM event_public_sites WHERE event_id = ?",
+        )
+          .bind(viewer.eventId)
+          .first(),
+      ).toEqual({ count: 0 });
+    } finally {
+      await env.DB.prepare(
+        "UPDATE events SET repository_provider = 'd1' WHERE id = ? AND organisation_id = ?",
+      )
+        .bind(viewer.eventId, viewer.organisationId)
+        .run();
+    }
+  });
+
+  it("fails public reads instead of serving D1 recordings after an Airtable authority switch", async () => {
+    await publishProgramme();
+    const siteService = new PublicSiteService(publicSiteEnv);
+    const configuration = publishableSite();
+    configuration.postEvent.enabled = true;
+    const saved = await siteService.saveDraft(viewer, {
+      commandId: crypto.randomUUID(),
+      revision: 0,
+      configurationJson: JSON.stringify(configuration),
+    });
+    await siteService.publish(viewer, {
+      commandId: crypto.randomUUID(),
+      revision: saved.revision,
+      confirmed: "true",
+    });
+    const recordingService = new PublicRecordingService(publicSiteEnv);
+    const recording = await recordingService.saveDraft(viewer, {
+      commandId: crypto.randomUUID(),
+      id: "",
+      sessionId: "schedule-test-one",
+      revision: 0,
+      title: "D1 recording",
+      recordingUrl: "https://video.example.test/d1-recording",
+      captionsUrl: "",
+      transcriptUrl: "",
+    });
+    await recordingService.publish(viewer, {
+      commandId: crypto.randomUUID(),
+      id: recording.id,
+      revision: 1,
+      confirmed: "true",
+    });
+    await env.DB.prepare(
+      "UPDATE events SET repository_provider = 'airtable' WHERE id = ? AND organisation_id = ?",
+    )
+      .bind(viewer.eventId, viewer.organisationId)
+      .run();
+
+    try {
+      await expect(
+        siteService.getPublished(
+          "future-of-events-2027",
+          Number.MAX_SAFE_INTEGER,
+        ),
+      ).rejects.toBeInstanceOf(PublishedPublicSiteInvariantError);
+    } finally {
+      await env.DB.prepare(
+        "UPDATE events SET repository_provider = 'd1' WHERE id = ? AND organisation_id = ?",
+      )
+        .bind(viewer.eventId, viewer.organisationId)
+        .run();
+    }
   });
 
   it("projects a published CFP as closed after its closing time", async () => {

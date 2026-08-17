@@ -56,10 +56,11 @@ export async function loader({ request, params, context }: Route.LoaderArgs) {
   if (publishedProgrammeNotModified(request, cacheHeaders.etag)) {
     return new Response(null, { status: 304, headers: cacheHeaders });
   }
+  const { recordings: _recordings, ...fixedPageSite } = site;
   return data(
     {
       programme,
-      site,
+      site: fixedPageSite,
       page,
       canonicalUrl,
       socialCardUrl: socialCardUrl.toString(),

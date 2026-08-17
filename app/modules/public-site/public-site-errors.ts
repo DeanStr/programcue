@@ -28,12 +28,25 @@ export class PublicSiteValidationError extends Error {
   }
 }
 
+export class PublicSiteIntegrityError extends Error {
+  constructor(options?: ErrorOptions) {
+    super(
+      "The public-site action could not record its complete state and evidence.",
+      options,
+    );
+    this.name = "PublicSiteIntegrityError";
+  }
+}
+
 export class PublishedPublicSiteInvariantError extends Error {
   constructor(message: string) {
     super(message);
     this.name = "PublishedPublicSiteInvariantError";
   }
 }
+
+export const PUBLIC_SITE_D1_PROGRAMME_AUTHORITY_REQUIRED =
+  "Featured programme content and recordings are unavailable for this event's programme source.";
 
 export const PUBLIC_SITE_SESSION_ELIGIBILITY_CONSTRAINT =
   "Withdraw public-site references and recordings before changing this published session eligibility";

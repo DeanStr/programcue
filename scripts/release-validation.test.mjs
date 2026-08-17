@@ -6,8 +6,12 @@ import { fileURLToPath } from "node:url";
 import { validateReleaseStateEvidence } from "./validate-release-state.mjs";
 import {
   lastImmutableMigrationName,
+  publicSiteMigrationName,
   requiredBrandAssetColumns,
   requiredBrandSchemaObjects,
+  requiredPublicSiteColumns,
+  requiredPublicSiteForeignKeys,
+  requiredPublicSiteSchemaObjects,
   requiredReviewerAiReviewColumns,
   requiredReviewerAiSchemaObjects,
   requiredReviewerAiSuggestionColumns,
@@ -22,19 +26,40 @@ const migrations = [
   "0033_decision_draft_session_format.sql",
   "0034_reviewer_ai_suggestions.sql",
   reviewerAiMigrationName,
+  publicSiteMigrationName,
 ];
 const repositoryRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 
-function columnEvidence(requiredColumns) {
+function columnEvidence(requiredColumns, tableName) {
   return [...requiredColumns].map(
-    ([name, { type, notnull, defaultValue }], cid) => ({
+    ([name, { type, notnull, defaultValue, pk }], cid) => ({
       cid,
       name,
       type,
       notnull,
       dflt_value: defaultValue,
-      pk: 0,
+      pk: pk ?? 0,
+      ...(tableName ? { tableName } : {}),
     }),
+  );
+}
+
+function foreignKeyEvidence() {
+  const nextId = new Map();
+  return requiredPublicSiteForeignKeys.flatMap(
+    ({ tableName, targetTable, columns, onDelete }) => {
+      const id = nextId.get(tableName) ?? 0;
+      nextId.set(tableName, id + 1);
+      return columns.map(([from, to], seq) => ({
+        tableName,
+        id,
+        seq,
+        table: targetTable,
+        from,
+        to,
+        on_delete: onDelete,
+      }));
+    },
   );
 }
 
@@ -64,6 +89,19 @@ function remoteEvidence(appliedMigrations = migrations) {
               ? "CREATE INDEX idx_reviewer_ai_operations_assignment_usage ON operation_jobs(event_id, json_extract(payload_json, '$.assignmentId'), created_at DESC)"
               : `CREATE ${type} ${name}`,
         })),
+        ...[...requiredPublicSiteSchemaObjects].map(([name, type]) => ({
+          name,
+          type,
+          sql:
+            name === "idx_event_site_sponsors_order"
+              ? "CREATE INDEX idx_event_site_sponsors_order ON event_site_sponsors(event_id, tier, position, name, id)"
+              : name === "idx_event_session_recordings_public"
+                ? "CREATE INDEX idx_event_session_recordings_public ON event_session_recordings(event_id, published_at, session_id) WHERE published_at IS NOT NULL"
+                : name ===
+                    "prevent_referenced_public_session_eligibility_change"
+                  ? "CREATE TRIGGER prevent_referenced_public_session_eligibility_change BEFORE UPDATE OF status, visibility ON sessions WHEN NEW.status <> 'published' OR NEW.visibility <> 'public' AND EXISTS (SELECT 1 FROM event_public_site_references reference WHERE reference.kind = 'session' OR reference.kind = 'speaker' AND participation_status = 'confirmed' AND content_status = 'approved') OR EXISTS (SELECT 1 FROM event_session_recordings recording WHERE recording.published_at IS NOT NULL) BEGIN SELECT 1; END"
+                  : "CREATE TRIGGER prevent_referenced_public_speaker_profile_demotion BEFORE UPDATE OF profile_status ON people WHEN OLD.profile_status = 'published' AND NEW.profile_status <> 'published' AND reference.kind = 'speaker' AND EXISTS (SELECT 1 FROM event_public_site_references) BEGIN SELECT 1; END",
+        })),
       ],
     },
     { success: true, results: columnEvidence(requiredReviewerAiReviewColumns) },
@@ -74,17 +112,31 @@ function remoteEvidence(appliedMigrations = migrations) {
     },
     { success: true, results: [{ quick_check: "ok" }] },
     { success: true, results: [] },
+    {
+      success: true,
+      results: [...requiredPublicSiteColumns].flatMap(([tableName, columns]) =>
+        columnEvidence(columns, tableName),
+      ),
+    },
+    {
+      success: true,
+      results: foreignKeyEvidence(),
+    },
+    { success: true, results: [{ invalidCount: 0 }] },
   ];
 }
 
 test("remote schema validation requires the exact migration ledger and deployed schema contracts", () => {
   assert.deepEqual(validateRemoteSchemaEvidence(remoteEvidence(), migrations), {
-    migrationCount: 5,
+    migrationCount: 6,
     pendingMigrationCount: 0,
     brandingColumnCount: 7,
     brandingObjectCount: 11,
     reviewerAiColumnCount: 12,
     reviewerAiObjectCount: 14,
+    publicSiteColumnCount: 28,
+    publicSiteObjectCount: 4,
+    publicSiteForeignKeyCount: 9,
   });
 
   const pendingEvidence = remoteEvidence(migrations.slice(0, 2));
@@ -94,11 +146,14 @@ test("remote schema validation requires the exact migration ledger and deployed 
     }),
     {
       migrationCount: 2,
-      pendingMigrationCount: 3,
+      pendingMigrationCount: 4,
       brandingColumnCount: 7,
       brandingObjectCount: 11,
       reviewerAiColumnCount: 0,
       reviewerAiObjectCount: 0,
+      publicSiteColumnCount: 0,
+      publicSiteObjectCount: 0,
+      publicSiteForeignKeyCount: 0,
     },
   );
   const sharedReviewerAiBaseline = remoteEvidence(migrations.slice(0, 4));
@@ -108,11 +163,14 @@ test("remote schema validation requires the exact migration ledger and deployed 
     }),
     {
       migrationCount: 4,
-      pendingMigrationCount: 1,
+      pendingMigrationCount: 2,
       brandingColumnCount: 7,
       brandingObjectCount: 11,
       reviewerAiColumnCount: 0,
       reviewerAiObjectCount: 0,
+      publicSiteColumnCount: 0,
+      publicSiteObjectCount: 0,
+      publicSiteForeignKeyCount: 0,
     },
   );
   const reorderedLedger = remoteEvidence();
@@ -153,6 +211,74 @@ test("remote schema validation requires the exact migration ledger and deployed 
   assert.throws(
     () => validateRemoteSchemaEvidence(missingReviewerTrigger, migrations),
     /missing required trigger reviewer_ai_suggestions_import_requires_review/u,
+  );
+
+  const missingPublicSiteTrigger = remoteEvidence();
+  missingPublicSiteTrigger[2].results =
+    missingPublicSiteTrigger[2].results.filter(
+      ({ name }) =>
+        name !== "prevent_referenced_public_session_eligibility_change",
+    );
+  assert.throws(
+    () => validateRemoteSchemaEvidence(missingPublicSiteTrigger, migrations),
+    /missing required trigger prevent_referenced_public_session_eligibility_change/u,
+  );
+
+  const stalePublicSiteTrigger = remoteEvidence();
+  stalePublicSiteTrigger[2].results.find(
+    ({ name }) =>
+      name === "prevent_referenced_public_session_eligibility_change",
+  ).sql =
+    "CREATE TRIGGER prevent_referenced_public_session_eligibility_change BEFORE UPDATE ON sessions BEGIN SELECT 1; END";
+  assert.throws(
+    () => validateRemoteSchemaEvidence(stalePublicSiteTrigger, migrations),
+    /public-session eligibility trigger has the wrong protection contract/u,
+  );
+
+  const invalidPublicSiteColumn = remoteEvidence();
+  invalidPublicSiteColumn[8].results.find(
+    ({ tableName, name }) =>
+      tableName === "event_session_recordings" && name === "published_at",
+  ).type = "TEXT";
+  assert.throws(
+    () => validateRemoteSchemaEvidence(invalidPublicSiteColumn, migrations),
+    /event_session_recordings\.published_at is missing or has the wrong contract/u,
+  );
+
+  const missingPublicSiteForeignKey = remoteEvidence();
+  missingPublicSiteForeignKey[9].results =
+    missingPublicSiteForeignKey[9].results.filter(
+      ({ tableName, table }) =>
+        !(tableName === "event_session_recordings" && table === "sessions"),
+    );
+  assert.throws(
+    () => validateRemoteSchemaEvidence(missingPublicSiteForeignKey, migrations),
+    /event_session_recordings is missing its required foreign key \(session_id, event_id\)/u,
+  );
+
+  const splitCompositePublicSiteForeignKey = remoteEvidence();
+  const splitComponent = splitCompositePublicSiteForeignKey[9].results.find(
+    ({ tableName, table, from }) =>
+      tableName === "event_session_recordings" &&
+      table === "sessions" &&
+      from === "event_id",
+  );
+  splitComponent.id += 100;
+  splitComponent.seq = 0;
+  assert.throws(
+    () =>
+      validateRemoteSchemaEvidence(
+        splitCompositePublicSiteForeignKey,
+        migrations,
+      ),
+    /event_session_recordings is missing its required foreign key \(session_id, event_id\)/u,
+  );
+
+  const invalidManagedEmbedTheme = remoteEvidence();
+  invalidManagedEmbedTheme[10].results[0].invalidCount = 1;
+  assert.throws(
+    () => validateRemoteSchemaEvidence(invalidManagedEmbedTheme, migrations),
+    /managed programme embeds retain a missing or invalid theme/u,
   );
 
   const legacyReviewerRelation = remoteEvidence();

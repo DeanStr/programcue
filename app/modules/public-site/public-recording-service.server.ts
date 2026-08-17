@@ -11,10 +11,13 @@ import {
   resolvePublicSiteCommandRace,
 } from "./public-site-command.server";
 import {
+  PUBLIC_SITE_D1_PROGRAMME_AUTHORITY_REQUIRED,
   PublicSiteRevisionConflictError,
   PublicSiteValidationError,
 } from "./public-site-errors";
 import {
+  publicSiteAtomicBatch,
+  publicSiteAtomicMutationGuard,
   publicSiteChangeSequence,
   publicSiteMutationEvidence,
 } from "./public-site-mutation-evidence.server";
@@ -56,8 +59,40 @@ const speakerNamesSchema = z.array(z.string().trim().min(1).max(200));
 const entityCommandResponseSchema = z.object({ id: z.string().min(1) });
 const emptyCommandResponseSchema = z.object({});
 
+type RecordingEventState = {
+  repositoryProvider: "d1" | "airtable";
+  publicProjectionRevision: number;
+};
+
 export class PublicRecordingService {
   constructor(private readonly env: CloudflareEnvironment) {}
+
+  private async eventState(viewer: Viewer) {
+    const event = await this.env.DB.prepare(
+      `SELECT repository_provider AS repositoryProvider,
+              public_projection_revision AS publicProjectionRevision
+         FROM events
+        WHERE id = ? AND organisation_id = ? AND activation_status = 'active'`,
+    )
+      .bind(viewer.eventId, viewer.organisationId)
+      .first<RecordingEventState>();
+    if (!event) {
+      throw new PublicSiteValidationError(
+        "The recording event is unavailable.",
+      );
+    }
+    return event;
+  }
+
+  private async requireD1ProgrammeAuthority(viewer: Viewer) {
+    const event = await this.eventState(viewer);
+    if (event.repositoryProvider !== "d1") {
+      throw new PublicSiteValidationError(
+        PUBLIC_SITE_D1_PROGRAMME_AUTHORITY_REQUIRED,
+      );
+    }
+    return event;
+  }
 
   async list(
     viewer: Pick<Viewer, "eventId" | "organisationId">,
@@ -112,6 +147,7 @@ export class PublicRecordingService {
         entityCommandResponseSchema,
       );
     const command = prepared.command;
+    await this.requireD1ProgrammeAuthority(viewer);
     const session = await this.env.DB.prepare(
       `SELECT session.id
          FROM sessions session
@@ -138,6 +174,12 @@ export class PublicRecordingService {
                   updated_at = unixepoch()
             WHERE id = ? AND event_id = ? AND organisation_id = ?
               AND session_id = ? AND draft_revision = ?
+              AND EXISTS (
+                SELECT 1 FROM events event
+                 WHERE event.id = event_session_recordings.event_id
+                   AND event.organisation_id = event_session_recordings.organisation_id
+                   AND event.repository_provider = 'd1'
+              )
               AND EXISTS (${commandGuard.sql})`,
         ).bind(
           parsed.title,
@@ -160,7 +202,12 @@ export class PublicRecordingService {
              draft_revision, last_updated_by_person_id, last_operation_id,
              created_at, updated_at
            ) SELECT ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?, unixepoch(), unixepoch()
-              WHERE EXISTS (${commandGuard.sql})`,
+              WHERE EXISTS (
+                SELECT 1 FROM events event
+                 WHERE event.id = ? AND event.organisation_id = ?
+                   AND event.repository_provider = 'd1'
+              )
+                AND EXISTS (${commandGuard.sql})`,
         ).bind(
           id,
           viewer.organisationId,
@@ -172,29 +219,64 @@ export class PublicRecordingService {
           parsed.transcriptUrl,
           viewer.personId,
           operationId,
+          viewer.eventId,
+          viewer.organisationId,
           ...commandGuard.bindings,
         );
+    const mutationDescriptor = {
+      action: "recording.draft_saved",
+      entityType: "session_recording",
+      entityId: id,
+      changeType: parsed.id ? ("updated" as const) : ("created" as const),
+      metadata: { sessionId: parsed.sessionId },
+    };
+    const mutationResult = { id };
+    const mutationState = {
+      sql: `SELECT 1 FROM event_session_recordings
+             WHERE id = ? AND event_id = ? AND organisation_id = ?
+               AND session_id = ? AND draft_title = ?
+               AND draft_recording_url = ? AND draft_captions_url IS ?
+               AND draft_transcript_url IS ? AND draft_revision = ?
+               AND last_operation_id = ?`,
+      bindings: [
+        id,
+        viewer.eventId,
+        viewer.organisationId,
+        parsed.sessionId,
+        parsed.title,
+        parsed.recordingUrl,
+        parsed.captionsUrl,
+        parsed.transcriptUrl,
+        parsed.id ? parsed.revision + 1 : 1,
+        operationId,
+      ],
+    };
     const evidence = publicSiteMutationEvidence(
       this.env,
       viewer,
       operationId,
-      "recording.draft_saved",
-      "session_recording",
-      id,
-      parsed.id ? "updated" : "created",
-      { sessionId: parsed.sessionId },
-      {
-        sql: `SELECT 1 FROM event_session_recordings
-               WHERE id = ? AND event_id = ? AND organisation_id = ?
-                 AND last_operation_id = ?`,
-        bindings: [id, viewer.eventId, viewer.organisationId, operationId],
-      },
+      mutationDescriptor,
+      mutationState,
     );
-    const results = await this.env.DB.batch([
+    const results = await publicSiteAtomicBatch(this.env, [
       ...publicSiteCommandClaimStatements(this.env, viewer, command),
       mutation,
       ...evidence,
-      publicSiteCommandCompletionStatement(this.env, viewer, command, { id }),
+      publicSiteCommandCompletionStatement(
+        this.env,
+        viewer,
+        command,
+        mutationResult,
+      ),
+      publicSiteAtomicMutationGuard(
+        this.env,
+        viewer,
+        command,
+        mutationDescriptor,
+        mutationResult,
+        mutationState,
+        mutationState,
+      ),
     ]);
     if ((results[2]?.meta.changes ?? 0) !== 1) {
       const replay = await resolvePublicSiteCommandRace(
@@ -209,10 +291,6 @@ export class PublicRecordingService {
         );
       throw new PublicSiteRevisionConflictError();
     }
-    if ((results[5]?.meta.changes ?? 0) !== 1)
-      throw new Error(
-        "The recording draft committed without durable command completion.",
-      );
     return { id, changeSequence: publicSiteChangeSequence(results[4]) };
   }
 
@@ -231,31 +309,65 @@ export class PublicRecordingService {
         emptyCommandResponseSchema,
       );
     const command = prepared.command;
+    const event = await this.requireD1ProgrammeAuthority(viewer);
     const operationId = command.id;
     const commandGuard = publicSiteCommandGuard(viewer, command);
+    const mutationDescriptor = {
+      action: "recording.published",
+      entityType: "session_recording",
+      entityId: parsed.id,
+      changeType: "published" as const,
+      metadata: { revision: parsed.revision },
+    };
+    const mutationResult = {};
+    const mutationActivation = {
+      sql: `SELECT 1 FROM event_session_recordings
+             WHERE id = ? AND event_id = ? AND organisation_id = ?
+               AND published_revision = ? AND last_operation_id = ?`,
+      bindings: [
+        parsed.id,
+        viewer.eventId,
+        viewer.organisationId,
+        parsed.revision,
+        operationId,
+      ],
+    };
+    const publicationState = {
+      sql: `SELECT 1 FROM event_session_recordings recording
+             WHERE recording.id = ? AND recording.event_id = ?
+               AND recording.organisation_id = ?
+               AND recording.published_title = recording.draft_title
+               AND recording.published_recording_url = recording.draft_recording_url
+               AND recording.published_captions_url IS recording.draft_captions_url
+               AND recording.published_transcript_url IS recording.draft_transcript_url
+               AND recording.published_revision = ?
+               AND recording.published_at IS NOT NULL
+               AND recording.last_operation_id = ?
+               AND EXISTS (
+                 SELECT 1 FROM events event
+                 WHERE event.id = recording.event_id
+                   AND event.organisation_id = recording.organisation_id
+                   AND event.public_projection_revision = ?
+                   AND event.last_operation_id = ?
+               )`,
+      bindings: [
+        parsed.id,
+        viewer.eventId,
+        viewer.organisationId,
+        parsed.revision,
+        operationId,
+        event.publicProjectionRevision + 1,
+        operationId,
+      ],
+    };
     const evidence = publicSiteMutationEvidence(
       this.env,
       viewer,
       operationId,
-      "recording.published",
-      "session_recording",
-      parsed.id,
-      "published",
-      { revision: parsed.revision },
-      {
-        sql: `SELECT 1 FROM event_session_recordings
-               WHERE id = ? AND event_id = ? AND organisation_id = ?
-                 AND published_revision = ? AND last_operation_id = ?`,
-        bindings: [
-          parsed.id,
-          viewer.eventId,
-          viewer.organisationId,
-          parsed.revision,
-          operationId,
-        ],
-      },
+      mutationDescriptor,
+      mutationActivation,
     );
-    const results = await this.env.DB.batch([
+    const results = await publicSiteAtomicBatch(this.env, [
       ...publicSiteCommandClaimStatements(this.env, viewer, command),
       this.env.DB.prepare(
         `UPDATE event_session_recordings
@@ -269,6 +381,13 @@ export class PublicRecordingService {
           WHERE id = ? AND event_id = ? AND organisation_id = ?
             AND draft_revision = ?
             AND (published_revision IS NULL OR published_revision <> draft_revision)
+            AND EXISTS (
+              SELECT 1 FROM events event
+               WHERE event.id = event_session_recordings.event_id
+                 AND event.organisation_id = event_session_recordings.organisation_id
+                 AND event.repository_provider = 'd1'
+                 AND event.public_projection_revision = ?
+            )
             AND EXISTS (
               SELECT 1 FROM schedule_entries entry
               JOIN schedule_versions version
@@ -297,6 +416,7 @@ export class PublicRecordingService {
         viewer.eventId,
         viewer.organisationId,
         parsed.revision,
+        event.publicProjectionRevision,
         ...commandGuard.bindings,
       ),
       this.env.DB.prepare(
@@ -306,6 +426,7 @@ export class PublicRecordingService {
                 last_operation_id = ?, last_updated_by_person_id = ?,
                 updated_at = unixepoch()
           WHERE id = ? AND organisation_id = ?
+            AND public_projection_revision = ?
             AND EXISTS (
               SELECT 1 FROM event_session_recordings
                WHERE id = ? AND event_id = ? AND last_operation_id = ?
@@ -316,13 +437,28 @@ export class PublicRecordingService {
         viewer.personId,
         viewer.eventId,
         viewer.organisationId,
+        event.publicProjectionRevision,
         parsed.id,
         viewer.eventId,
         operationId,
         parsed.revision,
       ),
       ...evidence,
-      publicSiteCommandCompletionStatement(this.env, viewer, command, {}),
+      publicSiteCommandCompletionStatement(
+        this.env,
+        viewer,
+        command,
+        mutationResult,
+      ),
+      publicSiteAtomicMutationGuard(
+        this.env,
+        viewer,
+        command,
+        mutationDescriptor,
+        mutationResult,
+        mutationActivation,
+        publicationState,
+      ),
     ]);
     if ((results[2]?.meta.changes ?? 0) !== 1) {
       const replay = await resolvePublicSiteCommandRace(
@@ -336,10 +472,6 @@ export class PublicRecordingService {
         "The recording changed or its session is not in the published programme.",
       );
     }
-    if ((results[6]?.meta.changes ?? 0) !== 1)
-      throw new Error(
-        "The recording publication committed without durable command completion.",
-      );
     return { changeSequence: publicSiteChangeSequence(results[5]) };
   }
 
@@ -358,30 +490,60 @@ export class PublicRecordingService {
         emptyCommandResponseSchema,
       );
     const command = prepared.command;
+    const event = await this.eventState(viewer);
     const operationId = command.id;
     const commandGuard = publicSiteCommandGuard(viewer, command);
+    const mutationDescriptor = {
+      action: "recording.unpublished",
+      entityType: "session_recording",
+      entityId: parsed.id,
+      changeType: "updated" as const,
+      metadata: { revision: parsed.revision },
+    };
+    const mutationResult = {};
+    const mutationActivation = {
+      sql: `SELECT 1 FROM event_session_recordings
+             WHERE id = ? AND event_id = ? AND organisation_id = ?
+               AND published_at IS NULL AND last_operation_id = ?`,
+      bindings: [parsed.id, viewer.eventId, viewer.organisationId, operationId],
+    };
+    const withdrawalState = {
+      sql: `SELECT 1 FROM event_session_recordings recording
+             WHERE recording.id = ? AND recording.event_id = ?
+               AND recording.organisation_id = ?
+               AND recording.draft_revision = ?
+               AND recording.published_title IS NULL
+               AND recording.published_recording_url IS NULL
+               AND recording.published_captions_url IS NULL
+               AND recording.published_transcript_url IS NULL
+               AND recording.published_revision IS NULL
+               AND recording.published_at IS NULL
+               AND recording.last_operation_id = ?
+               AND EXISTS (
+                 SELECT 1 FROM events event
+                 WHERE event.id = recording.event_id
+                   AND event.organisation_id = recording.organisation_id
+                   AND event.public_projection_revision = ?
+                   AND event.last_operation_id = ?
+               )`,
+      bindings: [
+        parsed.id,
+        viewer.eventId,
+        viewer.organisationId,
+        parsed.revision,
+        operationId,
+        event.publicProjectionRevision + 1,
+        operationId,
+      ],
+    };
     const evidence = publicSiteMutationEvidence(
       this.env,
       viewer,
       operationId,
-      "recording.unpublished",
-      "session_recording",
-      parsed.id,
-      "updated",
-      { revision: parsed.revision },
-      {
-        sql: `SELECT 1 FROM event_session_recordings
-               WHERE id = ? AND event_id = ? AND organisation_id = ?
-                 AND published_at IS NULL AND last_operation_id = ?`,
-        bindings: [
-          parsed.id,
-          viewer.eventId,
-          viewer.organisationId,
-          operationId,
-        ],
-      },
+      mutationDescriptor,
+      mutationActivation,
     );
-    const results = await this.env.DB.batch([
+    const results = await publicSiteAtomicBatch(this.env, [
       ...publicSiteCommandClaimStatements(this.env, viewer, command),
       this.env.DB.prepare(
         `UPDATE event_session_recordings
@@ -392,6 +554,12 @@ export class PublicRecordingService {
                 updated_at = unixepoch()
           WHERE id = ? AND event_id = ? AND organisation_id = ?
             AND draft_revision = ? AND published_at IS NOT NULL
+            AND EXISTS (
+              SELECT 1 FROM events event
+               WHERE event.id = event_session_recordings.event_id
+                 AND event.organisation_id = event_session_recordings.organisation_id
+                 AND event.public_projection_revision = ?
+            )
             AND EXISTS (${commandGuard.sql})`,
       ).bind(
         viewer.personId,
@@ -400,6 +568,7 @@ export class PublicRecordingService {
         viewer.eventId,
         viewer.organisationId,
         parsed.revision,
+        event.publicProjectionRevision,
         ...commandGuard.bindings,
       ),
       this.env.DB.prepare(
@@ -409,6 +578,7 @@ export class PublicRecordingService {
                 last_operation_id = ?, last_updated_by_person_id = ?,
                 updated_at = unixepoch()
           WHERE id = ? AND organisation_id = ?
+            AND public_projection_revision = ?
             AND EXISTS (
               SELECT 1 FROM event_session_recordings
                WHERE id = ? AND event_id = ? AND organisation_id = ?
@@ -419,13 +589,28 @@ export class PublicRecordingService {
         viewer.personId,
         viewer.eventId,
         viewer.organisationId,
+        event.publicProjectionRevision,
         parsed.id,
         viewer.eventId,
         viewer.organisationId,
         operationId,
       ),
       ...evidence,
-      publicSiteCommandCompletionStatement(this.env, viewer, command, {}),
+      publicSiteCommandCompletionStatement(
+        this.env,
+        viewer,
+        command,
+        mutationResult,
+      ),
+      publicSiteAtomicMutationGuard(
+        this.env,
+        viewer,
+        command,
+        mutationDescriptor,
+        mutationResult,
+        mutationActivation,
+        withdrawalState,
+      ),
     ]);
     if ((results[2]?.meta.changes ?? 0) !== 1) {
       const replay = await resolvePublicSiteCommandRace(
@@ -437,10 +622,6 @@ export class PublicRecordingService {
         return parsePublicSiteCommandReplay(replay, emptyCommandResponseSchema);
       throw new PublicSiteRevisionConflictError();
     }
-    if ((results[6]?.meta.changes ?? 0) !== 1)
-      throw new Error(
-        "The recording withdrawal committed without durable command completion.",
-      );
     return { changeSequence: publicSiteChangeSequence(results[5]) };
   }
 

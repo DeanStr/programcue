@@ -6,8 +6,10 @@ import type { PublicRecordingWorkspaceItem } from "~/modules/public-site/public-
 
 function RecordingFields({
   recording,
+  disabled,
 }: {
   recording?: PublicRecordingWorkspaceItem;
+  disabled: boolean;
 }) {
   return (
     <>
@@ -19,6 +21,7 @@ function RecordingFields({
           required
           maxLength={160}
           defaultValue={recording?.draftTitle}
+          disabled={disabled}
         />
       </label>
       <label className="label">
@@ -29,6 +32,7 @@ function RecordingFields({
           required
           type="url"
           defaultValue={recording?.draftRecordingUrl}
+          disabled={disabled}
         />
       </label>
       <label className="label">
@@ -38,6 +42,7 @@ function RecordingFields({
           name="captionsUrl"
           type="url"
           defaultValue={recording?.draftCaptionsUrl ?? ""}
+          disabled={disabled}
         />
       </label>
       <label className="label">
@@ -47,6 +52,7 @@ function RecordingFields({
           name="transcriptUrl"
           type="url"
           defaultValue={recording?.draftTranscriptUrl ?? ""}
+          disabled={disabled}
         />
       </label>
     </>
@@ -56,6 +62,7 @@ function RecordingFields({
 export function AdminPublicSiteRecordings({
   recordings,
   programme,
+  programmeFeaturesAvailable,
   blocked,
   busy,
   onPublish,
@@ -63,6 +70,7 @@ export function AdminPublicSiteRecordings({
 }: {
   recordings: PublicRecordingWorkspaceItem[];
   programme: PublishedProgramme | null;
+  programmeFeaturesAvailable: boolean;
   blocked: boolean;
   busy: boolean;
   onPublish: (recording: PublicRecordingWorkspaceItem) => void;
@@ -88,6 +96,12 @@ export function AdminPublicSiteRecordings({
           </p>
         </div>
       </div>
+      {!programmeFeaturesAvailable ? (
+        <p className="validation-item warn" role="status">
+          Recording drafts and publication are unavailable for this event's
+          programme source. Published recordings can still be withdrawn.
+        </p>
+      ) : null}
       {recordings.map((recording) => (
         <Form
           method="post"
@@ -108,12 +122,15 @@ export function AdminPublicSiteRecordings({
             value={recording.draftRevision}
           />
           <strong>{recording.sessionTitle}</strong>
-          <RecordingFields recording={recording} />
+          <RecordingFields
+            recording={recording}
+            disabled={!programmeFeaturesAvailable}
+          />
           <div className="page-actions">
             <button
               className="btn small"
               type="submit"
-              disabled={blocked || busy}
+              disabled={blocked || busy || !programmeFeaturesAvailable}
             >
               Save recording draft
             </button>
@@ -123,6 +140,7 @@ export function AdminPublicSiteRecordings({
               disabled={
                 blocked ||
                 busy ||
+                !programmeFeaturesAvailable ||
                 recording.publishedRevision === recording.draftRevision
               }
               onClick={() => onPublish(recording)}
@@ -142,7 +160,7 @@ export function AdminPublicSiteRecordings({
           </div>
         </Form>
       ))}
-      {programme ? (
+      {programme && programmeFeaturesAvailable ? (
         <Form method="post" className="public-site-record-editor">
           <input type="hidden" name="intent" value="save-recording" />
           <input type="hidden" name="commandId" value={commandIds.get("")} />
@@ -168,7 +186,7 @@ export function AdminPublicSiteRecordings({
                 ))}
             </select>
           </label>
-          <RecordingFields />
+          <RecordingFields disabled={false} />
           <button
             className="btn small"
             type="submit"
@@ -177,11 +195,11 @@ export function AdminPublicSiteRecordings({
             Create recording draft
           </button>
         </Form>
-      ) : (
+      ) : !programme ? (
         <p className="help">
           Publish a programme before creating recording drafts.
         </p>
-      )}
+      ) : null}
     </section>
   );
 }

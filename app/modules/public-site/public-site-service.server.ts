@@ -19,6 +19,7 @@ import {
   type PublishedPublicSiteSnapshot,
   parsePublicSiteDraft,
   parsePublishedPublicSiteSnapshot,
+  publicSiteUsesD1ProgrammeFeatures,
   publishedPublicSiteSnapshotSchema,
   publishedPublicSiteSponsorSchema,
   revisionInputSchema,
@@ -35,12 +36,15 @@ import {
   resolvePublicSiteCommandRace,
 } from "./public-site-command.server";
 import {
+  PUBLIC_SITE_D1_PROGRAMME_AUTHORITY_REQUIRED,
   PublicSiteNotFoundError,
   PublicSiteRevisionConflictError,
   PublicSiteValidationError,
   PublishedPublicSiteInvariantError,
 } from "./public-site-errors";
 import {
+  publicSiteAtomicBatch,
+  publicSiteAtomicMutationGuard,
   publicSiteChangeSequence,
   publicSiteMutationEvidence,
 } from "./public-site-mutation-evidence.server";
@@ -48,6 +52,7 @@ import { resolvePublicSitePresentation } from "./public-site-presentation";
 
 export {
   PublicSiteCommandConflictError,
+  PublicSiteIntegrityError,
   PublicSiteNotFoundError,
   PublicSiteRevisionConflictError,
   PublicSiteValidationError,
@@ -104,6 +109,8 @@ type EventRow = {
   brandPublishedRevision: number;
   brandPublishedAt: number | null;
   programmePublishedAt: number | null;
+  publicProjectionRevision: number;
+  repositoryProvider: "d1" | "airtable";
 };
 
 export type PublicSiteEvent = PublishedProgramme["event"];
@@ -161,7 +168,9 @@ export class PublicSiteService {
               brand_draft_revision AS brandDraftRevision,
               brand_published_revision AS brandPublishedRevision,
               brand_published_at AS brandPublishedAt,
-              programme_published_at AS programmePublishedAt
+              programme_published_at AS programmePublishedAt,
+              public_projection_revision AS publicProjectionRevision,
+              repository_provider AS repositoryProvider
          FROM events
         WHERE id = ? AND organisation_id = ? AND activation_status = 'active'`,
     )
@@ -355,6 +364,14 @@ export class PublicSiteService {
         revisionCommandResponseSchema,
       );
     const command = prepared.command;
+    const requiresD1ProgrammeAuthority =
+      publicSiteUsesD1ProgrammeFeatures(configuration);
+    const event = await this.event(viewer);
+    if (requiresD1ProgrammeAuthority && event.repositoryProvider !== "d1") {
+      throw new PublicSiteValidationError(
+        PUBLIC_SITE_D1_PROGRAMME_AUTHORITY_REQUIRED,
+      );
+    }
     const operationId = command.id;
     const commandGuard = publicSiteCommandGuard(viewer, command);
     const mutation =
@@ -367,6 +384,7 @@ export class PublicSiteService {
                 WHERE EXISTS (
                   SELECT 1 FROM events
                    WHERE id = ? AND organisation_id = ? AND activation_status = 'active'
+                     AND (? = 0 OR repository_provider = 'd1')
                 )
                   AND NOT EXISTS (
                     SELECT 1 FROM event_public_sites WHERE event_id = ?
@@ -380,6 +398,7 @@ export class PublicSiteService {
             operationId,
             viewer.eventId,
             viewer.organisationId,
+            requiresD1ProgrammeAuthority ? 1 : 0,
             viewer.eventId,
             ...commandGuard.bindings,
           )
@@ -389,6 +408,14 @@ export class PublicSiteService {
                     last_updated_by_person_id = ?, last_operation_id = ?,
                     updated_at = unixepoch()
               WHERE event_id = ? AND organisation_id = ? AND draft_revision = ?
+                AND (
+                  ? = 0 OR EXISTS (
+                    SELECT 1 FROM events event
+                     WHERE event.id = event_public_sites.event_id
+                       AND event.organisation_id = event_public_sites.organisation_id
+                       AND event.repository_provider = 'd1'
+                  )
+                )
                 AND EXISTS (${commandGuard.sql})`,
           ).bind(
             JSON.stringify(configuration),
@@ -397,36 +424,57 @@ export class PublicSiteService {
             viewer.eventId,
             viewer.organisationId,
             parsed.revision,
+            requiresD1ProgrammeAuthority ? 1 : 0,
             ...commandGuard.bindings,
           );
+    const mutationDescriptor = {
+      action: "public_site.draft_saved",
+      entityType: "public_site",
+      entityId: viewer.eventId,
+      changeType:
+        parsed.revision === 0 ? ("created" as const) : ("updated" as const),
+      metadata: { revision: nextRevision },
+    };
+    const mutationResult = { revision: nextRevision };
+    const mutationState = {
+      sql: `SELECT 1 FROM event_public_sites
+             WHERE event_id = ? AND organisation_id = ?
+               AND draft_revision = ? AND draft_json = ?
+               AND last_operation_id = ?`,
+      bindings: [
+        viewer.eventId,
+        viewer.organisationId,
+        nextRevision,
+        JSON.stringify(configuration),
+        operationId,
+      ],
+    };
     const evidence = publicSiteMutationEvidence(
       this.env,
       viewer,
       operationId,
-      "public_site.draft_saved",
-      "public_site",
-      viewer.eventId,
-      parsed.revision === 0 ? "created" : "updated",
-      { revision: nextRevision },
-      {
-        sql: `SELECT 1 FROM event_public_sites
-               WHERE event_id = ? AND organisation_id = ?
-                 AND draft_revision = ? AND last_operation_id = ?`,
-        bindings: [
-          viewer.eventId,
-          viewer.organisationId,
-          nextRevision,
-          operationId,
-        ],
-      },
+      mutationDescriptor,
+      mutationState,
     );
-    const results = await this.env.DB.batch([
+    const results = await publicSiteAtomicBatch(this.env, [
       ...publicSiteCommandClaimStatements(this.env, viewer, command),
       mutation,
       ...evidence,
-      publicSiteCommandCompletionStatement(this.env, viewer, command, {
-        revision: nextRevision,
-      }),
+      publicSiteCommandCompletionStatement(
+        this.env,
+        viewer,
+        command,
+        mutationResult,
+      ),
+      publicSiteAtomicMutationGuard(
+        this.env,
+        viewer,
+        command,
+        mutationDescriptor,
+        mutationResult,
+        mutationState,
+        mutationState,
+      ),
     ]);
     if ((results[2]?.meta.changes ?? 0) !== 1) {
       const replay = await resolvePublicSiteCommandRace(
@@ -441,10 +489,6 @@ export class PublicSiteService {
         );
       throw new PublicSiteRevisionConflictError();
     }
-    if ((results[5]?.meta.changes ?? 0) !== 1)
-      throw new Error(
-        "The public-site draft committed without durable command completion.",
-      );
     return {
       revision: nextRevision,
       changeSequence: publicSiteChangeSequence(results[4]),
@@ -484,15 +528,22 @@ export class PublicSiteService {
       );
     const command = prepared.command;
     const event = await this.event(viewer);
-    const [siteSnapshot, programme] = await Promise.all([
-      this.siteAndSponsors(viewer),
-      new PublicProgrammeService(this.env).getPublished(event.slug),
-    ]);
+    const siteSnapshot = await this.siteAndSponsors(viewer);
     const site = siteSnapshot?.site ?? null;
     const sponsors = siteSnapshot?.sponsors ?? [];
     if (!site || site.draftRevision !== parsed.revision)
       throw new PublicSiteRevisionConflictError();
     const configuration = parsePublicSiteDraft(site.draftJson);
+    const requiresD1ProgrammeAuthority =
+      publicSiteUsesD1ProgrammeFeatures(configuration);
+    if (requiresD1ProgrammeAuthority && event.repositoryProvider !== "d1") {
+      throw new PublicSiteValidationError(
+        PUBLIC_SITE_D1_PROGRAMME_AUTHORITY_REQUIRED,
+      );
+    }
+    const programme = await new PublicProgrammeService(this.env).getPublished(
+      event.slug,
+    );
     this.validateConfiguration(configuration, event, programme);
     if (configuration.pages.sponsors.enabled && sponsors.length === 0)
       throw new PublicSiteValidationError(
@@ -606,6 +657,13 @@ export class PublicSiteService {
                     AND person.profile_status = 'published'
                )
             )
+            AND EXISTS (
+              SELECT 1 FROM events event
+               WHERE event.id = event_public_sites.event_id
+                 AND event.organisation_id = event_public_sites.organisation_id
+                 AND event.public_projection_revision = ?
+                 AND (? = 0 OR event.repository_provider = 'd1')
+            )
             AND EXISTS (${commandGuard.sql})`,
       ).bind(
         JSON.stringify(snapshot),
@@ -624,6 +682,8 @@ export class PublicSiteService {
           : 0,
         JSON.stringify(featuredSessionIds),
         JSON.stringify(featuredSpeakerIds),
+        event.publicProjectionRevision,
+        requiresD1ProgrammeAuthority ? 1 : 0,
         ...commandGuard.bindings,
       ),
       this.env.DB.prepare(
@@ -669,6 +729,7 @@ export class PublicSiteService {
                 last_operation_id = ?, last_updated_by_person_id = ?,
                 updated_at = unixepoch()
           WHERE id = ? AND organisation_id = ?
+            AND public_projection_revision = ?
             AND EXISTS (
               SELECT 1 FROM event_public_sites
                WHERE event_id = ? AND published_revision = ? AND last_operation_id = ?
@@ -678,20 +739,18 @@ export class PublicSiteService {
         viewer.personId,
         viewer.eventId,
         viewer.organisationId,
+        event.publicProjectionRevision,
         viewer.eventId,
         parsed.revision,
         operationId,
       ),
     ];
-    const evidence = publicSiteMutationEvidence(
-      this.env,
-      viewer,
-      operationId,
-      "public_site.published",
-      "public_site",
-      viewer.eventId,
-      "published",
-      {
+    const mutationDescriptor = {
+      action: "public_site.published",
+      entityType: "public_site",
+      entityId: viewer.eventId,
+      changeType: "published" as const,
+      metadata: {
         revision: parsed.revision,
         sections: configuration.sectionOrder.filter(
           (section) => configuration.sectionVisibility[section],
@@ -701,25 +760,92 @@ export class PublicSiteService {
           .map(([page]) => page),
         sponsorCount: sponsors.length,
       },
-      {
-        sql: `SELECT 1 FROM event_public_sites
-               WHERE event_id = ? AND organisation_id = ?
-                 AND published_revision = ? AND last_operation_id = ?`,
-        bindings: [
-          viewer.eventId,
-          viewer.organisationId,
-          parsed.revision,
-          operationId,
-        ],
-      },
+    };
+    const mutationResult = { revision: parsed.revision };
+    const mutationActivation = {
+      sql: `SELECT 1 FROM event_public_sites
+             WHERE event_id = ? AND organisation_id = ?
+               AND published_revision = ? AND last_operation_id = ?`,
+      bindings: [
+        viewer.eventId,
+        viewer.organisationId,
+        parsed.revision,
+        operationId,
+      ],
+    };
+    const referencesJson = JSON.stringify(references);
+    const publicationState = {
+      sql: `SELECT 1 FROM event_public_sites site
+             WHERE site.event_id = ? AND site.organisation_id = ?
+               AND site.published_revision = ? AND site.published_json = ?
+               AND site.last_operation_id = ?
+               AND EXISTS (
+                 SELECT 1 FROM events event
+                  WHERE event.id = site.event_id
+                    AND event.organisation_id = site.organisation_id
+                    AND event.public_projection_revision = ?
+                    AND event.last_operation_id = ?
+               )
+               AND NOT EXISTS (
+                 SELECT reference.kind, reference.record_id, reference.site_revision
+                   FROM event_public_site_references reference
+                  WHERE reference.event_id = site.event_id
+                    AND reference.organisation_id = site.organisation_id
+                 EXCEPT
+                 SELECT json_extract(expected.value, '$.kind'),
+                        json_extract(expected.value, '$.recordId'), ?
+                   FROM json_each(?) expected
+               )
+               AND NOT EXISTS (
+                 SELECT json_extract(expected.value, '$.kind'),
+                        json_extract(expected.value, '$.recordId'), ?
+                   FROM json_each(?) expected
+                 EXCEPT
+                 SELECT reference.kind, reference.record_id, reference.site_revision
+                   FROM event_public_site_references reference
+                  WHERE reference.event_id = site.event_id
+                    AND reference.organisation_id = site.organisation_id
+               )`,
+      bindings: [
+        viewer.eventId,
+        viewer.organisationId,
+        parsed.revision,
+        JSON.stringify(snapshot),
+        operationId,
+        event.publicProjectionRevision + 1,
+        operationId,
+        parsed.revision,
+        referencesJson,
+        parsed.revision,
+        referencesJson,
+      ],
+    };
+    const evidence = publicSiteMutationEvidence(
+      this.env,
+      viewer,
+      operationId,
+      mutationDescriptor,
+      mutationActivation,
     );
-    const results = await this.env.DB.batch([
+    const results = await publicSiteAtomicBatch(this.env, [
       ...publicSiteCommandClaimStatements(this.env, viewer, command),
       ...statements,
       ...evidence,
-      publicSiteCommandCompletionStatement(this.env, viewer, command, {
-        revision: parsed.revision,
-      }),
+      publicSiteCommandCompletionStatement(
+        this.env,
+        viewer,
+        command,
+        mutationResult,
+      ),
+      publicSiteAtomicMutationGuard(
+        this.env,
+        viewer,
+        command,
+        mutationDescriptor,
+        mutationResult,
+        mutationActivation,
+        publicationState,
+      ),
     ]);
     if ((results[2]?.meta.changes ?? 0) !== 1) {
       const replay = await resolvePublicSiteCommandRace(
@@ -734,13 +860,9 @@ export class PublicSiteService {
         );
       throw new PublicSiteRevisionConflictError();
     }
-    if ((results.at(-1)?.meta.changes ?? 0) !== 1)
-      throw new Error(
-        "The site publication committed without durable command completion.",
-      );
     return {
       revision: parsed.revision,
-      changeSequence: publicSiteChangeSequence(results.at(-2)),
+      changeSequence: publicSiteChangeSequence(results.at(-3)),
     };
   }
 
@@ -784,6 +906,12 @@ export class PublicSiteService {
                   last_updated_by_person_id = ?, last_operation_id = ?,
                   updated_at = unixepoch()
             WHERE id = ? AND event_id = ? AND organisation_id = ? AND revision = ?
+              AND EXISTS (
+                SELECT 1 FROM event_public_sites site
+                 WHERE site.event_id = event_site_sponsors.event_id
+                   AND site.organisation_id = event_site_sponsors.organisation_id
+                   AND site.draft_revision = ?
+              )
               AND EXISTS (${commandGuard.sql})`,
         ).bind(
           parsed.name,
@@ -798,6 +926,7 @@ export class PublicSiteService {
           viewer.eventId,
           viewer.organisationId,
           parsed.revision,
+          site.draftRevision,
           ...commandGuard.bindings,
         )
       : this.env.DB.prepare(
@@ -806,7 +935,12 @@ export class PublicSiteService {
              description, position, revision, last_updated_by_person_id,
              last_operation_id, created_at, updated_at
            ) SELECT ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?, unixepoch(), unixepoch()
-              WHERE EXISTS (${commandGuard.sql})`,
+              WHERE EXISTS (
+                SELECT 1 FROM event_public_sites site
+                 WHERE site.event_id = ? AND site.organisation_id = ?
+                   AND site.draft_revision = ?
+              )
+                AND EXISTS (${commandGuard.sql})`,
         ).bind(
           id,
           viewer.organisationId,
@@ -819,25 +953,66 @@ export class PublicSiteService {
           parsed.position,
           viewer.personId,
           operationId,
+          viewer.eventId,
+          viewer.organisationId,
+          site.draftRevision,
           ...commandGuard.bindings,
         );
+    const mutationDescriptor = {
+      action: parsed.id
+        ? "public_site.sponsor_updated"
+        : "public_site.sponsor_created",
+      entityType: "event_sponsor",
+      entityId: id,
+      changeType: parsed.id ? ("updated" as const) : ("created" as const),
+      metadata: { name: parsed.name, tier: parsed.tier },
+    };
+    const mutationResult = { id };
+    const mutationActivation = {
+      sql: `SELECT 1 FROM event_site_sponsors
+             WHERE id = ? AND event_id = ? AND organisation_id = ?
+               AND last_operation_id = ?`,
+      bindings: [id, viewer.eventId, viewer.organisationId, operationId],
+    };
+    const sponsorState = {
+      sql: `SELECT 1 FROM event_site_sponsors sponsor
+             WHERE sponsor.id = ? AND sponsor.event_id = ?
+               AND sponsor.organisation_id = ? AND sponsor.name = ?
+               AND sponsor.tier = ? AND sponsor.website_url IS ?
+               AND sponsor.logo_url IS ? AND sponsor.description IS ?
+               AND sponsor.position = ? AND sponsor.revision = ?
+               AND sponsor.last_operation_id = ?
+               AND EXISTS (
+                 SELECT 1 FROM event_public_sites site
+                  WHERE site.event_id = sponsor.event_id
+                    AND site.organisation_id = sponsor.organisation_id
+                    AND site.draft_revision = ?
+                    AND site.last_operation_id = ?
+               )`,
+      bindings: [
+        id,
+        viewer.eventId,
+        viewer.organisationId,
+        parsed.name,
+        parsed.tier,
+        parsed.websiteUrl,
+        parsed.logoUrl,
+        parsed.description,
+        parsed.position,
+        parsed.id ? parsed.revision + 1 : 1,
+        operationId,
+        site.draftRevision + 1,
+        operationId,
+      ],
+    };
     const evidence = publicSiteMutationEvidence(
       this.env,
       viewer,
       operationId,
-      parsed.id ? "public_site.sponsor_updated" : "public_site.sponsor_created",
-      "event_sponsor",
-      id,
-      parsed.id ? "updated" : "created",
-      { name: parsed.name, tier: parsed.tier },
-      {
-        sql: `SELECT 1 FROM event_site_sponsors
-               WHERE id = ? AND event_id = ? AND organisation_id = ?
-                 AND last_operation_id = ?`,
-        bindings: [id, viewer.eventId, viewer.organisationId, operationId],
-      },
+      mutationDescriptor,
+      mutationActivation,
     );
-    const results = await this.env.DB.batch([
+    const results = await publicSiteAtomicBatch(this.env, [
       ...publicSiteCommandClaimStatements(this.env, viewer, command),
       mutation,
       this.env.DB.prepare(
@@ -846,6 +1021,7 @@ export class PublicSiteService {
                 last_updated_by_person_id = ?, last_operation_id = ?,
                 updated_at = unixepoch()
           WHERE event_id = ? AND organisation_id = ?
+            AND draft_revision = ?
             AND EXISTS (
               SELECT 1 FROM event_site_sponsors
                WHERE id = ? AND event_id = ? AND last_operation_id = ?
@@ -855,12 +1031,27 @@ export class PublicSiteService {
         operationId,
         viewer.eventId,
         viewer.organisationId,
+        site.draftRevision,
         id,
         viewer.eventId,
         operationId,
       ),
       ...evidence,
-      publicSiteCommandCompletionStatement(this.env, viewer, command, { id }),
+      publicSiteCommandCompletionStatement(
+        this.env,
+        viewer,
+        command,
+        mutationResult,
+      ),
+      publicSiteAtomicMutationGuard(
+        this.env,
+        viewer,
+        command,
+        mutationDescriptor,
+        mutationResult,
+        mutationActivation,
+        sponsorState,
+      ),
     ]);
     if ((results[2]?.meta.changes ?? 0) !== 1) {
       const replay = await resolvePublicSiteCommandRace(
@@ -875,10 +1066,6 @@ export class PublicSiteService {
         );
       throw new PublicSiteRevisionConflictError();
     }
-    if ((results[6]?.meta.changes ?? 0) !== 1)
-      throw new Error(
-        "The sponsor mutation committed without durable command completion.",
-      );
     return { id, changeSequence: publicSiteChangeSequence(results[5]) };
   }
 
@@ -897,25 +1084,53 @@ export class PublicSiteService {
         emptyCommandResponseSchema,
       );
     const command = prepared.command;
+    const site = await this.site(viewer);
+    if (!site)
+      throw new PublicSiteValidationError(
+        "Save the public-site draft before removing sponsors.",
+      );
     const operationId = command.id;
     const commandGuard = publicSiteCommandGuard(viewer, command);
+    const mutationDescriptor = {
+      action: "public_site.sponsor_deleted",
+      entityType: "event_sponsor",
+      entityId: parsed.id,
+      changeType: "deleted" as const,
+      metadata: { revision: parsed.revision },
+    };
+    const mutationResult = {};
+    const mutationActivation = {
+      sql: `SELECT 1 FROM event_public_sites
+             WHERE event_id = ? AND organisation_id = ?
+               AND last_operation_id = ?`,
+      bindings: [viewer.eventId, viewer.organisationId, operationId],
+    };
+    const sponsorDeletionState = {
+      sql: `SELECT 1 FROM event_public_sites site
+             WHERE site.event_id = ? AND site.organisation_id = ?
+               AND site.draft_revision = ?
+               AND site.last_operation_id = ?
+               AND NOT EXISTS (
+                 SELECT 1 FROM event_site_sponsors sponsor
+                  WHERE sponsor.id = ? AND sponsor.event_id = site.event_id
+                    AND sponsor.organisation_id = site.organisation_id
+               )`,
+      bindings: [
+        viewer.eventId,
+        viewer.organisationId,
+        site.draftRevision + 1,
+        operationId,
+        parsed.id,
+      ],
+    };
     const evidence = publicSiteMutationEvidence(
       this.env,
       viewer,
       operationId,
-      "public_site.sponsor_deleted",
-      "event_sponsor",
-      parsed.id,
-      "deleted",
-      { revision: parsed.revision },
-      {
-        sql: `SELECT 1 FROM event_public_sites
-               WHERE event_id = ? AND organisation_id = ?
-                 AND last_operation_id = ?`,
-        bindings: [viewer.eventId, viewer.organisationId, operationId],
-      },
+      mutationDescriptor,
+      mutationActivation,
     );
-    const results = await this.env.DB.batch([
+    const results = await publicSiteAtomicBatch(this.env, [
       ...publicSiteCommandClaimStatements(this.env, viewer, command),
       this.env.DB.prepare(
         `UPDATE event_public_sites
@@ -923,6 +1138,7 @@ export class PublicSiteService {
                 last_updated_by_person_id = ?, last_operation_id = ?,
                 updated_at = unixepoch()
           WHERE event_id = ? AND organisation_id = ?
+            AND draft_revision = ?
             AND EXISTS (${commandGuard.sql})
             AND EXISTS (
               SELECT 1 FROM event_site_sponsors
@@ -934,6 +1150,7 @@ export class PublicSiteService {
         operationId,
         viewer.eventId,
         viewer.organisationId,
+        site.draftRevision,
         ...commandGuard.bindings,
         parsed.id,
         viewer.eventId,
@@ -958,7 +1175,21 @@ export class PublicSiteService {
         operationId,
       ),
       ...evidence,
-      publicSiteCommandCompletionStatement(this.env, viewer, command, {}),
+      publicSiteCommandCompletionStatement(
+        this.env,
+        viewer,
+        command,
+        mutationResult,
+      ),
+      publicSiteAtomicMutationGuard(
+        this.env,
+        viewer,
+        command,
+        mutationDescriptor,
+        mutationResult,
+        mutationActivation,
+        sponsorDeletionState,
+      ),
     ]);
     if (
       (results[2]?.meta.changes ?? 0) !== 1 ||
@@ -973,10 +1204,6 @@ export class PublicSiteService {
         return parsePublicSiteCommandReplay(replay, emptyCommandResponseSchema);
       throw new PublicSiteRevisionConflictError();
     }
-    if ((results[6]?.meta.changes ?? 0) !== 1)
-      throw new Error(
-        "The sponsor deletion committed without durable command completion.",
-      );
     return { changeSequence: publicSiteChangeSequence(results[5]) };
   }
 
@@ -1000,6 +1227,8 @@ export class PublicSiteService {
               event.brand_published_revision AS brandPublishedRevision,
               event.brand_published_at AS brandPublishedAt,
               event.programme_published_at AS programmePublishedAt,
+              event.public_projection_revision AS publicProjectionRevision,
+              event.repository_provider AS repositoryProvider,
               event.organisation_id AS organisationId,
               (
                 SELECT json_object(
@@ -1045,6 +1274,14 @@ export class PublicSiteService {
       >();
     if (!row) return null;
     const configuration = parsePublishedPublicSiteSnapshot(row.publishedJson);
+    if (
+      row.repositoryProvider !== "d1" &&
+      publicSiteUsesD1ProgrammeFeatures(configuration)
+    ) {
+      throw new PublishedPublicSiteInvariantError(
+        "The published event site contains D1-bound programme content for a non-D1 programme source.",
+      );
+    }
     const event = this.publicEvent(row, now);
     let recordings: PublishedPublicRecording[] = [];
     if (configuration.postEvent.enabled) {

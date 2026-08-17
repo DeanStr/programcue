@@ -829,6 +829,36 @@ mutation or audit row, while reuse with changed details returns a conflict. The
 command claim, domain mutation, audit/change evidence and durable response
 complete in one D1 batch.
 
+Every public-site, sponsor and recording command ends with an operation-specific
+atomic batch guard. Once that command's domain operation marker exists, the
+guard requires the complete resulting state, exact audit and event-change
+evidence, positive change cursor and durable completed response; site
+publication also requires its exact featured-reference graph and event
+projection revision, sponsor mutations require the parent site's exact next
+draft revision, and recording publication or withdrawal requires the event's
+exact next projection revision. A
+missing dependent statement therefore fails and rolls back the D1 batch rather
+than leaving a processing command or reporting a committed operation as an
+error. An unclaimed or rejected compare-and-set does not activate the guard, so
+ordinary conflicts and command races retain their specific handling.
+
+The editorial site draft, fixed pages and sponsors remain D1 control-plane
+workflow state for either repository provider. Featured session/speaker
+references and post-event recordings currently require D1 programme authority,
+because their commit boundary otherwise would validate mutable D1 programme
+rows after presenting an Airtable-authoritative immutable projection. The
+server rejects those configurations before provider work and repeats the
+authority predicate in the atomic mutation; hidden featured IDs are rejected as
+provider-bound state, and the interface permits existing unsupported selections
+to be cleared before the draft is saved even when they are absent from the
+current provider programme. A published provider-incompatible snapshot fails
+public reads instead of serving D1 programme content or silently hiding it. Recording
+draft writes and publication fail explicitly for Airtable authority, while an
+already-published recording can always be withdrawn. There is no Airtable-to-D1
+programme fallback. Full Airtable support would extend the existing immutable
+published-programme projection mapping with a provider-bound eligibility
+manifest rather than add a parallel snapshot system.
+
 Sponsors are event-scoped structured draft records and enter the public surface
 only through the site snapshot. Recordings accept external credential-free
 HTTPS URLs only; saving is explicitly neither upload nor publication. A separate

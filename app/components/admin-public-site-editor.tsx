@@ -15,10 +15,12 @@ function SiteSectionControls({
   configuration,
   setConfiguration,
   programmeAvailable,
+  programmeReferencesAvailable,
 }: {
   configuration: PublicSiteDraft;
   setConfiguration: Dispatch<SetStateAction<PublicSiteDraft>>;
   programmeAvailable: boolean;
+  programmeReferencesAvailable: boolean;
 }) {
   function move(index: number, direction: -1 | 1) {
     setConfiguration((current) => {
@@ -38,13 +40,17 @@ function SiteSectionControls({
               type="checkbox"
               checked={configuration.sectionVisibility[section]}
               disabled={
-                !programmeAvailable &&
                 !configuration.sectionVisibility[section] &&
-                [
-                  "featured_speakers",
-                  "featured_sessions",
-                  "statistics",
-                ].includes(section)
+                ((!programmeAvailable &&
+                  [
+                    "featured_speakers",
+                    "featured_sessions",
+                    "statistics",
+                  ].includes(section)) ||
+                  (!programmeReferencesAvailable &&
+                    ["featured_speakers", "featured_sessions"].includes(
+                      section,
+                    )))
               }
               onChange={(event) =>
                 setConfiguration((current) => ({
@@ -93,6 +99,7 @@ export function AdminPublicSiteEditor({
   draftRevision,
   serializedConfiguration,
   programme,
+  programmeReferencesAvailable,
   unsaved,
   busy,
   saving,
@@ -102,6 +109,7 @@ export function AdminPublicSiteEditor({
   draftRevision: number;
   serializedConfiguration: string;
   programme: PublishedProgramme | null;
+  programmeReferencesAvailable: boolean;
   unsaved: boolean;
   busy: boolean;
   saving: boolean;
@@ -110,6 +118,18 @@ export function AdminPublicSiteEditor({
     () => ({ revision: draftRevision, id: crypto.randomUUID() }),
     [draftRevision],
   ).id;
+  const programmeSpeakerIds = new Set(
+    programme?.speakers.map((speaker) => speaker.id) ?? [],
+  );
+  const unavailableFeaturedSpeakerIds = configuration.featuredSpeakerIds.filter(
+    (speakerId) => !programmeSpeakerIds.has(speakerId),
+  );
+  const programmeSessionIds = new Set(
+    programme?.sessions.map((session) => session.id) ?? [],
+  );
+  const unavailableFeaturedSessionIds = configuration.featuredSessionIds.filter(
+    (sessionId) => !programmeSessionIds.has(sessionId),
+  );
   return (
     <Form method="post" className="card pad">
       <input type="hidden" name="intent" value="save-site" />
@@ -170,6 +190,7 @@ export function AdminPublicSiteEditor({
         configuration={configuration}
         setConfiguration={setConfiguration}
         programmeAvailable={programme !== null}
+        programmeReferencesAvailable={programmeReferencesAvailable}
       />
 
       <label className="label mt">
@@ -200,7 +221,8 @@ export function AdminPublicSiteEditor({
               checked={configuration.featuredSpeakerIds.includes(speaker.id)}
               disabled={
                 !configuration.featuredSpeakerIds.includes(speaker.id) &&
-                configuration.featuredSpeakerIds.length >= 12
+                (!programmeReferencesAvailable ||
+                  configuration.featuredSpeakerIds.length >= 12)
               }
               onChange={(event) =>
                 setConfiguration((current) => ({
@@ -218,6 +240,29 @@ export function AdminPublicSiteEditor({
         )) ?? (
           <p className="help">Publish a programme before choosing speakers.</p>
         )}
+        {unavailableFeaturedSpeakerIds.map((speakerId) => (
+          <label key={`unavailable-speaker-${speakerId}`}>
+            <input
+              type="checkbox"
+              checked
+              onChange={() =>
+                setConfiguration((current) => ({
+                  ...current,
+                  featuredSpeakerIds: current.featuredSpeakerIds.filter(
+                    (id) => id !== speakerId,
+                  ),
+                }))
+              }
+            />{" "}
+            Remove unavailable selected speaker: {speakerId}
+          </label>
+        ))}
+        {!programmeReferencesAvailable ? (
+          <p className="help">
+            Featured programme content is unavailable for this event's programme
+            source. Existing selections can be removed.
+          </p>
+        ) : null}
       </fieldset>
       <fieldset className="public-site-selection mt">
         <legend>Featured sessions</legend>
@@ -228,7 +273,8 @@ export function AdminPublicSiteEditor({
               checked={configuration.featuredSessionIds.includes(session.id)}
               disabled={
                 !configuration.featuredSessionIds.includes(session.id) &&
-                configuration.featuredSessionIds.length >= 12
+                (!programmeReferencesAvailable ||
+                  configuration.featuredSessionIds.length >= 12)
               }
               onChange={(event) =>
                 setConfiguration((current) => ({
@@ -246,6 +292,29 @@ export function AdminPublicSiteEditor({
         )) ?? (
           <p className="help">Publish a programme before choosing sessions.</p>
         )}
+        {unavailableFeaturedSessionIds.map((sessionId) => (
+          <label key={`unavailable-session-${sessionId}`}>
+            <input
+              type="checkbox"
+              checked
+              onChange={() =>
+                setConfiguration((current) => ({
+                  ...current,
+                  featuredSessionIds: current.featuredSessionIds.filter(
+                    (id) => id !== sessionId,
+                  ),
+                }))
+              }
+            />{" "}
+            Remove unavailable selected session: {sessionId}
+          </label>
+        ))}
+        {!programmeReferencesAvailable ? (
+          <p className="help">
+            Featured programme content is unavailable for this event's programme
+            source. Existing selections can be removed.
+          </p>
+        ) : null}
       </fieldset>
       <fieldset className="public-site-selection mt">
         <legend>Statistics</legend>
@@ -460,7 +529,10 @@ export function AdminPublicSiteEditor({
           <input
             type="checkbox"
             checked={configuration.postEvent.enabled}
-            disabled={!programme && !configuration.postEvent.enabled}
+            disabled={
+              (!programme || !programmeReferencesAvailable) &&
+              !configuration.postEvent.enabled
+            }
             onChange={(event) =>
               setConfiguration((current) => ({
                 ...current,
@@ -473,6 +545,12 @@ export function AdminPublicSiteEditor({
           />{" "}
           Show published recordings after the event ends
         </label>
+        {!programmeReferencesAvailable ? (
+          <p className="help">
+            Post-event recordings are unavailable for this event's programme
+            source.
+          </p>
+        ) : null}
         <label className="label mt">
           Heading
           <input

@@ -347,6 +347,18 @@ export type PublishedPublicSiteSnapshot = z.infer<
   typeof publishedPublicSiteSnapshotSchema
 >;
 
+export function publicSiteUsesD1ProgrammeFeatures(
+  configuration: PublicSiteDraft,
+) {
+  return (
+    configuration.sectionVisibility.featured_sessions ||
+    configuration.sectionVisibility.featured_speakers ||
+    configuration.featuredSessionIds.length > 0 ||
+    configuration.featuredSpeakerIds.length > 0 ||
+    configuration.postEvent.enabled
+  );
+}
+
 export function defaultPublicSiteDraft(): PublicSiteDraft {
   return {
     schemaVersion: 1,
