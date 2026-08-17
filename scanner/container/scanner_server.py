@@ -52,7 +52,13 @@ def log_shutdown(reason: str) -> None:
 
 def shutdown_server(server: ThreadingHTTPServer, reason: str) -> None:
     log_shutdown(reason)
-    server.shutdown()
+    # HTTPServer.shutdown() waits for serve_forever() and must not run on the
+    # request thread, or the handler can stall with SCAN_LOCK still held.
+    threading.Thread(
+        target=server.shutdown,
+        name="scanner-shutdown",
+        daemon=True,
+    ).start()
 
 
 def start_lifetime_guard(server: ThreadingHTTPServer) -> threading.Timer:
@@ -430,7 +436,10 @@ class ScannerHandler(BaseHTTPRequestHandler):
         finally:
             if should_shutdown:
                 shutdown_server(self.server, "scan_request_finished")
-            SCAN_LOCK.release()
+                # Keep the lock: this instance is exiting and must not admit
+                # another scan while the listen loop stops.
+            else:
+                SCAN_LOCK.release()
 
     def log_message(self, format: str, *args: Any) -> None:
         return

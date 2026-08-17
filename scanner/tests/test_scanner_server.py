@@ -18,6 +18,17 @@ class ScannerServerContractTests(unittest.TestCase):
     host = "327c60945460c16be8ecdbbc7fa35447.r2.cloudflarestorage.com"
     bucket = "program-cue-files"
 
+    def setUp(self):
+        # A ready scan keeps the process-wide lock as it exits. Isolate each
+        # test so that one-shot shutdown cannot leak capacity into later cases.
+        patcher = mock.patch.object(
+            scanner,
+            "SCAN_LOCK",
+            scanner.threading.BoundedSemaphore(1),
+        )
+        patcher.start()
+        self.addCleanup(patcher.stop)
+
     def job(self):
         return {
             "jobId": "file-scan-dispatch:version-1",
@@ -188,6 +199,8 @@ class ScannerServerContractTests(unittest.TestCase):
             },
             {"Retry-After": "15"},
         )
+        self.assertTrue(scanner.SCAN_LOCK.acquire(blocking=False))
+        scanner.SCAN_LOCK.release()
 
     def test_ready_scan_shuts_down_container_after_response(self):
         handler = object.__new__(scanner.ScannerHandler)
@@ -219,6 +232,10 @@ class ScannerServerContractTests(unittest.TestCase):
         shutdown.assert_called_once_with(
             handler.server,
             "scan_request_finished",
+        )
+        self.assertFalse(
+            scanner.SCAN_LOCK.acquire(blocking=False),
+            "an admitted scan must keep the lock while the instance exits",
         )
 
     def test_ready_scan_stops_the_real_http_server(self):
