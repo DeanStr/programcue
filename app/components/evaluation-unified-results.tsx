@@ -16,6 +16,10 @@ function humanise(value: string) {
   return value.replaceAll("_", " ");
 }
 
+function providerStateLabel(status: string) {
+  return status === "sent" ? "Provider accepted" : humanise(status);
+}
+
 export function EvaluationUnifiedResults() {
   const {
     loaderData,
@@ -636,7 +640,9 @@ export function EvaluationUnifiedResults() {
                                             <div>
                                               <dt>Communication</dt>
                                               <dd>
-                                                {decision.communicationStatus}{" "}
+                                                {providerStateLabel(
+                                                  decision.communicationStatus,
+                                                )}{" "}
                                                 <code>
                                                   {decision.communicationId}
                                                 </code>
@@ -645,19 +651,36 @@ export function EvaluationUnifiedResults() {
                                             <div>
                                               <dt>Recipient delivery</dt>
                                               <dd>
-                                                {decision.deliveryStatus} via{" "}
-                                                {decision.deliveryProvider}{" "}
+                                                {providerStateLabel(
+                                                  decision.deliveryStatus,
+                                                )}{" "}
+                                                via {decision.deliveryProvider}{" "}
                                                 <code>
                                                   {decision.deliveryId}
                                                 </code>
                                               </dd>
                                             </div>
                                             <div>
-                                              <dt>Message integrity SHA-256</dt>
+                                              <dt>
+                                                Rendered template body SHA-256
+                                              </dt>
                                               <dd>
                                                 <code>
                                                   {decision.renderedBodySha256}
                                                 </code>
+                                              </dd>
+                                            </div>
+                                            <div>
+                                              <dt>Delivery state updated</dt>
+                                              <dd>
+                                                <EventDateTime
+                                                  epochSeconds={
+                                                    decision.deliveryUpdatedAt
+                                                  }
+                                                  timeZone={
+                                                    loaderData.eventTimezone
+                                                  }
+                                                />
                                               </dd>
                                             </div>
                                             <div>
@@ -703,7 +726,9 @@ export function EvaluationUnifiedResults() {
                                               <div>
                                                 <dt>Communication</dt>
                                                 <dd>
-                                                  {decision.communicationStatus}{" "}
+                                                  {providerStateLabel(
+                                                    decision.communicationStatus,
+                                                  )}{" "}
                                                   <code>
                                                     {decision.communicationId}
                                                   </code>
@@ -712,10 +737,25 @@ export function EvaluationUnifiedResults() {
                                               <div>
                                                 <dt>Recipient delivery</dt>
                                                 <dd>
-                                                  {decision.deliveryStatus}{" "}
+                                                  {providerStateLabel(
+                                                    decision.deliveryStatus,
+                                                  )}{" "}
                                                   <code>
                                                     {decision.deliveryId}
                                                   </code>
+                                                </dd>
+                                              </div>
+                                              <div>
+                                                <dt>Delivery state updated</dt>
+                                                <dd>
+                                                  <EventDateTime
+                                                    epochSeconds={
+                                                      decision.deliveryUpdatedAt
+                                                    }
+                                                    timeZone={
+                                                      loaderData.eventTimezone
+                                                    }
+                                                  />
                                                 </dd>
                                               </div>
                                             </dl>

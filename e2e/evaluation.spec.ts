@@ -501,6 +501,8 @@ test("a released decision keeps inspectable recipient delivery evidence after re
     ).toBeVisible();
     await expect(result).toContainText("Rendered subject");
     await expect(result).toContainText("Recipient delivery");
+    await expect(result).toContainText("Rendered template body SHA-256");
+    await expect(result).toContainText("Delivery state updated");
     await expect(result).toContainText(
       "Queue acceptance is not proof of delivery",
     );

@@ -22,6 +22,7 @@ import {
 import { acceptedSpeakerInvitationOutcome } from "./evaluation-decision-invitation-outcome.server";
 import {
   buildDecisionStatements,
+  type DecisionReviewFeedbackEvidence,
   type DecisionSubmission,
 } from "./evaluation-decision-statements.server";
 import {
@@ -481,11 +482,16 @@ export class EvaluationDecisionService {
         );
       }
     }
-    const notificationFeedback =
+    const notificationFeedbackEvidence =
       parsed.includeReviewerFeedback && completedRound
         ? (
             await this.env.DB.prepare(
-              `SELECT trim(review.submitter_feedback) AS feedback
+              `SELECT assignment.id AS assignmentId,
+                      assignment.assigned_at AS assignedAt,
+                      review.id AS reviewId,
+                      review.revision AS reviewRevision,
+                      review.status AS reviewStatus,
+                      trim(COALESCE(review.submitter_feedback, '')) AS applicantFeedback
                  FROM evaluator_assignments assignment
                  JOIN reviews review
                    ON review.assignment_id = assignment.id
@@ -494,13 +500,15 @@ export class EvaluationDecisionService {
                   AND assignment.submission_id = ?
                   AND assignment.round_id = ?
                   AND review.status IN ('submitted','locked')
-                  AND length(trim(COALESCE(review.submitter_feedback, ''))) > 0
                 ORDER BY assignment.assigned_at, assignment.id`,
             )
               .bind(viewer.eventId, submission.id, completedRound.roundId)
-              .all<{ feedback: string }>()
-          ).results.map((row) => row.feedback)
+              .all<DecisionReviewFeedbackEvidence>()
+          ).results
         : [];
+    const notificationFeedback = notificationFeedbackEvidence
+      .map((row) => row.applicantFeedback)
+      .filter((feedback) => feedback.length > 0);
     const decisionId = commandId ?? crypto.randomUUID();
     const sessionId =
       parsed.release && parsed.decision === "accepted"
@@ -779,6 +787,7 @@ export class EvaluationDecisionService {
       sessionTrack,
       notificationIntent,
       notificationFeedback,
+      notificationFeedbackEvidence,
       roundId: completedRound?.roundId ?? null,
       speakerMemberships,
       speakerInvitationPlans,

@@ -279,6 +279,30 @@ describe("participant retention", () => {
     expect(
       JSON.parse((delivery as { sourceValuesJson: string }).sourceValuesJson),
     ).toMatchObject({ redacted: true });
+    await expect(
+      seeded.testEnv.DB.prepare(
+        `SELECT communication.id AS communicationId,
+                delivery.id AS deliveryId,
+                json_extract(communication.audience_json, '$.decisionId')
+                  AS audienceDecisionId,
+                delivery.source_id AS deliverySourceId
+           FROM operation_jobs operation
+           JOIN communications communication
+             ON communication.operation_id = operation.id
+            AND communication.event_id = operation.event_id
+           JOIN communication_deliveries delivery
+             ON delivery.communication_id = communication.id
+            AND delivery.event_id = communication.event_id
+          WHERE operation.id = ? AND operation.event_id = ?`,
+      )
+        .bind(seeded.decisionOperationId, seeded.eventId)
+        .first(),
+    ).resolves.toEqual({
+      communicationId: seeded.communicationId,
+      deliveryId: seeded.deliveryId,
+      audienceDecisionId: null,
+      deliverySourceId: null,
+    });
     expect(
       await seeded.testEnv.DB.prepare(
         `SELECT status, from_name AS fromName, from_email AS fromEmail,

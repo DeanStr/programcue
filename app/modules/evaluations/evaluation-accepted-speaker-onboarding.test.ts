@@ -213,6 +213,45 @@ function withBatchRace(
   });
 }
 
+function withSuppressedStatement(
+  testEnv: CloudflareEnvironment,
+  pattern: RegExp,
+) {
+  let suppressed = 0;
+  const faultingDb = new Proxy(testEnv.DB, {
+    get(target, property) {
+      if (property === "prepare") {
+        return (query: string) => {
+          if (!pattern.test(query)) return target.prepare(query);
+          suppressed += 1;
+          const noOp = target.prepare(
+            "UPDATE submissions SET status = status WHERE 0",
+          );
+          return new Proxy(noOp, {
+            get(statement, statementProperty) {
+              if (statementProperty === "bind") return () => noOp;
+              const value = Reflect.get(statement, statementProperty);
+              return typeof value === "function"
+                ? value.bind(statement)
+                : value;
+            },
+          });
+        };
+      }
+      const value = Reflect.get(target, property);
+      return typeof value === "function" ? value.bind(target) : value;
+    },
+  });
+  return {
+    env: new Proxy(testEnv, {
+      get(target, property) {
+        return property === "DB" ? faultingDb : Reflect.get(target, property);
+      },
+    }),
+    suppressed: () => suppressed,
+  };
+}
+
 async function resetEvaluationFixture() {
   await env.DB.batch([
     env.DB.prepare(
@@ -822,6 +861,122 @@ describe("evaluation vertical slice", () => {
         notificationFeedbackJson: JSON.stringify([
           "Clarify the intended experience level in the final description.",
         ]),
+      });
+    });
+
+    it("rejects selected reviewer feedback that changes at the release boundary", async () => {
+      await resetEvaluationFixture();
+      const token = crypto.randomUUID();
+      const planId = `feedback-race-plan-${token}`;
+      const roundId = `feedback-race-round-${token}`;
+      const firstAssignmentId = `feedback-race-assignment-a-${token}`;
+      const secondAssignmentId = `feedback-race-assignment-b-${token}`;
+      const firstReviewId = `feedback-race-review-a-${token}`;
+      const secondReviewId = `feedback-race-review-b-${token}`;
+      await env.DB.batch([
+        env.DB.prepare(
+          `INSERT INTO evaluation_plans (id, event_id, name, status)
+           VALUES (?, ?, 'Decision feedback race plan', 'active')`,
+        ).bind(planId, admin.eventId),
+        env.DB.prepare(
+          `INSERT INTO evaluation_rounds (
+             id, event_id, plan_id, round_number, name, status, scorecard_id
+           ) VALUES (?, ?, ?, 1, 'Feedback race round', 'active', ?)`,
+        ).bind(roundId, admin.eventId, planId, roundId),
+        ...[
+          [firstAssignmentId, firstReviewId, "First applicant-facing note."],
+          [secondAssignmentId, secondReviewId, "Second applicant-facing note."],
+        ].flatMap(([assignmentId, reviewId, feedback], index) => [
+          env.DB.prepare(
+            `INSERT INTO evaluator_assignments (
+               id, event_id, round_id, submission_id, evaluator_person_id,
+               status, assigned_at, submitted_at
+             ) VALUES (?, ?, ?, 'eval-test-submission', ?, 'submitted', ?, unixepoch())`,
+          ).bind(
+            assignmentId,
+            admin.eventId,
+            roundId,
+            index === 0 ? "person-demo-evaluator" : "person-demo-admin",
+            1_700_000_000 + index,
+          ),
+          env.DB.prepare(
+            `INSERT INTO reviews (
+               id, event_id, assignment_id, status, scores_json,
+               recommendation, confidence, submitter_feedback, submitted_at
+             ) VALUES (?, ?, ?, 'submitted', '{}', 'minor_changes', 4, ?, unixepoch())`,
+          ).bind(reviewId, admin.eventId, assignmentId, feedback),
+        ]),
+      ]);
+      const racedEnvironment = withBatchRace(
+        evaluationEnvironment(),
+        async () => {
+          await env.DB.prepare(
+            `UPDATE reviews
+                SET status = 'reopened', revision = revision + 1,
+                    submitter_feedback = 'Withdrawn feedback',
+                    updated_at = unixepoch()
+              WHERE id = ? AND event_id = ?`,
+          )
+            .bind(firstReviewId, admin.eventId)
+            .run();
+        },
+      );
+      await expect(
+        new EvaluationDecisionService(racedEnvironment).decide(admin, {
+          submissionId: "eval-test-submission",
+          decision: "rejected",
+          rationale: "The programme is already full in this area.",
+          includeReviewerFeedback: true,
+          release: true,
+        }),
+      ).rejects.toThrow(/changed before the decision was saved/i);
+      await expect(
+        env.DB.prepare(
+          `SELECT COUNT(*) AS total FROM submission_decisions
+            WHERE event_id = ? AND submission_id = 'eval-test-submission'
+              AND status = 'published'`,
+        )
+          .bind(admin.eventId)
+          .first(),
+      ).resolves.toEqual({ total: 0 });
+    });
+
+    it("rolls back release when a notification graph write is suppressed", async () => {
+      await resetEvaluationFixture();
+      const fault = withSuppressedStatement(
+        evaluationEnvironment(),
+        /INSERT INTO operation_items/u,
+      );
+      await expect(
+        new EvaluationDecisionService(fault.env).decide(admin, {
+          submissionId: "eval-test-submission",
+          decision: "rejected",
+          rationale: "The programme is already full in this area.",
+          release: true,
+          confirmedWithoutReview: true,
+        }),
+      ).rejects.toThrow(
+        /published decision requires a complete durable notification graph/i,
+      );
+      expect(fault.suppressed()).toBe(1);
+      await expect(
+        env.DB.prepare(
+          `SELECT submission.status,
+                  (SELECT COUNT(*) FROM submission_decisions decision
+                    WHERE decision.event_id = submission.event_id
+                      AND decision.submission_id = submission.id) AS decisions,
+                  (SELECT COUNT(*) FROM operation_jobs operation
+                    WHERE operation.event_id = submission.event_id
+                      AND operation.type = 'decision.notification') AS operations
+             FROM submissions submission
+            WHERE submission.id = 'eval-test-submission' AND submission.event_id = ?`,
+        )
+          .bind(admin.eventId)
+          .first(),
+      ).resolves.toEqual({
+        status: "submitted",
+        decisions: 0,
+        operations: 0,
       });
     });
 

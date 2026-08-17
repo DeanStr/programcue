@@ -1,4 +1,4 @@
--- Bind new AI assessments to the exact submitted source and materialise
+-- Bind AI assessments to the exact submitted source and materialise
 -- decision-notification intent before Queue dispatch.
 
 ALTER TABLE ai_review_assessments
@@ -222,6 +222,83 @@ WHEN EXISTS (
 )
 BEGIN
   SELECT RAISE(ABORT, 'decision delivery requires complete pinned evidence');
+END;
+
+-- The final published-decision audit is also the transaction completion
+-- sentinel. Every preceding notification write is deliberately conditional;
+-- abort the batch instead of allowing any of those statements to succeed as a
+-- no-op and leave a released decision with partial durable intent.
+CREATE TRIGGER decision_published_notification_graph_required
+BEFORE INSERT ON audit_events
+WHEN NEW.action = 'decision.published'
+AND NOT EXISTS (
+  -- Releases created before this migration are deliberately unlinked because
+  -- their historical work cannot prove the complete pinned-intent contract.
+  SELECT 1
+    FROM submission_decisions legacy_decision
+   WHERE legacy_decision.id = NEW.entity_id
+     AND legacy_decision.event_id = NEW.event_id
+     AND legacy_decision.status = 'published'
+     AND legacy_decision.notification_operation_id IS NULL
+  UNION ALL
+  SELECT 1
+    FROM submission_decisions decision
+    JOIN operation_jobs operation
+      ON operation.id = decision.notification_operation_id
+     AND operation.event_id = decision.event_id
+     AND operation.organisation_id = NEW.organisation_id
+     AND operation.type = 'decision.notification'
+     AND operation.status = 'queued'
+    JOIN communications communication
+      ON communication.operation_id = operation.id
+     AND communication.event_id = decision.event_id
+     AND communication.status = 'queued'
+    JOIN communication_deliveries delivery
+      ON delivery.communication_id = communication.id
+     AND delivery.event_id = decision.event_id
+     AND delivery.status = 'queued'
+    JOIN operation_items item
+      ON item.operation_id = operation.id
+     AND item.entity_type = 'communication_delivery'
+     AND item.entity_id = delivery.id
+     AND item.status = 'pending'
+   WHERE decision.id = NEW.entity_id
+     AND decision.event_id = NEW.event_id
+     AND decision.status = 'published'
+     AND decision.notification_operation_id =
+         json_extract(NEW.metadata_json, '$.notificationOperationId')
+     AND (SELECT COUNT(*) FROM communications linked_communication
+           WHERE linked_communication.operation_id = operation.id
+             AND linked_communication.event_id = decision.event_id) = 1
+     AND (SELECT COUNT(*)
+            FROM communication_deliveries linked_delivery
+           WHERE linked_delivery.communication_id = communication.id
+             AND linked_delivery.event_id = decision.event_id) = 1
+     AND (SELECT COUNT(*) FROM operation_items linked_item
+           WHERE linked_item.operation_id = operation.id) = 1
+     AND EXISTS (
+       SELECT 1 FROM audit_events prepared
+        WHERE prepared.action = 'decision.notification.prepared'
+          AND prepared.organisation_id = NEW.organisation_id
+          AND prepared.event_id = NEW.event_id
+          AND prepared.entity_type = 'communication'
+          AND prepared.entity_id = communication.id
+          AND prepared.correlation_id = operation.id
+          AND json_extract(prepared.metadata_json, '$.decisionId') = decision.id
+          AND json_extract(prepared.metadata_json, '$.operationId') = operation.id
+          AND json_extract(prepared.metadata_json, '$.deliveryId') = delivery.id
+     )
+     AND EXISTS (
+       SELECT 1 FROM event_changes notification_change
+        WHERE notification_change.event_id = decision.event_id
+          AND notification_change.entity_type = 'communication'
+          AND notification_change.entity_id = communication.id
+          AND notification_change.change_type = 'created'
+          AND notification_change.correlation_id = operation.correlation_id
+     )
+)
+BEGIN
+  SELECT RAISE(ABORT, 'published decision requires a complete durable notification graph');
 END;
 
 CREATE TRIGGER decision_communications_intent_immutable

@@ -575,7 +575,12 @@ export async function loader({ request, context }: LoaderFunctionArgs) {
                 delivery.provider_message_id AS providerMessageId,
                 delivery.failure_code AS failureCode,
                 delivery.failure_message AS failureMessage,
-                communication.sent_at AS sentAt,
+                delivery.updated_at AS deliveryUpdatedAt,
+                json_extract(communication.audience_json, '$.decisionId')
+                  AS audienceDecisionId,
+                json_extract(communication.audience_json, '$.submissionId')
+                  AS audienceSubmissionId,
+                delivery.source_id AS deliverySourceId,
                 json_extract(communication.content_snapshot_json, '$.template.id')
                   AS templateVersionId,
                 json_extract(communication.content_snapshot_json, '$.template.name')
@@ -601,12 +606,9 @@ export async function loader({ request, context }: LoaderFunctionArgs) {
            LEFT JOIN communications communication
              ON communication.operation_id = operation.id
             AND communication.event_id = decision.event_id
-            AND json_extract(communication.audience_json, '$.decisionId') =
-                decision.id
            LEFT JOIN communication_deliveries delivery
              ON delivery.communication_id = communication.id
             AND delivery.event_id = decision.event_id
-            AND delivery.source_id = decision.submission_id
           WHERE decision.event_id = ?
             AND (decision.round_id = ? OR decision.round_id IS NULL)
           ORDER BY decision.submission_id, decision.revision_number DESC`,
@@ -638,7 +640,10 @@ export async function loader({ request, context }: LoaderFunctionArgs) {
           providerMessageId: string | null;
           failureCode: string | null;
           failureMessage: string | null;
-          sentAt: number | null;
+          deliveryUpdatedAt: number | null;
+          audienceDecisionId: string | null;
+          audienceSubmissionId: string | null;
+          deliverySourceId: string | null;
           templateVersionId: string | null;
           templateName: string | null;
           templateVersionNumber: number | null;
@@ -697,6 +702,10 @@ export async function loader({ request, context }: LoaderFunctionArgs) {
         row.deliveryStatus,
         `${evidencePrefix}: recipient delivery status is missing.`,
       );
+      const deliveryUpdatedAt = requireValue(
+        row.deliveryUpdatedAt,
+        `${evidencePrefix}: recipient delivery state timestamp is missing.`,
+      );
       if (row.participantRetentionCompletedAt !== null) {
         return {
           ...row,
@@ -706,8 +715,22 @@ export async function loader({ request, context }: LoaderFunctionArgs) {
           communicationStatus,
           deliveryId,
           deliveryStatus,
+          deliveryUpdatedAt,
           notificationEvidenceState: "retained" as const,
         };
+      }
+      if (
+        row.audienceDecisionId !== row.id ||
+        row.audienceSubmissionId !== row.submissionId
+      ) {
+        throw new Error(
+          `${evidencePrefix}: communication audience does not match the released decision.`,
+        );
+      }
+      if (row.deliverySourceId !== row.submissionId) {
+        throw new Error(
+          `${evidencePrefix}: recipient delivery source does not match the released submission.`,
+        );
       }
       const recipientAddress = requireValue(
         row.recipientAddress,
@@ -766,6 +789,7 @@ export async function loader({ request, context }: LoaderFunctionArgs) {
         communicationStatus,
         deliveryId,
         deliveryStatus,
+        deliveryUpdatedAt,
         recipientAddress,
         recipientName,
         deliveryProvider,

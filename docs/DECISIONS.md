@@ -655,14 +655,23 @@ invalidation subsystem remain excluded.
   recipient identity/address/name, merge values, structured content, rendered
   subject and rendered-body hash before Queue dispatch. The worker sends only
   that persisted communication and never reselects a newer template, sender or
-  recipient. Decision-specific insert guards and the Queue handler reject an
+  recipient. When applicant-facing reviewer feedback is selected, release also
+  compares the exact ordered assignment/review identities, review revisions,
+  statuses and rendered feedback at the write boundary. The final published
+  audit is a transaction sentinel that aborts unless the complete linked
+  operation, communication, delivery, operation item, prepared audit and change
+  record exist. Decision-specific insert guards and the Queue handler reject an
   incomplete pinned contract before provider delivery; generic communication
   compatibility is not used as a decision fallback. Releases created before
   this complete evidence contract remain explicitly unlinked rather than being
   backfilled with partial provenance. The worker still rechecks global/provider suppression, unsubscribe state,
   provider readiness and current sender validity at send time. Chair evidence
-  shows recipient-level state and provider failure without displaying the body;
-  queue acceptance is never labelled as delivery. The only permitted mutation
+  follows the retained operation-to-communication-to-delivery relationships
+  after participant redaction rather than relying on erased audience/source
+  fields. It shows recipient-level state and provider failure without displaying
+  the body; `sent` is labelled as provider acceptance, delivery remains a
+  distinct provider-confirmed state, and the body-only digest is labelled as
+  the rendered template-body SHA-256. The only permitted mutation
   of pinned intent is the existing participant-retention workflow's exact,
   one-way pseudonymisation and redaction contract; it also removes the original
   rendered subject and body hash evidence that must not outlive the event's

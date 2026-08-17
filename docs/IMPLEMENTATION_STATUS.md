@@ -662,7 +662,11 @@ when the pinned render, sender or recipient evidence is incomplete. Existing
 releases without that complete contract remain explicitly pre-migration rather
 than receiving partial backfilled provenance. The result loader likewise rejects
 a broken new decision-to-operation-to-delivery chain instead of displaying it as
-legacy or substituting placeholder evidence. A focused Chromium
+legacy or substituting placeholder evidence, while retained evidence follows
+the immutable operation and communication relationships after audience/source
+redaction. Exact selected review identities, revisions, statuses and feedback
+are rechecked in the release CAS, and a suppressed notification graph statement
+aborts the release transaction. A focused Chromium
 workflow releases a decision, inspects its operation/communication/recipient
 delivery evidence and proves that evidence persists after reload; no provider
 delivery is inferred from Queue acceptance. A separate E2E-only, explicitly

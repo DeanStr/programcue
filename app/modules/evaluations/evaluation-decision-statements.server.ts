@@ -27,6 +27,15 @@ export type DecisionSubmission = {
   snapshotJson: string | null;
 };
 
+export type DecisionReviewFeedbackEvidence = {
+  assignmentId: string;
+  assignedAt: number;
+  reviewId: string;
+  reviewRevision: number;
+  reviewStatus: "submitted" | "locked";
+  applicantFeedback: string;
+};
+
 export const acceptanceTaskPlanGuardSql = `
   NOT EXISTS (
     WITH RECURSIVE acceptance_task_plan(template_id) AS (
@@ -302,6 +311,7 @@ export function buildDecisionStatements(input: {
   sessionTrack: { id: string; name: string } | null;
   notificationIntent: DecisionNotificationIntent | null;
   notificationFeedback: string[];
+  notificationFeedbackEvidence: DecisionReviewFeedbackEvidence[];
   roundId: string | null;
   speakerMemberships: Array<{ membershipId: string; personId: string }>;
   speakerInvitationPlans: AcceptedSpeakerInvitationPlan[];
@@ -325,6 +335,7 @@ export function buildDecisionStatements(input: {
     sessionTrack,
     notificationIntent,
     notificationFeedback,
+    notificationFeedbackEvidence,
     roundId,
     speakerMemberships,
     speakerInvitationPlans,
@@ -385,6 +396,56 @@ export function buildDecisionStatements(input: {
         ...speakerMemberships.map((membership) => membership.personId),
       ]
     : [];
+  const notificationFeedbackGuardSql = parsed.includeReviewerFeedback
+    ? `(
+        (SELECT COUNT(*)
+           FROM evaluator_assignments feedback_assignment
+           JOIN reviews feedback_review
+             ON feedback_review.assignment_id = feedback_assignment.id
+            AND feedback_review.event_id = feedback_assignment.event_id
+          WHERE feedback_assignment.event_id = submissions.event_id
+            AND feedback_assignment.submission_id = submissions.id
+            AND feedback_assignment.round_id = ?
+            AND feedback_review.status IN ('submitted','locked')) =
+          json_array_length(?)
+        AND NOT EXISTS (
+          SELECT 1 FROM json_each(?) feedback_snapshot
+           WHERE NOT EXISTS (
+              SELECT 1
+                FROM evaluator_assignments exact_feedback_assignment
+                JOIN reviews exact_feedback_review
+                  ON exact_feedback_review.assignment_id = exact_feedback_assignment.id
+                 AND exact_feedback_review.event_id = exact_feedback_assignment.event_id
+               WHERE exact_feedback_assignment.id =
+                     json_extract(feedback_snapshot.value, '$.assignmentId')
+                 AND exact_feedback_assignment.event_id = submissions.event_id
+                 AND exact_feedback_assignment.submission_id = submissions.id
+                 AND exact_feedback_assignment.round_id = ?
+                 AND exact_feedback_assignment.assigned_at =
+                     json_extract(feedback_snapshot.value, '$.assignedAt')
+                 AND exact_feedback_review.id =
+                     json_extract(feedback_snapshot.value, '$.reviewId')
+                 AND exact_feedback_review.revision =
+                     json_extract(feedback_snapshot.value, '$.reviewRevision')
+                 AND exact_feedback_review.status =
+                     json_extract(feedback_snapshot.value, '$.reviewStatus')
+                 AND trim(COALESCE(exact_feedback_review.submitter_feedback, '')) =
+                     json_extract(feedback_snapshot.value, '$.applicantFeedback')
+            )
+        )
+      )`
+    : "1";
+  const notificationFeedbackEvidenceJson = JSON.stringify(
+    notificationFeedbackEvidence,
+  );
+  const notificationFeedbackGuardBindings = parsed.includeReviewerFeedback
+    ? [
+        roundId,
+        notificationFeedbackEvidenceJson,
+        notificationFeedbackEvidenceJson,
+        roundId,
+      ]
+    : [];
   return [
     env.DB.prepare(
       `
@@ -418,6 +479,7 @@ export function buildDecisionStatements(input: {
                           AND current_plan.status <> 'archived') = 1
              )
            )
+           AND (${notificationFeedbackGuardSql})
            AND (
              ? <> 'published' OR ? <> 'accepted'
              OR ((${speakerSetGuard}) AND (${acceptanceTaskPlanGuardSql}))
@@ -503,6 +565,7 @@ export function buildDecisionStatements(input: {
       submission.revision,
       roundId,
       roundId,
+      ...notificationFeedbackGuardBindings,
       status,
       parsed.decision,
       ...speakerSetBindings,
@@ -975,7 +1038,16 @@ export function buildDecisionStatements(input: {
           entity_type, entity_id, metadata_json, created_at
         )
         SELECT ?, 'person', 'admin_ui', 1, ?, ?, ?, ?, 'submission_decision', ?, ?, unixepoch()
-         WHERE EXISTS (SELECT 1 FROM submission_decisions WHERE id = ? AND event_id = ?)
+         WHERE EXISTS (
+           SELECT 1 FROM submissions
+            WHERE id = ? AND event_id = ? AND last_operation_id = ?
+         )
+           AND (
+             ? = 'published'
+             OR EXISTS (
+               SELECT 1 FROM submission_decisions WHERE id = ? AND event_id = ?
+             )
+           )
       `,
     ).bind(
       auditEventId,
@@ -992,6 +1064,10 @@ export function buildDecisionStatements(input: {
         notificationOperationId,
         reviewEvidenceOverride: parsed.release && roundId === null,
       }),
+      submission.id,
+      viewer.eventId,
+      decisionId,
+      status,
       decisionId,
       viewer.eventId,
     ),

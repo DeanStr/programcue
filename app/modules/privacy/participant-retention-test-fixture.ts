@@ -511,6 +511,7 @@ export async function seedExpiredRetentionEvent() {
     formId,
     exclusiveSubmissionId,
     sharedSubmissionId,
+    decisionOperationId,
     communicationId,
     deliveryId,
     invitationId,
