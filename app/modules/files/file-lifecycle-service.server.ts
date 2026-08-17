@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { invalidateContentZipExportsForAsset } from "~/modules/content/content-archive-service.server";
 import {
   headshotProfileRevisionGuardStatement,
   headshotProfileRevisionStatement,
@@ -409,6 +410,11 @@ export class FileLifecycleService {
           enabled: preview.releasedHeadshotVersionId !== null,
         }),
       ]);
+      await invalidateContentZipExportsForAsset(this.env, {
+        organisationId: viewer.organisationId,
+        eventId: viewer.eventId,
+        assetId: preview.id,
+      });
     } catch (error) {
       throw new FileErasureIncompleteError(operationId, { cause: error });
     }
@@ -419,6 +425,11 @@ export class FileLifecycleService {
     const preview = await this.fileErasurePreview(viewer, input.assetId);
     const operationId = `file-erasure:${preview.id}`;
     if (preview.erasureComplete) {
+      await invalidateContentZipExportsForAsset(this.env, {
+        organisationId: viewer.organisationId,
+        eventId: viewer.eventId,
+        assetId: preview.id,
+      });
       return {
         operationId,
         duplicate: true,

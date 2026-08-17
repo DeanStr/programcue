@@ -691,7 +691,10 @@ export function EventSetupForm({
     (value) => value.trim(),
   );
   const changeCount = namedFieldChangeCount + recordChangeCount;
-  const hasUnsavedChanges = changeCount > 0 || pendingRecordDraftPresent;
+  const hasPersistedSetupChanges = changeCount > 0 || pendingRecordDraftPresent;
+  const newRoomDraftPresent =
+    newRoomName.length > 0 || newRoomCapacity !== "100";
+  const hasAnyUnsavedChanges = hasPersistedSetupChanges || newRoomDraftPresent;
 
   const captureEventSetupForm = useCallback((form: HTMLFormElement | null) => {
     formRef.current = form;
@@ -729,10 +732,10 @@ export function EventSetupForm({
   useBeforeUnload(
     useCallback(
       (unloadEvent: BeforeUnloadEvent) => {
-        if (!hasUnsavedChanges) return;
+        if (!hasAnyUnsavedChanges) return;
         unloadEvent.preventDefault();
       },
-      [hasUnsavedChanges],
+      [hasAnyUnsavedChanges],
     ),
   );
 
@@ -740,11 +743,12 @@ export function EventSetupForm({
   // record is removed stays here too, so comparing pathnames lets both through.
   const blocker = useBlocker(
     ({ currentLocation, nextLocation }) =>
-      hasUnsavedChanges && currentLocation.pathname !== nextLocation.pathname,
+      hasAnyUnsavedChanges &&
+      currentLocation.pathname !== nextLocation.pathname,
   );
 
   function addRoom() {
-    if (hasUnsavedChanges || roomFetcher.state !== "idle") return;
+    if (hasPersistedSetupChanges || roomFetcher.state !== "idle") return;
     const capacity = Number(newRoomCapacity);
     if (!newRoomName.trim() || !Number.isInteger(capacity) || capacity < 1)
       return;
@@ -1001,9 +1005,9 @@ export function EventSetupForm({
                 rooms={rooms}
                 setRooms={setRooms}
                 actionData={actionData}
-                addDisabled={hasUnsavedChanges}
+                addDisabled={hasPersistedSetupChanges}
                 onAdd={() => {
-                  if (!hasUnsavedChanges) setAddRoomOpen(true);
+                  if (!hasPersistedSetupChanges) setAddRoomOpen(true);
                 }}
                 onRemove={(roomId) => clearRemovedRecordFocus("room", roomId)}
                 focusedRoomId={
@@ -1056,13 +1060,13 @@ export function EventSetupForm({
               <EventRepositoryPanel
                 event={event}
                 onConfigureAirtable={() => {
-                  if (!hasUnsavedChanges) setAirtableOpen(true);
+                  if (!hasPersistedSetupChanges) setAirtableOpen(true);
                 }}
                 onMigrateRepository={() => {
-                  if (!hasUnsavedChanges) setMigrationOpen(true);
+                  if (!hasPersistedSetupChanges) setMigrationOpen(true);
                 }}
                 canManageFileRetention={canManageFileRetention}
-                hasUnsavedChanges={hasUnsavedChanges}
+                hasUnsavedChanges={hasPersistedSetupChanges}
               />
             </div>
           </AdminPageSection>
@@ -1070,7 +1074,7 @@ export function EventSetupForm({
 
         <div
           className="event-setup-actions"
-          data-dirty={hasUnsavedChanges ? "true" : undefined}
+          data-dirty={hasAnyUnsavedChanges ? "true" : undefined}
         >
           {pendingRecordDraftPresent ? (
             <p
@@ -1096,7 +1100,7 @@ export function EventSetupForm({
             type="button"
             className="btn"
             onClick={discardChanges}
-            disabled={!hasUnsavedChanges || saving}
+            disabled={!hasAnyUnsavedChanges || saving}
           >
             Discard changes
           </button>
@@ -1125,7 +1129,7 @@ export function EventSetupForm({
         add={addRoom}
         fetcher={roomFetcher}
         actionData={roomData}
-        hasUnsavedChanges={hasUnsavedChanges}
+        hasUnsavedChanges={hasPersistedSetupChanges}
       />
       <AdministratorInvitationDialog
         open={inviteOpen}
@@ -1144,7 +1148,7 @@ export function EventSetupForm({
         repositoryFetcher={repositoryFetcher}
         repositoryData={repositoryData}
         event={event}
-        hasUnsavedChanges={hasUnsavedChanges}
+        hasUnsavedChanges={hasPersistedSetupChanges}
       />
     </>
   );

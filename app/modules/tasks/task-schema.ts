@@ -72,29 +72,40 @@ export const taskEvidenceUrlSchema = z
     message: "Evidence links must use HTTP or HTTPS.",
   });
 
+const taskTargetTypeSchema = z.enum(["speaker", "session", "event"]);
+const taskTypeSchema = z.enum([
+  "checklist",
+  "acknowledgement",
+  "short_form",
+  "file_upload",
+  "link_visit",
+  "administrator_only",
+]);
+const taskImpactSchema = z.enum(["critical", "high", "medium", "low"]);
+const taskEvidenceModeSchema = z.enum([
+  "none",
+  "checkbox",
+  "file",
+  "text",
+  "link",
+  "admin_approval",
+]);
+const taskDueAnchorSchema = z.enum([
+  "none",
+  "acceptance",
+  "session_start",
+  "fixed",
+]);
+
 export const taskTemplateInputSchema = z
   .object({
     name: z.string().trim().min(3).max(160),
     description: z.string().trim().max(1_000),
-    targetType: z.enum(["speaker", "session", "event"]),
-    taskType: z.enum([
-      "checklist",
-      "acknowledgement",
-      "short_form",
-      "file_upload",
-      "link_visit",
-      "administrator_only",
-    ]),
-    impact: z.enum(["critical", "high", "medium", "low"]),
-    evidenceMode: z.enum([
-      "none",
-      "checkbox",
-      "file",
-      "text",
-      "link",
-      "admin_approval",
-    ]),
-    dueAnchor: z.enum(["none", "acceptance", "session_start", "fixed"]),
+    targetType: taskTargetTypeSchema,
+    taskType: taskTypeSchema,
+    impact: taskImpactSchema,
+    evidenceMode: taskEvidenceModeSchema,
+    dueAnchor: taskDueAnchorSchema,
     dueOffsetDays: z.coerce.number().int().min(-365).max(365).nullable(),
     fixedDueDate: z.string().date().nullable(),
     autoAssignOnAcceptance: z.boolean(),
@@ -232,20 +243,26 @@ export type TaskTemplateDraftValues = {
   dependencyIds: string[];
 };
 
+const taskTemplateDraftSchema = z.object({
+  name: z.string().catch(""),
+  description: z.string().catch(""),
+  targetType: taskTargetTypeSchema.catch("speaker"),
+  taskType: taskTypeSchema.catch("checklist"),
+  impact: taskImpactSchema.catch("medium"),
+  evidenceMode: taskEvidenceModeSchema.catch("checkbox"),
+  dueAnchor: taskDueAnchorSchema.catch("none"),
+  dueOffsetDays: z.string().catch(""),
+  fixedDueDate: z.string().catch(""),
+  autoAssignOnAcceptance: z.boolean().catch(false),
+  dependencyIds: z.array(z.string()).catch([]),
+});
+
 export function normalizeTaskTemplateDraft(
-  input: Partial<TaskTemplateDraftValues> = {},
+  input: unknown = {},
 ): TaskTemplateDraftValues {
-  return {
-    name: input.name ?? "",
-    description: input.description ?? "",
-    targetType: input.targetType || "speaker",
-    taskType: input.taskType || "checklist",
-    impact: input.impact || "medium",
-    evidenceMode: input.evidenceMode || "checkbox",
-    dueAnchor: input.dueAnchor || "none",
-    dueOffsetDays: input.dueOffsetDays ?? "",
-    fixedDueDate: input.fixedDueDate ?? "",
-    autoAssignOnAcceptance: input.autoAssignOnAcceptance ?? false,
-    dependencyIds: input.dependencyIds ?? [],
-  };
+  const candidate =
+    typeof input === "object" && input !== null && !Array.isArray(input)
+      ? input
+      : {};
+  return taskTemplateDraftSchema.parse(candidate);
 }

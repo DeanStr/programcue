@@ -55,6 +55,7 @@ export const operationJobs = sqliteTable(
     dispatchedAt: integer("dispatched_at"),
     startedAt: integer("started_at"),
     completedAt: integer("completed_at"),
+    contentZipStorageCleanedAt: integer("content_zip_storage_cleaned_at"),
     alertAcknowledgedAt: integer("alert_acknowledged_at"),
     alertAcknowledgedByPersonId: text(
       "alert_acknowledged_by_person_id",
@@ -98,6 +99,18 @@ export const operationJobs = sqliteTable(
         sql`${table.createdAt} DESC`,
       )
       .where(sql`${table.type} = 'ai.reviewer_suggestion.generate'`),
+    index("idx_content_zip_storage_cleanup")
+      .on(
+        table.type,
+        table.status,
+        table.contentZipStorageCleanedAt,
+        table.completedAt,
+        table.updatedAt,
+      )
+      .where(
+        sql`${table.type} = 'content.zip.export'
+          AND ${table.status} IN ('completed', 'failed', 'cancelled')`,
+      ),
   ],
 );
 

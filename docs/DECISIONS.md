@@ -148,6 +148,15 @@ archive to private R2, verifies its ETag and size, and records the result before
 the UI exposes a download. Missing Queue or storage configuration, queue-send
 failure and processing failure remain explicit operation failures.
 
+Stored ZIP exports are scoped beneath the event's private R2 cleanup prefix,
+use a claim-specific object key, expire 24 hours after completion, and are
+revalidated against their persisted current-file manifest and source ETags on
+every download. File erasure revokes matching exports before cleanup, and a
+lost Queue claim cannot publish its temporary object; completion is fenced by
+the claim token. Successful R2 cleanup records a terminal cleanup timestamp so
+scheduled retries advance past already-cleaned failures while still retrying a
+failed deletion.
+
 ## Public programme workstream decisions
 
 **Public embed surfaces.** The embed URL and generated widget allow exactly five

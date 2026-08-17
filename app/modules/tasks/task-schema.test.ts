@@ -52,4 +52,22 @@ describe("task template form values", () => {
       dueAnchor: "none",
     });
   });
+
+  it("replaces malformed select values before controlled redisplay", () => {
+    expect(
+      normalizeTaskTemplateDraft({
+        targetType: "not-a-target",
+        taskType: "not-a-task",
+        impact: "not-an-impact",
+        evidenceMode: "not-an-evidence-mode",
+        dueAnchor: "not-a-due-anchor",
+      }),
+    ).toMatchObject({
+      targetType: "speaker",
+      taskType: "checklist",
+      impact: "medium",
+      evidenceMode: "checkbox",
+      dueAnchor: "none",
+    });
+  });
 });

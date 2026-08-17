@@ -1,11 +1,90 @@
-import { ContentArchiveService } from "../../app/modules/content/content-archive-service.server";
+import {
+  ContentArchiveService,
+  markContentZipExportStorageCleanupRequired,
+  zipExportObjectKey,
+} from "../../app/modules/content/content-archive-service.server";
 import { contentZipQueueMessageSchema } from "../../app/modules/content/content-schema";
 import {
+  assertOperationClaim,
   errorDetails,
   loadOperationClaim,
   QUEUE_CLAIM_LEASE_SECONDS,
   QueueClaimLeaseBusyError,
+  QueueClaimLeaseLostError,
+  renewOperationClaim,
 } from "./claim-infrastructure";
+
+async function writeZipWithClaimLease(input: {
+  env: CloudflareEnvironment;
+  response: Response;
+  objectKey: string;
+  contentLength: number;
+  operationId: string;
+  organisationId: string;
+  eventId: string;
+  claimToken: string;
+}) {
+  const {
+    env,
+    response,
+    objectKey,
+    contentLength,
+    operationId,
+    organisationId,
+    eventId,
+    claimToken,
+  } = input;
+  const bucket = env.FILES;
+  if (!bucket) {
+    throw new Error("Required private R2 binding FILES is unavailable.");
+  }
+  if (!response.body) throw new Error("The ZIP archive has no stream body.");
+  const fixedLength = new FixedLengthStream(contentLength);
+  const pump = response.body.pipeTo(fixedLength.writable);
+  const put = bucket.put(objectKey, fixedLength.readable, {
+    httpMetadata: { contentType: "application/zip" },
+  });
+  let renewalInFlight: Promise<void> | null = null;
+  let rejectLease: ((reason: unknown) => void) | null = null;
+  const leaseLost = new Promise<never>((_resolve, reject) => {
+    rejectLease = reject;
+  });
+  const renew = () => {
+    if (renewalInFlight) return;
+    renewalInFlight = renewOperationClaim(
+      env,
+      { organisationId, eventId },
+      operationId,
+      claimToken,
+    )
+      .catch((error) => {
+        rejectLease?.(error);
+        throw error;
+      })
+      .finally(() => {
+        renewalInFlight = null;
+      });
+  };
+  const renewalTimer = setInterval(
+    renew,
+    Math.max(1_000, Math.floor((QUEUE_CLAIM_LEASE_SECONDS * 1_000) / 3)),
+  );
+  const transfer = Promise.all([pump, put]);
+  try {
+    await Promise.race([transfer, leaseLost]);
+    await transfer;
+  } catch (error) {
+    await fixedLength.writable.abort(error).catch(() => undefined);
+    await Promise.allSettled([pump, put]);
+    throw error;
+  } finally {
+    clearInterval(renewalTimer);
+    const pendingRenewal: Promise<void> | null = renewalInFlight;
+    if (pendingRenewal !== null) {
+      await Promise.allSettled([pendingRenewal]);
+    }
+  }
+}
 
 export async function processContentZipExport(
   input: unknown,
@@ -71,6 +150,7 @@ export async function processContentZipExport(
     throw new Error("The ZIP export could not claim its durable operation.");
   }
 
+  let objectKey: string | null = null;
   try {
     if (!env.FILES) {
       throw new Error("Required private R2 binding FILES is unavailable.");
@@ -84,6 +164,15 @@ export async function processContentZipExport(
       eventId: message.eventId,
       demo: false,
     };
+    await renewOperationClaim(
+      env,
+      {
+        organisationId: message.organisationId,
+        eventId: message.eventId,
+      },
+      message.operationId,
+      claimToken,
+    );
     const response = await new ContentArchiveService(env).downloadZip(viewer, {
       manifest: message.manifest,
       groupBy: message.groupBy,
@@ -96,19 +185,28 @@ export async function processContentZipExport(
         "The ZIP archive did not provide a valid content length.",
       );
     }
-    const objectKey = `private/exports/${message.eventId}/${message.operationId}.zip`;
-    const fixedLength = new FixedLengthStream(contentLength);
-    const pump = response.body.pipeTo(fixedLength.writable);
-    void pump.catch(() => undefined);
-    try {
-      await env.FILES.put(objectKey, fixedLength.readable, {
-        httpMetadata: { contentType: "application/zip" },
-      });
-      await pump;
-    } catch (error) {
-      await pump.catch(() => undefined);
-      throw error;
-    }
+    objectKey = zipExportObjectKey(
+      message.eventId,
+      message.operationId,
+      claimToken,
+    );
+    await writeZipWithClaimLease({
+      env,
+      response,
+      objectKey,
+      contentLength,
+      operationId: message.operationId,
+      organisationId: message.organisationId,
+      eventId: message.eventId,
+      claimToken,
+    });
+    await assertOperationClaim(
+      env,
+      message.operationId,
+      message.eventId,
+      claimToken,
+    );
+    if (!objectKey) throw new Error("The ZIP export object key was not set.");
     const object = await env.FILES.head(objectKey);
     if (!object?.httpEtag || object.size < 1) {
       throw new Error(
@@ -120,6 +218,7 @@ export async function processContentZipExport(
       objectEtag: object.httpEtag,
       sizeBytes: object.size,
       fileName: `programme-files-by-${message.groupBy}.zip`,
+      claimToken,
     });
     const completed = await env.DB.prepare(
       `UPDATE operation_jobs
@@ -145,7 +244,29 @@ export async function processContentZipExport(
     }
   } catch (error) {
     const details = errorDetails(error);
-    await env.DB.prepare(
+    let temporaryObjectCleanupFailed = false;
+    if (objectKey && env.FILES) {
+      try {
+        await env.FILES.delete(objectKey);
+      } catch (cleanupError) {
+        console.error(
+          JSON.stringify({
+            level: "error",
+            subsystem: "content-zip-export",
+            event: "temporary-object-cleanup-failed",
+            operationId: message.operationId,
+            errorName:
+              cleanupError instanceof Error
+                ? cleanupError.name
+                : "UnknownError",
+            message:
+              "The ZIP export failed, but its claim-specific temporary object could not be deleted.",
+          }),
+        );
+        temporaryObjectCleanupFailed = true;
+      }
+    }
+    const failed = await env.DB.prepare(
       `UPDATE operation_jobs
           SET status = 'failed', progress_completed = 1, progress_failed = 1,
               last_error = ?, completed_at = unixepoch(), claim_token = NULL,
@@ -162,5 +283,36 @@ export async function processContentZipExport(
         claimToken,
       )
       .run();
+    if ((failed.meta.changes ?? 0) !== 1) {
+      const current = await loadOperationClaim(
+        env,
+        message.operationId,
+        message.eventId,
+      );
+      if (current?.status === "failed" || current?.status === "cancelled") {
+        if (temporaryObjectCleanupFailed) {
+          await markContentZipExportStorageCleanupRequired(
+            env,
+            {
+              organisationId: message.organisationId,
+              eventId: message.eventId,
+            },
+            message.operationId,
+          );
+        }
+        return;
+      }
+      throw new QueueClaimLeaseLostError();
+    }
+    if (temporaryObjectCleanupFailed) {
+      await markContentZipExportStorageCleanupRequired(
+        env,
+        {
+          organisationId: message.organisationId,
+          eventId: message.eventId,
+        },
+        message.operationId,
+      );
+    }
   }
 }

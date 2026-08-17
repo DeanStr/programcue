@@ -15,6 +15,18 @@ import {
 } from "./zip-stream.server";
 
 const MAX_ZIP_BYTES = 100 * 1024 * 1024;
+export const ZIP_EXPORT_TTL_SECONDS = 24 * 60 * 60;
+const ZIP_EXPORT_EXPIRED_ERROR =
+  "The ZIP export expired and is no longer available for download.";
+
+const ZIP_EXPORT_PREFIX = "private/events";
+const LEGACY_ZIP_EXPORT_PREFIX = "private/exports";
+
+class ZipSourceInvalidatedError extends ContentManagementStateError {
+  constructor(message: string) {
+    super(message, 410);
+  }
+}
 
 type ZipOperationStatus = "queued" | "processing" | "ready" | "failed";
 
@@ -51,12 +63,79 @@ const zipManifestEntrySchema = z.object({
 
 const zipManifestSchema = z.array(zipManifestEntrySchema).min(1).max(20);
 
-const zipOperationResultSchema = z.object({
+const zipOperationResultFieldsSchema = z.object({
   objectKey: z.string().min(1),
   objectEtag: z.string().min(1),
   sizeBytes: z.number().int().positive(),
   fileName: z.string().min(1),
 });
+
+const currentZipOperationResultSchema = zipOperationResultFieldsSchema.extend({
+  claimToken: z
+    .string()
+    .min(1)
+    .max(160)
+    .regex(/^[A-Za-z0-9][A-Za-z0-9._:-]*$/),
+});
+
+const legacyZipOperationResultSchema = zipOperationResultFieldsSchema.strict();
+
+type ZipOperationResult =
+  | (z.infer<typeof currentZipOperationResultSchema> & { legacy: false })
+  | (z.infer<typeof legacyZipOperationResultSchema> & { legacy: true });
+
+type ZipSourceRow = z.infer<typeof zipManifestEntrySchema> & {
+  objectKey: string;
+  contentType: string | null;
+};
+
+function storageKeySegment(value: string, label: string) {
+  if (!/^[A-Za-z0-9][A-Za-z0-9._:-]{0,159}$/.test(value)) {
+    throw new Error(
+      `The ZIP export ${label} is not a safe storage identifier.`,
+    );
+  }
+  return value;
+}
+
+export function zipExportObjectPrefix(eventId: string, operationId: string) {
+  return `${ZIP_EXPORT_PREFIX}/${storageKeySegment(eventId, "event")}/exports/${storageKeySegment(operationId, "operation")}/`;
+}
+
+export function zipExportObjectKey(
+  eventId: string,
+  operationId: string,
+  claimToken: string,
+) {
+  return `${zipExportObjectPrefix(eventId, operationId)}${storageKeySegment(claimToken, "claim")}.zip`;
+}
+
+function legacyZipExportObjectKey(eventId: string, operationId: string) {
+  return `${LEGACY_ZIP_EXPORT_PREFIX}/${storageKeySegment(eventId, "event")}/${storageKeySegment(operationId, "operation")}.zip`;
+}
+
+function assertZipOperationObjectKey(
+  eventId: string,
+  operationId: string,
+  result: ZipOperationResult,
+) {
+  const expected = result.legacy
+    ? legacyZipExportObjectKey(eventId, operationId)
+    : zipExportObjectKey(eventId, operationId, result.claimToken);
+  if (result.objectKey !== expected) {
+    throw new Error(
+      "The completed ZIP export object key does not match its operation identity.",
+    );
+  }
+  return expected;
+}
+
+function zipExportExpired(completedAt: number | null) {
+  return (
+    completedAt === null ||
+    completedAt + ZIP_EXPORT_TTL_SECONDS <= Math.floor(Date.now() / 1_000)
+  );
+}
 
 function parseZipOperationResult(resultJson: string | null) {
   if (!resultJson) {
@@ -65,12 +144,326 @@ function parseZipOperationResult(resultJson: string | null) {
     );
   }
   try {
-    return zipOperationResultSchema.parse(JSON.parse(resultJson));
+    const parsed: unknown = JSON.parse(resultJson);
+    const current = currentZipOperationResultSchema.safeParse(parsed);
+    if (current.success) return { ...current.data, legacy: false as const };
+    const legacy = legacyZipOperationResultSchema.safeParse(parsed);
+    if (legacy.success) return { ...legacy.data, legacy: true as const };
   } catch {
+    // Fall through to the single explicit error below.
+  }
+  throw new Error("The completed ZIP export has invalid durable result JSON.");
+}
+
+function parseZipQueuePayload(
+  payloadJson: string,
+  operation: { id: string; eventId: string; organisationId: string },
+) {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(payloadJson);
+  } catch {
+    throw new Error("The ZIP export has invalid durable payload JSON.");
+  }
+  const message = contentZipQueueMessageSchema.parse(parsed);
+  if (
+    message.operationId !== operation.id ||
+    message.eventId !== operation.eventId ||
+    message.organisationId !== operation.organisationId
+  ) {
     throw new Error(
-      "The completed ZIP export has invalid durable result JSON.",
+      "The ZIP export payload does not match its durable operation identity.",
     );
   }
+  return message;
+}
+
+async function deleteZipExportObjects(
+  env: CloudflareEnvironment,
+  eventId: string,
+  operationId: string,
+) {
+  if (!env.FILES) {
+    throw new Error("Required private R2 binding FILES is unavailable.");
+  }
+  const prefix = zipExportObjectPrefix(eventId, operationId);
+  let cursor: string | undefined;
+  do {
+    const page = await env.FILES.list(
+      cursor ? { prefix, limit: 1_000, cursor } : { prefix, limit: 1_000 },
+    );
+    if (page.objects.length > 0) {
+      await env.FILES.delete(page.objects.map((object) => object.key));
+    }
+    cursor = page.truncated ? page.cursor : undefined;
+  } while (cursor);
+
+  // Remove the deterministic key used by the initial implementation too. It
+  // is derived from the operation identity, never from persisted result JSON.
+  await env.FILES.delete(legacyZipExportObjectKey(eventId, operationId));
+}
+
+async function markZipExportStorageCleaned(
+  env: CloudflareEnvironment,
+  scope: { organisationId: string; eventId: string },
+  operationId: string,
+) {
+  const result = await env.DB.prepare(
+    `UPDATE operation_jobs
+        SET content_zip_storage_cleaned_at = unixepoch(), updated_at = unixepoch()
+      WHERE id = ? AND event_id = ? AND organisation_id = ?
+        AND type = 'content.zip.export'`,
+  )
+    .bind(operationId, scope.eventId, scope.organisationId)
+    .run();
+  if ((result.meta.changes ?? 0) !== 1) {
+    throw new Error(
+      "The ZIP export storage cleanup marker could not be recorded.",
+    );
+  }
+}
+
+export async function markContentZipExportStorageCleanupRequired(
+  env: CloudflareEnvironment,
+  scope: { organisationId: string; eventId: string },
+  operationId: string,
+) {
+  await env.DB.prepare(
+    `UPDATE operation_jobs
+        SET content_zip_storage_cleaned_at = NULL, updated_at = unixepoch()
+      WHERE id = ? AND event_id = ? AND organisation_id = ?
+        AND type = 'content.zip.export'
+        AND status IN ('failed', 'cancelled')`,
+  )
+    .bind(operationId, scope.eventId, scope.organisationId)
+    .run();
+}
+
+export async function revokeContentZipExport(
+  env: CloudflareEnvironment,
+  scope: { organisationId: string; eventId: string },
+  operationId: string,
+  reason: string,
+) {
+  await env.DB.prepare(
+    `UPDATE operation_jobs
+        SET status = 'failed', progress_completed = 1, progress_failed = 1,
+            result_json = NULL, last_error = ?, completed_at = COALESCE(completed_at, unixepoch()),
+            claim_token = NULL, claim_expires_at = NULL, updated_at = unixepoch()
+      WHERE id = ? AND event_id = ? AND organisation_id = ?
+        AND type = 'content.zip.export'
+        AND status NOT IN ('failed', 'cancelled')`,
+  )
+    .bind(
+      reason.slice(0, 2_000),
+      operationId,
+      scope.eventId,
+      scope.organisationId,
+    )
+    .run();
+  await deleteZipExportObjects(env, scope.eventId, operationId);
+  await markZipExportStorageCleaned(env, scope, operationId);
+}
+
+async function expireContentZipExport(
+  env: CloudflareEnvironment,
+  scope: { organisationId: string; eventId: string },
+  operationId: string,
+) {
+  // Retire the deterministic idempotency key as part of expiry. A fresh
+  // request for the same unchanged manifest must be able to create a new
+  // operation, while the old terminal row remains available for audit.
+  await env.DB.prepare(
+    `UPDATE operation_jobs
+        SET status = 'failed', progress_completed = 1, progress_failed = 1,
+            result_json = NULL, last_error = ?,
+            idempotency_key = ?, completed_at = COALESCE(completed_at, unixepoch()),
+            claim_token = NULL, claim_expires_at = NULL, updated_at = unixepoch()
+      WHERE id = ? AND event_id = ? AND organisation_id = ?
+        AND type = 'content.zip.export' AND status = 'completed'
+        AND (completed_at IS NULL OR completed_at <= unixepoch() - ?)`,
+  )
+    .bind(
+      ZIP_EXPORT_EXPIRED_ERROR,
+      `content-zip:expired:${operationId}`,
+      operationId,
+      scope.eventId,
+      scope.organisationId,
+      ZIP_EXPORT_TTL_SECONDS,
+    )
+    .run();
+  await deleteZipExportObjects(env, scope.eventId, operationId);
+  await markZipExportStorageCleaned(env, scope, operationId);
+}
+
+type ExistingZipOperation = {
+  id: string;
+  status: string;
+  resultJson: string | null;
+  lastError: string | null;
+  completedAt: number | null;
+};
+
+async function loadZipOperationByIdempotency(
+  env: CloudflareEnvironment,
+  scope: { organisationId: string; eventId: string },
+  idempotencyKey: string,
+) {
+  return env.DB.prepare(
+    `SELECT id, status, result_json AS resultJson, last_error AS lastError,
+            completed_at AS completedAt
+       FROM operation_jobs
+      WHERE event_id = ? AND organisation_id = ? AND type = ?
+        AND idempotency_key = ?
+      LIMIT 1`,
+  )
+    .bind(
+      scope.eventId,
+      scope.organisationId,
+      "content.zip.export",
+      idempotencyKey,
+    )
+    .first<ExistingZipOperation>();
+}
+
+export async function invalidateContentZipExportsForAsset(
+  env: CloudflareEnvironment,
+  scope: { organisationId: string; eventId: string; assetId: string },
+) {
+  const operations = await env.DB.prepare(
+    `SELECT id, payload_json AS payloadJson
+       FROM operation_jobs
+      WHERE event_id = ? AND organisation_id = ?
+        AND type = 'content.zip.export'
+        AND status NOT IN ('failed', 'cancelled')
+      ORDER BY created_at, id`,
+  )
+    .bind(scope.eventId, scope.organisationId)
+    .all<{ id: string; payloadJson: string }>();
+
+  for (const operation of operations.results) {
+    let message: ReturnType<typeof contentZipQueueMessageSchema.parse>;
+    try {
+      message = parseZipQueuePayload(operation.payloadJson, {
+        id: operation.id,
+        eventId: scope.eventId,
+        organisationId: scope.organisationId,
+      });
+    } catch {
+      continue;
+    }
+    let manifest: unknown;
+    try {
+      manifest = JSON.parse(message.manifest);
+    } catch {
+      continue;
+    }
+    const parsedManifest = zipManifestSchema.safeParse(manifest);
+    if (
+      !parsedManifest.success ||
+      !parsedManifest.data.some((entry) => entry.assetId === scope.assetId)
+    ) {
+      continue;
+    }
+    await revokeContentZipExport(
+      env,
+      { organisationId: scope.organisationId, eventId: scope.eventId },
+      operation.id,
+      "The ZIP export was revoked because a referenced file was erased or released from retention.",
+    );
+  }
+}
+
+export async function cleanupExpiredContentZipExports(
+  env: CloudflareEnvironment,
+  limit = 100,
+) {
+  const cutoff = Math.floor(Date.now() / 1_000) - ZIP_EXPORT_TTL_SECONDS;
+  const operations = await env.DB.prepare(
+    `SELECT id, organisation_id AS organisationId, event_id AS eventId,
+            status, completed_at AS completedAt
+       FROM operation_jobs
+      WHERE type = 'content.zip.export'
+        AND content_zip_storage_cleaned_at IS NULL
+        AND (
+          (status = 'completed' AND completed_at IS NOT NULL AND completed_at <= ?)
+          OR status IN ('failed', 'cancelled')
+        )
+      ORDER BY CASE WHEN status = 'completed' THEN 0 ELSE 1 END,
+               CASE WHEN status = 'completed' THEN completed_at ELSE updated_at END,
+               id
+      LIMIT ?`,
+  )
+    .bind(cutoff, limit)
+    .all<{
+      id: string;
+      organisationId: string;
+      eventId: string;
+      status: string;
+      completedAt: number | null;
+    }>();
+
+  let failedCount = 0;
+  for (const operation of operations.results) {
+    try {
+      if (operation.status === "completed") {
+        await expireContentZipExport(
+          env,
+          {
+            organisationId: operation.organisationId,
+            eventId: operation.eventId,
+          },
+          operation.id,
+        );
+      } else {
+        await deleteZipExportObjects(env, operation.eventId, operation.id);
+        await markZipExportStorageCleaned(
+          env,
+          {
+            organisationId: operation.organisationId,
+            eventId: operation.eventId,
+          },
+          operation.id,
+        );
+      }
+    } catch (error) {
+      failedCount += 1;
+      const failure = (
+        error instanceof Error ? error.message : String(error)
+      ).slice(0, 2_000);
+      await env.DB.prepare(
+        `UPDATE operation_jobs
+            SET last_error = ?, updated_at = unixepoch()
+          WHERE id = ? AND event_id = ? AND organisation_id = ?
+            AND type = 'content.zip.export'
+            AND status IN ('completed', 'failed', 'cancelled')
+            AND content_zip_storage_cleaned_at IS NULL`,
+      )
+        .bind(
+          `ZIP storage cleanup failed: ${failure}`,
+          operation.id,
+          operation.eventId,
+          operation.organisationId,
+        )
+        .run();
+      console.error(
+        JSON.stringify({
+          level: "error",
+          subsystem: "content-zip-export-cleanup",
+          event: "storage-cleanup-failed",
+          operationId: operation.id,
+          errorName: error instanceof Error ? error.name : "UnknownError",
+          message: failure,
+        }),
+      );
+    }
+  }
+  if (failedCount > 0) {
+    throw new Error(
+      `${failedCount} expired ZIP export${failedCount === 1 ? "" : "s"} could not be cleaned up.`,
+    );
+  }
+  return operations.results.length;
 }
 
 function requireAdministrator(viewer: Viewer) {
@@ -182,12 +575,23 @@ export class ContentArchiveService {
         ORDER BY asset.id`,
     )
       .bind(viewer.organisationId, viewer.eventId, ...assetIds)
-      .all<
-        z.infer<typeof zipManifestEntrySchema> & {
-          objectKey: string;
-          contentType: string | null;
-        }
-      >();
+      .all<ZipSourceRow>();
+  }
+
+  private async assertZipSourceObjects(rows: readonly ZipSourceRow[]) {
+    const bucket = this.requireBucket();
+    for (const row of rows) {
+      const object = await bucket.head(row.objectKey);
+      if (
+        !object ||
+        object.httpEtag !== row.objectEtag ||
+        object.size !== row.sizeBytes
+      ) {
+        throw new ZipSourceInvalidatedError(
+          `Private file ${row.filename} is missing or no longer matches its released version.`,
+        );
+      }
+    }
   }
 
   private async validateZipManifest(viewer: Viewer, rawInput: unknown) {
@@ -223,7 +627,7 @@ export class ContentArchiveService {
         );
       });
     if (!unchanged) {
-      throw new ContentManagementStateError(
+      throw new ZipSourceInvalidatedError(
         "One or more selected files changed after preview. Prepare a fresh ZIP preview.",
       );
     }
@@ -300,119 +704,117 @@ export class ContentArchiveService {
       byte.toString(16).padStart(2, "0"),
     ).join("");
     const idempotencyKey = `content-zip:${input.groupBy}:${digestHex}`;
-    const existing = await this.env.DB.prepare(
-      `SELECT id, status, result_json AS resultJson, last_error AS lastError
-         FROM operation_jobs
-        WHERE event_id = ? AND organisation_id = ? AND type = ?
-          AND idempotency_key = ?
-        LIMIT 1`,
-    )
-      .bind(
-        viewer.eventId,
-        viewer.organisationId,
-        "content.zip.export",
-        idempotencyKey,
-      )
-      .first<{
-        id: string;
-        status: string;
-        resultJson: string | null;
-        lastError: string | null;
-      }>();
-    if (existing) {
-      return {
-        operationId: existing.id,
-        status: publicZipOperationStatus(existing.status),
-        error: existing.lastError,
-        selectedCount: expected.length,
-      };
-    }
-    const operationId = crypto.randomUUID();
-    const message = contentZipQueueMessageSchema.parse({
-      type: "content.zip.export",
-      operationId,
-      organisationId: viewer.organisationId,
+    const scope = {
       eventId: viewer.eventId,
-      idempotencyKey,
-      manifest: input.manifest,
-      groupBy: input.groupBy,
-    });
-    const inserted = await this.env.DB.prepare(
-      `INSERT OR IGNORE INTO operation_jobs (
-         id, organisation_id, event_id, requested_by_person_id, type,
-         idempotency_key, correlation_id, status, payload_json,
-         progress_total, progress_completed, progress_failed, cancellable,
-         created_at, updated_at
-       ) VALUES (?, ?, ?, ?, 'content.zip.export', ?, ?, 'queued', ?, 1, 0, 0, 0,
-                 unixepoch(), unixepoch())`,
-    )
-      .bind(
-        operationId,
-        viewer.organisationId,
-        viewer.eventId,
-        viewer.personId,
+      organisationId: viewer.organisationId,
+    };
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      const existing = await loadZipOperationByIdempotency(
+        this.env,
+        scope,
         idempotencyKey,
-        crypto.randomUUID(),
-        JSON.stringify(message),
-      )
-      .run();
-    if ((inserted.meta.changes ?? 0) !== 1) {
-      const raced = await this.env.DB.prepare(
-        `SELECT id, status, last_error AS lastError
-           FROM operation_jobs
-          WHERE event_id = ? AND organisation_id = ? AND type = ?
-            AND idempotency_key = ?
-          LIMIT 1`,
+      );
+      if (existing) {
+        if (
+          existing.status !== "completed" ||
+          !zipExportExpired(existing.completedAt)
+        ) {
+          return {
+            operationId: existing.id,
+            status: publicZipOperationStatus(existing.status),
+            error: existing.lastError,
+            selectedCount: expected.length,
+          };
+        }
+        await expireContentZipExport(this.env, scope, existing.id);
+        continue;
+      }
+
+      const operationId = crypto.randomUUID();
+      const message = contentZipQueueMessageSchema.parse({
+        type: "content.zip.export",
+        operationId,
+        organisationId: viewer.organisationId,
+        eventId: viewer.eventId,
+        idempotencyKey,
+        manifest: input.manifest,
+        groupBy: input.groupBy,
+      });
+      const inserted = await this.env.DB.prepare(
+        `INSERT OR IGNORE INTO operation_jobs (
+           id, organisation_id, event_id, requested_by_person_id, type,
+           idempotency_key, correlation_id, status, payload_json,
+           progress_total, progress_completed, progress_failed, cancellable,
+           created_at, updated_at
+         ) VALUES (?, ?, ?, ?, 'content.zip.export', ?, ?, 'queued', ?, 1, 0, 0, 0,
+                   unixepoch(), unixepoch())`,
       )
         .bind(
-          viewer.eventId,
+          operationId,
           viewer.organisationId,
-          "content.zip.export",
+          viewer.eventId,
+          viewer.personId,
           idempotencyKey,
+          crypto.randomUUID(),
+          JSON.stringify(message),
         )
-        .first<{ id: string; status: string; lastError: string | null }>();
-      if (!raced) {
-        throw new Error(
-          "The ZIP export idempotency record could not be recovered after a concurrent request.",
+        .run();
+      if ((inserted.meta.changes ?? 0) !== 1) {
+        const raced = await loadZipOperationByIdempotency(
+          this.env,
+          scope,
+          idempotencyKey,
         );
+        if (!raced) continue;
+        if (
+          raced.status === "completed" &&
+          zipExportExpired(raced.completedAt)
+        ) {
+          await expireContentZipExport(this.env, scope, raced.id);
+          continue;
+        }
+        return {
+          operationId: raced.id,
+          status: publicZipOperationStatus(raced.status),
+          error: raced.lastError,
+          selectedCount: expected.length,
+        };
+      }
+      try {
+        await this.env.OPERATIONS_QUEUE.send(message);
+      } catch (error) {
+        const failure = (
+          error instanceof Error ? error.message : String(error)
+        ).slice(0, 2_000);
+        await this.env.DB.prepare(
+          `UPDATE operation_jobs
+              SET status = 'queue_failed', last_error = ?, updated_at = unixepoch()
+            WHERE id = ? AND event_id = ? AND organisation_id = ? AND status = 'queued'`,
+        )
+          .bind(failure, operationId, viewer.eventId, viewer.organisationId)
+          .run();
+        return {
+          operationId,
+          status: "failed" as const,
+          error: `The ZIP export could not be queued: ${failure}`,
+        };
       }
       return {
-        operationId: raced.id,
-        status: publicZipOperationStatus(raced.status),
-        error: raced.lastError,
+        operationId,
+        status: "queued" as const,
         selectedCount: expected.length,
       };
     }
-    try {
-      await this.env.OPERATIONS_QUEUE.send(message);
-    } catch (error) {
-      const failure = (
-        error instanceof Error ? error.message : String(error)
-      ).slice(0, 2_000);
-      await this.env.DB.prepare(
-        `UPDATE operation_jobs
-            SET status = 'queue_failed', last_error = ?, updated_at = unixepoch()
-          WHERE id = ? AND event_id = ? AND organisation_id = ? AND status = 'queued'`,
-      )
-        .bind(failure, operationId, viewer.eventId, viewer.organisationId)
-        .run();
-      return {
-        operationId,
-        status: "failed" as const,
-        error: `The ZIP export could not be queued: ${failure}`,
-      };
-    }
-    return {
-      operationId,
-      status: "queued" as const,
-      selectedCount: expected.length,
-    };
+    throw new Error(
+      "The ZIP export could not establish an idempotent operation after concurrent expiry handling.",
+    );
   }
 
   async zipOperationStatus(viewer: Viewer, operationId: string) {
     requireAdministrator(viewer);
     const operation = await this.env.DB.prepare(
-      `SELECT id, status, result_json AS resultJson, last_error AS lastError
+      `SELECT id, status, result_json AS resultJson, last_error AS lastError,
+              completed_at AS completedAt
          FROM operation_jobs
         WHERE id = ? AND event_id = ? AND organisation_id = ?
           AND type = 'content.zip.export'
@@ -424,19 +826,34 @@ export class ContentArchiveService {
         status: string;
         resultJson: string | null;
         lastError: string | null;
+        completedAt: number | null;
       }>();
     if (!operation) {
       throw new ContentManagementStateError("ZIP export not found.", 404);
     }
-    const status = publicZipOperationStatus(operation.status);
+    let status = publicZipOperationStatus(operation.status);
+    let error = operation.lastError;
+    if (
+      operation.status === "completed" &&
+      zipExportExpired(operation.completedAt)
+    ) {
+      await expireContentZipExport(
+        this.env,
+        { organisationId: viewer.organisationId, eventId: viewer.eventId },
+        operation.id,
+      );
+      status = "failed";
+      error = "The ZIP export expired and must be prepared again.";
+    }
     const result =
-      operation.status === "completed"
-        ? parseZipOperationResult(operation.resultJson)
-        : null;
+      status === "ready" ? parseZipOperationResult(operation.resultJson) : null;
+    if (result) {
+      assertZipOperationObjectKey(viewer.eventId, operation.id, result);
+    }
     return {
       operationId: operation.id,
       status,
-      error: operation.lastError,
+      error,
       fileName: result?.fileName ?? null,
       sizeBytes: result?.sizeBytes ?? null,
       downloadUrl:
@@ -449,14 +866,20 @@ export class ContentArchiveService {
   async downloadStoredZip(viewer: Viewer, operationId: string) {
     requireAdministrator(viewer);
     const operation = await this.env.DB.prepare(
-      `SELECT result_json AS resultJson, status
+      `SELECT result_json AS resultJson, status, payload_json AS payloadJson,
+              completed_at AS completedAt
          FROM operation_jobs
         WHERE id = ? AND event_id = ? AND organisation_id = ?
           AND type = 'content.zip.export'
         LIMIT 1`,
     )
       .bind(operationId, viewer.eventId, viewer.organisationId)
-      .first<{ resultJson: string | null; status: string }>();
+      .first<{
+        resultJson: string | null;
+        status: string;
+        payloadJson: string;
+        completedAt: number | null;
+      }>();
     if (!operation) {
       throw new ContentManagementStateError("ZIP export not found.", 404);
     }
@@ -467,8 +890,49 @@ export class ContentArchiveService {
         409,
       );
     }
+    if (zipExportExpired(operation.completedAt)) {
+      await expireContentZipExport(
+        this.env,
+        { organisationId: viewer.organisationId, eventId: viewer.eventId },
+        operationId,
+      );
+      throw new ContentManagementStateError(
+        "This ZIP export has expired and must be prepared again.",
+        410,
+      );
+    }
     const result = parseZipOperationResult(operation.resultJson);
-    const object = await this.requireBucket().get(result.objectKey);
+    const objectKey = assertZipOperationObjectKey(
+      viewer.eventId,
+      operationId,
+      result,
+    );
+    const message = parseZipQueuePayload(operation.payloadJson, {
+      id: operationId,
+      eventId: viewer.eventId,
+      organisationId: viewer.organisationId,
+    });
+    try {
+      const { rows } = await this.validateZipManifest(viewer, {
+        manifest: message.manifest,
+        groupBy: message.groupBy,
+        confirmed: true,
+      });
+      await this.assertZipSourceObjects(rows.results);
+    } catch (error) {
+      if (!(error instanceof ZipSourceInvalidatedError)) throw error;
+      await revokeContentZipExport(
+        this.env,
+        { organisationId: viewer.organisationId, eventId: viewer.eventId },
+        operationId,
+        "The ZIP export was revoked because a referenced file changed or was removed.",
+      );
+      throw new ContentManagementStateError(
+        "This ZIP export is no longer available because one or more source files changed or were removed.",
+        410,
+      );
+    }
+    const object = await this.requireBucket().get(objectKey);
     if (
       !object ||
       object.httpEtag !== result.objectEtag ||
@@ -491,49 +955,7 @@ export class ContentArchiveService {
 
   async downloadZip(viewer: Viewer, rawInput: unknown) {
     requireAdministrator(viewer);
-    const input = contentZipConfirmSchema.parse(rawInput);
-    let decoded: unknown;
-    try {
-      decoded = JSON.parse(input.manifest);
-    } catch {
-      throw new ContentManagementStateError("The ZIP preview is invalid.", 422);
-    }
-    const expected = zipManifestSchema.parse(decoded);
-    const rows = await this.zipRows(
-      viewer,
-      expected.map((entry) => entry.assetId),
-    );
-    const current = rows.results.map(
-      ({ objectKey: _objectKey, contentType: _contentType, ...row }) => row,
-    );
-    const unchanged =
-      current.length === expected.length &&
-      current.every((row, index) => {
-        const prior = expected[index];
-        return (
-          prior !== undefined &&
-          row.assetId === prior.assetId &&
-          row.versionId === prior.versionId &&
-          row.objectEtag === prior.objectEtag &&
-          row.sizeBytes === prior.sizeBytes &&
-          row.filename === prior.filename &&
-          row.sessionName === prior.sessionName &&
-          row.speakerName === prior.speakerName &&
-          row.createdAt === prior.createdAt
-        );
-      });
-    if (!unchanged) {
-      throw new ContentManagementStateError(
-        "One or more selected files changed after preview. Prepare a fresh ZIP preview.",
-      );
-    }
-    const totalBytes = expected.reduce((sum, row) => sum + row.sizeBytes, 0);
-    if (totalBytes > MAX_ZIP_BYTES) {
-      throw new ContentManagementStateError(
-        "The selected current versions exceed the 100 MB ZIP export limit.",
-        422,
-      );
-    }
+    const { input, rows } = await this.validateZipManifest(viewer, rawInput);
     const bucket = this.requireBucket();
     const paths = new Set<string>();
     const entries: StoredZipEntry[] = [];

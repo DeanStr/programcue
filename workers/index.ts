@@ -1,6 +1,7 @@
 import { createRequestHandler, RouterContextProvider } from "react-router";
 
 import { runCommunicationAutomation } from "../app/modules/communications/communication-automation-service.server";
+import { cleanupExpiredContentZipExports } from "../app/modules/content/content-archive-service.server";
 import { requireRetiredEventBrandAssetCleanup } from "../app/modules/events/event-brand-asset-cleanup.server";
 import {
   cloudflareContext,
@@ -529,6 +530,12 @@ export default {
         observe(
           "event-brand-asset-cleanup",
           requireRetiredEventBrandAssetCleanup(env),
+        ),
+      );
+      ctx.waitUntil(
+        observe(
+          "content-zip-export-cleanup",
+          cleanupExpiredContentZipExports(env),
         ),
       );
       return;

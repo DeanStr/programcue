@@ -739,7 +739,13 @@ blocker.
   response-cancellation through a dedicated binary resource route rather than a
   document action. Focused Worker coverage selects two current versions,
   processes the Queue payload, checks the ready status and inspects the ZIP
-  bytes; missing queue/storage bindings fail explicitly.
+  bytes; missing queue/storage bindings fail explicitly. Stored archives live
+  under the event cleanup prefix, expire after 24 hours, revalidate their
+persisted source manifest and source ETags before every download, and are
+revoked and deleted when a referenced file is erased. The worker renews its
+claim while streaming and fences claim-specific objects on completion.
+Terminal cleanup records successful deletion and retries only rows whose
+cleanup marker is still absent.
   A speaker-scoped task file is attributed to its linked session only when
   exactly one event session matches that speaker; ambiguous relationships stay
   visibly unassigned instead of selecting an arbitrary session.

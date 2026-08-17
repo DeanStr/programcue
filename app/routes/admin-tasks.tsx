@@ -184,29 +184,7 @@ export async function action({ request, context }: Route.ActionArgs) {
       : undefined;
   const taskTemplateDraft: TaskTemplateDraftValues | undefined =
     taskTemplateInput
-      ? normalizeTaskTemplateDraft({
-          name: String(taskTemplateInput.name ?? ""),
-          description: String(taskTemplateInput.description ?? ""),
-          targetType: String(
-            taskTemplateInput.targetType ?? "",
-          ) as TaskTemplateDraftValues["targetType"],
-          taskType: String(
-            taskTemplateInput.taskType ?? "",
-          ) as TaskTemplateDraftValues["taskType"],
-          impact: String(
-            taskTemplateInput.impact ?? "",
-          ) as TaskTemplateDraftValues["impact"],
-          evidenceMode: String(
-            taskTemplateInput.evidenceMode ?? "",
-          ) as TaskTemplateDraftValues["evidenceMode"],
-          dueAnchor: String(
-            taskTemplateInput.dueAnchor ?? "",
-          ) as TaskTemplateDraftValues["dueAnchor"],
-          dueOffsetDays: String(taskTemplateInput.dueOffsetDays ?? ""),
-          fixedDueDate: String(taskTemplateInput.fixedDueDate ?? ""),
-          autoAssignOnAcceptance: taskTemplateInput.autoAssignOnAcceptance,
-          dependencyIds: taskTemplateInput.dependencyIds,
-        })
+      ? normalizeTaskTemplateDraft(taskTemplateInput)
       : undefined;
   try {
     if (intent === "create-travel-onboarding") {
