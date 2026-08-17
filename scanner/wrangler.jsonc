@@ -13,7 +13,7 @@
   ],
   "vars": {
     "APP_ENV": "production",
-    "SOURCE_REVISION": "c9e1287",
+    "SOURCE_REVISION": "ae6133c",
     "EXPECTED_CALLBACK_URL": "https://app.programcue.com/api/webhooks/file-scanner",
     "R2_BUCKET_NAME": "program-cue-files",
     "R2_OBJECT_HOST": "327c60945460c16be8ecdbbc7fa35447.r2.cloudflarestorage.com",
