@@ -94,15 +94,26 @@ test("Event Setup rejects attempts to change Branding-owned fields", async ({
   page,
 }) => {
   await page.goto("/admin/event");
+  await page.locator("body[data-hydrated='true']").waitFor();
   const venue = page.getByLabel("Venue", { exact: true });
   const originalVenue = await venue.inputValue();
   await venue.fill("This venue must not persist");
+  // Dirty-state tracking re-renders the form after the venue input. Tamper
+  // and submit in one turn so React cannot restore the published accent first.
   await page
-    .locator('input[name="brandAccent"]')
-    .evaluate((input: HTMLInputElement) => {
+    .locator("form")
+    .filter({ has: page.locator('input[name="brandAccent"]') })
+    .evaluate((form) => {
+      if (!(form instanceof HTMLFormElement)) {
+        throw new Error("Event Setup did not render a form.");
+      }
+      const input = form.querySelector('input[name="brandAccent"]');
+      if (!(input instanceof HTMLInputElement)) {
+        throw new Error("Event Setup is missing the published accent field.");
+      }
       input.value = "#000000";
+      form.requestSubmit();
     });
-  await page.getByRole("button", { name: "Save event" }).click();
   await expect(page.getByRole("alert")).toContainText(
     "use the Branding workspace",
   );
