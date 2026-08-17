@@ -23,8 +23,9 @@ MAX_REQUEST_BYTES = 24_000
 DOWNLOAD_TIMEOUT_SECONDS = 600
 SCAN_TIMEOUT_SECONDS = 720
 # The Cloudflare Container idle alarm remains the ordinary shutdown path, but
-# the scanner process also owns a hard ceiling. A provider alarm failure must
-# never leave an otherwise idle, metered ClamAV VM running indefinitely.
+# the scanner process also initiates graceful shutdown after forty minutes. An
+# active handler may finish before process exit; an idle VM cannot remain alive
+# indefinitely solely because the provider alarm failed.
 MAX_CONTAINER_LIFETIME_SECONDS = 40 * 60
 CHUNK_BYTES = 1024 * 1024
 SCAN_DIRECTORY = Path("/tmp/program-cue-scans")

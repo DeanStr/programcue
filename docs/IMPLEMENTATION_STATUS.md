@@ -1257,7 +1257,8 @@ capacity restored. The ready application reports image digest
 `sha256:87d8d269bf7c5ae98cd1501e71659033f7d4966e2c50b51599c70ad9b890ba20`;
 all scanner slots remained inactive after rollout. That source exits a ready
 container after one admitted scan, reduces the provider idle fallback to five
-minutes and adds an in-process forty-minute lifetime ceiling. Thirteen focused
+minutes and adds an independent in-process graceful-shutdown trigger after
+forty minutes. Thirteen focused
 container tests, including a real local HTTP-server shutdown, pass. A fresh
 post-cutover production file scan and subsequent inactive-state observation
 remain outstanding acceptance evidence.

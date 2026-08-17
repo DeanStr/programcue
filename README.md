@@ -191,8 +191,8 @@ The production resource inventory is:
   `program-cue-file-scans` and a four-slot EU-pinned pool of `standard-2`
   Cloudflare Containers running the pinned ClamAV 1.4 LTS image. Each container
   refreshes signatures before becoming healthy, exits after one admitted scan
-  and retains a five-minute idle fallback plus a forty-minute hard lifetime
-  ceiling for cold-start or provider-alarm failures.
+  and retains a five-minute idle fallback plus an independent graceful-shutdown
+  trigger after forty minutes for cold-start or provider-alarm failures.
 - A Resend sending domain and webhook, the provisioned Turnstile widget, and
   matching application/scanner credentials.
 - Google and Microsoft OAuth applications for participant sign-in and calendar
