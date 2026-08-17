@@ -1247,6 +1247,21 @@ the latest 20 scan Workflows were all complete. This is provider-platform
 evidence rather than an application scan failure; recurrence or a failure to
 resolve should be escalated to Cloudflare with that reference.
 
+On 17 August, account billing and live instance inspection found all four
+`standard-2` scanner slots still running despite zero active scan operations and
+no scan operation created after 13 August. Cloudflare recorded 549.33 GiB-hours
+for the pool on 16 August, consistent with nearly continuous four-slot
+allocation rather than file traffic. A zero-capacity cutover made every slot
+inactive before scanner source `ae6133c` was deployed and four-slot on-demand
+capacity restored. The ready application reports image digest
+`sha256:87d8d269bf7c5ae98cd1501e71659033f7d4966e2c50b51599c70ad9b890ba20`;
+all scanner slots remained inactive after rollout. That source exits a ready
+container after one admitted scan, reduces the provider idle fallback to five
+minutes and adds an in-process forty-minute lifetime ceiling. Thirteen focused
+container tests, including a real local HTTP-server shutdown, pass. A fresh
+post-cutover production file scan and subsequent inactive-state observation
+remain outstanding acceptance evidence.
+
 Live provider acceptance covers an owner Turnstile/Resend magic-link flow,
 tracked Resend delivered and bounced receipts, Google and hardened Microsoft
 sign-in, both calendar-provider connections and invitation create, update and
