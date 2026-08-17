@@ -381,9 +381,9 @@
     ),
     linear-gradient(
       115deg,
-      color-mix(in srgb, var(--event-accent) 60%, var(--surface-inverse)) 0%,
-      color-mix(in srgb, var(--event-accent) 46%, var(--surface-inverse)) 50%,
-      color-mix(in srgb, var(--event-accent) 28%, var(--surface-inverse)) 78%,
+      color-mix(in srgb, var(--event-accent) 66%, var(--surface-inverse)) 0%,
+      color-mix(in srgb, var(--event-accent) 52%, var(--surface-inverse)) 50%,
+      color-mix(in srgb, var(--event-accent) 34%, var(--surface-inverse)) 78%,
       var(--surface-inverse) 100%
     );
 }

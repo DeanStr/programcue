@@ -312,9 +312,9 @@
   margin-bottom: 0;
 }
 .public-site-introduction .public-site-section-heading h2 {
-  font-size: var(--text-sm);
+  font-size: var(--text-base);
   font-weight: var(--weight-semibold);
-  letter-spacing: var(--tracking-snug);
+  letter-spacing: var(--tracking-normal);
   color: var(--accent-ink);
 }
 .public-site-lede {
@@ -326,7 +326,7 @@
   text-wrap: balance;
 }
 .public-site-introduction.is-compact .public-site-lede {
-  max-width: 28ch;
+  max-width: 34ch;
   font-size: clamp(var(--text-2xl), 4.2cqw, var(--display-2));
   line-height: var(--leading-tight);
   letter-spacing: var(--tracking-tight);
@@ -870,7 +870,6 @@ a.public-site-feature-card:focus-visible .public-site-speaker-profile-cue {
   .public-site-section-heading h2 {
     font-size: var(--text-2xl);
   }
-  .public-site-introduction .public-site-section-heading h2,
   .public-site-statistics-section .public-site-section-heading h2 {
     font-size: var(--text-sm);
   }
