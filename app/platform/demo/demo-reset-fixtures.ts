@@ -1,4 +1,12 @@
 import { defaultProgrammeEmbedConfiguration } from "~/modules/programme/programme-embed-configuration";
+import {
+  defaultPublicSiteDraft,
+  type PublicSiteDraft,
+  type PublishedPublicSiteSnapshot,
+  publicSiteDraftSchema,
+  publishedPublicSiteSnapshotSchema,
+} from "~/modules/public-site/public-site";
+import { DEMO_IDENTITIES } from "~/platform/demo/demo-identities";
 
 export const DEMO_EVALUATION_RESET_CONFIRMATION = "clear-abstract-evaluation";
 
@@ -44,3 +52,120 @@ export const DEMO_SHOWCASE_EMBED_CONFIGURATION = {
   density: "compact" as const,
   showSpeakerDirectory: false,
 };
+export const DEMO_SHOWCASE_FEATURED_SESSION_IDS = [
+  "demo-session-1",
+  "demo-session-2",
+] as const;
+export const DEMO_SHOWCASE_FEATURED_SPEAKER_IDS = [
+  DEMO_IDENTITIES.speaker.personId,
+  DEMO_IDENTITIES.submitter.personId,
+] as const;
+export const DEMO_SHOWCASE_PUBLIC_SITE_TAGLINE =
+  "One destination for the whole event.";
+export const DEMO_SHOWCASE_PUBLIC_SITE_OPERATION_ID =
+  "demo-showcase:public-site-publish";
+export const DEMO_SHOWCASE_FAQ_WHEN_ID = "demo-showcase-faq-when";
+export const DEMO_SHOWCASE_FAQ_APPLY_ID = "demo-showcase-faq-apply";
+export const DEMO_SHOWCASE_SPONSOR_PARTNER_ID = "demo-showcase-sponsor-partner";
+export const DEMO_SHOWCASE_SPONSOR_COMMUNITY_ID =
+  "demo-showcase-sponsor-community";
+export const DEMO_SHOWCASE_SPONSOR_PARTNER_OPERATION_ID =
+  "demo-showcase:sponsor-partner";
+export const DEMO_SHOWCASE_SPONSOR_COMMUNITY_OPERATION_ID =
+  "demo-showcase:sponsor-community";
+export const DEMO_SHOWCASE_PUBLIC_SITE_AUDIT_ID =
+  "audit-demo-showcase-public-site-published";
+
+export const DEMO_SHOWCASE_SITE_SPONSORS = [
+  {
+    id: DEMO_SHOWCASE_SPONSOR_PARTNER_ID,
+    name: "Northstar Events",
+    tier: "Partner",
+    websiteUrl: null,
+    logoUrl: null,
+    description: null,
+    position: 0,
+    operationId: DEMO_SHOWCASE_SPONSOR_PARTNER_OPERATION_ID,
+  },
+  {
+    id: DEMO_SHOWCASE_SPONSOR_COMMUNITY_ID,
+    name: "EventLab",
+    tier: "Community",
+    websiteUrl: null,
+    logoUrl: null,
+    description: null,
+    position: 1,
+    operationId: DEMO_SHOWCASE_SPONSOR_COMMUNITY_OPERATION_ID,
+  },
+] as const;
+
+export function demoShowcasePublicSiteDraft(): PublicSiteDraft {
+  const draft = defaultPublicSiteDraft();
+  return publicSiteDraftSchema.parse({
+    ...draft,
+    tagline: DEMO_SHOWCASE_PUBLIC_SITE_TAGLINE,
+    theme: "light",
+    sectionVisibility: {
+      ...draft.sectionVisibility,
+      featured_speakers: true,
+      featured_sessions: true,
+      faq: true,
+    },
+    featuredSpeakerIds: [...DEMO_SHOWCASE_FEATURED_SPEAKER_IDS],
+    featuredSessionIds: [...DEMO_SHOWCASE_FEATURED_SESSION_IDS],
+    faqItems: [
+      {
+        id: DEMO_SHOWCASE_FAQ_WHEN_ID,
+        question: "When does the conference take place?",
+        answer:
+          "20–22 May 2027 at the Metro Toronto Convention Centre in Toronto.",
+      },
+      {
+        id: DEMO_SHOWCASE_FAQ_APPLY_ID,
+        question: "How do I apply to speak?",
+        answer:
+          "Use Apply to speak on this site while the call for speakers is open.",
+      },
+    ],
+    pages: {
+      ...draft.pages,
+      about: {
+        enabled: true,
+        title: "About",
+        navigationLabel: "About",
+        body: "## Why attend\n\nMeet practitioners building calmer, more useful event operations.",
+      },
+      sponsors: {
+        enabled: true,
+        title: "Sponsors",
+        navigationLabel: "Sponsors",
+        body: "Thanks to the organisations supporting this event.",
+      },
+    },
+  });
+}
+
+export function demoShowcasePublishedSponsors() {
+  return [...DEMO_SHOWCASE_SITE_SPONSORS]
+    .map(({ operationId: _operationId, ...sponsor }) => sponsor)
+    .sort((left, right) => {
+      const tier = left.tier.localeCompare(right.tier, "en", {
+        sensitivity: "base",
+      });
+      if (tier !== 0) return tier;
+      if (left.position !== right.position)
+        return left.position - right.position;
+      const name = left.name.localeCompare(right.name, "en", {
+        sensitivity: "base",
+      });
+      if (name !== 0) return name;
+      return left.id.localeCompare(right.id);
+    });
+}
+
+export function demoShowcasePublishedPublicSite(): PublishedPublicSiteSnapshot {
+  return publishedPublicSiteSnapshotSchema.parse({
+    ...demoShowcasePublicSiteDraft(),
+    sponsors: demoShowcasePublishedSponsors(),
+  });
+}

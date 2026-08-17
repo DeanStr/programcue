@@ -477,18 +477,29 @@ manual assistive-technology acceptance remains external.
 
 ### Evaluation showcase fixture evidence
 
-- **Production evaluator repository slice:** the deterministic reset
-  now keeps clean SBEK identities separate from a showcase cohort containing
-  two completed reviews with a 2.30-point score spread, one committee
+- **Local release-candidate evidence:** the deterministic reset keeps
+  clean SBEK identities separate from a showcase cohort containing two
+  completed reviews with a 2.30-point score spread, one committee
   discussion, a published waitlist decision, one historical public
-  speaker-profile snapshot, an active named schedule embed and canonical
-  venue/map context. Reset completeness requires those records while still
-  requiring zero prior SBEK submissions, assignments, speaker tasks and clean
-  applicant activation. On 16 August 2026 the access-code-gated evaluator reset
-  completed under deployed revision `ad9b752`, rotated the evaluator-session
-  generation and returned a fresh unlocked role picker. Production health
-  reported that exact revision and the temporary operator reset endpoint
-  remained unavailable with HTTP 404.
+  speaker-profile snapshot, an active named schedule embed, a published public
+  event-site snapshot (featured sessions and speakers, FAQ, About, Sponsors,
+  two text-only sponsors without outbound URLs, matching published references,
+  the fixture publication change, equal draft and published revisions) and
+  canonical venue/map context. Reset completeness requires those records while
+  still requiring zero prior SBEK submissions, assignments, speaker tasks and
+  clean applicant activation.
+  Focused Worker and Playwright coverage verifies the public-site showcase
+  locally. A later `/demo` load does not restore deleted sponsors or stale
+  featured references onto an already-edited site.
+- **Production evaluator repository slice:** On 16 August 2026 the
+  access-code-gated evaluator reset completed under deployed revision
+  `ad9b752`, rotated the evaluator-session generation and returned a fresh
+  unlocked role picker. That reset verified the preceding showcase cohort
+  (reviews, discussion, decision, profile revision, embed and venue), not the
+  public-site snapshot. Production health reported that exact revision and the
+  temporary operator reset endpoint remained unavailable with HTTP 404. After
+  this fixture is deployed and another production reset runs, attach that
+  evidence here.
 
 ### Reference-board adoption evidence
 
@@ -1004,8 +1015,10 @@ revoked and deleted during file erasure.
   sponsor snapshots and edits, featured-record and recording schedule blocking,
   recording resources/timing, independent withdrawal and a real Images WebP
   render. Unsaved client configuration blocks navigation and tab closure.
-  `e2e/public-site.spec.ts` passes the complete organizer-to-public Chromium
-  workflow, including discard confirmation, Event home/programme navigation,
+  `e2e/public-site.spec.ts` asserts the reset-restored published showcase,
+  replacement publication from that published state, and first-publish on a
+  blank event. Coverage still includes discard confirmation, Event
+  home/programme navigation,
   homepage/fixed-page desktop/mobile preview selection, ordered featured
   selection, FAQ ordering, featured-session detail links, 40-character labels
   without header overflow and conditional fixed-page caching. The shared header

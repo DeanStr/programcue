@@ -7,6 +7,7 @@ import { assistantProposalMetadataSchema } from "~/modules/ai/ai-tools.server";
 import { CommunicationService } from "~/modules/communications/communication-service.server";
 import { EvaluationService } from "~/modules/evaluations/evaluation-service.server";
 import { ProgrammeEmbedService } from "~/modules/programme/programme-embed-service.server";
+import { getValidatedPublishedPublicSite } from "~/modules/public-site/validated-public-site.server";
 import { eventLocalCalendarDate } from "~/modules/schedule/schedule-time";
 import { readSpeakerProfileHistory } from "~/modules/speakers/speaker-profile-revision.server";
 import { SubmissionService } from "~/modules/submissions/submission-service.server";
@@ -17,6 +18,11 @@ import {
   DEMO_VENUE_MAP_URL,
   SBEK_FIXTURE_PEOPLE,
 } from "~/platform/demo/demo-identities";
+import { ensureDemoPublicSite } from "~/platform/demo/demo-public-site-seed.server";
+import {
+  DEMO_SHOWCASE_PUBLIC_SITE_OPERATION_ID,
+  DEMO_SHOWCASE_SPONSOR_COMMUNITY_ID,
+} from "~/platform/demo/demo-reset-fixtures";
 import {
   DEMO_EVENT_ID,
   DEMO_ORGANISATION_ID,
@@ -238,6 +244,7 @@ describe("complete evaluator demo reset", () => {
         showcasePublishedDecisions: 1,
         showcaseProfileRevisions: 1,
         showcaseManagedEmbeds: 1,
+        showcasePublishedPublicSites: 1,
         sbekPeople: 4,
         sbekReviewerMemberships: 0,
         sbekReviewerAssignments: 0,
@@ -335,6 +342,101 @@ describe("complete evaluator demo reset", () => {
       ).resolves.toMatchObject({
         status: "active",
         configuration: expect.objectContaining({ surface: "schedule" }),
+      });
+      const publishedSite = await getValidatedPublishedPublicSite(
+        testEnvironment,
+        "future-of-events-2027",
+        null,
+      );
+      expect(publishedSite?.revision).toBe(1);
+      expect(publishedSite?.configuration).toMatchObject({
+        tagline: "One destination for the whole event.",
+        theme: "light",
+        sectionVisibility: {
+          introduction: true,
+          featured_speakers: true,
+          featured_sessions: true,
+          statistics: true,
+          venue: true,
+          faq: true,
+        },
+        featuredSessionIds: ["demo-session-1", "demo-session-2"],
+        featuredSpeakerIds: ["person-demo-speaker", "person-demo-submitter"],
+        pages: {
+          about: { enabled: true, navigationLabel: "About" },
+          sponsors: { enabled: true, navigationLabel: "Sponsors" },
+        },
+        sponsors: [
+          expect.objectContaining({
+            id: "demo-showcase-sponsor-community",
+            name: "EventLab",
+            tier: "Community",
+            logoUrl: null,
+            websiteUrl: null,
+          }),
+          expect.objectContaining({
+            id: "demo-showcase-sponsor-partner",
+            name: "Northstar Events",
+            tier: "Partner",
+            logoUrl: null,
+            websiteUrl: null,
+          }),
+        ],
+      });
+      await expect(
+        testEnvironment.DB.prepare(
+          `SELECT draft_revision AS draftRevision,
+                  published_revision AS publishedRevision,
+                  json_extract(draft_json, '$.sponsors') AS draftSponsors
+             FROM event_public_sites
+            WHERE event_id = ?`,
+        )
+          .bind(DEMO_EVENT_ID)
+          .first(),
+      ).resolves.toEqual({
+        draftRevision: 1,
+        publishedRevision: 1,
+        draftSponsors: null,
+      });
+      await expect(
+        testEnvironment.DB.prepare(
+          `SELECT kind, record_id AS recordId, site_revision AS siteRevision
+             FROM event_public_site_references
+            WHERE event_id = ?
+            ORDER BY kind, record_id`,
+        )
+          .bind(DEMO_EVENT_ID)
+          .all(),
+      ).resolves.toMatchObject({
+        results: [
+          { kind: "session", recordId: "demo-session-1", siteRevision: 1 },
+          { kind: "session", recordId: "demo-session-2", siteRevision: 1 },
+          {
+            kind: "speaker",
+            recordId: "person-demo-speaker",
+            siteRevision: 1,
+          },
+          {
+            kind: "speaker",
+            recordId: "person-demo-submitter",
+            siteRevision: 1,
+          },
+        ],
+      });
+      await expect(
+        testEnvironment.DB.prepare(
+          `SELECT entity_type AS entityType, change_type AS changeType,
+                  correlation_id AS correlationId
+             FROM event_changes
+            WHERE event_id = ? AND entity_type = 'public_site'
+              AND change_type = 'published' AND correlation_id = ?`,
+        )
+          .bind(DEMO_EVENT_ID, DEMO_SHOWCASE_PUBLIC_SITE_OPERATION_ID)
+          .first(),
+      ).resolves.toEqual({
+        entityType: "public_site",
+        changeType: "published",
+        correlationId: DEMO_SHOWCASE_PUBLIC_SITE_OPERATION_ID,
       });
       await expect(
         readSpeakerProfileHistory(testEnvironment, {
@@ -456,7 +558,7 @@ describe("complete evaluator demo reset", () => {
         )
           .bind(DEMO_EVENT_ID)
           .first<{ count: number }>(),
-      ).resolves.toEqual({ count: 7 });
+      ).resolves.toEqual({ count: 8 });
       const form = await testEnvironment.DB.prepare(
         `SELECT closes_at AS closesAt
          FROM form_definitions
@@ -604,6 +706,121 @@ describe("complete evaluator demo reset", () => {
       expect(audits.results.map((row) => row.action)).toEqual(
         expect.arrayContaining(["test.sentinel", "demo.reset"]),
       );
+    });
+
+    it("does not restore deleted public-site rows after the organiser edits the fixture generation", async () => {
+      const testEnvironment = demoEnvironment();
+      await ensureJudgedDemoWorkflow(testEnvironment);
+
+      try {
+        await testEnvironment.DB.batch([
+          testEnvironment.DB.prepare(
+            `UPDATE event_public_sites
+                SET draft_revision = 2, last_operation_id = 'demo-edited-public-site',
+                    updated_at = unixepoch()
+              WHERE event_id = ? AND last_operation_id = ?`,
+          ).bind(DEMO_EVENT_ID, DEMO_SHOWCASE_PUBLIC_SITE_OPERATION_ID),
+          testEnvironment.DB.prepare(
+            "DELETE FROM event_site_sponsors WHERE event_id = ? AND id = ?",
+          ).bind(DEMO_EVENT_ID, DEMO_SHOWCASE_SPONSOR_COMMUNITY_ID),
+          testEnvironment.DB.prepare(
+            `DELETE FROM event_public_site_references
+              WHERE event_id = ? AND kind = 'session' AND record_id = 'demo-session-2'`,
+          ).bind(DEMO_EVENT_ID),
+          testEnvironment.DB.prepare(
+            `DELETE FROM event_changes
+              WHERE event_id = ? AND entity_type = 'public_site'
+                AND change_type = 'published' AND correlation_id = ?`,
+          ).bind(DEMO_EVENT_ID, DEMO_SHOWCASE_PUBLIC_SITE_OPERATION_ID),
+        ]);
+
+        const prepared = await prepareJudgedDemoWorkflow(testEnvironment);
+        expect(prepared.complete).toBe(false);
+        expect(prepared.evidence.showcasePublishedPublicSites).toBe(0);
+
+        await expect(
+          testEnvironment.DB.prepare(
+            `SELECT last_operation_id AS lastOperationId, draft_revision AS draftRevision
+               FROM event_public_sites
+              WHERE event_id = ?`,
+          )
+            .bind(DEMO_EVENT_ID)
+            .first(),
+        ).resolves.toEqual({
+          lastOperationId: "demo-edited-public-site",
+          draftRevision: 2,
+        });
+        await expect(
+          testEnvironment.DB.prepare(
+            "SELECT id FROM event_site_sponsors WHERE event_id = ? AND id = ?",
+          )
+            .bind(DEMO_EVENT_ID, DEMO_SHOWCASE_SPONSOR_COMMUNITY_ID)
+            .first(),
+        ).resolves.toBeNull();
+        await expect(
+          testEnvironment.DB.prepare(
+            `SELECT record_id AS recordId FROM event_public_site_references
+              WHERE event_id = ? AND kind = 'session' AND record_id = 'demo-session-2'`,
+          )
+            .bind(DEMO_EVENT_ID)
+            .first(),
+        ).resolves.toBeNull();
+        await expect(
+          testEnvironment.DB.prepare(
+            `SELECT correlation_id AS correlationId FROM event_changes
+              WHERE event_id = ? AND entity_type = 'public_site'
+                AND change_type = 'published' AND correlation_id = ?`,
+          )
+            .bind(DEMO_EVENT_ID, DEMO_SHOWCASE_PUBLIC_SITE_OPERATION_ID)
+            .first(),
+        ).resolves.toBeNull();
+      } finally {
+        await testEnvironment.DB.prepare(
+          `UPDATE event_public_sites
+              SET draft_revision = 1, last_operation_id = ?,
+                  updated_at = unixepoch()
+            WHERE event_id = ?`,
+        )
+          .bind(DEMO_SHOWCASE_PUBLIC_SITE_OPERATION_ID, DEMO_EVENT_ID)
+          .run();
+        await ensureDemoPublicSite(testEnvironment);
+      }
+    });
+
+    it("restores missing public-site rows only while the seeded generation is still active", async () => {
+      const testEnvironment = demoEnvironment();
+      await ensureJudgedDemoWorkflow(testEnvironment);
+      await testEnvironment.DB.batch([
+        testEnvironment.DB.prepare(
+          "DELETE FROM event_site_sponsors WHERE event_id = ? AND id = ?",
+        ).bind(DEMO_EVENT_ID, DEMO_SHOWCASE_SPONSOR_COMMUNITY_ID),
+        testEnvironment.DB.prepare(
+          `DELETE FROM event_changes
+            WHERE event_id = ? AND entity_type = 'public_site'
+              AND change_type = 'published' AND correlation_id = ?`,
+        ).bind(DEMO_EVENT_ID, DEMO_SHOWCASE_PUBLIC_SITE_OPERATION_ID),
+      ]);
+
+      await ensureDemoPublicSite(testEnvironment);
+
+      await expect(
+        testEnvironment.DB.prepare(
+          "SELECT id FROM event_site_sponsors WHERE event_id = ? AND id = ?",
+        )
+          .bind(DEMO_EVENT_ID, DEMO_SHOWCASE_SPONSOR_COMMUNITY_ID)
+          .first(),
+      ).resolves.toEqual({ id: DEMO_SHOWCASE_SPONSOR_COMMUNITY_ID });
+      await expect(
+        testEnvironment.DB.prepare(
+          `SELECT correlation_id AS correlationId FROM event_changes
+            WHERE event_id = ? AND entity_type = 'public_site'
+              AND change_type = 'published' AND correlation_id = ?`,
+        )
+          .bind(DEMO_EVENT_ID, DEMO_SHOWCASE_PUBLIC_SITE_OPERATION_ID)
+          .first(),
+      ).resolves.toEqual({
+        correlationId: DEMO_SHOWCASE_PUBLIC_SITE_OPERATION_ID,
+      });
     });
 
     it("reports stale required communication templates as an incomplete baseline", async () => {

@@ -32,7 +32,7 @@ export const EVALUATION_IDENTITIES = {
     description:
       "The complete operations workspace with a rich, published event.",
     whatToTry:
-      "Inspect submissions and scheduling; enable reviewer AI in Review & decisions, and explicitly reuse the verified sender when creating a D1 event.",
+      "Inspect the published event website, submissions and scheduling; enable reviewer AI in Review & decisions, and explicitly reuse the verified sender when creating a D1 event.",
     group: "showcase",
   },
   chair: {

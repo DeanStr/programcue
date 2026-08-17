@@ -18,6 +18,7 @@ import {
   SBEK_FIXTURE_PEOPLE,
   SBEK_SECOND_SPEAKER,
 } from "~/platform/demo/demo-identities";
+import { ensureDemoPublicSite } from "~/platform/demo/demo-public-site-seed.server";
 import {
   DEMO_COMMUNICATION_TEMPLATE_TIMESTAMP,
   DEMO_DECISION_SENDER_ID,
@@ -34,10 +35,15 @@ import {
   DEMO_SHOWCASE_DISCUSSION_ID,
   DEMO_SHOWCASE_EMBED_CONFIGURATION,
   DEMO_SHOWCASE_EMBED_ID,
+  DEMO_SHOWCASE_FEATURED_SESSION_IDS,
+  DEMO_SHOWCASE_FEATURED_SPEAKER_IDS,
   DEMO_SHOWCASE_POSITIVE_REVIEW_ID,
   DEMO_SHOWCASE_PROFILE_REVISION_ID,
+  DEMO_SHOWCASE_PUBLIC_SITE_OPERATION_ID,
+  DEMO_SHOWCASE_PUBLIC_SITE_TAGLINE,
   DEMO_SHOWCASE_REVIEWER_ASSIGNMENT_ID,
   DEMO_SHOWCASE_ROUND_ID,
+  DEMO_SHOWCASE_SITE_SPONSORS,
   DEMO_SHOWCASE_SUBMISSION_ID,
   DEMO_SHOWCASE_TIMESTAMP,
   DEMO_SPEAKER_WELCOME_TEMPLATE_ID,
@@ -424,6 +430,9 @@ async function resetMutableIdentity(env: CloudflareEnvironment) {
 // applicant and reviewer remain absent from these records by construction and
 // are independently verified as clean in baselineEvidence.
 async function seedShowcaseCohort(env: CloudflareEnvironment) {
+  // Edited sites stay untouched. Completeness is reported by baselineEvidence,
+  // not by the showcase incomplete-sentinel below.
+  await ensureDemoPublicSite(env);
   const notificationOperationId =
     "demo-showcase-decision-notification-operation";
   const showcaseRationale =
@@ -1390,6 +1399,7 @@ export type DemoBaselineEvidence = {
   showcasePublishedDecisions: number;
   showcaseProfileRevisions: number;
   showcaseManagedEmbeds: number;
+  showcasePublishedPublicSites: number;
   sbekPeople: number;
   sbekReviewerMemberships: number;
   sbekReviewerAssignments: number;
@@ -1421,6 +1431,7 @@ export function demoBaselineIsComplete(evidence: DemoBaselineEvidence) {
     evidence.showcasePublishedDecisions === 1 &&
     evidence.showcaseProfileRevisions === 1 &&
     evidence.showcaseManagedEmbeds === 1 &&
+    evidence.showcasePublishedPublicSites === 1 &&
     evidence.sbekPeople === 4 &&
     evidence.sbekReviewerMemberships === 0 &&
     evidence.sbekReviewerAssignments === 0 &&
@@ -1722,10 +1733,60 @@ async function baselineEvidence(env: CloudflareEnvironment) {
       requireEmailProviderConfiguration(env).provider,
     )
     .first<{ count: number }>();
+  const publishedSite = await env.DB.prepare(
+    `SELECT COUNT(*) AS count FROM event_public_sites site
+      WHERE site.event_id = ? AND site.organisation_id = ?
+        AND site.draft_revision = 1 AND site.published_revision = 1
+        AND site.published_at IS NOT NULL
+        AND site.last_operation_id = ?
+        AND json_extract(site.draft_json, '$.theme') = 'light'
+        AND json_extract(site.draft_json, '$.tagline') = ?
+        AND json_extract(site.draft_json, '$.pages.about.enabled') = 1
+        AND json_extract(site.draft_json, '$.pages.sponsors.enabled') = 1
+        AND json_array_length(json_extract(site.draft_json, '$.featuredSessionIds')) = ?
+        AND json_array_length(json_extract(site.draft_json, '$.featuredSpeakerIds')) = ?
+        AND json_array_length(json_extract(site.draft_json, '$.faqItems')) = 2
+        AND json_array_length(json_extract(site.published_json, '$.sponsors')) = ?
+        AND (SELECT COUNT(*) FROM event_public_site_references reference
+              WHERE reference.event_id = site.event_id
+                AND reference.site_revision = site.published_revision
+                AND (
+                  (reference.kind = 'session' AND reference.record_id IN (${DEMO_SHOWCASE_FEATURED_SESSION_IDS.map(() => "?").join(", ")}))
+                  OR (reference.kind = 'speaker' AND reference.record_id IN (${DEMO_SHOWCASE_FEATURED_SPEAKER_IDS.map(() => "?").join(", ")}))
+                )) = ?
+        AND (SELECT COUNT(*) FROM event_site_sponsors sponsor
+              WHERE sponsor.event_id = site.event_id
+                AND sponsor.id IN (${DEMO_SHOWCASE_SITE_SPONSORS.map(() => "?").join(", ")})) = ?
+        AND EXISTS (
+              SELECT 1 FROM event_changes change
+               WHERE change.event_id = site.event_id
+                 AND change.entity_type = 'public_site'
+                 AND change.entity_id = site.event_id
+                 AND change.change_type = 'published'
+                 AND change.correlation_id = site.last_operation_id
+            )`,
+  )
+    .bind(
+      DEMO_EVENT_ID,
+      DEMO_ORGANISATION_ID,
+      DEMO_SHOWCASE_PUBLIC_SITE_OPERATION_ID,
+      DEMO_SHOWCASE_PUBLIC_SITE_TAGLINE,
+      DEMO_SHOWCASE_FEATURED_SESSION_IDS.length,
+      DEMO_SHOWCASE_FEATURED_SPEAKER_IDS.length,
+      DEMO_SHOWCASE_SITE_SPONSORS.length,
+      ...DEMO_SHOWCASE_FEATURED_SESSION_IDS,
+      ...DEMO_SHOWCASE_FEATURED_SPEAKER_IDS,
+      DEMO_SHOWCASE_FEATURED_SESSION_IDS.length +
+        DEMO_SHOWCASE_FEATURED_SPEAKER_IDS.length,
+      ...DEMO_SHOWCASE_SITE_SPONSORS.map((sponsor) => sponsor.id),
+      DEMO_SHOWCASE_SITE_SPONSORS.length,
+    )
+    .first<{ count: number }>();
   const evidence = Object.fromEntries(
     Object.entries(row).map(([key, value]) => [key, Number(value)]),
   ) as DemoBaselineEvidence;
   evidence.verifiedDecisionSenders = Number(sender?.count ?? 0);
+  evidence.showcasePublishedPublicSites = Number(publishedSite?.count ?? 0);
   return evidence;
 }
 

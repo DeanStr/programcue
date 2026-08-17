@@ -68,6 +68,7 @@ export const nodeOnlyTestFiles = [
   "app/platform/http/security-headers.test.ts",
   "app/platform/observability/request-correlation.test.ts",
   "app/platform/observability/source-revision.server.test.ts",
+  "app/platform/demo/demo-reset-fixtures.test.ts",
   "app/platform/drafts/draft-recovery.test.ts",
   "app/platform/realtime/realtime-client.test.ts",
   "app/platform/evaluation/evaluation-fixture-access.server.test.ts",

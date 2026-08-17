@@ -147,7 +147,9 @@ The fixture combines two useful data states:
 - Morgan Chen, Jordan Lee, Taylor Brooks and Priya Shah retain a separate populated
   showcase cohort for human exploration: two completed reviews with visible
   score spread, one committee discussion, one published decision, one public
-  speaker-profile revision and one active named programme embed.
+  speaker-profile revision, one active named programme embed and a published
+  public event site with featured sessions, featured speakers, FAQ, About,
+  Sponsors and two text-only sponsor records without outbound URLs.
 - Jordan Alvarez, Priya Raman, Marcus Okafor and Sam Whitfield use the exact
   SBEK identities and begin without evaluator-created submissions,
   assignments, accepted-speaker access or tasks.

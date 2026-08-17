@@ -1,5 +1,8 @@
 import { expect, type Page, test } from "@playwright/test";
 
+import { e2eOrigin } from "./support/e2e-origin";
+import { resetDemoEvent } from "./support/reset-demo-event";
+
 test.use({ storageState: { cookies: [], origins: [] } });
 
 async function openAnonymous(page: Page, path: string) {
@@ -9,6 +12,33 @@ async function openAnonymous(page: Page, path: string) {
   expect(page.url()).not.toContain("/sign-in");
 }
 
+test.beforeEach(async ({ playwright }) => {
+  const request = await playwright.request.newContext({
+    baseURL: e2eOrigin,
+    extraHTTPHeaders: { origin: e2eOrigin },
+    storageState: {
+      cookies: [
+        {
+          name: "program_cue_demo_identity",
+          value: "administrator",
+          domain: "127.0.0.1",
+          path: "/",
+          expires: -1,
+          httpOnly: true,
+          secure: false,
+          sameSite: "Lax",
+        },
+      ],
+      origins: [],
+    },
+  });
+  try {
+    await resetDemoEvent(request);
+  } finally {
+    await request.dispose();
+  }
+});
+
 test("anonymous visitors can use all programme surfaces and the gallery detail", async ({
   page,
 }) => {
@@ -16,11 +46,14 @@ test("anonymous visitors can use all programme surfaces and the gallery detail",
 
   await openAnonymous(page, "/public/programme/future-of-events-2027");
   await expect(page.locator(".public-nav a")).toHaveText([
+    "Event home",
     "All sessions",
     "Speakers",
     "Day agenda",
     "Full schedule",
     "Speaker Gallery",
+    "About",
+    "Sponsors",
   ]);
   await expect(
     page.getByRole("navigation", { name: "Programme views" }).getByRole("link"),

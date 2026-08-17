@@ -28,12 +28,18 @@ export async function resetDemoEvent(request: APIRequestContext) {
       const decodedValue = decoded.value as {
         data?: {
           committed?: boolean;
-          result?: { baseline?: { publishedSchedules?: number } };
+          result?: {
+            baseline?: {
+              publishedSchedules?: number;
+              showcasePublishedPublicSites?: number;
+            };
+          };
         };
       };
       const body = decodedValue.data ?? {};
       expect(body.committed).toBe(true);
       expect(body.result?.baseline?.publishedSchedules).toBe(1);
+      expect(body.result?.baseline?.showcasePublishedPublicSites).toBe(1);
       return;
     }
     if (response.status() !== 409 || Date.now() >= deadline) {
