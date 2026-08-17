@@ -226,7 +226,7 @@ describe("speaker profile service", () => {
       }),
     ).resolves.toMatchObject({ changed: true });
     const audits = await testEnv.DB.prepare(
-      `SELECT actor_person_id AS actorPersonId,
+      `SELECT actor_person_id AS actorPersonId, origin,
               json_extract(metadata_json, '$.source') AS source
          FROM audit_events
         WHERE event_id = ? AND action = 'speaker.participation.confirmed'
@@ -234,13 +234,18 @@ describe("speaker profile service", () => {
         ORDER BY created_at, id`,
     )
       .bind(speaker.eventId, `${sessionId}:${speaker.personId}`)
-      .all<{ actorPersonId: string; source: string }>();
+      .all<{ actorPersonId: string; origin: string; source: string }>();
     expect(audits.results).toHaveLength(2);
     expect(audits.results).toEqual(
       expect.arrayContaining([
-        { actorPersonId: speaker.personId, source: "speaker" },
+        {
+          actorPersonId: speaker.personId,
+          origin: "participant_ui",
+          source: "speaker",
+        },
         {
           actorPersonId: admin.personId,
+          origin: "admin_ui",
           source: "administrator_external",
         },
       ]),

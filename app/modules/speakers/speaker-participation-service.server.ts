@@ -180,13 +180,15 @@ export class SpeakerParticipationService {
 
     const auditEventId = crypto.randomUUID();
     const operationId = crypto.randomUUID();
+    const origin =
+      source === "administrator_external" ? "admin_ui" : "participant_ui";
     const [audited, updated, changed] = await this.env.DB.batch([
       this.env.DB.prepare(
         `INSERT INTO audit_events (
            id, actor_kind, origin, metadata_version, organisation_id, event_id, actor_person_id, action,
            entity_type, entity_id, correlation_id, metadata_json, created_at
          )
-         SELECT ?, 'person', 'participant_ui', 1, ?, ?, ?, 'speaker.participation.confirmed',
+         SELECT ?, 'person', ?, 1, ?, ?, ?, 'speaker.participation.confirmed',
                 'session_speaker', ?, ?, ?, unixepoch()
            FROM session_speakers relationship
            JOIN sessions session
@@ -199,6 +201,7 @@ export class SpeakerParticipationService {
             AND session.status NOT IN ('cancelled','archived')`,
       ).bind(
         auditEventId,
+        origin,
         viewer.organisationId,
         viewer.eventId,
         viewer.personId,
@@ -264,7 +267,7 @@ export class SpeakerParticipationService {
               SELECT 1 FROM audit_events audit
                WHERE audit.id = ? AND audit.organisation_id = ?
                  AND audit.event_id = ? AND audit.actor_person_id = ?
-                 AND audit.action = 'speaker.participation.confirmed'
+                 AND audit.origin = ? AND audit.action = 'speaker.participation.confirmed'
                  AND audit.entity_type = 'session_speaker'
                  AND audit.entity_id = ? AND audit.correlation_id = ?
             ) AND EXISTS (
@@ -287,6 +290,7 @@ export class SpeakerParticipationService {
           viewer.organisationId,
           viewer.eventId,
           viewer.personId,
+          origin,
           `${sessionId}:${personId}`,
           operationId,
           viewer.eventId,
