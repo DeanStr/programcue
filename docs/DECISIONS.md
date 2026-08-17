@@ -1176,20 +1176,20 @@ Inter face, semantic tokens and accessible component primitives remain the one
 application design system; no second UI library is introduced.
 
 The anonymous event site has a lower density and may use the event's supplied
-hero image and accent. Its bounded homepage is one editorial column: every
-section states its heading on top and a single hairline separates them. The
-homepage previously wrapped each section in an identical card, which said the
-introduction, the statistics and the venue were the same kind of thing; a
-sidenote-heading band for only some of them said the opposite twice on one
-page. Statistics are set on the page as one row of equal columns rather than in
-tinted tiles, since the tiles were the sole decorated surface in the column and
-a tile grid left an orphan box at most widths. Featured speaker and session
-selections are organiser-controlled and may hold up to twelve records, so their
-grid stays content-driven, capped at three columns by the same track floor as
-the application `.grid-N` primitive rather than by a fixed bento arrangement.
-The hero remains the one accent surface above the programme. Public light, dark
-and system themes remain event-site choices; a global application theme remains
-deferred for the reason documented above.
+hero image and accent. Its bounded homepage is predominantly one editorial
+column: sections state their heading on top and a single hairline separates
+them. The introduction alone uses a restrained bounded surface and narrow
+accent edge because it holds the organiser's opening statement and primary
+action; repeating that treatment on statistics, venue and record indexes would
+again make unlike content look interchangeable. Statistics are set on the page
+as one row of equal columns rather than in tinted tiles, since a tile grid left
+an orphan box at most widths. Featured speaker and session selections are
+organiser-controlled and may hold up to twelve records, so their grid stays
+content-driven, capped at three columns by the same track floor as the
+application `.grid-N` primitive rather than by a fixed bento arrangement. The
+hero remains the dominant accent surface above the programme. Public light,
+dark and system themes remain event-site choices; a global application theme
+remains deferred for the reason documented above.
 
 Within that column the rule is the only structural device, and it carries two
 weights: full strength between sections, and a lighter mix between the entries
@@ -1203,15 +1203,13 @@ already says what the list holds — every entry under "Featured sessions" is a
 session, so a calendar icon on each one is noise — and kept where they carry
 information, such as a recording's play mark or a speaker's portrait.
 
-Restraint is not the same as having nothing to look at, so the column spends
-its scale in one place and spends it on content rather than ornament. The
-statistics are the only numbers on the page and they carry the display size;
-speaker portraits are sized to the column rather than printed at a thumbnail
-next to their own names; and the introduction's opening statement is set a step
-above body copy. All three answer to container units, so the editor preview and
-a phone get the same relationships rather than the same pixels. Nothing else in
-the column competes: no second accent surface, no ornament, no scale contrast
-that is not carrying information.
+Restraint is not the same as having nothing to look at, so scale is spent on
+content rather than ornament. Statistics retain a strong numeric step but stay
+subordinate to the event masthead and section headings; speaker portraits are
+sized to the column rather than printed at a thumbnail next to their own names;
+and the introduction's opening statement is set above body copy without
+becoming another headline. All three answer to container units, so the editor
+preview and a phone get the same relationships rather than the same pixels.
 
 A featured session states when it happens. It is the only place a session
 appears outside the day-grouped list, so nothing above it supplies the date
@@ -1235,13 +1233,13 @@ FAQ marker retracts its vertical stroke into the horizontal one rather than
 being swapped for a different mark, and where the browser can interpolate to an
 intrinsic size the answer opens rather than appears.
 
-The hero is lit from one source. It previously layered a corner glow, a second
-glow from the opposite corner and a diagonal wash over both, so no part of the
-panel was ever the base colour and the result read as a stock gradient however
-carefully the stops were chosen. One light, falling to the base, leaves the
-masthead's own corner dark, gives the fine grid something to catch, and lets
-the panel state its own edge with an inset hairline rather than depending on a
-wash to separate it from the dark public canvas.
+Without a supplied banner, the hero uses one broad field derived from the
+published event accent over a fixed near-black base. The accent must occupy
+enough of the panel for an accent-only event to feel branded, while a separate
+copy-side scrim preserves white-text contrast across the allowed colour range.
+The fine grid follows that field and the panel states its edge with an inset
+hairline. A supplied customer image still replaces the generated field and is
+protected by its own legibility scrim; the grid is suppressed over photography.
 
 The homepage column is an inline-size container, and its spacing and column
 counts are expressed in container units rather than viewport units. The editor

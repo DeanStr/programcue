@@ -145,7 +145,10 @@ export function PublicSiteHome({
     React.ReactNode
   > = {
     introduction: (
-      <HomeSection title={configuration.introductionHeading}>
+      <HomeSection
+        title={configuration.introductionHeading}
+        className="public-site-introduction"
+      >
         <p className="public-site-lede">{event.description}</p>
         <div className="public-site-actions">
           {event.application ? (

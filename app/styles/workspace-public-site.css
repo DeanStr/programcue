@@ -281,15 +281,22 @@
   font-weight: var(--weight-semibold);
   letter-spacing: var(--tracking-tight);
 }
-/* The opening statement carries the introduction, so it is set a step above
-   body copy rather than a heading being set a step above its peers. Every
-   section heading stays the same size, because they are an index of the page
-   and reading one as more important than the others is not true. */
+/* The introduction is the one section that benefits from a bounded surface:
+   it is the organiser's opening statement and primary action, not another
+   index of records. A quiet accent tint and a narrow brand edge distinguish it
+   without turning the remaining editorial sections back into cards. */
+.public-site-introduction {
+  padding: clamp(var(--space-5), 3cqw, var(--space-7));
+  border: 1px solid var(--border-editorial);
+  border-left: 3px solid var(--event-accent);
+  border-radius: var(--radius);
+  background: color-mix(in srgb, var(--event-accent) 5%, var(--surface));
+}
 .public-site-lede {
-  max-width: 38ch;
+  max-width: 52ch;
   margin: 0;
-  font-size: clamp(var(--text-xl), 3.1cqw, var(--text-2xl));
-  line-height: var(--leading-snug);
+  font-size: clamp(var(--text-lg), 2.2cqw, var(--text-xl));
+  line-height: var(--leading-relaxed);
   letter-spacing: var(--tracking-snug);
   text-wrap: balance;
 }
@@ -451,15 +458,13 @@ a.public-site-feature-card:focus-visible img {
   font-size: var(--text-sm);
   text-transform: capitalize;
 }
-/* The column's one moment of scale, and it is spent on the only content here
-   that is a number. Four counts set at reading size read as a sentence broken
-   into four; set at display size they read as the measure of the event, which
-   is what "at a glance" is asking them to be. The size answers to the column,
-   so the editor preview and a phone get the same relationship. */
+/* The figures are prominent enough to scan but remain subordinate to the
+   event masthead and section headings. The size answers to the content column,
+   so the editor preview and a phone retain the same relationship. */
 .public-site-statistics dd {
   grid-row: 1;
   margin: 0;
-  font-size: clamp(var(--text-3xl), 6.4cqw, 64px);
+  font-size: clamp(var(--text-3xl), 4.6cqw, 48px);
   font-weight: var(--weight-bold);
   line-height: var(--leading-tight);
   letter-spacing: var(--tracking-tight);

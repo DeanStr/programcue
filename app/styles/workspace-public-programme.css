@@ -354,23 +354,23 @@
   overflow: hidden;
   isolation: isolate;
   background-color: var(--surface-inverse);
-  /* One light source, from the top right, falling to the base colour. Three
-     overlapping accent washes used to cover the whole panel — a corner glow, a
-     second glow from the opposite corner and a diagonal over both — so no part
-     of it was ever clean and the result read as a stock gradient. A single
-     source leaves the masthead's own corner dark and gives the texture below
-     something to catch. */
+  /* The fallback masthead is an event surface, not a neutral product panel.
+     A broad accent field lets an organiser's chosen colour own the hero, while
+     the first layer keeps the copy side dark enough for white text across the
+     full allowed accent range. Customer photography still takes over below. */
   background-image:
-    radial-gradient(
-      68% 116% at 97% -4%,
-      color-mix(in srgb, var(--event-accent) 88%, white) 0%,
-      color-mix(in srgb, var(--event-accent) 58%, var(--surface-inverse)) 34%,
-      transparent 70%
+    linear-gradient(
+      100deg,
+      color-mix(in srgb, var(--surface-inverse) 58%, transparent) 0%,
+      color-mix(in srgb, var(--surface-inverse) 28%, transparent) 54%,
+      transparent 82%
     ),
     linear-gradient(
-      to top,
-      color-mix(in srgb, var(--surface-inverse) 65%, transparent) 0%,
-      transparent 52%
+      115deg,
+      color-mix(in srgb, var(--event-accent) 60%, var(--surface-inverse)) 0%,
+      color-mix(in srgb, var(--event-accent) 46%, var(--surface-inverse)) 50%,
+      color-mix(in srgb, var(--event-accent) 28%, var(--surface-inverse)) 78%,
+      var(--surface-inverse) 100%
     );
 }
 /* The scrim is opaque where the type sits and clears to the photograph on the
@@ -388,11 +388,9 @@
   background-position: center;
   background-size: cover;
 }
-/* A fine grid that reads as the lit face of the panel rather than an idea of
-   one. Masked to the light source above and left visible: at 0.35 opacity over
-   0.055 lines it resolved to two percent white, which is a texture nobody has
-   ever seen. It is suppressed over a customer photograph, where a ruled
-   overlay is only ever damage. */
+/* A fine grid gives the generated colour field a physical surface. It follows
+   the broad brand field and is suppressed over customer photography, where a
+   ruled overlay is only ever damage. */
 .hero::before {
   content: "";
   position: absolute;
@@ -402,7 +400,7 @@
     linear-gradient(rgba(255, 255, 255, 0.05) 1px, transparent 1px),
     linear-gradient(90deg, rgba(255, 255, 255, 0.05) 1px, transparent 1px);
   background-size: 56px 56px;
-  mask-image: radial-gradient(72% 110% at 97% -4%, black, transparent 72%);
+  mask-image: linear-gradient(to right, black, transparent 88%);
 }
 .hero.has-image::before {
   display: none;
