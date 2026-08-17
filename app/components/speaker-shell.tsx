@@ -80,7 +80,7 @@ export function SpeakerShell({
           </div>
         </div>
         <div className="right">
-          <Link className="btn small" to={eventSelectionHref}>
+          <Link className="btn small" to={eventSelectionHref} reloadDocument>
             Switch event
           </Link>
           {event.participantSupportUrl ? (

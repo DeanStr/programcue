@@ -120,6 +120,9 @@ function AddRoomDialog({
   setNewRoomCapacity,
   cancel,
   add,
+  fetcher,
+  actionData,
+  hasUnsavedChanges,
 }: {
   open: boolean;
   newRoomName: string;
@@ -128,10 +131,12 @@ function AddRoomDialog({
   setNewRoomCapacity(value: string): void;
   cancel(): void;
   add(): void;
+  fetcher: EventSetupFetcher;
+  actionData?: ActionResponse;
+  hasUnsavedChanges: boolean;
 }) {
   const addRoomOpen = open;
   const cancelAddRoom = cancel;
-  const addRoom = add;
   return (
     <>
       {addRoomOpen ? (
@@ -144,38 +149,75 @@ function AddRoomDialog({
                 Cancel
               </button>
               <button
-                type="button"
+                type="submit"
+                form="event-add-room-form"
                 className="btn primary"
-                onClick={addRoom}
-                disabled={!newRoomName.trim() || Number(newRoomCapacity) < 1}
+                disabled={
+                  fetcher.state !== "idle" ||
+                  !newRoomName.trim() ||
+                  !Number.isInteger(Number(newRoomCapacity)) ||
+                  Number(newRoomCapacity) < 1
+                }
               >
-                Add room
+                {fetcher.state === "submitting" ? "Adding…" : "Add room"}
               </button>
             </>
           }
         >
-          <label className="label">
-            Room name
-            <input
-              className="field"
-              autoFocus
-              placeholder="Room 304"
-              value={newRoomName}
-              onChange={(inputEvent) => setNewRoomName(inputEvent.target.value)}
-            />
-          </label>
-          <label className="label mt">
-            Capacity
-            <input
-              className="field"
-              type="number"
-              min={1}
-              value={newRoomCapacity}
-              onChange={(inputEvent) =>
-                setNewRoomCapacity(inputEvent.target.value)
-              }
-            />
-          </label>
+          <form
+            id="event-add-room-form"
+            onSubmit={(submitEvent) => {
+              submitEvent.preventDefault();
+              add();
+            }}
+          >
+            <label className="label">
+              Room name
+              <input
+                className="field"
+                autoFocus
+                placeholder="Room 304"
+                value={newRoomName}
+                aria-invalid={Boolean(actionData?.errors?.name?.length)}
+                onChange={(inputEvent) =>
+                  setNewRoomName(inputEvent.target.value)
+                }
+              />
+              {actionData?.errors?.name?.[0] ? (
+                <span className="pc-field-error">
+                  {actionData.errors.name[0]}
+                </span>
+              ) : null}
+            </label>
+            <label className="label mt">
+              Capacity
+              <input
+                className="field"
+                type="number"
+                min={1}
+                value={newRoomCapacity}
+                aria-invalid={Boolean(actionData?.errors?.capacity?.length)}
+                onChange={(inputEvent) =>
+                  setNewRoomCapacity(inputEvent.target.value)
+                }
+              />
+              {actionData?.errors?.capacity?.[0] ? (
+                <span className="pc-field-error">
+                  {actionData.errors.capacity[0]}
+                </span>
+              ) : null}
+              {actionData && !actionData.ok && !actionData.errors ? (
+                <span className="pc-field-error">{actionData.message}</span>
+              ) : null}
+            </label>
+            {hasUnsavedChanges ? (
+              <p className="help mt">
+                Save or discard the current Event Setup changes before adding a
+                room. The server refreshes the canonical room list after this
+                command.
+              </p>
+            ) : null}
+          </form>
         </Dialog>
       ) : null}
     </>
@@ -531,6 +573,8 @@ export function EventSetupForm({
     | undefined;
   const inviteFetcher = useFetcher<typeof action>();
   const repositoryFetcher = useFetcher<typeof action>();
+  const roomFetcher = useFetcher<typeof action>();
+  const roomData = roomFetcher.data as ActionResponse | undefined;
   const formRef = useRef<HTMLFormElement | null>(null);
   const savedFieldValuesRef = useRef<ReadonlyMap<string, string[]> | null>(
     null,
@@ -588,6 +632,16 @@ export function EventSetupForm({
     if (response?.ok && response.intent === "confirm_repository_migration")
       setMigrationOpen(false);
   }, [repositoryFetcher.data]);
+  useEffect(() => {
+    if (
+      roomData?.intent === "add_room" &&
+      (roomData.ok || roomData.committed)
+    ) {
+      setAddRoomOpen(false);
+      setNewRoomName("");
+      setNewRoomCapacity("100");
+    }
+  }, [roomData]);
 
   const orderedRooms = useMemo(
     () => rooms.map((room, position) => ({ ...room, position })),
@@ -633,12 +687,9 @@ export function EventSetupForm({
     countChangedRecords(savedRecords[0], orderedRooms) +
     countChangedRecords(savedRecords[1], orderedTracks) +
     countChangedRecords(savedRecords[2], orderedSessionFormats);
-  const newRoomDraftPresent = Boolean(
-    newRoomName.trim() || newRoomCapacity !== "100",
+  const pendingRecordDraftPresent = Object.values(recordDraftValues).some(
+    (value) => value.trim(),
   );
-  const pendingRecordDraftPresent =
-    Object.values(recordDraftValues).some((value) => value.trim()) ||
-    newRoomDraftPresent;
   const changeCount = namedFieldChangeCount + recordChangeCount;
   const hasUnsavedChanges = changeCount > 0 || pendingRecordDraftPresent;
 
@@ -693,22 +744,19 @@ export function EventSetupForm({
   );
 
   function addRoom() {
+    if (hasUnsavedChanges || roomFetcher.state !== "idle") return;
     const capacity = Number(newRoomCapacity);
     if (!newRoomName.trim() || !Number.isInteger(capacity) || capacity < 1)
       return;
-    setRooms((current) => [
-      ...current,
+    void roomFetcher.submit(
       {
-        id: `room-${crypto.randomUUID()}`,
+        _intent: "add_room",
+        revision: String(event.revision),
         name: newRoomName.trim(),
-        capacity,
-        resources: [],
-        position: current.length,
+        capacity: String(capacity),
       },
-    ]);
-    setNewRoomName("");
-    setNewRoomCapacity("100");
-    setAddRoomOpen(false);
+      { method: "post" },
+    );
   }
 
   function cancelAddRoom() {
@@ -891,6 +939,9 @@ export function EventSetupForm({
         ) : null}
 
         {actionData ? <ResultNotice response={actionData} /> : null}
+        {roomData && !roomData.errors ? (
+          <ResultNotice response={roomData} />
+        ) : null}
         {inviteData ? <ResultNotice response={inviteData} /> : null}
         {repositoryData &&
         repositoryData.intent !== "preview_repository_migration" ? (
@@ -950,7 +1001,10 @@ export function EventSetupForm({
                 rooms={rooms}
                 setRooms={setRooms}
                 actionData={actionData}
-                onAdd={() => setAddRoomOpen(true)}
+                addDisabled={hasUnsavedChanges}
+                onAdd={() => {
+                  if (!hasUnsavedChanges) setAddRoomOpen(true);
+                }}
                 onRemove={(roomId) => clearRemovedRecordFocus("room", roomId)}
                 focusedRoomId={
                   focusedRecordKind === "room" ? focusedRecordId : null
@@ -1069,6 +1123,9 @@ export function EventSetupForm({
         setNewRoomCapacity={setNewRoomCapacity}
         cancel={cancelAddRoom}
         add={addRoom}
+        fetcher={roomFetcher}
+        actionData={roomData}
+        hasUnsavedChanges={hasUnsavedChanges}
       />
       <AdministratorInvitationDialog
         open={inviteOpen}

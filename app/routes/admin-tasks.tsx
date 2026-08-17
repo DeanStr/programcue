@@ -4,6 +4,10 @@ import { AdminTasksWorkspace } from "~/components/admin-tasks-workspace";
 import { calculateReadiness } from "~/modules/readiness/readiness-rules";
 import { ensureDemoSpeakerData } from "~/modules/speakers/demo.server";
 import {
+  normalizeTaskTemplateDraft,
+  type TaskTemplateDraftValues,
+} from "~/modules/tasks/task-schema";
+import {
   TaskService,
   TaskStateError,
 } from "~/modules/tasks/task-service.server";
@@ -162,6 +166,48 @@ export async function action({ request, context }: Route.ActionArgs) {
   const form = await request.formData();
   const intent = String(form.get("intent") ?? "");
   const service = new TaskService(env);
+  const taskTemplateInput =
+    intent === "create-template"
+      ? {
+          name: form.get("name"),
+          description: form.get("description"),
+          targetType: form.get("targetType"),
+          taskType: form.get("taskType"),
+          impact: form.get("impact"),
+          evidenceMode: form.get("evidenceMode"),
+          dueAnchor: form.get("dueAnchor"),
+          dueOffsetDays: form.get("dueOffsetDays"),
+          fixedDueDate: form.get("fixedDueDate"),
+          autoAssignOnAcceptance: form.get("autoAssignOnAcceptance") === "true",
+          dependencyIds: form.getAll("dependencyIds").map(String),
+        }
+      : undefined;
+  const taskTemplateDraft: TaskTemplateDraftValues | undefined =
+    taskTemplateInput
+      ? normalizeTaskTemplateDraft({
+          name: String(taskTemplateInput.name ?? ""),
+          description: String(taskTemplateInput.description ?? ""),
+          targetType: String(
+            taskTemplateInput.targetType ?? "",
+          ) as TaskTemplateDraftValues["targetType"],
+          taskType: String(
+            taskTemplateInput.taskType ?? "",
+          ) as TaskTemplateDraftValues["taskType"],
+          impact: String(
+            taskTemplateInput.impact ?? "",
+          ) as TaskTemplateDraftValues["impact"],
+          evidenceMode: String(
+            taskTemplateInput.evidenceMode ?? "",
+          ) as TaskTemplateDraftValues["evidenceMode"],
+          dueAnchor: String(
+            taskTemplateInput.dueAnchor ?? "",
+          ) as TaskTemplateDraftValues["dueAnchor"],
+          dueOffsetDays: String(taskTemplateInput.dueOffsetDays ?? ""),
+          fixedDueDate: String(taskTemplateInput.fixedDueDate ?? ""),
+          autoAssignOnAcceptance: taskTemplateInput.autoAssignOnAcceptance,
+          dependencyIds: taskTemplateInput.dependencyIds,
+        })
+      : undefined;
   try {
     if (intent === "create-travel-onboarding") {
       const templates = await service.createTravelOnboardingTemplates(
@@ -195,22 +241,24 @@ export async function action({ request, context }: Route.ActionArgs) {
       });
     }
     if (intent === "create-template") {
+      const draft = taskTemplateDraft;
+      if (!draft || !taskTemplateInput) {
+        throw new Error("The task template draft is unavailable.");
+      }
       const templateId = await service.createTemplate(
         viewer,
         {
-          name: form.get("name"),
-          description: form.get("description"),
-          targetType: form.get("targetType"),
-          taskType: form.get("taskType"),
-          impact: form.get("impact"),
-          evidenceMode: form.get("evidenceMode"),
-          dueAnchor: form.get("dueAnchor"),
+          ...taskTemplateInput,
           dueOffsetDays:
-            form.get("dueOffsetDays") === "" ? null : form.get("dueOffsetDays"),
+            taskTemplateInput.dueOffsetDays === "" ||
+            taskTemplateInput.dueOffsetDays === null
+              ? null
+              : taskTemplateInput.dueOffsetDays,
           fixedDueDate:
-            form.get("fixedDueDate") === "" ? null : form.get("fixedDueDate"),
-          autoAssignOnAcceptance: form.get("autoAssignOnAcceptance") === "true",
-          dependencyIds: form.getAll("dependencyIds").map(String),
+            taskTemplateInput.fixedDueDate === "" ||
+            taskTemplateInput.fixedDueDate === null
+              ? null
+              : taskTemplateInput.fixedDueDate,
           configuration: {},
         },
         String(form.get("intentId") ?? ""),
@@ -366,12 +414,23 @@ export async function action({ request, context }: Route.ActionArgs) {
         {
           ok: false,
           message: error.issues[0]?.message ?? "Review the task details.",
+          draft: taskTemplateDraft,
+          errors: Object.entries(error.flatten().fieldErrors).reduce(
+            (fieldErrors, [key, value]) => {
+              if (Array.isArray(value)) fieldErrors[key] = value.map(String);
+              return fieldErrors;
+            },
+            {} as Record<string, string[]>,
+          ),
         },
         { status: 422 },
       );
     }
     if (error instanceof TaskStateError) {
-      return data({ ok: false, message: error.message }, { status: 409 });
+      return data(
+        { ok: false, message: error.message, draft: taskTemplateDraft },
+        { status: 409 },
+      );
     }
     if (error instanceof Response) throw error;
     throw error;

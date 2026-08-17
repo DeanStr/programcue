@@ -1,11 +1,13 @@
 import { GitBranch, Plus } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Form } from "react-router";
 
 import { CharacterCount } from "~/components/ui/character-count";
 import {
+  normalizeTaskTemplateDraft,
   suggestedTaskEvidenceMode,
   type TaskEvidenceMode,
+  type TaskTemplateDraftValues,
   type TaskType,
   taskCompatibleEvidenceModes,
 } from "~/modules/tasks/task-schema";
@@ -14,9 +16,14 @@ import type { AdminTasksData } from "~/routes/admin-tasks";
 export function AdminTaskPlanPanel({
   data,
   busy,
+  actionNotice,
 }: {
   data: AdminTasksData;
   busy: boolean;
+  actionNotice?: {
+    draft?: TaskTemplateDraftValues;
+    errors?: Record<string, string[]>;
+  };
 }) {
   const assignableTemplates = data.templates.filter(
     (template) => template.status === "active",
@@ -24,17 +31,29 @@ export function AdminTaskPlanPanel({
   const [selectedTemplateId, setSelectedTemplateId] = useState(
     assignableTemplates[0]?.id ?? "",
   );
-  const [targetType, setTargetType] = useState<"speaker" | "session" | "event">(
-    "speaker",
+  const [templateDraft, setTemplateDraft] = useState(() =>
+    normalizeTaskTemplateDraft(),
   );
-  const [dueAnchor, setDueAnchor] = useState("none");
-  const [autoAssignOnAcceptance, setAutoAssignOnAcceptance] = useState(false);
-  const [taskType, setTaskType] = useState<TaskType>("checklist");
-  const [evidenceMode, setEvidenceMode] =
-    useState<TaskEvidenceMode>("checkbox");
-  const [dueOffsetDays, setDueOffsetDays] = useState("");
-  const [fixedDueDate, setFixedDueDate] = useState("");
-  const [description, setDescription] = useState("");
+  useEffect(() => {
+    if (actionNotice?.draft) setTemplateDraft(actionNotice.draft);
+  }, [actionNotice?.draft]);
+  const updateTemplateDraft = <K extends keyof TaskTemplateDraftValues>(
+    key: K,
+    value: TaskTemplateDraftValues[K],
+  ) => setTemplateDraft((current) => ({ ...current, [key]: value }));
+  const {
+    targetType,
+    dueAnchor,
+    autoAssignOnAcceptance,
+    taskType,
+    evidenceMode,
+    dueOffsetDays,
+    fixedDueDate,
+    description,
+  } = templateDraft;
+  const compatibleEvidenceModes =
+    taskCompatibleEvidenceModes[taskType] ??
+    taskCompatibleEvidenceModes.checklist;
   const selectedTemplate =
     assignableTemplates.find(
       (template) => template.id === selectedTemplateId,
@@ -153,7 +172,16 @@ export function AdminTaskPlanPanel({
                 Required
               </span>
             </span>
-            <input className="field" name="name" required />
+            <input
+              className="field"
+              name="name"
+              required
+              value={templateDraft.name}
+              onChange={(event) =>
+                updateTemplateDraft("name", event.currentTarget.value)
+              }
+              aria-invalid={Boolean(actionNotice?.errors?.name?.length)}
+            />
           </label>
           <label className="label">
             Description
@@ -162,7 +190,9 @@ export function AdminTaskPlanPanel({
               name="description"
               maxLength={1_000}
               value={description}
-              onChange={(event) => setDescription(event.currentTarget.value)}
+              onChange={(event) =>
+                updateTemplateDraft("description", event.currentTarget.value)
+              }
             />
             <CharacterCount value={description} maximum={1_000} />
           </label>
@@ -174,8 +204,9 @@ export function AdminTaskPlanPanel({
                 name="targetType"
                 value={targetType}
                 onChange={(event) =>
-                  setTargetType(
-                    event.target.value as "speaker" | "session" | "event",
+                  updateTemplateDraft(
+                    "targetType",
+                    event.target.value as TaskTemplateDraftValues["targetType"],
                   )
                 }
               >
@@ -192,8 +223,11 @@ export function AdminTaskPlanPanel({
                 value={taskType}
                 onChange={(event) => {
                   const next = event.currentTarget.value as TaskType;
-                  setTaskType(next);
-                  setEvidenceMode(suggestedTaskEvidenceMode(next));
+                  updateTemplateDraft("taskType", next);
+                  updateTemplateDraft(
+                    "evidenceMode",
+                    suggestedTaskEvidenceMode(next),
+                  );
                 }}
               >
                 <option value="checklist">Checklist</option>
@@ -208,7 +242,18 @@ export function AdminTaskPlanPanel({
           <div className="form-row">
             <label className="label">
               Impact
-              <select className="select" name="impact" defaultValue="medium">
+              <select
+                className="select"
+                name="impact"
+                value={templateDraft.impact}
+                onChange={(event) =>
+                  updateTemplateDraft(
+                    "impact",
+                    event.currentTarget
+                      .value as TaskTemplateDraftValues["impact"],
+                  )
+                }
+              >
                 <option value="critical">Critical</option>
                 <option value="high">High</option>
                 <option value="medium">Medium</option>
@@ -222,10 +267,13 @@ export function AdminTaskPlanPanel({
                 name="evidenceMode"
                 value={evidenceMode}
                 onChange={(event) =>
-                  setEvidenceMode(event.currentTarget.value as TaskEvidenceMode)
+                  updateTemplateDraft(
+                    "evidenceMode",
+                    event.currentTarget.value as TaskEvidenceMode,
+                  )
                 }
               >
-                {taskCompatibleEvidenceModes[taskType].map((mode) => (
+                {compatibleEvidenceModes.map((mode) => (
                   <option value={mode} key={mode}>
                     {
                       {
@@ -241,7 +289,7 @@ export function AdminTaskPlanPanel({
                 ))}
               </select>
               <span className="help">
-                {taskCompatibleEvidenceModes[taskType].length > 1
+                {compatibleEvidenceModes.length > 1
                   ? `Choose an accepted evidence type for ${taskType.replaceAll("_", " ")} tasks.`
                   : `Required evidence type for ${taskType.replaceAll("_", " ")} tasks.`}
               </span>
@@ -254,10 +302,11 @@ export function AdminTaskPlanPanel({
               name="dueAnchor"
               value={dueAnchor}
               onChange={(event) => {
-                setDueAnchor(event.target.value);
-                if (event.target.value === "session_start") {
-                  setAutoAssignOnAcceptance(false);
-                }
+                const next = event.target
+                  .value as TaskTemplateDraftValues["dueAnchor"];
+                updateTemplateDraft("dueAnchor", next);
+                if (next === "session_start")
+                  updateTemplateDraft("autoAssignOnAcceptance", false);
               }}
             >
               <option value="none">None</option>
@@ -277,7 +326,10 @@ export function AdminTaskPlanPanel({
                 max={365}
                 value={dueOffsetDays}
                 onChange={(event) =>
-                  setDueOffsetDays(event.currentTarget.value)
+                  updateTemplateDraft(
+                    "dueOffsetDays",
+                    event.currentTarget.value,
+                  )
                 }
                 placeholder="e.g. 14 or -7"
                 required
@@ -297,7 +349,9 @@ export function AdminTaskPlanPanel({
                 type="date"
                 name="fixedDueDate"
                 value={fixedDueDate}
-                onChange={(event) => setFixedDueDate(event.currentTarget.value)}
+                onChange={(event) =>
+                  updateTemplateDraft("fixedDueDate", event.currentTarget.value)
+                }
                 required
               />
               <span className="help">
@@ -329,7 +383,10 @@ export function AdminTaskPlanPanel({
               checked={autoAssignOnAcceptance}
               disabled={dueAnchor === "session_start"}
               onChange={(event) =>
-                setAutoAssignOnAcceptance(event.target.checked)
+                updateTemplateDraft(
+                  "autoAssignOnAcceptance",
+                  event.target.checked,
+                )
               }
             />{" "}
             Add this task automatically when a submission is accepted
@@ -354,6 +411,19 @@ export function AdminTaskPlanPanel({
                         type="checkbox"
                         name="dependencyIds"
                         value={template.id}
+                        checked={templateDraft.dependencyIds.includes(
+                          template.id,
+                        )}
+                        onChange={(event) =>
+                          updateTemplateDraft(
+                            "dependencyIds",
+                            event.target.checked
+                              ? [...templateDraft.dependencyIds, template.id]
+                              : templateDraft.dependencyIds.filter(
+                                  (id) => id !== template.id,
+                                ),
+                          )
+                        }
                       />{" "}
                       {template.name}
                     </label>

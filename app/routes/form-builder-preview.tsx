@@ -121,6 +121,15 @@ export async function loader({ request, context }: Route.LoaderArgs) {
 
 class InvalidFormPayloadError extends Error {}
 
+function zodFieldErrors(error: ZodError) {
+  const errors: Record<string, string[]> = {};
+  for (const issue of error.issues) {
+    const key = issue.path.map(String).join(".") || "form";
+    errors[key] = [...(errors[key] ?? []), issue.message];
+  }
+  return errors;
+}
+
 function jsonValue(formData: FormData, key: string) {
   try {
     return JSON.parse(String(formData.get(key) ?? ""));
@@ -204,7 +213,7 @@ export async function action({ request, context }: Route.ActionArgs) {
           ok: false,
           message:
             error.issues[0]?.message ?? "Review the highlighted form settings.",
-          errors: error.flatten().fieldErrors,
+          errors: zodFieldErrors(error),
         },
         { status: 400 },
       );
@@ -261,6 +270,17 @@ export default function FormBuilder({ loaderData }: Route.ComponentProps) {
   const [previewOpen, setPreviewOpen] = useState(false);
   const [clientReady, setClientReady] = useState(false);
   useEffect(() => setClientReady(true), []);
+  useEffect(() => {
+    if (!actionData?.errors) return;
+    const hasWebsiteError = Object.keys(actionData.errors).some((key) =>
+      key.endsWith("eventWebsiteUrl"),
+    );
+    if (!hasWebsiteError) return;
+    const frame = window.requestAnimationFrame(() => {
+      document.getElementById("form-builder-event-website")?.focus();
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [actionData]);
   /* The dock carries one of two panes. Rendering the switch inside each pane's
      own header keeps the pane title and the control that replaces it on the
      same line, instead of stacking two rows of chrome above the content. */
@@ -732,7 +752,11 @@ export default function FormBuilder({ loaderData }: Route.ComponentProps) {
               eventTimezone={eventTimezone}
             />
             <div className="mt">
-              <PresentationSettingsPanel input={input} change={change} />
+              <PresentationSettingsPanel
+                input={input}
+                change={change}
+                errors={actionData?.errors}
+              />
             </div>
           </div>
         </section>

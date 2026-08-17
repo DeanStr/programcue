@@ -793,7 +793,7 @@ function AdminPageFrame({
         <nav aria-label="Breadcrumb">
           <ol className="pc-breadcrumbs">
             <li>
-              <Link to="/events/select">
+              <Link to="/events/select" reloadDocument>
                 {currentEventOption.organisationName}
               </Link>
             </li>

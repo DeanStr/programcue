@@ -13,9 +13,11 @@ function suggestedCompletionMinutes(input: SaveFormInput) {
 export function PresentationSettingsPanel({
   input,
   change,
+  errors,
 }: {
   input: SaveFormInput;
   change: (next: SaveFormInput) => void;
+  errors?: Record<string, string[]>;
 }) {
   const presentation = input.schema.presentation;
   const suggestedMinutes = suggestedCompletionMinutes(input);
@@ -99,7 +101,16 @@ export function PresentationSettingsPanel({
               update({ eventWebsiteUrl: event.target.value })
             }
             placeholder="https://…"
+            id="form-builder-event-website"
+            aria-invalid={Boolean(
+              errors?.["schema.presentation.eventWebsiteUrl"]?.length,
+            )}
           />
+          {errors?.["schema.presentation.eventWebsiteUrl"]?.[0] ? (
+            <span className="pc-field-error">
+              {errors["schema.presentation.eventWebsiteUrl"][0]}
+            </span>
+          ) : null}
         </label>
         <label className="label mt">
           Same-origin hero image path

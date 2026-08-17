@@ -131,6 +131,9 @@ describe("submission form rules", () => {
       invitationText: "",
       showFeaturedSpeakers: false,
     });
+    expect(
+      formPresentationSchema.parse({ eventWebsiteUrl: "" }).eventWebsiteUrl,
+    ).toBe("");
     expect(DEFAULT_FORM_PRESENTATION.showFeaturedSpeakers).toBe(false);
     expect(DEFAULT_FORM_PRESENTATION.invitationHeading).toBe("");
     expect(DEFAULT_FORM_PRESENTATION.invitationText).toBe("");
@@ -152,9 +155,13 @@ describe("submission form rules", () => {
       "http://events.example.com",
       "https://user:secret@events.example.com",
     ]) {
-      expect(
-        formPresentationSchema.safeParse({ eventWebsiteUrl }).success,
-      ).toBe(false);
+      const result = formPresentationSchema.safeParse({ eventWebsiteUrl });
+      expect(result.success).toBe(false);
+      if (!result.success) {
+        expect(result.error.issues[0]?.message).toBe(
+          "Enter a valid URL beginning with https://",
+        );
+      }
     }
     expect(
       formPresentationSchema.safeParse({ organizerRole: "Programme chair" })

@@ -956,6 +956,16 @@ export function DraftEditor({
     if (!serverSaved && !readOnly) return;
     void clearDraftRecoveryScope(recoveryScope);
   }, [readOnly, recoveryScope, serverSaved]);
+  useEffect(() => {
+    const firstInvalidField = Object.keys(errors ?? {}).find(
+      (fieldId) => fieldId !== "speakers",
+    );
+    if (!firstInvalidField) return;
+    const frame = window.requestAnimationFrame(() => {
+      document.getElementById(`answer-${firstInvalidField}`)?.focus();
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [errors]);
   const fields = visibleFields(schema, answers);
   const sections = formSectionsForDisplay(schema, fields);
   const incompleteRequiredFields = fields.filter((field) => {

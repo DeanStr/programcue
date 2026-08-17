@@ -486,7 +486,7 @@ test.describe("mutable schedule authoring", () => {
       `Auto-place second ${unique}`,
     ];
 
-    for (const [index, title] of titles.entries()) {
+    for (const title of titles) {
       await waitForInterface(page, "/admin/sessions/new");
       const directSession = page.locator("form").filter({
         has: page.getByRole("button", {
@@ -499,12 +499,24 @@ test.describe("mutable schedule authoring", () => {
       await directSession
         .getByLabel("Description")
         .fill("A deterministic auto-placement test session.");
+      await directSession.getByLabel("Find existing speaker 1").fill("Priya");
+      const existingSpeaker = directSession.getByRole("button", {
+        name: /Priya Shah.*Already on this event roster/,
+      });
+      await expect(existingSpeaker).toBeEnabled();
+      await existingSpeaker.click();
+      await expect(directSession.getByLabel("Speaker 1 name")).toHaveValue(
+        "Priya Shah",
+      );
       await directSession
-        .getByLabel("Speaker 1 name")
-        .fill(`Auto Speaker ${index + 1}`);
-      await directSession
-        .getByLabel("Email", { exact: true })
-        .fill(`auto-place-${unique}-${index}@example.com`);
+        .getByRole("button", { name: "Create unscheduled session" })
+        .click();
+      const duplicateConfirmation = directSession.getByLabel(
+        "I reviewed these identities and confirm the entered names and email addresses.",
+      );
+      await expect(duplicateConfirmation).toBeVisible();
+      await duplicateConfirmation.check();
+      await expect(duplicateConfirmation).toBeChecked();
       await directSession
         .getByRole("button", { name: "Create unscheduled session" })
         .click();
@@ -583,6 +595,45 @@ test.describe("mutable schedule authoring", () => {
     await expect(
       page.locator(".schedule-entry-draggable").filter({ hasText: titles[1] }),
     ).toHaveCount(0);
+  });
+
+  test("explains why an unpublished speaker blocks auto-placement", async ({
+    page,
+  }) => {
+    const unique = Date.now();
+    const title = `Auto-place blocked ${unique}`;
+    await waitForInterface(page, "/admin/sessions/new");
+    const directSession = page.locator("form").filter({
+      has: page.getByRole("button", {
+        name: "Create unscheduled session",
+        exact: true,
+      }),
+    });
+    await directSession.getByLabel("Session title").fill(title);
+    await directSession.getByLabel("Track").selectOption({ index: 1 });
+    await directSession
+      .getByLabel("Speaker 1 name")
+      .fill(`Unpublished Speaker ${unique}`);
+    await directSession
+      .getByLabel("Email", { exact: true })
+      .fill(`auto-place-blocked-${unique}@example.com`);
+    await directSession
+      .getByRole("button", { name: "Create unscheduled session" })
+      .click();
+
+    await expect(page).toHaveURL(/\/admin\/schedule\?session=[^&]+&created=1/u);
+    await createNextScheduleDraft(page);
+    const readiness = page.getByTestId("auto-placement-readiness");
+    await expect(readiness).toContainText(
+      "No unscheduled session currently meets the placement rules",
+    );
+    await expect(readiness).toContainText(title);
+    await expect(readiness).toContainText(
+      "One or more linked speakers are not published for this event.",
+    );
+    await expect(
+      page.getByRole("button", { name: "Auto-place unscheduled sessions" }),
+    ).toBeDisabled();
   });
 });
 

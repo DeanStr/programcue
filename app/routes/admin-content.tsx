@@ -1,4 +1,5 @@
 import { ArchiveRestore, Download, Files, ShieldCheck } from "lucide-react";
+import { useEffect } from "react";
 import {
   data,
   Form,
@@ -21,6 +22,7 @@ import {
 import { requireCurrentEventRole } from "~/platform/auth/current-event.server";
 import { getCloudflareContext } from "~/platform/cloudflare-context";
 import type { Route } from "./+types/admin-content";
+import type { action as zipAction } from "./admin-content-zip";
 
 async function administrator(
   request: Request,
@@ -106,6 +108,84 @@ function formatBytes(bytes: number) {
   if (bytes < 1024) return `${bytes} B`;
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+type ZipOperationStatus = {
+  operationId: string;
+  status: "queued" | "processing" | "ready" | "failed";
+  error: string | null;
+  fileName: string | null;
+  sizeBytes: number | null;
+  downloadUrl: string | null;
+};
+
+function ZipExportProgress({ operationId }: { operationId: string }) {
+  const fetcher = useFetcher<ZipOperationStatus>();
+  // The operation id is the polling scope; the fetcher object is stable for
+  // this component and should not restart polling on each response.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: Polling is intentionally scoped to the durable operation id.
+  useEffect(() => {
+    void fetcher.load(
+      `/admin/content/export.zip?operation=${encodeURIComponent(operationId)}`,
+    );
+  }, [operationId]);
+  useEffect(() => {
+    if (
+      !fetcher.data ||
+      fetcher.data.status === "ready" ||
+      fetcher.data.status === "failed"
+    )
+      return;
+    const timer = window.setTimeout(() => {
+      void fetcher.load(
+        `/admin/content/export.zip?operation=${encodeURIComponent(operationId)}`,
+      );
+    }, 1_000);
+    return () => window.clearTimeout(timer);
+  }, [fetcher.data, fetcher.load, operationId]);
+  if (fetcher.state !== "idle" && !fetcher.data)
+    return <p className="help">ZIP export queued. Checking its status…</p>;
+  if (!fetcher.data) return null;
+  if (fetcher.data.status === "failed")
+    return (
+      <p className="validation-item error" role="alert">
+        {fetcher.data.error ?? "The ZIP export failed."}
+      </p>
+    );
+  if (fetcher.data.status === "ready")
+    return (
+      <div className="validation-item ok" role="status">
+        <strong>ZIP ready</strong>
+        <span>
+          {fetcher.data.fileName}
+          {fetcher.data.sizeBytes !== null
+            ? ` · ${formatBytes(fetcher.data.sizeBytes)}`
+            : ""}
+        </span>
+        {fetcher.data.downloadUrl ? (
+          <Link
+            className="btn small"
+            to={fetcher.data.downloadUrl}
+            reloadDocument
+          >
+            <Download aria-hidden size={14} /> Download ZIP
+          </Link>
+        ) : null}
+      </div>
+    );
+  return (
+    <p className="validation-item info" role="status">
+      <strong>
+        {fetcher.data.status === "processing"
+          ? "Processing ZIP…"
+          : "ZIP queued…"}
+      </strong>
+      <span>
+        The archive will become downloadable after its stored result is
+        verified.
+      </span>
+    </p>
+  );
 }
 
 type FileVersionPage =
@@ -224,7 +304,16 @@ function FileVersionHistory({
 
 export default function AdminContent({ loaderData }: Route.ComponentProps) {
   const actionData = useActionData<typeof action>();
+  const zipFetcher = useFetcher<typeof zipAction>();
   const navigation = useNavigation();
+  const zipPreviewManifest =
+    actionData?.ok && "preview" in actionData
+      ? actionData.preview.manifest
+      : null;
+  useEffect(() => {
+    if (zipPreviewManifest === null) return;
+    zipFetcher.reset();
+  }, [zipFetcher.reset, zipPreviewManifest]);
   const statusCounts = Object.fromEntries(
     ["draft", "in_review", "approved", "changes_requested"].map((status) => [
       status,
@@ -534,13 +623,12 @@ export default function AdminContent({ loaderData }: Route.ComponentProps) {
               </li>
             ))}
           </ul>
-          <Form
+          <zipFetcher.Form
             method="post"
             action="/admin/content/export.zip"
             className="stack mt"
-            reloadDocument
           >
-            <input type="hidden" name="intent" value="download-zip" />
+            <input type="hidden" name="intent" value="queue-zip" />
             <input
               type="hidden"
               name="manifest"
@@ -555,10 +643,24 @@ export default function AdminContent({ loaderData }: Route.ComponentProps) {
               <input type="checkbox" name="confirmed" value="true" required />
               Download exactly these current released versions
             </label>
-            <button type="submit" className="btn primary">
+            <button
+              type="submit"
+              className="btn primary"
+              disabled={zipFetcher.state !== "idle"}
+            >
               <Download aria-hidden size={15} /> Generate ZIP
             </button>
-          </Form>
+            {zipFetcher.data &&
+            "message" in zipFetcher.data &&
+            !zipFetcher.data.ok ? (
+              <p className="validation-item error" role="alert">
+                {zipFetcher.data.message}
+              </p>
+            ) : null}
+            {zipFetcher.data && "operationId" in zipFetcher.data ? (
+              <ZipExportProgress operationId={zipFetcher.data.operationId} />
+            ) : null}
+          </zipFetcher.Form>
         </section>
       ) : null}
     </>

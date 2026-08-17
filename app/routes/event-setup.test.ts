@@ -145,6 +145,119 @@ describe("Event Setup administrator scope route", () => {
     }
   });
 
+  it("persists an added room through Event Setup and exposes it to scheduling", async () => {
+    const service = new EventService(workerEnv);
+    const original = await service.getSetup({
+      ...viewer,
+      personId: "person-demo-admin",
+      name: "Olivia Bennett",
+      email: "olivia@example.com",
+      role: "administrator",
+      demo: true,
+    });
+    const roomName = `Route room ${crypto.randomUUID().slice(0, 8)}`;
+
+    const added = await action({
+      request: request("administrator", {
+        _intent: "add_room",
+        revision: String(original.revision),
+        name: roomName,
+        capacity: "180",
+      }),
+      params: {},
+      context: context(),
+    } as never);
+    if (added instanceof Response)
+      throw new Error("Room creation returned a raw response.");
+    expect(added.data).toMatchObject({
+      intent: "add_room",
+      message: expect.stringContaining(roomName),
+    });
+    expect(added.data.ok || added.data.committed).toBe(true);
+
+    try {
+      const reloaded = await loader({
+        request: request("administrator"),
+        params: {},
+        context: context(),
+      } as never);
+      expect(reloaded.event.rooms).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ name: roomName, capacity: 180 }),
+        ]),
+      );
+      const schedule = await new ScheduleService(workerEnv).getWorkspace(
+        viewer,
+      );
+      expect(schedule.rooms).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ name: roomName, capacity: 180 }),
+        ]),
+      );
+    } finally {
+      await workerEnv.DB.prepare(
+        "DELETE FROM rooms WHERE event_id = ? AND name = ?",
+      )
+        .bind(viewer.eventId, roomName)
+        .run();
+    }
+  });
+
+  it("returns specific room duplicate and validation errors without persistence", async () => {
+    const service = new EventService(workerEnv);
+    const original = await service.getSetup({
+      ...viewer,
+      personId: "person-demo-admin",
+      name: "Olivia Bennett",
+      email: "olivia@example.com",
+      role: "administrator",
+      demo: true,
+    });
+    const existingRoom = original.rooms[0];
+    if (!existingRoom) throw new Error("The demo room fixture is unavailable.");
+
+    const duplicate = await action({
+      request: request("administrator", {
+        _intent: "add_room",
+        revision: String(original.revision),
+        name: existingRoom.name.toUpperCase(),
+        capacity: "180",
+      }),
+      params: {},
+      context: context(),
+    } as never);
+    if (duplicate instanceof Response)
+      throw new Error("Duplicate room returned a raw response.");
+    expect(duplicate.init?.status).toBe(409);
+    expect(duplicate.data).toMatchObject({
+      ok: false,
+      intent: "add_room",
+      errors: { name: ["A room with that name already exists in this event."] },
+    });
+
+    const invalid = await action({
+      request: request("administrator", {
+        _intent: "add_room",
+        revision: String(original.revision),
+        name: "",
+        capacity: "0",
+      }),
+      params: {},
+      context: context(),
+    } as never);
+    if (invalid instanceof Response)
+      throw new Error("Invalid room returned a raw response.");
+    expect(invalid.init?.status).toBe(422);
+    expect(invalid.data).toMatchObject({
+      ok: false,
+      intent: "add_room",
+      errors: {
+        name: expect.any(Array),
+        capacity: expect.any(Array),
+      },
+    });
+  });
+
   it("returns a specific tracks field error for an invalid colour", async () => {
     const service = new EventService(workerEnv);
     const original = await service.getSetup({

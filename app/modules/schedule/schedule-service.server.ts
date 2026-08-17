@@ -80,6 +80,9 @@ export type ScheduleSession = {
   contentRevision: number;
   speakerIds: string[];
   speakerNames: string[];
+  /** A private or unpublished linked speaker blocks deterministic placement
+   * until the session can be represented in the public programme. */
+  hasUnpublishedSpeaker: boolean;
   status: string;
   revision: number;
 };

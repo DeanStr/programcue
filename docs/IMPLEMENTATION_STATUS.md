@@ -1,6 +1,6 @@
 # Verified implementation status
 
-Last verified: 2026-08-16.
+Last verified: 2026-08-17.
 
 This is the canonical implementation audit and requirements traceability record. The product specification remains authoritative for intended scope; this file records observed code, focused tests and local evidence only.
 
@@ -400,6 +400,14 @@ standalone webhook calls without an API-key actor must explicitly declare
 origin fails before endpoint discovery. This is repository evidence until the
 candidate is deployed.
 
+Priority 0 review hardening keeps the client autosave CAS token at the last
+revision explicitly acknowledged by the current assignment's save request.
+Retained or stale fetcher responses cannot advance that token or clear newer
+criteria/comments, while the server still serialises saves and enforces its
+compare-and-set boundary. Focused review Worker coverage and the desktop
+Chromium review workflow cover save, reload and conflict-safe recovery. This is
+local candidate evidence; deployment is not claimed.
+
 ### Cross-surface micro-UX evidence
 
 The connected production interfaces now derive new event, public-form,
@@ -408,6 +416,12 @@ public path and check event-slug availability without weakening the server's
 uniqueness boundary. Event creation, cloning and setup use coupled date ranges,
 searchable stable city/IANA timezone labels, linked field errors and focused
 error summaries. Existing and published identifiers remain unchanged.
+
+Event Setup room creation now uses a dedicated server action backed by the
+canonical compare-and-set `EventService.saveSetup` path. It persists the
+validated room, rejects duplicate names and invalid capacity with field errors,
+revalidates the canonical room list and exposes the room immediately to the
+schedule workspace; track creation remains on the same canonical save path.
 
 Application intake reports remaining required answers, labels required fields,
 warns about repeated speaker email addresses and surfaces bounded-text counts.
@@ -427,6 +441,16 @@ feedback and retain the existing server validation. Organisation owners can
 persist an audited real postal address for new communication-template defaults;
 the write revalidates active ownership, rejects stale revisions and rolls back
 unless the update and audit complete together. Missing data remains explicit.
+Task-template forms now enter through a typed normalisation boundary, so absent
+text, date and offset values render as controlled empty strings and failed
+submissions redisplay the same draft instead of passing `undefined` to inputs.
+Optional HTTPS URLs accept blank values, reject malformed values with the exact
+field copy `Enter a valid URL beginning with https://`, preserve the draft and
+return focus to the invalid control. Event-selection links from reviewer,
+speaker and administrator shells use a full document navigation, keeping the
+first navigation after invitation acceptance on the authoritative event
+loader. Focused Worker coverage records these P0 validation and navigation
+contracts; manual assistive-technology acceptance remains external.
 Schedule source search and public programme filters persist in the URL without
 rerunning their loaders, while server-owned focus parameters still revalidate;
 stale public facets are cleared with an explicit notice. Saved-view names
@@ -642,6 +666,13 @@ event-website/recording blockers. Confirmation remains disabled while any blocke
 visible, and the authoritative mutation rechecks the exact schedule revision
 and every invariant rather than trusting the preview.
 
+Auto-placement readiness uses the same deterministic planner as preview and
+confirmation. Eligible sessions enable the action, while unavailable sessions
+show per-session blockers such as missing duration, unpublished speakers,
+unavailable rooms and conflicts. Focused Worker tests and desktop Chromium
+coverage verify both the eligible flow and the explicit unpublished-speaker
+blocker.
+
 ## Audit and revision evidence
 
 - **Production slice; deployed:** Audit writes
@@ -699,11 +730,16 @@ and every invariant rather than trusting the preview.
   metadata is loaded only when its disclosure opens and remains bounded to 50
   versions per request. Individual and ZIP downloads
   require the current released, signature-valid, clean R2 object. ZIP export
-  previews an exact bounded manifest, requires confirmation, revalidates each
-  version and ETag, preflights R2 metadata before returning download headers,
-  preserves duplicate filename extensions and conditionally opens and
-  pull-streams only the current stored entry with response-cancellation
-  through a dedicated binary resource route rather than a document action.
+  previews an exact bounded manifest, requires confirmation, persists a durable
+  idempotent operation before Queue dispatch, reports queued/processing/ready/
+  failed status, revalidates each version and ETag in the worker, verifies the
+  resulting archive in private R2 and exposes a scoped download only after the
+  stored result is complete. It preserves duplicate filename extensions and
+  conditionally opens and pull-streams only the current stored entry with
+  response-cancellation through a dedicated binary resource route rather than a
+  document action. Focused Worker coverage selects two current versions,
+  processes the Queue payload, checks the ready status and inspects the ZIP
+  bytes; missing queue/storage bindings fail explicitly.
   A speaker-scoped task file is attributed to its linked session only when
   exactly one event session matches that speaker; ambiguous relationships stay
   visibly unassigned instead of selecting an arbitrary session.

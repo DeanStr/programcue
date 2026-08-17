@@ -116,6 +116,16 @@ export const roomInputSchema = z.object({
   position: z.coerce.number().int().min(0),
 });
 
+export const eventRoomCreateInputSchema = z.object({
+  revision: z.coerce.number().int().positive(),
+  name: z.string().trim().min(1, "Every room needs a name.").max(120),
+  capacity: z.coerce
+    .number()
+    .int()
+    .min(1, "Every room needs a positive capacity.")
+    .max(100_000),
+});
+
 export const eventSetupInputSchema = z
   .object({
     revision: z.coerce.number().int().positive(),

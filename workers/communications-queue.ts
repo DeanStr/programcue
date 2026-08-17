@@ -12,6 +12,7 @@ import {
   COMMUNICATION_SEND_BATCH_SIZE,
   processCommunicationSend,
 } from "./queue/communication-send";
+import { processContentZipExport } from "./queue/content-zip-export-handler";
 import {
   processDecisionNotification,
   processSubmissionNotification,
@@ -54,6 +55,7 @@ const queueFailureIdentitySchema = z
       "integration.accelevents.export",
       "webhook.deliver",
       "file.scan.dispatch",
+      "content.zip.export",
     ]),
     operationId: operationalIdentifierSchema,
     eventId: operationalIdentifierSchema,
@@ -85,6 +87,8 @@ function queueProvider(input: unknown, env: CloudflareEnvironment): string {
       return "webhook";
     case "file.scan.dispatch":
       return "file-scanner";
+    case "content.zip.export":
+      return "private-storage";
     default:
       return "unknown";
   }
@@ -219,7 +223,8 @@ export async function handleProgramCueQueueMessage(
     body?.type !== "schedule.calendar_fanout" &&
     body?.type !== "integration.accelevents.export" &&
     body?.type !== "webhook.deliver" &&
-    body?.type !== "file.scan.dispatch"
+    body?.type !== "file.scan.dispatch" &&
+    body?.type !== "content.zip.export"
   )
     return false;
   try {
@@ -237,7 +242,9 @@ export async function handleProgramCueQueueMessage(
       await processAcceleventsExport(body, env);
     else if (body.type === "webhook.deliver")
       await processWebhookDelivery(body, env);
-    else await processFileScanDispatch(body, env);
+    else if (body.type === "file.scan.dispatch")
+      await processFileScanDispatch(body, env);
+    else await processContentZipExport(body, env);
     message.ack();
   } catch (error) {
     const identity = queueFailureIdentitySchema.safeParse(body);

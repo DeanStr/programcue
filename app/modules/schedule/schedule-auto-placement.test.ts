@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
 
-import { computeAutoPlacements } from "./schedule-auto-placement";
+import {
+  computeAutoPlacements,
+  getAutoPlacementReadiness,
+} from "./schedule-auto-placement";
 import { autoPlacementD1StatementCount } from "./schedule-auto-placement-workflow.server";
 import type { ScheduleWorkspace } from "./schedule-service.server";
 import { eventLocalTimeEpoch } from "./schedule-time";
@@ -41,6 +44,7 @@ function session(
     contentRevision: 1,
     speakerIds: [],
     speakerNames: [],
+    hasUnpublishedSpeaker: false,
     status: "unscheduled",
     revision: 1,
     ...overrides,
@@ -262,6 +266,67 @@ describe("deterministic auto-placement", () => {
         sessionId: "large",
         reason: expect.stringContaining("capacity"),
       }),
+    );
+  });
+
+  it("reports eligible sessions and deterministic blockers before preview", () => {
+    const readiness = getAutoPlacementReadiness(
+      workspace([
+        session("eligible", "Eligible session"),
+        session("unpublished", "Unpublished speaker", {
+          hasUnpublishedSpeaker: true,
+        }),
+        session("invalid", "Missing duration", { durationMinutes: 0 }),
+      ]),
+    );
+
+    expect(readiness).toMatchObject({
+      unscheduledCount: 3,
+      eligibleCount: 1,
+      eligibleSessionIds: ["eligible"],
+      canPreview: true,
+      disabledReason: null,
+    });
+    expect(readiness.blocked).toEqual(
+      expect.arrayContaining([
+        {
+          sessionId: "unpublished",
+          reason:
+            "One or more linked speakers are not published for this event.",
+        },
+        expect.objectContaining({
+          sessionId: "invalid",
+          reason: expect.stringContaining("positive whole number"),
+        }),
+      ]),
+    );
+  });
+
+  it("explains why auto-place is unavailable when every session is blocked", () => {
+    const readiness = getAutoPlacementReadiness(
+      workspace([
+        session("blocked", "Blocked session", { durationMinutes: 0 }),
+      ]),
+    );
+
+    expect(readiness.canPreview).toBe(false);
+    expect(readiness.disabledReason).toContain("No unscheduled session");
+    expect(readiness.blocked).toEqual([
+      expect.objectContaining({
+        sessionId: "blocked",
+        reason: expect.stringContaining("positive whole number"),
+      }),
+    ]);
+  });
+
+  it("fails rather than treating missing speaker visibility metadata as public", () => {
+    const input = workspace([session("missing-metadata", "Missing metadata")]);
+    const candidate = input.sessions[0];
+    if (!candidate) throw new Error("The test session fixture is unavailable.");
+    delete (candidate as Partial<typeof candidate>).hasUnpublishedSpeaker;
+
+    expect(() => computeAutoPlacements(input)).toThrow(
+      "missing speaker publication visibility metadata",
     );
   });
 

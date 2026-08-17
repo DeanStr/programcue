@@ -40,7 +40,7 @@ export function ReviewerShell({
           <small>Evaluation workspace</small>
         </div>
         <div className="review-session-actions">
-          <Link className="btn small" to={eventSelectionHref}>
+          <Link className="btn small" to={eventSelectionHref} reloadDocument>
             Switch event
           </Link>
           {viewer.demo ? (

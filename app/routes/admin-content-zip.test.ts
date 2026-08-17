@@ -11,6 +11,7 @@ import {
   DEMO_IDENTITIES,
   DEMO_ORGANISATION_ID,
 } from "~/platform/demo/demo-identities";
+import { processContentZipExport } from "../../workers/queue/content-zip-export-handler";
 import { action } from "./admin-content-zip";
 
 const workerEnv = env as unknown as CloudflareEnvironment;
@@ -24,13 +25,20 @@ const viewer = {
   demo: true,
 };
 
-function context() {
+function context(environment: CloudflareEnvironment = workerEnv) {
   const value = new RouterContextProvider();
   value.set(cloudflareContext, {
-    env: workerEnv,
+    env: environment,
     ctx: {} as ExecutionContext,
   });
   return value;
+}
+
+function queuedEnvironment(send: () => Promise<void> = async () => undefined) {
+  return {
+    ...workerEnv,
+    OPERATIONS_QUEUE: { send },
+  } as unknown as CloudflareEnvironment;
 }
 
 beforeEach(async () => {
@@ -38,15 +46,27 @@ beforeEach(async () => {
 });
 
 describe("administrator content ZIP resource", () => {
-  it("returns confirmed ZIP bytes from a resource route", async () => {
+  it("persists a ZIP operation and serves the verified stored archive", async () => {
     const suffix = crypto.randomUUID();
     const assetId = `route-zip-asset-${suffix}`;
     const versionId = `route-zip-version-${suffix}`;
     const taskId = `route-zip-task-${suffix}`;
+    const secondAssetId = `route-zip-second-asset-${suffix}`;
+    const secondVersionId = `route-zip-second-version-${suffix}`;
     const objectKey = `private/route-zip-tests/${versionId}`;
+    const secondObjectKey = `private/route-zip-tests/${secondVersionId}`;
     const bytes = new TextEncoder().encode("route ZIP transport evidence");
+    const secondBytes = new TextEncoder().encode(
+      "second route ZIP transport evidence",
+    );
     const stored = await workerEnv.FILES.put(objectKey, bytes);
     if (!stored) throw new Error("The route ZIP test object was not stored.");
+    const secondStored = await workerEnv.FILES.put(
+      secondObjectKey,
+      secondBytes,
+    );
+    if (!secondStored)
+      throw new Error("The second route ZIP test object was not stored.");
     const session = await workerEnv.DB.prepare(
       `SELECT session.id, speaker.person_id AS speakerId
          FROM sessions session
@@ -73,9 +93,16 @@ describe("administrator content ZIP resource", () => {
         `INSERT INTO file_assets (
            id, event_id, owner_person_id, target_type, target_id, asset_kind,
            status, created_at, updated_at
-         ) VALUES (?, ?, ?, 'task', ?, 'task_evidence', 'active',
+        ) VALUES (?, ?, ?, 'task', ?, 'task_evidence', 'active',
                    unixepoch(), unixepoch())`,
       ).bind(assetId, DEMO_EVENT_ID, session.speakerId, taskId),
+      workerEnv.DB.prepare(
+        `INSERT INTO file_assets (
+           id, event_id, owner_person_id, target_type, target_id, asset_kind,
+           status, created_at, updated_at
+         ) VALUES (?, ?, ?, 'task', ?, 'task_evidence', 'active',
+                   unixepoch(), unixepoch())`,
+      ).bind(secondAssetId, DEMO_EVENT_ID, session.speakerId, taskId),
       workerEnv.DB.prepare(
         `INSERT INTO file_versions (
            id, event_id, asset_id, version_number, object_key,
@@ -96,23 +123,50 @@ describe("administrator content ZIP resource", () => {
         session.speakerId,
       ),
       workerEnv.DB.prepare(
+        `INSERT INTO file_versions (
+           id, event_id, asset_id, version_number, object_key,
+           original_filename, declared_content_type, detected_content_type,
+           size_bytes, object_etag, upload_status, signature_status,
+           scan_status, created_by_person_id, created_at, uploaded_at,
+           scanned_at, released_at
+         ) VALUES (?, ?, ?, 1, ?, 'route-evidence-second.pdf', 'application/pdf',
+                   'application/pdf', ?, ?, 'uploaded', 'valid', 'clean', ?,
+                   unixepoch(), unixepoch(), unixepoch(), unixepoch())`,
+      ).bind(
+        secondVersionId,
+        DEMO_EVENT_ID,
+        secondAssetId,
+        secondObjectKey,
+        secondBytes.byteLength,
+        secondStored.httpEtag,
+        session.speakerId,
+      ),
+      workerEnv.DB.prepare(
         `UPDATE file_assets
             SET current_version_id = ?, updated_at = unixepoch()
           WHERE id = ? AND event_id = ?`,
       ).bind(versionId, assetId, DEMO_EVENT_ID),
+      workerEnv.DB.prepare(
+        `UPDATE file_assets
+            SET current_version_id = ?, updated_at = unixepoch()
+          WHERE id = ? AND event_id = ?`,
+      ).bind(secondVersionId, secondAssetId, DEMO_EVENT_ID),
     ]);
 
     const preview = await new ContentManagementService(workerEnv).previewZip(
       viewer,
-      { assetIds: [assetId], groupBy: "session" },
+      { assetIds: [assetId, secondAssetId], groupBy: "session" },
     );
-    expect(preview.entries[0]?.sessionName).toBe("Unassigned");
+    expect(preview.entries).toHaveLength(2);
+    expect(
+      preview.entries.every((entry) => entry.sessionName === "Unassigned"),
+    ).toBe(true);
     const eventCookie = currentEventCookie(DEMO_EVENT_ID, workerEnv).split(
       ";",
       1,
     )[0];
     const form = new FormData();
-    form.set("intent", "download-zip");
+    form.set("intent", "queue-zip");
     form.set("manifest", preview.manifest);
     form.set("groupBy", preview.groupBy);
     form.set("confirmed", "true");
@@ -126,17 +180,101 @@ describe("administrator content ZIP resource", () => {
         body: form,
       }),
       params: {},
-      context: context(),
+      context: context(queuedEnvironment()),
     } as never);
 
-    expect(response.headers.get("content-type")).toBe("application/zip");
-    expect(response.headers.get("content-disposition")).toContain(
+    expect(response.data).toMatchObject({ ok: true, status: "queued" });
+    const operationId = response.data.operationId;
+    const operation = await workerEnv.DB.prepare(
+      "SELECT payload_json AS payloadJson FROM operation_jobs WHERE id = ?",
+    )
+      .bind(operationId)
+      .first<{ payloadJson: string }>();
+    if (!operation) throw new Error("The ZIP operation was not persisted.");
+    await processContentZipExport(JSON.parse(operation.payloadJson), workerEnv);
+    const status = await new ContentManagementService(
+      workerEnv,
+    ).zipOperationStatus(viewer, operationId);
+    expect(status).toMatchObject({ status: "ready" });
+    const downloaded = await new ContentManagementService(
+      workerEnv,
+    ).downloadStoredZip(viewer, operationId);
+    expect(downloaded.headers.get("content-type")).toBe("application/zip");
+    expect(downloaded.headers.get("content-disposition")).toContain(
       'attachment; filename="',
     );
-    const zip = new Uint8Array(await response.arrayBuffer());
+    const zip = new Uint8Array(await downloaded.arrayBuffer());
     expect(new DataView(zip.buffer).getUint32(0, true)).toBe(0x04034b50);
     expect(new TextDecoder().decode(zip)).toContain(
       "route ZIP transport evidence",
+    );
+    expect(new TextDecoder().decode(zip)).toContain(
+      "second route ZIP transport evidence",
+    );
+
+    await workerEnv.DB.prepare(
+      "UPDATE operation_jobs SET result_json = ? WHERE id = ?",
+    )
+      .bind("{}", operationId)
+      .run();
+    await expect(
+      new ContentManagementService(workerEnv).zipOperationStatus(
+        viewer,
+        operationId,
+      ),
+    ).rejects.toThrow("invalid durable result JSON");
+  });
+
+  it("reports missing ZIP storage and queue configuration explicitly", async () => {
+    const form = new FormData();
+    form.set("intent", "queue-zip");
+    form.set("manifest", "[]");
+    form.set("groupBy", "session");
+    form.set("confirmed", "true");
+
+    const invoke = (environment: CloudflareEnvironment) =>
+      action({
+        request: new Request("http://localhost/admin/content/export.zip", {
+          method: "POST",
+          headers: {
+            cookie:
+              "program_cue_demo_identity=administrator; program_cue_event=evt-foe-2025",
+            origin: "http://localhost",
+          },
+          body: form,
+        }),
+        params: {},
+        context: context(environment),
+      } as never);
+
+    let queueError: unknown;
+    try {
+      await invoke({
+        ...workerEnv,
+        OPERATIONS_QUEUE: void 0,
+      } as unknown as CloudflareEnvironment);
+    } catch (error) {
+      queueError = error;
+    }
+    expect(queueError).toBeInstanceOf(Response);
+    expect(queueError).toMatchObject({ status: 503 });
+    expect(await (queueError as Response).text()).toBe(
+      "ZIP export queue is unavailable. Configure the OPERATIONS_QUEUE binding before retrying.",
+    );
+
+    let storageError: unknown;
+    try {
+      await invoke({
+        ...queuedEnvironment(),
+        FILES: void 0,
+      } as unknown as CloudflareEnvironment);
+    } catch (error) {
+      storageError = error;
+    }
+    expect(storageError).toBeInstanceOf(Response);
+    expect(storageError).toMatchObject({ status: 503 });
+    expect(await (storageError as Response).text()).toBe(
+      "Private ZIP export storage is unavailable. Configure the FILES binding before retrying.",
     );
   });
 });

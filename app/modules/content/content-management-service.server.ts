@@ -1031,6 +1031,18 @@ export class ContentManagementService {
     return this.archive.downloadZip(viewer, rawInput);
   }
 
+  queueZip(viewer: Viewer, rawInput: unknown) {
+    return this.archive.queueZip(viewer, rawInput);
+  }
+
+  zipOperationStatus(viewer: Viewer, operationId: string) {
+    return this.archive.zipOperationStatus(viewer, operationId);
+  }
+
+  downloadStoredZip(viewer: Viewer, operationId: string) {
+    return this.archive.downloadStoredZip(viewer, operationId);
+  }
+
   downloadCurrentFile(viewer: Viewer, assetId: string) {
     return this.archive.downloadCurrentFile(viewer, assetId);
   }

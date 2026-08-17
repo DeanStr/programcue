@@ -78,7 +78,6 @@ export function SchedulePlannerWorkspace({
     trackGroups,
     unassign,
     undoAvailable,
-    unscheduledSessions,
     view,
     visibleSessions,
   } = useSchedulePlannerController(workspace);
@@ -108,19 +107,10 @@ export function SchedulePlannerWorkspace({
             className="btn"
             type="button"
             disabled={
-              !placementAvailable ||
-              unscheduledSessions.length === 0 ||
+              !workspace.autoPlacementReadiness.canPreview ||
               autoPlacementFetcher.state !== "idle"
             }
-            title={
-              !workspace.version
-                ? "Create a draft schedule before auto-placing sessions."
-                : workspace.version.status !== "draft"
-                  ? "Create the next draft before auto-placing sessions."
-                  : unscheduledSessions.length === 0
-                    ? "There are no unscheduled sessions to place."
-                    : undefined
-            }
+            title={workspace.autoPlacementReadiness.disabledReason ?? undefined}
             onClick={() => {
               clearAutoFeedback();
               autoPlacementFetcher.submit(
@@ -197,6 +187,28 @@ export function SchedulePlannerWorkspace({
           <strong>Auto-place blocked</strong>
           <span>{autoError}</span>
         </div>
+      ) : null}
+      {!workspace.autoPlacementReadiness.canPreview ? (
+        <section
+          className="validation-item schedule-notice warn mb"
+          aria-labelledby="auto-placement-readiness-heading"
+          data-testid="auto-placement-readiness"
+        >
+          <strong id="auto-placement-readiness-heading">
+            Auto-place unavailable
+          </strong>
+          <span>{workspace.autoPlacementReadiness.disabledReason}</span>
+          {workspace.autoPlacementReadiness.blocked.length ? (
+            <div className="stack">
+              {workspace.autoPlacementReadiness.blocked.map((item) => (
+                <span key={item.sessionId}>
+                  {sessionById.get(item.sessionId)?.title ?? item.sessionId}:{" "}
+                  {item.reason}
+                </span>
+              ))}
+            </div>
+          ) : null}
+        </section>
       ) : null}
       {autoResult ? (
         <div

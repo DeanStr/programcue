@@ -218,6 +218,7 @@ export function EventRoomsPanel({
   rooms,
   setRooms,
   actionData,
+  addDisabled = false,
   onAdd,
   onRemove,
   focusedRoomId,
@@ -226,6 +227,7 @@ export function EventRoomsPanel({
   rooms: EventSetup["rooms"];
   setRooms: Dispatch<SetStateAction<EventSetup["rooms"]>>;
   actionData?: ActionResponse;
+  addDisabled?: boolean;
   onAdd: () => void;
   onRemove: (roomId: string) => void;
   focusedRoomId: string | null;
@@ -302,7 +304,17 @@ export function EventRoomsPanel({
             A session can only be placed in a room when every resource it
             requires is in that room's inventory.
           </p>
-          <button type="button" className="btn small" onClick={onAdd}>
+          <button
+            type="button"
+            className="btn small"
+            onClick={onAdd}
+            disabled={addDisabled}
+            title={
+              addDisabled
+                ? "Save or discard the current Event Setup changes before adding a room."
+                : undefined
+            }
+          >
             <Plus aria-hidden size={14} /> Add room
           </button>
         </div>

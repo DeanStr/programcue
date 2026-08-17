@@ -38,6 +38,15 @@ export type AutoPlacementComputation = {
   unplaced: AutoPlacementUnplaced[];
 };
 
+export type AutoPlacementReadiness = {
+  unscheduledCount: number;
+  eligibleCount: number;
+  eligibleSessionIds: string[];
+  blocked: AutoPlacementUnplaced[];
+  canPreview: boolean;
+  disabledReason: string | null;
+};
+
 export type AutoPlacementPreview = AutoPlacementComputation & {
   idempotencyKey: string;
   scheduleVersionId: string;
@@ -176,11 +185,24 @@ export function computeAutoPlacements(
   });
 
   for (const session of sessions) {
+    if (typeof session.hasUnpublishedSpeaker !== "boolean") {
+      throw new ScheduleConfigurationError(
+        `Session ${session.id} is missing speaker publication visibility metadata.`,
+      );
+    }
     const durationSeconds = session.durationMinutes * 60;
     const failureMessages: string[] = [];
     let attemptedCandidates = 0;
     let exceededWorkingDay = false;
     let placed: AutoPlacementProposal | null = null;
+
+    if (session.hasUnpublishedSpeaker) {
+      unplaced.push({
+        sessionId: session.id,
+        reason: "One or more linked speakers are not published for this event.",
+      });
+      continue;
+    }
 
     if (Number.isSafeInteger(durationSeconds) && durationSeconds > 0) {
       candidateLoop: for (const { startsAt, workingDayEnd } of slots) {
@@ -262,6 +284,35 @@ export function computeAutoPlacements(
   }
 
   return { sessionRevisions, placements, unplaced };
+}
+
+export function getAutoPlacementReadiness(
+  workspace: Pick<
+    ScheduleWorkspace,
+    "event" | "rooms" | "sessions" | "entries" | "policies" | "version"
+  >,
+): AutoPlacementReadiness {
+  const computation = computeAutoPlacements(workspace);
+  const unscheduledCount = computation.sessionRevisions.length;
+  const eligibleSessionIds = computation.placements.map(
+    (placement) => placement.sessionId,
+  );
+  const hasDraft = workspace.version?.status === "draft";
+  return {
+    unscheduledCount,
+    eligibleCount: eligibleSessionIds.length,
+    eligibleSessionIds,
+    blocked: computation.unplaced,
+    canPreview: hasDraft && eligibleSessionIds.length > 0,
+    disabledReason:
+      unscheduledCount === 0
+        ? "There are no unscheduled sessions to place."
+        : !hasDraft
+          ? "Create an active draft schedule before auto-placing sessions."
+          : eligibleSessionIds.length === 0
+            ? "No unscheduled session currently meets the placement rules. Review each blocker below."
+            : null,
+  };
 }
 
 export function revalidateSelectedAutoPlacements(

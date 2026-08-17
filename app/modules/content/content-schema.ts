@@ -37,3 +37,17 @@ export const contentZipConfirmSchema = z.object({
   groupBy: z.enum(["session", "speaker"]),
   confirmed: z.union([z.literal("true"), z.literal(true)]),
 });
+
+export const contentZipQueueMessageSchema = z.object({
+  type: z.literal("content.zip.export"),
+  operationId: z.string().min(1).max(160),
+  organisationId: z.string().min(1).max(160),
+  eventId: z.string().min(1).max(160),
+  idempotencyKey: z.string().min(1).max(200),
+  manifest: z.string().min(2).max(40_000),
+  groupBy: z.enum(["session", "speaker"]),
+});
+
+export type ContentZipQueueMessage = z.infer<
+  typeof contentZipQueueMessageSchema
+>;

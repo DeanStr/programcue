@@ -10,10 +10,14 @@ import { validatePublicSiteCanonicalEvent } from "~/modules/public-site/public-s
 import { createAuth } from "~/platform/auth/auth.server";
 import type { Viewer } from "~/platform/auth/authorize.server";
 import { requireRuntimeMode } from "~/platform/runtime-environment.server";
-import { D1EventRepository } from "./event-repository.server";
+import {
+  D1EventRepository,
+  EventRevisionConflictError,
+} from "./event-repository.server";
 import {
   administratorInvitationSchema,
   administratorRevocationSchema,
+  eventRoomCreateInputSchema,
   eventSetupInputSchema,
 } from "./event-schema";
 
@@ -60,6 +64,13 @@ export class EventRepositoryMigrationRequiredError extends Error {
       "Repository authority cannot be changed by saving Event Setup. Configure Airtable, inspect the migration diff, and explicitly confirm the provider migration.",
     );
     this.name = "EventRepositoryMigrationRequiredError";
+  }
+}
+
+export class EventRoomNameConflictError extends Error {
+  constructor() {
+    super("A room with that name already exists in this event.");
+    this.name = "EventRoomNameConflictError";
   }
 }
 
@@ -254,6 +265,39 @@ export class EventService {
       }
     }
     return saved;
+  }
+
+  async addRoom(viewer: Viewer, input: unknown) {
+    const requested = eventRoomCreateInputSchema.parse(input);
+    const current = await this.getSetup(viewer);
+    if (current.revision !== requested.revision) {
+      throw new EventRevisionConflictError();
+    }
+    if (
+      current.rooms.some(
+        (room) =>
+          room.name.trim().toLowerCase() === requested.name.toLowerCase(),
+      )
+    ) {
+      throw new EventRoomNameConflictError();
+    }
+    const room = {
+      id: `room-${crypto.randomUUID()}`,
+      name: requested.name,
+      capacity: requested.capacity,
+      resources: [],
+      position:
+        current.rooms.reduce(
+          (highest, existingRoom) => Math.max(highest, existingRoom.position),
+          -1,
+        ) + 1,
+    };
+    const saved = await this.saveSetup(viewer, {
+      ...current,
+      revision: requested.revision,
+      rooms: [...current.rooms, room],
+    });
+    return { ...saved, room, revision: requested.revision + 1 };
   }
 
   async inviteAdministrator(

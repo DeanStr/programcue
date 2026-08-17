@@ -264,4 +264,26 @@ describe("administrator task filters", () => {
       .bind(endpointId)
       .run();
   });
+
+  it("does not default a missing required task type during creation", async () => {
+    const result = await action({
+      request: adminPost({
+        intent: "create-template",
+        intentId: crypto.randomUUID(),
+        name: "Missing task type",
+        description: "This request intentionally omits taskType.",
+        targetType: "speaker",
+        impact: "medium",
+        evidenceMode: "checkbox",
+        dueAnchor: "none",
+        dueOffsetDays: "",
+        fixedDueDate: "",
+      }),
+      params: {},
+      context: context(),
+    } as never);
+
+    expect(result.data).toMatchObject({ ok: false });
+    expect(result.init?.status).toBe(422);
+  });
 });

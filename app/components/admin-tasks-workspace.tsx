@@ -14,6 +14,7 @@ import {
   type TaskCompletionUndoNotice,
 } from "~/components/task-completion-undo-control";
 import { ReadinessWeightingCard } from "~/components/ui/readiness-weighting";
+import type { TaskTemplateDraftValues } from "~/modules/tasks/task-schema";
 import type { AdminTasksData } from "~/routes/admin-tasks";
 
 export function AdminTasksWorkspace({
@@ -22,7 +23,12 @@ export function AdminTasksWorkspace({
   busy,
 }: {
   data: AdminTasksData;
-  actionNotice?: { ok: boolean; message: string } & TaskCompletionUndoNotice;
+  actionNotice?: {
+    ok: boolean;
+    message: string;
+    draft?: TaskTemplateDraftValues;
+    errors?: Record<string, string[]>;
+  } & TaskCompletionUndoNotice;
   busy: boolean;
 }) {
   return (
@@ -182,7 +188,11 @@ export function AdminTasksWorkspace({
         <AdminAssignedTasksPanel data={data} busy={busy} />
         <div className="tasks-rail" id="readiness-weighting">
           <ReadinessWeightingCard />
-          <AdminTaskPlanPanel data={data} busy={busy} />
+          <AdminTaskPlanPanel
+            data={data}
+            busy={busy}
+            actionNotice={actionNotice}
+          />
         </div>
       </div>
     </>

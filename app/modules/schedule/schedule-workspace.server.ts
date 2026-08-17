@@ -159,6 +159,18 @@ export async function loadScheduleWorkspaceD1(
                COALESCE(content.visibility, s.visibility) AS visibility,
                COALESCE(content.content_status, 'draft') AS contentStatus,
                COALESCE(content.content_revision, 1) AS contentRevision,
+               EXISTS (
+                 SELECT 1
+                   FROM session_speakers unpublished_link
+                   LEFT JOIN people unpublished_person
+                     ON unpublished_person.id = unpublished_link.person_id
+                  WHERE unpublished_link.session_id = s.id
+                    AND unpublished_link.event_id = s.event_id
+                    AND (
+                      unpublished_link.visibility <> 'public'
+                      OR COALESCE(unpublished_person.profile_status, 'draft') <> 'published'
+                    )
+               ) AS hasUnpublishedSpeaker,
                content.session_id AS snapshotSessionId, s.status,
                s.revision,
                COALESCE((
@@ -198,10 +210,15 @@ export async function loadScheduleWorkspaceD1(
       .all<
         Omit<
           ScheduleSession,
-          "speakerIds" | "speakerNames" | "trackExclusive" | "requiredResources"
+          | "speakerIds"
+          | "speakerNames"
+          | "trackExclusive"
+          | "requiredResources"
+          | "hasUnpublishedSpeaker"
         > & {
           trackExclusive: number;
           requiredResourcesJson: string;
+          hasUnpublishedSpeaker: number;
           snapshotSessionId: string | null;
           speakersJson: string;
         }
@@ -358,6 +375,7 @@ export async function loadScheduleWorkspaceD1(
         trackExclusive: Boolean(session.trackExclusive),
         speakerIds: speakers.data.map((speaker) => speaker.id),
         speakerNames: speakers.data.map((speaker) => speaker.name),
+        hasUnpublishedSpeaker: Boolean(session.hasUnpublishedSpeaker),
       };
     },
   );

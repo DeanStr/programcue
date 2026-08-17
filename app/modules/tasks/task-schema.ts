@@ -217,3 +217,35 @@ export const participantEvidenceSchema = z.object({
 
 export type TaskTemplateInput = z.infer<typeof taskTemplateInputSchema>;
 export type TaskFormField = z.infer<typeof taskFormFieldSchema>;
+
+export type TaskTemplateDraftValues = {
+  name: string;
+  description: string;
+  targetType: TaskTemplateInput["targetType"];
+  taskType: TaskTemplateInput["taskType"];
+  impact: TaskTemplateInput["impact"];
+  evidenceMode: TaskTemplateInput["evidenceMode"];
+  dueAnchor: TaskTemplateInput["dueAnchor"];
+  dueOffsetDays: string;
+  fixedDueDate: string;
+  autoAssignOnAcceptance: boolean;
+  dependencyIds: string[];
+};
+
+export function normalizeTaskTemplateDraft(
+  input: Partial<TaskTemplateDraftValues> = {},
+): TaskTemplateDraftValues {
+  return {
+    name: input.name ?? "",
+    description: input.description ?? "",
+    targetType: input.targetType || "speaker",
+    taskType: input.taskType || "checklist",
+    impact: input.impact || "medium",
+    evidenceMode: input.evidenceMode || "checkbox",
+    dueAnchor: input.dueAnchor || "none",
+    dueOffsetDays: input.dueOffsetDays ?? "",
+    fixedDueDate: input.fixedDueDate ?? "",
+    autoAssignOnAcceptance: input.autoAssignOnAcceptance ?? false,
+    dependencyIds: input.dependencyIds ?? [],
+  };
+}

@@ -4,6 +4,7 @@ import {
   generateInvitationIcs,
   stableCalendarUid,
 } from "~/modules/calendars/ics.server";
+import { getAutoPlacementReadiness } from "~/modules/schedule/schedule-auto-placement";
 import { buildSchedulePublicationPreview } from "~/modules/schedule/schedule-publication-preview.server";
 import {
   ScheduleConfigurationError,
@@ -68,6 +69,7 @@ export async function loader({ request, context }: Route.LoaderArgs) {
   ]);
   const service = new ScheduleService(env);
   const workspace = await service.getWorkspace(viewer);
+  const autoPlacementReadiness = getAutoPlacementReadiness(workspace);
   const calendarPreviews = Object.fromEntries(
     workspace.entries.map((entry) => {
       const session = workspace.sessions.find(
@@ -173,6 +175,7 @@ export async function loader({ request, context }: Route.LoaderArgs) {
     });
   return {
     ...workspace,
+    autoPlacementReadiness,
     activeFilter,
     filteredSessionIds,
     focusedSessionId,

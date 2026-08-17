@@ -111,6 +111,13 @@ export type StoredZipEntry = {
   open: () => Promise<R2ObjectBody>;
 };
 
+export function storedZipByteLength(entries: StoredZipEntry[]) {
+  return entries.reduce((total, entry) => {
+    const nameLength = encoder.encode(entry.path).length;
+    return total + 30 + nameLength + entry.expectedSize + 16 + 46 + nameLength;
+  }, 22);
+}
+
 export function createStoredZipStream(entries: StoredZipEntry[]) {
   type CurrentEntry = {
     entry: StoredZipEntry;

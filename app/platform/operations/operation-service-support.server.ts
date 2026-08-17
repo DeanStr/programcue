@@ -37,6 +37,7 @@ export const genericRetryableOperationTypes = [
   "integration.accelevents.export",
   "webhook.deliver",
   "file.scan.dispatch",
+  "content.zip.export",
 ] as const;
 
 export const genericRetryableOperationTypesSql = genericRetryableOperationTypes

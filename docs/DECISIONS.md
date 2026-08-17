@@ -141,6 +141,13 @@ mutable queue record is introduced.
 | Publication boundary | Confirming schedule publication makes the exact immutable schedule-version content snapshot authoritative for public, API, Airtable and calendar consumers. Its confirmation previews added, removed, moved/resized and visibility-changed sessions against the current published version and lists every known conflict, content, confirmation and public-site blocker. Every scheduled source-public session must have a public, Approved content snapshot; missing, hidden/private or non-Approved snapshots block publication before provider work and are rechecked in the atomic D1 write. The preview is guidance over the current revision, not a substitute for final fail-closed revalidation. A blocked draft never replaces the last published programme. Editing or restoring content returns only the draft revision to Draft, so organisers may continue working without withdrawing approved live content. Content already published under the former advisory policy is retained with explicit `legacy_publication` provenance and no fabricated human approver. D1 rejects invalid publication transitions, entry insertion or reassignment into a published version, approval/visibility demotion or deletion of scheduled public content, and making an unapproved scheduled session public. Recovery may restore an empty published version first, but must restore coherent approval provenance before its public entries. Airtable staging applies the same approval boundary before provider writes. |
 | Central file library | The library is a tenant/event-scoped view over existing `file_assets`, `file_versions` and private R2 objects, not a second upload store. The initial read is limited to 50 assets and their current versions; retained history is loaded in separate 50-version pages. Downloads fail closed unless the selected version is current, released, signature-valid, scan-clean and ETag/size matched. ZIP export is bounded, previewed and explicitly confirmed; it preflights metadata before returning download headers, then conditionally opens and pull-streams only the current R2 body with cancellation. The confirmed binary download posts to a dedicated resource route so React Router never tries to deserialize ZIP bytes as document action data.                                                                                                                                                                                                                                                                                                                                                                                                                                           |
 
+ZIP generation is now a durable operation rather than a long-lived document
+response. The confirmed manifest is persisted with an idempotency key before
+Queue dispatch; the worker revalidates the exact current versions, writes the
+archive to private R2, verifies its ETag and size, and records the result before
+the UI exposes a download. Missing Queue or storage configuration, queue-send
+failure and processing failure remain explicit operation failures.
+
 ## Public programme workstream decisions
 
 **Public embed surfaces.** The embed URL and generated widget allow exactly five
@@ -315,6 +322,15 @@ server derives that exact subset, revalidates it against the current schedule
 and within itself, includes the canonically ordered selected IDs in the idempotency request
 hash and applies it atomically. Deselected sessions remain unscheduled and are
 reported separately from sessions the planner could not place.
+
+Auto-placement readiness calls the same pure planner as preview and
+confirmation. A button may be enabled only when that planner returns at least
+one eligible session; otherwise the UI lists each deterministic blocker,
+including missing duration, unpublished speakers, unavailable rooms and
+conflicts. Event Setup room creation follows the same explicit rule: a server
+command validates the name/capacity, performs a revision-checked canonical
+setup save and revalidates the returned list before the room can be used by
+scheduling.
 
 | Decision                             | Outcome                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
 | ------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -499,6 +515,14 @@ adding permanent visual noise. Participant and organiser profile editors warn
 before discarding unsaved changes, while the server revision remains the
 durable source of truth.
 
+Task-template drafts cross a typed normalisation boundary at the loader/action
+form edge: absent text, date and offset values become controlled empty strings,
+while invalid submissions retain the typed draft for redisplay. Optional HTTPS
+URLs accept blank values but use one exact validation copy for malformed input
+and return focus to the invalid control. Event-selection links from reviewer,
+speaker and administrator shells use a full document navigation so the first
+route after an invitation acceptance reads the authoritative event context.
+
 ## TypeScript validation decision
 
 The Node/tooling and Cloudflare application graphs are independent no-emit
@@ -532,6 +556,12 @@ analytics, arbitrary CSS, a generic diff framework and a separate cache
 invalidation subsystem remain excluded.
 
 ## Evaluation regression decisions
+
+- **Reviewer autosave authority:** The client sends only the latest revision
+  acknowledged by the current assignment's save request. React Router's
+  retained fetcher response is not a CAS token; an older response cannot clear
+  newer edits or advance the revision. The server remains the serialising and
+  compare-and-set authority.
 
 - **Form configuration authority:** protected Track and Format questions are
   complete ordered projections of Event Setup, not independently editable

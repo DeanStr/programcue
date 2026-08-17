@@ -33,6 +33,7 @@ import {
   EventInvitationDeliveryError,
   EventPublicSiteConflictError,
   EventRepositoryMigrationRequiredError,
+  EventRoomNameConflictError,
   EventService,
 } from "~/modules/events/event-service.server";
 import { FILE_SIZE_MIB } from "~/modules/files/file-policy";
@@ -52,6 +53,7 @@ export type ActionResponse = {
   ok: boolean;
   intent:
     | "save"
+    | "add_room"
     | "invite"
     | "revoke_administrator"
     | "configure_airtable"
@@ -60,6 +62,7 @@ export type ActionResponse = {
   message: string;
   errors?: Record<string, string[]>;
   committed?: boolean;
+  revision?: number;
   preview?: AirtableMigrationPreview;
 };
 
@@ -68,6 +71,7 @@ function responseIntent(
 ): ActionResponse["intent"] {
   if (
     value === "invite" ||
+    value === "add_room" ||
     value === "revoke_administrator" ||
     value === "configure_airtable" ||
     value === "preview_repository_migration" ||
@@ -231,6 +235,32 @@ export async function action({ request, context }: Route.ActionArgs) {
         intent: "revoke_administrator",
         message: `${scopeLabel} administrator access was revoked.`,
       });
+    }
+
+    if (intent === "add_room") {
+      const saved = await service.addRoom(viewer, {
+        revision: formData.get("revision"),
+        name: formData.get("name"),
+        capacity: formData.get("capacity"),
+      });
+      const realtimeFailure = await notifyRouteChange(
+        env,
+        viewer,
+        saved.changeSequence,
+        viewer.eventId,
+      );
+      return data<ActionResponse>(
+        {
+          ok: !realtimeFailure,
+          intent: "add_room",
+          committed: Boolean(realtimeFailure),
+          message: realtimeFailure
+            ? `Room “${saved.room.name}” was saved. ${realtimeFailure.message}`
+            : `Room “${saved.room.name}” was added and is ready for scheduling.`,
+          revision: saved.revision,
+        },
+        realtimeFailure ? { status: 207 } : undefined,
+      );
     }
 
     if (intent === "invite") {
@@ -424,6 +454,7 @@ export async function action({ request, context }: Route.ActionArgs) {
       error instanceof EventRevisionConflictError ||
       error instanceof EventSlugConflictError ||
       error instanceof EventRoomInUseError ||
+      error instanceof EventRoomNameConflictError ||
       error instanceof EventRoomOwnershipError ||
       error instanceof EventTrackInUseError ||
       error instanceof EventTrackOwnershipError ||
@@ -436,6 +467,17 @@ export async function action({ request, context }: Route.ActionArgs) {
       error instanceof EventRepositoryMigrationRequiredError ||
       error instanceof AirtableMigrationStateError
     ) {
+      if (error instanceof EventRoomNameConflictError) {
+        return data<ActionResponse>(
+          {
+            ok: false,
+            intent: "add_room",
+            message: error.message,
+            errors: { name: [error.message] },
+          },
+          { status: 409 },
+        );
+      }
       return data<ActionResponse>(
         {
           ok: false,

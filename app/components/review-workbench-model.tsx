@@ -242,6 +242,14 @@ export function useReviewWorkbenchState({
   const [submitMode, setSubmitMode] = useState<"stay" | "next" | null>(null);
   const [dirty, setDirty] = useState(false);
   const [editVersion, setEditVersion] = useState(0);
+  /* The revision sent with the next save is the last revision the server
+     acknowledged for this assignment. It must not be read directly from
+     fetcher.data: React Router can retain a previous response while another
+     edit is being queued, and a retained response is not a new CAS token. */
+  const [acknowledgedRevision, setAcknowledgedRevision] = useState(
+    workspace.review?.revision ?? 0,
+  );
+  const acknowledgedRevisionRef = useRef(acknowledgedRevision);
   const [pendingNavigation, setPendingNavigation] = useState<{
     href: string;
     sawSaveInFlight: boolean;
@@ -250,12 +258,7 @@ export function useReviewWorkbenchState({
     (criterion) => criterion.required,
   ).length;
   const readOnly = workspace.selected?.status === "submitted";
-  const revision =
-    fetcher.data &&
-    "revision" in fetcher.data &&
-    typeof fetcher.data.revision === "number"
-      ? fetcher.data.revision
-      : (workspace.review?.revision ?? 0);
+  const revision = acknowledgedRevision;
   const committedWarning = Boolean(
     fetcher.data &&
       "committed" in fetcher.data &&
@@ -567,6 +570,8 @@ export function useReviewWorkbenchState({
       serverSyncedEditGeneration.current = 0;
       inFlightSaveGeneration.current = null;
       handledSavedRevision.current = null;
+      acknowledgedRevisionRef.current = workspace.review?.revision ?? 0;
+      setAcknowledgedRevision(workspace.review?.revision ?? 0);
       setDirty(false);
       setRecoveryPayload(serverRecoveryPayload);
       setSuggestionImport({
@@ -596,6 +601,7 @@ export function useReviewWorkbenchState({
     workspace.review?.aiSuggestionId,
     workspace.review?.confirmedAiCriterionIds,
     workspace.review?.importedCriterionIds,
+    workspace.review?.revision,
   ]);
   useEffect(() => {
     if (fetcher.state !== "idle" || !fetcher.data) return;
@@ -620,6 +626,17 @@ export function useReviewWorkbenchState({
       handledSavedRevision.current = fetcher.data.revision;
       const savedEditGeneration = inFlightSaveGeneration.current;
       inFlightSaveGeneration.current = null;
+      /* A response is only an acknowledgement for the request currently
+         owned by this assignment. Older retained responses cannot advance
+         the revision token or clear a newer draft. */
+      if (
+        savedEditGeneration === null ||
+        fetcher.data.revision <= acknowledgedRevisionRef.current
+      ) {
+        return;
+      }
+      acknowledgedRevisionRef.current = fetcher.data.revision;
+      setAcknowledgedRevision(fetcher.data.revision);
       if (
         reviewSaveCoversCurrentEdits(
           savedEditGeneration,
@@ -641,6 +658,18 @@ export function useReviewWorkbenchState({
     saveFailed,
     workspace.selected?.id,
   ]);
+  useEffect(() => {
+    const serverRevision = workspace.review?.revision ?? 0;
+    if (
+      fetcher.state === "idle" &&
+      !dirty &&
+      inFlightSaveGeneration.current === null &&
+      serverRevision > acknowledgedRevisionRef.current
+    ) {
+      acknowledgedRevisionRef.current = serverRevision;
+      setAcknowledgedRevision(serverRevision);
+    }
+  }, [dirty, fetcher.state, workspace.review?.revision]);
   function markDirty(criterionId?: string) {
     if (saveFailed) fetcher.reset();
     if (criterionId) {

@@ -85,7 +85,7 @@ const optionalHttpsUrl = z
     } catch {
       return false;
     }
-  }, "Use a complete HTTPS URL without embedded credentials");
+  }, "Enter a valid URL beginning with https://");
 
 export const heroImagePathSchema = z
   .string()
@@ -744,7 +744,7 @@ export function validateFinalAnswers(
         const url = new URL(String(answer));
         if (url.protocol !== "https:") throw new Error("unsupported protocol");
       } catch {
-        errors[field.id] = [`${field.label} must be a valid HTTPS URL`];
+        errors[field.id] = ["Enter a valid URL beginning with https://"];
       }
     }
   }
