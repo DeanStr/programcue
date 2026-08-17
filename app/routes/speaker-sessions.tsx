@@ -8,7 +8,10 @@ import {
   SpeakerService,
 } from "~/modules/speakers/speaker-service.server";
 import { requireSpeakerWorkspace } from "~/modules/speakers/speaker-workspace.server";
-import { recordRouteChange } from "~/platform/realtime/route-realtime.server";
+import {
+  notifyRouteChange,
+  recordRouteChange,
+} from "~/platform/realtime/route-realtime.server";
 import type { Route } from "./+types/speaker-sessions";
 
 export const meta = () => [{ title: "My Sessions · Program Cue" }];
@@ -30,13 +33,21 @@ export async function action({ request, context }: Route.ActionArgs) {
         confirmation: form.get("confirmation"),
       },
     );
-    const realtimeFailure = result.changed
-      ? await recordRouteChange(env, viewer, {
-          entityType: "session",
-          entityId: result.sessionId,
-          changeType: "updated",
-        })
-      : null;
+    const realtimeFailure =
+      result.changeSequence != null
+        ? await notifyRouteChange(
+            env,
+            viewer,
+            result.changeSequence,
+            result.sessionId,
+          )
+        : result.changed
+          ? await recordRouteChange(env, viewer, {
+              entityType: "session",
+              entityId: result.sessionId,
+              changeType: "updated",
+            })
+          : null;
     if (realtimeFailure) return data(realtimeFailure, { status: 207 });
     return data({
       ok: true,

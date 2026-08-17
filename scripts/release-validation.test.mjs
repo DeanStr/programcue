@@ -9,6 +9,7 @@ import {
   publicSiteMigrationName,
   publicSiteProgrammeMembershipGuardMigrationName,
   publicSiteRelationshipGuardMigrationName,
+  publicSpeakerConfirmationGuardMigrationName,
   requiredBrandAssetColumns,
   requiredBrandSchemaObjects,
   requiredFeaturedSpeakerRelationshipObjects,
@@ -38,6 +39,10 @@ const relationshipGuardMigrations = [
 const programmeMembershipGuardMigrations = [
   ...relationshipGuardMigrations,
   publicSiteProgrammeMembershipGuardMigrationName,
+];
+const publicSpeakerConfirmationGuardMigrations = [
+  ...programmeMembershipGuardMigrations,
+  publicSpeakerConfirmationGuardMigrationName,
 ];
 const repositoryRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 
@@ -111,10 +116,14 @@ function remoteEvidence(appliedMigrations = migrations) {
                 : name ===
                     "prevent_referenced_public_session_eligibility_change"
                   ? appliedMigrations.includes(
-                      publicSiteProgrammeMembershipGuardMigrationName,
+                      publicSpeakerConfirmationGuardMigrationName,
                     )
-                    ? "CREATE TRIGGER prevent_referenced_public_session_eligibility_change BEFORE UPDATE OF status, visibility ON sessions WHEN NEW.status <> 'published' OR NEW.visibility <> 'public' AND EXISTS (SELECT 1 FROM event_public_site_references reference WHERE reference.kind = 'session' OR reference.kind = 'speaker' AND relation.visibility = 'public' AND profile_status = 'published' AND session_id <> OLD.id) OR EXISTS (SELECT 1 FROM event_session_recordings recording WHERE recording.published_at IS NOT NULL) BEGIN SELECT 1; END"
-                    : "CREATE TRIGGER prevent_referenced_public_session_eligibility_change BEFORE UPDATE OF status, visibility ON sessions WHEN NEW.status <> 'published' OR NEW.visibility <> 'public' AND EXISTS (SELECT 1 FROM event_public_site_references reference WHERE reference.kind = 'session' OR reference.kind = 'speaker' AND participation_status = 'confirmed' AND content_status = 'approved') OR EXISTS (SELECT 1 FROM event_session_recordings recording WHERE recording.published_at IS NOT NULL) BEGIN SELECT 1; END"
+                    ? "CREATE TRIGGER prevent_referenced_public_session_eligibility_change BEFORE UPDATE OF status, visibility ON sessions WHEN NEW.status <> 'published' OR NEW.visibility <> 'public' AND EXISTS (SELECT 1 FROM event_public_site_references reference WHERE reference.kind = 'session' OR reference.kind = 'speaker' AND relation.visibility = 'public' AND profile_status = 'published' AND participation_status = 'confirmed' AND session_id <> OLD.id) OR EXISTS (SELECT 1 FROM event_session_recordings recording WHERE recording.published_at IS NOT NULL) BEGIN SELECT 1; END"
+                    : appliedMigrations.includes(
+                          publicSiteProgrammeMembershipGuardMigrationName,
+                        )
+                      ? "CREATE TRIGGER prevent_referenced_public_session_eligibility_change BEFORE UPDATE OF status, visibility ON sessions WHEN NEW.status <> 'published' OR NEW.visibility <> 'public' AND EXISTS (SELECT 1 FROM event_public_site_references reference WHERE reference.kind = 'session' OR reference.kind = 'speaker' AND relation.visibility = 'public' AND profile_status = 'published' AND session_id <> OLD.id) OR EXISTS (SELECT 1 FROM event_session_recordings recording WHERE recording.published_at IS NOT NULL) BEGIN SELECT 1; END"
+                      : "CREATE TRIGGER prevent_referenced_public_session_eligibility_change BEFORE UPDATE OF status, visibility ON sessions WHEN NEW.status <> 'published' OR NEW.visibility <> 'public' AND EXISTS (SELECT 1 FROM event_public_site_references reference WHERE reference.kind = 'session' OR reference.kind = 'speaker' AND participation_status = 'confirmed' AND content_status = 'approved') OR EXISTS (SELECT 1 FROM event_session_recordings recording WHERE recording.published_at IS NOT NULL) BEGIN SELECT 1; END"
                   : "CREATE TRIGGER prevent_referenced_public_speaker_profile_demotion BEFORE UPDATE OF profile_status ON people WHEN OLD.profile_status = 'published' AND NEW.profile_status <> 'published' AND reference.kind = 'speaker' AND EXISTS (SELECT 1 FROM event_public_site_references) BEGIN SELECT 1; END",
         })),
         ...[...requiredFeaturedSpeakerRelationshipObjects].map(
@@ -124,8 +133,16 @@ function remoteEvidence(appliedMigrations = migrations) {
             sql:
               name ===
               "prevent_referenced_public_speaker_relationship_visibility_change"
-                ? "CREATE TRIGGER prevent_referenced_public_speaker_relationship_visibility_change BEFORE UPDATE OF visibility ON session_speakers WHEN OLD.visibility = 'public' AND NEW.visibility <> 'public' AND EXISTS (SELECT 1 FROM event_public_site_references reference WHERE reference.kind = 'speaker') AND session_id <> OLD.session_id BEGIN SELECT RAISE(ABORT, 'Remove this featured speaker from published event sites before hiding or removing their final public session relationship'); END"
-                : "CREATE TRIGGER prevent_referenced_public_speaker_relationship_delete BEFORE DELETE ON session_speakers WHEN OLD.visibility = 'public' AND EXISTS (SELECT 1 FROM event_public_site_references reference WHERE reference.kind = 'speaker') AND session_id <> OLD.session_id BEGIN SELECT RAISE(ABORT, 'Remove this featured speaker from published event sites before hiding or removing their final public session relationship'); END",
+                ? appliedMigrations.includes(
+                    publicSpeakerConfirmationGuardMigrationName,
+                  )
+                  ? "CREATE TRIGGER prevent_referenced_public_speaker_relationship_visibility_change BEFORE UPDATE OF visibility, participation_status ON session_speakers WHEN OLD.visibility = 'public' AND OLD.participation_status = 'confirmed' AND (NEW.visibility <> 'public' OR NEW.participation_status <> 'confirmed') AND EXISTS (SELECT 1 FROM event_public_site_references reference WHERE reference.kind = 'speaker') AND alternative_relation.participation_status = 'confirmed' AND session_id <> OLD.session_id BEGIN SELECT RAISE(ABORT, 'Remove this featured speaker from published event sites before hiding, unconfirming, or removing their final public confirmed session relationship'); END"
+                  : "CREATE TRIGGER prevent_referenced_public_speaker_relationship_visibility_change BEFORE UPDATE OF visibility ON session_speakers WHEN OLD.visibility = 'public' AND NEW.visibility <> 'public' AND EXISTS (SELECT 1 FROM event_public_site_references reference WHERE reference.kind = 'speaker') AND session_id <> OLD.session_id BEGIN SELECT RAISE(ABORT, 'Remove this featured speaker from published event sites before hiding or removing their final public session relationship'); END"
+                : appliedMigrations.includes(
+                      publicSpeakerConfirmationGuardMigrationName,
+                    )
+                  ? "CREATE TRIGGER prevent_referenced_public_speaker_relationship_delete BEFORE DELETE ON session_speakers WHEN OLD.visibility = 'public' AND OLD.participation_status = 'confirmed' AND EXISTS (SELECT 1 FROM event_public_site_references reference WHERE reference.kind = 'speaker') AND alternative_relation.participation_status = 'confirmed' AND session_id <> OLD.session_id BEGIN SELECT RAISE(ABORT, 'Remove this featured speaker from published event sites before hiding, unconfirming, or removing their final public confirmed session relationship'); END"
+                  : "CREATE TRIGGER prevent_referenced_public_speaker_relationship_delete BEFORE DELETE ON session_speakers WHEN OLD.visibility = 'public' AND EXISTS (SELECT 1 FROM event_public_site_references reference WHERE reference.kind = 'speaker') AND session_id <> OLD.session_id BEGIN SELECT RAISE(ABORT, 'Remove this featured speaker from published event sites before hiding or removing their final public session relationship'); END",
           }),
         ),
       ],
@@ -347,6 +364,42 @@ test("remote schema validation requires the exact migration ledger and deployed 
     /public-session eligibility trigger has the wrong protection contract/u,
   );
 
+  assert.deepEqual(
+    validateRemoteSchemaEvidence(
+      remoteEvidence(publicSpeakerConfirmationGuardMigrations),
+      publicSpeakerConfirmationGuardMigrations,
+    ),
+    {
+      migrationCount: 9,
+      pendingMigrationCount: 0,
+      brandingColumnCount: 7,
+      brandingObjectCount: 11,
+      reviewerAiColumnCount: 12,
+      reviewerAiObjectCount: 14,
+      publicSiteColumnCount: 28,
+      publicSiteObjectCount: 6,
+      publicSiteForeignKeyCount: 9,
+    },
+  );
+
+  const staleConfirmedSpeakerTrigger = remoteEvidence(
+    publicSpeakerConfirmationGuardMigrations,
+  );
+  staleConfirmedSpeakerTrigger[2].results.find(
+    ({ name }) =>
+      name ===
+      "prevent_referenced_public_speaker_relationship_visibility_change",
+  ).sql =
+    "CREATE TRIGGER prevent_referenced_public_speaker_relationship_visibility_change BEFORE UPDATE OF visibility ON session_speakers WHEN OLD.visibility = 'public' AND NEW.visibility <> 'public' AND EXISTS (SELECT 1 FROM event_public_site_references reference WHERE reference.kind = 'speaker') AND session_id <> OLD.session_id BEGIN SELECT RAISE(ABORT, 'Remove this featured speaker from published event sites before hiding or removing their final public session relationship'); END";
+  assert.throws(
+    () =>
+      validateRemoteSchemaEvidence(
+        staleConfirmedSpeakerTrigger,
+        publicSpeakerConfirmationGuardMigrations,
+      ),
+    /featured-speaker relationship visibility trigger has the wrong protection contract/u,
+  );
+
   const invalidPublicSiteColumn = remoteEvidence();
   invalidPublicSiteColumn[8].results.find(
     ({ tableName, name }) =>
@@ -432,6 +485,30 @@ test("remote schema validation requires the exact migration ledger and deployed 
     () => validateRemoteSchemaEvidence(foreignKeyFailure, migrations),
     /foreign_key_check returned violations/u,
   );
+});
+
+test("confirmed public-speaker migration fails closed and invalidates pending public membership", async () => {
+  const migration = await readFile(
+    resolve(
+      repositoryRoot,
+      "migrations",
+      publicSpeakerConfirmationGuardMigrationName,
+    ),
+    "utf8",
+  );
+  assert.match(
+    migration,
+    /CREATE TABLE migration_0042_featured_speaker_guard/u,
+  );
+  assert.match(
+    migration,
+    /published_featured_speakers_must_be_confirmed INTEGER NOT NULL/u,
+  );
+  assert.match(
+    migration,
+    /INSERT INTO event_changes[\s\S]*migration-0042-public-speaker-eligibility[\s\S]*participation_status = 'pending'/u,
+  );
+  assert.doesNotMatch(migration, /^SELECT RAISE\(/mu);
 });
 
 test("release state permits only the clean tested checkout", () => {

@@ -217,6 +217,7 @@ async function d1PublishedSessionPage(
          WHERE search_relation.session_id = s.id
            AND search_relation.event_id = s.event_id
            AND search_relation.visibility = 'public'
+           AND search_relation.participation_status = 'confirmed'
            AND search_person.profile_status = 'published'
            AND instr(lower(search_person.display_name), lower(?)) > 0
       )
@@ -238,6 +239,7 @@ async function d1PublishedSessionPage(
          AND filter_relation.event_id = s.event_id
          AND filter_relation.person_id = ?
          AND filter_relation.visibility = 'public'
+         AND filter_relation.participation_status = 'confirmed'
     )`);
     bindings.push(input.speakerId);
   }
@@ -290,6 +292,7 @@ async function d1PublishedSessionPage(
                     WHERE relation.session_id = s.id
                       AND relation.event_id = s.event_id
                       AND relation.visibility = 'public'
+                      AND relation.participation_status = 'confirmed'
                     ORDER BY relation.position, relation.person_id
                  ) ordered
              ) AS speakerIds,
@@ -304,6 +307,7 @@ async function d1PublishedSessionPage(
                     WHERE relation.session_id = s.id
                       AND relation.event_id = s.event_id
                       AND relation.visibility = 'public'
+                      AND relation.participation_status = 'confirmed'
                     ORDER BY relation.position, relation.person_id
                  ) ordered
              ) AS speakerNames
@@ -427,6 +431,7 @@ async function d1PublishedSpeakerPage(
          AND filter_relation.event_id = ?
          AND filter_relation.session_id = ?
          AND filter_relation.visibility = 'public'
+         AND filter_relation.participation_status = 'confirmed'
          AND filter_session.status = 'published'
          AND filter_session.visibility = 'public'
          AND filter_entry.schedule_version_id = ?
@@ -469,6 +474,7 @@ async function d1PublishedSpeakerPage(
                       AND linked_session.visibility = 'public'
                       AND linked_content.visibility = 'public'
                       AND linked_relation.visibility = 'public'
+                      AND linked_relation.participation_status = 'confirmed'
                     ORDER BY linked_entry.starts_at, linked_session.id
                  ) ordered
              ) AS sessionIds
@@ -491,6 +497,7 @@ async function d1PublishedSpeakerPage(
          AND session.status = 'published' AND session.visibility = 'public'
          AND content.visibility = 'public'
          AND relation.visibility = 'public'
+         AND relation.participation_status = 'confirmed'
          AND p.profile_status = 'published'
          ${predicates.length ? `AND ${predicates.join(" AND ")}` : ""}
        GROUP BY p.id

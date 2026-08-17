@@ -119,7 +119,8 @@ export class ProgrammeAdminService {
           WHERE session.event_id = ? AND person.profile_status = 'published'
             AND session.status = 'published'
             AND content.visibility = 'public'
-            AND speaker.visibility = 'public'`,
+            AND speaker.visibility = 'public'
+            AND speaker.participation_status = 'confirmed'`,
       )
         .bind(viewer.organisationId, viewer.eventId)
         .first<{ total: number }>(),

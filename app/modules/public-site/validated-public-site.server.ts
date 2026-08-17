@@ -87,6 +87,7 @@ async function missingPublishedProgrammeFeaturedIds(
              AND session.visibility = 'public'
              AND content.visibility = 'public'
              AND relation.visibility = 'public'
+             AND relation.participation_status = 'confirmed'
              AND person.profile_status = 'published'
         )
       )

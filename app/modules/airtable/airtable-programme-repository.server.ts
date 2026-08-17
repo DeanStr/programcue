@@ -251,6 +251,7 @@ export class AirtableProgrammeRepository {
                      WHERE relation.event_id = content.event_id
                        AND relation.session_id = content.session_id
                        AND relation.visibility = 'public'
+                       AND relation.participation_status = 'confirmed'
                        AND person.profile_status = 'published'
                      ORDER BY relation.position, relation.person_id
                   ) ordered
@@ -263,6 +264,7 @@ export class AirtableProgrammeRepository {
                      WHERE relation.event_id = content.event_id
                        AND relation.session_id = content.session_id
                        AND relation.visibility = 'public'
+                       AND relation.participation_status = 'confirmed'
                        AND person.profile_status = 'published'
                      ORDER BY relation.position, relation.person_id
                   ) ordered
@@ -323,6 +325,7 @@ export class AirtableProgrammeRepository {
             AND session.status IN ('scheduled','published')
             AND session.visibility = 'public'
             AND relation.visibility = 'public'
+            AND relation.participation_status = 'confirmed'
             AND person.profile_status = 'published'
           GROUP BY person.id
           ORDER BY person.display_name COLLATE NOCASE, person.id`,

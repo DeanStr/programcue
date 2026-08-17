@@ -894,11 +894,17 @@ revoked and deleted during file erasure.
   adds the matching last-relationship guards on `session_speakers` visibility
   changes and deletes; the release validator requires those triggers only after
   0039 is applied. Migration
-  `0040_align_featured_speaker_session_guard.sql` is deliberate semantic
-  alignment, not stronger publication protection: it recreates the session-
-  status trigger so session hide and relationship hide use the same live
-  programme-membership rule as `0039` and the current `getPublished()` speaker
-  projection. Confirmation remains a site/schedule publish-time check.
+  `0040_align_featured_speaker_session_guard.sql` aligned session hide with
+  the then-weaker live speaker projection. Migration
+  `0042_confirmed_public_speaker_eligibility.sql` unifies that live
+  projection with publication: public speaker eligibility now requires a
+  confirmed relationship, and the featured-speaker guards block hiding,
+  deleting or unconfirming the final qualifying relationship. The migration
+  refuses to apply while a published featured-speaker reference lacks that
+  confirmed membership, and inserts an `event` change for any published
+  programme that still has a public pending speaker so pre-cut cursors
+  become stale. Confirming a public published-programme relationship writes
+  the matching `person` change in the same guarded batch.
   Approved public schedule content remains the separate `0021` immutable-
   publication invariant; the lightweight featured-ID reader does not
   reproduce that full snapshot-integrity query.
@@ -948,10 +954,10 @@ revoked and deleted during file erasure.
   check; they do not materialize the full published programme or read Airtable.
   Featured IDs still fail closed against current D1 programme membership
   when those homepage sections are enabled. That membership check follows the
-  public speaker projection (public relationship, published profile, published
-  public session and content visibility). It does not re-check confirmation or
-  reproduce `getPublished()`'s approved-content snapshot integrity query;
-  approval remains enforced by migration `0021`. Fixed editorial page ETags combine the
+  public speaker projection (public confirmed relationship, published profile,
+  published public session and content visibility). It does not reproduce
+  `getPublished()`'s approved-content snapshot integrity query; approval
+  remains enforced by migration `0021`. Fixed editorial page ETags combine the
   request resource, site content identity, site publication revision and the
   current D1 published-programme version identity, so a later programme
   publish cannot 304 stale nav or footer chrome. Generic social-card URLs
@@ -982,8 +988,10 @@ revoked and deleted during file erasure.
   baseline triggers block direct session changes that would invalidate a
   featured record or published recording, block demotion of a featured
   speaker profile, and block hiding a session or hiding or deleting a
-  relationship when it is the last public published-programme membership for a
-  featured speaker. A remaining public pending relationship is sufficient.
+  relationship when it is the last public confirmed published-programme
+  membership for a featured speaker. A remaining public pending relationship
+  is not sufficient. Direct SQL cannot hide, delete or unconfirm that final
+  relationship while the person remains featured.
   Public loaders remain
   fail-closed instead of dropping referenced content.
 - **Repository authority boundary:** Editorial site configuration, fixed pages

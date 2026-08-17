@@ -416,6 +416,7 @@ export class PublicProgrammeService {
            AND session.status = 'published' AND session.visibility = 'public'
            AND content.visibility = 'public'
            AND relation.visibility = 'public'
+           AND relation.participation_status = 'confirmed'
            AND person.profile_status = 'published'
          GROUP BY person.id
          ORDER BY person.display_name COLLATE NOCASE, person.id
@@ -647,6 +648,7 @@ export class PublicProgrammeService {
                      JOIN people p ON p.id = ss.person_id AND p.profile_status = 'published'
                     WHERE ss.session_id = s.id AND ss.event_id = s.event_id
                       AND ss.visibility = 'public'
+                      AND ss.participation_status = 'confirmed'
                     ORDER BY ss.position, ss.person_id
                  ) ordered
              ) AS speakerIds,
@@ -658,6 +660,7 @@ export class PublicProgrammeService {
                      JOIN people p ON p.id = ss.person_id AND p.profile_status = 'published'
                     WHERE ss.session_id = s.id AND ss.event_id = s.event_id
                       AND ss.visibility = 'public'
+                      AND ss.participation_status = 'confirmed'
                     ORDER BY ss.position, ss.person_id
                  ) ordered
              ) AS speakerNames
@@ -706,6 +709,7 @@ export class PublicProgrammeService {
                       AND linked_session.visibility = 'public'
                       AND linked_content.visibility = 'public'
                       AND linked_speaker.visibility = 'public'
+                      AND linked_speaker.participation_status = 'confirmed'
                     ORDER BY linked_entry.starts_at, linked_session.id
                  ) ordered
              ) AS sessionIds
@@ -723,7 +727,9 @@ export class PublicProgrammeService {
        WHERE s.event_id = ? AND se.schedule_version_id = ?
          AND s.status = 'published' AND s.visibility = 'public'
          AND content.visibility = 'public'
-         AND ss.visibility = 'public' AND p.profile_status = 'published'
+         AND ss.visibility = 'public'
+         AND ss.participation_status = 'confirmed'
+         AND p.profile_status = 'published'
        GROUP BY p.id
        ORDER BY p.display_name COLLATE NOCASE, p.id
     `,

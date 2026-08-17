@@ -24,7 +24,6 @@ import {
   PUBLIC_SITE_SPEAKER_RELATIONSHIP_CONSTRAINT,
   PublishedPublicSiteInvariantError,
 } from "./public-site-errors";
-import { resolvePublicSitePresentation } from "./public-site-presentation";
 import {
   PublicSiteCommandConflictError,
   PublicSiteIntegrityError,
@@ -1289,7 +1288,7 @@ describe("public event site publication", () => {
     ).toEqual({ visibility: "public" });
   });
 
-  it("treats a pending public relationship as a remaining published-programme alternative", async () => {
+  it("blocks hiding the last confirmed relationship when only a pending alternative remains", async () => {
     await publishProgramme(["schedule-test-one", "schedule-test-two"]);
     await env.DB.prepare(
       `INSERT INTO session_speakers (
@@ -1308,18 +1307,22 @@ describe("public event site publication", () => {
       .run();
     await publishFeaturedSpeakerSite();
 
-    await env.DB.prepare(
-      "UPDATE sessions SET visibility = 'private' WHERE id = ? AND event_id = ?",
-    )
-      .bind("schedule-test-one", viewer.eventId)
-      .run();
-    await env.DB.prepare(
-      `UPDATE session_speakers
-          SET visibility = 'private'
-        WHERE session_id = ? AND event_id = ? AND person_id = ?`,
-    )
-      .bind("schedule-test-one", viewer.eventId, "person-demo-speaker")
-      .run();
+    await expect(
+      env.DB.prepare(
+        "UPDATE sessions SET visibility = 'private' WHERE id = ? AND event_id = ?",
+      )
+        .bind("schedule-test-one", viewer.eventId)
+        .run(),
+    ).rejects.toThrow(/withdraw public-site references/i);
+    await expect(
+      env.DB.prepare(
+        `UPDATE session_speakers
+            SET visibility = 'private'
+          WHERE session_id = ? AND event_id = ? AND person_id = ?`,
+      )
+        .bind("schedule-test-one", viewer.eventId, "person-demo-speaker")
+        .run(),
+    ).rejects.toThrow(PUBLIC_SITE_SPEAKER_RELATIONSHIP_CONSTRAINT);
 
     expect(
       await env.DB.prepare(
@@ -1327,16 +1330,16 @@ describe("public event site publication", () => {
       )
         .bind("schedule-test-one", viewer.eventId)
         .first(),
-    ).toEqual({ visibility: "private" });
+    ).toEqual({ visibility: "public" });
     expect(
       await env.DB.prepare(
         `SELECT visibility, participation_status AS participationStatus
            FROM session_speakers
           WHERE session_id = ? AND event_id = ? AND person_id = ?`,
       )
-        .bind("schedule-test-two", viewer.eventId, "person-demo-speaker")
+        .bind("schedule-test-one", viewer.eventId, "person-demo-speaker")
         .first(),
-    ).toEqual({ visibility: "public", participationStatus: "pending" });
+    ).toEqual({ visibility: "public", participationStatus: "confirmed" });
 
     const programme = await new PublicProgrammeService(
       publicSiteEnv,
@@ -1344,37 +1347,285 @@ describe("public event site publication", () => {
     const speaker = programme?.speakers.find(
       (candidate) => candidate.id === "person-demo-speaker",
     );
-    expect(speaker).toBeDefined();
-    expect(speaker?.sessionIds).toEqual(["schedule-test-two"]);
+    expect(speaker?.sessionIds).toEqual(["schedule-test-one"]);
+  });
 
-    const site = await new PublicSiteService(publicSiteEnv).getPublished(
-      "future-of-events-2027",
-    );
+  it("blocks changing the final featured relationship away from confirmed", async () => {
+    await publishProgramme();
+    await publishFeaturedSpeakerSite();
+
+    await expect(
+      env.DB.prepare(
+        `UPDATE session_speakers
+            SET participation_status = 'pending',
+                participation_confirmed_at = NULL
+          WHERE session_id = ? AND event_id = ? AND person_id = ?`,
+      )
+        .bind("schedule-test-one", viewer.eventId, "person-demo-speaker")
+        .run(),
+    ).rejects.toThrow(PUBLIC_SITE_SPEAKER_RELATIONSHIP_CONSTRAINT);
     expect(
-      resolvePublicSitePresentation(
-        site!.configuration,
-        site!.event,
-        programme,
-      ).featuredSpeakers.map((featured) => featured.id),
-    ).toEqual(["person-demo-speaker"]);
+      await env.DB.prepare(
+        `SELECT visibility, participation_status AS participationStatus
+           FROM session_speakers
+          WHERE session_id = ? AND event_id = ? AND person_id = ?`,
+      )
+        .bind("schedule-test-one", viewer.eventId, "person-demo-speaker")
+        .first(),
+    ).toEqual({ visibility: "public", participationStatus: "confirmed" });
+  });
 
-    const context = new RouterContextProvider();
-    context.set(cloudflareContext, {
-      env: publicSiteEnv,
-      ctx: {} as ExecutionContext,
-    });
-    const homepage = await publicProgrammePageLoader({
-      request: new Request(
-        "https://programcue.test/public/programme/future-of-events-2027",
+  it("allows unconfirming a featured relationship when another confirmed public relationship remains", async () => {
+    await env.DB.prepare(
+      `INSERT OR IGNORE INTO session_speakers (
+         session_id, event_id, person_id, position, role_label,
+         participation_status, participation_confirmed_at, visibility
+       ) VALUES (
+         'schedule-test-two', ?, 'person-demo-speaker', 1, 'Speaker',
+         'confirmed', unixepoch(), 'public'
+       )`,
+    )
+      .bind(viewer.eventId)
+      .run();
+    await publishProgramme(["schedule-test-one", "schedule-test-two"]);
+    await publishFeaturedSpeakerSite();
+
+    await env.DB.prepare(
+      `UPDATE session_speakers
+          SET participation_status = 'pending',
+              participation_confirmed_at = NULL
+        WHERE session_id = ? AND event_id = ? AND person_id = ?`,
+    )
+      .bind("schedule-test-one", viewer.eventId, "person-demo-speaker")
+      .run();
+
+    const programme = await new PublicProgrammeService(
+      publicSiteEnv,
+    ).getPublished("future-of-events-2027");
+    expect(
+      programme?.speakers.find(
+        (candidate) => candidate.id === "person-demo-speaker",
+      )?.sessionIds,
+    ).toEqual(["schedule-test-two"]);
+  });
+
+  it("lets an unfeatured speaker move between pending and confirmed", async () => {
+    await publishProgramme();
+    await env.DB.prepare(
+      `UPDATE session_speakers
+          SET participation_status = 'pending',
+              participation_confirmed_at = NULL
+        WHERE session_id = ? AND event_id = ? AND person_id = ?`,
+    )
+      .bind("schedule-test-one", viewer.eventId, "person-demo-speaker")
+      .run();
+    await env.DB.prepare(
+      `UPDATE session_speakers
+          SET participation_status = 'confirmed',
+              participation_confirmed_at = unixepoch()
+        WHERE session_id = ? AND event_id = ? AND person_id = ?`,
+    )
+      .bind("schedule-test-one", viewer.eventId, "person-demo-speaker")
+      .run();
+
+    expect(
+      await env.DB.prepare(
+        `SELECT participation_status AS participationStatus
+           FROM session_speakers
+          WHERE session_id = ? AND event_id = ? AND person_id = ?`,
+      )
+        .bind("schedule-test-one", viewer.eventId, "person-demo-speaker")
+        .first(),
+    ).toEqual({ participationStatus: "confirmed" });
+  });
+
+  it("fails closed when a published featured speaker lacks a confirmed public membership", async () => {
+    await publishProgramme();
+    const personId = `unconfirmed-featured-${crypto.randomUUID()}`;
+    await env.DB.batch([
+      env.DB.prepare(
+        `INSERT INTO people (
+           id, email, display_name, email_verified, profile_status,
+           created_at, updated_at
+         ) VALUES (?, ?, 'Unconfirmed Featured', 1, 'published',
+                   unixepoch(), unixepoch())`,
+      ).bind(personId, `${personId}@example.com`),
+      env.DB.prepare(
+        `INSERT INTO session_speakers (
+           session_id, event_id, person_id, position, role_label,
+           participation_status, participation_confirmed_at, visibility
+         ) VALUES ('schedule-test-one', ?, ?, 40, 'Speaker',
+                   'pending', NULL, 'public')`,
+      ).bind(viewer.eventId, personId),
+      env.DB.prepare(
+        `INSERT INTO event_public_sites (
+           event_id, organisation_id, draft_json, draft_revision,
+           published_json, published_revision, published_at,
+           last_updated_by_person_id, last_operation_id, created_at, updated_at
+         ) VALUES (
+           ?, ?, '{}', 1, '{}', 1, unixepoch(), ?, ?, unixepoch(), unixepoch()
+         )`,
+      ).bind(
+        viewer.eventId,
+        viewer.organisationId,
+        viewer.personId,
+        `featured-guard-${personId}`,
       ),
-      params: { slug: "future-of-events-2027" },
-      context,
-    } as never);
-    if (homepage instanceof Response)
-      throw new Error(
-        `Published homepage returned HTTP ${homepage.status} after the pending alternative remained.`,
-      );
-    expect(homepage.data).not.toMatchObject({ eventSiteOnly: true });
+      env.DB.prepare(
+        `INSERT INTO event_public_site_references (
+           event_id, organisation_id, kind, record_id, site_revision
+         ) VALUES (?, ?, 'speaker', ?, 1)`,
+      ).bind(viewer.eventId, viewer.organisationId, personId),
+    ]);
+
+    const guardTable = `migration_0042_featured_speaker_guard_${crypto.randomUUID().replaceAll("-", "")}`;
+    try {
+      await expect(
+        env.DB.batch([
+          env.DB.prepare(`
+            CREATE TABLE ${guardTable} (
+              published_featured_speakers_must_be_confirmed INTEGER NOT NULL
+                CHECK (published_featured_speakers_must_be_confirmed = 1)
+            )
+          `),
+          env.DB.prepare(
+            `INSERT INTO ${guardTable} (
+               published_featured_speakers_must_be_confirmed
+             )
+             SELECT 0
+               FROM event_public_site_references reference
+               JOIN event_public_sites site
+                 ON site.event_id = reference.event_id
+                AND site.published_at IS NOT NULL
+              WHERE reference.kind = 'speaker'
+                AND NOT EXISTS (
+                  SELECT 1
+                    FROM session_speakers relation
+                    JOIN sessions session
+                      ON session.id = relation.session_id
+                     AND session.event_id = relation.event_id
+                    JOIN people person ON person.id = relation.person_id
+                    JOIN schedule_entries entry
+                      ON entry.event_id = relation.event_id
+                     AND entry.session_id = relation.session_id
+                    JOIN schedule_versions version
+                      ON version.id = entry.schedule_version_id
+                     AND version.event_id = entry.event_id
+                     AND version.status = 'published'
+                    JOIN schedule_session_contents content
+                      ON content.event_id = entry.event_id
+                     AND content.schedule_version_id = entry.schedule_version_id
+                     AND content.session_id = entry.session_id
+                     AND content.visibility = 'public'
+                   WHERE relation.event_id = reference.event_id
+                     AND relation.person_id = reference.record_id
+                     AND relation.visibility = 'public'
+                     AND relation.participation_status = 'confirmed'
+                     AND person.profile_status = 'published'
+                     AND session.status = 'published'
+                     AND session.visibility = 'public'
+                )
+              LIMIT 1`,
+          ),
+        ]),
+      ).rejects.toThrow(/CHECK constraint failed/i);
+    } finally {
+      await env.DB.batch([
+        env.DB.prepare(`DROP TABLE IF EXISTS ${guardTable}`),
+        env.DB.prepare(
+          `DELETE FROM session_speakers
+            WHERE event_id = ? AND person_id = ?`,
+        ).bind(viewer.eventId, personId),
+        env.DB.prepare("DELETE FROM people WHERE id = ?").bind(personId),
+      ]);
+    }
+  });
+
+  it("records an event change for a published programme that still has a public pending speaker", async () => {
+    await publishProgramme();
+    const personId = `pending-public-${crypto.randomUUID()}`;
+    const before = await env.DB.prepare(
+      `SELECT public_projection_revision AS revision FROM events WHERE id = ?`,
+    )
+      .bind(viewer.eventId)
+      .first<{ revision: number }>();
+    await env.DB.prepare(
+      `INSERT INTO people (
+         id, email, display_name, email_verified, profile_status,
+         created_at, updated_at
+       ) VALUES (?, ?, 'Pending Public Speaker', 1, 'published',
+                 unixepoch(), unixepoch())`,
+    )
+      .bind(personId, `${personId}@example.com`)
+      .run();
+    await env.DB.prepare(
+      `INSERT INTO session_speakers (
+         session_id, event_id, person_id, position, role_label,
+         participation_status, participation_confirmed_at, visibility
+       ) VALUES ('schedule-test-one', ?, ?, 41, 'Speaker',
+                 'pending', NULL, 'public')`,
+    )
+      .bind(viewer.eventId, personId)
+      .run();
+
+    try {
+      await env.DB.prepare(
+        `INSERT INTO event_changes (
+           event_id, entity_type, entity_id, change_type, correlation_id, created_at
+         )
+         SELECT DISTINCT event.id, 'event', event.id, 'updated',
+                'migration-0042-public-speaker-eligibility', unixepoch()
+           FROM events event
+           JOIN schedule_versions version
+             ON version.event_id = event.id
+            AND version.status = 'published'
+           JOIN schedule_entries entry
+             ON entry.event_id = version.event_id
+            AND entry.schedule_version_id = version.id
+           JOIN sessions session
+             ON session.id = entry.session_id
+            AND session.event_id = entry.event_id
+            AND session.status = 'published'
+            AND session.visibility = 'public'
+           JOIN schedule_session_contents content
+             ON content.event_id = entry.event_id
+            AND content.schedule_version_id = entry.schedule_version_id
+            AND content.session_id = entry.session_id
+            AND content.visibility = 'public'
+           JOIN session_speakers relation
+             ON relation.event_id = entry.event_id
+            AND relation.session_id = entry.session_id
+            AND relation.visibility = 'public'
+            AND relation.participation_status = 'pending'
+           JOIN people person
+             ON person.id = relation.person_id
+            AND person.profile_status = 'published'
+          WHERE event.programme_published_at IS NOT NULL
+            AND event.id = ?`,
+      )
+        .bind(viewer.eventId)
+        .run();
+
+      const after = await env.DB.prepare(
+        `SELECT public_projection_revision AS revision,
+                (SELECT COUNT(*) FROM event_changes change
+                  WHERE change.event_id = events.id
+                    AND change.correlation_id =
+                        'migration-0042-public-speaker-eligibility') AS changeCount
+           FROM events WHERE id = ?`,
+      )
+        .bind(viewer.eventId)
+        .first<{ revision: number; changeCount: number }>();
+      expect(after!.changeCount).toBe(1);
+      expect(after!.revision).toBeGreaterThan(before!.revision);
+    } finally {
+      await env.DB.batch([
+        env.DB.prepare(
+          `DELETE FROM session_speakers WHERE event_id = ? AND person_id = ?`,
+        ).bind(viewer.eventId, personId),
+        env.DB.prepare("DELETE FROM people WHERE id = ?").bind(personId),
+      ]);
+    }
   });
 
   it("serves fixed editorial pages without reading an Airtable programme snapshot", async () => {

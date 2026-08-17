@@ -15,6 +15,8 @@ export const publicSiteRelationshipGuardMigrationName =
   "0039_featured_speaker_relationship_guards.sql";
 export const publicSiteProgrammeMembershipGuardMigrationName =
   "0040_align_featured_speaker_session_guard.sql";
+export const publicSpeakerConfirmationGuardMigrationName =
+  "0042_confirmed_public_speaker_eligibility.sql";
 
 export const requiredBrandAssetColumns = new Map([
   ["width_px", { type: "INTEGER", notnull: 0, defaultValue: null }],
@@ -400,6 +402,9 @@ export function validateRemoteSchemaEvidence(
   const programmeMembershipGuardsApplied = appliedMigrationNames.includes(
     publicSiteProgrammeMembershipGuardMigrationName,
   );
+  const publicSpeakerConfirmationGuardsApplied = appliedMigrationNames.includes(
+    publicSpeakerConfirmationGuardMigrationName,
+  );
   if (featuredSpeakerRelationshipGuardsApplied && !publicSiteApplied) {
     throw new Error(
       "Remote D1 applied featured-speaker relationship guards without the public event-site baseline.",
@@ -408,6 +413,15 @@ export function validateRemoteSchemaEvidence(
   if (programmeMembershipGuardsApplied && !publicSiteApplied) {
     throw new Error(
       "Remote D1 aligned the featured-speaker session guard without the public event-site baseline.",
+    );
+  }
+  if (
+    publicSpeakerConfirmationGuardsApplied &&
+    (!featuredSpeakerRelationshipGuardsApplied ||
+      !programmeMembershipGuardsApplied)
+  ) {
+    throw new Error(
+      "Remote D1 applied confirmed public-speaker eligibility without the featured-speaker relationship guards.",
     );
   }
   if (publicSiteApplied) {
@@ -472,13 +486,20 @@ export function validateRemoteSchemaEvidence(
       /reference\.kind\s*=\s*'session'/iu.test(sessionTriggerSql) &&
       /reference\.kind\s*=\s*'speaker'/iu.test(sessionTriggerSql) &&
       /recording\.published_at\s+IS\s+NOT\s+NULL/iu.test(sessionTriggerSql);
-    const sessionTriggerMatchesLiveProgramme = programmeMembershipGuardsApplied
-      ? /session_id\s*<>\s*OLD\.id/iu.test(sessionTriggerSql) &&
-        /profile_status\s*=\s*'published'/iu.test(sessionTriggerSql) &&
-        /relation\.visibility\s*=\s*'public'/iu.test(sessionTriggerSql) &&
-        !/participation_status\s*=\s*'confirmed'/iu.test(sessionTriggerSql)
-      : /participation_status\s*=\s*'confirmed'/iu.test(sessionTriggerSql) &&
-        /content_status\s*=\s*'approved'/iu.test(sessionTriggerSql);
+    const sessionTriggerMatchesLiveProgramme =
+      publicSpeakerConfirmationGuardsApplied
+        ? /session_id\s*<>\s*OLD\.id/iu.test(sessionTriggerSql) &&
+          /profile_status\s*=\s*'published'/iu.test(sessionTriggerSql) &&
+          /relation\.visibility\s*=\s*'public'/iu.test(sessionTriggerSql) &&
+          /participation_status\s*=\s*'confirmed'/iu.test(sessionTriggerSql)
+        : programmeMembershipGuardsApplied
+          ? /session_id\s*<>\s*OLD\.id/iu.test(sessionTriggerSql) &&
+            /profile_status\s*=\s*'published'/iu.test(sessionTriggerSql) &&
+            /relation\.visibility\s*=\s*'public'/iu.test(sessionTriggerSql) &&
+            !/participation_status\s*=\s*'confirmed'/iu.test(sessionTriggerSql)
+          : /participation_status\s*=\s*'confirmed'/iu.test(
+              sessionTriggerSql,
+            ) && /content_status\s*=\s*'approved'/iu.test(sessionTriggerSql);
     if (!sessionTriggerHasBaseline || !sessionTriggerMatchesLiveProgramme) {
       throw new Error(
         "Remote D1 public-session eligibility trigger has the wrong protection contract.",
@@ -513,27 +534,35 @@ export function validateRemoteSchemaEvidence(
           row.name ===
           "prevent_referenced_public_speaker_relationship_visibility_change",
       );
+      const visibilityTriggerSql =
+        typeof relationshipVisibilityTrigger?.sql === "string"
+          ? relationshipVisibilityTrigger.sql
+          : "";
+      const visibilityTriggerMatchesContract =
+        publicSpeakerConfirmationGuardsApplied
+          ? /BEFORE\s+UPDATE\s+OF\s+visibility\s*,\s*participation_status\s+ON\s+session_speakers/iu.test(
+              visibilityTriggerSql,
+            ) &&
+            /OLD\.participation_status\s*=\s*'confirmed'/iu.test(
+              visibilityTriggerSql,
+            ) &&
+            /NEW\.participation_status\s*<>\s*'confirmed'/iu.test(
+              visibilityTriggerSql,
+            ) &&
+            /alternative_relation\.participation_status\s*=\s*'confirmed'/iu.test(
+              visibilityTriggerSql,
+            )
+          : /BEFORE\s+UPDATE\s+OF\s+visibility\s+ON\s+session_speakers/iu.test(
+              visibilityTriggerSql,
+            );
       if (
-        typeof relationshipVisibilityTrigger?.sql !== "string" ||
-        !/BEFORE\s+UPDATE\s+OF\s+visibility\s+ON\s+session_speakers/iu.test(
-          relationshipVisibilityTrigger.sql,
-        ) ||
-        !/event_public_site_references/iu.test(
-          relationshipVisibilityTrigger.sql,
-        ) ||
-        !/reference\.kind\s*=\s*'speaker'/iu.test(
-          relationshipVisibilityTrigger.sql,
-        ) ||
-        !/OLD\.visibility\s*=\s*'public'/iu.test(
-          relationshipVisibilityTrigger.sql,
-        ) ||
-        !/NEW\.visibility\s*<>\s*'public'/iu.test(
-          relationshipVisibilityTrigger.sql,
-        ) ||
-        !/session_id\s*<>\s*OLD\.session_id/iu.test(
-          relationshipVisibilityTrigger.sql,
-        ) ||
-        !/RAISE\s*\(\s*ABORT\s*,/iu.test(relationshipVisibilityTrigger.sql)
+        !visibilityTriggerMatchesContract ||
+        !/event_public_site_references/iu.test(visibilityTriggerSql) ||
+        !/reference\.kind\s*=\s*'speaker'/iu.test(visibilityTriggerSql) ||
+        !/OLD\.visibility\s*=\s*'public'/iu.test(visibilityTriggerSql) ||
+        !/NEW\.visibility\s*<>\s*'public'/iu.test(visibilityTriggerSql) ||
+        !/session_id\s*<>\s*OLD\.session_id/iu.test(visibilityTriggerSql) ||
+        !/RAISE\s*\(\s*ABORT\s*,/iu.test(visibilityTriggerSql)
       ) {
         throw new Error(
           "Remote D1 featured-speaker relationship visibility trigger has the wrong protection contract.",
@@ -543,22 +572,26 @@ export function validateRemoteSchemaEvidence(
         (row) =>
           row.name === "prevent_referenced_public_speaker_relationship_delete",
       );
+      const deleteTriggerSql =
+        typeof relationshipDeleteTrigger?.sql === "string"
+          ? relationshipDeleteTrigger.sql
+          : "";
+      const deleteTriggerMatchesConfirmation =
+        !publicSpeakerConfirmationGuardsApplied ||
+        (/OLD\.participation_status\s*=\s*'confirmed'/iu.test(
+          deleteTriggerSql,
+        ) &&
+          /alternative_relation\.participation_status\s*=\s*'confirmed'/iu.test(
+            deleteTriggerSql,
+          ));
       if (
-        typeof relationshipDeleteTrigger?.sql !== "string" ||
-        !/BEFORE\s+DELETE\s+ON\s+session_speakers/iu.test(
-          relationshipDeleteTrigger.sql,
-        ) ||
-        !/event_public_site_references/iu.test(relationshipDeleteTrigger.sql) ||
-        !/reference\.kind\s*=\s*'speaker'/iu.test(
-          relationshipDeleteTrigger.sql,
-        ) ||
-        !/OLD\.visibility\s*=\s*'public'/iu.test(
-          relationshipDeleteTrigger.sql,
-        ) ||
-        !/session_id\s*<>\s*OLD\.session_id/iu.test(
-          relationshipDeleteTrigger.sql,
-        ) ||
-        !/RAISE\s*\(\s*ABORT\s*,/iu.test(relationshipDeleteTrigger.sql)
+        !/BEFORE\s+DELETE\s+ON\s+session_speakers/iu.test(deleteTriggerSql) ||
+        !/event_public_site_references/iu.test(deleteTriggerSql) ||
+        !/reference\.kind\s*=\s*'speaker'/iu.test(deleteTriggerSql) ||
+        !/OLD\.visibility\s*=\s*'public'/iu.test(deleteTriggerSql) ||
+        !/session_id\s*<>\s*OLD\.session_id/iu.test(deleteTriggerSql) ||
+        !/RAISE\s*\(\s*ABORT\s*,/iu.test(deleteTriggerSql) ||
+        !deleteTriggerMatchesConfirmation
       ) {
         throw new Error(
           "Remote D1 featured-speaker relationship delete trigger has the wrong protection contract.",

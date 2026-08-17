@@ -1958,6 +1958,107 @@ describe("evaluation vertical slice", () => {
       });
     });
 
+    it.each([
+      [
+        "audit insertion",
+        /INSERT INTO audit_events[\s\S]*'decision\.reopened'/u,
+      ],
+      [
+        "decision supersession",
+        /UPDATE submission_decisions\s+SET status = 'superseded'/u,
+      ],
+      [
+        "submission transition",
+        /UPDATE submissions\s+SET status = 'decision_ready'/u,
+      ],
+      [
+        "event-change insertion",
+        /INSERT INTO event_changes[\s\S]*'submission_decision'/u,
+      ],
+    ])(
+      "rolls back decision reopen when its %s is suppressed",
+      async (_label, pattern) => {
+        await resetEvaluationFixture();
+        const service = new EvaluationService(evaluationEnvironment());
+        const released = await service.decide(admin, {
+          submissionId: "eval-test-submission",
+          decision: "rejected",
+          rationale: "Initial outcome before the atomic reopen check.",
+          release: true,
+          confirmedWithoutReview: true,
+        });
+        const before = await env.DB.prepare(
+          `SELECT submission.status AS submissionStatus, submission.revision,
+                  decision.status AS decisionStatus,
+                  (SELECT COUNT(*) FROM audit_events audit
+                    WHERE audit.entity_id = decision.id
+                      AND audit.action = 'decision.reopened') AS reopenAuditCount,
+                  (SELECT operation.status FROM operation_jobs operation
+                    WHERE operation.id = ?) AS notificationStatus,
+                  (SELECT communication.status FROM communications communication
+                    WHERE communication.operation_id = ?
+                      AND communication.event_id = decision.event_id) AS communicationStatus
+             FROM submissions submission
+             JOIN submission_decisions decision
+               ON decision.submission_id = submission.id
+              AND decision.event_id = submission.event_id
+            WHERE submission.id = 'eval-test-submission'
+              AND decision.id = ?`,
+        )
+          .bind(
+            released.notificationOperationId,
+            released.notificationOperationId,
+            released.decisionId,
+          )
+          .first();
+        expect(before).toMatchObject({
+          submissionStatus: "rejected",
+          decisionStatus: "published",
+          reopenAuditCount: 0,
+          notificationStatus: "queued",
+          communicationStatus: "queued",
+        });
+        const fault = withSuppressedStatement(evaluationEnvironment(), pattern);
+
+        await expect(
+          new EvaluationService(fault.env).reopenDecision(admin, {
+            submissionId: "eval-test-submission",
+            reason: "The committee received material correcting evidence.",
+            confirmed: true,
+          }),
+        ).rejects.toThrow(
+          /complete audit, decision, submission, and change evidence|changed before it could be reopened/i,
+        );
+        expect(fault.suppressed()).toBe(1);
+        await expect(
+          env.DB.prepare(
+            `SELECT submission.status AS submissionStatus, submission.revision,
+                    decision.status AS decisionStatus,
+                    (SELECT COUNT(*) FROM audit_events audit
+                      WHERE audit.entity_id = decision.id
+                        AND audit.action = 'decision.reopened') AS reopenAuditCount,
+                    (SELECT operation.status FROM operation_jobs operation
+                      WHERE operation.id = ?) AS notificationStatus,
+                    (SELECT communication.status FROM communications communication
+                      WHERE communication.operation_id = ?
+                        AND communication.event_id = decision.event_id) AS communicationStatus
+               FROM submissions submission
+               JOIN submission_decisions decision
+                 ON decision.submission_id = submission.id
+                AND decision.event_id = submission.event_id
+              WHERE submission.id = 'eval-test-submission'
+                AND decision.id = ?`,
+          )
+            .bind(
+              released.notificationOperationId,
+              released.notificationOperationId,
+              released.decisionId,
+            )
+            .first(),
+        ).resolves.toEqual(before);
+      },
+    );
+
     it("fails accepted release if the claimed speaker set changes before provisioning", async () => {
       await resetEvaluationFixture();
       const latePersonId = `eval-late-speaker-${crypto.randomUUID()}`;

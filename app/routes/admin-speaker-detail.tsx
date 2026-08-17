@@ -100,13 +100,21 @@ export async function action({ request, params, context }: Route.ActionArgs) {
           externalConfirmation: form.get("externalConfirmation"),
         },
       );
-      const realtimeFailure = result.changed
-        ? await recordRouteChange(env, viewer, {
-            entityType: "session",
-            entityId: result.sessionId,
-            changeType: "updated",
-          })
-        : null;
+      const realtimeFailure =
+        result.changeSequence != null
+          ? await notifyRouteChange(
+              env,
+              viewer,
+              result.changeSequence,
+              result.sessionId,
+            )
+          : result.changed
+            ? await recordRouteChange(env, viewer, {
+                entityType: "session",
+                entityId: result.sessionId,
+                changeType: "updated",
+              })
+            : null;
       if (realtimeFailure) return data(realtimeFailure, { status: 207 });
       return data({
         ok: true,

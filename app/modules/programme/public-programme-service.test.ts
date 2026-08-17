@@ -785,6 +785,45 @@ describe("published programme and itinerary", () => {
       publicSession.speakerNames.length,
     );
 
+    await env.DB.batch([
+      env.DB.prepare(`
+        INSERT INTO people (
+          id, email, display_name, email_verified, profile_status,
+          created_at, updated_at
+        ) VALUES (
+          'programme-pending-speaker', 'programme-pending-speaker@example.com',
+          'Pending Public Speaker', 1, 'published', unixepoch(), unixepoch()
+        )
+      `),
+      env.DB.prepare(
+        `
+        INSERT INTO session_speakers (
+          session_id, event_id, person_id, position,
+          participation_status, participation_confirmed_at, visibility
+        ) VALUES (?, 'evt-foe-2025', 'programme-pending-speaker', 100,
+                  'pending', NULL, 'public')
+      `,
+      ).bind(publicSessionId),
+    ]);
+    const withoutPendingParticipation = await service.getPublished(
+      "future-of-events-2027",
+    );
+    const publicSessionWithoutPending =
+      withoutPendingParticipation!.sessions.find(
+        (session) => session.id === publicSessionId,
+      )!;
+    expect(publicSessionWithoutPending.speakerIds).not.toContain(
+      "programme-pending-speaker",
+    );
+    expect(publicSessionWithoutPending.speakerNames).not.toContain(
+      "Pending Public Speaker",
+    );
+    expect(
+      withoutPendingParticipation!.speakers.some(
+        (speaker) => speaker.id === "programme-pending-speaker",
+      ),
+    ).toBe(false);
+
     await env.DB.prepare(
       `INSERT INTO sessions (id, event_id, title, slug, format, duration_minutes, status, visibility, revision, created_at, updated_at) VALUES ('private-unpublished-session', 'evt-foe-2025', 'Private draft', 'private-draft', 'other', 30, 'unscheduled', 'private', 1, unixepoch(), unixepoch())`,
     ).run();

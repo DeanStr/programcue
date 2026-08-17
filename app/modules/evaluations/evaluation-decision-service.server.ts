@@ -9,6 +9,10 @@ import {
 } from "~/modules/events/event-configuration";
 import { submittedSnapshotSchema } from "~/modules/submissions/submission-schema";
 import type { Viewer } from "~/platform/auth/authorize.server";
+import {
+  atomicBatchGuardStatement,
+  isAtomicBatchGuardError,
+} from "~/platform/database/atomic-batch-guard.server";
 import { WebhookService } from "~/platform/operations/webhook-service.server";
 import {
   persistAcceptedSpeakerQueueFailure,
@@ -87,6 +91,7 @@ export class EvaluationDecisionService {
     const { parsed, released } = await this.loadReopenContext(viewer, input);
     const operationId = crypto.randomUUID();
     const auditEventId = crypto.randomUUID();
+    const nextRevision = released.revision + 1;
     const [
       auditInsert,
       ,
@@ -295,7 +300,67 @@ export class EvaluationDecisionService {
         viewer.eventId,
         operationId,
       ),
-    ]);
+      atomicBatchGuardStatement(
+        this.env,
+        `EXISTS (
+            SELECT 1 FROM audit_events audit WHERE audit.id = ?
+          ) AND NOT (
+            EXISTS (
+              SELECT 1 FROM audit_events audit
+               WHERE audit.id = ? AND audit.organisation_id = ?
+                 AND audit.event_id = ? AND audit.actor_person_id = ?
+                 AND audit.action = 'decision.reopened'
+                 AND audit.entity_type = 'submission_decision'
+                 AND audit.entity_id = ? AND audit.correlation_id = ?
+                 AND json_extract(audit.metadata_json, '$.reason') = ?
+                 AND json_extract(audit.metadata_json, '$.submissionId') = ?
+            ) AND EXISTS (
+              SELECT 1 FROM submission_decisions decision
+               WHERE decision.id = ? AND decision.event_id = ?
+                 AND decision.status = 'superseded'
+            ) AND EXISTS (
+              SELECT 1 FROM submissions submission
+               WHERE submission.id = ? AND submission.event_id = ?
+                 AND submission.status = 'decision_ready'
+                 AND submission.revision = ?
+                 AND submission.last_operation_id = ?
+            ) AND EXISTS (
+              SELECT 1 FROM event_changes change
+               WHERE change.event_id = ? AND change.entity_type = 'submission_decision'
+                 AND change.entity_id = ? AND change.change_type = 'updated'
+                 AND change.correlation_id = ?
+            )
+          )`,
+        [
+          auditEventId,
+          auditEventId,
+          viewer.organisationId,
+          viewer.eventId,
+          viewer.personId,
+          released.decisionId,
+          operationId,
+          parsed.reason,
+          parsed.submissionId,
+          released.decisionId,
+          viewer.eventId,
+          parsed.submissionId,
+          viewer.eventId,
+          nextRevision,
+          operationId,
+          viewer.eventId,
+          released.decisionId,
+          operationId,
+        ],
+      ),
+    ]).catch((error: unknown) => {
+      if (isAtomicBatchGuardError(error)) {
+        throw new Error(
+          "The reopened decision could not record its complete audit, decision, submission, and change evidence.",
+          { cause: error },
+        );
+      }
+      throw error;
+    });
     if (
       (auditInsert.meta.changes ?? 0) !== 1 ||
       (decisionUpdate.meta.changes ?? 0) !== 1 ||
