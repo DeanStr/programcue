@@ -748,7 +748,10 @@ The Content URL retains a validated event-scoped ZIP operation so polling and
 download recovery survive reload. Terminal cleanup records successful deletion,
 uses a durable, reclaimable cleanup lease to exclude concurrent retry, and
 retries only rows whose cleanup marker is still absent; the worker clears that
-marker atomically when it claims a retry. An uninspectable event-scoped ZIP is conservatively
+marker atomically when it claims a retry. File erasure retains an unexpired
+worker claim and reports incomplete cleanup until the worker releases or its
+lease expires, so later prefix cleanup cannot miss an interrupted write; generic
+retry is also fenced during that active lease. An uninspectable event-scoped ZIP is conservatively
 revoked and deleted during file erasure.
   A speaker-scoped task file is attributed to its linked session only when
   exactly one event session matches that speaker; ambiguous relationships stay

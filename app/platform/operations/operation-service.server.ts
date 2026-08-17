@@ -393,6 +393,7 @@ export class OperationService {
     const operation = await this.env.DB.prepare(
       `
       SELECT o.id, o.type, o.payload_json AS payloadJson, o.status,
+             o.claim_token AS claimToken,
              o.claim_expires_at AS claimExpiresAt, o.updated_at AS updatedAt
         FROM operation_jobs o
         JOIN events e ON e.id = o.event_id
@@ -406,6 +407,7 @@ export class OperationService {
         type: string;
         payloadJson: string;
         status: string;
+        claimToken: string | null;
         claimExpiresAt: number | null;
         updatedAt: number;
       }>();
@@ -427,14 +429,25 @@ export class OperationService {
         `Operation type ${operation.type} has no retryable Queue consumer. Start a new preview from its owning workflow instead.`,
       );
     }
+    const now = Math.floor(Date.now() / 1_000);
+    const activeRevokedZipWorkerClaim =
+      operation.type === "content.zip.export" &&
+      operation.status === "failed" &&
+      operation.claimToken !== null &&
+      operation.claimExpiresAt !== null &&
+      operation.claimExpiresAt > now;
+    if (activeRevokedZipWorkerClaim) {
+      throw new OperationStateError(
+        "This ZIP export still has an active worker lease after revocation. Retry after that lease expires.",
+      );
+    }
     const expiredRunningClaim =
       operation.status === "running" &&
       operation.claimExpiresAt !== null &&
-      operation.claimExpiresAt <= Math.floor(Date.now() / 1_000);
+      operation.claimExpiresAt <= now;
     const staleQueued =
       operation.status === "queued" &&
-      operation.updatedAt <=
-        Math.floor(Date.now() / 1_000) - STALE_QUEUED_OPERATION_SECONDS;
+      operation.updatedAt <= now - STALE_QUEUED_OPERATION_SECONDS;
     if (
       !["queue_failed", "failed", "partially_failed"].includes(
         operation.status,
@@ -508,7 +521,14 @@ export class OperationService {
          AND payload_json = ?
          AND (
            type <> 'content.zip.export'
-           OR content_zip_storage_cleanup_claim IS NULL
+           OR (
+             content_zip_storage_cleanup_claim IS NULL
+             AND (
+               claim_token IS NULL
+               OR claim_expires_at IS NULL
+               OR claim_expires_at <= unixepoch()
+             )
+           )
          )
          AND (
            status IN ('queue_failed','failed','partially_failed')

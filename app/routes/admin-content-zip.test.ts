@@ -302,6 +302,80 @@ describe("administrator content ZIP resource", () => {
         .bind(operationId)
         .first(),
     ).resolves.toEqual({ status: "failed", cleanedAt: expect.any(Number) });
+
+    const interruptedWorkerClaim = crypto.randomUUID();
+    const orphanObjectKey = zipExportObjectKey(
+      DEMO_EVENT_ID,
+      operationId,
+      interruptedWorkerClaim,
+    );
+    await workerEnv.FILES.put(
+      orphanObjectKey,
+      new TextEncoder().encode("archive written before worker interruption"),
+    );
+    await workerEnv.DB.prepare(
+      `UPDATE operation_jobs
+          SET status = 'running', result_json = NULL, completed_at = NULL,
+              claim_token = ?, claim_expires_at = unixepoch() + 60,
+              content_zip_storage_cleaned_at = NULL,
+              content_zip_storage_cleanup_claim = NULL,
+              content_zip_storage_cleanup_claimed_at = NULL
+        WHERE id = ?`,
+    )
+      .bind(interruptedWorkerClaim, operationId)
+      .run();
+    await expect(
+      invalidateContentZipExportsForAsset(workerEnv, {
+        organisationId: DEMO_ORGANISATION_ID,
+        eventId: DEMO_EVENT_ID,
+        assetId,
+      }),
+    ).rejects.toThrow("storage cleanup is pending");
+    expect(await workerEnv.FILES.head(orphanObjectKey)).not.toBeNull();
+    await expect(
+      workerEnv.DB.prepare(
+        `SELECT status, claim_token AS claimToken,
+                content_zip_storage_cleaned_at AS cleanedAt
+           FROM operation_jobs WHERE id = ?`,
+      )
+        .bind(operationId)
+        .first(),
+    ).resolves.toEqual({
+      status: "failed",
+      claimToken: interruptedWorkerClaim,
+      cleanedAt: null,
+    });
+
+    await expect(
+      new OperationService(retryEnvironment).retry(viewer, operationId),
+    ).rejects.toThrow("active worker lease after revocation");
+
+    await expect(
+      invalidateContentZipExportsForAsset(workerEnv, {
+        organisationId: DEMO_ORGANISATION_ID,
+        eventId: DEMO_EVENT_ID,
+        assetId,
+      }),
+    ).rejects.toThrow("storage cleanup is pending");
+
+    await cleanupExpiredContentZipExports(workerEnv);
+    expect(await workerEnv.FILES.head(orphanObjectKey)).not.toBeNull();
+    await workerEnv.DB.prepare(
+      "UPDATE operation_jobs SET claim_expires_at = unixepoch() - 1 WHERE id = ?",
+    )
+      .bind(operationId)
+      .run();
+    await cleanupExpiredContentZipExports(workerEnv);
+    expect(await workerEnv.FILES.head(orphanObjectKey)).toBeNull();
+    await expect(
+      workerEnv.DB.prepare(
+        `SELECT claim_token AS claimToken,
+                content_zip_storage_cleaned_at AS cleanedAt
+           FROM operation_jobs WHERE id = ?`,
+      )
+        .bind(operationId)
+        .first(),
+    ).resolves.toEqual({ claimToken: null, cleanedAt: expect.any(Number) });
   });
 
   it("reports missing ZIP storage and queue configuration explicitly", async () => {

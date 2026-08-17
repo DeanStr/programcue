@@ -157,8 +157,11 @@ the claim token. Successful R2 cleanup records a terminal cleanup timestamp so
 scheduled retries advance past already-cleaned failures while still retrying a
 failed deletion. Cleanup first holds its own durable, five-minute reclaimable
 lease, which prevents a generic operation retry from racing deletion or
-inheriting a stale cleanup timestamp; the ZIP worker also clears the marker
-while claiming work. An
+inheriting a stale cleanup timestamp. File erasure retains an unexpired ZIP
+worker claim, reports incomplete cleanup, and waits for the worker to release
+or expire that claim before removing the whole prefix; the ZIP worker also
+clears the marker while claiming work. Generic ZIP retry is unavailable during
+that worker lease, including in its atomic update predicate. An
 uninspectable event-scoped ZIP is revoked during file erasure because its
 manifest cannot prove it excludes the erased file. The prior deterministic ZIP
 result/key format was not deployed, so this pre-release slice stores and reads

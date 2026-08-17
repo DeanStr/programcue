@@ -304,6 +304,22 @@ export async function processContentZipExport(
             message.operationId,
           );
         }
+        await env.DB.prepare(
+          `UPDATE operation_jobs
+              SET claim_token = NULL, claim_expires_at = NULL,
+                  updated_at = unixepoch()
+            WHERE id = ? AND event_id = ? AND organisation_id = ?
+              AND type = 'content.zip.export'
+              AND status IN ('failed', 'cancelled')
+              AND claim_token = ?`,
+        )
+          .bind(
+            message.operationId,
+            message.eventId,
+            message.organisationId,
+            claimToken,
+          )
+          .run();
         return;
       }
       throw new QueueClaimLeaseLostError();

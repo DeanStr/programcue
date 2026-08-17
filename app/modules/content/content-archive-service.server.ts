@@ -227,6 +227,11 @@ async function claimZipExportStorageCleanup(
         AND type = 'content.zip.export'
         AND content_zip_storage_cleaned_at IS NULL
         AND (
+          claim_token IS NULL
+          OR claim_expires_at IS NULL
+          OR claim_expires_at <= unixepoch()
+        )
+        AND (
           content_zip_storage_cleanup_claim IS NULL
           OR content_zip_storage_cleanup_claimed_at IS NULL
           OR content_zip_storage_cleanup_claimed_at <= unixepoch() - ?
@@ -263,6 +268,7 @@ async function markZipExportStorageCleaned(
         SET content_zip_storage_cleaned_at = unixepoch(),
             content_zip_storage_cleanup_claim = NULL,
             content_zip_storage_cleanup_claimed_at = NULL,
+            claim_token = NULL, claim_expires_at = NULL,
             updated_at = unixepoch()
       WHERE id = ? AND event_id = ? AND organisation_id = ?
         AND type = 'content.zip.export'
@@ -360,7 +366,8 @@ export async function revokeContentZipExport(
     `UPDATE operation_jobs
         SET status = 'failed', progress_completed = 1, progress_failed = 1,
             result_json = NULL, last_error = ?, completed_at = COALESCE(completed_at, unixepoch()),
-            claim_token = NULL, claim_expires_at = NULL,
+            claim_token = CASE WHEN status = 'running' THEN claim_token ELSE NULL END,
+            claim_expires_at = CASE WHEN status = 'running' THEN claim_expires_at ELSE NULL END,
             content_zip_storage_cleaned_at = NULL, updated_at = unixepoch()
       WHERE id = ? AND event_id = ? AND organisation_id = ?
         AND type = 'content.zip.export'
@@ -378,7 +385,7 @@ export async function revokeContentZipExport(
   });
   if (!cleaned) {
     throw new Error(
-      "The ZIP export storage cleanup is already in progress; file erasure must be retried.",
+      "The ZIP export storage cleanup is pending; file erasure must be retried.",
     );
   }
 }
@@ -455,7 +462,10 @@ export async function invalidateContentZipExportsForAsset(
        FROM operation_jobs
       WHERE event_id = ? AND organisation_id = ?
         AND type = 'content.zip.export'
-        AND status NOT IN ('failed', 'cancelled')
+        AND (
+          status NOT IN ('failed', 'cancelled')
+          OR content_zip_storage_cleaned_at IS NULL
+        )
       ORDER BY created_at, id`,
   )
     .bind(scope.eventId, scope.organisationId)
