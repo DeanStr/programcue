@@ -121,12 +121,13 @@
   --text-tertiary: var(--muted-on-surface); /* 5.43:1 on white */
   --text-inverse: #fff;
   --text-accent: var(--brand-700);
-  /* Public event shells replace these two with the accessible palette derived
+  /* Public event shells replace these with the accessible palette derived
      from the event accent. Defaults keep the CSS contract valid before that
      route-owned inline palette is present. */
   --event-accent-light-ink: var(--brand-700);
   --event-accent-dark-ink: var(--public-dark-accent-ink);
   --event-accent-on-solid: var(--text-inverse);
+  --event-control-on-solid: var(--text-inverse);
   --event-control-on-dark: var(--public-dark-accent-on-solid);
 
   /* --- State -------------------------------------------------------------
