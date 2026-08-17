@@ -4,6 +4,7 @@ import {
   generateInvitationIcs,
   stableCalendarUid,
 } from "~/modules/calendars/ics.server";
+import { buildSchedulePublicationPreview } from "~/modules/schedule/schedule-publication-preview.server";
 import {
   ScheduleConfigurationError,
   ScheduleIdempotencyConflictError,
@@ -97,6 +98,11 @@ export async function loader({ request, context }: Route.LoaderArgs) {
       return [session.id, { payload, ics: generateInvitationIcs(payload) }];
     }),
   );
+  const publicationPreview = await buildSchedulePublicationPreview(
+    env,
+    viewer,
+    workspace,
+  );
   const searchParams = new URL(request.url).searchParams;
   const requestedFilter = searchParams.get("filter");
   const activeFilter =
@@ -176,6 +182,7 @@ export async function loader({ request, context }: Route.LoaderArgs) {
     recoveryScope: { eventId: viewer.eventId, personId: viewer.personId },
     intentId: crypto.randomUUID(),
     calendarPreviews,
+    publicationPreview,
   };
 }
 

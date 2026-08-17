@@ -26,6 +26,19 @@ test("anonymous visitors can use all programme surfaces and the gallery detail",
     page.getByRole("navigation", { name: "Programme views" }).getByRole("link"),
   ).toHaveText(["List", "Agenda", "Schedule"]);
   await expect(page.locator(".programme-row")).toHaveCount(5);
+  await page
+    .locator(".programme-entry")
+    .filter({ hasText: "AI in Event Operations" })
+    .locator(".programme-row")
+    .click();
+  await expect(page).toHaveURL(
+    /\/public\/programme\/future-of-events-2027\/sessions\?session=demo-session-2$/u,
+  );
+  await expect(
+    page.locator(".session-detail-panel h2", {
+      hasText: "AI in Event Operations",
+    }),
+  ).toBeVisible();
   const showMore = page
     .getByRole("button", {
       name: /Show more of the The Future of Attendee Engagement description/,

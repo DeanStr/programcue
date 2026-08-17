@@ -105,7 +105,7 @@ test.describe
       page,
     }) => {
       const title = `Duplicate-aware direct session ${Date.now()}`;
-      await page.goto("/admin/sessions/new?from=global");
+      await page.goto("/admin/sessions/new");
       const directSessionForm = page.locator("form").filter({
         has: page.getByRole("button", {
           name: "Create unscheduled session",

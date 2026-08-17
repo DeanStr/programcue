@@ -7,7 +7,7 @@ import {
 } from "./client-search-revalidation";
 
 describe("client-owned URL filter revalidation", () => {
-  it("skips public loader work for client filters but not speaker shares", () => {
+  it("skips public loader work for filters but not record detail", () => {
     const current = new URL(
       "https://example.test/public/programme/event?track=Current",
     );
@@ -25,6 +25,15 @@ describe("client-owned URL filter revalidation", () => {
         current,
         new URL(
           "https://example.test/public/programme/event?track=Next&speaker=person-1",
+        ),
+        PUBLIC_PROGRAMME_CLIENT_SEARCH_PARAMETERS,
+      ),
+    ).toBe(false);
+    expect(
+      onlyClientSearchParametersChanged(
+        current,
+        new URL(
+          "https://example.test/public/programme/event?track=Current&session=session-1",
         ),
         PUBLIC_PROGRAMME_CLIENT_SEARCH_PARAMETERS,
       ),

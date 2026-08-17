@@ -26,7 +26,7 @@ function adminRequest(body: URLSearchParams) {
     "evt-foe-2025",
     env as unknown as CloudflareEnvironment,
   ).split(";", 1)[0];
-  return new Request("http://localhost/admin/sessions/new?from=schedule", {
+  return new Request("http://localhost/admin/sessions/new", {
     method: "POST",
     headers: {
       cookie: `program_cue_demo_identity=administrator; ${eventCookie}`,
@@ -58,9 +58,14 @@ describe("manual person creation warnings", () => {
         new URL("https://example.test/admin/sessions/new?from=/admin/event"),
       ),
     ).toThrow(Response);
-    expect(() =>
+    expect(
       directSessionCreationOrigin(
         new URL("https://example.test/admin/sessions/new"),
+      ),
+    ).toBe("schedule");
+    expect(() =>
+      directSessionCreationOrigin(
+        new URL("https://example.test/admin/sessions/new?from=schedule"),
       ),
     ).toThrow(Response);
     expect(() =>
@@ -73,9 +78,9 @@ describe("manual person creation warnings", () => {
     expect(
       directSessionSuccessDestination("programme", "session 1", true),
     ).toBe("/admin/programme?createdSession=session+1&attention=1");
-    expect(directSessionSuccessDestination("global", "session 1", false)).toBe(
-      "/admin/schedule?session=session+1&created=1",
-    );
+    expect(
+      directSessionSuccessDestination("schedule", "session 1", false),
+    ).toBe("/admin/schedule?session=session+1&created=1");
   });
 
   it("reports an unmet speaker-invitation prerequisite instead of a server error", async () => {

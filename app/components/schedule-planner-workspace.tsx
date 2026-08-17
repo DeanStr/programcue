@@ -38,7 +38,6 @@ export function SchedulePlannerWorkspace({
     clearAutoError,
     clearAutoFeedback,
     conflictSeverityByEntryId,
-    contentApprovalBlockers,
     dismissAutoPreview,
     draggingSessionId,
     entriesBySlot,
@@ -48,7 +47,6 @@ export function SchedulePlannerWorkspace({
     navigation,
     place,
     placementAvailable,
-    publicContentVisibilityBlockers,
     publishOpen,
     quickDurationMinutes,
     quickEntry,
@@ -103,7 +101,7 @@ export function SchedulePlannerWorkspace({
               Open public programme
             </Link>
           ) : null}
-          <Link className="btn" to="/admin/sessions/new?from=schedule">
+          <Link className="btn" to="/admin/sessions/new">
             Create direct session
           </Link>
           <button
@@ -529,12 +527,11 @@ export function SchedulePlannerWorkspace({
           clearError={clearAutoError}
         />
       ) : null}
-      {publishOpen && workspace.version ? (
+      {publishOpen && workspace.version && workspace.publicationPreview ? (
         <SchedulePublicationDialog
           workspace={{ ...workspace, version: workspace.version }}
           fetcher={fetcher}
-          contentApprovalBlockers={contentApprovalBlockers}
-          publicContentVisibilityBlockers={publicContentVisibilityBlockers}
+          preview={workspace.publicationPreview}
           close={() => setPublishOpen(false)}
         />
       ) : null}

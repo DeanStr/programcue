@@ -655,7 +655,7 @@ test.describe
       await page
         .getByRole("link", { name: "Create direct session", exact: true })
         .click();
-      await expect(page).toHaveURL(/\/admin\/sessions\/new\?from=schedule$/u);
+      await expect(page).toHaveURL(/\/admin\/sessions\/new$/u);
       const directSession = page.locator("form").filter({
         has: page.getByRole("button", {
           name: "Create unscheduled session",

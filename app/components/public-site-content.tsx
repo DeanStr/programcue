@@ -16,6 +16,7 @@ import { RestrictedMarkdown } from "~/components/restricted-markdown";
 import {
   formatProgrammeEventDay,
   programmeAccentPalette,
+  publicSessionDetailPath,
   publicSpeakerProfilePath,
 } from "~/modules/programme/programme-presentation";
 import type { PublishedProgramme } from "~/modules/programme/public-programme-types";
@@ -211,7 +212,12 @@ export function PublicSiteHome({
       <HomeSection title="Featured sessions">
         <div className="public-site-feature-grid sessions">
           {featuredSessions.map((session) => (
-            <article className="public-site-feature-card" key={session.id}>
+            <PreviewSafeLink
+              className="public-site-feature-card"
+              href={publicSessionDetailPath(event.slug, session.id)}
+              key={session.id}
+              preview={preview}
+            >
               <CalendarDays aria-hidden />
               <span>
                 <strong>{session.title}</strong>
@@ -221,7 +227,7 @@ export function PublicSiteHome({
                     .join(" · ")}
                 </small>
               </span>
-            </article>
+            </PreviewSafeLink>
           ))}
         </div>
       </HomeSection>

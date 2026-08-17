@@ -405,7 +405,7 @@ export function AdminAuxiliaryDialogs({
           <div className="pc-menu">
             <Link
               className="pc-menu-item"
-              to="/admin/sessions/new?from=global"
+              to="/admin/sessions/new"
               onClick={closeDialog}
               data-dialog-autofocus
             >

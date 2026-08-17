@@ -137,13 +137,17 @@ export const meta: Route.MetaFunction = ({ loaderData }) => {
   }
   const { event, sessions, speakers } = loaderData.programme;
   const place = [event.venue, event.city].filter(Boolean).join(", ");
-  const description = loaderData.speakerShare
-    ? loaderData.speakerShare.description
-    : (event.description ??
-      `${sessions.length} sessions and ${speakers.length} speakers${place ? ` at ${place}` : ""}.`);
-  const title = loaderData.speakerShare
-    ? `${loaderData.speakerShare.speakerName} · ${event.name}`
-    : `Programme · ${event.name}`;
+  const description = loaderData.sessionShare
+    ? loaderData.sessionShare.description
+    : loaderData.speakerShare
+      ? loaderData.speakerShare.description
+      : (event.description ??
+        `${sessions.length} sessions and ${speakers.length} speakers${place ? ` at ${place}` : ""}.`);
+  const title = loaderData.sessionShare
+    ? `${loaderData.sessionShare.sessionTitle} · ${event.name}`
+    : loaderData.speakerShare
+      ? `${loaderData.speakerShare.speakerName} · ${event.name}`
+      : `Programme · ${event.name}`;
   const generatedShareImage = loaderData.site
     ? new URL(
         `/public/programme/${encodeURIComponent(event.slug)}/social-card.webp`,
@@ -292,9 +296,21 @@ export async function loader({ request, params, context }: Route.LoaderArgs) {
       );
     }
   }
+  const requestedSessionValues = url.searchParams.getAll("session");
+  if (requestedSessionValues.length > 1) {
+    throw new Response("Choose one published session", { status: 400 });
+  }
+  if (requestedSessionValues.length > 0 && url.searchParams.has("speaker")) {
+    throw new Response("Choose either a speaker or a session to share", {
+      status: 400,
+    });
+  }
   const service = new PublicProgrammeService(env);
   const programme = await service.getPublished(slug);
   if (!programme) {
+    if (requestedSessionValues.length) {
+      throw new Response("Published session not found", { status: 404 });
+    }
     if (embedded || managedEmbed || params.surface) {
       throw new Response("Published event programme not found", {
         status: 404,
@@ -352,6 +368,21 @@ export async function loader({ request, params, context }: Route.LoaderArgs) {
   if (requestedSpeakerId !== null && !featuredSpeaker) {
     throw new Response("Published speaker profile not found", { status: 404 });
   }
+  const requestedSessionId = requestedSessionValues[0] ?? null;
+  if (requestedSessionId !== null && (embedded || surface !== "sessions")) {
+    throw new Response(
+      "Published session detail is available on the sessions view",
+      { status: 400 },
+    );
+  }
+  const featuredSession = requestedSessionId
+    ? (programme.sessions.find(
+        (session) => session.id === requestedSessionId,
+      ) ?? null)
+    : null;
+  if (requestedSessionId !== null && !featuredSession) {
+    throw new Response("Published session not found", { status: 404 });
+  }
   const canonicalUrl = new URL(
     managedEmbed
       ? `/embed/${encodeURIComponent(programme.event.slug)}/saved/${encodeURIComponent(managedEmbed.slug)}`
@@ -389,6 +420,18 @@ export async function loader({ request, params, context }: Route.LoaderArgs) {
         ? new URL(releasedHeadshotPath, request.url).toString()
         : null,
     };
+  }
+  const sessionShare = featuredSession
+    ? {
+        sessionId: featuredSession.id,
+        sessionTitle: featuredSession.title,
+        description:
+          shareDescription(featuredSession.description) ||
+          `${featuredSession.title} is part of ${programme.event.name}.`,
+      }
+    : null;
+  if (featuredSession) {
+    canonicalUrl.searchParams.set("session", featuredSession.id);
   }
   let embedOptions: ReturnType<typeof parseProgrammeEmbedSearchParameters>;
   try {
@@ -508,6 +551,8 @@ export async function loader({ request, params, context }: Route.LoaderArgs) {
       site,
       canonicalUrl: canonicalUrl.toString(),
       speakerShare,
+      sessionShare,
+      sessionFocusId: featuredSession?.id ?? null,
       surface,
       itinerary,
       embedded,

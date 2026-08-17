@@ -113,6 +113,12 @@ export function publicSpeakerProfilePath(eventSlug: string, speakerId: string) {
   )}`;
 }
 
+export function publicSessionDetailPath(eventSlug: string, sessionId: string) {
+  return `${publicProgrammeSurfacePath(eventSlug, "sessions")}?${new URLSearchParams(
+    { session: sessionId },
+  )}`;
+}
+
 const SPEAKER_HONORIFICS = new Set([
   "dr",
   "dr.",

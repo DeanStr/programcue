@@ -1,15 +1,294 @@
-import { ChevronDown, ChevronUp, Plus, Trash2 } from "lucide-react";
-import { type Dispatch, type SetStateAction, useMemo } from "react";
+import { ChevronDown, ChevronUp, Plus, Search, Trash2, X } from "lucide-react";
+import {
+  type Dispatch,
+  type SetStateAction,
+  useEffect,
+  useMemo,
+  useState,
+} from "react";
 import { Form, Link } from "react-router";
 import type { PublishedProgramme } from "~/modules/programme/public-programme-types";
 import {
   PUBLIC_SITE_PAGE_TYPES,
   type PublicSiteDraft,
+  type PublicSitePageType,
 } from "~/modules/public-site/public-site";
 import {
   publicSitePageDescriptions,
   publicSiteSectionLabels,
 } from "./admin-public-site-constants";
+
+type FeaturedPickerItem = {
+  id: string;
+  title: string;
+  metadata: string;
+  searchText: string;
+  unavailable?: boolean;
+};
+
+function OrderedFeaturedPicker({
+  label,
+  recordKind,
+  items,
+  canAdd,
+  selectedIds,
+  setSelectedIds,
+  unavailableMessage,
+}: {
+  label: string;
+  recordKind: "session" | "speaker";
+  items: FeaturedPickerItem[] | null;
+  canAdd: boolean;
+  selectedIds: string[];
+  setSelectedIds(update: (current: string[]) => string[]): void;
+  unavailableMessage: string;
+}) {
+  const [query, setQuery] = useState("");
+  const itemById = useMemo(
+    () => new Map(items?.map((item) => [item.id, item]) ?? []),
+    [items],
+  );
+  const selected = useMemo(
+    () =>
+      selectedIds.map(
+        (id) =>
+          itemById.get(id) ?? {
+            id,
+            title: `Remove unavailable selected ${recordKind}: ${id}`,
+            metadata: "Remove this stale selection before publication.",
+            searchText: id,
+            unavailable: true,
+          },
+      ),
+    [itemById, recordKind, selectedIds],
+  );
+  const normalisedQuery = query.trim().toLowerCase();
+  const available = useMemo(() => {
+    const selectedSet = new Set(selectedIds);
+    return (items ?? []).filter(
+      (item) =>
+        !selectedSet.has(item.id) &&
+        (!normalisedQuery ||
+          item.searchText.toLowerCase().includes(normalisedQuery)),
+    );
+  }, [items, normalisedQuery, selectedIds]);
+
+  function move(index: number, direction: -1 | 1) {
+    setSelectedIds((current) => {
+      const target = index + direction;
+      if (target < 0 || target >= current.length) return current;
+      const next = [...current];
+      [next[index], next[target]] = [next[target], next[index]];
+      return next;
+    });
+  }
+
+  return (
+    <fieldset className="public-site-featured-picker mt">
+      <legend>{label}</legend>
+      <div className="card-title">
+        <div>
+          <strong>Featured · {selected.length} of 12</strong>
+          <p className="help">
+            This order is the public homepage display order.
+          </p>
+        </div>
+      </div>
+      {selected.length ? (
+        <ol className="public-site-featured-selected">
+          {selected.map((item, index) => (
+            <li key={item.id}>
+              <span>
+                <strong>{item.title}</strong>
+                {item.metadata ? <small>{item.metadata}</small> : null}
+              </span>
+              <div className="public-site-order-actions">
+                <button
+                  type="button"
+                  className="btn small"
+                  disabled={index === 0}
+                  aria-label={`Move up ${item.title}`}
+                  onClick={() => move(index, -1)}
+                >
+                  <ChevronUp aria-hidden size={14} /> Move up
+                </button>
+                <button
+                  type="button"
+                  className="btn small"
+                  disabled={index === selected.length - 1}
+                  aria-label={`Move down ${item.title}`}
+                  onClick={() => move(index, 1)}
+                >
+                  <ChevronDown aria-hidden size={14} /> Move down
+                </button>
+                <button
+                  type="button"
+                  className="btn small"
+                  aria-label={
+                    item.unavailable ? item.title : `Remove ${item.title}`
+                  }
+                  onClick={() =>
+                    setSelectedIds((current) =>
+                      current.filter((id) => id !== item.id),
+                    )
+                  }
+                >
+                  <X aria-hidden size={14} /> Remove
+                </button>
+              </div>
+            </li>
+          ))}
+        </ol>
+      ) : (
+        <p className="help">No records selected.</p>
+      )}
+      {!items || !canAdd ? (
+        <p className="help">{unavailableMessage}</p>
+      ) : (
+        <>
+          <label className="label mt">
+            <span>
+              <Search aria-hidden size={14} /> Search available
+            </span>
+            <input
+              className="field"
+              type="search"
+              value={query}
+              onChange={(event) => setQuery(event.target.value)}
+            />
+          </label>
+          <p className="help" role="status">
+            {available.length} available{" "}
+            {available.length === 1 ? "record" : "records"}
+            {normalisedQuery ? " match" : ""}.
+          </p>
+          <div className="public-site-featured-available">
+            {available.map((item) => (
+              <div key={item.id}>
+                <span>
+                  <strong>{item.title}</strong>
+                  {item.metadata ? <small>{item.metadata}</small> : null}
+                </span>
+                <button
+                  type="button"
+                  className="btn small"
+                  disabled={selected.length >= 12}
+                  aria-label={`Add ${item.title}`}
+                  onClick={() =>
+                    setSelectedIds((current) => [...current, item.id])
+                  }
+                >
+                  <Plus aria-hidden size={14} /> Add
+                </button>
+              </div>
+            ))}
+            {!available.length ? (
+              <p className="help">
+                {normalisedQuery
+                  ? "No available records match this search."
+                  : "Every available record is already featured."}
+              </p>
+            ) : null}
+          </div>
+        </>
+      )}
+    </fieldset>
+  );
+}
+
+function SitePageEditor({
+  page,
+  value,
+  setConfiguration,
+}: {
+  page: PublicSitePageType;
+  value: PublicSiteDraft["pages"][PublicSitePageType];
+  setConfiguration: Dispatch<SetStateAction<PublicSiteDraft>>;
+}) {
+  const [open, setOpen] = useState(value.enabled);
+  useEffect(() => {
+    if (value.enabled) setOpen(true);
+  }, [value.enabled]);
+  function update(
+    change: Partial<PublicSiteDraft["pages"][PublicSitePageType]>,
+  ) {
+    setConfiguration((current) => ({
+      ...current,
+      pages: {
+        ...current.pages,
+        [page]: { ...current.pages[page], ...change },
+      },
+    }));
+  }
+  return (
+    <fieldset>
+      <legend>{value.title}</legend>
+      <div className="public-site-page-row">
+        <div>
+          <strong>{value.navigationLabel}</strong>
+          <p className="help">{publicSitePageDescriptions[page]}</p>
+        </div>
+        <label>
+          <input
+            type="checkbox"
+            checked={value.enabled}
+            onChange={(event) => {
+              update({ enabled: event.target.checked });
+              if (event.target.checked) setOpen(true);
+            }}
+          />{" "}
+          Publish this page with the site
+        </label>
+      </div>
+      <details
+        className="pc-disclosure mt"
+        open={open}
+        onToggle={(event) => setOpen(event.currentTarget.open)}
+      >
+        <summary>
+          <strong>Edit page content</strong>
+          <span className="help">
+            {value.enabled
+              ? "Published with the next site version"
+              : "Not enabled"}
+          </span>
+        </summary>
+        <div className="stack mt">
+          <label className="label">
+            Title
+            <input
+              className="field"
+              maxLength={100}
+              value={value.title}
+              onChange={(event) => update({ title: event.target.value })}
+            />
+          </label>
+          <label className="label">
+            Navigation label
+            <input
+              className="field"
+              maxLength={40}
+              value={value.navigationLabel}
+              onChange={(event) =>
+                update({ navigationLabel: event.target.value })
+              }
+            />
+          </label>
+          <label className="label">
+            Restricted Markdown
+            <textarea
+              className="textarea"
+              maxLength={8000}
+              rows={5}
+              value={value.body}
+              onChange={(event) => update({ body: event.target.value })}
+            />
+          </label>
+        </div>
+      </details>
+    </fieldset>
+  );
+}
 
 function SiteSectionControls({
   configuration,
@@ -118,17 +397,39 @@ export function AdminPublicSiteEditor({
     () => ({ revision: draftRevision, id: crypto.randomUUID() }),
     [draftRevision],
   ).id;
-  const programmeSpeakerIds = new Set(
-    programme?.speakers.map((speaker) => speaker.id) ?? [],
+  const speakerItems = useMemo(
+    () =>
+      programme
+        ? programme.speakers.map((speaker) => {
+            const metadata = [speaker.jobTitle, speaker.organisationName]
+              .filter(Boolean)
+              .join(" · ");
+            return {
+              id: speaker.id,
+              title: speaker.displayName,
+              metadata,
+              searchText: `${speaker.displayName} ${metadata}`,
+            };
+          })
+        : null,
+    [programme],
   );
-  const unavailableFeaturedSpeakerIds = configuration.featuredSpeakerIds.filter(
-    (speakerId) => !programmeSpeakerIds.has(speakerId),
-  );
-  const programmeSessionIds = new Set(
-    programme?.sessions.map((session) => session.id) ?? [],
-  );
-  const unavailableFeaturedSessionIds = configuration.featuredSessionIds.filter(
-    (sessionId) => !programmeSessionIds.has(sessionId),
+  const sessionItems = useMemo(
+    () =>
+      programme
+        ? programme.sessions.map((session) => {
+            const metadata = [session.track, session.format, session.room]
+              .filter(Boolean)
+              .join(" · ");
+            return {
+              id: session.id,
+              title: session.title,
+              metadata,
+              searchText: `${session.title} ${metadata} ${session.speakerNames.join(" ")}`,
+            };
+          })
+        : null,
+    [programme],
   );
   return (
     <Form method="post" className="card pad">
@@ -212,110 +513,42 @@ export function AdminPublicSiteEditor({
         <Link to="/admin/event">Edit event details</Link>.
       </p>
 
-      <fieldset className="public-site-selection mt">
-        <legend>Featured speakers</legend>
-        {programme?.speakers.map((speaker) => (
-          <label key={speaker.id}>
-            <input
-              type="checkbox"
-              checked={configuration.featuredSpeakerIds.includes(speaker.id)}
-              disabled={
-                !configuration.featuredSpeakerIds.includes(speaker.id) &&
-                (!programmeReferencesAvailable ||
-                  configuration.featuredSpeakerIds.length >= 12)
-              }
-              onChange={(event) =>
-                setConfiguration((current) => ({
-                  ...current,
-                  featuredSpeakerIds: event.target.checked
-                    ? [...current.featuredSpeakerIds, speaker.id]
-                    : current.featuredSpeakerIds.filter(
-                        (id) => id !== speaker.id,
-                      ),
-                }))
-              }
-            />{" "}
-            {speaker.displayName}
-          </label>
-        )) ?? (
-          <p className="help">Publish a programme before choosing speakers.</p>
-        )}
-        {unavailableFeaturedSpeakerIds.map((speakerId) => (
-          <label key={`unavailable-speaker-${speakerId}`}>
-            <input
-              type="checkbox"
-              checked
-              onChange={() =>
-                setConfiguration((current) => ({
-                  ...current,
-                  featuredSpeakerIds: current.featuredSpeakerIds.filter(
-                    (id) => id !== speakerId,
-                  ),
-                }))
-              }
-            />{" "}
-            Remove unavailable selected speaker: {speakerId}
-          </label>
-        ))}
-        {!programmeReferencesAvailable ? (
-          <p className="help">
-            Featured programme content is unavailable for this event's programme
-            source. Existing selections can be removed.
-          </p>
-        ) : null}
-      </fieldset>
-      <fieldset className="public-site-selection mt">
-        <legend>Featured sessions</legend>
-        {programme?.sessions.map((session) => (
-          <label key={session.id}>
-            <input
-              type="checkbox"
-              checked={configuration.featuredSessionIds.includes(session.id)}
-              disabled={
-                !configuration.featuredSessionIds.includes(session.id) &&
-                (!programmeReferencesAvailable ||
-                  configuration.featuredSessionIds.length >= 12)
-              }
-              onChange={(event) =>
-                setConfiguration((current) => ({
-                  ...current,
-                  featuredSessionIds: event.target.checked
-                    ? [...current.featuredSessionIds, session.id]
-                    : current.featuredSessionIds.filter(
-                        (id) => id !== session.id,
-                      ),
-                }))
-              }
-            />{" "}
-            {session.title}
-          </label>
-        )) ?? (
-          <p className="help">Publish a programme before choosing sessions.</p>
-        )}
-        {unavailableFeaturedSessionIds.map((sessionId) => (
-          <label key={`unavailable-session-${sessionId}`}>
-            <input
-              type="checkbox"
-              checked
-              onChange={() =>
-                setConfiguration((current) => ({
-                  ...current,
-                  featuredSessionIds: current.featuredSessionIds.filter(
-                    (id) => id !== sessionId,
-                  ),
-                }))
-              }
-            />{" "}
-            Remove unavailable selected session: {sessionId}
-          </label>
-        ))}
-        {!programmeReferencesAvailable ? (
-          <p className="help">
-            Featured programme content is unavailable for this event's programme
-            source. Existing selections can be removed.
-          </p>
-        ) : null}
-      </fieldset>
+      <OrderedFeaturedPicker
+        label="Featured speakers"
+        recordKind="speaker"
+        items={speakerItems}
+        canAdd={programmeReferencesAvailable}
+        selectedIds={configuration.featuredSpeakerIds}
+        setSelectedIds={(update) =>
+          setConfiguration((current) => ({
+            ...current,
+            featuredSpeakerIds: update(current.featuredSpeakerIds),
+          }))
+        }
+        unavailableMessage={
+          programme
+            ? "Featured programme content is unavailable for this event's programme source. Existing selections can be removed."
+            : "Publish a programme before choosing speakers."
+        }
+      />
+      <OrderedFeaturedPicker
+        label="Featured sessions"
+        recordKind="session"
+        items={sessionItems}
+        canAdd={programmeReferencesAvailable}
+        selectedIds={configuration.featuredSessionIds}
+        setSelectedIds={(update) =>
+          setConfiguration((current) => ({
+            ...current,
+            featuredSessionIds: update(current.featuredSessionIds),
+          }))
+        }
+        unavailableMessage={
+          programme
+            ? "Featured programme content is unavailable for this event's programme source. Existing selections can be removed."
+            : "Publish a programme before choosing sessions."
+        }
+      />
       <fieldset className="public-site-selection mt">
         <legend>Statistics</legend>
         {Object.entries(configuration.statisticVisibility).map(
@@ -408,6 +641,7 @@ export function AdminPublicSiteEditor({
             <button
               className="btn small mt"
               type="button"
+              aria-label={`Remove FAQ item ${index + 1}`}
               onClick={() =>
                 setConfiguration((current) => ({
                   ...current,
@@ -419,6 +653,44 @@ export function AdminPublicSiteEditor({
             >
               <Trash2 aria-hidden size={14} /> Remove
             </button>
+            <div className="public-site-order-actions mt">
+              <button
+                className="btn small"
+                type="button"
+                disabled={index === 0}
+                aria-label={`Move up FAQ item ${index + 1}`}
+                onClick={() =>
+                  setConfiguration((current) => {
+                    const faqItems = [...current.faqItems];
+                    [faqItems[index - 1], faqItems[index]] = [
+                      faqItems[index],
+                      faqItems[index - 1],
+                    ];
+                    return { ...current, faqItems };
+                  })
+                }
+              >
+                <ChevronUp aria-hidden size={14} /> Move up
+              </button>
+              <button
+                className="btn small"
+                type="button"
+                disabled={index === configuration.faqItems.length - 1}
+                aria-label={`Move down FAQ item ${index + 1}`}
+                onClick={() =>
+                  setConfiguration((current) => {
+                    const faqItems = [...current.faqItems];
+                    [faqItems[index], faqItems[index + 1]] = [
+                      faqItems[index + 1],
+                      faqItems[index],
+                    ];
+                    return { ...current, faqItems };
+                  })
+                }
+              >
+                <ChevronDown aria-hidden size={14} /> Move down
+              </button>
+            </div>
           </fieldset>
         ))}
       </div>
@@ -432,95 +704,14 @@ export function AdminPublicSiteEditor({
         </div>
       </div>
       <div className="public-site-page-editor">
-        {PUBLIC_SITE_PAGE_TYPES.map((page) => {
-          const value = configuration.pages[page];
-          return (
-            <fieldset key={page}>
-              <legend>{value.title}</legend>
-              <label>
-                <input
-                  type="checkbox"
-                  checked={value.enabled}
-                  onChange={(event) =>
-                    setConfiguration((current) => ({
-                      ...current,
-                      pages: {
-                        ...current.pages,
-                        [page]: {
-                          ...current.pages[page],
-                          enabled: event.target.checked,
-                        },
-                      },
-                    }))
-                  }
-                />{" "}
-                Publish this page with the site
-              </label>
-              <p className="help">{publicSitePageDescriptions[page]}</p>
-              <label className="label">
-                Title
-                <input
-                  className="field"
-                  maxLength={100}
-                  value={value.title}
-                  onChange={(event) =>
-                    setConfiguration((current) => ({
-                      ...current,
-                      pages: {
-                        ...current.pages,
-                        [page]: {
-                          ...current.pages[page],
-                          title: event.target.value,
-                        },
-                      },
-                    }))
-                  }
-                />
-              </label>
-              <label className="label mt">
-                Navigation label
-                <input
-                  className="field"
-                  maxLength={40}
-                  value={value.navigationLabel}
-                  onChange={(event) =>
-                    setConfiguration((current) => ({
-                      ...current,
-                      pages: {
-                        ...current.pages,
-                        [page]: {
-                          ...current.pages[page],
-                          navigationLabel: event.target.value,
-                        },
-                      },
-                    }))
-                  }
-                />
-              </label>
-              <label className="label mt">
-                Restricted Markdown
-                <textarea
-                  className="textarea"
-                  maxLength={8000}
-                  rows={5}
-                  value={value.body}
-                  onChange={(event) =>
-                    setConfiguration((current) => ({
-                      ...current,
-                      pages: {
-                        ...current.pages,
-                        [page]: {
-                          ...current.pages[page],
-                          body: event.target.value,
-                        },
-                      },
-                    }))
-                  }
-                />
-              </label>
-            </fieldset>
-          );
-        })}
+        {PUBLIC_SITE_PAGE_TYPES.map((page) => (
+          <SitePageEditor
+            key={page}
+            page={page}
+            value={configuration.pages[page]}
+            setConfiguration={setConfiguration}
+          />
+        ))}
       </div>
 
       <fieldset className="public-site-post-event mt">
@@ -597,8 +788,8 @@ export function AdminPublicSiteEditor({
           {saving
             ? "Saving…"
             : draftRevision === 0
-              ? "Create site draft"
-              : "Save site draft"}
+              ? "Create website draft"
+              : "Save website draft"}
         </button>
       </div>
     </Form>

@@ -19,7 +19,7 @@ import { getCloudflareContext } from "~/platform/cloudflare-context";
 import type { Route } from "./+types/admin-section";
 
 export const meta: Route.MetaFunction = () => [
-  { title: "Publish & embed · Program Cue" },
+  { title: "Programme publishing · Program Cue" },
 ];
 
 export async function loader({ request, params, context }: Route.LoaderArgs) {
@@ -163,7 +163,7 @@ export default function AdminSection({ loaderData }: Route.ComponentProps) {
       <div className="page-head">
         <div>
           <span className="pc-page-eyebrow">Publication overview</span>
-          <h1>Publish &amp; embed</h1>
+          <h1>Programme publishing</h1>
           <p>
             Inspect the programme that is available to attendees and continue
             editing in the schedule planner.

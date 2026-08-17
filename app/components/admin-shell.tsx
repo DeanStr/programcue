@@ -52,13 +52,23 @@ import { BrandMark } from "./brand-mark";
 import { Dialog } from "./dialog";
 import { Button } from "./ui/button";
 
-export type AdminNavigationItem = readonly [string, LucideIcon, string];
+export type AdminNavigationItem = readonly [
+  string,
+  LucideIcon,
+  string,
+  string?,
+];
 
 export const NAV_ITEMS = [
   ["command", LayoutDashboard, "Home"],
   ["event", CalendarCog, "Event settings"],
   ["branding", Palette, "Branding"],
-  ["site", Globe2, "Public site"],
+  [
+    "site",
+    Globe2,
+    "Event website",
+    "Homepage, event information, sponsors and recordings",
+  ],
   ["submissions", Files, "Applications"],
   /* Sparkles is the universal "a machine wrote this" glyph and the palette
      already spends it on the assistant. Humans score submissions here. */
@@ -72,7 +82,12 @@ export const NAV_ITEMS = [
   /* Files and FileStack are the same stacked-paper outline at 16px, which is
      exactly the size the rail runs at when the icon is the only label. */
   ["content", FolderOpen, "Session content & files"],
-  ["programme", PanelTop, "Publish & embed"],
+  [
+    "programme",
+    PanelTop,
+    "Programme publishing",
+    "Published schedule, attendee programme and website embeds",
+  ],
   ["integrations", Cable, "Integrations"],
   ["settings", Settings, "API & webhooks"],
   ["operations", Activity, "Operations"],

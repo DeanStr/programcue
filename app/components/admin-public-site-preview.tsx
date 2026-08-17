@@ -198,7 +198,7 @@ export function AdminPublicSitePreview({
       <div
         className="branding-preview-toolbar"
         role="toolbar"
-        aria-label="Public site preview controls"
+        aria-label="Event website preview controls"
       >
         <label className="public-site-preview-content-control">
           <span>Preview</span>
@@ -240,7 +240,7 @@ export function AdminPublicSitePreview({
       </div>
       <section
         className={`public-site-preview-frame${mobilePreview ? " is-mobile" : ""}`}
-        aria-label="Public site preview"
+        aria-label="Event website preview"
         data-public-theme={configuration.theme}
         // biome-ignore lint/a11y/noNoninteractiveTabindex: This scrollable preview must be keyboard-focusable so users can reach overflow content.
         tabIndex={0}
@@ -284,7 +284,7 @@ export function AdminPublicSitePreview({
       </section>
       <section className="card pad">
         <div>
-          <h2>Publish saved site draft</h2>
+          <h2>Publish saved website draft</h2>
           <p className="help">
             Publishing snapshots editorial configuration and sponsors. Programme
             data remains canonical.
@@ -296,7 +296,7 @@ export function AdminPublicSitePreview({
           disabled={!canPublish}
           onClick={onPublish}
         >
-          Publish public site
+          Publish event website
         </button>
       </section>
       {published ? (

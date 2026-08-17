@@ -182,7 +182,7 @@ export function AdminCommandDialog({
       label: "Direct session",
       description: "Enter a proposal on behalf of an invited speaker",
       meta: "Configure",
-      run: () => selectCommand("/admin/sessions/new?from=global"),
+      run: () => selectCommand("/admin/sessions/new"),
     },
     {
       value: "create manual application record proposal",
@@ -285,8 +285,8 @@ export function AdminCommandDialog({
         )
       : [];
 
-  const navigateMatches = navigationItems.filter(([, , label]) =>
-    staticMatch(`navigate ${label}`),
+  const navigateMatches = navigationItems.filter(([, , label, description]) =>
+    staticMatch(`navigate ${label} ${description ?? ""}`),
   );
   const createMatches = matching(createCommands, canRunCommands);
   const actionMatches = matching(actionCommands, canRunCommands);
@@ -424,16 +424,17 @@ export function AdminCommandDialog({
           ) : null}
           {navigateMatches.length ? (
             <Command.Group heading="Navigate">
-              {navigateMatches.map(([id, Icon, label]) => (
+              {navigateMatches.map(([id, Icon, label, description]) => (
                 <Command.Item
                   key={id}
-                  value={`navigate ${label}`}
+                  value={`navigate ${label} ${description ?? ""}`}
                   className="command-item"
                   onSelect={() => selectCommand(`/admin/${id}`)}
                 >
                   <CommandRow
                     icon={Icon}
                     label={label}
+                    description={description}
                     meta={pathname === `/admin/${id}` ? undefined : "Open"}
                     current={pathname === `/admin/${id}`}
                   />

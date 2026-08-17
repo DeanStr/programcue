@@ -138,7 +138,7 @@ mutable queue record is introduced.
 | Decision             | Outcome                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
 | -------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Content history      | Schedule-version content snapshots remain the current working record. Every change also appends an immutable attributed revision containing all fields needed for exact inspection and restoration; restoration creates a new Draft revision and never rewrites history.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
-| Publication boundary | Confirming schedule publication makes the exact immutable schedule-version content snapshot authoritative for public, API, Airtable and calendar consumers. Every scheduled source-public session must have a public, Approved content snapshot; missing, hidden/private or non-Approved snapshots block publication before provider work and are rechecked in the atomic D1 write. A blocked draft never replaces the last published programme. Editing or restoring content returns only the draft revision to Draft, so organisers may continue working without withdrawing approved live content. Content already published under the former advisory policy is retained with explicit `legacy_publication` provenance and no fabricated human approver. D1 rejects invalid publication transitions, entry insertion or reassignment into a published version, approval/visibility demotion or deletion of scheduled public content, and making an unapproved scheduled session public. Recovery may restore an empty published version first, but must restore coherent approval provenance before its public entries. Airtable staging applies the same approval boundary before provider writes. |
+| Publication boundary | Confirming schedule publication makes the exact immutable schedule-version content snapshot authoritative for public, API, Airtable and calendar consumers. Its confirmation previews added, removed, moved/resized and visibility-changed sessions against the current published version and lists every known conflict, content, confirmation and public-site blocker. Every scheduled source-public session must have a public, Approved content snapshot; missing, hidden/private or non-Approved snapshots block publication before provider work and are rechecked in the atomic D1 write. The preview is guidance over the current revision, not a substitute for final fail-closed revalidation. A blocked draft never replaces the last published programme. Editing or restoring content returns only the draft revision to Draft, so organisers may continue working without withdrawing approved live content. Content already published under the former advisory policy is retained with explicit `legacy_publication` provenance and no fabricated human approver. D1 rejects invalid publication transitions, entry insertion or reassignment into a published version, approval/visibility demotion or deletion of scheduled public content, and making an unapproved scheduled session public. Recovery may restore an empty published version first, but must restore coherent approval provenance before its public entries. Airtable staging applies the same approval boundary before provider writes. |
 | Central file library | The library is a tenant/event-scoped view over existing `file_assets`, `file_versions` and private R2 objects, not a second upload store. The initial read is limited to 50 assets and their current versions; retained history is loaded in separate 50-version pages. Downloads fail closed unless the selected version is current, released, signature-valid, scan-clean and ETag/size matched. ZIP export is bounded, previewed and explicitly confirmed; it preflights metadata before returning download headers, then conditionally opens and pull-streams only the current R2 body with cancellation. The confirmed binary download posts to a dedicated resource route so React Router never tries to deserialize ZIP bytes as document action data.                                                                                                                                                                                                                                                                                                                                                                                                                                           |
 
 ## Public programme workstream decisions
@@ -466,11 +466,13 @@ advisory while the server mutation remains the uniqueness authority. Date
 ranges preserve their duration when a start moves, but invalid ranges still
 fail both client and server validation.
 
-Standalone public-programme filters and schedule-source search live in the URL
-so reload, history and shared links preserve the operator's context. These
-client-owned parameters do not re-run the route loaders; public speaker shares
-and schedule filter, session and conflict focus remain server-owned and do
-revalidate. Unavailable public facets are removed from old links and disclosed
+Standalone public-programme filters, selected public session detail and
+schedule-source search live in the URL so reload, history and shared links
+preserve context. Public session and speaker detail parameters are server-owned:
+every transition re-runs strict published-record validation rather than letting
+the client substitute a previous or first visible record. Schedule filter,
+session and conflict focus also remain server-owned and revalidate. Unavailable
+public facets are removed from old links and disclosed
 instead of remaining visible while being ignored. Embed configuration remains
 owned by its explicit embed query contract. Person-first
 lookup is an authorised, organisation-scoped read over established membership,
@@ -766,9 +768,12 @@ ports remain allowed because no current requirement narrows them.
 The event site is a bounded editorial layer over the canonical event and
 published programme, not a generic block editor. Its homepage has exactly six
 known section types and its navigation has five known optional pages. Organisers
-may hide or reorder sections with authoritative Move up/Move down controls, but
-cannot add arbitrary routes, HTML, scripts or layout blocks. Editorial bodies
-use a deliberately restricted Markdown subset. Credentialed, non-HTTPS or
+may hide or reorder sections with authoritative Move up/Move down controls.
+Featured speakers and sessions use searchable available/selected lists whose
+explicit selected order is the public display order; FAQ questions use the same
+visible ordering controls. Disabled fixed pages remain compact until opened or
+enabled. The editor cannot add arbitrary routes, HTML, scripts or layout
+blocks. Editorial bodies use a deliberately restricted Markdown subset. Credentialed, non-HTTPS or
 invalid Markdown links are rejected when the draft is saved; rendering repeats
 the same link restriction as defense in depth rather than silently repairing
 published copy. Enabled fixed pages must have case-insensitively unique
@@ -897,9 +902,13 @@ footer contract. With a published site, the root is explicitly Event home while
 All sessions and Speakers use their dedicated programme routes. Those three
 primary destinations stay visible on wide screens; agenda, schedule, gallery
 and the five bounded editorial pages live in one keyboard-accessible Browse
-popover whose labels wrap. At tablet widths all destinations use the existing
-Browse disclosure, so navigation capacity does not depend on label length or
-JavaScript width measurement. The desktop/mobile preview selects the homepage
+popover grouped as Programme views and Event information. At tablet widths all
+destinations use the same grouped Browse disclosure, so navigation capacity
+does not depend on label length or JavaScript width measurement. Featured
+sessions link to the strict sessions-surface `?session=` detail URL; direct
+requests reject missing/unpublished records, duplicates, embeds and mixed
+speaker/session shares instead of falling back to another session. The
+desktop/mobile preview selects the homepage
 or any of the five fixed pages; fixed-page previews and public routes share one
 page-content renderer, and disabled pages remain previewable with an explicit
 unpublished label. The publication confirmation reports added and removed
@@ -983,10 +992,13 @@ is intentional because the interface communicates numbered item ranges and
 there is no measured scale requirement for keyset pagination.
 
 Organiser-created application records and direct sessions use dedicated
-routes. Direct-session origin is the closed enum `schedule | programme |
-global`, affects only the post-success destination and never carries an
-arbitrary return URL or authority. A successful creation redirects with the
-exact created record ID so the destination can focus and confirm that record.
+routes. `/admin/sessions/new` is the canonical schedule-origin route; the only
+accepted override is exactly one `from=programme`. Missing origin therefore has
+one stable meaning, while duplicate, unknown and redundant `from=schedule`
+values fail validation. Origin affects only the post-success destination and
+never carries an arbitrary return URL or authority. A successful creation
+redirects with the exact created record ID so the destination can focus and
+confirm that record.
 
 New and edited application forms use strict schema version 2. Sections have
 stable IDs, ordered array position, titles and optional descriptions, and every

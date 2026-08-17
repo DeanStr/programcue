@@ -23,9 +23,10 @@ test.afterAll(async ({ request }) => {
 test("organisers compose, preview and publish the bounded public event site", async ({
   page,
 }) => {
+  test.slow();
   await page.goto("/admin/site");
   await expect(
-    page.getByRole("heading", { name: "Public event site" }),
+    page.getByRole("heading", { name: "Event website" }),
   ).toBeVisible();
   await expect(page.getByLabel("Publication status")).toContainText("Branding");
   await expect(page.getByLabel("Publication status")).toContainText(
@@ -40,6 +41,71 @@ test("organisers compose, preview and publish the bounded public event site", as
   await expect(
     page.locator(".public-site-section-order > li").first(),
   ).toContainText("Featured speakers");
+
+  for (const section of [
+    "Featured speakers",
+    "Featured sessions",
+    "Frequently asked questions",
+  ]) {
+    await page
+      .locator(".public-site-section-order > li")
+      .filter({ hasText: section })
+      .getByRole("checkbox")
+      .check();
+  }
+  const featuredSpeakers = page
+    .locator("fieldset.public-site-featured-picker")
+    .filter({ has: page.locator("legend", { hasText: "Featured speakers" }) });
+  await featuredSpeakers.getByLabel("Search available").fill("Priya Shah");
+  await featuredSpeakers
+    .locator(".public-site-featured-available > div")
+    .filter({ hasText: "Priya Shah" })
+    .getByRole("button", { name: "Add" })
+    .click();
+  await expect(featuredSpeakers).toContainText("Featured · 1 of 12");
+
+  const featuredSessions = page
+    .locator("fieldset.public-site-featured-picker")
+    .filter({ has: page.locator("legend", { hasText: "Featured sessions" }) });
+  await featuredSessions
+    .getByLabel("Search available")
+    .fill("AI in Event Operations");
+  await featuredSessions
+    .locator(".public-site-featured-available > div")
+    .filter({ hasText: "AI in Event Operations" })
+    .getByRole("button", { name: "Add" })
+    .click();
+  await featuredSessions
+    .getByLabel("Search available")
+    .fill("The Future of Attendee Engagement");
+  await featuredSessions
+    .locator(".public-site-featured-available > div")
+    .filter({ hasText: "The Future of Attendee Engagement" })
+    .getByRole("button", { name: "Add" })
+    .click();
+  const selectedSessions = featuredSessions.locator(
+    ".public-site-featured-selected > li",
+  );
+  await selectedSessions
+    .filter({ hasText: "The Future of Attendee Engagement" })
+    .getByRole("button", { name: "Move up" })
+    .click();
+  await expect(selectedSessions.first()).toContainText(
+    "The Future of Attendee Engagement",
+  );
+  await expect(featuredSessions).toContainText("Featured · 2 of 12");
+
+  await page.getByRole("button", { name: "Add question" }).click();
+  await page.getByRole("button", { name: "Add question" }).click();
+  const faqQuestions = page.locator(".public-site-faq-editor > fieldset");
+  await faqQuestions.nth(0).getByLabel("Question").fill("First question");
+  await faqQuestions.nth(0).getByLabel("Answer").fill("First answer");
+  await faqQuestions.nth(1).getByLabel("Question").fill("Priority question");
+  await faqQuestions.nth(1).getByLabel("Answer").fill("Priority answer");
+  await faqQuestions.nth(1).getByRole("button", { name: "Move up" }).click();
+  await expect(faqQuestions.nth(0).getByLabel("Question")).toHaveValue(
+    "Priority question",
+  );
 
   const aboutPage = page
     .locator(".public-site-page-editor fieldset")
@@ -67,7 +133,7 @@ test("organisers compose, preview and publish the bounded public event site", as
     .getByRole("link", { name: "Speakers", exact: true })
     .click();
   const unsavedDialog = page.getByRole("dialog", {
-    name: "Leave without saving the public site?",
+    name: "Leave without saving the event website?",
   });
   await expect(unsavedDialog).toBeVisible();
   await unsavedDialog.getByRole("button", { name: "Keep editing" }).click();
@@ -99,7 +165,7 @@ test("organisers compose, preview and publish the bounded public event site", as
     "dark",
   );
   const previewFrame = page.getByRole("region", {
-    name: "Public site preview",
+    name: "Event website preview",
   });
   await expect(previewFrame).toHaveAttribute("tabindex", "0");
   await expect(previewFrame.getByText("Explore the programme")).toBeVisible();
@@ -110,9 +176,9 @@ test("organisers compose, preview and publish the bounded public event site", as
     getComputedStyle(element).getPropertyValue("--event-accent").trim(),
   );
   expect(previewAccent).toMatch(/^#[0-9a-f]{6}$/iu);
-  await page.getByRole("button", { name: "Create site draft" }).click();
+  await page.getByRole("button", { name: "Create website draft" }).click();
   await expect(
-    page.getByText("Public-site draft saved. Public pages are unchanged."),
+    page.getByText("Website draft saved. Public pages are unchanged."),
   ).toBeVisible();
 
   await page
@@ -126,9 +192,9 @@ test("organisers compose, preview and publish the bounded public event site", as
       "Save the homepage and page edits before changing sponsors or recording drafts. Published recordings can still be withdrawn.",
     ),
   ).toBeVisible();
-  await page.getByRole("button", { name: "Save site draft" }).click();
+  await page.getByRole("button", { name: "Save website draft" }).click();
   await expect(
-    page.getByText("Public-site draft saved. Public pages are unchanged."),
+    page.getByText("Website draft saved. Public pages are unchanged."),
   ).toBeVisible();
   await expect(page.getByLabel("Tagline")).toHaveValue(
     "One destination for the event and every attendee.",
@@ -144,21 +210,21 @@ test("organisers compose, preview and publish the bounded public event site", as
     .fill("https://example.com/partner");
   await newSponsor.getByRole("button", { name: "Add sponsor" }).click();
   await expect(
-    page.getByText("Sponsor saved to the site draft."),
+    page.getByText("Sponsor saved to the website draft."),
   ).toBeVisible();
 
-  await page.getByRole("button", { name: "Publish public site" }).click();
+  await page.getByRole("button", { name: "Publish event website" }).click();
   const confirmation = page.getByRole("dialog", {
-    name: "Publish the public event site?",
+    name: "Publish the event website?",
   });
   await expect(confirmation).toContainText("Pages to publish: About, Sponsors");
   await expect(confirmation).toContainText(
     "Sponsors to publish: Example Partner",
   );
   await confirmation
-    .getByRole("button", { name: "Publish public site" })
+    .getByRole("button", { name: "Publish event website" })
     .click();
-  await expect(page.getByText("Public event site published.")).toBeVisible();
+  await expect(page.getByText("Event website published.")).toBeVisible();
   await expect(
     page.getByRole("img", { name: "Generated social sharing preview" }),
   ).toHaveAttribute("src", /social-card\.webp\?v=.+/u);
@@ -178,6 +244,78 @@ test("organisers compose, preview and publish the bounded public event site", as
     page.getByRole("heading", { name: "Supported by" }),
   ).toBeVisible();
   await expect(page.getByText("Example Partner")).toBeVisible();
+  await expect(page.getByText("Priority question")).toBeVisible();
+  const featuredSessionLink = page.getByRole("link", {
+    name: "The Future of Attendee Engagement",
+  });
+  await expect(featuredSessionLink).toHaveAttribute(
+    "href",
+    "/public/programme/future-of-events-2027/sessions?session=demo-session-1",
+  );
+  await featuredSessionLink.click();
+  await expect(page).toHaveURL(
+    /\/public\/programme\/future-of-events-2027\/sessions\?session=demo-session-1$/u,
+  );
+  await expect(
+    page.getByRole("heading", {
+      name: "The Future of Attendee Engagement",
+      exact: true,
+      level: 2,
+    }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("button", {
+      name: "Save The Future of Attendee Engagement to my itinerary",
+    }),
+  ).toBeVisible();
+  await page.evaluate(() => {
+    window.history.pushState(
+      null,
+      "",
+      "/public/programme/future-of-events-2027/sessions?session=not-published",
+    );
+    window.dispatchEvent(new PopStateEvent("popstate"));
+  });
+  await expect(
+    page.getByRole("heading", { name: "Programme not found" }),
+  ).toBeVisible();
+  await expect(page.getByText("Published session not found")).toBeVisible();
+  expect(
+    (
+      await page.request.get(
+        "/public/programme/future-of-events-2027/sessions?session=not-published",
+      )
+    ).status(),
+  ).toBe(404);
+  expect(
+    (
+      await page.request.get(
+        "/public/programme/future-of-events-2027?session=demo-session-1",
+      )
+    ).status(),
+  ).toBe(400);
+  expect(
+    (
+      await page.request.get(
+        "/public/programme/future-of-events-2027/sessions?session=demo-session-1&session=demo-session-2",
+      )
+    ).status(),
+  ).toBe(400);
+  expect(
+    (
+      await page.request.get(
+        "/public/programme/future-of-events-2027/sessions?speaker=person-demo-speaker&session=demo-session-1",
+      )
+    ).status(),
+  ).toBe(400);
+  expect(
+    (
+      await page.request.get(
+        "/embed/future-of-events-2027/sessions?session=demo-session-1",
+      )
+    ).status(),
+  ).toBe(400);
+  await page.goto("/public/programme/future-of-events-2027");
   await expect(page.locator(".public-shell")).toHaveAttribute(
     "data-public-theme",
     "dark",
@@ -223,6 +361,8 @@ test("organisers compose, preview and publish the bounded public event site", as
   await page.setViewportSize({ width: 1280, height: 720 });
 
   await eventNavigation.getByLabel("Browse programme and event pages").click();
+  await expect(eventNavigation.getByText("Programme views")).toBeVisible();
+  await expect(eventNavigation.getByText("Event information")).toBeVisible();
   const longAboutNavigationLink = eventNavigation.getByRole("link", {
     name: longAboutNavigationLabel,
   });
@@ -288,7 +428,7 @@ test("organisers compose, preview and publish the bounded public event site", as
     .filter({ has: page.locator("legend", { hasText: "Sponsors" }) })
     .getByLabel("Publish this page with the site")
     .uncheck();
-  await page.getByRole("button", { name: "Save site draft" }).click();
+  await page.getByRole("button", { name: "Save website draft" }).click();
   const sponsorEditor = page.locator("form.public-site-record-editor").filter({
     has: page.locator('input[name="name"][value="Example Partner"]'),
   });
@@ -297,9 +437,9 @@ test("organisers compose, preview and publish the bounded public event site", as
     .getByRole("dialog", { name: "Remove Example Partner?" })
     .getByRole("button", { name: "Remove sponsor" })
     .click();
-  await page.getByRole("button", { name: "Publish public site" }).click();
+  await page.getByRole("button", { name: "Publish event website" }).click();
   const replacement = page.getByRole("dialog", {
-    name: "Publish the public event site?",
+    name: "Publish the event website?",
   });
   await expect(replacement).toContainText("Pages removed: About, Sponsors");
   await expect(replacement).toContainText("Sponsors removed: Example Partner");

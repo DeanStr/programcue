@@ -67,6 +67,25 @@ test("schedule source search updates its URL without reloading the workspace", a
   expect(routeReads).toEqual([]);
 });
 
+test("schedule publication previews material changes and readiness", async ({
+  page,
+}) => {
+  await waitForInterface(page, "/admin/schedule");
+  await createNextScheduleDraft(page);
+  await page.getByRole("button", { name: "Publish schedule" }).click();
+  const publication = page.getByRole("dialog", { name: "Publish schedule" });
+  await expect(publication).toContainText("Changes since version 1");
+  await expect(publication).toContainText(
+    "No session placement or visibility changes were found.",
+  );
+  await expect(publication).toContainText("Publication readiness");
+  await expect(publication).toContainText("No publication blockers found");
+  await expect(
+    publication.getByRole("button", { name: "Confirm publication" }),
+  ).toBeEnabled();
+  await publication.getByRole("button", { name: "Cancel" }).click();
+});
+
 test("schedule and programme render the event calendar date and timezone", async ({
   page,
 }) => {
@@ -462,7 +481,7 @@ test.describe("mutable schedule authoring", () => {
     ];
 
     for (const [index, title] of titles.entries()) {
-      await waitForInterface(page, "/admin/sessions/new?from=schedule");
+      await waitForInterface(page, "/admin/sessions/new");
       const directSession = page.locator("form").filter({
         has: page.getByRole("button", {
           name: "Create unscheduled session",

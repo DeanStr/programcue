@@ -11,8 +11,7 @@ import {
 import { ActionNotice, AdminCreationForm } from "./submissions-admin-panels";
 import type { SubmissionsAdminActionResult } from "./submissions-admin-types";
 
-const creationOrigins = ["schedule", "programme", "global"] as const;
-type CreationOrigin = (typeof creationOrigins)[number];
+type CreationOrigin = "schedule" | "programme";
 
 export const meta: Route.MetaFunction = () => [
   { title: "Create direct session · Program Cue" },
@@ -20,13 +19,11 @@ export const meta: Route.MetaFunction = () => [
 
 export function directSessionCreationOrigin(url: URL): CreationOrigin {
   const values = url.searchParams.getAll("from");
-  if (
-    values.length !== 1 ||
-    !creationOrigins.includes(values[0] as CreationOrigin)
-  ) {
+  if (values.length === 0) return "schedule";
+  if (values.length !== 1 || values[0] !== "programme") {
     throw new Response("Invalid direct-session origin", { status: 400 });
   }
-  return values[0] as CreationOrigin;
+  return "programme";
 }
 
 async function viewerFor(
@@ -148,7 +145,7 @@ export default function AdminCreateSession({
           <Link className="subtle" to={backHref}>
             ← Back to{" "}
             {loaderData.origin === "programme"
-              ? "publish and embed"
+              ? "programme publishing"
               : "schedule"}
           </Link>
           <h1>Create direct session</h1>

@@ -185,32 +185,6 @@ export function useSchedulePlannerController(
     [workspace.sessions],
   );
 
-  const contentApprovalBlockers = useMemo(
-    () =>
-      workspace.entries.flatMap((entry) => {
-        const session = sessionById.get(entry.sessionId);
-        return session &&
-          session.sourceVisibility === "public" &&
-          session.contentStatus !== "approved"
-          ? [session]
-          : [];
-      }),
-    [sessionById, workspace.entries],
-  );
-
-  const publicContentVisibilityBlockers = useMemo(
-    () =>
-      workspace.entries.flatMap((entry) => {
-        const session = sessionById.get(entry.sessionId);
-        return session &&
-          session.sourceVisibility === "public" &&
-          session.visibility !== "public"
-          ? [session]
-          : [];
-      }),
-    [sessionById, workspace.entries],
-  );
-
   const resourceInventory = useMemo(
     () =>
       [...new Set(workspace.rooms.flatMap((room) => room.resources))].sort(),
@@ -602,7 +576,6 @@ export function useSchedulePlannerController(
     clearAutoError,
     clearAutoFeedback,
     conflictSeverityByEntryId,
-    contentApprovalBlockers,
     dismissAutoPreview,
     draggingSessionId,
     entriesBySlot,
@@ -612,7 +585,6 @@ export function useSchedulePlannerController(
     navigation,
     place,
     placementAvailable,
-    publicContentVisibilityBlockers,
     publishOpen,
     quickDurationMinutes,
     quickEntry,

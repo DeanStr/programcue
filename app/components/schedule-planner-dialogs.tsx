@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Form, Link } from "react-router";
 import { Dialog } from "~/components/dialog";
 import type { AutoPlacementPreview } from "~/modules/schedule/schedule-auto-placement";
+import type { SchedulePublicationPreview } from "~/modules/schedule/schedule-publication-preview.server";
 import type { ScheduleSession } from "~/modules/schedule/schedule-service.server";
 import type {
   ScheduleFetcher,
@@ -256,18 +257,28 @@ export function AutoPlacementPreviewDialog({
 export function SchedulePublicationDialog({
   workspace,
   fetcher,
-  contentApprovalBlockers,
-  publicContentVisibilityBlockers,
+  preview,
   close,
 }: {
   workspace: SchedulePlannerWorkspaceData & {
     version: NonNullable<SchedulePlannerWorkspaceData["version"]>;
   };
   fetcher: ScheduleFetcher;
-  contentApprovalBlockers: ScheduleSession[];
-  publicContentVisibilityBlockers: ScheduleSession[];
+  preview: SchedulePublicationPreview;
   close: () => void;
 }) {
+  const blockerCount =
+    Number(preview.blockers.emptySchedule) +
+    preview.blockers.conflicts.length +
+    preview.blockers.contentVisibility.length +
+    preview.blockers.contentApproval.length +
+    preview.blockers.unconfirmedSpeakers.length +
+    preview.blockers.publicDependencies.length;
+  const changeCount =
+    preview.changes.added.length +
+    preview.changes.removed.length +
+    preview.changes.moved.length +
+    preview.changes.visibility.length;
   return (
     <Dialog
       title="Publish schedule"
@@ -292,10 +303,7 @@ export function SchedulePublicationDialog({
             <button
               type="submit"
               className="btn primary"
-              disabled={
-                publicContentVisibilityBlockers.length > 0 ||
-                contentApprovalBlockers.length > 0
-              }
+              disabled={blockerCount > 0}
             >
               Confirm publication
             </button>
@@ -316,81 +324,173 @@ export function SchedulePublicationDialog({
         authoritative. If this draft is blocked, the currently published
         programme remains unchanged.
       </p>
-      {publicContentVisibilityBlockers.length ? (
-        <div className="validation-item error">
-          <strong>
-            {publicContentVisibilityBlockers.length} scheduled public content
-            record
-            {publicContentVisibilityBlockers.length === 1 ? " is" : "s are"}{" "}
-            private or hidden.
-          </strong>{" "}
-          Public sessions require public content snapshots. Correct each listed
-          session before publishing.
-          <ul>
-            {publicContentVisibilityBlockers.slice(0, 5).map((session) => (
-              <li key={session.id}>
-                {session.title} · {session.visibility}
-              </li>
-            ))}
-            {publicContentVisibilityBlockers.length > 5 ? (
-              <li>{publicContentVisibilityBlockers.length - 5} more</li>
-            ) : null}
-          </ul>
-        </div>
-      ) : (
-        <div className="validation-item ok">
-          Every scheduled public session has a public content snapshot.
-        </div>
-      )}
-      {contentApprovalBlockers.length ? (
-        <div className="validation-item error">
-          <strong>
-            {contentApprovalBlockers.length} scheduled public content record
-            {contentApprovalBlockers.length === 1 ? " is" : "s are"} not marked
-            Approved.
-          </strong>{" "}
-          Publication is blocked until each exact content revision is approved
-          or the session is removed from the public schedule.
-          <ul>
-            {contentApprovalBlockers.slice(0, 5).map((session) => (
-              <li key={session.id}>
-                <Link
-                  to={`/admin/content/sessions/${encodeURIComponent(session.id)}`}
-                  onClick={close}
-                >
-                  {session.title}
-                </Link>{" "}
-                · {session.contentStatus.replaceAll("_", " ")}
-              </li>
-            ))}
-            {contentApprovalBlockers.length > 5 ? (
-              <li>{contentApprovalBlockers.length - 5} more</li>
-            ) : null}
-          </ul>
-        </div>
-      ) : (
-        <div className="validation-item ok">
-          Every scheduled public content record is marked Approved.
-        </div>
-      )}
-      <div
-        className={`validation-item ${workspace.publicationConflicts.some((conflict) => conflict.severity === "blocking") ? "error" : workspace.publicationConflicts.length ? "warn" : "ok"}`}
-      >
-        {workspace.publicationConflicts.length
-          ? `${workspace.publicationConflicts.length} current conflict${workspace.publicationConflicts.length === 1 ? "" : "s"} will be revalidated before publication.`
-          : "No current conflicts. All placements will be revalidated before publication."}
-        {workspace.publicationConflicts.length ? (
-          <ul>
-            {workspace.publicationConflicts.map((conflict, index) => (
-              // biome-ignore lint/suspicious/noArrayIndexKey: Duplicate stateless publication conflicts are valid, and this projection does not expose the primary entry ID needed for a stable unique key.
-              <li key={index}>
-                {conflict.severity === "blocking" ? "Blocking" : "Warning"}:{" "}
-                {conflict.message}
-              </li>
-            ))}
-          </ul>
+      <section aria-labelledby="schedule-publication-changes">
+        <h3 id="schedule-publication-changes">
+          Changes since{" "}
+          {preview.publishedVersionNumber
+            ? `version ${preview.publishedVersionNumber}`
+            : "the unpublished baseline"}
+        </h3>
+        <p className="help">
+          {changeCount
+            ? `${changeCount} material ${changeCount === 1 ? "change" : "changes"} will become public.`
+            : "No session placement or visibility changes were found."}
+        </p>
+        {preview.changes.added.length ? (
+          <div className="validation-item info">
+            <strong>Added · {preview.changes.added.length}</strong>
+            <ul>
+              {preview.changes.added.map((item) => (
+                <li key={item.sessionId}>{item.title}</li>
+              ))}
+            </ul>
+          </div>
         ) : null}
-      </div>
+        {preview.changes.removed.length ? (
+          <div className="validation-item warn">
+            <strong>Removed · {preview.changes.removed.length}</strong>
+            <ul>
+              {preview.changes.removed.map((item) => (
+                <li key={item.sessionId}>{item.title}</li>
+              ))}
+            </ul>
+          </div>
+        ) : null}
+        {preview.changes.moved.length ? (
+          <div className="validation-item info">
+            <strong>Moved or resized · {preview.changes.moved.length}</strong>
+            <ul>
+              {preview.changes.moved.map((item) => (
+                <li key={item.sessionId}>
+                  <strong>{item.title}</strong> · {item.from.room},{" "}
+                  {scheduleDateTimeLabel(
+                    item.from.startsAt,
+                    workspace.event.timezone,
+                  )}
+                  –
+                  {scheduleDateTimeLabel(
+                    item.from.endsAt,
+                    workspace.event.timezone,
+                  )}{" "}
+                  → {item.to.room},{" "}
+                  {scheduleDateTimeLabel(
+                    item.to.startsAt,
+                    workspace.event.timezone,
+                  )}
+                  –
+                  {scheduleDateTimeLabel(
+                    item.to.endsAt,
+                    workspace.event.timezone,
+                  )}
+                </li>
+              ))}
+            </ul>
+          </div>
+        ) : null}
+        {preview.changes.visibility.length ? (
+          <div className="validation-item warn">
+            <strong>
+              Visibility changed · {preview.changes.visibility.length}
+            </strong>
+            <ul>
+              {preview.changes.visibility.map((item) => (
+                <li key={item.sessionId}>
+                  {item.title} · {item.from} → {item.to}
+                </li>
+              ))}
+            </ul>
+          </div>
+        ) : null}
+      </section>
+
+      <section aria-labelledby="schedule-publication-readiness">
+        <h3 id="schedule-publication-readiness">Publication readiness</h3>
+        {blockerCount ? (
+          <div className="validation-item error">
+            <strong>
+              {blockerCount} publication{" "}
+              {blockerCount === 1 ? "blocker" : "blockers"}
+            </strong>
+            <span>Resolve every item below before publishing.</span>
+          </div>
+        ) : (
+          <div className="validation-item ok">
+            No publication blockers found. Every invariant will be revalidated
+            on confirmation.
+          </div>
+        )}
+        {preview.blockers.emptySchedule ? (
+          <div className="validation-item error">
+            Place at least one session before publishing.
+          </div>
+        ) : null}
+        {preview.blockers.contentVisibility.length ? (
+          <div className="validation-item error">
+            <strong>Public content hidden or private</strong>
+            <ul>
+              {preview.blockers.contentVisibility.map((session) => (
+                <li key={session.sessionId}>{session.title}</li>
+              ))}
+            </ul>
+          </div>
+        ) : null}
+        {preview.blockers.contentApproval.length ? (
+          <div className="validation-item error">
+            <strong>Content approval required</strong>
+            <ul>
+              {preview.blockers.contentApproval.map((session) => (
+                <li key={session.sessionId}>
+                  <Link
+                    to={`/admin/content/sessions/${encodeURIComponent(session.sessionId)}`}
+                    onClick={close}
+                  >
+                    {session.title}
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          </div>
+        ) : null}
+        {preview.blockers.unconfirmedSpeakers.length ? (
+          <div className="validation-item error">
+            <strong>Speaker confirmation required</strong>
+            <ul>
+              {preview.blockers.unconfirmedSpeakers.map((item) => (
+                <li key={`${item.sessionId}:${item.speakerId}`}>
+                  {item.title} · {item.speakerName}
+                </li>
+              ))}
+            </ul>
+          </div>
+        ) : null}
+        {preview.blockers.publicDependencies.map((message) => (
+          <div className="validation-item error" key={message}>
+            {message}
+          </div>
+        ))}
+        {preview.blockers.conflicts.length ? (
+          <div className="validation-item error">
+            <strong>Blocking schedule conflicts</strong>
+            <ul>
+              {preview.blockers.conflicts.map((conflict, index) => (
+                // biome-ignore lint/suspicious/noArrayIndexKey: Deterministic conflict messages have no persisted identifier in this projection.
+                <li key={index}>{conflict.message}</li>
+              ))}
+            </ul>
+          </div>
+        ) : null}
+        {preview.warnings.length ? (
+          <div className="validation-item warn">
+            <strong>Warnings · {preview.warnings.length}</strong>
+            <ul>
+              {preview.warnings.map((warning, index) => (
+                // biome-ignore lint/suspicious/noArrayIndexKey: Deterministic conflict messages have no persisted identifier in this projection.
+                <li key={index}>{warning.message}</li>
+              ))}
+            </ul>
+          </div>
+        ) : null}
+      </section>
       <p className="help">
         The current public version remains available in history. Calendar
         updates are queued separately.

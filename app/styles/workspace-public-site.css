@@ -62,6 +62,7 @@
   gap: var(--space-2);
 }
 .public-site-selection,
+.public-site-featured-picker,
 .public-site-faq-editor fieldset,
 .public-site-page-editor fieldset,
 .public-site-post-event,
@@ -81,6 +82,51 @@
   display: flex;
   align-items: center;
   gap: var(--space-2);
+}
+.public-site-featured-picker {
+  display: grid;
+  gap: var(--space-3);
+}
+.public-site-featured-selected {
+  display: grid;
+  gap: var(--space-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.public-site-featured-selected > li,
+.public-site-featured-available > div,
+.public-site-page-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding: var(--space-3);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--surface-sunken);
+}
+.public-site-featured-selected span,
+.public-site-featured-available span {
+  display: grid;
+  gap: var(--space-1);
+  min-width: 0;
+}
+.public-site-featured-selected small,
+.public-site-featured-available small {
+  color: var(--muted);
+}
+.public-site-featured-available {
+  display: grid;
+  gap: var(--space-2);
+  max-height: 320px;
+  overflow: auto;
+}
+.public-site-page-row > div {
+  min-width: 0;
+}
+.public-site-page-row .help {
+  margin-bottom: 0;
 }
 .public-site-faq-editor,
 .public-site-page-editor {
@@ -460,6 +506,12 @@
     grid-template-columns: 1fr;
   }
   .public-site-section-order > li {
+    align-items: stretch;
+    flex-direction: column;
+  }
+  .public-site-featured-selected > li,
+  .public-site-featured-available > div,
+  .public-site-page-row {
     align-items: stretch;
     flex-direction: column;
   }

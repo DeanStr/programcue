@@ -635,6 +635,13 @@ the result reports them separately from honest unplaced reasons and leaves the
 schedule unpublished. Focused unit, Worker and Chromium schedule tests verify
 this AIA-08 production slice.
 
+Schedule publication now presents the material delta against the current live
+version—added, removed, moved/resized and visibility-changed sessions—alongside
+all currently known conflict, content-approval, speaker-confirmation and public
+event-website/recording blockers. Confirmation remains disabled while any blocker is
+visible, and the authoritative mutation rechecks the exact schedule revision
+and every invariant rather than trusting the preview.
+
 ## Audit and revision evidence
 
 - **Production slice; deployed:** Audit writes
@@ -780,7 +787,11 @@ this AIA-08 production slice.
 - **Bounded composition:** The homepage has exactly six fixed sections:
   introduction, featured speakers, featured sessions, published-programme
   statistics, venue/map and FAQ. Organisers can hide them and use keyboard-
-  accessible Move up/Move down controls. Desktop/mobile previews use the same
+  accessible Move up/Move down controls. Featured speaker/session selection is
+  split into searchable available records and an explicitly ordered selected
+  list with a visible 12-record limit; FAQ entries have the same keyboard
+  ordering controls. Disabled fixed-page editors stay collapsed until opened
+  or enabled. Desktop/mobile previews use the same
   renderer as the public homepage and can select any fixed page through the
   public page-content renderer; disabled pages are explicitly identified.
   About, FAQ, Venue, Code of Conduct and Sponsors are the only optional pages;
@@ -875,10 +886,13 @@ this AIA-08 production slice.
   render. Unsaved client configuration blocks navigation and tab closure.
   `e2e/public-site.spec.ts` passes the complete organizer-to-public Chromium
   workflow, including discard confirmation, Event home/programme navigation,
-  homepage/fixed-page desktop/mobile preview selection, 40-character labels
+  homepage/fixed-page desktop/mobile preview selection, ordered featured
+  selection, FAQ ordering, featured-session detail links, 40-character labels
   without header overflow and conditional fixed-page caching. The shared header
-  keeps primary destinations visible, puts variants and editorial pages in
-  Browse, and collapses fully at tablet width.
+  keeps primary destinations visible, groups programme variants and editorial
+  pages inside Browse, and collapses fully at tablet width. Direct session-detail
+  URLs are server-validated and fail explicitly for duplicate, mixed, embedded
+  or unavailable selections.
   `/admin/site` passes
   the WCAG A/AA axe sweep at phone, tablet and desktop widths. The complete local
   core gate also passes, including TypeScript, production builds, the Agents
@@ -907,7 +921,7 @@ this AIA-08 production slice.
 | EVA-001–009               | Teams, invitations, multi-round review, assignments, mixed rubrics, moderation/reopen, decisions and acceptance onboarding are connected.                                                                                                                                                                                                                                                                                                                                                                    |
 | ABS-01/02/03/07           | Independent round configuration, round-scoped reviewer pools, numeric/dropdown/free-text criteria and round-level blind-review server enforcement are verified by focused Worker tests and the ABS-S2/S3 Chromium workflow; broader evaluation capabilities remain tracked under EVA-001–009.                                                                                                                                                                                                                |
 | COM-001–006               | Email provider selection, sender provisioning, versioned templates, scheduled sends, automatic reminders, receipts/suppression and calendar OAuth/lifecycle are connected. Live Resend authentication delivery, tracked delivered/bounced receipts, both social sign-ins, both calendar-provider connections and both providers' invitation create/update/cancel lifecycles are verified.                                                                                                                    |
-| SCH-001–007               | FullCalendar list/day/week planning, configuration, breaks/resources, resize/unassign/undo, content snapshots, publication conflicts and exact public/calendar reads are connected.                                                                                                                                                                                                                                                                                                                          |
+| SCH-001–007               | FullCalendar list/day/week planning, configuration, breaks/resources, resize/unassign/undo, content snapshots, material publication diff/readiness, publication conflicts and exact public/calendar reads are connected.                                                                                                                                                                                                                                                                                      |
 | DSH-001–003               | Readiness, record-aware navigation/search, operation health, durable progress and event-scoped realtime invalidation are connected.                                                                                                                                                                                                                                                                                                                                                                          |
 | NFR-001–005               | Typed builds, indexed server pagination, local performance harness, automated accessibility/cross-browser coverage, security controls, observability and recovery mechanics exist. Production RUM/scale, live recovery and manual accessibility acceptance remain outstanding.                                                                                                                                                                                                                               |
 | OPT-001–006               | Multi-round evaluation, advanced task/resource flows, AI assistance, D1/Airtable event clone, import/export, saved views and higher-polish operational UI are connected.                                                                                                                                                                                                                                                                                                                                     |

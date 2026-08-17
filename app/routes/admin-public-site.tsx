@@ -39,7 +39,7 @@ import { notifyRouteChange } from "~/platform/realtime/route-realtime.server";
 import type { Route } from "./+types/admin-public-site";
 
 export const meta: Route.MetaFunction = () => [
-  { title: "Public site · Program Cue" },
+  { title: "Event website · Program Cue" },
 ];
 
 type ActionResponse = {
@@ -272,14 +272,14 @@ export async function action({ request, context }: Route.ActionArgs) {
       viewer.eventId,
     );
     const labels: Record<string, string> = {
-      "save-site": "Public-site draft saved. Public pages are unchanged.",
-      "publish-site": "Public event site published.",
-      "save-sponsor": "Sponsor saved to the site draft.",
-      "delete-sponsor": "Sponsor removed from the site draft.",
+      "save-site": "Website draft saved. Public pages are unchanged.",
+      "publish-site": "Event website published.",
+      "save-sponsor": "Sponsor saved to the website draft.",
+      "delete-sponsor": "Sponsor removed from the website draft.",
       "save-recording": "Recording draft saved. It is not public.",
       "publish-recording":
         "Recording published. It appears only after its session and event have ended.",
-      "unpublish-recording": "Recording withdrawn from the public site.",
+      "unpublish-recording": "Recording withdrawn from the event website.",
     };
     return data<ActionResponse>(
       {
@@ -306,7 +306,8 @@ export async function action({ request, context }: Route.ActionArgs) {
       return data<ActionResponse>(
         {
           ok: false,
-          message: error.issues[0]?.message ?? "Review the public-site fields.",
+          message:
+            error.issues[0]?.message ?? "Review the event website fields.",
         },
         { status: 422 },
       );
@@ -455,11 +456,11 @@ export default function AdminPublicSite({ loaderData }: Route.ComponentProps) {
     });
     confirm(
       {
-        title: "Publish the public event site?",
+        title: "Publish the event website?",
         description:
-          "The saved homepage, navigation, pages and sponsor snapshot will replace the current public site.",
+          "The saved homepage, navigation, pages and sponsor snapshot will replace the current event website.",
         records,
-        confirmLabel: "Publish public site",
+        confirmLabel: "Publish event website",
         tone: "primary",
       },
       () =>
@@ -566,7 +567,7 @@ export default function AdminPublicSite({ loaderData }: Route.ComponentProps) {
       {dialog}
       {blocker.state === "blocked" ? (
         <ConfirmDialog
-          title="Leave without saving the public site?"
+          title="Leave without saving the event website?"
           description="The homepage, page, theme, ordering or featured-record changes on this page have not been saved."
           confirmLabel="Leave and discard"
           cancelLabel="Keep editing"
@@ -577,7 +578,7 @@ export default function AdminPublicSite({ loaderData }: Route.ComponentProps) {
       <div className="page-head">
         <div>
           <span className="pc-page-eyebrow">Published experience</span>
-          <h1>Public event site</h1>
+          <h1>Event website</h1>
           <p>
             Compose a bounded event homepage and pages from approved event and
             programme records.
@@ -591,7 +592,7 @@ export default function AdminPublicSite({ loaderData }: Route.ComponentProps) {
               target="_blank"
               rel="noreferrer"
             >
-              Open public site <ExternalLink aria-hidden size={13} />
+              Open event website <ExternalLink aria-hidden size={13} />
             </Link>
           ) : null}
           <span
@@ -624,7 +625,7 @@ export default function AdminPublicSite({ loaderData }: Route.ComponentProps) {
       {secondaryActionsBlocked ? (
         <div className="validation-item warn mb" role="status">
           {newerDraftAvailable
-            ? "A newer saved site draft is available. Save will report a revision conflict; refresh before managing sponsors or recordings."
+            ? "A newer saved website draft is available. Save will report a revision conflict; refresh before managing sponsors or recordings."
             : "Save the homepage and page edits before changing sponsors or recording drafts. Published recordings can still be withdrawn."}
         </div>
       ) : null}
@@ -641,7 +642,7 @@ export default function AdminPublicSite({ loaderData }: Route.ComponentProps) {
           current={loaderData.publicationStatus.branding.current}
         />
         <PublicationStatus
-          label="Public site"
+          label="Event website"
           draft={loaderData.publicationStatus.site.draftRevision}
           published={loaderData.publicationStatus.site.publishedRevision}
           publishedAt={loaderData.publicationStatus.site.publishedAt}

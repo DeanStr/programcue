@@ -4,6 +4,7 @@ import { useFetcher, useLocation, useNavigate } from "react-router";
 import type { parseProgrammeEmbedSearchParameters } from "~/modules/programme/programme-embed-configuration";
 import {
   type PublicProgrammeSurface,
+  publicProgrammeSurfacePath,
   sortPublishedSpeakers,
 } from "~/modules/programme/programme-presentation";
 import {
@@ -39,6 +40,12 @@ export type PublicProgrammeLoaderData = {
     text: string;
     imageUrl: string | null;
   } | null;
+  sessionShare: {
+    sessionId: string;
+    sessionTitle: string;
+    description: string;
+  } | null;
+  sessionFocusId: string | null;
   site?: PublishedPublicSite | null;
 };
 
@@ -292,8 +299,22 @@ export function usePublicProgrammeModel(loaderData: PublicProgrammeLoaderData) {
     () => sortPublishedSpeakers(programme.speakers),
     [programme.speakers],
   );
-  const [selectedId, setSelectedId] = useState(programme.sessions[0]?.id ?? "");
+  const [selectedId, setSelectedId] = useState(
+    loaderData.sessionFocusId ?? programme.sessions[0]?.id ?? "",
+  );
   const sessionDetailRef = useRef<HTMLElement | null>(null);
+  useEffect(() => {
+    if (embedded) return;
+    setSelectedId(loaderData.sessionFocusId ?? programme.sessions[0]?.id ?? "");
+  }, [embedded, loaderData.sessionFocusId, programme.sessions]);
+  useEffect(() => {
+    if (!loaderData.sessionFocusId || typeof window === "undefined") return;
+    if (!window.matchMedia("(max-width: 900px)").matches) return;
+    window.requestAnimationFrame(() => {
+      sessionDetailRef.current?.focus({ preventScroll: true });
+      sessionDetailRef.current?.scrollIntoView({ block: "start" });
+    });
+  }, [loaderData.sessionFocusId]);
   const [embeddedSelectedSpeakerId, setEmbeddedSelectedSpeakerId] =
     useState("");
   const selectedSpeakerId = embedded
@@ -549,7 +570,13 @@ export function usePublicProgrammeModel(loaderData: PublicProgrammeLoaderData) {
     (showControl("format") && Boolean(format)) ||
     (showControl("room") && Boolean(room));
   const selected =
-    visible.find((session) => session.id === selectedId) ?? visible[0] ?? null;
+    loaderData.sessionFocusId !== null
+      ? (programme.sessions.find(
+          (session) => session.id === loaderData.sessionFocusId,
+        ) ?? null)
+      : (visible.find((session) => session.id === selectedId) ??
+        visible[0] ??
+        null);
   const visibleSessionIds = new Set(visible.map((session) => session.id));
   const facetSpeakerIds = new Set(
     sessionsMatchingFacets.flatMap((session) => session.speakerIds),
@@ -734,6 +761,23 @@ export function usePublicProgrammeModel(loaderData: PublicProgrammeLoaderData) {
    */
   function openSessionDetail(sessionId: string) {
     setSelectedId(sessionId);
+    if (!embedded) {
+      const search = publicSearchWithPendingQueries();
+      search.delete("speaker");
+      search.set("session", sessionId);
+      const nextSearch = `?${search}`;
+      void navigate(
+        {
+          pathname: publicProgrammeSurfacePath(
+            programme.event.slug,
+            "sessions",
+          ),
+          search: nextSearch,
+          hash: "",
+        },
+        { preventScrollReset: true },
+      );
+    }
     if (typeof window === "undefined") return;
     if (!window.matchMedia("(max-width: 900px)").matches) return;
     window.requestAnimationFrame(() => {

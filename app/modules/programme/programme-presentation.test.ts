@@ -7,6 +7,7 @@ import {
   formatProgrammeTimeRange,
   programmeAccentPalette,
   publicProgrammeSessionUrl,
+  publicSessionDetailPath,
   publicSpeakerProfilePath,
   sortPublishedSpeakers,
   speakerSurname,
@@ -17,6 +18,12 @@ describe("programme presentation rules", () => {
   it("builds a server-resolvable public speaker profile path", () => {
     expect(publicSpeakerProfilePath("future/events", "speaker ? one")).toBe(
       "/public/programme/future%2Fevents?speaker=speaker+%3F+one",
+    );
+  });
+
+  it("builds a server-resolvable public session detail path", () => {
+    expect(publicSessionDetailPath("future/events", "session ? one")).toBe(
+      "/public/programme/future%2Fevents/sessions?session=session+%3F+one",
     );
   });
 

@@ -1,10 +1,13 @@
-export async function validatePublishedSiteReferencesForSchedule(
+type PublishedSiteScheduleInput = {
+  eventId: string;
+  organisationId: string;
+  scheduleVersionId: string;
+};
+
+async function publishedSiteReferenceProblemsForSchedule(
   env: CloudflareEnvironment,
-  input: {
-    eventId: string;
-    organisationId: string;
-    scheduleVersionId: string;
-  },
+  input: PublishedSiteScheduleInput,
+  collectAll: boolean,
 ) {
   const invalid = await env.DB.prepare(
     `SELECT reference.kind, reference.record_id AS recordId,
@@ -75,7 +78,7 @@ export async function validatePublishedSiteReferencesForSchedule(
           )
         )
       ORDER BY reference.kind, reference.record_id
-      LIMIT 1`,
+      ${collectAll ? "" : "LIMIT 1"}`,
   )
     .bind(
       input.scheduleVersionId,
@@ -84,17 +87,18 @@ export async function validatePublishedSiteReferencesForSchedule(
       input.scheduleVersionId,
       input.scheduleVersionId,
     )
-    .first<{
+    .all<{
       kind: "session" | "speaker";
       recordId: string;
       label: string | null;
     }>();
-  if (invalid) {
-    const label = invalid.label?.trim() || invalid.recordId;
-    return `The public event home features ${invalid.kind} “${label}”, which is not eligible for this programme version. Update and publish the public site before publishing this schedule.`;
-  }
+  const problems = invalid.results.map((reference) => {
+    const label = reference.label?.trim() || reference.recordId;
+    return `The public event home features ${reference.kind} “${label}”, which is not eligible for this programme version. Update and publish the event website before publishing this schedule.`;
+  });
+  if (!collectAll && problems.length) return problems;
 
-  const invalidRecording = await env.DB.prepare(
+  const invalidRecordings = await env.DB.prepare(
     `SELECT recording.id, recording.published_title AS title,
             recording.session_id AS sessionId
        FROM event_session_recordings recording
@@ -118,12 +122,36 @@ export async function validatePublishedSiteReferencesForSchedule(
              AND content.content_status = 'approved'
         )
       ORDER BY recording.published_title, recording.id
-      LIMIT 1`,
+      ${collectAll ? "" : "LIMIT 1"}`,
   )
     .bind(input.eventId, input.organisationId, input.scheduleVersionId)
-    .first<{ id: string; title: string; sessionId: string }>();
-  if (!invalidRecording) return null;
-  return `Published recording “${invalidRecording.title}” belongs to a session that is not eligible for this programme version. Withdraw the recording before publishing this schedule.`;
+    .all<{ id: string; title: string; sessionId: string }>();
+  return [
+    ...problems,
+    ...invalidRecordings.results.map(
+      (recording) =>
+        `Published recording “${recording.title}” belongs to a session that is not eligible for this programme version. Withdraw the recording before publishing this schedule.`,
+    ),
+  ];
+}
+
+export async function listPublishedSiteReferenceProblemsForSchedule(
+  env: CloudflareEnvironment,
+  input: PublishedSiteScheduleInput,
+) {
+  return publishedSiteReferenceProblemsForSchedule(env, input, true);
+}
+
+export async function validatePublishedSiteReferencesForSchedule(
+  env: CloudflareEnvironment,
+  input: PublishedSiteScheduleInput,
+) {
+  const problems = await publishedSiteReferenceProblemsForSchedule(
+    env,
+    input,
+    false,
+  );
+  return problems[0] ?? null;
 }
 
 export const PUBLIC_SITE_SCHEDULE_ATOMIC_GUARD = `

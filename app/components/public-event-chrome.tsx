@@ -106,7 +106,6 @@ export function PublicEventHeader({
     },
   );
   const overflowLinks = [...programmeOverflowLinks, ...pageLinks];
-  const links = [...programmePrimaryLinks, ...overflowLinks];
   const activeOverflowLink = overflowLinks.find((link) => link.active);
   const itineraryHref = overviewSurface
     ? "#itinerary"
@@ -133,6 +132,20 @@ export function PublicEventHeader({
       >
         {link.label}
       </a>
+    );
+  }
+
+  function navigationGroup(
+    label: string,
+    groupLinks: EventNavigationLink[],
+    onActivate?: () => void,
+  ) {
+    if (!groupLinks.length) return null;
+    return (
+      <section className="public-nav-destination-group" aria-label={label}>
+        <span className="public-nav-destination-heading">{label}</span>
+        {groupLinks.map((link) => navigationLink(link, onActivate))}
+      </section>
     );
   }
 
@@ -168,10 +181,11 @@ export function PublicEventHeader({
               Browse
             </summary>
             <div className="public-nav-overflow-panel">
-              {overflowLinks.map((link) =>
-                navigationLink(link, () =>
-                  overflowNavigationRef.current?.removeAttribute("open"),
-                ),
+              {navigationGroup("Programme views", programmeOverflowLinks, () =>
+                overflowNavigationRef.current?.removeAttribute("open"),
+              )}
+              {navigationGroup("Event information", pageLinks, () =>
+                overflowNavigationRef.current?.removeAttribute("open"),
               )}
             </div>
           </details>
@@ -180,10 +194,16 @@ export function PublicEventHeader({
       <details className="public-mobile-nav" ref={mobileNavigationRef}>
         <summary className="btn small">Browse</summary>
         <nav aria-label={site ? "Event navigation" : "Programme sections"}>
-          {links.map((link) =>
+          {programmePrimaryLinks.map((link) =>
             navigationLink(link, () =>
               mobileNavigationRef.current?.removeAttribute("open"),
             ),
+          )}
+          {navigationGroup("Programme views", programmeOverflowLinks, () =>
+            mobileNavigationRef.current?.removeAttribute("open"),
+          )}
+          {navigationGroup("Event information", pageLinks, () =>
+            mobileNavigationRef.current?.removeAttribute("open"),
           )}
         </nav>
       </details>
