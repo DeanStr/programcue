@@ -13,6 +13,7 @@ import {
 
 import { events, people } from "./schema-core";
 import { epochNow } from "./schema-helpers";
+import { operationJobs } from "./schema-operations-runtime";
 import { sessions } from "./schema-schedule";
 import { submissionRevisions, submissions } from "./schema-submissions";
 
@@ -737,7 +738,9 @@ export const submissionDecisions = sqliteTable(
     notificationFeedbackJson: text("notification_feedback_json").notNull(),
     effectPreviewJson: text("effect_preview_json").notNull().default("{}"),
     idempotencyKey: text("idempotency_key"),
-    notificationOperationId: text("notification_operation_id"),
+    notificationOperationId: text("notification_operation_id").references(
+      () => operationJobs.id,
+    ),
     decidedAt: integer("decided_at").notNull().default(epochNow),
     publishedAt: integer("published_at"),
   },

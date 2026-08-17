@@ -68,7 +68,7 @@ INSERT OR IGNORE INTO audit_events (
   id, actor_kind, origin, metadata_version, organisation_id, event_id,
   action, entity_type, entity_id, metadata_json, created_at
 )
-SELECT 'migration-0039-decision-notification-unlinked:' || decision.id,
+SELECT 'migration-0041-decision-notification-unlinked:' || decision.id,
        'system', 'internal', 1, event.organisation_id, decision.event_id,
        'decision.notification.legacy_unlinked', 'submission_decision',
        decision.id,
@@ -79,7 +79,8 @@ SELECT 'migration-0039-decision-notification-unlinked:' || decision.id,
        unixepoch()
   FROM submission_decisions decision
   JOIN events event ON event.id = decision.event_id
- WHERE decision.status = 'published'
+ WHERE decision.published_at IS NOT NULL
+   AND decision.status IN ('published', 'superseded', 'revoked')
    AND decision.notification_operation_id IS NULL;
 
 CREATE TRIGGER decision_notification_legacy_unlinked_set_closed
@@ -92,12 +93,12 @@ END;
 -- A running legacy operation may already have crossed the provider boundary,
 -- so require it to drain before migration. Unclaimed legacy work cannot be
 -- rendered safely by the new contract and is cancelled with durable evidence.
-CREATE TABLE migration_0039_decision_notification_guard (
+CREATE TABLE migration_0041_decision_notification_guard (
   legacy_running_notifications_must_drain INTEGER NOT NULL
     CHECK (legacy_running_notifications_must_drain = 1)
 );
 
-INSERT INTO migration_0039_decision_notification_guard (
+INSERT INTO migration_0041_decision_notification_guard (
   legacy_running_notifications_must_drain
 )
 SELECT 0
@@ -107,13 +108,13 @@ SELECT 0
    AND json_type(operation.payload_json, '$.communicationId') IS NULL
  LIMIT 1;
 
-DROP TABLE migration_0039_decision_notification_guard;
+DROP TABLE migration_0041_decision_notification_guard;
 
 INSERT OR IGNORE INTO audit_events (
   id, actor_kind, origin, metadata_version, organisation_id, event_id,
   action, entity_type, entity_id, correlation_id, metadata_json, created_at
 )
-SELECT 'migration-0039-decision-notification-cancelled:' || operation.id,
+SELECT 'migration-0041-decision-notification-cancelled:' || operation.id,
        'system', 'internal', 1, operation.organisation_id, operation.event_id,
        'decision.notification.legacy_cancelled', 'operation_job', operation.id,
        operation.correlation_id,

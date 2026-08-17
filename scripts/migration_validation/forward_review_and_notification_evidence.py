@@ -3,7 +3,7 @@ from pathlib import Path
 import sqlite3
 
 
-MIGRATION = "0039_review_and_notification_evidence.sql"
+MIGRATION = "0041_review_and_notification_evidence.sql"
 FILE_POLICY = json.dumps(
     {
         "headshotMaximumBytes": 10_485_760,
@@ -107,19 +107,51 @@ def validate_review_and_notification_evidence_forward_migration(root: Path) -> N
         INSERT INTO submissions (
           id, event_id, submitter_email, public_reference, title, status,
           answers_json, submitted_snapshot_json, submitted_at
-        ) VALUES (
+        ) VALUES
+        (
           'legacy-release-submission', 'notification-event',
           'legacy@example.test', 'LEGACY-RELEASE', 'Legacy release',
+          'rejected', '{}', '{}', unixepoch()
+        ),
+        (
+          'legacy-superseded-submission', 'notification-event',
+          'superseded@example.test', 'LEGACY-SUPERSEDED',
+          'Legacy superseded release', 'rejected', '{}', '{}', unixepoch()
+        ),
+        (
+          'legacy-revoked-submission', 'notification-event',
+          'revoked@example.test', 'LEGACY-REVOKED',
+          'Legacy revoked release', 'rejected', '{}', '{}', unixepoch()
+        ),
+        (
+          'legacy-draft-submission', 'notification-event',
+          'draft@example.test', 'LEGACY-DRAFT', 'Legacy superseded draft',
           'rejected', '{}', '{}', unixepoch()
         );
         INSERT INTO submission_decisions (
           id, event_id, submission_id, revision_number, status, decision,
           decided_by_person_id, notification_feedback_json,
           effect_preview_json, published_at
-        ) VALUES (
+        ) VALUES
+        (
           'legacy-unlinked-decision', 'notification-event',
           'legacy-release-submission', 1, 'published', 'rejected',
           'notification-admin', '[]', '{}', unixepoch()
+        ),
+        (
+          'legacy-superseded-decision', 'notification-event',
+          'legacy-superseded-submission', 1, 'superseded', 'rejected',
+          'notification-admin', '[]', '{}', unixepoch()
+        ),
+        (
+          'legacy-revoked-decision', 'notification-event',
+          'legacy-revoked-submission', 1, 'revoked', 'rejected',
+          'notification-admin', '[]', '{}', unixepoch()
+        ),
+        (
+          'legacy-superseded-draft', 'notification-event',
+          'legacy-draft-submission', 1, 'superseded', 'rejected',
+          'notification-admin', '[]', '{}', NULL
         );
         INSERT INTO communications (
           id, event_id, operation_id, idempotency_key, kind, channel, status,
@@ -212,20 +244,34 @@ def validate_review_and_notification_evidence_forward_migration(root: Path) -> N
     }:
         raise SystemExit("Legacy cancellation audit lost the previous operation state")
 
-    legacy_marker = deployed.execute(
+    legacy_markers = deployed.execute(
         """
         SELECT action, entity_type, entity_id
           FROM audit_events
          WHERE action = 'decision.notification.legacy_unlinked'
-           AND entity_id = 'legacy-unlinked-decision'
+         ORDER BY entity_id
         """
-    ).fetchone()
-    if legacy_marker != (
-        "decision.notification.legacy_unlinked",
-        "submission_decision",
-        "legacy-unlinked-decision",
-    ):
-        raise SystemExit("The migration did not mark its historical unlinked release")
+    ).fetchall()
+    if legacy_markers != [
+        (
+            "decision.notification.legacy_unlinked",
+            "submission_decision",
+            "legacy-revoked-decision",
+        ),
+        (
+            "decision.notification.legacy_unlinked",
+            "submission_decision",
+            "legacy-superseded-decision",
+        ),
+        (
+            "decision.notification.legacy_unlinked",
+            "submission_decision",
+            "legacy-unlinked-decision",
+        ),
+    ]:
+        raise SystemExit(
+            "The migration did not mark exactly its historical released decisions"
+        )
     deployed.execute(
         """
         INSERT INTO audit_events (

@@ -662,7 +662,7 @@ when the pinned render, sender or recipient evidence is incomplete. Existing
 releases without that complete contract remain explicitly pre-migration rather
 than receiving partial backfilled provenance; a migration-time audit marks that
 closed historical set, and the database rejects new NULL-linked release audits.
-Migration `0039` blocks on a legacy notification already crossing the provider
+Migration `0041` blocks on a legacy notification already crossing the provider
 boundary, and cancels and audits queued or failed legacy notification work that
 cannot satisfy the new pinned contract; the Queue acknowledges only an exact
 migration-cancelled legacy

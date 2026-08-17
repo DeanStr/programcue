@@ -70,6 +70,38 @@ function reviewWorkbenchRequest(origin: string) {
   });
 }
 
+async function markDecisionAsMigrationLegacy(decisionId: string) {
+  await workerEnv.DB.exec(
+    "DROP TRIGGER decision_notification_legacy_unlinked_set_closed",
+  );
+  try {
+    await workerEnv.DB.prepare(
+      `INSERT INTO audit_events (
+         id, actor_kind, origin, metadata_version, organisation_id, event_id,
+         action, entity_type, entity_id, metadata_json, created_at
+       ) VALUES (?, 'system', 'internal', 1, 'org-future-events', 'evt-foe-2025',
+                 'decision.notification.legacy_unlinked',
+                 'submission_decision', ?,
+                 '{"reason":"release predates pinned notification evidence","deliveryOutcome":"not asserted by migration"}',
+                 unixepoch())`,
+    )
+      .bind(
+        `migration-0041-decision-notification-unlinked:${decisionId}`,
+        decisionId,
+      )
+      .run();
+  } finally {
+    await workerEnv.DB.prepare(
+      `CREATE TRIGGER decision_notification_legacy_unlinked_set_closed
+       BEFORE INSERT ON audit_events
+       WHEN NEW.action = 'decision.notification.legacy_unlinked'
+       BEGIN
+         SELECT RAISE(ABORT, 'legacy unlinked decision notification set is closed');
+       END`,
+    ).run();
+  }
+}
+
 beforeEach(async () => {
   await ensureDemoEvaluationData(workerEnv);
   await workerEnv.DB.batch([
@@ -172,6 +204,7 @@ describe("evaluation administration results", () => {
                    unixepoch(), unixepoch())`,
       ).bind(decisionId),
     ]);
+    await markDecisionAsMigrationLegacy(decisionId);
 
     try {
       const result = await loader({
@@ -188,6 +221,7 @@ describe("evaluation administration results", () => {
           id: decisionId,
           status: "published",
           decision: "waitlisted",
+          notificationEvidenceState: "legacy",
         }),
       );
     } finally {
@@ -202,6 +236,41 @@ describe("evaluation administration results", () => {
               AND event_id = 'evt-foe-2025'`,
         ),
       ]);
+    }
+  });
+
+  it("rejects a released decision with neither pinned evidence nor the migration marker", async () => {
+    const decisionId = `evaluation-admin-malformed-release-${crypto.randomUUID()}`;
+    await workerEnv.DB.prepare(
+      `INSERT INTO submission_decisions (
+         id, event_id, submission_id, round_id, revision_number, status,
+         decision, decided_by_person_id, rationale,
+         notification_feedback_json, effect_preview_json,
+         decided_at, published_at
+       ) VALUES (?, 'evt-foe-2025', 'demo-evaluation-submission-calm', NULL,
+                 1, 'published', 'waitlisted', 'person-demo-admin',
+                 'Malformed release without durable notification intent.', '[]', '{}',
+                 unixepoch(), unixepoch())`,
+    )
+      .bind(decisionId)
+      .run();
+
+    try {
+      await expect(
+        loader({
+          request: loaderRequest(),
+          params: {},
+          context: context(),
+        } as never),
+      ).rejects.toThrow(
+        `Released decision ${decisionId} has incomplete notification evidence: operation link is missing without the migration audit marker.`,
+      );
+    } finally {
+      await workerEnv.DB.prepare(
+        "DELETE FROM submission_decisions WHERE id = ? AND event_id = 'evt-foe-2025'",
+      )
+        .bind(decisionId)
+        .run();
     }
   });
 

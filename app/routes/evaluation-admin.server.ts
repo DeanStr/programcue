@@ -560,6 +560,20 @@ export async function loader({ request, context }: LoaderFunctionArgs) {
                 decision.published_at AS publishedAt,
                 person.display_name AS decidedByName,
                 decision.notification_operation_id AS notificationOperationId,
+                EXISTS (
+                  SELECT 1
+                    FROM audit_events legacy_unlinked
+                   WHERE legacy_unlinked.id =
+                         'migration-0041-decision-notification-unlinked:' || decision.id
+                     AND legacy_unlinked.organisation_id = event.organisation_id
+                     AND legacy_unlinked.event_id = decision.event_id
+                     AND legacy_unlinked.actor_kind = 'system'
+                     AND legacy_unlinked.origin = 'internal'
+                     AND legacy_unlinked.action =
+                         'decision.notification.legacy_unlinked'
+                     AND legacy_unlinked.entity_type = 'submission_decision'
+                     AND legacy_unlinked.entity_id = decision.id
+                ) AS hasLegacyUnlinkedMarker,
                 operation.id AS notificationOperationRecordId,
                 operation.status AS notificationOperationStatus,
                 operation.last_error AS notificationOperationError,
@@ -625,6 +639,7 @@ export async function loader({ request, context }: LoaderFunctionArgs) {
           publishedAt: number | null;
           decidedByName: string;
           notificationOperationId: string | null;
+          hasLegacyUnlinkedMarker: number;
           notificationOperationRecordId: string | null;
           notificationOperationStatus: string | null;
           notificationOperationError: string | null;
@@ -682,10 +697,15 @@ export async function loader({ request, context }: LoaderFunctionArgs) {
       ) {
         return { ...row, notificationEvidenceState: "not_applicable" as const };
       }
+      const evidencePrefix = `Released decision ${row.id} has incomplete notification evidence`;
       if (row.notificationOperationId === null) {
+        if (row.hasLegacyUnlinkedMarker !== 1) {
+          throw new Error(
+            `${evidencePrefix}: operation link is missing without the migration audit marker.`,
+          );
+        }
         return { ...row, notificationEvidenceState: "legacy" as const };
       }
-      const evidencePrefix = `Released decision ${row.id} has incomplete notification evidence`;
       requireValue(
         row.notificationOperationRecordId,
         `${evidencePrefix}: operation record is missing.`,
