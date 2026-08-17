@@ -184,7 +184,7 @@ export function PublicSiteHome({
       </HomeSection>
     ),
     featured_speakers: (
-      <HomeSection title="Featured speakers">
+      <HomeSection title="Featured speakers" className="public-site-speakers">
         <div className="public-site-feature-grid">
           {featuredSpeakers.map((speaker) => (
             <PreviewSafeLink
@@ -212,7 +212,7 @@ export function PublicSiteHome({
       </HomeSection>
     ),
     featured_sessions: (
-      <HomeSection title="Featured sessions">
+      <HomeSection title="Featured sessions" className="public-site-sessions">
         <div className="public-site-feature-grid sessions">
           {featuredSessions.map((session) => (
             <PreviewSafeLink
@@ -242,7 +242,10 @@ export function PublicSiteHome({
       </HomeSection>
     ),
     statistics: (
-      <HomeSection title="At a glance">
+      <HomeSection
+        title="At a glance"
+        className="public-site-statistics-section"
+      >
         <dl className="public-site-statistics">
           {statistics.map((statistic) => (
             <div key={statistic.label}>

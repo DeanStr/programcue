@@ -281,6 +281,19 @@
   font-weight: var(--weight-semibold);
   letter-spacing: var(--tracking-tight);
 }
+/* A short rule repeats the event identity below the masthead without turning
+   every section into another branded container. The introduction already has
+   a full-height accent edge, so it does not repeat the mark. */
+.public-site-section:not(.public-site-introduction)
+  .public-site-section-heading
+  h2::after {
+  content: "";
+  display: block;
+  width: var(--space-7);
+  height: 2px;
+  margin-top: var(--space-2);
+  background: var(--event-accent);
+}
 /* The introduction is the one section that benefits from a bounded surface:
    it is the organiser's opening statement and primary action, not another
    index of records. A quiet accent tint and a narrow brand edge distinguish it
@@ -351,6 +364,27 @@
 .public-site-feature-grid > a:hover,
 .public-site-feature-grid > a:focus-visible {
   border-top-color: var(--event-accent);
+}
+/* Speakers form an editorial profile strip rather than a row of cards. The
+   section-wide wash gives portraits a place to live while the open right edge
+   keeps the entry part of the page. */
+.public-site-speakers .public-site-feature-grid > * {
+  padding-inline: var(--space-3);
+  background: linear-gradient(
+    90deg,
+    color-mix(in srgb, var(--event-accent) 8%, var(--surface)) 0%,
+    transparent 78%
+  );
+}
+/* Sessions use a timetable rail, a cue specific to scheduled content. It adds
+   hierarchy without enclosing each session in a generic rounded rectangle. */
+.public-site-sessions .public-site-feature-grid > * {
+  border-left: 2px solid var(--accent-line);
+  padding-left: var(--space-4);
+}
+.public-site-sessions .public-site-feature-grid > *:hover,
+.public-site-sessions .public-site-feature-grid > *:focus-visible {
+  border-left-color: var(--event-accent);
 }
 .public-site-feature-card,
 .public-site-recording-card > a {
@@ -448,6 +482,19 @@ a.public-site-feature-card:focus-visible img {
   grid-auto-columns: minmax(0, 1fr);
   gap: var(--space-4);
   margin: 0;
+}
+/* One continuous band, not four metric cards. Square edges and a fading tint
+   make the data a change of pace in the editorial column rather than another
+   set of containers. */
+.public-site-statistics-section {
+  padding: clamp(var(--space-5), 3cqw, var(--space-7));
+  border-block: 1px solid var(--accent-line);
+  background: linear-gradient(
+    90deg,
+    var(--accent-soft) 0%,
+    color-mix(in srgb, var(--event-accent) 4%, var(--surface)) 62%,
+    transparent 100%
+  );
 }
 .public-site-statistics div {
   display: grid;

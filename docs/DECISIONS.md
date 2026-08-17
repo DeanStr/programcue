@@ -1191,17 +1191,20 @@ hero remains the dominant accent surface above the programme. Public light,
 dark and system themes remain event-site choices; a global application theme
 remains deferred for the reason documented above.
 
-Within that column the rule is the only structural device, and it carries two
-weights: full strength between sections, and a lighter mix between the entries
-inside one. Featured speakers, featured sessions and the FAQ were tinted,
-bordered, rounded boxes, which is the shape a page uses when it has nothing
-else to separate things with; a page that already rules its sections does not
-need it twice. The FAQ replaces the browser's default disclosure triangle with
-a plus drawn from two hairlines, so the one piece of unstyled chrome on a
-public page is gone. Repeated decorative marks are removed where the heading
-already says what the list holds — every entry under "Featured sessions" is a
-session, so a calendar icon on each one is noise — and kept where they carry
-information, such as a recording's play mark or a speaker's portrait.
+Within that column hairlines remain the default structural device, carrying
+full strength between sections and a lighter mix between entries. Limited,
+content-specific cues keep the page from becoming one undifferentiated ruled
+list: section headings carry a short accent rule, speakers sit on an open-ended
+accent wash, sessions use a timetable rail, and the statistics share one
+square-edged band. None encloses each record in a generic rounded card.
+Featured speakers, featured sessions and the FAQ previously repeated tinted,
+bordered boxes even though the page already separated their entries. The FAQ
+replaces the browser's default disclosure triangle with a plus drawn from two
+hairlines, so the one piece of unstyled chrome on a public page is gone.
+Repeated decorative marks are removed where the heading already says what the
+list holds — every entry under "Featured sessions" is a session, so a calendar
+icon on each one is noise — and kept where they carry information, such as a
+recording's play mark or a speaker's portrait.
 
 Restraint is not the same as having nothing to look at, so scale is spent on
 content rather than ornament. Statistics retain a strong numeric step but stay
