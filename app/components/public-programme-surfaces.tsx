@@ -2,6 +2,7 @@ import { type ReactNode, type Ref, useRef, useState } from "react";
 import {
   formatProgrammeDuration,
   formatProgrammeTimeRange,
+  publicSessionDetailPath,
 } from "~/modules/programme/programme-presentation";
 import type {
   PublishedSession,
@@ -831,7 +832,10 @@ function SpeakerDetailPanel({
             {model.selectedSpeakerAllSessions.length ? (
               model.selectedSpeakerAllSessions.map((session) => (
                 <a
-                  href={`/public/programme/${encodeURIComponent(model.programme.event.slug)}#session-${session.slug}`}
+                  href={publicSessionDetailPath(
+                    model.programme.event.slug,
+                    session.id,
+                  )}
                   key={session.id}
                 >
                   <strong>{session.title}</strong>

@@ -1,5 +1,5 @@
 import ical, { ICalCalendarMethod } from "ical-generator";
-import { publicProgrammeSessionUrl } from "~/modules/programme/programme-presentation";
+import { publicSessionDetailPath } from "~/modules/programme/programme-presentation";
 import { publicItineraryIdentity } from "~/modules/programme/public-itinerary-identity.server";
 import {
   PublicProgrammeService,
@@ -121,11 +121,10 @@ export async function loader({ request, params, context }: Route.LoaderArgs) {
         ]
           .filter(Boolean)
           .join(", "),
-        url: publicProgrammeSessionUrl(
+        url: new URL(
+          publicSessionDetailPath(programme.event.slug, session.id),
           env.BETTER_AUTH_URL,
-          programme.event.slug,
-          session.slug,
-        ),
+        ).toString(),
       });
     }
     return new Response(calendar.toString(), {

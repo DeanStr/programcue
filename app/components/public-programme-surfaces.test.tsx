@@ -319,7 +319,7 @@ describe("public programme speaker surfaces", () => {
     expect(markup).toContain("Tuesday, May 20");
     expect(markup).toContain("9:00–9:45 AM");
     expect(markup).toContain(
-      'href="/public/programme/future-of-events-2027#session-future-attendee-engagement"',
+      'href="/public/programme/future-of-events-2027/sessions?session=session-1"',
     );
   });
 

@@ -148,7 +148,7 @@ test("anonymous visitors can use all programme surfaces and the gallery detail",
     detail.getByRole("link", { name: "The Future of Attendee Engagement" }),
   ).toHaveAttribute(
     "href",
-    "/public/programme/future-of-events-2027#session-future-attendee-engagement",
+    "/public/programme/future-of-events-2027/sessions?session=demo-session-1",
   );
   await detail.getByRole("button", { name: "Close speaker details" }).click();
   await expect(detail).toHaveCount(0);

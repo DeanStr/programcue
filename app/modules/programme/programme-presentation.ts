@@ -352,16 +352,3 @@ export function formatProgrammeEventDay(date: string) {
     timeZone: "UTC",
   }).format(instant);
 }
-
-export function publicProgrammeSessionUrl(
-  baseUrl: string,
-  eventSlug: string,
-  sessionSlug: string,
-) {
-  const url = new URL(
-    `/public/programme/${encodeURIComponent(eventSlug)}`,
-    baseUrl,
-  );
-  url.hash = `session-${sessionSlug}`;
-  return url.toString();
-}

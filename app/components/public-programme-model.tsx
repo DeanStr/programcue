@@ -302,11 +302,18 @@ export function usePublicProgrammeModel(loaderData: PublicProgrammeLoaderData) {
   const [selectedId, setSelectedId] = useState(
     loaderData.sessionFocusId ?? programme.sessions[0]?.id ?? "",
   );
+  const [sessionFocusOverride, setSessionFocusOverride] = useState<
+    string | null | undefined
+  >(undefined);
   const sessionDetailRef = useRef<HTMLElement | null>(null);
   useEffect(() => {
     if (embedded) return;
     setSelectedId(loaderData.sessionFocusId ?? programme.sessions[0]?.id ?? "");
   }, [embedded, loaderData.sessionFocusId, programme.sessions]);
+  // biome-ignore lint/correctness/useExhaustiveDependencies: A loader focus change releases the local pending focus override.
+  useEffect(() => {
+    setSessionFocusOverride(undefined);
+  }, [loaderData.sessionFocusId]);
   useEffect(() => {
     if (!loaderData.sessionFocusId || typeof window === "undefined") return;
     if (!window.matchMedia("(max-width: 900px)").matches) return;
@@ -340,9 +347,17 @@ export function usePublicProgrammeModel(loaderData: PublicProgrammeLoaderData) {
     return search;
   }, [location.search]);
   const replacePublicSearchParameter = useCallback(
-    (name: string, value: string) => {
+    (
+      name: string,
+      value: string,
+      { clearSession = false }: { clearSession?: boolean } = {},
+    ) => {
       if (embedded) return;
       const search = publicSearchWithPendingQueries();
+      if (clearSession) {
+        search.delete("session");
+        setSessionFocusOverride(null);
+      }
       if (value) search.set(name, value);
       else search.delete(name);
       const nextSearch = search.size ? `?${search}` : "";
@@ -366,6 +381,7 @@ export function usePublicProgrammeModel(loaderData: PublicProgrammeLoaderData) {
   );
   const setQuery = (value: string) => {
     pendingTextQueries.current.query = value;
+    if (!embedded) setSessionFocusOverride(null);
     setQueryState(value);
   };
   const setStandaloneDirectoryQuery = (value: string) => {
@@ -378,19 +394,21 @@ export function usePublicProgrammeModel(loaderData: PublicProgrammeLoaderData) {
   };
   const setTrack = (value: string) => {
     setTrackState(value);
-    replacePublicSearchParameter("track", value);
+    replacePublicSearchParameter("track", value, { clearSession: true });
   };
   const setFormat = (value: string) => {
     setFormatState(value);
-    replacePublicSearchParameter("format", value);
+    replacePublicSearchParameter("format", value, { clearSession: true });
   };
   const setRoom = (value: string) => {
     setRoomState(value);
-    replacePublicSearchParameter("room", value);
+    replacePublicSearchParameter("room", value, { clearSession: true });
   };
   const setPublicDay = (value: string) => {
     setDay(value);
-    replacePublicSearchParameter("day", value === "All days" ? "" : value);
+    replacePublicSearchParameter("day", value === "All days" ? "" : value, {
+      clearSession: true,
+    });
   };
   const showControl = (control: (typeof embedOptions.controls)[number]) =>
     !embedded || visibleEmbedControls.has(control);
@@ -426,7 +444,10 @@ export function usePublicProgrammeModel(loaderData: PublicProgrammeLoaderData) {
       new URLSearchParams(location.search).get("query") ?? "";
     if (nextQuery === currentQuery) return;
     const timer = window.setTimeout(
-      () => replacePublicSearchParameter("query", nextQuery),
+      () =>
+        replacePublicSearchParameter("query", nextQuery, {
+          clearSession: true,
+        }),
       300,
     );
     return () => window.clearTimeout(timer);
@@ -521,15 +542,6 @@ export function usePublicProgrammeModel(loaderData: PublicProgrammeLoaderData) {
     rooms,
     tracks,
   ]);
-  useEffect(() => {
-    if (location.hash.startsWith("#session-")) {
-      const slug = location.hash.slice("#session-".length);
-      const linked = programme.sessions.find(
-        (session) => session.slug === slug,
-      );
-      if (linked) setSelectedId(linked.id);
-    }
-  }, [location.hash, programme.sessions]);
   const normalisedQuery = query.trim().toLocaleLowerCase();
   const sessionsMatchingFacets = useMemo(
     () =>
@@ -570,10 +582,14 @@ export function usePublicProgrammeModel(loaderData: PublicProgrammeLoaderData) {
     (showControl("track") && Boolean(track)) ||
     (showControl("format") && Boolean(format)) ||
     (showControl("room") && Boolean(room));
+  const effectiveSessionFocusId =
+    sessionFocusOverride === undefined
+      ? loaderData.sessionFocusId
+      : sessionFocusOverride;
   const selected =
-    loaderData.sessionFocusId !== null
+    effectiveSessionFocusId !== null
       ? (programme.sessions.find(
-          (session) => session.id === loaderData.sessionFocusId,
+          (session) => session.id === effectiveSessionFocusId,
         ) ?? null)
       : (visible.find((session) => session.id === selectedId) ??
         visible[0] ??
@@ -697,6 +713,7 @@ export function usePublicProgrammeModel(loaderData: PublicProgrammeLoaderData) {
     const sessionId = search.get("session");
     if (sessionId) speakerProfileReturnSessionRef.current = sessionId;
     search.delete("session");
+    setSessionFocusOverride(null);
     search.set("speaker", speakerId);
     const nextSearch = `?${search}`;
     pendingClientSearches.current.add(nextSearch);
@@ -767,6 +784,7 @@ export function usePublicProgrammeModel(loaderData: PublicProgrammeLoaderData) {
    * did nothing at all on a phone.
    */
   function openSessionDetail(sessionId: string) {
+    if (!embedded) setSessionFocusOverride(sessionId);
     setSelectedId(sessionId);
     if (!embedded) {
       const search = publicSearchWithPendingQueries();
@@ -818,12 +836,14 @@ export function usePublicProgrammeModel(loaderData: PublicProgrammeLoaderData) {
     if (showControl("format")) setFormatState("");
     if (showControl("room")) setRoomState("");
     if (!embedded) {
+      setSessionFocusOverride(null);
       const search = new URLSearchParams(location.search);
       if (showControl("search")) search.delete("query");
       if (showControl("day")) search.delete("day");
       if (showControl("track")) search.delete("track");
       if (showControl("format")) search.delete("format");
       if (showControl("room")) search.delete("room");
+      search.delete("session");
       const nextSearch = search.size ? `?${search}` : "";
       pendingClientSearches.current.add(nextSearch);
       void navigate(
@@ -839,6 +859,7 @@ export function usePublicProgrammeModel(loaderData: PublicProgrammeLoaderData) {
 
   function selectSavedSession(sessionId: string) {
     if (!visibleSessionIds.has(sessionId)) clearFilters();
+    else setSessionFocusOverride(null);
     setSelectedId(sessionId);
   }
 

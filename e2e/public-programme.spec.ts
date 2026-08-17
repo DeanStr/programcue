@@ -93,6 +93,58 @@ test("public programme filters sessions by track, format and room", async ({
   await expect(detailProfileLink).toBeFocused();
 });
 
+test("public programme clears a pinned session when session filters change", async ({
+  page,
+}) => {
+  await waitForInterface(
+    page,
+    "/public/programme/future-of-events-2027/sessions?session=demo-session-1",
+  );
+  const detailTitle = page.locator(".session-detail-panel h2");
+  await expect(detailTitle).toHaveText("The Future of Attendee Engagement");
+
+  await page.getByLabel("Filter by track").selectOption("AI & Innovation");
+  await expect(page).not.toHaveURL(/session=/u);
+  await expect(detailTitle).toHaveText("AI in Event Operations");
+  await expect(page.locator(".programme-row")).toHaveCount(2);
+
+  await waitForInterface(
+    page,
+    "/public/programme/future-of-events-2027/sessions?session=demo-session-1",
+  );
+  await page
+    .getByLabel("Search sessions, speakers, or topics")
+    .fill("event operations");
+  await expect(page).not.toHaveURL(/session=/u);
+  await expect(detailTitle).toHaveText("AI in Event Operations");
+});
+
+test("public session detail exposes its canonical share link", async ({
+  page,
+}) => {
+  await waitForInterface(page, "/public/programme/future-of-events-2027");
+  await page
+    .locator(".programme-entry")
+    .filter({ hasText: "The Future of Attendee Engagement" })
+    .locator(".programme-row")
+    .click();
+
+  const shareLink = page.getByRole("link", {
+    name: "Shareable session link",
+  });
+  await expect(shareLink).toHaveAttribute(
+    "href",
+    "/public/programme/future-of-events-2027/sessions?session=demo-session-1",
+  );
+  await shareLink.click();
+  await expect(page).toHaveURL(
+    "/public/programme/future-of-events-2027/sessions?session=demo-session-1",
+  );
+  await expect(page).toHaveTitle(
+    "The Future of Attendee Engagement · Future of Events 2027",
+  );
+});
+
 test("public programme clears unavailable saved facets honestly", async ({
   page,
 }) => {

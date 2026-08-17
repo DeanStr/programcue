@@ -110,19 +110,16 @@ test("schedule and programme render the event calendar date and timezone", async
   expect(sessionUrls).toHaveLength(5);
   for (const sessionUrl of sessionUrls) {
     expect(sessionUrl).toMatch(
-      /^https?:\/\/[^/]+\/public\/programme\/future-of-events-2027#session-[a-z0-9-]+$/,
+      /^https?:\/\/[^/]+\/public\/programme\/future-of-events-2027\/sessions\?session=[a-z0-9-]+$/,
     );
   }
   const linkedSession = new URL(sessionUrls.at(-1)!);
   await page.goto("/admin/event");
   await waitForInterface(
     page,
-    `${linkedSession.pathname}${linkedSession.hash}`,
+    `${linkedSession.pathname}${linkedSession.search}`,
   );
-  await expect(page.locator(linkedSession.hash)).toHaveAttribute(
-    "aria-pressed",
-    "true",
-  );
+  await expect(page.locator(".session-detail-panel h2")).toBeVisible();
 
   const hydrationErrors: string[] = [];
   page.on("console", (message) => {

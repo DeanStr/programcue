@@ -6,7 +6,6 @@ import {
   formatProgrammeEventDay,
   formatProgrammeTimeRange,
   programmeAccentPalette,
-  publicProgrammeSessionUrl,
   publicSessionDetailPath,
   publicSpeakerProfilePath,
   sortPublishedSpeakers,
@@ -63,18 +62,6 @@ describe("programme presentation rules", () => {
     });
     expect(programmeAccentPalette("#ffffff").ink).not.toBe("#ffffff");
     expect(() => programmeAccentPalette("white")).toThrow(/six-digit/i);
-  });
-
-  it("keeps calendar links scoped to the requested public event", () => {
-    expect(
-      publicProgrammeSessionUrl(
-        "https://events.example.com",
-        "second-event",
-        "opening-keynote",
-      ),
-    ).toBe(
-      "https://events.example.com/public/programme/second-event#session-opening-keynote",
-    );
   });
 
   it("orders speakers by surname with deterministic honorific and suffix handling", () => {

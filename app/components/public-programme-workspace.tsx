@@ -38,6 +38,7 @@ import {
   formatProgrammeTimeRange,
   programmeAccentPalette,
   publicProgrammeSurfacePath,
+  publicSessionDetailPath,
   publicSpeakerProfilePath,
 } from "~/modules/programme/programme-presentation";
 
@@ -414,7 +415,6 @@ function ProgrammeSessionEntry({
     >
       <button
         type="button"
-        id={`session-${session.slug}`}
         className={`programme-row${active ? " active" : ""}${model.showEmbedField("time") ? "" : " without-time"}`}
         aria-pressed={active}
         onClick={() => model.openSessionDetail(session.id)}
@@ -864,7 +864,7 @@ function SessionDetailPanel({ model }: { model: PublicProgrammeModel }) {
       <div className="divider" />
       <Link
         className="btn small"
-        to={`/public/programme/${programme.event.slug}#session-${selected.slug}`}
+        to={publicSessionDetailPath(programme.event.slug, selected.id)}
       >
         Shareable session link
       </Link>
@@ -935,7 +935,6 @@ function OverviewSpeakers({ model }: { model: PublicProgrammeModel }) {
     programme,
     speakerProfileRef,
     closeSpeakerProfile,
-    setSelectedId,
   } = model;
   return (
     <section
@@ -1029,9 +1028,11 @@ function OverviewSpeakers({ model }: { model: PublicProgrammeModel }) {
                 {selectedSpeakerSessions.length ? (
                   selectedSpeakerSessions.map((session) => (
                     <a
-                      href={`#session-${session.slug}`}
+                      href={publicSessionDetailPath(
+                        programme.event.slug,
+                        session.id,
+                      )}
                       key={session.id}
-                      onClick={() => setSelectedId(session.id)}
                     >
                       {model.showEmbedField("time") ? (
                         <>
