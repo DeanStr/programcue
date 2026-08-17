@@ -271,6 +271,155 @@ export function EvaluationUnifiedResults() {
                       <details>
                         <summary>Review and decision detail</summary>
                         <div className="stack mt">
+                          <article className="card pad">
+                            <strong>Human review aggregate · canonical</strong>
+                            <p>
+                              {result.averageScore === null
+                                ? "No scored human reviews."
+                                : `${Number(result.averageScore).toFixed(2)} / 5 from ${result.completedReviewCount} completed human review${result.completedReviewCount === 1 ? "" : "s"}.`}
+                            </p>
+                            <p className="help">
+                              This is the score used for review coverage,
+                              disagreement, sorting and decision readiness.
+                            </p>
+                          </article>
+                          {result.aiAssessment ? (
+                            <>
+                              <article className="card pad">
+                                <strong>AI advisory · immutable</strong>
+                                <p>
+                                  <strong>
+                                    {result.aiAssessment.score.toFixed(1)} / 5
+                                  </strong>
+                                </p>
+                                <p>{result.aiAssessment.rationale}</p>
+                                <p className="help">
+                                  {result.aiAssessment.providerLabel} ·{" "}
+                                  {result.aiAssessment.model} · submission
+                                  revision{" "}
+                                  {result.aiAssessment
+                                    .submissionRevisionNumber ??
+                                    "legacy source"}{" "}
+                                  · generated{" "}
+                                  <EventDateTime
+                                    epochSeconds={
+                                      result.aiAssessment.generatedAt
+                                    }
+                                    timeZone={loaderData.eventTimezone}
+                                  />
+                                </p>
+                                {result.aiAssessment.sourceSnapshotSha256 ? (
+                                  <p className="help">
+                                    Submitted snapshot SHA-256:{" "}
+                                    {result.aiAssessment.sourceSnapshotSha256}
+                                  </p>
+                                ) : null}
+                              </article>
+                              <article className="card pad">
+                                <strong>
+                                  Human assessment of the AI advisory ·
+                                  non-canonical
+                                </strong>
+                                {result.aiAssessment.overridden ? (
+                                  <>
+                                    <p>
+                                      <strong>
+                                        {result.aiAssessment.overrideScore.toFixed(
+                                          1,
+                                        )}{" "}
+                                        / 5
+                                      </strong>{" "}
+                                      · {result.aiAssessment.overrideByName}
+                                    </p>
+                                    <p>
+                                      {result.aiAssessment.overrideRationale}
+                                    </p>
+                                    <p className="help">
+                                      Recorded{" "}
+                                      <EventDateTime
+                                        epochSeconds={
+                                          result.aiAssessment.overrideAt
+                                        }
+                                        timeZone={loaderData.eventTimezone}
+                                      />
+                                    </p>
+                                  </>
+                                ) : (
+                                  <p className="help">
+                                    No authorised human assessment has been
+                                    recorded for this advisory.
+                                  </p>
+                                )}
+                                <p className="help">
+                                  Does not affect review averages, coverage,
+                                  disagreement, sorting, or decision readiness.
+                                </p>
+                                {loaderData.canAssessAiAdvisories ? (
+                                  <Form method="post" className="stack mt">
+                                    <input
+                                      type="hidden"
+                                      name="intent"
+                                      value="override-ai-review-assessment"
+                                    />
+                                    <input
+                                      type="hidden"
+                                      name="assessmentId"
+                                      value={result.aiAssessment.id}
+                                    />
+                                    <input
+                                      type="hidden"
+                                      name="expectedRevision"
+                                      value={result.aiAssessment.revision}
+                                    />
+                                    <label className="label">
+                                      Human assessment score
+                                      <input
+                                        className="input"
+                                        name="score"
+                                        type="number"
+                                        min="1"
+                                        max="5"
+                                        step="0.1"
+                                        defaultValue={
+                                          result.aiAssessment.overrideScore ??
+                                          result.aiAssessment.score
+                                        }
+                                        required
+                                      />
+                                    </label>
+                                    <label className="label">
+                                      Assessment rationale
+                                      <textarea
+                                        className="textarea"
+                                        name="rationale"
+                                        minLength={10}
+                                        maxLength={2000}
+                                        defaultValue={
+                                          result.aiAssessment
+                                            .overrideRationale ?? ""
+                                        }
+                                        required
+                                      />
+                                    </label>
+                                    <label className="speaker-confirm">
+                                      <input
+                                        type="checkbox"
+                                        name="confirmed"
+                                        value="true"
+                                        required
+                                      />
+                                      Save this as a separate, non-canonical
+                                      human assessment without altering the AI
+                                      artifact.
+                                    </label>
+                                    <button type="submit" className="btn small">
+                                      Save human assessment
+                                    </button>
+                                  </Form>
+                                ) : null}
+                              </article>
+                            </>
+                          ) : null}
                           {result.reviews.length ? (
                             result.reviews.map((review) => (
                               <article
@@ -426,6 +575,170 @@ export function EvaluationUnifiedResults() {
                                     {decision.rationale
                                       ? ` · ${decision.rationale}`
                                       : ""}
+                                    {[
+                                      "published",
+                                      "superseded",
+                                      "revoked",
+                                    ].includes(decision.status) ? (
+                                      <div className="card pad mt">
+                                        <strong>
+                                          Decision notification evidence
+                                        </strong>
+                                        {decision.notificationEvidenceState ===
+                                        "available" ? (
+                                          <dl>
+                                            <div>
+                                              <dt>Decision</dt>
+                                              <dd>
+                                                {humanise(decision.decision)}
+                                              </dd>
+                                            </div>
+                                            <div>
+                                              <dt>Recipient</dt>
+                                              <dd>
+                                                {decision.recipientName}{" "}
+                                                {`<${decision.recipientAddress}>`}
+                                              </dd>
+                                            </div>
+                                            <div>
+                                              <dt>Template</dt>
+                                              <dd>
+                                                {decision.templateName} v
+                                                {decision.templateVersionNumber}
+                                              </dd>
+                                            </div>
+                                            <div>
+                                              <dt>Rendered subject</dt>
+                                              <dd>
+                                                {decision.renderedSubject}
+                                              </dd>
+                                            </div>
+                                            <div>
+                                              <dt>Queue operation</dt>
+                                              <dd>
+                                                <Link
+                                                  to={`/admin/operations?operation=${encodeURIComponent(decision.notificationOperationId)}`}
+                                                >
+                                                  {
+                                                    decision.notificationOperationStatus
+                                                  }
+                                                </Link>{" "}
+                                                <code>
+                                                  {
+                                                    decision.notificationOperationId
+                                                  }
+                                                </code>
+                                                {decision.notificationOperationError
+                                                  ? ` · ${decision.notificationOperationError}`
+                                                  : ""}
+                                              </dd>
+                                            </div>
+                                            <div>
+                                              <dt>Communication</dt>
+                                              <dd>
+                                                {decision.communicationStatus}{" "}
+                                                <code>
+                                                  {decision.communicationId}
+                                                </code>
+                                              </dd>
+                                            </div>
+                                            <div>
+                                              <dt>Recipient delivery</dt>
+                                              <dd>
+                                                {decision.deliveryStatus} via{" "}
+                                                {decision.deliveryProvider}{" "}
+                                                <code>
+                                                  {decision.deliveryId}
+                                                </code>
+                                              </dd>
+                                            </div>
+                                            <div>
+                                              <dt>Message integrity SHA-256</dt>
+                                              <dd>
+                                                <code>
+                                                  {decision.renderedBodySha256}
+                                                </code>
+                                              </dd>
+                                            </div>
+                                            <div>
+                                              <dt>Sender</dt>
+                                              <dd>
+                                                {decision.senderFromName}{" "}
+                                                {`<${decision.senderFromEmail}>`}
+                                              </dd>
+                                            </div>
+                                            {decision.failureMessage ? (
+                                              <div>
+                                                <dt>Provider failure</dt>
+                                                <dd>
+                                                  {decision.failureCode
+                                                    ? `${decision.failureCode}: `
+                                                    : ""}
+                                                  {decision.failureMessage}
+                                                </dd>
+                                              </div>
+                                            ) : null}
+                                          </dl>
+                                        ) : decision.notificationEvidenceState ===
+                                          "retained" ? (
+                                          <>
+                                            <dl>
+                                              <div>
+                                                <dt>Queue operation</dt>
+                                                <dd>
+                                                  <Link
+                                                    to={`/admin/operations?operation=${encodeURIComponent(decision.notificationOperationId)}`}
+                                                  >
+                                                    {
+                                                      decision.notificationOperationStatus
+                                                    }
+                                                  </Link>{" "}
+                                                  <code>
+                                                    {
+                                                      decision.notificationOperationId
+                                                    }
+                                                  </code>
+                                                </dd>
+                                              </div>
+                                              <div>
+                                                <dt>Communication</dt>
+                                                <dd>
+                                                  {decision.communicationStatus}{" "}
+                                                  <code>
+                                                    {decision.communicationId}
+                                                  </code>
+                                                </dd>
+                                              </div>
+                                              <div>
+                                                <dt>Recipient delivery</dt>
+                                                <dd>
+                                                  {decision.deliveryStatus}{" "}
+                                                  <code>
+                                                    {decision.deliveryId}
+                                                  </code>
+                                                </dd>
+                                              </div>
+                                            </dl>
+                                            <p className="help">
+                                              Recipient and message evidence was
+                                              redacted when participant
+                                              retention completed.
+                                            </p>
+                                          </>
+                                        ) : (
+                                          <p className="help">
+                                            Pre-migration released decision:
+                                            exact linked recipient delivery
+                                            evidence was never captured.
+                                          </p>
+                                        )}
+                                        <p className="help">
+                                          Queue acceptance is not proof of
+                                          delivery. Message bodies are not
+                                          shown.
+                                        </p>
+                                      </div>
+                                    ) : null}
                                   </li>
                                 ))}
                               </ul>

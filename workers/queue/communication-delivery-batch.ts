@@ -29,8 +29,18 @@ type CommunicationSendMessage = {
 
 export const communicationContentSnapshotSchema = z.object({
   schemaVersion: z.literal(1),
+  renderContractVersion: z.literal(1).optional(),
   category: z.string(),
   subjectTemplate: z.string(),
+  sender: z
+    .object({
+      id: z.string(),
+      provider: z.enum(["resend", "mailpit"]).optional(),
+      fromName: z.string(),
+      fromEmail: z.string(),
+      replyToEmail: z.string().nullable(),
+    })
+    .optional(),
   content: templateContentSchema,
   event: z.object({
     eventName: z.string(),
@@ -44,6 +54,8 @@ type CommunicationSnapshot = z.infer<typeof communicationContentSnapshotSchema>;
 
 type ClaimedCommunication = {
   kind: "transactional" | "optional";
+  senderProfileId: string;
+  senderProvider: "resend" | "mailpit";
   fromName: string;
   fromEmail: string;
   replyToEmail: string | null;
@@ -56,12 +68,24 @@ type CommunicationDelivery = {
   name: string;
   idempotencyKey: string;
   sourceValuesJson: string;
+  renderedSubject: string | null;
+  renderedBodySha256: string | null;
 };
 
 const sourceMergeValuesSchema = z.record(
   z.string(),
   z.union([z.string(), z.number(), z.null()]),
 );
+
+async function sha256(value: string) {
+  const digest = await crypto.subtle.digest(
+    "SHA-256",
+    new TextEncoder().encode(value),
+  );
+  return Array.from(new Uint8Array(digest), (byte) =>
+    byte.toString(16).padStart(2, "0"),
+  ).join("");
+}
 
 export async function deliverCommunicationBatch(input: {
   env: CloudflareEnvironment;
@@ -323,6 +347,22 @@ export async function deliverCommunicationBatch(input: {
       };
       const subject = renderMergeTemplate(snapshot.subjectTemplate, values);
       const body = renderMergeTemplate(snapshot.content.body, values);
+      if (
+        delivery.renderedSubject !== null &&
+        delivery.renderedSubject !== subject
+      ) {
+        throw new Error(
+          "The pinned communication subject no longer matches its render contract.",
+        );
+      }
+      if (
+        delivery.renderedBodySha256 !== null &&
+        delivery.renderedBodySha256 !== (await sha256(body))
+      ) {
+        throw new Error(
+          "The pinned communication body no longer matches its render contract.",
+        );
+      }
       const rendered = await renderProgramCueEmail({
         preview: subject,
         heading: subject,
@@ -341,7 +381,7 @@ export async function deliverCommunicationBatch(input: {
         from: `${communication.fromName} <${communication.fromEmail}>`,
         replyTo: communication.replyToEmail,
         to: delivery.address,
-        subject,
+        subject: delivery.renderedSubject ?? subject,
         html: rendered.html,
         text: rendered.text,
         idempotencyKey: delivery.idempotencyKey,

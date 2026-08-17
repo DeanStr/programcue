@@ -1,4 +1,5 @@
 import { expect, test } from "@playwright/test";
+import { e2eOrigin } from "./support/e2e-origin";
 import { resetDemoEvent } from "./support/reset-demo-event";
 
 test.beforeEach(async ({ request }) => {
@@ -442,6 +443,152 @@ test("a committee chair can save and resume an accepted decision draft", async (
     decision.getByLabel("Acceptance session duration (minutes)"),
   ).toHaveValue("75");
 
+  await resetDemoEvent(request);
+});
+
+test("a released decision keeps inspectable recipient delivery evidence after reload", async ({
+  page,
+  request,
+}) => {
+  test.setTimeout(60_000);
+  await resetDemoEvent(request);
+  await page.context().addCookies([
+    {
+      name: "program_cue_event",
+      value: "evt-foe-2025",
+      domain: "127.0.0.1",
+      path: "/",
+      httpOnly: true,
+      sameSite: "Lax",
+    },
+    {
+      name: "program_cue_demo_identity",
+      value: "administrator",
+      domain: "127.0.0.1",
+      path: "/",
+      httpOnly: true,
+      sameSite: "Lax",
+    },
+  ]);
+  await page.goto("/admin/review");
+  await page.locator("body[data-hydrated='true']").waitFor();
+
+  const proposal = page
+    .getByRole("region", { name: "Proposal queue" })
+    .getByRole("row", { name: /Designing inclusive attendee journeys/u });
+  await proposal.getByRole("button", { name: "Decide" }).click();
+  const decision = page.getByRole("dialog", { name: /Decision ·/ });
+  await decision.locator('select[name="decision"]').selectOption("rejected");
+  await decision
+    .getByLabel("Rationale")
+    .fill("The programme already covers this material in greater depth.");
+  const evidenceOverride = decision.getByRole("checkbox", {
+    name: /Confirm review-evidence override/u,
+  });
+  if (await evidenceOverride.isVisible()) await evidenceOverride.check();
+  await decision.getByRole("button", { name: "Release decision" }).click();
+  await expect(
+    page.getByRole("status").filter({ hasText: /notification queued/i }),
+  ).toBeVisible();
+
+  async function expectDeliveryEvidence() {
+    const result = page
+      .getByRole("region", { name: "Unified evaluation results" })
+      .getByRole("row", { name: /Designing inclusive attendee journeys/u });
+    await result.getByText("Review and decision detail").click();
+    await expect(
+      result.getByText("Decision notification evidence"),
+    ).toBeVisible();
+    await expect(result).toContainText("Rendered subject");
+    await expect(result).toContainText("Recipient delivery");
+    await expect(result).toContainText(
+      "Queue acceptance is not proof of delivery",
+    );
+  }
+
+  await expectDeliveryEvidence();
+  await page.reload();
+  await page.locator("body[data-hydrated='true']").waitFor();
+  await expectDeliveryEvidence();
+  await resetDemoEvent(request);
+});
+
+test("AI advisory and human judgment remain separate after reload", async ({
+  page,
+  request,
+}) => {
+  await resetDemoEvent(request);
+  const fixture = await request.post("/demo/fixtures/ai-review-evidence", {
+    form: { confirm: "seed-ai-review-evidence-browser-fixture" },
+    headers: { origin: e2eOrigin },
+  });
+  expect(fixture.ok()).toBeTruthy();
+  await page.context().addCookies([
+    {
+      name: "program_cue_event",
+      value: "evt-foe-2025",
+      domain: "127.0.0.1",
+      path: "/",
+      httpOnly: true,
+      sameSite: "Lax",
+    },
+    {
+      name: "program_cue_demo_identity",
+      value: "administrator",
+      domain: "127.0.0.1",
+      path: "/",
+      httpOnly: true,
+      sameSite: "Lax",
+    },
+  ]);
+  await page.goto("/admin/review");
+  await page.locator("body[data-hydrated='true']").waitFor();
+
+  async function openEvidence() {
+    const result = page
+      .getByRole("region", { name: "Unified evaluation results" })
+      .getByRole("row", { name: /Designing inclusive attendee journeys/u });
+    const humanAggregate = result.getByText(
+      "Human review aggregate · canonical",
+    );
+    if (!(await humanAggregate.isVisible())) {
+      await result.getByText("Review and decision detail").click();
+    }
+    await expect(humanAggregate).toBeVisible();
+    await expect(result.getByText("AI advisory · immutable")).toBeVisible();
+    await expect(
+      result.getByText(/Human assessment of the AI advisory/u),
+    ).toBeVisible();
+    await expect(result).toContainText("2.5 / 5");
+    await expect(result).toContainText("no model provider was called");
+    return result;
+  }
+
+  let result = await openEvidence();
+  await result.getByLabel("Human assessment score").fill("4.5");
+  await result
+    .getByLabel("Assessment rationale")
+    .fill("The human panel weighs the demonstrated audience fit differently.");
+  await result
+    .getByRole("checkbox", { name: /Save this as a separate/u })
+    .check();
+  await result.getByRole("button", { name: "Save human assessment" }).click();
+  await expect(
+    page
+      .getByRole("status")
+      .filter({ hasText: "Human assessment of the AI advisory saved" }),
+  ).toContainText("4.5 / 5");
+
+  result = await openEvidence();
+  await expect(result).toContainText("4.5 / 5");
+  await expect(result).toContainText(
+    "Does not affect review averages, coverage, disagreement, sorting, or decision readiness",
+  );
+  await page.reload();
+  await page.locator("body[data-hydrated='true']").waitFor();
+  result = await openEvidence();
+  await expect(result).toContainText("2.5 / 5");
+  await expect(result).toContainText("4.5 / 5");
   await resetDemoEvent(request);
 });
 

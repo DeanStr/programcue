@@ -15,6 +15,14 @@ export const generationOperationPayloadSchema = z
     roundRevision: z.number().int().positive(),
     scorecardId: z.string().trim().min(1).max(200),
     scorecardVersion: z.number().int().positive(),
+    submissionRevisionId: z.string().trim().min(1).max(200),
+    submissionRevisionNumber: z.number().int().positive(),
+    // Preserve byte-for-byte JSON because its SHA-256 and the final
+    // compare-and-set predicate bind the exact submitted source.
+    sourceSnapshotJson: z.string().min(2),
+    sourceSnapshotSha256: z.string().regex(/^[a-f0-9]{64}$/u),
+    modelInputSha256: z.string().regex(/^[a-f0-9]{64}$/u),
+    promptVersion: z.number().int().positive(),
     criterionIds: z.array(z.string().trim().min(1).max(200)).min(1).max(100),
   })
   .strict();

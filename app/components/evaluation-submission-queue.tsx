@@ -174,7 +174,7 @@ export function EvaluationSubmissionQueue() {
                               AI first pass · {aiAssessment.score.toFixed(1)} /
                               5
                               {aiAssessment.overridden
-                                ? ` · human override ${aiAssessment.effectiveScore.toFixed(1)} / 5`
+                                ? ` · human assessment ${aiAssessment.overrideScore?.toFixed(1)} / 5`
                                 : ""}
                             </summary>
                             <div className="stack mt">
@@ -187,13 +187,13 @@ export function EvaluationSubmissionQueue() {
                               {aiAssessment.overridden ? (
                                 <div className="validation-item ok">
                                   <strong>
-                                    Human override ·{" "}
+                                    Human assessment of AI ·{" "}
                                     {aiAssessment.overrideScore?.toFixed(1)} / 5
                                   </strong>
                                   <span>{aiAssessment.overrideRationale}</span>
                                 </div>
                               ) : null}
-                              {loaderData.canManageAiAssessments ? (
+                              {loaderData.canAssessAiAdvisories ? (
                                 <Form method="post" className="stack">
                                   <input
                                     type="hidden"
@@ -216,7 +216,7 @@ export function EvaluationSubmissionQueue() {
                                     value="true"
                                   />
                                   <label className="label">
-                                    Human override score
+                                    Human assessment score
                                     <input
                                       className="input"
                                       name="score"
@@ -232,7 +232,7 @@ export function EvaluationSubmissionQueue() {
                                     />
                                   </label>
                                   <label className="label">
-                                    Override rationale
+                                    Assessment rationale
                                     <textarea
                                       className="textarea"
                                       name="rationale"
@@ -251,7 +251,7 @@ export function EvaluationSubmissionQueue() {
                                       const form = event.currentTarget.form;
                                       if (!form) {
                                         throw new Error(
-                                          "The AI override form is missing.",
+                                          "The human AI-assessment form is missing.",
                                         );
                                       }
                                       const formData = new FormData(form);
@@ -263,29 +263,28 @@ export function EvaluationSubmissionQueue() {
                                         typeof rationale !== "string"
                                       ) {
                                         throw new Error(
-                                          "The AI override confirmation values are missing.",
+                                          "The human AI-assessment confirmation values are missing.",
                                         );
                                       }
                                       if (!form.reportValidity()) return;
                                       confirm(
                                         {
-                                          title:
-                                            "Save human AI-score override?",
+                                          title: "Save human assessment of AI?",
                                           description:
-                                            "The original AI result stays immutable. This saves a separate human score and rationale that becomes the effective advisory score.",
+                                            "The original AI result stays immutable. This separate human assessment does not affect review averages, coverage, disagreement, sorting, or decision readiness.",
                                           records: [
                                             `${submission.title} · ${selectedResultsRoundName()}`,
-                                            `Effective score: ${score} / 5`,
+                                            `Human assessment: ${score} / 5`,
                                             `Rationale: ${rationale.trim()}`,
                                           ],
-                                          confirmLabel: "Save override",
+                                          confirmLabel: "Save assessment",
                                           tone: "primary",
                                         },
                                         () => form.requestSubmit(),
                                       );
                                     }}
                                   >
-                                    Review human override
+                                    Review human assessment
                                   </button>
                                 </Form>
                               ) : null}

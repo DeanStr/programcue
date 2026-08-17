@@ -8,50 +8,15 @@ import {
   parseStagedGenerationResult,
 } from "./ai-review-assessment-durable-state";
 import { AiReviewAssessmentStateError } from "./ai-review-assessment-errors";
+import {
+  type AiReviewAssessmentRow,
+  assessmentFromRow,
+  type ProviderKey,
+  providerLabels,
+} from "./ai-review-assessment-support.server";
 import type { AiModelProvider } from "./openai-responses-provider.server";
 
-type ProviderKey = "workers_ai" | "openai" | "anthropic";
-
-const providerLabels: Record<ProviderKey, AiModelProvider["providerName"]> = {
-  workers_ai: "Workers AI",
-  openai: "OpenAI",
-  anthropic: "Anthropic",
-};
-
-type AiReviewAssessmentRow = {
-  id: string;
-  eventId: string;
-  roundId: string;
-  roundName: string;
-  submissionId: string;
-  submissionTitle: string;
-  submissionReference: string;
-  scorecardId: string;
-  scorecardVersion: number;
-  roundRevision: number;
-  score: number;
-  rationale: string;
-  provider: ProviderKey;
-  model: string;
-  providerResponseId: string;
-  generatedByPersonId: string;
-  generatedByName: string;
-  generatedAt: number;
-  overrideScore: number | null;
-  overrideRationale: string | null;
-  overrideByPersonId: string | null;
-  overrideByName: string | null;
-  overrideAt: number | null;
-  revision: number;
-  updatedAt: number;
-};
-
-export type AiReviewAssessment = Omit<AiReviewAssessmentRow, "provider"> & {
-  provider: ProviderKey;
-  providerLabel: AiModelProvider["providerName"];
-  effectiveScore: number;
-  overridden: boolean;
-};
+export type { AiReviewAssessment } from "./ai-review-assessment-support.server";
 
 type AiReviewAssessmentGenerationAttemptBase = {
   operationId: string;
@@ -79,15 +44,6 @@ export type AiReviewAssessmentGenerationAttempt =
       providerRequestId: string | null;
       failedAt: number;
     });
-
-function assessmentFromRow(row: AiReviewAssessmentRow): AiReviewAssessment {
-  return {
-    ...row,
-    providerLabel: providerLabels[row.provider],
-    effectiveScore: row.overrideScore ?? row.score,
-    overridden: row.overrideScore !== null,
-  };
-}
 
 function assertAssessmentReader(viewer: Viewer) {
   if (
@@ -162,6 +118,11 @@ export class AiReviewAssessmentReader {
                    assessment.scorecard_id AS scorecardId,
                    assessment.scorecard_version AS scorecardVersion,
                    assessment.round_revision AS roundRevision,
+                   assessment.submission_revision_id AS submissionRevisionId,
+                   source_revision.revision_number AS submissionRevisionNumber,
+                   assessment.source_snapshot_sha256 AS sourceSnapshotSha256,
+                   assessment.model_input_sha256 AS modelInputSha256,
+                   assessment.prompt_version AS promptVersion,
                    assessment.score, assessment.rationale,
                    assessment.provider, assessment.model,
                    assessment.provider_response_id AS providerResponseId,
@@ -181,6 +142,10 @@ export class AiReviewAssessmentReader {
               JOIN submissions submission
                 ON submission.id = assessment.submission_id
                AND submission.event_id = assessment.event_id
+              LEFT JOIN submission_revisions source_revision
+                ON source_revision.id = assessment.submission_revision_id
+               AND source_revision.event_id = assessment.event_id
+               AND source_revision.submission_id = assessment.submission_id
               JOIN people generator
                 ON generator.id = assessment.generated_by_person_id
               LEFT JOIN people overrider

@@ -328,6 +328,26 @@ export async function ensureDemoEvaluationData(env: CloudflareEnvironment) {
         DEMO_EVENT_ID,
       ),
       env.DB.prepare(`
+        INSERT OR IGNORE INTO submission_revisions (
+          id, event_id, submission_id, form_version_id, revision_number,
+          answers_json, speaker_snapshot_json, save_kind, saved_by_person_id,
+          idempotency_key, created_at
+        )
+        SELECT ?, s.event_id, s.id, s.form_version_id, 1,
+               s.answers_json, ?, 'submitted', s.submitter_person_id, ?,
+               s.submitted_at
+          FROM submissions s
+         WHERE s.id = ? AND s.event_id = ? AND s.submitted_at IS NOT NULL
+      `).bind(
+        `demo-evaluation-submission-revision-${proposal.id}`,
+        JSON.stringify([
+          { name: proposal.speakerName, email: proposal.submitterEmail },
+        ]),
+        `demo-evaluation-submitted-${proposal.id}`,
+        proposal.id,
+        DEMO_EVENT_ID,
+      ),
+      env.DB.prepare(`
         INSERT OR IGNORE INTO submission_track_selections (
           event_id, submission_id, track_id, track_name_snapshot, position
         )

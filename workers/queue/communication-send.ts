@@ -46,9 +46,20 @@ function communicationQueuePayload(
     ...(includeFailed ? { includeFailed: true } : {}),
   });
 }
+
+function durableOperationPayload(
+  operation: { type: string; payloadJson: string },
+  message: z.infer<typeof communicationQueueMessageSchema>,
+  includeFailed: boolean,
+) {
+  return operation.type === "communication.send"
+    ? communicationQueuePayload(message, includeFailed)
+    : operation.payloadJson;
+}
 async function finishOwnedCommunicationFailure(
   env: CloudflareEnvironment,
   message: z.infer<typeof communicationQueueMessageSchema>,
+  operationPayloadJson: string,
   claimToken: string,
   error: unknown,
 ) {
@@ -140,7 +151,7 @@ async function finishOwnedCommunicationFailure(
       message.eventId,
       message.communicationId,
       message.eventId,
-      communicationQueuePayload(message, true),
+      operationPayloadJson,
       failure.message,
       message.operationId,
       message.eventId,
@@ -151,6 +162,8 @@ async function finishOwnedCommunicationFailure(
 }
 type ClaimedCommunication = {
   kind: "transactional" | "optional";
+  senderProfileId: string;
+  senderProvider: "resend" | "mailpit";
   fromName: string;
   fromEmail: string;
   replyToEmail: string | null;
@@ -162,6 +175,8 @@ type CommunicationDelivery = {
   name: string;
   idempotencyKey: string;
   sourceValuesJson: string;
+  renderedSubject: string | null;
+  renderedBodySha256: string | null;
 };
 
 export async function processCommunicationSend(
@@ -172,14 +187,14 @@ export async function processCommunicationSend(
   const message = communicationQueueMessageSchema.parse(input);
   const operation = await env.DB.prepare(
     `
-    SELECT o.id, o.status
+    SELECT o.id, o.status, o.type, o.payload_json AS payloadJson
       FROM operation_jobs o
       JOIN events e ON e.id = o.event_id AND e.organisation_id = ?
      WHERE o.id = ? AND o.event_id = ? AND o.type IN ('communication.send','decision.notification','submission.notification')
   `,
   )
     .bind(message.organisationId, message.operationId, message.eventId)
-    .first<{ id: string; status: string }>();
+    .first<{ id: string; status: string; type: string; payloadJson: string }>();
   if (!operation)
     throw new Error(
       "Communication operation does not exist in the authorised event.",
@@ -356,7 +371,8 @@ export async function processCommunicationSend(
     // operation. A sender disabled before the claim must never be used from a
     // stale pre-claim read.
     const claimedCommunication = await env.DB.prepare(
-      `SELECT c.kind, sp.from_name AS fromName, sp.from_email AS fromEmail,
+      `SELECT c.kind, sp.id AS senderProfileId, sp.provider AS senderProvider,
+              sp.from_name AS fromName, sp.from_email AS fromEmail,
               sp.reply_to_email AS replyToEmail
          FROM communications c
          JOIN sender_profiles sp
@@ -379,12 +395,32 @@ export async function processCommunicationSend(
       .first<ClaimedCommunication>();
     if (!claimedCommunication)
       throw new Error("A verified sender profile is unavailable.");
+    if (
+      snapshot.sender &&
+      (snapshot.sender.id !== claimedCommunication.senderProfileId ||
+        (snapshot.sender.provider !== undefined &&
+          snapshot.sender.provider !== claimedCommunication.senderProvider))
+    ) {
+      throw new Error(
+        "The pinned sender does not match the currently verified sender authority.",
+      );
+    }
+    const deliveryCommunication = snapshot.sender
+      ? {
+          ...claimedCommunication,
+          fromName: snapshot.sender.fromName,
+          fromEmail: snapshot.sender.fromEmail,
+          replyToEmail: snapshot.sender.replyToEmail,
+        }
+      : claimedCommunication;
     const deliveries = await env.DB.prepare(
       `
       SELECT d.id, d.person_id AS personId, d.recipient_address AS address,
              COALESCE(d.recipient_name, d.recipient_address) AS name,
              d.idempotency_key AS idempotencyKey,
-             d.source_values_json AS sourceValuesJson
+             d.source_values_json AS sourceValuesJson,
+             d.rendered_subject AS renderedSubject,
+             d.rendered_body_sha256 AS renderedBodySha256
         FROM communication_deliveries d
        WHERE d.communication_id = ? AND d.event_id = ?
          AND d.status IN ('queued','failed','sending')
@@ -403,7 +439,7 @@ export async function processCommunicationSend(
     await deliverCommunicationBatch({
       env,
       message,
-      communication: claimedCommunication,
+      communication: deliveryCommunication,
       snapshot,
       deliveries,
       claimToken,
@@ -475,12 +511,17 @@ export async function processCommunicationSend(
         message.eventId,
         claimToken,
       );
-      const continuationPayload = communicationQueuePayload(
+      const continuationQueuePayload = communicationQueuePayload(
+        message,
+        includeFailed,
+      );
+      const continuationOperationPayload = durableOperationPayload(
+        operation,
         message,
         includeFailed,
       );
       const continuationMessage = communicationQueueMessageSchema.parse(
-        JSON.parse(continuationPayload),
+        JSON.parse(continuationQueuePayload),
       );
       const continuationResults = await env.DB.batch([
         env.DB.prepare(
@@ -509,7 +550,7 @@ export async function processCommunicationSend(
           total,
           counts.terminalItems,
           failed,
-          continuationPayload,
+          continuationOperationPayload,
           message.operationId,
           message.eventId,
           claimToken,
@@ -526,7 +567,7 @@ export async function processCommunicationSend(
           message.communicationId,
           message.operationId,
           message.eventId,
-          continuationPayload,
+          continuationOperationPayload,
         ),
       ]);
       if (
@@ -550,7 +591,7 @@ export async function processCommunicationSend(
             failure.message,
             message.operationId,
             message.eventId,
-            continuationPayload,
+            continuationOperationPayload,
           ),
           env.DB.prepare(
             `UPDATE communications SET status = 'failed', updated_at = unixepoch()
@@ -639,7 +680,7 @@ export async function processCommunicationSend(
         total,
         succeeded + failed,
         failed,
-        communicationQueuePayload(message, failed > 0),
+        durableOperationPayload(operation, message, failed > 0),
         failed,
         failed ? `${failed} of ${total} deliveries failed.` : null,
         message.operationId,
@@ -716,7 +757,13 @@ export async function processCommunicationSend(
     );
   } catch (error) {
     try {
-      await finishOwnedCommunicationFailure(env, message, claimToken, error);
+      await finishOwnedCommunicationFailure(
+        env,
+        message,
+        operation.payloadJson,
+        claimToken,
+        error,
+      );
     } catch (failureError) {
       console.error(
         JSON.stringify({

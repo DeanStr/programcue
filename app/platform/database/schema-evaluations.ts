@@ -14,7 +14,7 @@ import {
 import { events, people } from "./schema-core";
 import { epochNow } from "./schema-helpers";
 import { sessions } from "./schema-schedule";
-import { submissions } from "./schema-submissions";
+import { submissionRevisions, submissions } from "./schema-submissions";
 
 export const evaluationPlans = sqliteTable(
   "evaluation_plans",
@@ -510,6 +510,12 @@ export const aiReviewAssessments = sqliteTable(
     scorecardId: text("scorecard_id").notNull(),
     scorecardVersion: integer("scorecard_version").notNull(),
     roundRevision: integer("round_revision").notNull(),
+    submissionRevisionId: text("submission_revision_id").references(
+      () => submissionRevisions.id,
+    ),
+    sourceSnapshotSha256: text("source_snapshot_sha256"),
+    modelInputSha256: text("model_input_sha256"),
+    promptVersion: integer("prompt_version"),
     score: real("score").notNull(),
     rationale: text("rationale").notNull(),
     provider: text("provider")
@@ -731,6 +737,7 @@ export const submissionDecisions = sqliteTable(
     notificationFeedbackJson: text("notification_feedback_json").notNull(),
     effectPreviewJson: text("effect_preview_json").notNull().default("{}"),
     idempotencyKey: text("idempotency_key"),
+    notificationOperationId: text("notification_operation_id"),
     decidedAt: integer("decided_at").notNull().default(epochNow),
     publishedAt: integer("published_at"),
   },
@@ -743,6 +750,9 @@ export const submissionDecisions = sqliteTable(
       table.eventId,
       table.idempotencyKey,
     ),
+    uniqueIndex("ux_submission_decisions_notification_operation")
+      .on(table.notificationOperationId)
+      .where(sql`${table.notificationOperationId} IS NOT NULL`),
     uniqueIndex("ux_decisions_one_published")
       .on(table.submissionId)
       .where(sql`${table.status} = 'published'`),

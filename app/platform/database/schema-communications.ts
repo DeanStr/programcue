@@ -263,6 +263,8 @@ export const communicationDeliveries = sqliteTable(
     nextAttemptAt: integer("next_attempt_at"),
     failureCode: text("failure_code"),
     failureMessage: text("failure_message"),
+    renderedSubject: text("rendered_subject"),
+    renderedBodySha256: text("rendered_body_sha256"),
     createdAt: integer("created_at").notNull().default(epochNow),
     updatedAt: integer("updated_at").notNull().default(epochNow),
   },

@@ -259,7 +259,9 @@ describe("participant retention", () => {
     const delivery = await seeded.testEnv.DB.prepare(
       `SELECT recipient_address AS address, recipient_name AS name,
               provider, provider_message_id AS providerMessageId,
-              source_values_json AS sourceValuesJson
+              source_values_json AS sourceValuesJson,
+              rendered_subject AS renderedSubject,
+              rendered_body_sha256 AS renderedBodySha256
          FROM communication_deliveries WHERE id = ?`,
     )
       .bind(seeded.deliveryId)
@@ -268,6 +270,8 @@ describe("participant retention", () => {
       name: null,
       provider: null,
       providerMessageId: null,
+      renderedSubject: "Retained message",
+      renderedBodySha256: null,
     });
     expect(String((delivery as { address: string }).address)).toContain(
       "@privacy.invalid",
@@ -514,7 +518,35 @@ describe("participant retention", () => {
     const planId = id("privacy-ai-plan");
     const roundId = id("privacy-ai-round");
     const assessmentId = id("privacy-ai-assessment");
+    const formVersionId = id("privacy-ai-form-version");
+    const submissionRevisionId = id("privacy-ai-submission-revision");
+    const sourceSnapshotSha256 = "a".repeat(64);
+    const modelInputSha256 = "b".repeat(64);
     await seeded.testEnv.DB.batch([
+      seeded.testEnv.DB.prepare(
+        `INSERT INTO form_versions (
+           id, event_id, form_id, version_number, schema_json, status,
+           published_at, created_by_person_id
+         ) VALUES (?, ?, ?, 1, '{"fields":[]}', 'published', unixepoch(),
+                   'person-demo-owner')`,
+      ).bind(formVersionId, seeded.eventId, seeded.formId),
+      seeded.testEnv.DB.prepare(
+        `UPDATE submissions SET form_version_id = ?
+          WHERE id = ? AND event_id = ?`,
+      ).bind(formVersionId, seeded.exclusiveSubmissionId, seeded.eventId),
+      seeded.testEnv.DB.prepare(
+        `INSERT INTO submission_revisions (
+           id, event_id, submission_id, form_version_id, revision_number,
+           answers_json, speaker_snapshot_json, save_kind, saved_by_person_id
+         )
+         SELECT ?, event_id, id, form_version_id, 1, answers_json, '[]',
+                'submitted', submitter_person_id
+           FROM submissions WHERE id = ? AND event_id = ?`,
+      ).bind(
+        submissionRevisionId,
+        seeded.exclusiveSubmissionId,
+        seeded.eventId,
+      ),
       seeded.testEnv.DB.prepare(
         `INSERT INTO evaluation_plans (
            id, event_id, name, status, created_by_person_id
@@ -532,11 +564,12 @@ describe("participant retention", () => {
            id, event_id, round_id, submission_id, scorecard_id,
            scorecard_version, round_revision, score, rationale, provider,
            model, provider_response_id, generated_by_person_id,
-           last_operation_id
+           submission_revision_id, source_snapshot_sha256,
+           model_input_sha256, prompt_version, last_operation_id
          ) VALUES (?, ?, ?, ?, ?, 1, 1, 4,
                    'Private generated rationale that must be deleted when participant retention completes.',
                    'workers_ai', '@cf/deepseek-ai/deepseek-v4-flash-0731', ?,
-                   'person-demo-owner', ?)`,
+                   'person-demo-owner', ?, ?, ?, 1, ?)`,
       ).bind(
         assessmentId,
         seeded.eventId,
@@ -544,6 +577,9 @@ describe("participant retention", () => {
         seeded.exclusiveSubmissionId,
         roundId,
         id("privacy-ai-provider-response"),
+        submissionRevisionId,
+        sourceSnapshotSha256,
+        modelInputSha256,
         id("privacy-ai-operation"),
       ),
     ]);
@@ -569,11 +605,12 @@ describe("participant retention", () => {
            id, event_id, round_id, submission_id, scorecard_id,
            scorecard_version, round_revision, score, rationale, provider,
            model, provider_response_id, generated_by_person_id,
-           last_operation_id
+           submission_revision_id, source_snapshot_sha256,
+           model_input_sha256, prompt_version, last_operation_id
          ) VALUES (?, ?, ?, ?, ?, 1, 1, 4,
                    'A new private rationale must not be written after participant retention has completed.',
                    'workers_ai', '@cf/deepseek-ai/deepseek-v4-flash-0731', ?,
-                   'person-demo-owner', ?)`,
+                   'person-demo-owner', ?, ?, ?, 1, ?)`,
       )
         .bind(
           id("post-retention-ai-assessment"),
@@ -582,6 +619,9 @@ describe("participant retention", () => {
           seeded.exclusiveSubmissionId,
           roundId,
           id("post-retention-ai-provider-response"),
+          submissionRevisionId,
+          sourceSnapshotSha256,
+          modelInputSha256,
           id("post-retention-ai-operation"),
         )
         .run(),
@@ -689,6 +729,15 @@ describe("participant retention", () => {
           seeded.communicationId,
           id("post-retention-delivery-key"),
         )
+        .run(),
+    ).rejects.toThrow(lockMessage);
+    await expect(
+      seeded.testEnv.DB.prepare(
+        `UPDATE communication_deliveries
+            SET rendered_subject = 'Restored private decision subject'
+          WHERE id = ?`,
+      )
+        .bind(seeded.deliveryId)
         .run(),
     ).rejects.toThrow(lockMessage);
     await expect(

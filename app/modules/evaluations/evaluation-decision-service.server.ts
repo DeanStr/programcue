@@ -1,4 +1,8 @@
-import { inspectDecisionNotificationReadiness } from "~/modules/communications/decision-notification-readiness.server";
+import { requireValue } from "~/lib/required-value";
+import {
+  type DecisionNotificationIntent,
+  prepareDecisionNotificationIntent,
+} from "~/modules/communications/decision-notification-intent.server";
 import {
   parseSessionFormatsConfiguration,
   type SessionFormatConfiguration,
@@ -41,14 +45,7 @@ export class EvaluationDecisionService {
     const released = await this.env.DB.prepare(
       `SELECT decision.id AS decisionId, decision.decision,
               submission.status AS submissionStatus, submission.revision,
-              (SELECT operation.id
-                 FROM operation_jobs operation
-                WHERE operation.event_id = decision.event_id
-                  AND operation.organisation_id = event.organisation_id
-                  AND operation.type = 'decision.notification'
-                  AND json_extract(operation.payload_json, '$.payload.decisionId') = decision.id
-                ORDER BY operation.created_at DESC
-                LIMIT 1) AS notificationOperationId
+              decision.notification_operation_id AS notificationOperationId
          FROM submission_decisions decision
          JOIN submissions submission
            ON submission.id = decision.submission_id
@@ -336,7 +333,7 @@ export class EvaluationDecisionService {
             AND session.event_id = decision.event_id
            LEFT JOIN operation_jobs operation
              ON operation.event_id = decision.event_id
-            AND operation.idempotency_key = 'decision-notification:' || decision.id
+            AND operation.id = decision.notification_operation_id
           WHERE decision.id = ? AND decision.event_id = ?`,
       )
         .bind(viewer.organisationId, commandId, viewer.eventId)
@@ -422,6 +419,10 @@ export class EvaluationDecisionService {
       `
       SELECT s.id, s.title, s.public_reference AS reference, s.format, s.category,
              COALESCE(person.email, s.submitter_email) AS notificationAddress,
+             s.submitter_person_id AS notificationPersonId,
+             COALESCE(person.display_name, person.email, s.submitter_email) AS notificationName,
+             e.name AS eventName, e.brand_accent AS eventBrandAccent,
+             e.starts_at AS eventStartsAt, e.ends_at AS eventEndsAt,
              s.status, s.revision, s.submitted_snapshot_json AS snapshotJson
         FROM submissions s JOIN events e ON e.id = s.event_id
         LEFT JOIN people person ON person.id = s.submitter_person_id
@@ -697,27 +698,37 @@ export class EvaluationDecisionService {
     if (parsed.release && !operationsQueue) {
       throw new Error("Required OPERATIONS_QUEUE binding is unavailable.");
     }
-    let notificationTemplateVersionId: string | null = null;
-    let notificationSenderProfileId: string | null = null;
+    let notificationIntent: DecisionNotificationIntent | null = null;
     if (parsed.release) {
-      const notificationReadiness = await inspectDecisionNotificationReadiness(
+      const preparedNotification = await prepareDecisionNotificationIntent(
         this.env,
         {
-          organisationId: viewer.organisationId,
-          eventId: viewer.eventId,
+          viewer,
+          decisionId,
+          operationId: requireValue(
+            notificationOperationId,
+            "Released decision notification operation is unavailable.",
+          ),
+          submissionId: submission.id,
+          submissionTitle: submission.title,
+          decision: parsed.decision,
+          rationale: parsed.rationale,
+          feedback: notificationFeedback,
+          recipientPersonId: submission.notificationPersonId,
           recipientAddress: submission.notificationAddress,
+          recipientName: submission.notificationName,
+          event: {
+            name: submission.eventName,
+            brandAccent: submission.eventBrandAccent,
+            startsAt: submission.eventStartsAt,
+            endsAt: submission.eventEndsAt,
+          },
         },
       );
-      if (notificationReadiness.error) {
-        throw new EvaluationValidationError(notificationReadiness.error);
+      if (preparedNotification.error) {
+        throw new EvaluationValidationError(preparedNotification.error);
       }
-      if (!notificationReadiness.template || !notificationReadiness.sender) {
-        throw new Error(
-          "Decision notification readiness succeeded without its required records.",
-        );
-      }
-      notificationTemplateVersionId = notificationReadiness.template.id;
-      notificationSenderProfileId = notificationReadiness.sender.id;
+      notificationIntent = preparedNotification.intent;
     }
     const speakerInvitationPlans =
       sessionId && acceptedEvent
@@ -766,10 +777,7 @@ export class EvaluationDecisionService {
       format,
       sessionDurationMinutes,
       sessionTrack,
-      notificationOperationId,
-      notificationTemplateVersionId,
-      notificationSenderProfileId,
-      notificationAddress: submission.notificationAddress,
+      notificationIntent,
       notificationFeedback,
       roundId: completedRound?.roundId ?? null,
       speakerMemberships,
@@ -848,14 +856,12 @@ export class EvaluationDecisionService {
     let notificationStatus: "not_requested" | "queued" | "queue_failed" =
       notificationOperationId ? "queued" : "not_requested";
     if (notificationOperationId) {
-      const message = {
-        operationId: notificationOperationId,
-        eventId: viewer.eventId,
-        organisationId: viewer.organisationId,
-        type: "decision.notification",
-        idempotencyKey: `decision-notification:${decisionId}`,
-        payload: { decisionId },
-      };
+      if (!notificationIntent) {
+        throw new Error(
+          "Released decision notification intent was not materialised.",
+        );
+      }
+      const message: unknown = JSON.parse(notificationIntent.queuePayloadJson);
       try {
         await operationsQueue.send(message);
       } catch (error) {

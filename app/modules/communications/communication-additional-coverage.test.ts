@@ -323,6 +323,7 @@ describe("Communications D1 vertical slice", () => {
       const decisionMessage = {
         type: "decision.notification" as const,
         operationId: decisionOperationId,
+        communicationId: `decision-communication-${decisionOperationId}`,
         eventId: viewer.eventId,
         organisationId: viewer.organisationId,
         idempotencyKey: `decision-payload-${crypto.randomUUID()}`,
@@ -376,7 +377,7 @@ describe("Communications D1 vertical slice", () => {
           },
           testEnv,
         ),
-      ).rejects.toThrow("does not match its durable operation payload");
+      ).rejects.toThrow("does not exist in the authorised event");
       await expect(
         processSubmissionNotification(
           { ...submissionMessage, submissionId: "substituted-submission-b" },
@@ -395,13 +396,14 @@ describe("Communications D1 vertical slice", () => {
   });
 
   describe("additional workflow coverage", () => {
-    it("keeps an active trigger-failure lease and reclaims it only after expiry", async () => {
+    it("rejects an orphaned decision operation without changing its active lease", async () => {
       const { testEnv } = await communicationEnvironment();
       const token = crypto.randomUUID().slice(0, 8);
       const operationId = `decision-missing-operation-${token}`;
       const message = {
         type: "decision.notification" as const,
         operationId,
+        communicationId: `decision-communication-${operationId}`,
         eventId: viewer.eventId,
         organisationId: viewer.organisationId,
         idempotencyKey: `decision-missing-${token}`,
@@ -429,7 +431,7 @@ describe("Communications D1 vertical slice", () => {
 
       await expect(
         processDecisionNotification(message, testEnv),
-      ).rejects.toThrow("active Queue claim lease");
+      ).rejects.toThrow("does not exist in the authorised event");
       expect(
         await env.DB.prepare(
           `SELECT status, claim_token AS claimToken
@@ -444,7 +446,9 @@ describe("Communications D1 vertical slice", () => {
       )
         .bind(operationId)
         .run();
-      await processDecisionNotification(message, testEnv);
+      await expect(
+        processDecisionNotification(message, testEnv),
+      ).rejects.toThrow("does not exist in the authorised event");
       expect(
         await env.DB.prepare(
           `SELECT status, claim_token AS claimToken, claim_expires_at AS claimExpiresAt
@@ -452,7 +456,11 @@ describe("Communications D1 vertical slice", () => {
         )
           .bind(operationId)
           .first(),
-      ).toEqual({ status: "failed", claimToken: null, claimExpiresAt: null });
+      ).toEqual({
+        status: "running",
+        claimToken: "active-trigger-claim",
+        claimExpiresAt: expect.any(Number),
+      });
     });
   });
 });

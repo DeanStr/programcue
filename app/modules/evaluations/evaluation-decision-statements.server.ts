@@ -1,7 +1,12 @@
 import { requireValue } from "~/lib/required-value";
+import type { DecisionNotificationIntent } from "~/modules/communications/decision-notification-intent.server";
 import { materializePublishedResourceAcknowledgementsForSession } from "~/modules/resources/resource-service.server";
 import type { Viewer } from "~/platform/auth/authorize.server";
 import type { AcceptedSpeakerInvitationPlan } from "./accepted-speaker-invitation.server";
+import {
+  decisionAuthorityBindings,
+  decisionAuthorityGuardSql,
+} from "./evaluation-decision-authority.server";
 import type { decisionSchema } from "./evaluation-schema";
 
 export type DecisionSubmission = {
@@ -11,6 +16,12 @@ export type DecisionSubmission = {
   format: string | null;
   category: string | null;
   notificationAddress: string | null;
+  notificationPersonId: string | null;
+  notificationName: string | null;
+  eventName: string;
+  eventBrandAccent: string;
+  eventStartsAt: number;
+  eventEndsAt: number;
   status: string;
   revision: number;
   snapshotJson: string | null;
@@ -289,10 +300,7 @@ export function buildDecisionStatements(input: {
   format: string;
   sessionDurationMinutes: number;
   sessionTrack: { id: string; name: string } | null;
-  notificationOperationId: string | null;
-  notificationTemplateVersionId: string | null;
-  notificationSenderProfileId: string | null;
-  notificationAddress: string | null;
+  notificationIntent: DecisionNotificationIntent | null;
   notificationFeedback: string[];
   roundId: string | null;
   speakerMemberships: Array<{ membershipId: string; personId: string }>;
@@ -315,16 +323,19 @@ export function buildDecisionStatements(input: {
     format,
     sessionDurationMinutes,
     sessionTrack,
-    notificationOperationId,
-    notificationTemplateVersionId,
-    notificationSenderProfileId,
-    notificationAddress,
+    notificationIntent,
     notificationFeedback,
     roundId,
     speakerMemberships,
     speakerInvitationPlans,
     auditEventId,
   } = input;
+  const notificationOperationId = notificationIntent?.operationId ?? null;
+  const notificationTemplateVersionId =
+    notificationIntent?.templateVersionId ?? null;
+  const notificationSenderProfileId =
+    notificationIntent?.senderProfileId ?? null;
+  const notificationAddress = notificationIntent?.recipientAddress ?? null;
   if (parsed.decision === "accepted" && !sessionTrack) {
     throw new Error(
       "Accepted decision statements require the confirmed submitted track.",
@@ -342,7 +353,8 @@ export function buildDecisionStatements(input: {
   }
   if (
     status === "published" &&
-    (!notificationTemplateVersionId ||
+    (!notificationIntent ||
+      !notificationTemplateVersionId ||
       !notificationSenderProfileId ||
       !notificationAddress)
   ) {
@@ -425,16 +437,7 @@ export function buildDecisionStatements(input: {
            )
            AND (
              ? <> 'published'
-             OR ? IN ('owner','administrator')
-             OR (
-               ? = 'committee_chair'
-               AND EXISTS (
-                 SELECT 1 FROM evaluation_plans authority_plan
-                  WHERE authority_plan.event_id = submissions.event_id
-                    AND authority_plan.status = 'active'
-                    AND authority_plan.decision_role = 'committee_chair'
-               )
-             )
+             OR ${decisionAuthorityGuardSql("submissions.event_id")}
            )
            AND (
              ? <> 'published'
@@ -451,18 +454,44 @@ export function buildDecisionStatements(input: {
                     AND decision_version.status = 'published'
                     AND decision_version.category = 'decision'
                     AND decision_version.channel = 'email'
+                    AND decision_version.name = ?
+                    AND decision_version.version_number = ?
+                    AND decision_version.subject_template = ?
+                    AND decision_version.content_json = ?
                )
                AND EXISTS (
                  SELECT 1 FROM sender_profiles decision_sender
                   WHERE decision_sender.id = ?
                     AND decision_sender.event_id = submissions.event_id
                     AND decision_sender.status = 'verified'
+                    AND decision_sender.provider = ?
+                    AND decision_sender.from_name = ?
+                    AND decision_sender.from_email = ?
+                    AND decision_sender.reply_to_email IS ?
                )
                AND COALESCE(
                  (SELECT recipient.email FROM people recipient
                    WHERE recipient.id = submissions.submitter_person_id),
                  submissions.submitter_email
                ) = ?
+               AND submissions.submitter_person_id IS ?
+               AND COALESCE(
+                 (SELECT recipient.display_name FROM people recipient
+                   WHERE recipient.id = submissions.submitter_person_id),
+                 COALESCE(
+                   (SELECT recipient.email FROM people recipient
+                     WHERE recipient.id = submissions.submitter_person_id),
+                   submissions.submitter_email
+                 )
+               ) = ?
+               AND EXISTS (
+                 SELECT 1 FROM events notification_event
+                  WHERE notification_event.id = submissions.event_id
+                    AND notification_event.name = ?
+                    AND notification_event.brand_accent = ?
+                    AND notification_event.starts_at = ?
+                    AND notification_event.ends_at = ?
+               )
              )
            )
       `,
@@ -481,12 +510,25 @@ export function buildDecisionStatements(input: {
       sessionTrack?.id ?? null,
       sessionTrack?.name ?? null,
       status,
-      viewer.role,
-      viewer.role,
+      ...decisionAuthorityBindings(viewer.role),
       status,
       notificationTemplateVersionId,
+      notificationIntent?.templateName ?? null,
+      notificationIntent?.templateVersionNumber ?? null,
+      notificationIntent?.templateSubject ?? null,
+      notificationIntent?.templateContentJson ?? null,
       notificationSenderProfileId,
+      notificationIntent?.senderProvider ?? null,
+      notificationIntent?.senderFromName ?? null,
+      notificationIntent?.senderFromEmail ?? null,
+      notificationIntent?.senderReplyToEmail ?? null,
       notificationAddress,
+      notificationIntent?.recipientPersonId ?? null,
+      notificationIntent?.recipientName ?? null,
+      notificationIntent?.eventName ?? null,
+      notificationIntent?.eventBrandAccent ?? null,
+      notificationIntent?.eventStartsAt ?? null,
+      notificationIntent?.eventEndsAt ?? null,
     ),
     env.DB.prepare(
       `
@@ -542,10 +584,10 @@ export function buildDecisionStatements(input: {
         INSERT INTO submission_decisions (
           id, event_id, submission_id, round_id, revision_number, status, decision,
           decided_by_person_id, rationale, notification_feedback_json,
-          effect_preview_json, idempotency_key,
+          effect_preview_json, idempotency_key, notification_operation_id,
           decided_at, published_at
         )
-        SELECT ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, unixepoch(),
+        SELECT ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, unixepoch(),
                CASE WHEN ? = 'published' THEN unixepoch() END
          WHERE EXISTS (
            SELECT 1 FROM submissions
@@ -576,6 +618,7 @@ export function buildDecisionStatements(input: {
         sessionDurationMinutes: parsed.sessionDurationMinutes ?? null,
       }),
       `decision:${submission.id}:${revision}`,
+      notificationOperationId,
       status,
       submission.id,
       viewer.eventId,
@@ -727,7 +770,7 @@ export function buildDecisionStatements(input: {
           }),
         ]
       : []),
-    ...(notificationOperationId
+    ...(notificationIntent
       ? [
           env.DB.prepare(
             `
@@ -743,22 +786,185 @@ export function buildDecisionStatements(input: {
          )
       `,
           ).bind(
-            notificationOperationId,
+            notificationIntent.operationId,
             viewer.organisationId,
             viewer.eventId,
             viewer.personId,
-            `decision-notification:${decisionId}`,
-            crypto.randomUUID(),
-            JSON.stringify({
-              operationId: notificationOperationId,
-              eventId: viewer.eventId,
-              organisationId: viewer.organisationId,
-              type: "decision.notification",
-              idempotencyKey: `decision-notification:${decisionId}`,
-              payload: { decisionId },
-            }),
+            notificationIntent.operationIdempotencyKey,
+            notificationIntent.correlationId,
+            notificationIntent.queuePayloadJson,
             decisionId,
             viewer.eventId,
+          ),
+          env.DB.prepare(
+            `
+        INSERT INTO communications (
+          id, event_id, template_version_id, sender_profile_id, operation_id,
+          idempotency_key, kind, channel, status, audience_json,
+          content_snapshot_json, recipient_count, queued_at,
+          created_by_person_id, created_at, updated_at
+        )
+        SELECT ?, decision.event_id, version.id, sender.id, operation.id,
+               ?, 'transactional', 'email', 'queued', ?, ?, 1, unixepoch(),
+               ?, unixepoch(), unixepoch()
+          FROM submission_decisions decision
+          JOIN operation_jobs operation
+            ON operation.id = decision.notification_operation_id
+           AND operation.event_id = decision.event_id
+           AND operation.organisation_id = ?
+           AND operation.status = 'queued'
+          JOIN communication_template_versions version
+            ON version.id = ? AND version.event_id = decision.event_id
+           AND version.status = 'published' AND version.category = 'decision'
+           AND version.channel = 'email' AND version.name = ?
+           AND version.version_number = ? AND version.subject_template = ?
+           AND version.content_json = ?
+          JOIN communication_templates template
+            ON template.id = version.template_id
+           AND template.event_id = version.event_id
+           AND template.status = 'active'
+          JOIN sender_profiles sender
+            ON sender.id = ? AND sender.event_id = decision.event_id
+           AND sender.status = 'verified' AND sender.provider = ?
+           AND sender.from_name = ? AND sender.from_email = ?
+           AND sender.reply_to_email IS ?
+          JOIN events event
+            ON event.id = decision.event_id AND event.organisation_id = ?
+           AND event.name = ? AND event.brand_accent = ?
+           AND event.starts_at = ? AND event.ends_at = ?
+         WHERE decision.id = ? AND decision.event_id = ?
+           AND decision.status = 'published'
+      `,
+          ).bind(
+            notificationIntent.communicationId,
+            notificationIntent.operationIdempotencyKey,
+            notificationIntent.audienceJson,
+            notificationIntent.contentSnapshotJson,
+            viewer.personId,
+            viewer.organisationId,
+            notificationIntent.templateVersionId,
+            notificationIntent.templateName,
+            notificationIntent.templateVersionNumber,
+            notificationIntent.templateSubject,
+            notificationIntent.templateContentJson,
+            notificationIntent.senderProfileId,
+            notificationIntent.senderProvider,
+            notificationIntent.senderFromName,
+            notificationIntent.senderFromEmail,
+            notificationIntent.senderReplyToEmail,
+            viewer.organisationId,
+            notificationIntent.eventName,
+            notificationIntent.eventBrandAccent,
+            notificationIntent.eventStartsAt,
+            notificationIntent.eventEndsAt,
+            decisionId,
+            viewer.eventId,
+          ),
+          env.DB.prepare(
+            `
+        INSERT INTO communication_deliveries (
+          id, event_id, communication_id, person_id, recipient_address,
+          recipient_name, source_id, source_values_json, channel, provider,
+          idempotency_key, status, rendered_subject, rendered_body_sha256,
+          created_at, updated_at
+        )
+        SELECT ?, communication.event_id, communication.id, ?, ?, ?, ?, ?,
+               'email', ?, ?, 'queued', ?, ?, unixepoch(), unixepoch()
+          FROM communications communication
+         WHERE communication.id = ? AND communication.event_id = ?
+           AND communication.operation_id = ?
+           AND communication.status = 'queued'
+      `,
+          ).bind(
+            notificationIntent.deliveryId,
+            notificationIntent.recipientPersonId,
+            notificationIntent.recipientAddress,
+            notificationIntent.recipientName,
+            submission.id,
+            notificationIntent.sourceValuesJson,
+            notificationIntent.senderProvider,
+            notificationIntent.deliveryIdempotencyKey,
+            notificationIntent.renderedSubject,
+            notificationIntent.renderedBodySha256,
+            notificationIntent.communicationId,
+            viewer.eventId,
+            notificationIntent.operationId,
+          ),
+          env.DB.prepare(
+            `
+        INSERT INTO operation_items (
+          id, operation_id, item_key, entity_type, entity_id, status,
+          result_json, updated_at
+        )
+        SELECT ?, operation.id, ?, 'communication_delivery', delivery.id,
+               'pending', json_object('sourceId', ?), unixepoch()
+          FROM operation_jobs operation
+          JOIN communication_deliveries delivery
+            ON delivery.id = ? AND delivery.event_id = operation.event_id
+         WHERE operation.id = ? AND operation.event_id = ?
+           AND operation.status = 'queued'
+      `,
+          ).bind(
+            notificationIntent.operationItemId,
+            notificationIntent.deliveryIdempotencyKey,
+            submission.id,
+            notificationIntent.deliveryId,
+            notificationIntent.operationId,
+            viewer.eventId,
+          ),
+          env.DB.prepare(
+            `
+        INSERT INTO audit_events (
+          id, actor_kind, origin, metadata_version, organisation_id, event_id,
+          actor_person_id, action, entity_type, entity_id, correlation_id,
+          metadata_json, created_at
+        )
+        SELECT ?, 'person', 'admin_ui', 1, ?, ?, ?,
+               'decision.notification.prepared', 'communication', ?, ?, ?,
+               unixepoch()
+         WHERE EXISTS (
+           SELECT 1 FROM communication_deliveries
+            WHERE id = ? AND event_id = ? AND communication_id = ?
+         )
+      `,
+          ).bind(
+            `decision-notification-prepared:${notificationIntent.operationId}`,
+            viewer.organisationId,
+            viewer.eventId,
+            viewer.personId,
+            notificationIntent.communicationId,
+            notificationIntent.operationId,
+            JSON.stringify({
+              decisionId,
+              operationId: notificationIntent.operationId,
+              templateVersionId: notificationIntent.templateVersionId,
+              deliveryId: notificationIntent.deliveryId,
+              renderedSubject: notificationIntent.renderedSubject,
+              renderedBodySha256: notificationIntent.renderedBodySha256,
+            }),
+            notificationIntent.deliveryId,
+            viewer.eventId,
+            notificationIntent.communicationId,
+          ),
+          env.DB.prepare(
+            `
+        INSERT INTO event_changes (
+          event_id, entity_type, entity_id, change_type, correlation_id,
+          created_at
+        )
+        SELECT ?, 'communication', ?, 'created', ?, unixepoch()
+         WHERE EXISTS (
+           SELECT 1 FROM communication_deliveries
+            WHERE id = ? AND event_id = ? AND communication_id = ?
+         )
+      `,
+          ).bind(
+            viewer.eventId,
+            notificationIntent.communicationId,
+            notificationIntent.correlationId,
+            notificationIntent.deliveryId,
+            viewer.eventId,
+            notificationIntent.communicationId,
           ),
         ]
       : []),

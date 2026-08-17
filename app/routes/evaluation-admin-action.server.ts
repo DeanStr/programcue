@@ -1,5 +1,6 @@
 import { type ActionFunctionArgs, data, redirect } from "react-router";
 import { ZodError } from "zod";
+import { requireValue } from "~/lib/required-value";
 import {
   AiReviewAssessmentConflictError,
   AiReviewAssessmentService,
@@ -194,7 +195,10 @@ export async function action({ request, context }: ActionFunctionArgs) {
       );
       return {
         ok: true,
-        message: `Human AI-score override saved at ${assessment.effectiveScore.toFixed(1)} / 5.`,
+        message: `Human assessment of the AI advisory saved at ${requireValue(
+          assessment.overrideScore,
+          "A saved human assessment must include its score.",
+        ).toFixed(1)} / 5.`,
       };
     }
     if (values.get("intent") === "resend-accepted-speaker") {

@@ -1,7 +1,10 @@
 import { parsePersistedRubricOptions } from "~/modules/evaluations/evaluation-service-foundation.server";
 import { reviewableSubmissionSql } from "~/modules/evaluations/evaluation-submission-review-eligibility.server";
 import type { Viewer } from "~/platform/auth/authorize.server";
-import { AiReviewAssessmentStateError } from "./ai-review-assessment-errors";
+import {
+  AiReviewAssessmentIntentConflictError,
+  AiReviewAssessmentStateError,
+} from "./ai-review-assessment-errors";
 import { AiReviewAssessmentOperationStore } from "./ai-review-assessment-operation-store.server";
 import {
   type AiReviewAssessmentGenerationAttempt,
@@ -70,6 +73,11 @@ export class AiReviewAssessmentFoundation {
                  assessment.scorecard_id AS scorecardId,
                  assessment.scorecard_version AS scorecardVersion,
                  assessment.round_revision AS roundRevision,
+                 assessment.submission_revision_id AS submissionRevisionId,
+                 source_revision.revision_number AS submissionRevisionNumber,
+                 assessment.source_snapshot_sha256 AS sourceSnapshotSha256,
+                 assessment.model_input_sha256 AS modelInputSha256,
+                 assessment.prompt_version AS promptVersion,
                  assessment.score, assessment.rationale,
                  assessment.provider, assessment.model,
                  assessment.provider_response_id AS providerResponseId,
@@ -89,6 +97,10 @@ export class AiReviewAssessmentFoundation {
             JOIN submissions submission
               ON submission.id = assessment.submission_id
              AND submission.event_id = assessment.event_id
+            LEFT JOIN submission_revisions source_revision
+              ON source_revision.id = assessment.submission_revision_id
+             AND source_revision.event_id = assessment.event_id
+             AND source_revision.submission_id = assessment.submission_id
             JOIN people generator
               ON generator.id = assessment.generated_by_person_id
             LEFT JOIN people overrider
@@ -136,6 +148,20 @@ export class AiReviewAssessmentFoundation {
             submission.status AS submissionStatus,
             submission.submitted_at AS submittedAt,
             submission.submitted_snapshot_json AS submittedSnapshotJson,
+            (SELECT revision.id
+               FROM submission_revisions revision
+              WHERE revision.event_id = submission.event_id
+                AND revision.submission_id = submission.id
+                AND revision.save_kind = 'submitted'
+              ORDER BY revision.revision_number DESC, revision.id DESC
+              LIMIT 1) AS submissionRevisionId,
+            (SELECT revision.revision_number
+               FROM submission_revisions revision
+              WHERE revision.event_id = submission.event_id
+                AND revision.submission_id = submission.id
+                AND revision.save_kind = 'submitted'
+              ORDER BY revision.revision_number DESC, revision.id DESC
+              LIMIT 1) AS submissionRevisionNumber,
             assessment.id AS existingAssessmentId
        FROM evaluation_rounds round
        JOIN events event
@@ -164,6 +190,14 @@ export class AiReviewAssessmentFoundation {
     if (target.submittedAt === null) {
       throw new AiReviewAssessmentStateError(
         "AI first-pass assessment requires a submitted proposal eligible for the current review cycle.",
+      );
+    }
+    if (
+      !target.submissionRevisionId ||
+      target.submissionRevisionNumber === null
+    ) {
+      throw new AiReviewAssessmentStateError(
+        "AI first-pass assessment requires an immutable submitted revision.",
       );
     }
     return target;
@@ -234,8 +268,22 @@ export class AiReviewAssessmentFoundation {
     target: Pick<
       GenerationTarget,
       "roundRevision" | "scorecardId" | "scorecardVersion"
-    >,
+    > & {
+      submissionRevisionId: string;
+      submissionRevisionNumber: number;
+      sourceSnapshotJson: string;
+      sourceSnapshotSha256: string;
+      modelInputSha256: string;
+      promptVersion: number;
+      provider: string;
+      model: string;
+    },
   ) {
+    if (
+      (await sha256(target.sourceSnapshotJson)) !== target.sourceSnapshotSha256
+    ) {
+      throw new AiReviewAssessmentIntentConflictError();
+    }
     return sha256(
       JSON.stringify({
         roundId: input.roundId,
@@ -243,6 +291,13 @@ export class AiReviewAssessmentFoundation {
         roundRevision: target.roundRevision,
         scorecardId: target.scorecardId,
         scorecardVersion: target.scorecardVersion,
+        submissionRevisionId: target.submissionRevisionId,
+        submissionRevisionNumber: target.submissionRevisionNumber,
+        sourceSnapshotSha256: target.sourceSnapshotSha256,
+        modelInputSha256: target.modelInputSha256,
+        promptVersion: target.promptVersion,
+        provider: target.provider,
+        model: target.model,
       }),
     );
   }
@@ -255,10 +310,14 @@ export class AiReviewAssessmentFoundation {
       | "roundRevision"
       | "scorecardId"
       | "scorecardVersion"
-    >,
+    > & {
+      sourceSnapshotSha256: string;
+      modelInputSha256: string;
+      promptVersion: number;
+    },
   ) {
     return `ai-review-assessment-target:${await sha256(
-      `${target.roundId}\u0000${target.submissionId}\u0000${target.roundRevision}\u0000${target.scorecardId}\u0000${target.scorecardVersion}`,
+      `${target.roundId}\u0000${target.submissionId}\u0000${target.roundRevision}\u0000${target.scorecardId}\u0000${target.scorecardVersion}\u0000${target.sourceSnapshotSha256}\u0000${target.modelInputSha256}\u0000${target.promptVersion}`,
     )}`;
   }
 }

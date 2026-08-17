@@ -1,3 +1,7 @@
+import {
+  decisionAuthorityBindings,
+  decisionAuthorityGuardSql,
+} from "~/modules/evaluations/evaluation-decision-authority.server";
 import type { Viewer } from "~/platform/auth/authorize.server";
 import {
   AiReviewAssessmentConflictError,
@@ -5,7 +9,6 @@ import {
 } from "./ai-review-assessment-errors";
 import { AiReviewAssessmentGenerationService } from "./ai-review-assessment-generation.server";
 import {
-  assertAssessmentAdministrator,
   epochSeconds,
   overrideInputSchema,
   sha256,
@@ -19,10 +22,9 @@ export {
 export type { AiReviewAssessmentGenerationAttempt } from "./ai-review-assessment-reader.server";
 export type { AiReviewAssessment } from "./ai-review-assessment-support.server";
 
-/** Assessment façade adding human override behavior to the generation workflow. */
+/** Assessment façade adding human advisory-assessment behavior to generation. */
 export class AiReviewAssessmentService extends AiReviewAssessmentGenerationService {
   async override(viewer: Viewer, rawInput: unknown) {
-    assertAssessmentAdministrator(viewer);
     await this.assertViewerEvent(viewer);
     const input = overrideInputSchema.parse(rawInput);
     const operationId = `ai-review-override:${crypto.randomUUID()}`;
@@ -64,7 +66,8 @@ export class AiReviewAssessmentService extends AiReviewAssessmentGenerationServi
                     AND other_plan.id <> plan.id
                     AND other_plan.status <> 'archived'
                )
-          )`,
+          )
+          AND ${decisionAuthorityGuardSql("assessment.event_id")}`,
       ).bind(
         input.score,
         input.rationale,
@@ -76,6 +79,7 @@ export class AiReviewAssessmentService extends AiReviewAssessmentGenerationServi
         viewer.eventId,
         input.expectedRevision,
         viewer.organisationId,
+        ...decisionAuthorityBindings(viewer.role),
       ),
       this.env.DB.prepare(
         `INSERT INTO audit_events (
@@ -114,8 +118,29 @@ export class AiReviewAssessmentService extends AiReviewAssessmentGenerationServi
         if (current.revision !== input.expectedRevision) {
           throw new AiReviewAssessmentConflictError();
         }
+        const authority = await this.env.DB.prepare(
+          `SELECT ${decisionAuthorityGuardSql("assessment.event_id")} AS authorised
+             FROM ai_review_assessments assessment
+             JOIN events event
+               ON event.id = assessment.event_id
+              AND event.organisation_id = ?
+            WHERE assessment.id = ? AND assessment.event_id = ?`,
+        )
+          .bind(
+            ...decisionAuthorityBindings(viewer.role),
+            viewer.organisationId,
+            input.assessmentId,
+            viewer.eventId,
+          )
+          .first<{ authorised: number | boolean }>();
+        if (!authority?.authorised) {
+          throw new Response(
+            "Only an owner, administrator, or committee chair with current decision authority can assess an AI advisory.",
+            { status: 403 },
+          );
+        }
         throw new AiReviewAssessmentStateError(
-          "Human overrides can only be saved against an assessment in the event's current active review cycle.",
+          "A human assessment of AI can only be saved in the event's current review cycle.",
         );
       }
       throw new Response("AI review assessment not found.", { status: 404 });

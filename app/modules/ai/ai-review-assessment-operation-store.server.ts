@@ -346,6 +346,11 @@ export class AiReviewAssessmentOperationStore {
       roundRevision: input.payload.roundRevision,
       scorecardId: input.payload.scorecardId,
       scorecardVersion: input.payload.scorecardVersion,
+      submissionRevisionId: input.payload.submissionRevisionId,
+      submissionRevisionNumber: input.payload.submissionRevisionNumber,
+      sourceSnapshotSha256: input.payload.sourceSnapshotSha256,
+      modelInputSha256: input.payload.modelInputSha256,
+      promptVersion: input.payload.promptVersion,
     });
     try {
       await this.env.DB.batch([
@@ -354,11 +359,13 @@ export class AiReviewAssessmentOperationStore {
              id, event_id, round_id, submission_id, scorecard_id,
              scorecard_version, round_revision, score, rationale, provider,
              model, provider_response_id, generated_by_person_id, generated_at,
+             submission_revision_id, source_snapshot_sha256,
+             model_input_sha256, prompt_version,
              revision, last_operation_id, updated_at
            )
            SELECT ?, round.event_id, round.id, submission.id,
                   round.scorecard_id, round.scorecard_version, round.revision,
-                  ?, ?, ?, ?, ?, ?, ?, 1, ?, ?
+                  ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?
              FROM evaluation_rounds round
              JOIN events event
                ON event.id = round.event_id AND event.organisation_id = ?
@@ -379,6 +386,15 @@ export class AiReviewAssessmentOperationStore {
                    AND other_plan.status <> 'archived'
               )
               AND submission.submitted_at IS NOT NULL
+              AND submission.submitted_snapshot_json = ?
+              AND EXISTS (
+                SELECT 1 FROM submission_revisions source_revision
+                 WHERE source_revision.id = ?
+                   AND source_revision.event_id = submission.event_id
+                   AND source_revision.submission_id = submission.id
+                   AND source_revision.revision_number = ?
+                   AND source_revision.save_kind = 'submitted'
+              )
               AND ${reviewableSubmissionSql("submission", "review")}
               AND EXISTS (
                 SELECT 1 FROM operation_jobs operation
@@ -403,6 +419,10 @@ export class AiReviewAssessmentOperationStore {
           input.staged.responseId,
           input.requestedByPersonId,
           input.staged.generatedAt,
+          input.payload.submissionRevisionId,
+          input.payload.sourceSnapshotSha256,
+          input.payload.modelInputSha256,
+          input.payload.promptVersion,
           input.operationId,
           input.staged.generatedAt,
           viewer.organisationId,
@@ -412,6 +432,9 @@ export class AiReviewAssessmentOperationStore {
           input.payload.roundRevision,
           input.payload.scorecardId,
           input.payload.scorecardVersion,
+          input.payload.sourceSnapshotJson,
+          input.payload.submissionRevisionId,
+          input.payload.submissionRevisionNumber,
           input.operationId,
           input.claimToken,
           input.stagedJson,

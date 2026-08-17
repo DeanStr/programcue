@@ -22,6 +22,10 @@ export default [
     "demo/fixtures/assistant-proposal",
     "routes/demo-assistant-proposal-fixture.ts",
   ),
+  route(
+    "demo/fixtures/ai-review-evidence",
+    "routes/demo-ai-review-evidence-fixture.ts",
+  ),
   route("demo/fixtures/golden-path", "routes/demo-golden-path-fixture.ts"),
   route("api/v1/health", "routes/api-health.ts"),
   route(

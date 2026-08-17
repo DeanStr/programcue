@@ -13,6 +13,7 @@ import {
   CommunicationQueueUnavailableError,
   CommunicationService,
 } from "./communication-service.server";
+import { prepareDecisionNotificationIntent } from "./decision-notification-intent.server";
 import { ResendEmailProvider } from "./resend.server";
 import {
   createCommunicationUnsubscribeUrl,
@@ -1238,7 +1239,7 @@ describe("Communications D1 vertical slice", () => {
   });
 
   describe("provider delivery workflows", () => {
-    it("keeps a released-decision delivery terminal when a stale duplicate resumes materialisation", async () => {
+    it("sends the recipient and template pinned at decision release exactly once", async () => {
       const { testEnv } = await communicationEnvironment();
       const service = new CommunicationService(testEnv);
       const template = await service.saveTemplate(viewer, {
@@ -1265,14 +1266,38 @@ describe("Communications D1 vertical slice", () => {
       const submissionId = `decision-submission-${token}`;
       const decisionId = `decision-${token}`;
       const operationId = `decision-operation-${token}`;
-      const message = {
-        type: "decision.notification",
+      const event = await env.DB.prepare(
+        `SELECT name, brand_accent AS brandAccent, starts_at AS startsAt,
+                ends_at AS endsAt
+           FROM events WHERE id = ?`,
+      )
+        .bind(viewer.eventId)
+        .first<{
+          name: string;
+          brandAccent: string;
+          startsAt: number;
+          endsAt: number;
+        }>();
+      if (!event) throw new Error("Test event is unavailable.");
+      const prepared = await prepareDecisionNotificationIntent(testEnv, {
+        viewer,
+        decisionId,
         operationId,
-        eventId: viewer.eventId,
-        organisationId: viewer.organisationId,
-        idempotencyKey: `decision-notification-${token}`,
-        payload: { decisionId },
-      };
+        submissionId,
+        submissionTitle: "A measured proposal",
+        decision: "accepted",
+        rationale: "A strong fit for this audience.",
+        feedback: [
+          "Clarify the intended experience level in the final description.",
+        ],
+        recipientPersonId: "person-demo-submitter",
+        recipientAddress: "alex.submitter@example.com",
+        recipientName: "Alex Morgan",
+        event,
+      });
+      if (!prepared.intent) throw new Error(prepared.error);
+      const intent = prepared.intent;
+      const message = JSON.parse(intent.queuePayloadJson) as unknown;
       await env.DB.batch([
         env.DB.prepare(
           `INSERT INTO submissions (
@@ -1283,11 +1308,25 @@ describe("Communications D1 vertical slice", () => {
                   unixepoch(), unixepoch(), unixepoch())`,
         ).bind(submissionId, viewer.eventId, `DEC-${token}`),
         env.DB.prepare(
+          `INSERT INTO operation_jobs (
+          id, organisation_id, event_id, requested_by_person_id, type, idempotency_key,
+          correlation_id, status, payload_json, progress_total, created_at, updated_at
+        ) VALUES (?, ?, ?, ?, 'decision.notification', ?, ?, 'queued', ?, 1, unixepoch(), unixepoch())`,
+        ).bind(
+          operationId,
+          viewer.organisationId,
+          viewer.eventId,
+          viewer.personId,
+          intent.operationIdempotencyKey,
+          intent.correlationId,
+          intent.queuePayloadJson,
+        ),
+        env.DB.prepare(
           `INSERT INTO submission_decisions (
           id, event_id, submission_id, revision_number, status, decision, decided_by_person_id,
           rationale, notification_feedback_json, effect_preview_json,
-          idempotency_key, decided_at, published_at
-        ) VALUES (?, ?, ?, 1, 'published', 'accepted', ?, ?, ?, '{}', ?, unixepoch(), unixepoch())`,
+          idempotency_key, notification_operation_id, decided_at, published_at
+        ) VALUES (?, ?, ?, 1, 'published', 'accepted', ?, ?, ?, '{}', ?, ?, unixepoch(), unixepoch())`,
         ).bind(
           decisionId,
           viewer.eventId,
@@ -1298,22 +1337,157 @@ describe("Communications D1 vertical slice", () => {
             "Clarify the intended experience level in the final description.",
           ]),
           `decision-${token}`,
+          operationId,
         ),
         env.DB.prepare(
-          `INSERT INTO operation_jobs (
-          id, organisation_id, event_id, requested_by_person_id, type, idempotency_key,
-          correlation_id, status, payload_json, progress_total, created_at, updated_at
-        ) VALUES (?, ?, ?, ?, 'decision.notification', ?, ?, 'queued', ?, 1, unixepoch(), unixepoch())`,
+          `INSERT INTO communications (
+          id, event_id, template_version_id, sender_profile_id, operation_id,
+          idempotency_key, kind, channel, status, audience_json,
+          content_snapshot_json, recipient_count, queued_at,
+          created_by_person_id, created_at, updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, 'transactional', 'email', 'queued', ?, ?, 1,
+                  unixepoch(), ?, unixepoch(), unixepoch())`,
         ).bind(
-          operationId,
-          viewer.organisationId,
+          intent.communicationId,
           viewer.eventId,
+          intent.templateVersionId,
+          intent.senderProfileId,
+          operationId,
+          intent.operationIdempotencyKey,
+          intent.audienceJson,
+          intent.contentSnapshotJson,
           viewer.personId,
-          message.idempotencyKey,
-          crypto.randomUUID(),
-          JSON.stringify(message),
+        ),
+        env.DB.prepare(
+          `INSERT INTO communication_deliveries (
+          id, event_id, communication_id, person_id, recipient_address,
+          recipient_name, source_id, source_values_json, channel, provider,
+          idempotency_key, status, rendered_subject, rendered_body_sha256,
+          created_at, updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'email', ?, ?, 'queued', ?, ?,
+                  unixepoch(), unixepoch())`,
+        ).bind(
+          intent.deliveryId,
+          viewer.eventId,
+          intent.communicationId,
+          intent.recipientPersonId,
+          intent.recipientAddress,
+          intent.recipientName,
+          submissionId,
+          intent.sourceValuesJson,
+          intent.senderProvider,
+          intent.deliveryIdempotencyKey,
+          intent.renderedSubject,
+          intent.renderedBodySha256,
+        ),
+        env.DB.prepare(
+          `INSERT INTO operation_items (
+          id, operation_id, item_key, entity_type, entity_id, status,
+          result_json, updated_at
+        ) VALUES (?, ?, ?, 'communication_delivery', ?, 'pending', '{}', unixepoch())`,
+        ).bind(
+          intent.operationItemId,
+          operationId,
+          intent.deliveryIdempotencyKey,
+          intent.deliveryId,
         ),
       ]);
+      await expect(
+        env.DB.prepare(
+          `INSERT INTO communications (
+             id, event_id, template_version_id, sender_profile_id, operation_id,
+             idempotency_key, kind, channel, status, audience_json,
+             content_snapshot_json, recipient_count, created_by_person_id
+           ) VALUES (?, ?, ?, ?, ?, ?, 'transactional', 'email', 'queued', ?,
+                     '{}', 1, ?)`,
+        )
+          .bind(
+            `malformed-decision-communication-${token}`,
+            viewer.eventId,
+            intent.templateVersionId,
+            intent.senderProfileId,
+            operationId,
+            `malformed-decision-communication-key-${token}`,
+            intent.audienceJson,
+            viewer.personId,
+          )
+          .run(),
+      ).rejects.toThrow(
+        /decision communication requires complete pinned intent/i,
+      );
+      await expect(
+        env.DB.prepare(
+          `INSERT INTO communication_deliveries (
+             id, event_id, communication_id, person_id, recipient_address,
+             recipient_name, source_id, source_values_json, channel, provider,
+             idempotency_key, status, rendered_subject, rendered_body_sha256
+           ) VALUES (?, ?, ?, ?, ?, NULL, ?, ?, 'email', ?, ?, 'queued', ?, ?)`,
+        )
+          .bind(
+            `malformed-decision-delivery-${token}`,
+            viewer.eventId,
+            intent.communicationId,
+            intent.recipientPersonId,
+            intent.recipientAddress,
+            submissionId,
+            intent.sourceValuesJson,
+            intent.senderProvider,
+            `malformed-decision-delivery-key-${token}`,
+            intent.renderedSubject,
+            intent.renderedBodySha256,
+          )
+          .run(),
+      ).rejects.toThrow(/decision delivery requires complete pinned evidence/i);
+      await expect(
+        env.DB.prepare(
+          `UPDATE operation_jobs SET payload_json = '{}'
+            WHERE id = ?`,
+        )
+          .bind(operationId)
+          .run(),
+      ).rejects.toThrow(/decision notification operation intent is immutable/i);
+      await expect(
+        env.DB.prepare(
+          `UPDATE communications SET content_snapshot_json = '{}'
+            WHERE id = ?`,
+        )
+          .bind(intent.communicationId)
+          .run(),
+      ).rejects.toThrow(/decision communication intent is immutable/i);
+      await expect(
+        env.DB.prepare(
+          `UPDATE communication_deliveries
+              SET recipient_address = 'substituted@example.com'
+            WHERE id = ?`,
+        )
+          .bind(intent.deliveryId)
+          .run(),
+      ).rejects.toThrow(/decision delivery intent is immutable/i);
+      const replacement = await service.saveTemplate(viewer, {
+        templateId: template.templateId,
+        name: "Decision notification changed after release",
+        category: "decision",
+        subject: "Changed subject for {{submission.title}}",
+        content: {
+          body: "This newer template must not replace released intent.",
+          physicalAddress: "100 Programme Way, Toronto",
+        },
+      });
+      await service.publishTemplate(viewer, replacement.versionId);
+      await env.DB.prepare(
+        `UPDATE submissions SET submitter_email = 'changed@example.com'
+          WHERE id = ? AND event_id = ?`,
+      )
+        .bind(submissionId, viewer.eventId)
+        .run();
+      await env.DB.prepare(
+        `UPDATE sender_profiles
+            SET from_name = 'Changed sender', from_email = 'changed-sender@example.com',
+                reply_to_email = 'changed-reply@example.com'
+          WHERE id = ? AND event_id = ?`,
+      )
+        .bind(intent.senderProfileId, viewer.eventId)
+        .run();
       const requests: Array<Record<string, unknown>> = [];
       const providerKeys: string[] = [];
       const provider = new ResendEmailProvider(
@@ -1328,50 +1502,14 @@ describe("Communications D1 vertical slice", () => {
           return Response.json({ id: "resend-decision-001" });
         },
       );
-      let releaseStaleMaterialisation!: () => void;
-      const staleMaterialisationReleased = new Promise<void>((resolve) => {
-        releaseStaleMaterialisation = resolve;
-      });
-      let staleMaterialisationReachedResolve!: () => void;
-      const staleMaterialisationReached = new Promise<void>((resolve) => {
-        staleMaterialisationReachedResolve = resolve;
-      });
-      let interceptedMaterialisation = false;
-      const delayedDb = new Proxy(testEnv.DB, {
-        get(target, property) {
-          if (property === "batch") {
-            return async (statements: D1PreparedStatement[]) => {
-              if (!interceptedMaterialisation) {
-                interceptedMaterialisation = true;
-                staleMaterialisationReachedResolve();
-                await staleMaterialisationReleased;
-              }
-              return target.batch(statements);
-            };
-          }
-          const value = Reflect.get(target, property, target) as unknown;
-          return typeof value === "function" ? value.bind(target) : value;
-        },
-      });
-      const staleWorker = processDecisionNotification(
-        message,
-        { ...testEnv, DB: delayedDb },
-        { email: provider },
-      );
-      await staleMaterialisationReached;
-      try {
-        await processDecisionNotification(message, testEnv, {
-          email: provider,
-        });
-      } finally {
-        releaseStaleMaterialisation();
-      }
-      await staleWorker;
+      await processDecisionNotification(message, testEnv, { email: provider });
+      await processDecisionNotification(message, testEnv, { email: provider });
       expect(requests).toHaveLength(1);
       expect(providerKeys[0]).toMatch(
         /^programcue:communication-delivery:v1:[0-9a-f]{64}$/,
       );
       expect(requests[0]).toMatchObject({
+        from: `${intent.senderFromName} <${intent.senderFromEmail}>`,
         to: ["alex.submitter@example.com"],
         subject: "Your proposal was accepted",
       });
@@ -1381,8 +1519,11 @@ describe("Communications D1 vertical slice", () => {
       expect(JSON.stringify(requests[0])).toContain(
         "Clarify the intended experience level",
       );
-      const result = await env.DB.prepare(
-        `
+      expect(JSON.stringify(requests[0])).not.toContain("changed@example.com");
+      expect(JSON.stringify(requests[0])).not.toContain("Changed subject");
+      expect(
+        await env.DB.prepare(
+          `
         SELECT o.status AS operationStatus, c.status AS communicationStatus,
                d.provider_message_id AS providerMessageId
           FROM operation_jobs o
@@ -1390,13 +1531,62 @@ describe("Communications D1 vertical slice", () => {
           JOIN communication_deliveries d ON d.communication_id = c.id
          WHERE o.id = ?
       `,
-      )
-        .bind(operationId)
-        .first();
-      expect(result).toEqual({
+        )
+          .bind(operationId)
+          .first(),
+      ).toEqual({
         operationStatus: "completed",
         communicationStatus: "sent",
         providerMessageId: "resend-decision-001",
+      });
+
+      await env.DB.batch([
+        env.DB.prepare(
+          `INSERT INTO communication_unsubscribes (
+             id, event_id, address, category, reason, created_at
+           ) VALUES (?, ?, ?, '*', 'email.suppressed', unixepoch())`,
+        ).bind(crypto.randomUUID(), viewer.eventId, intent.recipientAddress),
+        env.DB.prepare(
+          `UPDATE operation_jobs
+              SET status = 'queued', progress_completed = 0,
+                  progress_failed = 0, completed_at = NULL
+            WHERE id = ?`,
+        ).bind(operationId),
+        env.DB.prepare(
+          `UPDATE communications SET status = 'queued', sent_at = NULL
+            WHERE id = ?`,
+        ).bind(intent.communicationId),
+        env.DB.prepare(
+          `UPDATE communication_deliveries
+              SET status = 'queued', provider_message_id = NULL,
+                  failure_code = NULL, failure_message = NULL
+            WHERE id = ?`,
+        ).bind(intent.deliveryId),
+        env.DB.prepare(
+          `UPDATE operation_items
+              SET status = 'pending', error_code = NULL, error_message = NULL,
+                  completed_at = NULL
+            WHERE id = ?`,
+        ).bind(intent.operationItemId),
+      ]);
+      await processDecisionNotification(message, testEnv, { email: provider });
+      expect(requests).toHaveLength(1);
+      expect(
+        await env.DB.prepare(
+          `SELECT o.status AS operationStatus,
+                  d.status AS deliveryStatus,
+                  d.failure_code AS failureCode
+             FROM operation_jobs o
+             JOIN communications c ON c.operation_id = o.id
+             JOIN communication_deliveries d ON d.communication_id = c.id
+            WHERE o.id = ?`,
+        )
+          .bind(operationId)
+          .first(),
+      ).toEqual({
+        operationStatus: "failed",
+        deliveryStatus: "suppressed",
+        failureCode: "recipient_unsubscribed",
       });
     });
   });

@@ -49,6 +49,11 @@ export class AiReviewAssessmentGenerationState extends AiReviewAssessmentFoundat
       roundRevision: input.payload.roundRevision,
       scorecardId: input.payload.scorecardId,
       scorecardVersion: input.payload.scorecardVersion,
+      submissionRevisionId: input.payload.submissionRevisionId,
+      submissionRevisionNumber: input.payload.submissionRevisionNumber,
+      sourceSnapshotSha256: input.payload.sourceSnapshotSha256,
+      modelInputSha256: input.payload.modelInputSha256,
+      promptVersion: input.payload.promptVersion,
       criterionIds: input.payload.criterionIds,
     });
     await this.dependencies.beforeGenerationReserved?.();
@@ -76,6 +81,15 @@ export class AiReviewAssessmentGenerationState extends AiReviewAssessmentFoundat
           AND event.participant_retention_completed_at IS NULL
           AND round.revision = ?
           AND round.scorecard_id = ? AND round.scorecard_version = ?
+          AND submission.submitted_snapshot_json = ?
+          AND EXISTS (
+            SELECT 1 FROM submission_revisions source_revision
+             WHERE source_revision.id = ?
+               AND source_revision.event_id = submission.event_id
+               AND source_revision.submission_id = submission.id
+               AND source_revision.revision_number = ?
+               AND source_revision.save_kind = 'submitted'
+          )
           AND round.status IN ('active','closed')
           AND plan.status IN ('active','closed')
           AND NOT EXISTS (
@@ -128,6 +142,9 @@ export class AiReviewAssessmentGenerationState extends AiReviewAssessmentFoundat
         input.payload.roundRevision,
         input.payload.scorecardId,
         input.payload.scorecardVersion,
+        input.payload.sourceSnapshotJson,
+        input.payload.submissionRevisionId,
+        input.payload.submissionRevisionNumber,
         input.targetKey,
         input.payload.retryOfOperationId,
         input.payload.retryOfOperationId,
@@ -192,6 +209,15 @@ export class AiReviewAssessmentGenerationState extends AiReviewAssessmentFoundat
                    AND round.revision = ?
                    AND round.scorecard_id = ?
                    AND round.scorecard_version = ?
+                   AND submission.submitted_snapshot_json = ?
+                   AND EXISTS (
+                     SELECT 1 FROM submission_revisions source_revision
+                      WHERE source_revision.id = ?
+                        AND source_revision.event_id = submission.event_id
+                        AND source_revision.submission_id = submission.id
+                        AND source_revision.revision_number = ?
+                        AND source_revision.save_kind = 'submitted'
+                   )
                    AND round.status IN ('active','closed')
                    AND plan.status IN ('active','closed')
                    AND NOT EXISTS (
@@ -234,6 +260,9 @@ export class AiReviewAssessmentGenerationState extends AiReviewAssessmentFoundat
           input.payload.roundRevision,
           input.payload.scorecardId,
           input.payload.scorecardVersion,
+          input.payload.sourceSnapshotJson,
+          input.payload.submissionRevisionId,
+          input.payload.submissionRevisionNumber,
           input.targetKey,
           input.payload.retryOfOperationId,
           viewer.eventId,

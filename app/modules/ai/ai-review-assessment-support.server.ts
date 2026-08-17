@@ -1,5 +1,6 @@
 import { z } from "zod";
 
+import { requireValue } from "~/lib/required-value";
 import type { Viewer } from "~/platform/auth/authorize.server";
 
 import type { AiModelProvider } from "./openai-responses-provider.server";
@@ -45,7 +46,7 @@ export const overrideInputSchema = z
     score: z.coerce.number().finite().min(1).max(5),
     rationale: z.string().trim().min(10).max(2_000),
     confirmed: z.literal(true, {
-      error: "Confirm the human AI-score override before saving it.",
+      error: "Confirm the human assessment of AI before saving it.",
     }),
   })
   .strict();
@@ -114,6 +115,11 @@ export type AiReviewAssessmentRow = {
   scorecardId: string;
   scorecardVersion: number;
   roundRevision: number;
+  submissionRevisionId: string | null;
+  submissionRevisionNumber: number | null;
+  sourceSnapshotSha256: string | null;
+  modelInputSha256: string | null;
+  promptVersion: number | null;
   score: number;
   rationale: string;
   provider: ProviderKey;
@@ -131,12 +137,38 @@ export type AiReviewAssessmentRow = {
   updatedAt: number;
 };
 
-export type AiReviewAssessment = Omit<AiReviewAssessmentRow, "provider"> & {
+type AiReviewAssessmentBase = Omit<
+  AiReviewAssessmentRow,
+  | "provider"
+  | "overrideScore"
+  | "overrideRationale"
+  | "overrideByPersonId"
+  | "overrideByName"
+  | "overrideAt"
+> & {
   provider: ProviderKey;
   providerLabel: AiModelProvider["providerName"];
-  effectiveScore: number;
-  overridden: boolean;
 };
+
+export type AiReviewAssessment = AiReviewAssessmentBase &
+  (
+    | {
+        overridden: false;
+        overrideScore: null;
+        overrideRationale: null;
+        overrideByPersonId: null;
+        overrideByName: null;
+        overrideAt: null;
+      }
+    | {
+        overridden: true;
+        overrideScore: number;
+        overrideRationale: string;
+        overrideByPersonId: string;
+        overrideByName: string;
+        overrideAt: number;
+      }
+  );
 
 export type AiReviewAssessmentDependencies = {
   provider?: AiModelProvider;
@@ -161,6 +193,8 @@ export type GenerationTarget = {
   submissionStatus: string;
   submittedAt: number | null;
   submittedSnapshotJson: string | null;
+  submissionRevisionId: string | null;
+  submissionRevisionNumber: number | null;
   existingAssessmentId: string | null;
 };
 
@@ -201,11 +235,49 @@ export type { AiReviewAssessmentGenerationAttempt } from "./ai-review-assessment
 export function assessmentFromRow(
   row: AiReviewAssessmentRow,
 ): AiReviewAssessment {
+  if (row.overrideScore === null) {
+    if (
+      row.overrideRationale !== null ||
+      row.overrideByPersonId !== null ||
+      row.overrideByName !== null ||
+      row.overrideAt !== null
+    ) {
+      throw new Error(
+        `AI assessment ${row.id} has incomplete human assessment evidence.`,
+      );
+    }
+    return {
+      ...row,
+      providerLabel: providerLabels[row.provider],
+      overridden: false,
+      overrideScore: null,
+      overrideRationale: null,
+      overrideByPersonId: null,
+      overrideByName: null,
+      overrideAt: null,
+    };
+  }
   return {
     ...row,
     providerLabel: providerLabels[row.provider],
-    effectiveScore: row.overrideScore ?? row.score,
-    overridden: row.overrideScore !== null,
+    overridden: true,
+    overrideScore: row.overrideScore,
+    overrideRationale: requireValue(
+      row.overrideRationale,
+      `AI assessment ${row.id} is missing its human rationale.`,
+    ),
+    overrideByPersonId: requireValue(
+      row.overrideByPersonId,
+      `AI assessment ${row.id} is missing its human assessor.`,
+    ),
+    overrideByName: requireValue(
+      row.overrideByName,
+      `AI assessment ${row.id} is missing its human assessor name.`,
+    ),
+    overrideAt: requireValue(
+      row.overrideAt,
+      `AI assessment ${row.id} is missing its human assessment timestamp.`,
+    ),
   };
 }
 

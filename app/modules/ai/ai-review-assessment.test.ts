@@ -143,7 +143,7 @@ describe("persisted AI first-pass review assessments", () => {
         rationale:
           "This unconfirmed override must not modify the effective advisory score.",
       }),
-    ).rejects.toThrow(/confirm the human AI-score override/i);
+    ).rejects.toThrow(/confirm the human assessment of AI/i);
     expect(
       await env.DB.prepare(
         `SELECT override_score AS overrideScore, revision
@@ -202,12 +202,15 @@ describe("persisted AI first-pass review assessments", () => {
       roundId: ROUND_ID,
       submissionId: SUBMISSION_ID,
       score: 4.25,
-      effectiveScore: 4.25,
       overridden: false,
       provider: "workers_ai",
       providerLabel: "Workers AI",
       model: "@cf/deepseek-ai/deepseek-v4-flash-0731",
       providerResponseId: "response-1",
+      submissionRevisionNumber: 1,
+      sourceSnapshotSha256: expect.stringMatching(/^[a-f0-9]{64}$/u),
+      modelInputSha256: expect.stringMatching(/^[a-f0-9]{64}$/u),
+      promptVersion: 1,
       revision: 1,
     });
     expect(assessment.rationale).toContain("run-of-show");
@@ -228,6 +231,10 @@ describe("persisted AI first-pass review assessments", () => {
     const persisted = await env.DB.prepare(
       `SELECT score, rationale, provider, model,
               provider_response_id AS responseId,
+              submission_revision_id AS submissionRevisionId,
+              source_snapshot_sha256 AS sourceSnapshotSha256,
+              model_input_sha256 AS modelInputSha256,
+              prompt_version AS promptVersion,
               override_score AS overrideScore, revision
          FROM ai_review_assessments WHERE id = ?`,
     )
@@ -238,15 +245,23 @@ describe("persisted AI first-pass review assessments", () => {
         provider: string;
         model: string;
         responseId: string;
+        submissionRevisionId: string;
+        sourceSnapshotSha256: string;
+        modelInputSha256: string;
+        promptVersion: number;
         overrideScore: number | null;
         revision: number;
       }>();
-    expect(persisted).toEqual({
+    expect(persisted).toMatchObject({
       score: 4.25,
       rationale: validAssessment().rationale,
       provider: "workers_ai",
       model: "@cf/deepseek-ai/deepseek-v4-flash-0731",
       responseId: "response-1",
+      submissionRevisionId: `demo-evaluation-submission-revision-${SUBMISSION_ID}`,
+      sourceSnapshotSha256: expect.stringMatching(/^[a-f0-9]{64}$/u),
+      modelInputSha256: expect.stringMatching(/^[a-f0-9]{64}$/u),
+      promptVersion: 1,
       overrideScore: null,
       revision: 1,
     });
@@ -801,7 +816,6 @@ describe("persisted AI first-pass review assessments", () => {
     expect(overridden).toMatchObject({
       score: 4.25,
       overrideScore: 3.5,
-      effectiveScore: 3.5,
       overridden: true,
       overrideByPersonId: admin.personId,
       revision: 2,
@@ -815,7 +829,6 @@ describe("persisted AI first-pass review assessments", () => {
         id: generated.id,
         score: 4.25,
         overrideScore: 3.5,
-        effectiveScore: 3.5,
       }),
     ]);
     await expect(service.listGenerationAttempts(admin)).resolves.toEqual([]);
@@ -844,6 +857,66 @@ describe("persisted AI first-pass review assessments", () => {
       .bind(admin.eventId, generated.id)
       .first<{ count: number }>();
     expect(overrideAudit?.count).toBe(1);
+  });
+
+  it("rechecks committee-chair decision authority inside the assessment transaction", async () => {
+    const service = new AiReviewAssessmentService(
+      env as unknown as CloudflareEnvironment,
+      {
+        provider: workersAiProvider(async () =>
+          structuredResponse(validAssessment(), "chair-authority-response"),
+        ),
+      },
+    );
+    const generated = await service.generate(admin, generationInput());
+    await expect(
+      service.override(committeeChair, {
+        assessmentId: generated.id,
+        expectedRevision: generated.revision,
+        score: 4,
+        rationale:
+          "A chair without explicit decision authority cannot assess this advisory.",
+        confirmed: true,
+      }),
+    ).rejects.toMatchObject({ status: 403 });
+
+    await env.DB.prepare(
+      `UPDATE evaluation_plans SET decision_role = 'committee_chair'
+        WHERE id = 'demo-evaluation-plan' AND event_id = ?`,
+    )
+      .bind(admin.eventId)
+      .run();
+    const racingService = new AiReviewAssessmentService(
+      env as unknown as CloudflareEnvironment,
+      {
+        beforeOverridePersisted: async () => {
+          await env.DB.prepare(
+            `UPDATE evaluation_plans SET decision_role = 'administrator'
+              WHERE id = 'demo-evaluation-plan' AND event_id = ?`,
+          )
+            .bind(admin.eventId)
+            .run();
+        },
+      },
+    );
+    await expect(
+      racingService.override(committeeChair, {
+        assessmentId: generated.id,
+        expectedRevision: generated.revision,
+        score: 4,
+        rationale:
+          "Authority revoked before persistence must stop this chair assessment.",
+        confirmed: true,
+      }),
+    ).rejects.toMatchObject({ status: 403 });
+    await expect(
+      env.DB.prepare(
+        `SELECT override_score AS overrideScore, revision
+           FROM ai_review_assessments WHERE id = ?`,
+      )
+        .bind(generated.id)
+        .first(),
+    ).resolves.toEqual({ overrideScore: null, revision: generated.revision });
   });
 
   it("replays the exact completed generation intent without another provider call", async () => {
@@ -1152,6 +1225,55 @@ describe("persisted AI first-pass review assessments", () => {
       "completed",
       "failed",
     ]);
+  });
+
+  it("does not save an assessment if the exact submitted snapshot changes during generation", async () => {
+    const original = await env.DB.prepare(
+      `SELECT submitted_snapshot_json AS snapshotJson
+         FROM submissions WHERE id = ? AND event_id = ?`,
+    )
+      .bind(SUBMISSION_ID, admin.eventId)
+      .first<{ snapshotJson: string }>();
+    if (!original) throw new Error("AI test submission is unavailable.");
+    const create = vi.fn(async () => {
+      await env.DB.prepare(
+        `UPDATE submissions
+            SET submitted_snapshot_json = json_set(
+              submitted_snapshot_json,
+              '$.answers.session_overview',
+              'Changed while the provider was running.'
+            )
+          WHERE id = ? AND event_id = ?`,
+      )
+        .bind(SUBMISSION_ID, admin.eventId)
+        .run();
+      return structuredResponse(validAssessment());
+    });
+    const service = new AiReviewAssessmentService(
+      env as unknown as CloudflareEnvironment,
+      { provider: workersAiProvider(create) },
+    );
+
+    try {
+      await expect(
+        service.generate(admin, generationInput()),
+      ).rejects.toBeInstanceOf(AiReviewAssessmentConflictError);
+      await expect(
+        env.DB.prepare(
+          `SELECT COUNT(*) AS count FROM ai_review_assessments
+            WHERE event_id = ? AND submission_id = ?`,
+        )
+          .bind(admin.eventId, SUBMISSION_ID)
+          .first(),
+      ).resolves.toEqual({ count: 0 });
+    } finally {
+      await env.DB.prepare(
+        `UPDATE submissions SET submitted_snapshot_json = ?
+          WHERE id = ? AND event_id = ?`,
+      )
+        .bind(original.snapshotJson, SUBMISSION_ID, admin.eventId)
+        .run();
+    }
   });
 
   it("does not reserve or dispatch generation after repository authority changes", async () => {

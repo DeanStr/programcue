@@ -329,6 +329,20 @@ describe("evaluation vertical slice", () => {
         }),
       ),
       env.DB.prepare(
+        `INSERT OR IGNORE INTO submission_revisions
+           (id, event_id, submission_id, form_version_id, revision_number,
+            answers_json, speaker_snapshot_json, save_kind, saved_by_person_id)
+         VALUES ('eval-test-submitted-revision', ?, 'eval-test-submission',
+                 'eval-test-form-v1', 1, ?, '[]', 'submitted', 'person-demo-submitter')`,
+      ).bind(
+        admin.eventId,
+        JSON.stringify({
+          abstract: "A clear, useful proposal.",
+          description: "A practical description for the public programme.",
+          biography: "Alex Morgan is the identifying speaker biography.",
+        }),
+      ),
+      env.DB.prepare(
         `INSERT OR IGNORE INTO submission_speakers (id, event_id, submission_id, person_id, email, display_name, position, invitation_status, is_primary, claimed_at, created_at, updated_at) VALUES ('eval-test-speaker', ?, 'eval-test-submission', 'person-demo-submitter', 'alex.submitter@example.com', 'Alex Morgan', 0, 'claimed', 1, unixepoch(), unixepoch(), unixepoch())`,
       ).bind(admin.eventId),
       env.DB.prepare(
@@ -527,10 +541,12 @@ describe("evaluation vertical slice", () => {
              id, event_id, round_id, submission_id, scorecard_id,
              scorecard_version, round_revision, score, rationale, provider,
              model, provider_response_id, generated_by_person_id,
-             last_operation_id
+             last_operation_id, submission_revision_id, source_snapshot_sha256,
+             model_input_sha256, prompt_version
            ) VALUES (?, ?, ?, 'eval-test-submission', ?, 1, 1, 4,
                      'This persisted AI assessment must survive a concurrent plan replacement attempt.',
-                     'workers_ai', '@cf/deepseek-ai/deepseek-v4-flash-0731', ?, ?, ?)`,
+                     'workers_ai', '@cf/deepseek-ai/deepseek-v4-flash-0731', ?, ?, ?,
+                     'eval-test-submitted-revision', ?, ?, 1)`,
         )
           .bind(
             assessmentId,
@@ -540,6 +556,8 @@ describe("evaluation vertical slice", () => {
             "eval-ai-plan-replacement-response",
             admin.personId,
             "eval-ai-plan-replacement-operation",
+            "a".repeat(64),
+            "b".repeat(64),
           )
           .run();
       });

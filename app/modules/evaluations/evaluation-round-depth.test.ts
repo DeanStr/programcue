@@ -311,6 +311,18 @@ async function addSubmission() {
       snapshot,
     ),
     env.DB.prepare(
+      `INSERT INTO submission_revisions
+         (id, event_id, submission_id, form_version_id, revision_number,
+          answers_json, speaker_snapshot_json, save_kind, saved_by_person_id)
+       VALUES (?, ?, ?, ?, 1, ?, '[]', 'submitted', 'person-sbek-speaker')`,
+    ).bind(
+      "abstract-depth-submitted-revision",
+      admin.eventId,
+      submissionId,
+      formVersionId,
+      JSON.stringify(submittedSnapshot().answers),
+    ),
+    env.DB.prepare(
       `INSERT INTO submission_speakers
          (id, event_id, submission_id, person_id, email, display_name, position,
           invitation_status, is_primary, claimed_at, created_at, updated_at)
@@ -677,10 +689,12 @@ describe("abstract management round depth", () => {
          id, event_id, round_id, submission_id, scorecard_id,
          scorecard_version, round_revision, score, rationale, provider,
          model, provider_response_id, generated_by_person_id,
-         last_operation_id
+         last_operation_id, submission_revision_id, source_snapshot_sha256,
+         model_input_sha256, prompt_version
        ) VALUES (?, ?, ?, ?, ?, ?, ?, 4,
                  'A sufficiently detailed persisted AI assessment rationale for this test.',
-                 'workers_ai', '@cf/deepseek-ai/deepseek-v4-flash-0731', ?, ?, ?)`,
+                 'workers_ai', '@cf/deepseek-ai/deepseek-v4-flash-0731', ?, ?, ?,
+                 'abstract-depth-submitted-revision', ?, ?, 1)`,
     )
       .bind(
         "abstract-round-edit-ai-assessment",
@@ -693,6 +707,8 @@ describe("abstract management round depth", () => {
         "abstract-round-edit-ai-response",
         admin.personId,
         "abstract-round-edit-ai-operation",
+        "a".repeat(64),
+        "b".repeat(64),
       )
       .run();
     await expect(

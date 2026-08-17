@@ -24,6 +24,7 @@ export async function seedExpiredRetentionEvent() {
   const operationalTaskId = id("privacy-operational-task");
   const operationalTaskCommentId = id("privacy-operational-comment");
   const operationalTaskEvidenceId = id("privacy-operational-evidence");
+  const decisionOperationId = id("privacy-decision-operation");
   const communicationId = id("privacy-communication");
   const deliveryId = id("privacy-delivery");
   const invitationId = id("privacy-invitation");
@@ -340,6 +341,19 @@ export async function seedExpiredRetentionEvent() {
       `${sharedId}@example.com`,
     ),
     testEnv.DB.prepare(
+      `INSERT INTO operation_jobs (
+         id, organisation_id, event_id, requested_by_person_id, type,
+         idempotency_key, correlation_id, status, payload_json
+       ) VALUES (?, ?, ?, 'person-demo-owner', 'decision.notification', ?, ?,
+                 'completed', '{"privateDecisionId":"private-decision"}')`,
+    ).bind(
+      decisionOperationId,
+      organisationId,
+      eventId,
+      id("privacy-decision-operation-key"),
+      id("privacy-decision-correlation"),
+    ),
+    testEnv.DB.prepare(
       `INSERT INTO communication_templates (
          id, event_id, name, category, status, created_by_person_id
        ) VALUES (?, ?, 'Exclusive Person message', 'ad_hoc', 'active',
@@ -371,26 +385,34 @@ export async function seedExpiredRetentionEvent() {
     ),
     testEnv.DB.prepare(
       `INSERT INTO communications (
-         id, event_id, template_version_id, sender_profile_id, idempotency_key,
-         kind, channel, status, audience_json, content_snapshot_json,
+         id, event_id, template_version_id, sender_profile_id, operation_id,
+         idempotency_key, kind, channel, status, audience_json, content_snapshot_json,
          recipient_count, sent_at
-       ) VALUES (?, ?, ?, ?, ?, 'transactional', 'email', 'sent', ?, ?, 1,
+       ) VALUES (?, ?, ?, ?, ?, ?, 'transactional', 'email', 'sent', ?, ?, 1,
                  unixepoch())`,
     ).bind(
       communicationId,
       eventId,
       templateVersionId,
       senderProfileId,
+      decisionOperationId,
       id("privacy-communication-key"),
-      JSON.stringify({ email: `${exclusiveId}@example.com` }),
+      JSON.stringify({
+        type: "decision",
+        decisionId: id("privacy-decision"),
+        email: `${exclusiveId}@example.com`,
+      }),
       JSON.stringify({ html: "Hello Exclusive Person" }),
     ),
     testEnv.DB.prepare(
       `INSERT INTO communication_deliveries (
          id, event_id, communication_id, person_id, recipient_address,
          recipient_name, source_values_json, channel, provider,
-         provider_message_id, idempotency_key, status
-       ) VALUES (?, ?, ?, ?, ?, 'Exclusive Person', ?, 'email', 'resend', ?, ?, 'delivered')`,
+         provider_message_id, idempotency_key, status, rendered_subject,
+         rendered_body_sha256
+       ) VALUES (?, ?, ?, ?, ?, 'Exclusive Person', ?, 'email', 'resend', ?, ?,
+                 'delivered', 'Hello Exclusive Person',
+                 '0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef')`,
     ).bind(
       deliveryId,
       eventId,

@@ -46,6 +46,8 @@ const wrangler = spawn(
     `BETTER_AUTH_URL:http://localhost:${e2ePort}`,
     "--var",
     `CORS_ALLOWED_ORIGINS:http://localhost:${e2ePort},http://127.0.0.1:${e2ePort}`,
+    "--var",
+    "PROGRAM_CUE_E2E_FIXTURES:true",
     "--log-level",
     "warn",
     "--env-file",

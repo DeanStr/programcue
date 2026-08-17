@@ -301,6 +301,10 @@ export function buildParticipantRetentionFinalisationStatements(
               source_values_json = ?, provider = NULL,
               provider_message_id = NULL,
               idempotency_key = 'retained-delivery-' || id,
+              rendered_subject = CASE
+                WHEN rendered_subject IS NULL THEN NULL ELSE 'Retained message'
+              END,
+              rendered_body_sha256 = NULL,
               status = CASE WHEN status IN ('queued','sending','failed') THEN 'cancelled' ELSE status END,
               next_attempt_at = NULL, failure_code = NULL, failure_message = NULL,
               updated_at = unixepoch()

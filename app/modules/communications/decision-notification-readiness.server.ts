@@ -7,16 +7,19 @@ import {
   requireEmailProviderConfiguration,
 } from "./email-provider.server";
 
-type DecisionTemplateRow = {
+export type DecisionTemplateRow = {
   id: string;
+  name: string;
+  versionNumber: number;
   subjectTemplate: string | null;
   contentJson: string;
 };
 
-type DecisionSenderRow = {
+export type DecisionSenderRow = {
   id: string;
   fromName: string;
   fromEmail: string;
+  replyToEmail: string | null;
 };
 
 export type DecisionNotificationReadiness = {
@@ -47,7 +50,8 @@ export async function inspectDecisionNotificationReadiness(
   }
 
   const templatePromise = env.DB.prepare(
-    `SELECT version.id, version.subject_template AS subjectTemplate,
+    `SELECT version.id, version.name, version.version_number AS versionNumber,
+            version.subject_template AS subjectTemplate,
             version.content_json AS contentJson
        FROM communication_template_versions version
        JOIN communication_templates template
@@ -66,7 +70,8 @@ export async function inspectDecisionNotificationReadiness(
   const senderPromise = provider
     ? env.DB.prepare(
         `SELECT sender.id, sender.from_name AS fromName,
-                sender.from_email AS fromEmail
+                sender.from_email AS fromEmail,
+                sender.reply_to_email AS replyToEmail
            FROM sender_profiles sender
            JOIN events event
              ON event.id = sender.event_id AND event.organisation_id = ?

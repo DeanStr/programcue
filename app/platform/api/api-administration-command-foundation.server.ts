@@ -171,8 +171,9 @@ export abstract class ApiAdministrationCommandExecutor {
            ON session.source_submission_id = decision.submission_id
           AND session.event_id = decision.event_id
          LEFT JOIN operation_jobs operation
-           ON operation.event_id = decision.event_id
-          AND operation.idempotency_key = 'decision-notification:' || decision.id
+           ON operation.id = decision.notification_operation_id
+          AND operation.event_id = decision.event_id
+          AND operation.type = 'decision.notification'
         WHERE decision.id = ? AND decision.event_id = ?`,
     )
       .bind(viewer.organisationId, commandId, viewer.eventId)

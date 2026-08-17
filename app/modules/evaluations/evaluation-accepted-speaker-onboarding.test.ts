@@ -224,6 +224,19 @@ async function resetEvaluationFixture() {
     env.DB.prepare(
       "DELETE FROM submission_decisions WHERE event_id = ? AND submission_id = 'eval-test-submission'",
     ).bind(admin.eventId),
+    env.DB.prepare(
+      `DELETE FROM communications
+        WHERE event_id = ?
+          AND json_extract(audience_json, '$.type') = 'decision'
+          AND json_extract(audience_json, '$.submissionId') = 'eval-test-submission'`,
+    ).bind(admin.eventId),
+    env.DB.prepare(
+      `DELETE FROM operation_jobs
+        WHERE event_id = ? AND type = 'decision.notification'
+          AND json_extract(payload_json, '$.payload.decisionId') NOT IN (
+            SELECT id FROM submission_decisions WHERE event_id = ?
+          )`,
+    ).bind(admin.eventId, admin.eventId),
     env.DB.prepare("DELETE FROM evaluation_plans WHERE event_id = ?").bind(
       admin.eventId,
     ),
@@ -541,6 +554,41 @@ describe("evaluation vertical slice", () => {
       });
       expect(result.sessionId).toBeTruthy();
       expect(result.notificationStatus).toBe("queued");
+      await expect(
+        env.DB.prepare(
+          `SELECT decision.notification_operation_id AS linkedOperationId,
+                  operation.status AS operationStatus,
+                  communication.id AS communicationId,
+                  communication.status AS communicationStatus,
+                  delivery.id AS deliveryId,
+                  delivery.status AS deliveryStatus,
+                  delivery.recipient_address AS recipientAddress,
+                  delivery.rendered_subject AS renderedSubject,
+                  delivery.rendered_body_sha256 AS renderedBodySha256,
+                  json_extract(operation.payload_json, '$.communicationId') AS payloadCommunicationId
+             FROM submission_decisions decision
+             JOIN operation_jobs operation
+               ON operation.id = decision.notification_operation_id
+             JOIN communications communication
+               ON communication.operation_id = operation.id
+             JOIN communication_deliveries delivery
+               ON delivery.communication_id = communication.id
+            WHERE decision.id = ? AND decision.event_id = ?`,
+        )
+          .bind(result.decisionId, admin.eventId)
+          .first(),
+      ).resolves.toMatchObject({
+        linkedOperationId: result.notificationOperationId,
+        operationStatus: "queued",
+        communicationId: expect.any(String),
+        communicationStatus: "queued",
+        deliveryId: expect.any(String),
+        deliveryStatus: "queued",
+        recipientAddress: "alex.submitter@example.com",
+        renderedSubject: expect.any(String),
+        renderedBodySha256: expect.stringMatching(/^[a-f0-9]{64}$/u),
+        payloadCommunicationId: expect.any(String),
+      });
       expect(result.speakerInvitationStatus).toBe("demo_not_sent");
       expect(result.speakerInvitationCount).toBe(1);
       const [submission, session, audit, speakerMembership] = await Promise.all(
