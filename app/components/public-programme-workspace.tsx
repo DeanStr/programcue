@@ -1116,6 +1116,13 @@ export function PublicProgrammeWorkspace({
       >
         <PublicProgrammeHero model={model} />
         {!embedded ? <PublicProgrammeViewNavigation model={model} /> : null}
+        {homeSurface && loaderData.site ? (
+          <PublicSiteHome
+            event={programme.event}
+            programme={programme}
+            site={loaderData.site}
+          />
+        ) : null}
         <div
           className={`public-main${!overviewSurface ? " public-surface-main" : ""}`}
         >
@@ -1130,13 +1137,6 @@ export function PublicProgrammeWorkspace({
           ) : (
             <>
               <div className="public-content">
-                {homeSurface && loaderData.site ? (
-                  <PublicSiteHome
-                    event={programme.event}
-                    programme={programme}
-                    site={loaderData.site}
-                  />
-                ) : null}
                 {fetcher.data && "error" in fetcher.data ? (
                   <div className="validation-item error mb" role="alert">
                     <strong>Itinerary not updated</strong>

@@ -257,7 +257,7 @@ export function PublicSiteHome({
       </HomeSection>
     ),
     venue: (
-      <HomeSection title="Venue">
+      <HomeSection title="Venue" className="public-site-venue-section">
         <div className="public-site-venue">
           <MapPin aria-hidden />
           <div>
@@ -281,7 +281,10 @@ export function PublicSiteHome({
       </HomeSection>
     ),
     faq: (
-      <HomeSection title="Frequently asked questions">
+      <HomeSection
+        title="Frequently asked questions"
+        className="public-site-faq-section"
+      >
         <div className="public-site-faq">
           {configuration.faqItems.map((item) => (
             <details key={item.id}>

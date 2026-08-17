@@ -1176,43 +1176,35 @@ Inter face, semantic tokens and accessible component primitives remain the one
 application design system; no second UI library is introduced.
 
 The anonymous event site has a lower density and may use the event's supplied
-hero image and accent. Its bounded homepage is predominantly one editorial
-column: sections state their heading on top and a single hairline separates
-them. The introduction alone uses a restrained bounded surface and narrow
-accent edge because it holds the organiser's opening statement and primary
-action; repeating that treatment on statistics, venue and record indexes would
-again make unlike content look interchangeable. Statistics are set on the page
-as one row of equal columns rather than in tinted tiles, since a tile grid left
-an orphan box at most widths. Featured speaker and session selections are
-organiser-controlled and may hold up to twelve records, so their grid stays
-content-driven, capped at three columns by the same track floor as the
-application `.grid-N` primitive rather than by a fixed bento arrangement. The
-hero remains the dominant accent surface above the programme. Public light,
-dark and system themes remain event-site choices; a global application theme
-remains deferred for the reason documented above.
+hero image and accent. Its curated homepage owns the full public-event measure
+above the filterable programme; it is not squeezed into the schedule's content
+column to make room for an itinerary rail that is not part of the landing-page
+story. The programme and itinerary keep their working two-column layout below.
+The hero remains the dominant accent surface above both. Public light, dark and
+system themes remain event-site choices; a global application theme remains
+deferred for the reason documented above.
 
-Within that column hairlines remain the default structural device, carrying
-full strength between sections and a lighter mix between entries. Limited,
-content-specific cues keep the page from becoming one undifferentiated ruled
-list: section headings carry a short accent rule, speakers sit on an open-ended
-accent wash, sessions use a timetable rail, and the statistics share one
-square-edged band. None encloses each record in a generic rounded card.
-Featured speakers, featured sessions and the FAQ previously repeated tinted,
-bordered boxes even though the page already separated their entries. The FAQ
-replaces the browser's default disclosure triangle with a plus drawn from two
-hairlines, so the one piece of unstyled chrome on a public page is gone.
-Repeated decorative marks are removed where the heading already says what the
-list holds — every entry under "Featured sessions" is a session, so a calendar
-icon on each one is noise — and kept where they carry information, such as a
-recording's play mark or a speaker's portrait.
+The homepage follows an editorial event hierarchy rather than a dashboard or a
+stack of cards. The introduction is a two-column proposition-and-explanation
+spread, speakers use large rectangular portraits on an open-ended accent field,
+and featured sessions form a numbered programme edit with a timetable rail.
+Statistics share one square-edged band, venue information uses a location rail,
+and section headings extend into a fading brand rule. Featured speakers,
+featured sessions and the FAQ do not enclose each record in a generic rounded
+container. The FAQ replaces the browser's default disclosure triangle with a
+plus drawn from two hairlines. Repeated marks are removed where the heading
+already supplies their meaning — every entry under "Featured sessions" is a
+session, so a calendar icon on each one is noise — and kept where they carry
+information, such as a recording's play mark or a speaker's portrait.
 
 Restraint is not the same as having nothing to look at, so scale is spent on
 content rather than ornament. Statistics retain a strong numeric step but stay
-subordinate to the event masthead and section headings; speaker portraits are
-sized to the column rather than printed at a thumbnail next to their own names;
-and the introduction's opening statement is set above body copy without
-becoming another headline. All three answer to container units, so the editor
-preview and a phone get the same relationships rather than the same pixels.
+subordinate to the event masthead and section headings; speaker portraits read
+as lineup photography rather than avatars; and the organiser's opening
+statement gets display hierarchy without becoming another hero. Speaker grids
+adapt explicitly for one-, two- and three-column lineups and all homepage
+relationships answer to the homepage container, so the editor preview and a
+phone get the same composition rather than the same pixels.
 
 A featured session states when it happens. It is the only place a session
 appears outside the day-grouped list, so nothing above it supplies the date
