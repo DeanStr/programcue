@@ -85,7 +85,7 @@ describe("programme presentation rules", () => {
 
   /* Controls use the derived ink while solid accent fills use the raw colour;
      dark-canvas ink is a third surface. Each needs its own readable foreground. */
-  it("derives solid-accent ink that stays readable on any accent", () => {
+  it("derives contrast-safe inks for arbitrary event accents", () => {
     for (const accent of [
       "#9d4a31",
       "#4f46e5",
@@ -99,9 +99,17 @@ describe("programme presentation rules", () => {
       "#808080",
       "#767676",
       "#78969b",
+      "#90eefb",
     ]) {
       const { ink, onAccent, onRawAccent, onDark, onDarkSolid } =
         programmeAccentPalette(accent);
+      const lightAccentSoft = mixHex(accent, "#ffffff", 0.08);
+      expect(programmeContrastRatio(ink, "#ffffff")).toBeGreaterThanOrEqual(
+        4.75,
+      );
+      expect(
+        programmeContrastRatio(ink, lightAccentSoft),
+      ).toBeGreaterThanOrEqual(4.75);
       expect(
         programmeContrastRatio(onRawAccent, accent),
       ).toBeGreaterThanOrEqual(4.5);
@@ -125,6 +133,7 @@ describe("programme presentation rules", () => {
     expect(programmeAccentPalette("#000000").onDark).not.toBe("#000000");
     expect(programmeAccentPalette("#9d4a31").onDark).not.toBe("#d7e4e1");
     expect(programmeAccentPalette("#78969b").onDark).not.toBe("#78969b");
+    expect(programmeAccentPalette("#90eefb").ink).toBe("#487686");
   });
 
   it("checks solid-accent contrast after converting the colour to hex", () => {

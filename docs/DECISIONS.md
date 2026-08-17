@@ -1177,98 +1177,31 @@ application design system; no second UI library is introduced.
 
 The anonymous event site has a lower density and may use the event's supplied
 hero image and accent. Its curated homepage owns the full public-event measure
-above the filterable programme; it is not squeezed into the schedule's content
-column to make room for an itinerary rail that is not part of the landing-page
-story. The programme and itinerary keep their working two-column layout below.
-The hero remains the dominant accent surface above both. Public light, dark and
-system themes remain event-site choices; a global application theme remains
-deferred for the reason documented above.
+above the filterable programme; the programme and itinerary retain their denser
+working layout below. Public light, dark and system themes remain event-site
+choices. A global application theme remains deferred for the reason documented
+above.
 
 The homepage follows an editorial event hierarchy rather than a dashboard or a
-stack of cards. The introduction is a kicker plus the organiser's sentence:
-the section label stays a label, and a short description takes display type
-instead of sitting in a two-column hole beside it. Speakers are a compact
-cast of circular portraits with an accent ring on a quiet wash, and featured
-sessions form a numbered programme edit with a timetable rail. Statistics reprise the
-masthead as a dark event panel — accent over the fixed near-black canvas,
-inset hairline, fine grid — with the four figures locked up by rules rather
-than dumped on a solid fill. Venue information uses a location rail, and
-section headings carry a fading brand rule underneath so a long title and a
-short title use the same device. Featured speakers, featured sessions and the
-FAQ do not enclose each record in a generic rounded container. The FAQ
-replaces the browser's default disclosure triangle with a plus drawn from two
-hairlines. Repeated marks are removed where the heading already supplies their
-meaning — every entry under "Featured sessions" is a session, so a calendar
-icon on each one is noise — and kept where they carry information, such as a
-recording's play mark or a speaker's portrait.
+stack of interchangeable cards. Scale and emphasis are spent on organiser copy,
+people, sessions and event facts rather than ornament. Curated sessions state
+their event-local date and time, the transition into the working programme is
+named, and repeated venue information is suppressed. Attendee-facing controls
+use task language rather than file formats or implementation terminology.
 
-Restraint is not the same as having nothing to look at, so scale is spent on
-content rather than ornament. The glance panel is prominent because it is
-composed, not because it is a louder rectangle; speaker portraits stay faces
-you can recognise, not a poster of the only featured person; and the
-organiser's opening statement gets display hierarchy without becoming another
-hero. Speaker grids fill compact columns and all homepage relationships
-answer to the homepage container, so the editor preview and a phone get the
-same composition rather than the same pixels. A single featured speaker stays
-the size of one person: on a wide column the wash hugs the card so an 88px
-portrait does not sit in a field that looks like missing people. Inset panels
-share one corner language, and each featured entry has one visual marker
-rather than competing borders. The featured-speaker card names the profile it
-already opens, in body ink rather than accent ink, because that cue sits on a
-tinted wash; the later Speakers list keeps “View profile and sessions”
-because that list is the working directory. The venue's map control is the
-section's action, not a trailing text link. The
-"Full programme" seam names the transition from curated content to the working
-list, and repeated venue information is suppressed there.
-
-A featured session states when it happens. It is the only place a session
-appears outside the day-grouped list, so nothing above it supplies the date
-that the compact time range deliberately omits, and the entries carried a title
-and a run of labels without the one fact an attendee needs from a session they
-are being offered. The day and clock range are resolved in the presentation
-module against the event timezone rather than rebuilt in a component from an
-epoch it cannot place, and they lead the entry as a dateline.
-
-Attendee-facing controls are named in an attendee's words. The calendar action
-read "Add to calendar (.ics)" on the event masthead and in the footer, which
-states a file extension to someone who wants a date in their diary. The label
-is the action; the file format is the browser's business.
+The editor preview and published page render the same composition. Homepage
+relationships respond to the content container rather than the viewport, so a
+phone-sized preview in a desktop window behaves like the published phone page
+without a second set of mirrored layout rules.
 
 Motion is confined to state feedback and is expressed through the shared
-duration tokens, so `prefers-reduced-motion` already governs it. Hovering a
-featured record answers on the rule that marks where the record starts, on its
-title and on the portrait's ring — nothing moves, because a list of twelve
-records that shifts under the pointer is a list that cannot be read down. The
-FAQ marker retracts its vertical stroke into the horizontal one rather than
-being swapped for a different mark, and where the browser can interpolate to an
-intrinsic size the answer opens rather than appears.
+duration tokens, so `prefers-reduced-motion` governs it. Interactive feedback
+must not shift repeated records under the pointer or keyboard focus.
 
-Without a supplied banner, the hero uses one broad field derived from the
-published event accent over a fixed near-black base. The accent must occupy
-enough of the panel for an accent-only event to feel branded, while a separate
-copy-side scrim preserves white-text contrast across the allowed colour range.
-The fine grid follows that field and the panel states its edge with an inset
-hairline. A supplied customer image still replaces the generated field and is
-protected by its own legibility scrim; the grid is suppressed over photography.
-
-The homepage column is an inline-size container, and its spacing and column
-counts are expressed in container units rather than viewport units. The editor
-renders that same markup inside a 390px preview frame in a desktop viewport,
-so viewport-relative rules made the preview draw gaps at more than twice the
-size a phone renders and fit one more statistics column than a phone shows.
-The frame also carries the published page's gutter, so the column the preview
-measures against is the column a phone measures against. A preview that is
-faithful by construction is worth more than mirrored breakpoints that have to
-be kept in step by hand. Below the column breakpoint the statistics wrap two by
-two.
-
-Solid surfaces derive foregrounds from the colour actually painted. Light
-paper, the dark `--accent-soft` fill and raw accent fills each have their
-own contrast-safe ink; dark theme uses that tint-safe ink rather than a
-fixed mint, so track pills and itinerary times stay the event colour on the
-15% mix they actually sit on. Small text on a decorative wash stays on body
-ink. Tokens are checked after conversion to their final hexadecimal colours.
-Published browser coverage measures the glance panel against its first
-accent stop, including the worst-case white accent, with a parser that accepts
-`color(srgb …)`, while presentation-rule tests exercise pale, dark and
-boundary accents.
+Event branding accepts arbitrary six-digit accent colours and optional customer
+imagery without weakening legibility. Decorative accents remain exact, while
+text and control foregrounds are derived for the light, dark, tinted and solid
+surfaces they actually occupy. Contrast is checked after foregrounds reach
+their final hexadecimal colours, with a safety margin where the colour space
+allows one. Browser and presentation-rule coverage exercise representative
+pale, dark and boundary accents against the rendered surfaces.

@@ -147,10 +147,8 @@ export function programmeAccentPalette(value: string) {
   const softSurface = mixColour(accent, PROGRAMME_SURFACE_WHITE, 0.08);
   let ink = accent;
   for (let step = 0; step <= 100; step += 1) {
-    const candidate = mixColour(
-      accent,
-      PROGRAMME_SURFACE_INK,
-      (100 - step) / 100,
+    const candidate = roundColour(
+      mixColour(accent, PROGRAMME_SURFACE_INK, (100 - step) / 100),
     );
     if (
       contrastRatio(candidate, PROGRAMME_SURFACE_WHITE) >=
