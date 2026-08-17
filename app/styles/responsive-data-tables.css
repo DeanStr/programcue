@@ -15,7 +15,8 @@
   line-height: 1.3;
 }
 .pc-responsive-table .pc-record-email {
-  overflow-wrap: anywhere;
+  overflow-wrap: break-word;
+  word-break: normal;
 }
 .pc-record-link {
   color: var(--blue);

@@ -25,15 +25,15 @@ test("speaker profile, sessions and D1 task state render through the production 
   await expect(
     page.getByRole("heading", { name: /Welcome back, Priya/ }),
   ).toBeVisible();
-  // The task progress bar was replaced by a preparation stepper covering all
-  // three obligations, each stating its own condition in words.
+  // The task progress bar was replaced by a preparation stepper covering
+  // profile, sessions, tasks and required resource acknowledgements.
   const stepper = page.locator(".speaker-stepper");
   await expect(
     page.getByRole("heading", { name: "Your preparation" }),
   ).toBeVisible();
-  await expect(stepper.locator(".speaker-stage")).toHaveCount(3);
+  await expect(stepper.locator(".speaker-stage")).toHaveCount(4);
   await expect(stepper).toContainText("Profile marked published");
-  for (const stage of ["Profile", "Sessions", "Requirements"]) {
+  for (const stage of ["Profile", "Sessions", "Requirements", "Resources"]) {
     await expect(
       stepper.getByRole("link", { name: new RegExp(stage) }),
     ).toBeVisible();

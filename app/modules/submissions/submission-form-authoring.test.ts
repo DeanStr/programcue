@@ -697,6 +697,82 @@ describe("Submissions D1 vertical slice", () => {
       ).resolves.toBeNull();
     });
 
+    it("binds the showcase applicant as a verified fixture-org applicant and fails closed otherwise", async () => {
+      const openForm = await publishedForm();
+      const passwordForm = await publishedForm({
+        accessMode: "password_protected",
+        accessPassword: "fixture-password",
+      });
+      const evaluationEnvironment = {
+        ...openForm.testEnv,
+        APP_ENV: "production",
+        DEMO_MODE: "false",
+        EVALUATION_MODE: "true",
+        EVALUATION_ACCESS_CODE: "evaluation-access-code-2026",
+        EVALUATION_SESSION_SECRET:
+          "evaluation-session-secret-with-more-than-thirty-two-characters",
+      } as CloudflareEnvironment;
+      await evaluationEnvironment.DB.prepare(
+        `INSERT INTO audit_events (
+           id, actor_kind, origin, metadata_version, organisation_id, event_id, actor_id, action,
+           entity_type, entity_id, metadata_json, created_at
+         ) VALUES (?, 'system', 'internal', 1, 'org-future-events', 'evt-foe-2025', 'test-operator',
+                   'evaluation.fixture.reset', 'event', 'evt-foe-2025', '{}',
+                   unixepoch())`,
+      )
+        .bind(crypto.randomUUID())
+        .run();
+      const cookie = await evaluationSessionCookie(
+        evaluationEnvironment,
+        "applicant",
+      );
+      const request = new Request(
+        `https://example.com/apply/${openForm.slug}`,
+        {
+          headers: { cookie: cookie.split(";", 1)[0]! },
+        },
+      );
+      const applicantSessions = new ApplicantSessionService(
+        evaluationEnvironment,
+      );
+      const form = await openForm.service.getPublicForm(openForm.slug);
+      const protectedForm = await passwordForm.service.getPublicForm(
+        passwordForm.slug,
+      );
+
+      await expect(applicantSessions.get(request, form)).resolves.toMatchObject(
+        {
+          personId: "person-demo-submitter",
+          email: "alex.submitter@example.com",
+          verified: true,
+          evaluation: true,
+        },
+      );
+      await expect(
+        applicantSessions.get(request, {
+          ...form,
+          eventId: "another-tenant-event",
+        }),
+      ).resolves.toBeNull();
+      await expect(
+        applicantSessions.get(request, protectedForm),
+      ).resolves.toBeNull();
+
+      await evaluationEnvironment.DB.prepare(
+        `UPDATE memberships
+            SET revoked_at = unixepoch()
+          WHERE person_id = 'person-demo-submitter'
+            AND organisation_id = 'org-future-events'
+            AND event_id = 'evt-foe-2025'
+            AND role = 'submitter'`,
+      ).run();
+      const unavailable = await applicantSessions
+        .get(request, form)
+        .catch((error: unknown) => error);
+      expect(unavailable).toBeInstanceOf(Response);
+      expect((unavailable as Response).status).toBe(503);
+    });
+
     it("treats a malformed applicant cookie as an absent session", async () => {
       const { service, slug } = await publishedForm();
       const form = await service.getPublicForm(slug);

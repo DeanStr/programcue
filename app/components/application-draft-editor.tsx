@@ -64,7 +64,6 @@ function FieldControl({
       <textarea
         {...common}
         className="textarea"
-        placeholder={field.example || undefined}
         value={String(value ?? "")}
         onChange={(event) => onChange(event.target.value)}
         maxLength={5_000}
@@ -113,7 +112,6 @@ function FieldControl({
       {...common}
       className="field"
       type={field.type === "url" || field.type === "video" ? "url" : "text"}
-      placeholder={field.example || undefined}
       value={String(value ?? "")}
       onChange={(event) => onChange(event.target.value)}
       maxLength={field.id === "title" ? 180 : 5_000}
@@ -182,9 +180,18 @@ function ApplicationAnswers({
           {section.fields.map((field) => {
             const error = errors?.[field.id]?.[0];
             const helpId = field.help ? `answer-${field.id}-help` : undefined;
+            const exampleId = field.example
+              ? `answer-${field.id}-example`
+              : undefined;
             const errorId = error ? `answer-${field.id}-error` : undefined;
             const describedBy =
-              [helpId, errorId].filter(Boolean).join(" ") || undefined;
+              [helpId, exampleId, errorId].filter(Boolean).join(" ") ||
+              undefined;
+            const exampleHelp = field.example ? (
+              <span className="help" id={exampleId}>
+                Example: {field.example}
+              </span>
+            ) : null;
             const update = (value: string | string[]) => {
               setAnswers((current) => ({ ...current, [field.id]: value }));
               setDirty(true);
@@ -210,6 +217,7 @@ function ApplicationAnswers({
                       {field.help}
                     </span>
                   ) : null}
+                  {exampleHelp}
                   <label className="label" htmlFor={`answer-${field.id}`}>
                     HTTPS video link
                     <FieldControl
@@ -280,6 +288,7 @@ function ApplicationAnswers({
                       {field.help}
                     </span>
                   ) : null}
+                  {exampleHelp}
                   <FieldControl
                     field={field}
                     value={answers[field.id]}
@@ -312,6 +321,7 @@ function ApplicationAnswers({
                     {field.help}
                   </span>
                 ) : null}
+                {exampleHelp}
                 <FieldControl
                   field={field}
                   value={answers[field.id]}

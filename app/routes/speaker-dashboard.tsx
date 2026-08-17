@@ -13,6 +13,7 @@ import {
   SpeakerUpdatesRail,
 } from "~/components/speaker-dashboard-overview";
 import { useSpeakerWorkspace } from "~/components/speaker-workspace-context";
+import { ResourceService } from "~/modules/resources/resource-service.server";
 import { requireSpeakerWorkspace } from "~/modules/speakers/speaker-workspace.server";
 import { ParticipantApplicationSummaryService } from "~/modules/submissions/participant-application-summary.server";
 import { TaskService } from "~/modules/tasks/task-service.server";
@@ -22,11 +23,30 @@ export const meta = () => [{ title: "Participant Overview · Program Cue" }];
 
 export async function loader({ request, context }: Route.LoaderArgs) {
   const { env, viewer } = await requireSpeakerWorkspace(request, context);
-  const [tasks, applications] = await Promise.all([
+  const [tasks, applications, resources] = await Promise.all([
     new TaskService(env).listParticipantTasks(viewer),
     new ParticipantApplicationSummaryService(env).list(viewer),
+    new ResourceService(env).getParticipantWorkspace(viewer),
   ]);
-  return { tasks, applications };
+  const requiredResources = resources.pages.filter(
+    (page) => page.acknowledgementRequired,
+  );
+  const outstandingResource =
+    requiredResources.find((page) => !page.acknowledged) ?? null;
+  return {
+    tasks,
+    applications,
+    requiredResourceCount: requiredResources.length,
+    acknowledgedResourceCount: requiredResources.filter(
+      (page) => page.acknowledged,
+    ).length,
+    outstandingResource: outstandingResource
+      ? {
+          title: outstandingResource.title,
+          href: `/participant/resources?resource=${encodeURIComponent(outstandingResource.slug)}`,
+        }
+      : null,
+  };
 }
 
 export default function SpeakerDashboard({ loaderData }: Route.ComponentProps) {
@@ -55,6 +75,9 @@ export default function SpeakerDashboard({ loaderData }: Route.ComponentProps) {
             next={next}
             completedCount={finished}
             requirementCount={tasks.length}
+            outstandingResource={loaderData.outstandingResource}
+            requiredResourceCount={loaderData.requiredResourceCount}
+            acknowledgedResourceCount={loaderData.acknowledgedResourceCount}
           />
 
           <section className="mt" aria-labelledby="speaker-workspaces-heading">

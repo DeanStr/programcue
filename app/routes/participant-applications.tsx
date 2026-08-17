@@ -412,7 +412,9 @@ export default function ParticipantApplications({
                 <p className="subtle">
                   {application.formName} ·{" "}
                   {application.primarySubmitter
-                    ? "Submitted by you"
+                    ? application.status === "draft"
+                      ? "Started by you"
+                      : "Submitted by you"
                     : "You are a co-speaker"}
                 </p>
                 <p className="tiny subtle">

@@ -356,3 +356,29 @@
   font-size: var(--text-xs);
   margin: 0;
 }
+
+ol.timeline {
+  display: grid;
+  gap: var(--space-3);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+ol.timeline > li {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+  padding-bottom: var(--space-3);
+  border-bottom: 1px solid var(--line);
+}
+ol.timeline > li:last-child {
+  border-bottom: 0;
+  padding-bottom: 0;
+}
+ol.timeline > li > strong,
+ol.timeline > li > span,
+ol.timeline > li > small {
+  display: block;
+  min-width: 0;
+  overflow-wrap: break-word;
+}

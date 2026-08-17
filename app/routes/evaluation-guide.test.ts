@@ -226,13 +226,13 @@ describe("production evaluation guide", () => {
       unlockedGuide.identities.find((identity) => identity.key === "organizer"),
     ).toMatchObject({
       whatToTry: expect.stringContaining(
-        "enable reviewer AI in Review & decisions",
+        "enable reviewer AI in Review & selection",
       ),
     });
     expect(
       unlockedGuide.identities.find((identity) => identity.key === "reviewer"),
     ).toMatchObject({
-      description: expect.stringContaining("submitted review"),
+      description: expect.stringContaining("completed scoring"),
       whatToTry: expect.stringContaining("then switch to Clean reviewer"),
     });
 

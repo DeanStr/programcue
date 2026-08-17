@@ -293,7 +293,16 @@ export function getAutoPlacementReadiness(
   >,
 ): AutoPlacementReadiness {
   const computation = computeAutoPlacements(workspace);
-  const unscheduledCount = computation.sessionRevisions.length;
+  const scheduledSessionIds = new Set(
+    workspace.entries.map((entry) => entry.sessionId),
+  );
+  const unplacedCount = workspace.sessions.filter(
+    (session) => !scheduledSessionIds.has(session.id),
+  ).length;
+  const unscheduledCount = workspace.sessions.filter(
+    (session) =>
+      session.status === "unscheduled" && !scheduledSessionIds.has(session.id),
+  ).length;
   const eligibleSessionIds = computation.placements.map(
     (placement) => placement.sessionId,
   );
@@ -305,13 +314,15 @@ export function getAutoPlacementReadiness(
     blocked: computation.unplaced,
     canPreview: hasDraft && eligibleSessionIds.length > 0,
     disabledReason:
-      unscheduledCount === 0
+      unplacedCount === 0
         ? "There are no unscheduled sessions to place."
         : !hasDraft
           ? "Create an active draft schedule before auto-placing sessions."
-          : eligibleSessionIds.length === 0
-            ? "No unscheduled session currently meets the placement rules. Review each blocker below."
-            : null,
+          : unscheduledCount === 0
+            ? "The remaining unplaced sessions are not unscheduled, so auto-place cannot move them."
+            : eligibleSessionIds.length === 0
+              ? "No unscheduled session currently meets the placement rules. Review each blocker below."
+              : null,
   };
 }
 

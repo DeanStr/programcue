@@ -54,6 +54,47 @@ function forbidden(message: string, status = 403): never {
   });
 }
 
+export function eventRoleAccessMessage(
+  allowedRoles: ReadonlyArray<ViewerRole>,
+) {
+  if (allowedRoles.length === 0) {
+    return "This page has no authorised roles configured.";
+  }
+  const roles = new Set(allowedRoles);
+  const adminOnly = [...roles].every(
+    (role) => role === "owner" || role === "administrator",
+  );
+  if (adminOnly) {
+    return "This page is for event administrators. Your current role cannot open it.";
+  }
+  if (
+    roles.has("committee_chair") &&
+    !roles.has("evaluator") &&
+    !roles.has("speaker") &&
+    !roles.has("submitter")
+  ) {
+    return "This page is for committee chairs and administrators. Your current role cannot open it.";
+  }
+  if (
+    roles.has("evaluator") &&
+    !roles.has("owner") &&
+    !roles.has("administrator") &&
+    !roles.has("committee_chair")
+  ) {
+    return "This page is for reviewers with accepted event access. Your current role cannot open it.";
+  }
+  if (
+    (roles.has("speaker") || roles.has("submitter")) &&
+    !roles.has("owner") &&
+    !roles.has("administrator") &&
+    !roles.has("committee_chair") &&
+    !roles.has("evaluator")
+  ) {
+    return "This page is part of the participant workspace. Your current role cannot open it.";
+  }
+  return "Your account cannot open this page. Ask an event administrator if you need access.";
+}
+
 function signInLocation(request: Request, demo = false) {
   const url = new URL(request.url);
   const returnTo = `${url.pathname}${url.search}`;
@@ -173,7 +214,7 @@ async function resolveEventRole(
     await requireAuthenticatedPerson(request, env, unauthenticatedBehavior);
 
   if (allowedRoles.length === 0)
-    forbidden("Your account cannot manage this event.");
+    forbidden(eventRoleAccessMessage(allowedRoles));
   const rolePlaceholders = allowedRoles.map(() => "?").join(",");
 
   let membership = await env.DB.prepare(
@@ -391,7 +432,7 @@ async function resolveEventRole(
   }
 
   if (!membership) {
-    forbidden("Your account cannot manage this event.");
+    forbidden(eventRoleAccessMessage(allowedRoles));
   }
 
   return {

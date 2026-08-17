@@ -200,7 +200,7 @@ unauthorised until the organiser performs and the reviewer accepts the real
 invitation workflow.
 
 For reviewer AI, keep the consent and review steps with their actual actors.
-Jordan first enables reviewer AI under `Review & decisions`. After Jordan has
+Jordan first enables reviewer AI under `Review & selection`. After Jordan has
 assigned the proposal, switch to Sam, save at least one independent rubric
 response, then request and inspect the AI suggestions. Sam may fill unanswered
 closed criteria from the suggestions or explicitly edit existing answers, must
@@ -306,7 +306,7 @@ Speaker Network/CRM bonus:
     "speaker2": "marcus.speaker@sbek-test.example.com",
     "reviewer": "sam.reviewer@sbek-test.example.com"
   },
-  "submissionNotes": "Program Cue production deployment with EVALUATION_MODE enabled for a dedicated seeded Future of Events fixture. Open /evaluate, enter the supplied access code and choose the matching fixed identity before saving each starting state. Organizer = Jordan Alvarez, speaker = Priya Raman, reviewer = Sam Whitfield; Marcus Okafor is an in-scenario co-speaker input, not a separately saved starting state. Return to /evaluate and select the target card whenever a scenario switches roles. For reviewer AI, Jordan enables it under Review & decisions; after assignment, switch to Sam, save an independent rubric response, then request and inspect suggestions before submitting. The public programme is /public/programme/future-of-events-2027. When creating a blank D1 event, explicitly choose the available verified sender so that event's later communication workflow is ready. Reset only before a new full run, never between chained scenarios."
+  "submissionNotes": "Program Cue production deployment with EVALUATION_MODE enabled for a dedicated seeded Future of Events fixture. Open /evaluate, enter the supplied access code and choose the matching fixed identity before saving each starting state. Organizer = Jordan Alvarez, speaker = Priya Raman, reviewer = Sam Whitfield; Marcus Okafor is an in-scenario co-speaker input, not a separately saved starting state. Return to /evaluate and select the target card whenever a scenario switches roles. For reviewer AI, Jordan enables it under Review & selection; after assignment, switch to Sam, save an independent rubric response, then request and inspect suggestions before submitting. The public programme is /public/programme/future-of-events-2027. When creating a blank D1 event, explicitly choose the available verified sender so that event's later communication workflow is ready. Reset only before a new full run, never between chained scenarios."
 }
 ```
 

@@ -7,8 +7,16 @@ import { useReviewWorkbenchModel } from "~/components/review-workbench-model";
 import { useConfirm } from "~/components/ui/confirm-dialog";
 
 export function ReviewWorkbenchHeader() {
-  const { fetcher, dirty, readOnly, committedWarning, saveFailed, recovery } =
-    useReviewWorkbenchModel();
+  const {
+    fetcher,
+    dirty,
+    readOnly,
+    committedWarning,
+    saveFailed,
+    recovery,
+    workspace,
+  } = useReviewWorkbenchModel();
+  const hasSavedDraft = Boolean(workspace.review);
   return (
     <div className="page-head review-page-head">
       <div>
@@ -20,7 +28,7 @@ export function ReviewWorkbenchHeader() {
       <div className="page-actions">
         <DraftRecoveryStatus state={recovery.state} />
         <span
-          className={`status ${dirty || committedWarning ? "warning" : saveFailed ? "danger" : fetcher.state === "idle" ? "success" : "info"}`}
+          className={`status ${dirty || committedWarning ? "warning" : saveFailed ? "danger" : fetcher.state === "idle" && hasSavedDraft ? "success" : "info"}`}
         >
           {readOnly
             ? "Submitted"
@@ -32,7 +40,9 @@ export function ReviewWorkbenchHeader() {
                   ? "Save failed"
                   : dirty
                     ? "Unsaved changes"
-                    : "Saved"}
+                    : hasSavedDraft
+                      ? "Saved"
+                      : "No draft yet"}
         </span>
       </div>
     </div>

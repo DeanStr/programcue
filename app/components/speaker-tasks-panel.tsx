@@ -1,4 +1,5 @@
 import { CheckCircle2, Clock3, LockKeyhole } from "lucide-react";
+import { useState } from "react";
 import { Form } from "react-router";
 
 import {
@@ -54,6 +55,31 @@ async function attachTaskEvidence(
   return { message: payload.message };
 }
 
+function AcknowledgementCompleteControls({ busy }: { busy: boolean }) {
+  const [confirmed, setConfirmed] = useState(false);
+  return (
+    <>
+      <label className="speaker-confirm">
+        <input
+          type="checkbox"
+          name="confirmed"
+          required
+          checked={confirmed}
+          onChange={(event) => setConfirmed(event.target.checked)}
+        />{" "}
+        I confirm this requirement
+      </label>
+      <button
+        type="submit"
+        className="btn primary"
+        disabled={busy || !confirmed}
+      >
+        <CheckCircle2 aria-hidden size={15} /> Complete task
+      </button>
+    </>
+  );
+}
+
 export function taskEvidenceVersionStatus(
   version: Pick<
     ParticipantTaskEvidenceVersion,
@@ -103,10 +129,7 @@ export function SpeakerTasksPanel({
   return (
     <section className="mt" id="tasks">
       <div className="card-title">
-        <div>
-          <span className="pc-section-kicker">Onboarding</span>
-          <h2>My tasks</h2>
-        </div>
+        <h2 className="sr-only">Assigned tasks</h2>
         <span className="pill right">
           {finished} of {tasks.length} complete
         </span>
@@ -245,9 +268,9 @@ export function SpeakerTasksPanel({
                       kinds={[
                         {
                           value: "task_evidence",
-                          label: `Task evidence · PDF, DOC, DOCX, XLS, XLSX, ZIP, JPG, PNG or WebP (${maximumMegabytes(portal.event.filePolicy.supportingDocumentMaximumBytes)} MB maximum)`,
+                          label: `Task evidence · PDF, PPT, PPTX, DOC, DOCX, XLS, XLSX, ZIP, JPG, PNG or WebP (${maximumMegabytes(portal.event.filePolicy.supportingDocumentMaximumBytes)} MB maximum)`,
                           accept:
-                            ".pdf,.doc,.docx,.xls,.xlsx,.zip,.jpg,.jpeg,.png,.webp",
+                            ".pdf,.ppt,.pptx,.doc,.docx,.xls,.xlsx,.zip,.jpg,.jpeg,.png,.webp",
                           maximumBytes:
                             portal.event.filePolicy
                               .supportingDocumentMaximumBytes,
@@ -383,18 +406,18 @@ export function SpeakerTasksPanel({
                           />
                         </label>
                       ) : (
-                        <label className="speaker-confirm">
-                          <input type="checkbox" name="confirmed" required /> I
-                          confirm this requirement
-                        </label>
+                        <AcknowledgementCompleteControls busy={busy} />
                       )}
-                      <button
-                        type="submit"
-                        className="btn primary"
-                        disabled={busy}
-                      >
-                        <CheckCircle2 aria-hidden size={15} /> Complete task
-                      </button>
+                      {task.taskType === "short_form" ||
+                      task.taskType === "link_visit" ? (
+                        <button
+                          type="submit"
+                          className="btn primary"
+                          disabled={busy}
+                        >
+                          <CheckCircle2 aria-hidden size={15} /> Complete task
+                        </button>
+                      ) : null}
                     </Form>
                   ) : null}
                   {task.status === "submitted" ? (

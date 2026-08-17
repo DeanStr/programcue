@@ -9,6 +9,7 @@ import {
   Scripts,
   ScrollRestoration,
   useLocation,
+  useRouteLoaderData,
 } from "react-router";
 import { Toaster } from "sonner";
 import { BrandMark } from "~/components/brand-mark";
@@ -114,6 +115,35 @@ export function Layout({ children }: { children: React.ReactNode }) {
   );
 }
 
+function EvaluationBanner({
+  evaluation,
+}: {
+  evaluation: { name: string; label: string } | null | undefined;
+}) {
+  const embedded = useLocation().pathname.startsWith("/embed/");
+  if (!evaluation || embedded) return null;
+  return (
+    <aside
+      className="pc-status-notice is-warning pc-eval-banner"
+      aria-label="Evaluation session"
+    >
+      <span className="pc-eval-banner-identity">
+        <strong>Evaluation:</strong> {evaluation.label} · {evaluation.name}
+      </span>
+      <span className="pc-eval-banner-actions">
+        <Link className="btn small" to="/evaluate">
+          Evaluation guide
+        </Link>
+        <Form method="post" action="/sign-out">
+          <button className="btn small" type="submit">
+            Change persona
+          </button>
+        </Form>
+      </span>
+    </aside>
+  );
+}
+
 export default function App({ loaderData }: Route.ComponentProps) {
   const embedded = useLocation().pathname.startsWith("/embed/");
   useEffect(() => {
@@ -127,24 +157,7 @@ export default function App({ loaderData }: Route.ComponentProps) {
   return (
     <>
       <RouteProgress />
-      {loaderData.evaluation && !embedded ? (
-        <aside
-          className="pc-status-notice is-warning"
-          aria-label="Evaluation session"
-          style={{ borderRadius: 0, margin: 0, justifyContent: "center" }}
-        >
-          <strong>Evaluation:</strong> {loaderData.evaluation.label} ·{" "}
-          {loaderData.evaluation.name}
-          <Link className="btn small" to="/evaluate">
-            Evaluation guide
-          </Link>
-          <Form method="post" action="/sign-out">
-            <button className="btn small" type="submit">
-              Change persona
-            </button>
-          </Form>
-        </aside>
-      ) : null}
+      <EvaluationBanner evaluation={loaderData.evaluation} />
       <Outlet />
       {!embedded ? (
         <Toaster
@@ -163,6 +176,9 @@ export default function App({ loaderData }: Route.ComponentProps) {
 }
 
 export function ErrorBoundary({ error }: Route.ErrorBoundaryProps) {
+  const rootData = useRouteLoaderData("root") as
+    | Route.ComponentProps["loaderData"]
+    | undefined;
   let title = UNKNOWN_ROUTE_ERROR_TITLE;
   let message = UNKNOWN_ROUTE_ERROR_MESSAGE;
   // Home, not Event Setup: an arbitrary failure is not evidence the user was
@@ -174,35 +190,40 @@ export function ErrorBoundary({ error }: Route.ErrorBoundaryProps) {
     title = routeErrorCopy(error.status).title;
     message = routeErrorMessage(error.status, error.data);
     if ([400, 403, 428].includes(error.status)) {
-      returnHref = "/events/select";
-      returnLabel = "Choose an event";
+      returnHref = rootData?.evaluation ? "/evaluate" : "/events/select";
+      returnLabel = rootData?.evaluation
+        ? "Choose an evaluation persona"
+        : "Choose an event";
     }
   } else if (error instanceof Error && import.meta.env.DEV) {
     message = error.message;
   }
 
   return (
-    <main className="design-board" id="main" tabIndex={-1}>
-      <section
-        className="card pad"
-        style={{ maxWidth: 680, margin: "8vh auto" }}
-      >
-        <BrandMark />
-        <h1>{title}</h1>
-        <p className="subtle">{message}</p>
-        <div className="page-actions mt">
-          <button
-            className="btn"
-            onClick={() => window.location.reload()}
-            type="button"
-          >
-            Try again
-          </button>
-          <Link className="btn primary" to={returnHref}>
-            {returnLabel}
-          </Link>
-        </div>
-      </section>
-    </main>
+    <>
+      <EvaluationBanner evaluation={rootData?.evaluation} />
+      <main className="design-board" id="main" tabIndex={-1}>
+        <section
+          className="card pad"
+          style={{ maxWidth: 680, margin: "8vh auto" }}
+        >
+          <BrandMark />
+          <h1>{title}</h1>
+          <p className="subtle">{message}</p>
+          <div className="page-actions mt">
+            <button
+              className="btn"
+              onClick={() => window.location.reload()}
+              type="button"
+            >
+              Try again
+            </button>
+            <Link className="btn primary" to={returnHref}>
+              {returnLabel}
+            </Link>
+          </div>
+        </section>
+      </main>
+    </>
   );
 }

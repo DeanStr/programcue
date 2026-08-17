@@ -1590,6 +1590,7 @@
   font-size: var(--text-xs);
   line-height: var(--leading-normal);
   color: var(--text-secondary);
+  overflow-wrap: break-word;
 }
 .public-venue-map {
   display: inline-flex;

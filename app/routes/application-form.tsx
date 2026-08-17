@@ -606,7 +606,8 @@ function AuthenticatedApplicationWorkspace({
           </div>
           {applicant.verified &&
           !applicant.claimOnly &&
-          !historicalClaimPortal ? (
+          !historicalClaimPortal &&
+          drafts.length > 0 ? (
             <Form method="post" action={claimScopedAction}>
               <input type="hidden" name="_intent" value="create_draft" />
               <input
@@ -639,7 +640,7 @@ function AuthenticatedApplicationWorkspace({
             <span className="help right">
               Application history is read-only.
             </span>
-          ) : (
+          ) : applicant.verified ? null : (
             <span className="help right">
               Verify your email to start another application.
             </span>

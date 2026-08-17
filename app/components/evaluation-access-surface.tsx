@@ -150,7 +150,7 @@ const OPERATIONS_DESTINATIONS: readonly Destination[] = [
   {
     to: "/admin/review",
     icon: ClipboardCheck,
-    label: "Review & decisions",
+    label: "Review & selection",
     detail: "Rounds, scoring and outcomes.",
   },
   {
@@ -186,7 +186,7 @@ const OPERATIONS_DESTINATIONS: readonly Destination[] = [
   {
     to: "/admin/crm",
     icon: Contact,
-    label: "Speaker CRM",
+    label: "Speaker network",
     detail: "Prospects and the invitation pipeline.",
   },
   {

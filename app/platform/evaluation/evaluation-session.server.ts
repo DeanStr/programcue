@@ -32,7 +32,7 @@ export const EVALUATION_IDENTITIES = {
     description:
       "The complete operations workspace with a rich, published event.",
     whatToTry:
-      "Inspect the published event website, submissions and scheduling; enable reviewer AI in Review & decisions, and explicitly reuse the verified sender when creating a D1 event.",
+      "Inspect the published event website, submissions and scheduling; enable reviewer AI in Review & selection, and explicitly reuse the verified sender when creating a D1 event.",
     group: "showcase",
   },
   chair: {
@@ -48,17 +48,18 @@ export const EVALUATION_IDENTITIES = {
     ...DEMO_IDENTITIES.evaluator,
     label: "Reviewer",
     description:
-      "A submitted review with rubric evidence and immutable history.",
+      "A reviewer queue with completed scoring on one proposal and an open assignment on another.",
     whatToTry:
-      "Inspect the submitted review and its evidence. To try reviewer AI, enable it as Event organiser, assign a proposal, then switch to Clean reviewer.",
+      "Inspect completed scoring history, then open the assigned proposal. To try reviewer AI, enable it as Event organiser, assign a proposal, then switch to Clean reviewer.",
     group: "showcase",
   },
   applicant: {
     ...DEMO_IDENTITIES.submitter,
     label: "Applicant",
-    description: "Submitted proposal details and current application status.",
+    description:
+      "An accepted speaker who also has a waitlisted application and published sessions.",
     whatToTry:
-      "Open the submitted application and inspect its proposal details and status.",
+      "Open the waitlisted application, then inspect published sessions and the participant workspace.",
     group: "showcase",
   },
   speaker: {

@@ -6,6 +6,7 @@ import { ensureDemoData } from "~/platform/demo/seed.server";
 import { evaluationSessionCookie } from "~/platform/evaluation/evaluation-session.server";
 import {
   acceptEventInvitation,
+  eventRoleAccessMessage,
   requireAuthenticatedPerson,
   requireEventRole,
 } from "./authorize.server";
@@ -725,5 +726,21 @@ describe("event role authorization", () => {
         ),
       ),
     ).rejects.toMatchObject({ status: 403 });
+  });
+});
+
+describe("event role access copy", () => {
+  it("describes the authorised workspace instead of claiming the person cannot manage the event", () => {
+    expect(eventRoleAccessMessage(["owner", "administrator"])).toContain(
+      "event administrators",
+    );
+    expect(eventRoleAccessMessage(["evaluator"])).toContain("reviewers");
+    expect(eventRoleAccessMessage(["speaker", "submitter"])).toContain(
+      "participant workspace",
+    );
+    expect(
+      eventRoleAccessMessage(["owner", "administrator", "committee_chair"]),
+    ).toContain("committee chairs");
+    expect(eventRoleAccessMessage([])).toContain("no authorised roles");
   });
 });

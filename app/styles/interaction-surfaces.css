@@ -89,7 +89,7 @@ body:has(.sidebar-is-collapsed) {
   display: grid;
   place-items: center;
   padding: var(--space-6);
-  z-index: 110;
+  z-index: 400;
 }
 .modal {
   position: relative;

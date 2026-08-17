@@ -31,6 +31,7 @@ export const nodeOnlyTestFiles = [
   "app/components/submission-data-grid.test.tsx",
   "app/components/schedule-standard-calendar.test.tsx",
   "app/components/schedule-planner-workspace.test.tsx",
+  "app/components/speaker-dashboard-overview.test.ts",
   "app/components/speaker-tasks-panel.test.tsx",
   "app/components/task-completion-undo-control.test.ts",
   "app/modules/communications/communication-rules.test.ts",

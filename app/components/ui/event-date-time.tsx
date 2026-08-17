@@ -1,5 +1,9 @@
 import type { ReactNode } from "react";
 
+const DEFAULT_VISIBLE_OPTIONS: Intl.DateTimeFormatOptions = {
+  dateStyle: "medium",
+  timeStyle: "short",
+};
 const DEFAULT_EXACT_OPTIONS: Intl.DateTimeFormatOptions = {
   dateStyle: "long",
   timeStyle: "long",
@@ -57,6 +61,11 @@ export function EventDateTime({
     timeZone,
     exactOptions ?? DEFAULT_EXACT_OPTIONS,
   );
+  const visible = formatEventDateTime(
+    epochSeconds,
+    timeZone,
+    DEFAULT_VISIBLE_OPTIONS,
+  );
   const disclosure = `${exact} (${timeZone})`;
 
   return (
@@ -67,7 +76,7 @@ export function EventDateTime({
       tabIndex={focusable ? 0 : undefined}
     >
       <span aria-hidden="true">
-        {children ?? exact}
+        {children ?? visible}
         {showTimeZone ? (
           <small className="pc-event-time-zone"> {timeZone}</small>
         ) : null}

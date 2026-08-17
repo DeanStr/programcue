@@ -53,6 +53,11 @@
   color: var(--text-secondary);
   cursor: default;
 }
+.field::placeholder,
+.textarea::placeholder {
+  color: var(--text-tertiary);
+  opacity: 1;
+}
 .textarea {
   min-height: 110px;
   width: 100%;

@@ -103,7 +103,7 @@ function FieldControlPreview({ field }: { field: FormField }) {
         disabled
         rows={2}
         aria-label={`${field.label} preview`}
-        placeholder={field.example || "Long answer"}
+        placeholder="Long answer"
       />
     );
   }
@@ -141,7 +141,7 @@ function FieldControlPreview({ field }: { field: FormField }) {
       disabled
       type={field.type === "url" || field.type === "video" ? "url" : "text"}
       aria-label={`${field.label} preview`}
-      placeholder={field.example || formFieldTypeLabel(field.type)}
+      placeholder={formFieldTypeLabel(field.type)}
     />
   );
 }
@@ -201,6 +201,7 @@ function CanvasField({
         </button>
       </div>
       {field.help ? <p>{field.help}</p> : null}
+      {field.example ? <p>Example: {field.example}</p> : null}
       <div className="fb-canvas-control">
         <FieldControlPreview field={field} />
       </div>

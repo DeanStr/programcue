@@ -149,6 +149,8 @@ const policies: Record<AssetKind, FilePolicy> = {
   task_evidence: {
     extensions: new Set([
       "pdf",
+      "ppt",
+      "pptx",
       "doc",
       "docx",
       "xls",
@@ -161,6 +163,8 @@ const policies: Record<AssetKind, FilePolicy> = {
     ]),
     contentTypes: new Set([
       pdf,
+      ppt,
+      pptx,
       doc,
       docx,
       xls,

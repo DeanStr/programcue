@@ -20,10 +20,14 @@ export function speakerMilestones({
   portal,
   completedCount,
   requirementCount,
+  requiredResourceCount,
+  acknowledgedResourceCount,
 }: {
   portal: SpeakerPortal;
   completedCount: number;
   requirementCount: number;
+  requiredResourceCount: number;
+  acknowledgedResourceCount: number;
 }): SpeakerMilestone[] {
   const profilePublished = portal.profile.profileStatus === "published";
   const liveSessions = portal.sessions.filter(
@@ -72,6 +76,21 @@ export function speakerMilestones({
             : "not_started",
       href: "/participant/tasks",
     },
+    {
+      key: "resources",
+      label: "Resources",
+      detail: requiredResourceCount
+        ? `${acknowledgedResourceCount} of ${requiredResourceCount} acknowledged`
+        : "Nothing requested",
+      state: !requiredResourceCount
+        ? "complete"
+        : acknowledgedResourceCount === requiredResourceCount
+          ? "complete"
+          : acknowledgedResourceCount > 0
+            ? "in_progress"
+            : "not_started",
+      href: "/participant/resources",
+    },
   ];
 }
 
@@ -86,11 +105,17 @@ export function SpeakerDashboardOverview({
   next,
   completedCount,
   requirementCount,
+  outstandingResource = null,
+  requiredResourceCount,
+  acknowledgedResourceCount,
 }: {
   portal: SpeakerPortal;
   next: SpeakerTask | undefined;
   completedCount: number;
   requirementCount: number;
+  outstandingResource?: { title: string; href: string } | null;
+  requiredResourceCount: number;
+  acknowledgedResourceCount: number;
 }) {
   const waitingOnTeam = next
     ? ["submitted", "blocked"].includes(next.status)
@@ -99,11 +124,15 @@ export function SpeakerDashboardOverview({
     portal,
     completedCount,
     requirementCount,
+    requiredResourceCount,
+    acknowledgedResourceCount,
   });
   const completedStages = milestones.filter(
     (milestone) => milestone.state === "complete",
   ).length;
   const preparationComplete = completedStages === milestones.length;
+  const resourceAction =
+    !next && outstandingResource ? outstandingResource : null;
   return (
     <>
       <div className="speaker-portal-head">
@@ -157,18 +186,21 @@ export function SpeakerDashboardOverview({
       <section className="card next-action mt">
         <div>
           <span
-            className={`status ${next ? speakerStatusClass(next.status) : "success"}`}
+            className={`status ${next ? speakerStatusClass(next.status) : resourceAction ? "warning" : "success"}`}
           >
             {next
               ? waitingOnTeam
                 ? "Waiting"
                 : "Next action"
-              : preparationComplete
-                ? "Preparation complete"
-                : "Tasks complete"}
+              : resourceAction
+                ? "Next action"
+                : preparationComplete
+                  ? "Preparation complete"
+                  : "Tasks complete"}
           </span>
           <h2>
             {next?.title ??
+              resourceAction?.title ??
               (preparationComplete
                 ? "You are ready for the event"
                 : "No outstanding requirements")}
@@ -180,9 +212,11 @@ export function SpeakerDashboardOverview({
                   ? "Submitted for administrator review. No further action is required until the event team responds."
                   : "This requirement is waiting for its prerequisites to be completed."
                 : next.description
-              : preparationComplete
-                ? "There are no outstanding requirements right now."
-                : "Your task list is clear. Check the preparation stages above for remaining profile or session status."}
+              : resourceAction
+                ? "Read and acknowledge the current published resource."
+                : preparationComplete
+                  ? "There are no outstanding requirements right now."
+                  : "Your task list is clear. Check the preparation stages above for remaining profile, session or resource status."}
           </p>
           {next ? (
             <Link
@@ -190,6 +224,10 @@ export function SpeakerDashboardOverview({
               to={`/participant/tasks#task-${next.id}`}
             >
               Open task
+            </Link>
+          ) : resourceAction ? (
+            <Link className="btn primary" to={resourceAction.href}>
+              Open resource
             </Link>
           ) : null}
         </div>
@@ -257,10 +295,7 @@ export function SpeakerSessionsPanel({
   return (
     <section className="mt" id="sessions">
       <div className="card-title">
-        <div>
-          <span className="pc-section-kicker">Programme</span>
-          <h2>My sessions</h2>
-        </div>
+        <h2 className="sr-only">Session list</h2>
         <span className="pill right">{portal.sessions.length}</span>
       </div>
       <div className="grid grid-2">

@@ -148,7 +148,8 @@ export class ApplicantSessionService {
     if (evaluationSession) {
       if (
         form.accessMode !== "password_protected" &&
-        evaluationSession.identityKey === "sbek_applicant"
+        (evaluationSession.identityKey === "sbek_applicant" ||
+          evaluationSession.identityKey === "applicant")
       ) {
         const fixtureEvent = await this.env.DB.prepare(
           `SELECT 1 FROM events

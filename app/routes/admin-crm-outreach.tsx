@@ -200,7 +200,7 @@ export default function AdminCrmOutreach({ loaderData }: Route.ComponentProps) {
               className="field"
               name="subject"
               required
-              placeholder="Speak at DevFlow Conf 2027?"
+              placeholder="Invitation to speak at this event"
             />
           </label>
           <label className="label">
@@ -221,7 +221,7 @@ export default function AdminCrmOutreach({ loaderData }: Route.ComponentProps) {
               className="field"
               name="physicalAddress"
               required
-              placeholder="100 Programme Way, Toronto"
+              placeholder="Event venue address"
             />
           </label>
           <p className="help">

@@ -569,7 +569,9 @@ export function ReviewScorePanel() {
                     ? "Save failed"
                     : dirty
                       ? "Unsaved"
-                      : "Saved"}
+                      : workspace.review
+                        ? "Saved"
+                        : "No draft yet"}
               </span>
               <button
                 ref={saveDraftTriggerRef}

@@ -40,7 +40,6 @@ function FieldPreview({
     return (
       <textarea
         className="textarea"
-        placeholder={field.example || undefined}
         maxLength={5_000}
         value={String(value ?? "")}
         onChange={(event) => onChange(event.target.value)}
@@ -86,7 +85,6 @@ function FieldPreview({
     <input
       className="field"
       type={field.type === "url" || field.type === "video" ? "url" : "text"}
-      placeholder={field.example || undefined}
       maxLength={field.id === "title" ? 180 : 5_000}
       value={String(value ?? "")}
       onChange={(event) => onChange(event.target.value)}
@@ -269,6 +267,11 @@ export function ApplicantPreviewPanel({
                           {field.help ? (
                             <span className="help">{field.help}</span>
                           ) : null}
+                          {field.example ? (
+                            <span className="help">
+                              Example: {field.example}
+                            </span>
+                          ) : null}
                           <FieldPreview
                             field={field}
                             value={answers[field.id]}
@@ -287,6 +290,11 @@ export function ApplicantPreviewPanel({
                           {field.required ? " *" : ""}
                           {field.help ? (
                             <span className="help">{field.help}</span>
+                          ) : null}
+                          {field.example ? (
+                            <span className="help">
+                              Example: {field.example}
+                            </span>
                           ) : null}
                           <FieldPreview
                             field={field}

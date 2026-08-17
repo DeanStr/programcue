@@ -302,6 +302,47 @@ describe("deterministic auto-placement", () => {
     );
   });
 
+  it("asks for a draft when unplaced sessions exist on a published version", () => {
+    const readiness = getAutoPlacementReadiness(
+      workspace(
+        [
+          session("pending", "Pending session", {
+            status: "scheduled",
+          }),
+        ],
+        {
+          version: {
+            id: "version-1",
+            versionNumber: 1,
+            status: "published",
+            revision: 4,
+            notes: "",
+          },
+        },
+      ),
+    );
+
+    expect(readiness.unscheduledCount).toBe(0);
+    expect(readiness.canPreview).toBe(false);
+    expect(readiness.disabledReason).toContain("active draft");
+    expect(readiness.disabledReason).not.toContain(
+      "no unscheduled sessions to place",
+    );
+  });
+
+  it("explains when leftover unplaced sessions are not unscheduled", () => {
+    const readiness = getAutoPlacementReadiness(
+      workspace([
+        session("accepted", "Accepted but unplaced", { status: "scheduled" }),
+      ]),
+    );
+
+    expect(readiness.unscheduledCount).toBe(0);
+    expect(readiness.canPreview).toBe(false);
+    expect(readiness.disabledReason).toContain("not unscheduled");
+    expect(readiness.blocked).toEqual([]);
+  });
+
   it("explains why auto-place is unavailable when every session is blocked", () => {
     const readiness = getAutoPlacementReadiness(
       workspace([

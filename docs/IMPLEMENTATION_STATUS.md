@@ -174,6 +174,15 @@ or unchanged.
 
 ### Production evaluation release-candidate evidence
 
+A follow-up QA pass on the production `/evaluate` fixture tightened
+role-specific 403 copy, kept the evaluation banner on root error pages, aligned
+auto-place readiness with unpublished sessions on a published schedule, and
+fixed participant draft attribution, apply-form example answers, task-evidence
+PPT/PPTX acceptance, speaker-resource readiness and several stacking, wrapping
+and readiness inconsistencies. Speaker preparation now counts required resource
+acknowledgements as a fourth milestone. Those changes are local-branch evidence
+until this revision is deployed.
+
 The current repository revision expands the production-only `/evaluate` slice
 without turning on local demo powers. Access remains rate-limited,
 access-code-gated, fixed-person and bound to the latest completed reset
