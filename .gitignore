@@ -11,7 +11,7 @@ coverage/
 playwright-report/
 test-results/
 build/
-.react-router/
+.react-router
 .artifacts/
 worker-configuration.d.ts
 .DS_Store

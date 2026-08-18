@@ -1,6 +1,5 @@
-import { useEffect, useLayoutEffect, useRef } from "react";
+import { useEffect } from "react";
 import {
-  Form,
   isRouteErrorResponse,
   Link,
   Links,
@@ -13,6 +12,10 @@ import {
 } from "react-router";
 import { Toaster } from "sonner";
 import { BrandMark } from "~/components/brand-mark";
+import {
+  EvaluationBanner,
+  evaluationBannerHiddenFromCookieHeader,
+} from "~/components/evaluation-banner";
 import { RouteProgress } from "~/components/ui/route-progress";
 import {
   routeErrorCopy,
@@ -90,7 +93,13 @@ export async function loader({ request, context }: Route.LoaderArgs) {
     );
   }
   return {
-    evaluation: { name: identity.name, label },
+    evaluation: {
+      name: identity.name,
+      label,
+      bannerHidden: evaluationBannerHiddenFromCookieHeader(
+        request.headers.get("cookie"),
+      ),
+    },
   };
 }
 
@@ -117,62 +126,6 @@ export function Layout({ children }: { children: React.ReactNode }) {
         <Scripts />
       </body>
     </html>
-  );
-}
-
-function EvaluationBanner({
-  evaluation,
-}: {
-  evaluation: { name: string; label: string } | null | undefined;
-}) {
-  const embedded = useLocation().pathname.startsWith("/embed/");
-  const visible = Boolean(evaluation && !embedded);
-  const bannerRef = useRef<HTMLElement>(null);
-  useLayoutEffect(() => {
-    if (!visible) {
-      document.documentElement.style.removeProperty("--eval-banner-offset");
-      return;
-    }
-    const node = bannerRef.current;
-    if (!node) {
-      document.documentElement.style.removeProperty("--eval-banner-offset");
-      return;
-    }
-    const publish = () => {
-      document.documentElement.style.setProperty(
-        "--eval-banner-offset",
-        `${Math.ceil(node.getBoundingClientRect().height)}px`,
-      );
-    };
-    publish();
-    const observer = new ResizeObserver(publish);
-    observer.observe(node);
-    return () => {
-      observer.disconnect();
-      document.documentElement.style.removeProperty("--eval-banner-offset");
-    };
-  }, [visible]);
-  if (!evaluation || !visible) return null;
-  return (
-    <aside
-      ref={bannerRef}
-      className="pc-status-notice is-warning pc-eval-banner"
-      aria-label="Evaluation session"
-    >
-      <span className="pc-eval-banner-identity">
-        <strong>Evaluation:</strong> {evaluation.label} · {evaluation.name}
-      </span>
-      <span className="pc-eval-banner-actions">
-        <Link className="btn small" to="/evaluate">
-          Evaluation guide
-        </Link>
-        <Form method="post" action="/sign-out">
-          <button className="btn small" type="submit">
-            Change persona
-          </button>
-        </Form>
-      </span>
-    </aside>
   );
 }
 
