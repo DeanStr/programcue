@@ -630,15 +630,18 @@ export function validateRemoteSchemaEvidence(
           identityTriggerSql,
         ) ||
         !/profile_status\s*=\s*'archived'/iu.test(identityTriggerSql) ||
+        !/retained\.id\s*=\s*NEW\.person_id/iu.test(identityTriggerSql) ||
         !/retained\.last_operation_id\s*=\s*event\.last_operation_id/iu.test(
           identityTriggerSql,
         ) ||
+        !/event\.id\s*=\s*OLD\.event_id/iu.test(identityTriggerSql) ||
         !/participant_retention_completed_at\s+IS\s+NULL/iu.test(
           identityTriggerSql,
         ) ||
         !/NOT\s+EXISTS\s*\(\s*SELECT\s+1\s+FROM\s+event_public_site_references\s+reference/iu.test(
           identityTriggerSql,
         ) ||
+        !/reference\.event_id\s*=\s*OLD\.event_id/iu.test(identityTriggerSql) ||
         !/reference\.kind\s*=\s*'speaker'/iu.test(identityTriggerSql) ||
         !/reference\.record_id\s*=\s*OLD\.person_id/iu.test(
           identityTriggerSql,

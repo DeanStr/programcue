@@ -1869,7 +1869,11 @@ describe("evaluation vertical slice", () => {
         reason: "The committee received material correcting evidence.",
         confirmed: true,
       });
-      expect(reopened.notificationOutcome).toBe("cancelled_before_delivery");
+      expect(reopened).toMatchObject({
+        notificationOutcome: "cancelled_before_delivery",
+        communicationStatus: "cancelled",
+        deliveryStatus: "cancelled",
+      });
       expect(executeIdempotent).toHaveBeenCalledWith(
         expect.objectContaining({ eventId: admin.eventId }),
         expect.objectContaining({ operation: "evaluation.decision.reopen" }),
@@ -1977,13 +1981,118 @@ describe("evaluation vertical slice", () => {
       });
     });
 
-    it("reopens a released rejection after its notification has already been delivered", async () => {
+    it.each([
+      ["sent", "sent", "sent"],
+      ["delivered", "sent", "delivered"],
+      ["failed", "failed", "failed"],
+      ["bounced", "failed", "bounced"],
+      ["suppressed", "failed", "suppressed"],
+    ] as const)(
+      "preserves a completed notification whose delivery is %s",
+      async (deliveryStatus, communicationStatus, expectedDelivery) => {
+        await resetEvaluationFixture();
+        const service = new EvaluationService(evaluationEnvironment());
+        const released = await service.decide(admin, {
+          submissionId: "eval-test-submission",
+          decision: "rejected",
+          rationale: "Initial outcome before delivery completed.",
+          release: true,
+          confirmedWithoutReview: true,
+        });
+        await env.DB.batch([
+          env.DB.prepare(
+            `UPDATE operation_jobs
+                SET status = 'completed', completed_at = unixepoch(),
+                    updated_at = unixepoch()
+              WHERE id = ? AND event_id = ?`,
+          ).bind(released.notificationOperationId, admin.eventId),
+          env.DB.prepare(
+            `UPDATE communications
+                SET status = ?, sent_at = unixepoch(), updated_at = unixepoch()
+              WHERE operation_id = ? AND event_id = ?`,
+          ).bind(
+            communicationStatus,
+            released.notificationOperationId,
+            admin.eventId,
+          ),
+          env.DB.prepare(
+            `UPDATE communication_deliveries
+                SET status = ?, updated_at = unixepoch()
+              WHERE event_id = ? AND communication_id IN (
+                SELECT communication.id FROM communications communication
+                 WHERE communication.operation_id = ?
+                   AND communication.event_id = communication_deliveries.event_id
+              )`,
+          ).bind(
+            deliveryStatus,
+            admin.eventId,
+            released.notificationOperationId,
+          ),
+          env.DB.prepare(
+            `UPDATE operation_items
+                SET status = 'completed', completed_at = unixepoch(),
+                    updated_at = unixepoch()
+              WHERE operation_id = ?`,
+          ).bind(released.notificationOperationId),
+        ]);
+
+        const reopened = await service.reopenDecision(admin, {
+          submissionId: "eval-test-submission",
+          reason: "The committee received material correcting evidence.",
+          confirmed: true,
+        });
+        expect(reopened).toMatchObject({
+          notificationOutcome: "already_provider_accepted",
+          communicationStatus,
+          deliveryStatus: expectedDelivery,
+        });
+        await expect(
+          env.DB.prepare(
+            `SELECT submission.status, decision.status AS decisionStatus,
+                    (SELECT operation.status FROM operation_jobs operation
+                      WHERE operation.id = ?) AS notificationStatus,
+                    (SELECT communication.status FROM communications communication
+                      WHERE communication.operation_id = ?
+                        AND communication.event_id = decision.event_id) AS communicationStatus,
+                    (SELECT delivery.status FROM communication_deliveries delivery
+                      JOIN communications communication
+                        ON communication.id = delivery.communication_id
+                       AND communication.event_id = delivery.event_id
+                       AND communication.operation_id = ?) AS deliveryStatus,
+                    (SELECT item.status FROM operation_items item
+                      WHERE item.operation_id = ?) AS itemStatus
+               FROM submissions submission
+               JOIN submission_decisions decision
+                 ON decision.submission_id = submission.id
+              WHERE submission.id = 'eval-test-submission'
+                AND decision.id = ?`,
+          )
+            .bind(
+              released.notificationOperationId,
+              released.notificationOperationId,
+              released.notificationOperationId,
+              released.notificationOperationId,
+              released.decisionId,
+            )
+            .first(),
+        ).resolves.toEqual({
+          status: "decision_ready",
+          decisionStatus: "superseded",
+          notificationStatus: "completed",
+          communicationStatus,
+          deliveryStatus: expectedDelivery,
+          itemStatus: "completed",
+        });
+      },
+    );
+
+    it("fails closed when a completed notification is still sending", async () => {
       await resetEvaluationFixture();
       const service = new EvaluationService(evaluationEnvironment());
       const released = await service.decide(admin, {
         submissionId: "eval-test-submission",
         decision: "rejected",
-        rationale: "Initial outcome before delivery completed.",
+        rationale: "Initial outcome before an inconsistent send state.",
         release: true,
         confirmedWithoutReview: true,
       });
@@ -1996,12 +2105,12 @@ describe("evaluation vertical slice", () => {
         ).bind(released.notificationOperationId, admin.eventId),
         env.DB.prepare(
           `UPDATE communications
-              SET status = 'sent', sent_at = unixepoch(), updated_at = unixepoch()
+              SET status = 'sending', updated_at = unixepoch()
             WHERE operation_id = ? AND event_id = ?`,
         ).bind(released.notificationOperationId, admin.eventId),
         env.DB.prepare(
           `UPDATE communication_deliveries
-              SET status = 'sent', updated_at = unixepoch()
+              SET status = 'sending', updated_at = unixepoch()
             WHERE event_id = ? AND communication_id IN (
               SELECT communication.id FROM communications communication
                WHERE communication.operation_id = ?
@@ -2010,55 +2119,19 @@ describe("evaluation vertical slice", () => {
         ).bind(admin.eventId, released.notificationOperationId),
         env.DB.prepare(
           `UPDATE operation_items
-              SET status = 'completed', completed_at = unixepoch(),
-                  updated_at = unixepoch()
+              SET status = 'running', updated_at = unixepoch()
             WHERE operation_id = ?`,
         ).bind(released.notificationOperationId),
       ]);
-
-      const reopened = await service.reopenDecision(admin, {
-        submissionId: "eval-test-submission",
-        reason: "The committee received material correcting evidence.",
-        confirmed: true,
-      });
-      expect(reopened.notificationOutcome).toBe("already_delivered");
       await expect(
-        env.DB.prepare(
-          `SELECT submission.status, decision.status AS decisionStatus,
-                  (SELECT operation.status FROM operation_jobs operation
-                    WHERE operation.id = ?) AS notificationStatus,
-                  (SELECT communication.status FROM communications communication
-                    WHERE communication.operation_id = ?
-                      AND communication.event_id = decision.event_id) AS communicationStatus,
-                  (SELECT delivery.status FROM communication_deliveries delivery
-                    JOIN communications communication
-                      ON communication.id = delivery.communication_id
-                     AND communication.event_id = delivery.event_id
-                     AND communication.operation_id = ?) AS deliveryStatus,
-                  (SELECT item.status FROM operation_items item
-                    WHERE item.operation_id = ?) AS itemStatus
-             FROM submissions submission
-             JOIN submission_decisions decision
-               ON decision.submission_id = submission.id
-            WHERE submission.id = 'eval-test-submission'
-              AND decision.id = ?`,
-        )
-          .bind(
-            released.notificationOperationId,
-            released.notificationOperationId,
-            released.notificationOperationId,
-            released.notificationOperationId,
-            released.decisionId,
-          )
-          .first(),
-      ).resolves.toEqual({
-        status: "decision_ready",
-        decisionStatus: "superseded",
-        notificationStatus: "completed",
-        communicationStatus: "sent",
-        deliveryStatus: "sent",
-        itemStatus: "completed",
-      });
+        service.reopenDecision(admin, {
+          submissionId: "eval-test-submission",
+          reason: "The committee received material correcting evidence.",
+          confirmed: true,
+        }),
+      ).rejects.toThrow(
+        /complete audit, decision, submission, change, and notification evidence|changed before it could be reopened/i,
+      );
     });
 
     it("fails closed when a released decision has no notification link or legacy marker", async () => {

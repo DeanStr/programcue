@@ -805,10 +805,15 @@ export function EvaluationUnifiedResults() {
                                   "available" ||
                                 releasedDecision.notificationEvidenceState ===
                                   "retained";
-                              const originalOutcomeAlreadySent =
+                              const originalOutcomeAlreadyAccepted =
                                 hasLinkedNotification &&
                                 releasedDecision.notificationOperationStatus ===
                                   "completed";
+                              const laterProviderFailure =
+                                originalOutcomeAlreadyAccepted &&
+                                ["failed", "bounced", "suppressed"].includes(
+                                  releasedDecision.deliveryStatus ?? "",
+                                );
                               const pendingNotificationCancellable =
                                 hasLinkedNotification &&
                                 [
@@ -857,9 +862,11 @@ export function EvaluationUnifiedResults() {
                                       />
                                       <div className="validation-item warn">
                                         <strong>
-                                          {originalOutcomeAlreadySent
-                                            ? "The original decision email has already been sent"
-                                            : "Prior messages cannot be recalled"}
+                                          {laterProviderFailure
+                                            ? `The original decision email was later reported as ${releasedDecision.deliveryStatus}`
+                                            : originalOutcomeAlreadyAccepted
+                                              ? "The original decision email was already accepted by the provider"
+                                              : "Prior messages cannot be recalled"}
                                         </strong>
                                         <span>
                                           Reopening supersedes the released{" "}
@@ -867,11 +874,13 @@ export function EvaluationUnifiedResults() {
                                           outcome and returns this proposal to
                                           decision-ready state. You must release
                                           the corrected outcome separately.
-                                          {originalOutcomeAlreadySent
-                                            ? " The original outcome has already been sent and cannot be recalled."
-                                            : pendingNotificationCancellable
-                                              ? " A pending notification will be cancelled; messages already sent cannot be recalled."
-                                              : " No pending notification remains to cancel; messages already sent cannot be recalled."}
+                                          {laterProviderFailure
+                                            ? " The provider accepted the original send and later reported a terminal failure. That evidence is retained and cannot be recalled."
+                                            : originalOutcomeAlreadyAccepted
+                                              ? " The original outcome was already accepted by the provider and cannot be recalled."
+                                              : pendingNotificationCancellable
+                                                ? " A pending notification will be cancelled; messages already sent cannot be recalled."
+                                                : " No pending notification remains to cancel; messages already sent cannot be recalled."}
                                         </span>
                                       </div>
                                       <label className="label">
@@ -891,11 +900,13 @@ export function EvaluationUnifiedResults() {
                                           value="true"
                                           required
                                         />
-                                        {originalOutcomeAlreadySent
-                                          ? "I understand the original decision email has already been sent and cannot be recalled."
-                                          : pendingNotificationCancellable
-                                            ? "I understand a pending notification will be cancelled and messages already sent cannot be recalled."
-                                            : "I understand there is no pending notification to cancel and messages already sent cannot be recalled."}
+                                        {laterProviderFailure
+                                          ? `I understand the original decision email was later reported as ${releasedDecision.deliveryStatus} and cannot be recalled.`
+                                          : originalOutcomeAlreadyAccepted
+                                            ? "I understand the original decision email was already accepted by the provider and cannot be recalled."
+                                            : pendingNotificationCancellable
+                                              ? "I understand a pending notification will be cancelled and messages already sent cannot be recalled."
+                                              : "I understand there is no pending notification to cancel and messages already sent cannot be recalled."}
                                       </label>
                                       <button
                                         type="submit"

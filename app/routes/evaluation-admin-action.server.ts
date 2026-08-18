@@ -15,6 +15,7 @@ import {
   ReviewerAiSuggestionStateError,
 } from "~/modules/ai/reviewer-ai-suggestion.server";
 import { communicationScheduledEpoch } from "~/modules/communications/communication-time";
+import type { DecisionReopenResult } from "~/modules/evaluations/evaluation-decision-service.server";
 import {
   parseScorecardSelection,
   ScorecardSelectionError,
@@ -36,6 +37,24 @@ import { evaluatorEmailRoutingMessage } from "~/platform/evaluation/evaluator-em
 import { rejectCrossOriginBrowserMutation } from "~/platform/http/mutation-origin.server";
 import { recordRouteChange } from "~/platform/realtime/route-realtime.server";
 import { decisionActionOutcome } from "./evaluation-admin-outcomes";
+
+function decisionReopenFlash(result: DecisionReopenResult) {
+  if (result.notificationOutcome === "cancelled_before_delivery") {
+    return "Decision reopened for correction and its pending notification was cancelled. Messages already sent cannot be recalled; record and release the corrected outcome explicitly.";
+  }
+  if (result.notificationOutcome === "legacy_unverified") {
+    return "Decision reopened for correction. This release predates pinned notification evidence, so delivery is not asserted. Messages that were sent cannot be recalled; record and release the corrected outcome explicitly.";
+  }
+  const deliveryStatus = result.deliveryStatus;
+  if (
+    deliveryStatus === "failed" ||
+    deliveryStatus === "bounced" ||
+    deliveryStatus === "suppressed"
+  ) {
+    return `Decision reopened for correction. The original decision email had already been accepted by the provider and later reported as ${deliveryStatus}. Messages already sent cannot be recalled; record and release the corrected outcome explicitly.`;
+  }
+  return "Decision reopened for correction. The original decision email had already been accepted by the provider. Messages already sent cannot be recalled; record and release the corrected outcome explicitly.";
+}
 
 function readRubricCriteria(values: FormData) {
   const ids = values.getAll("criterionId").map(String);
@@ -783,12 +802,7 @@ export async function action({ request, context }: ActionFunctionArgs) {
       }
       return {
         ok: true,
-        message:
-          result.notificationOutcome === "cancelled_before_delivery"
-            ? "Decision reopened for correction and its pending notification was cancelled. Messages already sent cannot be recalled; record and release the corrected outcome explicitly."
-            : result.notificationOutcome === "legacy_unverified"
-              ? "Decision reopened for correction. This release predates pinned notification evidence, so delivery is not asserted. Messages that were sent cannot be recalled; record and release the corrected outcome explicitly."
-              : "Decision reopened for correction. No pending notification remained to cancel. Messages already sent cannot be recalled; record and release the corrected outcome explicitly.",
+        message: decisionReopenFlash(result),
       };
     }
     return data(

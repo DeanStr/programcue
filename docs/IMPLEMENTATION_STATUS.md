@@ -419,15 +419,16 @@ standalone webhook calls without an API-key actor must explicitly declare
 `admin_ui`, `participant_ui`, `public_form`, `api` or `internal`, and a missing
 origin fails before endpoint discovery. Decision reopen now requires the same
 kind of complete current-state guard for its notification graph: the linked
-operation must be `cancelled` or `completed`, with its communication, delivery
-and operation-item rows present and no leftover cancellable communication,
-delivery or operation item. A NULL notification link is
-accepted only with the exact closed `decision.notification.legacy_unlinked`
-audit; any other missing operation fails before supersession. Fault injection
-that suppresses communication cancellation, delivery cancellation or item
-skipping rolls the reopen back. An already-delivered notification can still
-be reopened and is reported as `already_delivered`; a 0041-marked unlinked
-release is reported as `legacy_unverified` rather than as a send. This is
+operation must be a one-recipient terminal graph. Pending work is cancelled
+only while the parent job is still cancellable. A completed job keeps its
+existing communication and delivery evidence, including later failed, bounced
+or suppressed provider updates, and is reported as
+`already_provider_accepted` with that delivery status. A NULL notification
+link is accepted only with the exact closed
+`decision.notification.legacy_unlinked` audit; any other missing operation
+fails before supersession. The outcome is selected in the same D1 batch.
+Fault injection that suppresses communication cancellation, delivery
+cancellation or item skipping rolls the reopen back. This is
 repository evidence until the candidate is deployed.
 
 Priority 0 review hardening keeps the client autosave CAS token at the last
