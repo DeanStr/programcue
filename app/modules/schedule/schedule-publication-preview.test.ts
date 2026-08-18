@@ -10,7 +10,28 @@ import {
 } from "./schedule-service-test-fixture";
 import { eventLocalTimeEpoch } from "./schedule-time";
 
-beforeEach(prepareScheduleServiceTest);
+beforeEach(async () => {
+  await prepareScheduleServiceTest();
+  await env.DB.prepare(
+    `UPDATE sessions
+        SET title = CASE id
+              WHEN 'schedule-test-one' THEN 'First test session'
+              ELSE 'Second test session'
+            END,
+            description = NULL,
+            format = CASE id
+              WHEN 'schedule-test-one' THEN 'presentation'
+              ELSE 'panel'
+            END,
+            duration_minutes = 60,
+            track_id = 'schedule-test-track',
+            visibility = 'public'
+      WHERE event_id = ?
+        AND id IN ('schedule-test-one', 'schedule-test-two')`,
+  )
+    .bind(viewer.eventId)
+    .run();
+});
 
 describe("schedule publication preview", () => {
   it("shows the exact draft blockers before publication", async () => {
@@ -190,6 +211,102 @@ describe("schedule publication preview", () => {
     );
     expect(removalPreview?.changes.removed).toEqual([
       { sessionId: "schedule-test-one", title: "First test session" },
+    ]);
+  });
+
+  it("compares snapshotted public content separately from placement", async () => {
+    const service = new ScheduleService(scheduleTestEnv);
+    const publishedId = await service.createDraft(viewer);
+    let workspace = await service.getWorkspace(viewer);
+    const startsAt = eventLocalTimeEpoch(
+      workspace.event.startsAt,
+      workspace.event.timezone,
+      9,
+    );
+    await service.place(viewer, {
+      scheduleVersionId: publishedId,
+      scheduleRevision: workspace.version!.revision,
+      sessionId: "schedule-test-one",
+      roomId: "main",
+      startsAt,
+      endsAt: startsAt + 3_600,
+    });
+    await approveScheduledTestContent(publishedId);
+    workspace = await service.getWorkspace(viewer);
+    await service.publish(viewer, {
+      scheduleVersionId: publishedId,
+      scheduleRevision: workspace.version!.revision,
+    });
+
+    const draftId = await service.createDraft(viewer);
+    workspace = await service.getWorkspace(viewer);
+    await env.DB.prepare(
+      `INSERT OR IGNORE INTO tracks (id, event_id, name, slug, position)
+       VALUES ('schedule-test-content-track', ?, 'Content Track', 'content-track', 20)`,
+    )
+      .bind(viewer.eventId)
+      .run();
+    const session = workspace.sessions.find(
+      (candidate) => candidate.id === "schedule-test-one",
+    );
+    expect(session).toBeDefined();
+    await service.updateSessionContent(
+      viewer,
+      {
+        scheduleVersionId: draftId,
+        scheduleRevision: workspace.version!.revision,
+        sessionId: session!.id,
+        sessionRevision: session!.revision,
+        idempotencyKey: crypto.randomUUID(),
+        title: "Revised first session",
+        description: "A public abstract that will become live.",
+        format: "panel",
+        durationMinutes: session!.durationMinutes,
+        trackId: "schedule-test-content-track",
+        visibility: session!.visibility,
+        requiredResources: session!.requiredResources,
+      },
+      "admin_ui",
+    );
+    workspace = await service.getWorkspace(viewer);
+
+    const preview = await buildSchedulePublicationPreview(
+      scheduleTestEnv,
+      viewer,
+      workspace,
+    );
+
+    expect(preview?.changes.added).toEqual([]);
+    expect(preview?.changes.removed).toEqual([]);
+    expect(preview?.changes.moved).toEqual([]);
+    expect(preview?.changes.visibility).toEqual([]);
+    expect(preview?.changes.content).toEqual([
+      {
+        sessionId: "schedule-test-one",
+        title: "Revised first session",
+        fields: [
+          {
+            field: "title",
+            before: "First test session",
+            after: "Revised first session",
+          },
+          {
+            field: "description",
+            before: "None",
+            after: "A public abstract that will become live.",
+          },
+          {
+            field: "track",
+            before: "Operations",
+            after: "Content Track",
+          },
+          {
+            field: "format",
+            before: "Presentation",
+            after: "Panel",
+          },
+        ],
+      },
     ]);
   });
 

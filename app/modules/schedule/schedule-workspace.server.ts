@@ -417,7 +417,12 @@ export async function loadScheduleWorkspaceD1(
   return {
     ...workspace,
     publicationConflicts: detectWorkspaceConflicts(workspace).map(
-      ({ conflict }) => conflict,
+      ({ entryId, conflict }) => ({
+        ...conflict,
+        entryIds: [entryId, conflict.conflictingEntryId].filter(
+          (id): id is string => Boolean(id),
+        ),
+      }),
     ),
   };
 }

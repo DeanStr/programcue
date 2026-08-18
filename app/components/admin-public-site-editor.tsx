@@ -72,6 +72,7 @@ function OrderedFeaturedPicker({
           item.searchText.toLowerCase().includes(normalisedQuery)),
     );
   }, [items, normalisedQuery, selectedIds]);
+  const visibleAvailable = available.slice(0, 20);
 
   function move(index: number, direction: -1 | 1) {
     setSelectedIds((current) => {
@@ -158,12 +159,16 @@ function OrderedFeaturedPicker({
             />
           </label>
           <p className="help" role="status">
-            {available.length} available{" "}
-            {available.length === 1 ? "record" : "records"}
-            {normalisedQuery ? " match" : ""}.
+            {available.length > visibleAvailable.length
+              ? `Showing ${visibleAvailable.length} of ${available.length} ${
+                  normalisedQuery ? "matches" : "available records"
+                }. Type to search.`
+              : `${available.length} available ${
+                  available.length === 1 ? "record" : "records"
+                }${normalisedQuery ? " match" : ""}.`}
           </p>
           <div className="public-site-featured-available">
-            {available.map((item) => (
+            {visibleAvailable.map((item) => (
               <div key={item.id}>
                 <span>
                   <strong>{item.title}</strong>

@@ -1,46 +1,81 @@
-import { useState } from "react";
-import { Form, Link } from "react-router";
+import { useEffect, useRef, useState } from "react";
+import { Link, useFetcher, useRevalidator } from "react-router";
 import { Dialog } from "~/components/dialog";
 import type { AutoPlacementPreview } from "~/modules/schedule/schedule-auto-placement";
-import type { SchedulePublicationPreview } from "~/modules/schedule/schedule-publication-preview.server";
+import type {
+  SchedulePublicationContentField,
+  SchedulePublicationPreview,
+} from "~/modules/schedule/schedule-publication-preview.server";
 import type { ScheduleSession } from "~/modules/schedule/schedule-service.server";
+import type { action as schedulePlannerAction } from "~/routes/schedule-planner.server";
 import type {
   ScheduleFetcher,
   SchedulePlannerWorkspaceData,
 } from "./schedule-planner-panel-types";
 import {
+  isRecord,
   scheduleDateTimeLabel,
   serializeAutoPlacementPreview,
 } from "./schedule-planner-workspace-helpers";
 
+function recordNotice(result: unknown) {
+  if (!isRecord(result)) return null;
+  if (typeof result.error === "string" && result.error) {
+    return { tone: "error" as const, text: result.error };
+  }
+  if (
+    result.committed === true &&
+    typeof result.message === "string" &&
+    result.message
+  ) {
+    return { tone: "warn" as const, text: result.message };
+  }
+  return null;
+}
+
 export function ScheduleDraftDialog({
   workspace,
-  busy,
   close,
 }: {
   workspace: SchedulePlannerWorkspaceData & {
     version: NonNullable<SchedulePlannerWorkspaceData["version"]>;
   };
-  busy: boolean;
   close: () => void;
 }) {
+  const fetcher = useFetcher<typeof schedulePlannerAction>();
+  const creating = fetcher.state !== "idle";
+  const notice = recordNotice(fetcher.data);
+  const draftCreatedWithWarning = notice?.tone === "warn";
+  useEffect(() => {
+    if (fetcher.state !== "idle") return;
+    const result: unknown = fetcher.data;
+    if (isRecord(result) && result.ok === true) close();
+  }, [close, fetcher.data, fetcher.state]);
   return (
     <Dialog
       title="Create the next schedule draft?"
       description="Prepare a new draft from the current published schedule."
       onClose={close}
+      dismissible={!creating}
       footer={
         <>
-          <button className="btn" type="button" onClick={close} disabled={busy}>
-            Cancel
+          <button
+            className="btn"
+            type="button"
+            onClick={close}
+            disabled={creating}
+          >
+            {draftCreatedWithWarning ? "Close" : "Cancel"}
           </button>
-          <Form method="post" onSubmit={close}>
-            <input type="hidden" name="intent" value="create-draft" />
-            <input type="hidden" name="intentId" value={workspace.intentId} />
-            <button type="submit" className="btn primary" disabled={busy}>
-              {busy ? "Creating draft…" : "Confirm new draft"}
-            </button>
-          </Form>
+          {draftCreatedWithWarning ? null : (
+            <fetcher.Form method="post">
+              <input type="hidden" name="intent" value="create-draft" />
+              <input type="hidden" name="intentId" value={workspace.intentId} />
+              <button type="submit" className="btn primary" disabled={creating}>
+                {creating ? "Creating draft…" : "Confirm new draft"}
+              </button>
+            </fetcher.Form>
+          )}
         </>
       }
     >
@@ -60,6 +95,17 @@ export function ScheduleDraftDialog({
             and published.
           </span>
         </div>
+        {notice ? (
+          <div
+            className={`validation-item ${notice.tone === "error" ? "error" : "warn"}`}
+            role="alert"
+          >
+            {draftCreatedWithWarning ? (
+              <strong>Draft created, but open views may be stale.</strong>
+            ) : null}
+            <span>{notice.text}</span>
+          </div>
+        ) : null}
       </div>
     </Dialog>
   );
@@ -254,11 +300,33 @@ export function AutoPlacementPreviewDialog({
   );
 }
 
+const CONTENT_FIELD_LABELS: Record<SchedulePublicationContentField, string> = {
+  title: "Title",
+  description: "Description",
+  track: "Track",
+  format: "Format",
+  duration: "Duration",
+};
+
+function isPublishResult(result: unknown): result is Record<string, unknown> {
+  return isRecord(result) && result.intent === "publish";
+}
+
+function publicationActionError(result: unknown) {
+  if (!isPublishResult(result) || result.committed === true) return null;
+  if (typeof result.error !== "string" || !result.error) return null;
+  return {
+    message: result.error,
+    conflict: result.conflict === true,
+  };
+}
+
 export function SchedulePublicationDialog({
   workspace,
   fetcher,
   preview,
   close,
+  revealConflictEntries,
 }: {
   workspace: SchedulePlannerWorkspaceData & {
     version: NonNullable<SchedulePlannerWorkspaceData["version"]>;
@@ -266,7 +334,17 @@ export function SchedulePublicationDialog({
   fetcher: ScheduleFetcher;
   preview: SchedulePublicationPreview;
   close: () => void;
+  revealConflictEntries(entryIds: string[]): void;
 }) {
+  const revalidator = useRevalidator();
+  const [publishAttempted, setPublishAttempted] = useState(false);
+  const submitLock = useRef(false);
+  const returnFocusRef = useRef<HTMLElement | null>(null);
+  const skipReturnFocusRef = useRef(false);
+  const publishing =
+    fetcher.state !== "idle" &&
+    (fetcher.formData?.get("intent") === "publish" || publishAttempted);
+  const actionError = publicationActionError(fetcher.data);
   const blockerCount =
     Number(preview.blockers.emptySchedule) +
     preview.blockers.conflicts.length +
@@ -278,17 +356,43 @@ export function SchedulePublicationDialog({
     preview.changes.added.length +
     preview.changes.removed.length +
     preview.changes.moved.length +
-    preview.changes.visibility.length;
+    preview.changes.visibility.length +
+    preview.changes.content.length;
+  useEffect(() => {
+    if (fetcher.state === "idle") submitLock.current = false;
+    if (!publishAttempted || fetcher.state !== "idle") return;
+    const result: unknown = fetcher.data;
+    if (!isPublishResult(result)) return;
+    if (result.ok === true || result.committed === true) close();
+  }, [close, fetcher.data, fetcher.state, publishAttempted]);
   return (
     <Dialog
       title="Publish schedule"
       onClose={close}
+      dismissible={!publishing}
+      returnFocus={returnFocusRef}
+      skipReturnFocus={skipReturnFocusRef}
       footer={
         <>
-          <button className="btn" type="button" onClick={close}>
+          <button
+            className="btn"
+            type="button"
+            onClick={close}
+            disabled={publishing}
+          >
             Cancel
           </button>
-          <fetcher.Form method="post" onSubmit={close}>
+          <fetcher.Form
+            method="post"
+            onSubmit={(event) => {
+              if (submitLock.current) {
+                event.preventDefault();
+                return;
+              }
+              submitLock.current = true;
+              setPublishAttempted(true);
+            }}
+          >
             <input type="hidden" name="intent" value="publish" />
             <input
               type="hidden"
@@ -303,9 +407,9 @@ export function SchedulePublicationDialog({
             <button
               type="submit"
               className="btn primary"
-              disabled={blockerCount > 0}
+              disabled={blockerCount > 0 || publishing}
             >
-              Confirm publication
+              {publishing ? "Publishing…" : "Confirm publication"}
             </button>
           </fetcher.Form>
         </>
@@ -334,7 +438,7 @@ export function SchedulePublicationDialog({
         <p className="help">
           {changeCount
             ? `${changeCount} material ${changeCount === 1 ? "change" : "changes"} will become public.`
-            : "No session placement or visibility changes were found."}
+            : "No session placement, visibility or public content changes were found."}
         </p>
         {preview.changes.added.length ? (
           <div className="validation-item info">
@@ -401,6 +505,26 @@ export function SchedulePublicationDialog({
             </ul>
           </div>
         ) : null}
+        {preview.changes.content.length ? (
+          <div className="validation-item info">
+            <strong>Public content · {preview.changes.content.length}</strong>
+            <ul>
+              {preview.changes.content.map((item) => (
+                <li key={item.sessionId}>
+                  <strong>{item.title}</strong>
+                  <ul>
+                    {item.fields.map((field) => (
+                      <li key={field.field}>
+                        {CONTENT_FIELD_LABELS[field.field]} · {field.before} →{" "}
+                        {field.after}
+                      </li>
+                    ))}
+                  </ul>
+                </li>
+              ))}
+            </ul>
+          </div>
+        ) : null}
       </section>
 
       <section aria-labelledby="schedule-publication-readiness">
@@ -426,6 +550,18 @@ export function SchedulePublicationDialog({
         {preview.blockers.emptySchedule ? (
           <div className="validation-item error">
             Place at least one session before publishing.
+            <button
+              className="btn small"
+              type="button"
+              onClick={() => {
+                returnFocusRef.current = document.getElementById(
+                  "schedule-source-heading",
+                );
+                close();
+              }}
+            >
+              Return to unscheduled sessions
+            </button>
           </div>
         ) : null}
         {preview.blockers.contentVisibility.length ? (
@@ -433,7 +569,14 @@ export function SchedulePublicationDialog({
             <strong>Public content hidden or private</strong>
             <ul>
               {preview.blockers.contentVisibility.map((session) => (
-                <li key={session.sessionId}>{session.title}</li>
+                <li key={session.sessionId}>
+                  <Link
+                    to={`/admin/content/sessions/${encodeURIComponent(session.sessionId)}`}
+                    onClick={close}
+                  >
+                    Review visibility · {session.title}
+                  </Link>
+                </li>
               ))}
             </ul>
           </div>
@@ -448,7 +591,7 @@ export function SchedulePublicationDialog({
                     to={`/admin/content/sessions/${encodeURIComponent(session.sessionId)}`}
                     onClick={close}
                   >
-                    {session.title}
+                    Review content · {session.title}
                   </Link>
                 </li>
               ))}
@@ -461,7 +604,13 @@ export function SchedulePublicationDialog({
             <ul>
               {preview.blockers.unconfirmedSpeakers.map((item) => (
                 <li key={`${item.sessionId}:${item.speakerId}`}>
-                  {item.title} · {item.speakerName}
+                  <Link
+                    to={`/admin/speakers/${encodeURIComponent(item.speakerId)}`}
+                    onClick={close}
+                  >
+                    Confirm participation · {item.speakerName}
+                  </Link>
+                  <span> · {item.title}</span>
                 </li>
               ))}
             </ul>
@@ -469,17 +618,38 @@ export function SchedulePublicationDialog({
         ) : null}
         {preview.blockers.publicDependencies.map((message) => (
           <div className="validation-item error" key={message}>
-            {message}
+            <span>{message}</span>
+            <Link to="/admin/site" onClick={close}>
+              Update event website
+            </Link>
           </div>
         ))}
         {preview.blockers.conflicts.length ? (
           <div className="validation-item error">
             <strong>Blocking schedule conflicts</strong>
             <ul>
-              {preview.blockers.conflicts.map((conflict, index) => (
-                // biome-ignore lint/suspicious/noArrayIndexKey: Deterministic conflict messages have no persisted identifier in this projection.
-                <li key={index}>{conflict.message}</li>
-              ))}
+              {preview.blockers.conflicts.map((conflict, index) => {
+                const entryIds = conflict.entryIds;
+                return (
+                  // biome-ignore lint/suspicious/noArrayIndexKey: Deterministic conflict messages have no persisted identifier in this projection.
+                  <li key={index}>
+                    {entryIds.length ? (
+                      <button
+                        className="btn small"
+                        type="button"
+                        onClick={() => {
+                          skipReturnFocusRef.current = true;
+                          close();
+                          revealConflictEntries(entryIds);
+                        }}
+                      >
+                        Reveal conflict in planner
+                      </button>
+                    ) : null}{" "}
+                    {conflict.message}
+                  </li>
+                );
+              })}
             </ul>
           </div>
         ) : null}
@@ -495,6 +665,30 @@ export function SchedulePublicationDialog({
           </div>
         ) : null}
       </section>
+      {actionError ? (
+        <div className="validation-item error" role="alert">
+          <strong>
+            {actionError.conflict
+              ? "Publication preview is out of date"
+              : "Publication failed"}
+          </strong>
+          <span>{actionError.message}</span>
+          {actionError.conflict ? (
+            <button
+              className="btn small"
+              type="button"
+              disabled={revalidator.state !== "idle" || publishing}
+              onClick={() => {
+                void revalidator.revalidate();
+              }}
+            >
+              {revalidator.state === "idle"
+                ? "Refresh publication preview"
+                : "Refreshing preview…"}
+            </button>
+          ) : null}
+        </div>
+      ) : null}
       <p className="help">
         The current public version remains available in history. Calendar
         updates are queued separately.

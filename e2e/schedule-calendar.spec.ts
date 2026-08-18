@@ -76,7 +76,7 @@ test("schedule publication previews material changes and readiness", async ({
   const publication = page.getByRole("dialog", { name: "Publish schedule" });
   await expect(publication).toContainText("Changes since version 1");
   await expect(publication).toContainText(
-    "No session placement or visibility changes were found.",
+    "No session placement, visibility or public content changes were found.",
   );
   await expect(publication).toContainText("Publication readiness");
   await expect(publication).toContainText("No publication blockers found");

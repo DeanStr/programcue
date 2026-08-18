@@ -127,7 +127,7 @@ export type ScheduleWorkspace = {
     severity: string;
     message: string;
   }>;
-  publicationConflicts: ScheduleConflict[];
+  publicationConflicts: Array<ScheduleConflict & { entryIds: string[] }>;
   policies: SchedulePolicies;
   policyRevision: number;
 };

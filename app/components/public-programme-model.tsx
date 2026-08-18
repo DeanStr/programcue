@@ -44,6 +44,7 @@ export type PublicProgrammeLoaderData = {
     sessionId: string;
     sessionTitle: string;
     description: string;
+    url: string;
   } | null;
   sessionFocusId: string | null;
   site?: PublishedPublicSite | null;

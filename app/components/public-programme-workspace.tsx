@@ -20,6 +20,7 @@ import {
 } from "~/components/public-programme-model";
 import {
   ProgrammeDayHeading,
+  PublicShareActions,
   PublicSpeakerAvatar,
   PublicSpeakerShareActions,
   SaveSessionButton,
@@ -883,12 +884,30 @@ function SessionDetailPanel({ model }: { model: PublicProgrammeModel }) {
         </>
       )}
       <div className="divider" />
-      <Link
-        className="btn small"
-        to={publicSessionDetailPath(programme.event.slug, selected.id)}
-      >
-        Shareable session link
-      </Link>
+      <div className="public-profile-actions">
+        <PublicShareActions
+          url={new URL(
+            publicSessionDetailPath(programme.event.slug, selected.id),
+            model.loaderData.canonicalUrl,
+          ).toString()}
+          title={`${selected.title} · ${programme.event.name}`}
+          text={
+            model.loaderData.sessionShare?.sessionId === selected.id
+              ? model.loaderData.sessionShare.description
+              : `${selected.title} is part of ${programme.event.name}.`
+          }
+          copyLabel="Copy session link"
+          shareLabel="Share session"
+          resetKey={selected.id}
+          failedMessage="This browser could not share the session. Copy the address from the address bar instead."
+        />
+        <Link
+          className="btn small"
+          to={publicSessionDetailPath(programme.event.slug, selected.id)}
+        >
+          Shareable session link
+        </Link>
+      </div>
     </section>
   );
 }

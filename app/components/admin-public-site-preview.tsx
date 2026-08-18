@@ -148,6 +148,7 @@ function PromotionTools({
         <img
           src={socialCardUrl.toString()}
           alt="Generated social sharing preview"
+          loading="lazy"
         />
         <div>
           <strong>{name}</strong>

@@ -20,6 +20,25 @@ export type SchedulePublicationVisibilityChange = SchedulePublicationChange & {
   to: string;
 };
 
+export const SCHEDULE_PUBLICATION_CONTENT_FIELDS = [
+  "title",
+  "description",
+  "track",
+  "format",
+  "duration",
+] as const;
+
+export type SchedulePublicationContentField =
+  (typeof SCHEDULE_PUBLICATION_CONTENT_FIELDS)[number];
+
+export type SchedulePublicationContentChange = SchedulePublicationChange & {
+  fields: Array<{
+    field: SchedulePublicationContentField;
+    before: string;
+    after: string;
+  }>;
+};
+
 export type SchedulePublicationPreview = {
   publishedVersionNumber: number | null;
   changes: {
@@ -27,6 +46,7 @@ export type SchedulePublicationPreview = {
     removed: SchedulePublicationChange[];
     moved: SchedulePublicationMove[];
     visibility: SchedulePublicationVisibilityChange[];
+    content: SchedulePublicationContentChange[];
   };
   blockers: {
     emptySchedule: boolean;
@@ -46,6 +66,11 @@ type PublishedEntry = Pick<
   "sessionId" | "roomId" | "startsAt" | "endsAt"
 > & {
   title: string;
+  description: string | null;
+  format: string;
+  trackId: string | null;
+  trackName: string | null;
+  durationMinutes: number;
   visibility: string;
   room: string;
 };
@@ -58,6 +83,15 @@ function compareLabels(
     left.title.localeCompare(right.title, "en", { sensitivity: "base" }) ||
     left.sessionId.localeCompare(right.sessionId)
   );
+}
+
+function displayText(value: string | null | undefined) {
+  const trimmed = value?.trim() ?? "";
+  return trimmed || "None";
+}
+
+function durationLabel(minutes: number) {
+  return `${minutes} min`;
 }
 
 export async function buildSchedulePublicationPreview(
@@ -116,7 +150,10 @@ export async function buildSchedulePublicationPreview(
     ? await env.DB.prepare(
         `SELECT entry.session_id AS sessionId, entry.room_id AS roomId,
                 entry.starts_at AS startsAt, entry.ends_at AS endsAt,
-                content.title, content.visibility, room.name AS room
+                content.title, content.description, content.format,
+                content.track_id AS trackId, track.name AS trackName,
+                content.duration_minutes AS durationMinutes,
+                content.visibility, room.name AS room
            FROM schedule_entries entry
            JOIN schedule_session_contents content
              ON content.schedule_version_id = entry.schedule_version_id
@@ -124,6 +161,8 @@ export async function buildSchedulePublicationPreview(
             AND content.session_id = entry.session_id
            JOIN rooms room
              ON room.id = entry.room_id AND room.event_id = entry.event_id
+           LEFT JOIN tracks track
+             ON track.id = content.track_id AND track.event_id = content.event_id
           WHERE entry.event_id = ? AND entry.schedule_version_id = ?
           ORDER BY content.title COLLATE NOCASE, entry.session_id`,
       )
@@ -145,6 +184,9 @@ export async function buildSchedulePublicationPreview(
   const removed: SchedulePublicationChange[] = [];
   const moved: SchedulePublicationMove[] = [];
   const visibility: SchedulePublicationVisibilityChange[] = [];
+  const content: SchedulePublicationContentChange[] = [];
+  const formatLabel = (key: string) =>
+    workspace.sessionFormats.find((format) => format.key === key)?.label ?? key;
 
   for (const [sessionId, entry] of draftEntries) {
     const session = sessions.get(sessionId);
@@ -187,6 +229,47 @@ export async function buildSchedulePublicationPreview(
         from: previous.visibility,
         to: session.visibility,
       });
+    }
+    const fields: SchedulePublicationContentChange["fields"] = [];
+    if (previous.title !== session.title) {
+      fields.push({
+        field: "title",
+        before: previous.title,
+        after: session.title,
+      });
+    }
+    if (
+      displayText(previous.description) !== displayText(session.description)
+    ) {
+      fields.push({
+        field: "description",
+        before: displayText(previous.description),
+        after: displayText(session.description),
+      });
+    }
+    if ((previous.trackId ?? null) !== session.trackId) {
+      fields.push({
+        field: "track",
+        before: previous.trackName ?? "No track",
+        after: session.trackName ?? "No track",
+      });
+    }
+    if (previous.format !== session.format) {
+      fields.push({
+        field: "format",
+        before: formatLabel(previous.format),
+        after: formatLabel(session.format),
+      });
+    }
+    if (previous.durationMinutes !== session.durationMinutes) {
+      fields.push({
+        field: "duration",
+        before: durationLabel(previous.durationMinutes),
+        after: durationLabel(session.durationMinutes),
+      });
+    }
+    if (fields.length) {
+      content.push({ sessionId, title: session.title, fields });
     }
   }
 
@@ -232,6 +315,7 @@ export async function buildSchedulePublicationPreview(
       removed: removed.sort(compareLabels),
       moved: moved.sort(compareLabels),
       visibility: visibility.sort(compareLabels),
+      content: content.sort(compareLabels),
     },
     blockers: {
       emptySchedule: workspace.entries.length === 0,

@@ -545,12 +545,12 @@ export function SchedulePlannerWorkspace({
           fetcher={fetcher}
           preview={workspace.publicationPreview}
           close={() => setPublishOpen(false)}
+          revealConflictEntries={revealConflictEntries}
         />
       ) : null}
       {draftOpen && workspace.version ? (
         <ScheduleDraftDialog
           workspace={{ ...workspace, version: workspace.version }}
-          busy={navigation.state !== "idle"}
           close={() => setDraftOpen(false)}
         />
       ) : null}

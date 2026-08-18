@@ -8,7 +8,6 @@ import {
   useSubmit,
 } from "react-router";
 import { ZodError } from "zod";
-import { publicSiteSectionLabels } from "~/components/admin-public-site-constants";
 import { AdminPublicSiteEditor } from "~/components/admin-public-site-editor";
 import { AdminPublicSitePreview } from "~/components/admin-public-site-preview";
 import { AdminPublicSiteRecordings } from "~/components/admin-public-site-recordings";
@@ -18,13 +17,11 @@ import { useUnsavedChanges } from "~/components/ui/use-unsaved-changes";
 import { requireValue } from "~/lib/required-value";
 import type { PublicRecordingWorkspaceItem } from "~/modules/public-site/public-recording-service.server";
 import { PublicRecordingService } from "~/modules/public-site/public-recording-service.server";
-import {
-  PUBLIC_SITE_PAGE_TYPES,
-  type PublicSiteDraft,
-  type PublicSiteSponsor,
-  type PublishedPublicSiteSnapshot,
-} from "~/modules/public-site/public-site";
 import { publicSiteCommandIdForIntent } from "~/modules/public-site/public-site-command.server";
+import {
+  publicationChangeSummary,
+  recordingsArePubliclyRenderable,
+} from "~/modules/public-site/public-site-publication-summary";
 import {
   PublicSiteCommandConflictError,
   PublicSiteIntegrityError,
@@ -49,90 +46,6 @@ type ActionResponse = {
   committed?: boolean;
   draftRevision?: number;
 };
-
-function changedList(label: string, before: string[], after: string[]) {
-  const beforeSet = new Set(before);
-  const afterSet = new Set(after);
-  const added = after.filter((value) => !beforeSet.has(value));
-  const removed = before.filter((value) => !afterSet.has(value));
-  return [
-    ...(added.length ? [`${label} added: ${added.join(", ")}`] : []),
-    ...(removed.length ? [`${label} removed: ${removed.join(", ")}`] : []),
-  ];
-}
-
-function publicationChangeSummary(input: {
-  draft: PublicSiteDraft;
-  sponsors: PublicSiteSponsor[];
-  published: { configuration: PublishedPublicSiteSnapshot } | null;
-  speakerNames: Map<string, string>;
-  sessionNames: Map<string, string>;
-}) {
-  const enabledSections = (configuration: PublicSiteDraft) =>
-    configuration.sectionOrder
-      .filter((section) => configuration.sectionVisibility[section])
-      .map((section) => publicSiteSectionLabels[section]);
-  const enabledPages = (configuration: PublicSiteDraft) =>
-    PUBLIC_SITE_PAGE_TYPES.filter(
-      (page) => configuration.pages[page].enabled,
-    ).map((page) => configuration.pages[page].title);
-  const names = (ids: string[], labels: Map<string, string>) =>
-    ids.map((id) => labels.get(id) ?? id);
-  const nextSponsors = input.sponsors.map((sponsor) => sponsor.name);
-  if (!input.published) {
-    return [
-      `Sections to publish: ${enabledSections(input.draft).join(", ") || "none"}`,
-      `Pages to publish: ${enabledPages(input.draft).join(", ") || "none"}`,
-      `Sponsors to publish: ${nextSponsors.join(", ") || "none"}`,
-    ];
-  }
-
-  const before = input.published.configuration;
-  const changes = [
-    ...changedList(
-      "Sections",
-      enabledSections(before),
-      enabledSections(input.draft),
-    ),
-    ...changedList("Pages", enabledPages(before), enabledPages(input.draft)),
-    ...changedList(
-      "Featured speakers",
-      names(before.featuredSpeakerIds, input.speakerNames),
-      names(input.draft.featuredSpeakerIds, input.speakerNames),
-    ),
-    ...changedList(
-      "Featured sessions",
-      names(before.featuredSessionIds, input.sessionNames),
-      names(input.draft.featuredSessionIds, input.sessionNames),
-    ),
-    ...changedList(
-      "Sponsors",
-      before.sponsors.map((sponsor) => sponsor.name),
-      nextSponsors,
-    ),
-  ];
-  if (before.theme !== input.draft.theme)
-    changes.push(`Theme: ${before.theme} → ${input.draft.theme}`);
-  if (before.sectionOrder.join("\n") !== input.draft.sectionOrder.join("\n"))
-    changes.push("Homepage section order changed.");
-  const { sponsors: _sponsors, ...beforeEditorial } = before;
-  if (JSON.stringify(beforeEditorial) !== JSON.stringify(input.draft))
-    changes.push("Homepage or fixed-page editorial content changed.");
-  const beforeSponsors = new Map(
-    before.sponsors.map((sponsor) => [sponsor.id, sponsor]),
-  );
-  const updatedSponsors = input.sponsors
-    .filter((sponsor) => {
-      const prior = beforeSponsors.get(sponsor.id);
-      if (!prior) return false;
-      const { revision: _revision, ...next } = sponsor;
-      return JSON.stringify(prior) !== JSON.stringify(next);
-    })
-    .map((sponsor) => sponsor.name);
-  if (updatedSponsors.length)
-    changes.push(`Sponsors updated: ${updatedSponsors.join(", ")}`);
-  return changes.length ? changes : ["No public content changes detected."];
-}
 
 function sitePublishCommandKey(
   draftRevision: number,
@@ -453,6 +366,14 @@ export default function AdminPublicSite({ loaderData }: Route.ComponentProps) {
           session.title,
         ]) ?? [],
       ),
+      hasRenderableRecordings: recordingsArePubliclyRenderable({
+        hasPublishedRecording: loaderData.recordings.some(
+          (recording) => recording.publishedRevision !== null,
+        ),
+        eventEndsAt: loaderData.event.endsAt,
+        eventTimezone: loaderData.event.timezone,
+        now: Math.floor(Date.now() / 1_000),
+      }),
     });
     confirm(
       {

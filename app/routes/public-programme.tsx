@@ -2,6 +2,7 @@ import type { CSSProperties } from "react";
 import {
   data,
   isRouteErrorResponse,
+  redirect,
   type ShouldRevalidateFunctionArgs,
   useRouteError,
 } from "react-router";
@@ -23,6 +24,7 @@ import {
 import {
   PUBLIC_PROGRAMME_SURFACES,
   type PublicProgrammeSurface,
+  publicSessionDetailPath,
 } from "~/modules/programme/programme-presentation";
 import {
   itineraryCookie,
@@ -385,12 +387,6 @@ export async function loader({ request, params, context }: Route.LoaderArgs) {
     throw new Response("Published speaker profile not found", { status: 404 });
   }
   const requestedSessionId = requestedSessionValues[0] ?? null;
-  if (requestedSessionId !== null && (embedded || surface !== "sessions")) {
-    throw new Response(
-      "Published session detail is available on the sessions view",
-      { status: 400 },
-    );
-  }
   const featuredSession = requestedSessionId
     ? (programme.sessions.find(
         (session) => session.id === requestedSessionId,
@@ -398,6 +394,17 @@ export async function loader({ request, params, context }: Route.LoaderArgs) {
     : null;
   if (requestedSessionId !== null && !featuredSession) {
     throw new Response("Published session not found", { status: 404 });
+  }
+  if (featuredSession && (embedded || surface !== "sessions")) {
+    if (embedded || managedEmbed) {
+      throw new Response(
+        "Published session detail is available on the sessions view",
+        { status: 400 },
+      );
+    }
+    throw redirect(
+      publicSessionDetailPath(programme.event.slug, featuredSession.id),
+    );
   }
   const canonicalUrl = new URL(
     managedEmbed
@@ -437,6 +444,9 @@ export async function loader({ request, params, context }: Route.LoaderArgs) {
         : null,
     };
   }
+  if (featuredSession) {
+    canonicalUrl.searchParams.set("session", featuredSession.id);
+  }
   const sessionShare = featuredSession
     ? {
         sessionId: featuredSession.id,
@@ -444,11 +454,9 @@ export async function loader({ request, params, context }: Route.LoaderArgs) {
         description:
           shareDescription(featuredSession.description) ||
           `${featuredSession.title} is part of ${programme.event.name}.`,
+        url: canonicalUrl.toString(),
       }
     : null;
-  if (featuredSession) {
-    canonicalUrl.searchParams.set("session", featuredSession.id);
-  }
   let embedOptions: ReturnType<typeof parseProgrammeEmbedSearchParameters>;
   try {
     embedOptions = managedEmbed

@@ -13,6 +13,7 @@ import {
   speakerAffiliation,
 } from "./public-programme-model";
 import {
+  PublicShareActions,
   PublicSpeakerAvatar,
   PublicSpeakerShareActions,
   SaveSessionButton,
@@ -214,6 +215,23 @@ describe("public programme speaker surfaces", () => {
 
     expect(markup).toContain("Copy profile link");
     expect(markup).not.toContain(">Share profile<");
+  });
+
+  it("always renders a copy action for a resolved session share", () => {
+    const markup = renderToStaticMarkup(
+      <PublicShareActions
+        url="https://programcue.test/public/programme/future-of-events-2027/sessions?session=session-1"
+        title={`${session.title} · Future of Events 2027`}
+        text={`${session.title} is part of Future of Events 2027.`}
+        copyLabel="Copy session link"
+        shareLabel="Share session"
+        resetKey={session.id}
+        failedMessage="This browser could not share the session."
+      />,
+    );
+
+    expect(markup).toContain("Copy session link");
+    expect(markup).not.toContain(">Share session<");
   });
 
   it("renders only supplied affiliation fields and omits empty metadata", () => {

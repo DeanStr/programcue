@@ -172,7 +172,9 @@ export function ScheduleSourcePanel({
       className="card pad schedule-source"
     >
       <div className="card-title">
-        <h2 id="schedule-source-heading">Sessions</h2>
+        <h2 id="schedule-source-heading" tabIndex={-1}>
+          Sessions
+        </h2>
       </div>
       {placementAvailable &&
       workspace.sessions.length &&

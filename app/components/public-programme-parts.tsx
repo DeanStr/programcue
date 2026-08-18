@@ -26,52 +26,57 @@ function legacyCopy(value: string) {
   try {
     input.select();
     if (!document.execCommand("copy")) {
-      throw new Error("The browser did not copy the speaker link.");
+      throw new Error("The browser did not copy the public link.");
     }
   } finally {
     input.remove();
   }
 }
 
-export function PublicSpeakerShareActions({
-  model,
+export function PublicShareActions({
+  url,
+  title,
+  text,
+  copyLabel,
+  shareLabel,
+  resetKey,
+  failedMessage,
 }: {
-  model: PublicProgrammeModel;
+  url: string;
+  title: string;
+  text: string;
+  copyLabel: string;
+  shareLabel: string;
+  resetKey: string;
+  failedMessage: string;
 }) {
-  const share = model.speakerShare;
   const [canUseWebShare, setCanUseWebShare] = useState(false);
   const [status, setStatus] = useState<"idle" | "copied" | "failed">("idle");
   useEffect(() => {
     setCanUseWebShare(typeof navigator.share === "function");
   }, []);
-  // biome-ignore lint/correctness/useExhaustiveDependencies: A different speaker is the deliberate reset trigger for transient share feedback.
-  useEffect(() => setStatus("idle"), [share?.speakerId]);
-  if (!share) return null;
-  const resolvedShare = share;
+  // biome-ignore lint/correctness/useExhaustiveDependencies: A different record is the deliberate reset trigger for transient share feedback.
+  useEffect(() => setStatus("idle"), [resetKey]);
   async function copyLink() {
     try {
       if (navigator.clipboard?.writeText) {
-        await navigator.clipboard.writeText(resolvedShare.url);
+        await navigator.clipboard.writeText(url);
       } else {
-        legacyCopy(resolvedShare.url);
+        legacyCopy(url);
       }
       setStatus("copied");
     } catch {
       try {
-        legacyCopy(resolvedShare.url);
+        legacyCopy(url);
         setStatus("copied");
       } catch {
         setStatus("failed");
       }
     }
   }
-  async function shareProfile() {
+  async function shareRecord() {
     try {
-      await navigator.share({
-        title: `${resolvedShare.speakerName} · ${model.programme.event.name}`,
-        text: resolvedShare.text,
-        url: resolvedShare.url,
-      });
+      await navigator.share({ title, text, url });
     } catch (error) {
       if (!(error instanceof DOMException) || error.name !== "AbortError") {
         setStatus("failed");
@@ -90,24 +95,43 @@ export function PublicSpeakerShareActions({
         ) : (
           <Copy aria-hidden size={14} />
         )}
-        {status === "copied" ? "Link copied" : "Copy profile link"}
+        {status === "copied" ? "Link copied" : copyLabel}
       </button>
       {canUseWebShare ? (
         <button
           className="btn small"
           type="button"
-          onClick={() => void shareProfile()}
+          onClick={() => void shareRecord()}
         >
-          <Share2 aria-hidden size={14} /> Share profile
+          <Share2 aria-hidden size={14} /> {shareLabel}
         </button>
       ) : null}
       {status === "failed" ? (
         <span className="help" role="alert">
-          This browser could not share the profile. Copy the address from the
-          address bar instead.
+          {failedMessage}
         </span>
       ) : null}
     </>
+  );
+}
+
+export function PublicSpeakerShareActions({
+  model,
+}: {
+  model: PublicProgrammeModel;
+}) {
+  const share = model.speakerShare;
+  if (!share) return null;
+  return (
+    <PublicShareActions
+      url={share.url}
+      title={`${share.speakerName} · ${model.programme.event.name}`}
+      text={share.text}
+      copyLabel="Copy profile link"
+      shareLabel="Share profile"
+      resetKey={share.speakerId}
+      failedMessage="This browser could not share the profile. Copy the address from the address bar instead."
+    />
   );
 }
 

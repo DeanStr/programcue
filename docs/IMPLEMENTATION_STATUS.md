@@ -796,7 +796,7 @@ blocker.
   requested remain explicit revision-checked editorial states. Editing or
   restoring returns only the draft content to Draft. Publication requires each
   scheduled source-public session's exact snapshot to be public and Approved;
-  the preview links every blocker to review, and service, atomic D1 and Airtable
+  the preview links hidden, unapproved and unconfirmed records, website dependencies and planner conflicts to their owning workflows, and service, atomic D1 and Airtable
   staging boundaries fail fast on drift. A blocked draft leaves the previous
   published programme intact. Existing content published under the former
   advisory rule is retained with `legacy_publication` provenance and no
@@ -1051,15 +1051,20 @@ revoked and deleted during file erasure.
   render. Unsaved client configuration blocks navigation and tab closure.
   `e2e/public-site.spec.ts` asserts the reset-restored published showcase,
   replacement publication from that published state, and first-publish on a
-  blank event. Coverage still includes discard confirmation, Event
+  blank event. First publication now uses the same empty-baseline comparison as
+  later publications.
+  Coverage still includes discard confirmation, Event
   home/programme navigation,
   homepage/fixed-page desktop/mobile preview selection, ordered featured
   selection, FAQ ordering, featured-session detail links, 40-character labels
   without header overflow and conditional fixed-page caching. The shared header
   keeps primary destinations visible, groups programme variants and editorial
   pages inside Browse, and collapses fully at tablet width. Direct session-detail
-  URLs are server-validated and fail explicitly for duplicate, mixed, embedded
-  or unavailable selections. The homepage's glance panel is a dark event surface in the masthead's
+  URLs are server-validated: a known session on the wrong public surface
+  canonicalises to the sessions view, while duplicate, mixed, embedded or
+  unavailable selections still fail explicitly. Session details reuse the
+  speaker copy/share actions. Featured-record pickers cap the available list
+  at 20. The homepage's glance panel is a dark event surface in the masthead's
   language; `programmeAccentPalette` derives separate inks for light paper, the
   dark `--accent-soft` fill and solid accent fills, and unit coverage checks
   representative pale, dark, mid-teal and rounding-boundary accents at 4.5:1.

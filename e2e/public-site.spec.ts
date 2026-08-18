@@ -187,13 +187,13 @@ test("reset restores a published public event site", async ({ page }) => {
       )
     ).status(),
   ).toBe(404);
-  expect(
-    (
-      await page.request.get(
-        "/public/programme/future-of-events-2027?session=demo-session-1",
-      )
-    ).status(),
-  ).toBe(400);
+  const canonicalisedSession = await page.request.get(
+    "/public/programme/future-of-events-2027?session=demo-session-1",
+  );
+  expect(canonicalisedSession.status()).toBe(200);
+  expect(canonicalisedSession.url()).toMatch(
+    /\/public\/programme\/future-of-events-2027\/sessions\?session=demo-session-1$/u,
+  );
   expect(
     (
       await page.request.get(
@@ -630,7 +630,7 @@ test("organisers preview unpublished edits and publish a replacement", async ({
   await expect(confirmation).toContainText(
     "Featured sessions added: Designing Inclusive Hybrid Experiences",
   );
-  await expect(confirmation).toContainText("Theme: light → dark");
+  await expect(confirmation).toContainText("Theme: Light → Dark");
   await confirmation
     .getByRole("button", { name: "Publish event website" })
     .click();
@@ -864,9 +864,11 @@ test("organisers first-publish a bounded site on a blank event", async ({
   const confirmation = page.getByRole("dialog", {
     name: "Publish the event website?",
   });
-  await expect(confirmation).toContainText("Pages to publish: About, Sponsors");
+  await expect(confirmation).toContainText("Pages added: About, Sponsors");
+  await expect(confirmation).toContainText("Sponsors added: Civic Partner");
+  await expect(confirmation).toContainText("Theme: Follow visitor system");
   await expect(confirmation).toContainText(
-    "Sponsors to publish: Civic Partner",
+    "Editorial homepage content will be published.",
   );
   await confirmation
     .getByRole("button", { name: "Publish event website" })

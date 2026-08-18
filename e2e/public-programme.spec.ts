@@ -161,6 +161,9 @@ test("public session detail exposes its canonical share link", async ({
     .locator(".programme-row")
     .click();
 
+  await expect(
+    page.getByRole("button", { name: "Copy session link" }),
+  ).toBeVisible();
   const shareLink = page.getByRole("link", {
     name: "Shareable session link",
   });

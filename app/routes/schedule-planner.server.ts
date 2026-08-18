@@ -530,6 +530,7 @@ export async function action({ request, context }: Route.ActionArgs) {
           return data(
             {
               ok: false,
+              intent: "publish",
               committed: true,
               error: `Schedule published successfully.${calendarMessage}${realtimeFailure ? ` ${realtimeFailure.message}` : ""}${webhook.warning ? ` ${webhook.warning}` : ""}`,
               calendar: publication.calendar,
@@ -540,6 +541,7 @@ export async function action({ request, context }: Route.ActionArgs) {
         }
         return {
           ok: true,
+          intent: "publish",
           message:
             "Schedule published. Calendar invitations are being sent to speakers.",
           calendar: publication.calendar,
@@ -553,16 +555,30 @@ export async function action({ request, context }: Route.ActionArgs) {
         );
     }
   } catch (error) {
+    const publishIntent =
+      intent === "publish" ? { intent: "publish" as const } : {};
     if (error instanceof ZodError)
       return data(
         {
           ok: false,
           ...(autoPlacementIntent ? { intent: autoPlacementIntent } : {}),
+          ...publishIntent,
           error: error.issues[0]?.message ?? "Invalid schedule change.",
         },
         { status: 422 },
       );
     if (error instanceof ScheduleRevisionConflictError) {
+      if (intent === "publish") {
+        return data(
+          {
+            ok: false,
+            intent: "publish",
+            conflict: true,
+            error: error.message,
+          },
+          { status: 409 },
+        );
+      }
       if (
         intent === "save-session-content" ||
         intent === "save-schedule-notes"
@@ -610,12 +626,16 @@ export async function action({ request, context }: Route.ActionArgs) {
         { status: 409 },
       );
     if (error instanceof ScheduleUndoUnavailableError)
-      return data({ ok: false, error: error.message }, { status: 409 });
+      return data(
+        { ok: false, ...publishIntent, error: error.message },
+        { status: 409 },
+      );
     if (error instanceof ScheduleNotFoundError)
       return data(
         {
           ok: false,
           ...(autoPlacementIntent ? { intent: autoPlacementIntent } : {}),
+          ...publishIntent,
           error: error.message,
         },
         { status: 404 },
@@ -627,7 +647,12 @@ export async function action({ request, context }: Route.ActionArgs) {
       );
     if (error instanceof SchedulePublicationBlockedError)
       return data(
-        { ok: false, error: error.message, conflicts: error.conflicts },
+        {
+          ok: false,
+          intent: "publish",
+          error: error.message,
+          conflicts: error.conflicts,
+        },
         { status: 409 },
       );
     if (error instanceof ScheduleConfigurationError)
@@ -635,6 +660,7 @@ export async function action({ request, context }: Route.ActionArgs) {
         {
           ok: false,
           ...(autoPlacementIntent ? { intent: autoPlacementIntent } : {}),
+          ...publishIntent,
           error: error.message,
         },
         { status: 422 },

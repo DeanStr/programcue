@@ -435,6 +435,37 @@ describe("published programme and itinerary", () => {
     expect((invalid as Response).status).toBe(404);
   });
 
+  it("canonicalises a known session on the wrong public surface", async () => {
+    await ensureDemoData(env as unknown as CloudflareEnvironment);
+    const context = new RouterContextProvider();
+    context.set(cloudflareContext, {
+      env: env as unknown as CloudflareEnvironment,
+      ctx: {} as ExecutionContext,
+    });
+    const result = await publicProgrammePageLoader({
+      request: new Request(
+        "https://programcue.test/public/programme/future-of-events-2027?session=demo-session-1",
+      ),
+      params: { slug: "future-of-events-2027" },
+      context,
+    } as never).catch((error: unknown) => error);
+
+    expect(result).toMatchObject({ status: 302 });
+    expect((result as Response).headers.get("Location")).toBe(
+      "/public/programme/future-of-events-2027/sessions?session=demo-session-1",
+    );
+
+    const unknown = await publicProgrammePageLoader({
+      request: new Request(
+        "https://programcue.test/public/programme/future-of-events-2027?session=not-published",
+      ),
+      params: { slug: "future-of-events-2027" },
+      context,
+    } as never).catch((error: unknown) => error);
+    expect(unknown).toBeInstanceOf(Response);
+    expect((unknown as Response).status).toBe(404);
+  });
+
   it("uses the matched route parameter for programme data revalidation", async () => {
     const context = new RouterContextProvider();
     context.set(cloudflareContext, {

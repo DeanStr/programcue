@@ -193,7 +193,11 @@ describe("schedule placement workflows", () => {
       workspace = await service.getWorkspace(viewer);
       expect(workspace.conflicts).toEqual([]);
       expect(workspace.publicationConflicts).toEqual([
-        expect.objectContaining({ type: "capacity", severity: "blocking" }),
+        expect.objectContaining({
+          type: "capacity",
+          severity: "blocking",
+          entryIds: expect.arrayContaining([expect.any(String)]),
+        }),
       ]);
       const publication = service.publish(viewer, {
         scheduleVersionId: versionId,
@@ -203,7 +207,9 @@ describe("schedule placement workflows", () => {
         SchedulePublicationBlockedError,
       );
       await expect(publication).rejects.toMatchObject({
-        conflicts: workspace.publicationConflicts,
+        conflicts: workspace.publicationConflicts.map(
+          ({ entryIds: _entryIds, ...conflict }) => conflict,
+        ),
       });
     } finally {
       await env.DB.prepare(

@@ -31,6 +31,8 @@ export function Dialog({
   tone = "info",
   titleHidden = false,
   bare = false,
+  dismissible = true,
+  skipReturnFocus,
 }: {
   title: string;
   /** One line of context under the title. Also becomes the accessible description. */
@@ -49,6 +51,10 @@ export function Dialog({
   titleHidden?: boolean;
   /** Remove body padding, for lists and instruments that own their own gutters. */
   bare?: boolean;
+  /** Escape, overlay click and the close button. Disable while a mutation is in flight. */
+  dismissible?: boolean;
+  /** When true at close, skip returning focus so the caller can move it. */
+  skipReturnFocus?: RefObject<boolean>;
 }) {
   const titleId = useId();
   const descriptionId = useId();
@@ -56,9 +62,10 @@ export function Dialog({
   const contentRef = useRef<HTMLDivElement | null>(null);
   const returnFocusFrameRef = useRef<number | null>(null);
   const restoreFocus = useCallback(() => {
+    if (skipReturnFocus?.current) return;
     const target = returnFocus?.current ?? capturedReturnFocusRef.current;
     if (target?.isConnected) target.focus();
-  }, [returnFocus]);
+  }, [returnFocus, skipReturnFocus]);
   const setContentRef = useCallback(
     (node: HTMLDivElement | null) => {
       contentRef.current = node;
@@ -66,7 +73,7 @@ export function Dialog({
         // Capture at portal mount, immediately before Radix moves focus into the
         // dialog. Capturing during React render is timing-dependent under load
         // and can observe <body> instead of the control that opened the dialog.
-        if (!returnFocus && document.activeElement instanceof HTMLElement) {
+        if (document.activeElement instanceof HTMLElement) {
           capturedReturnFocusRef.current = document.activeElement;
         }
         if (returnFocusFrameRef.current !== null) {
@@ -83,7 +90,7 @@ export function Dialog({
         restoreFocus();
       });
     },
-    [restoreFocus, returnFocus],
+    [restoreFocus],
   );
 
   useEffect(() => {
@@ -107,7 +114,7 @@ export function Dialog({
     <DialogPrimitive.Root
       open
       onOpenChange={(open) => {
-        if (!open) onClose();
+        if (!open && dismissible) onClose();
       }}
     >
       <DialogPrimitive.Portal>
@@ -129,6 +136,15 @@ export function Dialog({
             onCloseAutoFocus={(event) => {
               event.preventDefault();
               restoreFocus();
+            }}
+            onEscapeKeyDown={(event) => {
+              if (!dismissible) event.preventDefault();
+            }}
+            onPointerDownOutside={(event) => {
+              if (!dismissible) event.preventDefault();
+            }}
+            onInteractOutside={(event) => {
+              if (!dismissible) event.preventDefault();
             }}
           >
             {/* Deliberately no grabber. A sheet handle states that the panel
@@ -162,12 +178,14 @@ export function Dialog({
                     </DialogPrimitive.Description>
                   ) : null}
                 </div>
-                <DialogPrimitive.Close
-                  className="icon-btn modal-close"
-                  aria-label="Close"
-                >
-                  <X aria-hidden size={17} />
-                </DialogPrimitive.Close>
+                {dismissible ? (
+                  <DialogPrimitive.Close
+                    className="icon-btn modal-close"
+                    aria-label="Close"
+                  >
+                    <X aria-hidden size={17} />
+                  </DialogPrimitive.Close>
+                ) : null}
               </div>
             )}
             <div className="modal-body">{children}</div>
