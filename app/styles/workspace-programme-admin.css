@@ -328,7 +328,7 @@ a.content-review-title:focus-visible {
 .programme-embed-disclosure-summary h2::before {
   content: "▸ ";
   color: var(--text-tertiary);
-  font-weight: var(--weight-regular);
+  font-weight: var(--weight-normal);
 }
 .programme-embed-disclosure[open]
   .programme-embed-disclosure-summary

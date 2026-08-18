@@ -1189,7 +1189,7 @@ a.public-site-feature-card:focus-visible .public-site-speaker-profile-cue {
     var(--event-accent) 15%,
     var(--public-dark-surface)
   );
-  --format-ink: #7dcdc4;
+  --format-ink: var(--public-dark-format-ink);
 }
 @media (prefers-color-scheme: dark) {
   :is(.public-shell, .public-site-preview-frame)[data-public-theme="system"] {
@@ -1216,7 +1216,7 @@ a.public-site-feature-card:focus-visible .public-site-speaker-profile-cue {
       var(--event-accent) 15%,
       var(--public-dark-surface)
     );
-    --format-ink: #7dcdc4;
+    --format-ink: var(--public-dark-format-ink);
   }
 }
 

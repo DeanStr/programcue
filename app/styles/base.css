@@ -196,7 +196,7 @@ a {
 }
 .nav a:hover {
   background: rgba(247, 245, 241, 0.06);
-  color: #f4f4ef;
+  color: var(--canvas);
 }
 /* "Where I am" should not out-shout "what to click", so location is an edge
    marker and a brighter label — not a saturated bar the width of the rail.
@@ -205,7 +205,7 @@ a {
 .nav a.active {
   border-left-color: var(--brand-500);
   background: rgba(247, 245, 241, 0.08);
-  color: #f4f4ef;
+  color: var(--canvas);
   font-weight: var(--weight-semibold);
 }
 .nav .nav-icon {
@@ -246,7 +246,7 @@ a {
   background: var(--amber);
 }
 .sidebar-demo:hover {
-  color: #f4f4ef;
+  color: var(--canvas);
 }
 .sidebar-collapse {
   display: flex;
@@ -262,7 +262,7 @@ a {
 }
 .sidebar-collapse:hover {
   background: rgba(247, 245, 241, 0.06);
-  color: #f4f4ef;
+  color: var(--canvas);
 }
 .topbar {
   grid-area: topbar;
@@ -935,7 +935,7 @@ a {
 .status {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
+  gap: var(--space-2);
   border: 0;
   border-radius: 0;
   padding: 0;

@@ -1,27 +1,6 @@
 /* Format is categorical colour, independent of copper brand emphasis.
    Fill/ink/line let a block read as an object; the legacy .format-*
    badges keep the same hues for chips outside the planner. */
-:root {
-  --format-keynote-fill: #f1ebfe;
-  --format-keynote-ink: #4c1d95;
-  --format-keynote-line: #c4b5fd;
-  --format-presentation-fill: #e7f0fe;
-  --format-presentation-ink: #1e3a8a;
-  --format-presentation-line: #93c5fd;
-  --format-panel-fill: #fff0e4;
-  --format-panel-ink: #9a3412;
-  --format-panel-line: #fdba74;
-  --format-workshop-fill: #e7f7ed;
-  --format-workshop-ink: #166534;
-  --format-workshop-line: #86efac;
-  --format-breakout-fill: #e5f7fb;
-  --format-breakout-ink: #155e75;
-  --format-breakout-line: #67e8f9;
-  --format-break-fill: #eef0ea;
-  --format-break-ink: #3f4d48;
-  --format-break-line: #c9cdc4;
-}
-
 .format-keynote {
   background: var(--format-keynote-fill);
   color: var(--format-keynote-accent);

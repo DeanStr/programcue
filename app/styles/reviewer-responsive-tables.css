@@ -355,7 +355,7 @@
 .reviewer-shell .review-scale-ends {
   display: flex;
   justify-content: space-between;
-  margin-top: 4px;
+  margin-top: var(--space-1);
   padding-inline: var(--space-2);
   color: var(--text-tertiary);
   font-size: var(--text-2xs);

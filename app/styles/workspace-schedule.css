@@ -90,7 +90,7 @@
   gap: 1px;
   border: 1px solid var(--pc-format-line);
   border-radius: 8px;
-  padding: 5px 8px 4px;
+  padding: var(--space-1) var(--space-2) var(--space-1);
   background: var(--pc-format-fill);
   color: var(--pc-format-ink);
   font-size: var(--text-2xs);
@@ -206,7 +206,7 @@
   text-wrap: nowrap;
 }
 .schedule-page-stats {
-  margin: 4px 0 0;
+  margin: var(--space-1) 0 0;
   color: var(--text-tertiary);
   font-size: var(--text-2xs);
   font-weight: var(--weight-semibold);
@@ -468,7 +468,7 @@
 .schedule-format-key span {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
+  gap: var(--space-2);
 }
 .schedule-format-key span::before {
   content: "";
@@ -502,7 +502,7 @@
   );
 }
 .schedule-scroll-hint span {
-  margin-right: 4px;
+  margin-right: var(--space-1);
   color: var(--text-tertiary);
   font-size: var(--text-2xs);
 }
@@ -522,7 +522,7 @@
   min-width: max-content;
   gap: 1px;
   margin: 0;
-  padding: 5px 10px;
+  padding: var(--space-1) var(--space-3);
   border: 0;
   border-radius: 8px;
   background: transparent;
@@ -592,7 +592,7 @@
   border-bottom-color: color-mix(in srgb, var(--line) 22%, transparent);
 }
 .schedule-room-board > .header {
-  padding: 8px 10px;
+  padding: var(--space-2) var(--space-3);
   background: var(--surface-sunken);
   font-size: var(--text-xs);
   font-weight: var(--weight-semibold);
@@ -607,7 +607,7 @@
   font-weight: var(--weight-medium);
 }
 .schedule-room-board > .time {
-  padding: 2px 8px;
+  padding: 2px var(--space-2);
   color: var(--text-tertiary);
   font-size: var(--text-2xs);
   font-weight: var(--weight-medium);
@@ -653,7 +653,7 @@
   flex-wrap: wrap;
   align-items: center;
   gap: var(--space-2) var(--space-3);
-  padding: 8px var(--space-4);
+  padding: var(--space-2) var(--space-4);
 }
 .schedule-conflicts-head {
   display: flex;
@@ -717,7 +717,7 @@
 }
 .schedule-standard-calendar :is(.fc-button, .fc-button-primary) {
   min-height: 28px;
-  padding: 4px 8px;
+  padding: var(--space-1) var(--space-2);
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
   background: var(--surface);
@@ -763,7 +763,7 @@
   align-content: start;
   gap: 1px;
   min-width: 0;
-  padding: 3px 5px;
+  padding: 3px var(--space-1);
   color: inherit;
   line-height: 1.2;
   white-space: normal;
@@ -822,7 +822,7 @@
 }
 .schedule-canvas .schedule-view-tabs .tab {
   margin: 0;
-  padding: 4px 8px;
+  padding: var(--space-1) var(--space-2);
   border: 0;
   border-radius: 8px;
   background: transparent;

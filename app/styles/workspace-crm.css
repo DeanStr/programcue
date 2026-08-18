@@ -732,7 +732,7 @@ button.crm-chip {
     grid-column: 1;
     grid-row: 1;
     width: auto;
-    margin: 4px 0 0;
+    margin: var(--space-1) 0 0;
   }
 
   .crm-directory tr:has(> .crm-select-cell) td:nth-child(2) {

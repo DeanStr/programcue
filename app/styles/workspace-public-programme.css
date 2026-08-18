@@ -1558,7 +1558,7 @@
   font-size: var(--text-sm);
   line-height: var(--leading-normal);
   color: var(--text-secondary);
-  font-weight: var(--weight-regular);
+  font-weight: var(--weight-normal);
 }
 .public-speaker-directory-trigger {
   display: flex;

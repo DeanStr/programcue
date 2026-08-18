@@ -9,8 +9,8 @@
   min-height: var(--control-height);
 }
 /* Replace the OS chevron so selects match the rest of the control set and
-   can express the error state, which native chrome ignores. Stroke is --muted
-   (#61716c), not the cool slate leftover. */
+   can express the error state, which native chrome ignores. The stroke uses
+   --muted rather than the cool slate leftover. */
 .select {
   appearance: none;
   padding-right: var(--space-7);
@@ -248,7 +248,7 @@
 .pill {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
+  gap: var(--space-2);
   background: color-mix(in srgb, var(--ink) 4%, var(--surface));
   border: 0;
   border-radius: var(--radius-xs);

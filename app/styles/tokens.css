@@ -38,6 +38,24 @@
   /* Schedule formats are categorical, not brand or state. Keep keynote violet
      independent from copper product emphasis and orange panel rails. */
   --format-keynote-accent: #5b21b6;
+  --format-keynote-fill: #f1ebfe;
+  --format-keynote-ink: #4c1d95;
+  --format-keynote-line: #c4b5fd;
+  --format-presentation-fill: #e7f0fe;
+  --format-presentation-ink: #1e3a8a;
+  --format-presentation-line: #93c5fd;
+  --format-panel-fill: #fff0e4;
+  --format-panel-ink: #9a3412;
+  --format-panel-line: #fdba74;
+  --format-workshop-fill: #e7f7ed;
+  --format-workshop-ink: #166534;
+  --format-workshop-line: #86efac;
+  --format-breakout-fill: #e5f7fb;
+  --format-breakout-ink: #155e75;
+  --format-breakout-line: #67e8f9;
+  --format-break-fill: #eef0ea;
+  --format-break-ink: #3f4d48;
+  --format-break-line: #c9cdc4;
   --teal: #0d9488;
   --format-ink: #0f5f56;
   --green: #3a5f42;
@@ -103,6 +121,7 @@
   --public-dark-muted-on-surface: #bcc7c4;
   --public-dark-accent-ink: #d7e4e1;
   --public-dark-accent-on-solid: #101817;
+  --public-dark-format-ink: #7dcdc4;
   /* The one dark gradient ground in the product: the design-system hero and
      the evaluation surfaces. Held as tokens because two files were painting
      the same three values by hand. */

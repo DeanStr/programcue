@@ -73,7 +73,7 @@
   gap: 1px;
   width: 100%;
   height: 100%;
-  padding: 5px 8px 4px;
+  padding: var(--space-1) var(--space-2) var(--space-1);
   text-align: left;
   line-height: 1.25;
   overflow: hidden;
@@ -640,7 +640,7 @@ body.dark-mode .program-cue-api-reference .scalar-api-reference {
   box-shadow: inset 0 0 0 1px var(--brand-600);
 }
 .comms-compose-steps li.is-complete {
-  border-color: #86efac;
+  border-color: var(--format-workshop-line);
   background: #f0fdf4;
   color: var(--state-good-text);
 }

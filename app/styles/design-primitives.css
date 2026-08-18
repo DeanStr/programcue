@@ -6,7 +6,7 @@
 .status {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
+  gap: var(--space-2);
 }
 .nav-icon {
   display: grid;
@@ -58,7 +58,7 @@ div.status {
 }
 p.status::before,
 div.status::before {
-  margin-top: 6px;
+  margin-top: var(--space-2);
 }
 
 /* Phase 0 shared interface primitives. Keep these classes namespaced so routes can adopt them incrementally. */
