@@ -1,5 +1,5 @@
 import { DndContext, DragOverlay, type DragStartEvent } from "@dnd-kit/core";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Form, Link } from "react-router";
 import { ScheduleContentWorkflows } from "~/components/schedule-content-workflows";
 import { statusPresentation } from "~/components/ui/domain-status-badge";
@@ -30,13 +30,23 @@ export function SchedulePlannerWorkspace({
   workspace: SchedulePlannerWorkspaceData;
 }) {
   const [draftOpen, setDraftOpen] = useState(false);
-  const inspectorShouldOpen =
-    workspace.version?.status === "draft" ||
-    Boolean(workspace.createdSessionId);
-  const [inspectorOpen, setInspectorOpen] = useState(inspectorShouldOpen);
+  const [inspectorOpen, setInspectorOpen] = useState(true);
+  const inspectorToggleRef = useRef<HTMLButtonElement>(null);
+  const inspectorTitleRef = useRef<HTMLHeadingElement>(null);
+  const inspectorFocusAfterToggle = useRef(false);
   useEffect(() => {
-    if (inspectorShouldOpen) setInspectorOpen(true);
-  }, [inspectorShouldOpen]);
+    if (workspace.createdSessionId || workspace.focusedSessionId) {
+      setInspectorOpen(true);
+    }
+  }, [workspace.createdSessionId, workspace.focusedSessionId]);
+  useEffect(() => {
+    if (!inspectorFocusAfterToggle.current) return;
+    inspectorFocusAfterToggle.current = false;
+    const target = inspectorOpen
+      ? inspectorTitleRef.current
+      : inspectorToggleRef.current;
+    target?.focus({ preventScroll: true });
+  }, [inspectorOpen]);
   const {
     actionNotices,
     actionResult,
@@ -91,6 +101,14 @@ export function SchedulePlannerWorkspace({
     view,
     visibleSessions,
   } = useSchedulePlannerController(workspace);
+  function inspectSession(sessionId: string) {
+    selectQuickSession(sessionId);
+    setInspectorOpen(true);
+  }
+  function toggleInspector(open: boolean) {
+    inspectorFocusAfterToggle.current = true;
+    setInspectorOpen(open);
+  }
   const unscheduledCount = workspace.sessions.length - scheduledSessionIds.size;
   const showAutoPlaceButton =
     workspace.version?.status === "draft" ||
@@ -439,13 +457,15 @@ export function SchedulePlannerWorkspace({
           place(event);
         }}
       >
-        <div className="schedule-workspace">
+        <div
+          className={`schedule-workspace${inspectorOpen ? " is-inspecting" : ""}`}
+        >
           <ScheduleSourcePanel
             workspace={workspace}
             fetcher={fetcher}
             placementAvailable={placementAvailable}
             quickSessionId={quickSessionId}
-            selectQuickSession={selectQuickSession}
+            selectQuickSession={inspectSession}
             allPlacementSlots={allPlacementSlots}
             quickStartsAt={quickStartsAt}
             setQuickStartsAt={setQuickStartsAt}
@@ -473,7 +493,7 @@ export function SchedulePlannerWorkspace({
               placementAvailable={placementAvailable}
               moveInStandardCalendar={moveInStandardCalendar}
               resize={resize}
-              selectQuickSession={selectQuickSession}
+              selectQuickSession={inspectSession}
               trackGroups={trackGroups}
               sessionById={sessionById}
               roomScrollRef={roomScrollRef}
@@ -489,6 +509,65 @@ export function SchedulePlannerWorkspace({
               revealConflictEntries={revealConflictEntries}
             />
           </div>
+          <button
+            ref={inspectorToggleRef}
+            type="button"
+            className="schedule-inspector-toggle"
+            hidden={inspectorOpen}
+            aria-expanded={inspectorOpen}
+            aria-controls="schedule-inspector"
+            onClick={() => toggleInspector(true)}
+          >
+            <strong>Notes and session content</strong>
+            <span className="help">
+              {quickSession ? quickSession.title : "Schedule notes"}
+            </span>
+          </button>
+          <aside
+            id="schedule-inspector"
+            className="schedule-inspector"
+            hidden={!inspectorOpen}
+            aria-labelledby="schedule-inspector-title"
+            data-testid="schedule-inspector"
+          >
+            <div className="schedule-inspector-head">
+              <div>
+                <h2
+                  id="schedule-inspector-title"
+                  ref={inspectorTitleRef}
+                  tabIndex={-1}
+                >
+                  Notes and session content
+                </h2>
+                <p className="help">
+                  {quickSession
+                    ? quickSession.title
+                    : "Schedule notes and the selected session"}
+                </p>
+              </div>
+              <button
+                type="button"
+                className="btn small"
+                aria-expanded={inspectorOpen}
+                aria-controls="schedule-inspector"
+                onClick={() => toggleInspector(false)}
+              >
+                Hide panel
+              </button>
+            </div>
+            <div className="schedule-inspector-body">
+              <ScheduleContentWorkflows
+                workspace={workspace}
+                session={quickSession ?? null}
+                recoveryScope={workspace.recoveryScope}
+                calendarPreview={
+                  quickSession
+                    ? (workspace.calendarPreviews[quickSession.id] ?? null)
+                    : null
+                }
+              />
+            </div>
+          </aside>
         </div>
         {/* Rendered in a portal above both panes. Without it the dragged card
             is clipped the moment it leaves the source list, which has
@@ -514,30 +593,6 @@ export function SchedulePlannerWorkspace({
           ) : null}
         </DragOverlay>
       </DndContext>
-      <details
-        className="schedule-inspector"
-        open={inspectorOpen}
-        onToggle={(event) => setInspectorOpen(event.currentTarget.open)}
-      >
-        <summary>
-          <strong>Notes and session content</strong>
-          <span className="help">
-            {quickSession
-              ? quickSession.title
-              : "Schedule notes and the selected session"}
-          </span>
-        </summary>
-        <ScheduleContentWorkflows
-          workspace={workspace}
-          session={quickSession ?? null}
-          recoveryScope={workspace.recoveryScope}
-          calendarPreview={
-            quickSession
-              ? (workspace.calendarPreviews[quickSession.id] ?? null)
-              : null
-          }
-        />
-      </details>
       {autoPreview ? (
         <AutoPlacementPreviewDialog
           preview={autoPreview}

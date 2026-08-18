@@ -43,6 +43,7 @@ function ScheduledEntryCard({
   revealed,
   conflictSeverity,
   timezone,
+  onSelect,
 }: {
   entry: ScheduleEntry;
   session: ScheduleSession;
@@ -52,6 +53,7 @@ function ScheduledEntryCard({
   revealed: boolean;
   conflictSeverity: "warning" | "blocking" | undefined;
   timezone: string;
+  onSelect(sessionId: string): void;
 }) {
   const { attributes, listeners, setNodeRef, transform, isDragging } =
     useDraggable({
@@ -86,6 +88,10 @@ function ScheduledEntryCard({
       }
       {...listeners}
       {...attributes}
+      onClick={() => {
+        if (isDragging) return;
+        onSelect(session.id);
+      }}
     >
       {minutes >= MINUTES_FOR_SPEAKER_LINE ? (
         <span className="session-card-format">{formatLabel}</span>
@@ -505,6 +511,7 @@ export function ScheduleCanvasPanel({
                                     entry.id,
                                   )}
                                   timezone={workspace.event.timezone}
+                                  onSelect={selectQuickSession}
                                 />
                               </div>
                             );

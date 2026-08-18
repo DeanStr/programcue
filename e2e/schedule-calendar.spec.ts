@@ -236,6 +236,50 @@ test("focuses the exact named schedule record", async ({ page }) => {
   await expect(page.locator(`#schedule-session-${sessionId}`)).toBeFocused();
 });
 
+test("keeps notes and session content beside the planner", async ({ page }) => {
+  await waitForInterface(page, "/admin/schedule?session=demo-session-1");
+  const inspector = page.getByRole("complementary", {
+    name: "Notes and session content",
+  });
+  const canvas = page.locator(".schedule-canvas");
+  await expect(inspector).toBeVisible();
+  await expect(canvas).toBeVisible();
+  await expect(
+    inspector.getByRole("heading", { name: "Schedule notes" }),
+  ).toBeVisible();
+  await expect(
+    inspector.getByRole("heading", { name: "Session editor" }),
+  ).toBeVisible();
+  await expect(inspector.getByLabel("Title")).toHaveValue(
+    "The Future of Attendee Engagement",
+  );
+  const inspectorBox = await inspector.boundingBox();
+  const canvasBox = await canvas.boundingBox();
+  expect(inspectorBox, "inspector should be measured").toBeTruthy();
+  expect(canvasBox, "canvas should be measured").toBeTruthy();
+  expect(inspectorBox!.x).toBeGreaterThan(canvasBox!.x);
+  expect(Math.abs(inspectorBox!.y - canvasBox!.y)).toBeLessThan(80);
+
+  await inspector.getByRole("button", { name: "Hide panel" }).click();
+  await expect(inspector).toBeHidden();
+  await expect(
+    page.getByRole("button", { name: /Notes and session content/ }),
+  ).toBeFocused();
+
+  const otherSession = page.locator(
+    '.schedule-room-board .session-card[data-session-id="demo-session-2"]',
+  );
+  // Published cards stay in the tab order with aria-disabled so drag is
+  // off, but a pointer click still selects the session. Playwright's
+  // actionability check treats aria-disabled as not enabled.
+  await otherSession.click({ force: true });
+  await expect(inspector).toBeVisible();
+  await expect(inspector.getByLabel("Title")).toHaveValue(
+    "AI in Event Operations",
+  );
+  await expect(otherSession).toBeFocused();
+});
+
 test.describe("mutable schedule authoring", () => {
   test.afterEach(async ({ context }) => {
     await context.setOffline(false);
