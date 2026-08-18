@@ -833,6 +833,46 @@ describe("Submissions D1 vertical slice", () => {
       );
     });
 
+    it("does not accept a pre-Host applicant cookie in production", async () => {
+      const { service, slug, testEnv } = await publishedForm();
+      const form = await service.getPublicForm(slug);
+      const email = `legacy-host-cookie-${crypto.randomUUID()}@example.com`;
+      await service.applicants.requestCode(form, email, "");
+      const verified = await service.applicants.verifyCode(
+        form,
+        email,
+        "424242",
+      );
+      const demoCookie = verified.cookie.split(";")[0]!;
+      const cookieName = demoCookie.split("=", 1)[0]!;
+      const token = demoCookie.slice(cookieName.length + 1);
+      const productionService = new SubmissionService({
+        ...testEnv,
+        APP_ENV: "production",
+        DEMO_MODE: "false",
+        EVALUATION_MODE: "false",
+      } as unknown as CloudflareEnvironment);
+      const productionForm = await productionService.getPublicForm(slug);
+      const requestUrl = `https://example.com/apply/${slug}`;
+
+      await expect(
+        productionService.applicants.get(
+          new Request(requestUrl, {
+            headers: { cookie: `__Host-${cookieName}=${token}` },
+          }),
+          productionForm,
+        ),
+      ).resolves.toMatchObject({ email });
+      await expect(
+        productionService.applicants.get(
+          new Request(requestUrl, {
+            headers: { cookie: demoCookie },
+          }),
+          productionForm,
+        ),
+      ).resolves.toBeNull();
+    });
+
     it("treats a malformed applicant cookie as an absent session", async () => {
       const { service, slug } = await publishedForm();
       const form = await service.getPublicForm(slug);

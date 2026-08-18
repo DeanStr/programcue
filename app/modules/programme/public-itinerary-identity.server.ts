@@ -40,14 +40,9 @@ async function readItineraryBrowserId(
   env: CloudflareEnvironment,
 ) {
   const production = new URL(request.url).protocol === "https:";
-  const preferred = await verifyItineraryBrowserCookie(
-    env,
-    readCookie(request, publicItineraryCookieName(production)),
-  );
-  if (preferred) return preferred;
   return verifyItineraryBrowserCookie(
     env,
-    readCookie(request, PUBLIC_ITINERARY_COOKIE),
+    readCookie(request, publicItineraryCookieName(production)),
   );
 }
 

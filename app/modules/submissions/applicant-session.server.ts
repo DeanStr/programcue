@@ -159,12 +159,7 @@ async function readApplicantToken(
   env: CloudflareEnvironment,
   formId: string,
 ) {
-  const production = requiresProductionSecurity(env.APP_ENV);
-  const currentName = await cookieName(formId, production);
-  const current = cookieValue(request, currentName);
-  if (current) return current;
-  if (production) return cookieValue(request, await cookieName(formId, false));
-  return null;
+  return cookieValue(request, await formCookieName(env, formId));
 }
 
 export type PublicForm = FormSummary & { version: FormVersion };

@@ -1062,6 +1062,19 @@ describe("published programme and itinerary", () => {
         "evt-foe-2025",
       ),
     ).resolves.toEqual({ personId: null, visitorToken: browserId });
+    const hostCookie = cookie.split(";")[0]!;
+    const hostValue = hostCookie.slice(hostCookie.indexOf("=") + 1);
+    await expect(
+      publicItineraryIdentity(
+        new Request("https://programme.example/event", {
+          headers: {
+            cookie: `program_cue_itinerary=${hostValue}`,
+          },
+        }),
+        env as unknown as CloudflareEnvironment,
+        "evt-foe-2025",
+      ),
+    ).resolves.toEqual({ personId: null, visitorToken: null });
     const encodedValue = cookie.split(";")[0]!.split("=")[1]!;
     const signedValue = decodeURIComponent(encodedValue);
     const tampered = `${signedValue.slice(0, -1)}${signedValue.endsWith("a") ? "b" : "a"}`;
