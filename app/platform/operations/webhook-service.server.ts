@@ -3,7 +3,10 @@ import { requireValue } from "~/lib/required-value";
 
 import type { AuditOrigin } from "~/platform/audit/audit-contract";
 import type { Viewer } from "~/platform/auth/authorize.server";
-import { atomicBatchGuardStatement } from "~/platform/database/atomic-batch-guard.server";
+import {
+  atomicBatchGuardStatement,
+  isAtomicBatchGuardError,
+} from "~/platform/database/atomic-batch-guard.server";
 import {
   type WebhookEndpointListItem,
   WebhookEndpointService,
@@ -895,29 +898,6 @@ export class WebhookService {
     endpointId: string,
     suppliedIdempotencyKey: string = crypto.randomUUID(),
   ) {
-    const endpoint = await this.env.DB.prepare(
-      `
-      SELECT we.id, we.name, we.status, we.secret_ciphertext AS secretCiphertext
-        FROM webhook_endpoints we
-        JOIN events e ON e.id = we.event_id AND e.organisation_id = ?
-       WHERE we.id = ? AND we.event_id = ?
-       LIMIT 1
-    `,
-    )
-      .bind(viewer.organisationId, endpointId, viewer.eventId)
-      .first<{
-        id: string;
-        name: string;
-        status: string;
-        secretCiphertext: string;
-      }>();
-    if (!endpoint) throw new WebhookEndpointNotFoundError();
-    if (webhookSecretWasErased(endpoint.secretCiphertext)) {
-      throw new WebhookEndpointCredentialsErasedError();
-    }
-    if (endpoint.status === "disabled") {
-      throw new Error("Enable this webhook endpoint before sending a test.");
-    }
     const idempotencyKey = `webhook-test:${endpointId}:${suppliedIdempotencyKey}`;
     const existing = await this.env.DB.prepare(
       `SELECT delivery.id AS deliveryId, item.operation_id AS operationId,
@@ -956,7 +936,7 @@ export class WebhookService {
     const requestHash = await webhookRequestHash({
       eventType: "program_cue.test",
       entityType: "webhook_endpoint",
-      entityId: endpoint.id,
+      entityId: endpointId,
       data: { message: "Program Cue outbound webhook test" },
     });
     const message: WebhookDeliveryMessage = {
@@ -967,83 +947,107 @@ export class WebhookService {
       organisationId: viewer.organisationId,
       idempotencyKey,
     };
-    const [created] = await this.env.DB.batch([
-      this.env.DB.prepare(
-        `
-        INSERT OR IGNORE INTO webhook_deliveries (
-          id, endpoint_id, event_type, entity_type, entity_id,
-          idempotency_key, request_hash, payload_json, status, attempt_count,
-          created_at, updated_at
-        ) VALUES (?, ?, 'program_cue.test', 'webhook_endpoint', ?, ?, ?, ?,
-                  'queued', 0, unixepoch(), unixepoch())
-      `,
-      ).bind(
-        deliveryId,
-        endpoint.id,
-        endpoint.id,
-        idempotencyKey,
-        requestHash,
-        payload,
-      ),
-      this.env.DB.prepare(
-        `
-        INSERT INTO operation_jobs (
-          id, organisation_id, event_id, requested_by_person_id, type,
-          idempotency_key, correlation_id, status, payload_json,
-          progress_total, progress_completed, progress_failed, cancellable,
-          created_at, updated_at
-        ) SELECT ?, ?, ?, ?, 'webhook.deliver', ?, ?, 'queued', ?, 1, 0, 0,
-                 0, unixepoch(), unixepoch()
-           WHERE EXISTS (
+    let created: D1Result;
+    try {
+      [created] = await this.env.DB.batch([
+        this.env.DB.prepare(
+          `
+          INSERT OR IGNORE INTO webhook_deliveries (
+            id, endpoint_id, event_type, entity_type, entity_id,
+            idempotency_key, request_hash, payload_json, status, attempt_count,
+            created_at, updated_at
+          )
+          SELECT ?, we.id, 'program_cue.test', 'webhook_endpoint', we.id, ?, ?, ?,
+                 'queued', 0, unixepoch(), unixepoch()
+            FROM webhook_endpoints we
+            JOIN events e ON e.id = we.event_id AND e.organisation_id = ?
+           WHERE we.id = ? AND we.event_id = ?
+             AND we.status IN ('active','failing')
+             AND we.secret_ciphertext NOT LIKE 'retained-%'
+        `,
+        ).bind(
+          deliveryId,
+          idempotencyKey,
+          requestHash,
+          payload,
+          viewer.organisationId,
+          endpointId,
+          viewer.eventId,
+        ),
+        this.env.DB.prepare(
+          `
+          INSERT INTO operation_jobs (
+            id, organisation_id, event_id, requested_by_person_id, type,
+            idempotency_key, correlation_id, status, payload_json,
+            progress_total, progress_completed, progress_failed, cancellable,
+            created_at, updated_at
+          ) SELECT ?, ?, ?, ?, 'webhook.deliver', ?, ?, 'queued', ?, 1, 0, 0,
+                   0, unixepoch(), unixepoch()
+             WHERE EXISTS (
+               SELECT 1 FROM webhook_deliveries
+                WHERE id = ? AND endpoint_id = ? AND status = 'queued'
+             )
+        `,
+        ).bind(
+          operationId,
+          viewer.organisationId,
+          viewer.eventId,
+          viewer.personId,
+          idempotencyKey,
+          correlationId,
+          JSON.stringify(message),
+          deliveryId,
+          endpointId,
+        ),
+        this.env.DB.prepare(
+          `
+          INSERT INTO operation_items (
+            id, operation_id, item_key, entity_type, entity_id, status, updated_at
+          ) SELECT ?, ?, ?, 'webhook_delivery', ?, 'pending', unixepoch()
+             WHERE EXISTS (SELECT 1 FROM operation_jobs WHERE id = ?)
+        `,
+        ).bind(
+          crypto.randomUUID(),
+          operationId,
+          idempotencyKey,
+          deliveryId,
+          operationId,
+        ),
+        this.env.DB.prepare(
+          `
+          INSERT INTO audit_events (
+            id, actor_kind, origin, metadata_version, organisation_id, event_id, actor_person_id, action,
+            entity_type, entity_id, correlation_id, metadata_json, created_at
+          ) SELECT ?, 'person', 'admin_ui', 1, ?, ?, ?, 'webhook.test_queued', 'webhook_delivery', ?,
+                   ?, ?, unixepoch()
+             WHERE EXISTS (SELECT 1 FROM operation_jobs WHERE id = ?)
+        `,
+        ).bind(
+          crypto.randomUUID(),
+          viewer.organisationId,
+          viewer.eventId,
+          viewer.personId,
+          deliveryId,
+          correlationId,
+          JSON.stringify({ operationId, endpointId }),
+          operationId,
+        ),
+        atomicBatchGuardStatement(
+          this.env,
+          `NOT EXISTS (
              SELECT 1 FROM webhook_deliveries
               WHERE id = ? AND endpoint_id = ? AND status = 'queued'
-           )
-      `,
-      ).bind(
-        operationId,
-        viewer.organisationId,
-        viewer.eventId,
-        viewer.personId,
-        idempotencyKey,
-        correlationId,
-        JSON.stringify(message),
-        deliveryId,
-        endpoint.id,
-      ),
-      this.env.DB.prepare(
-        `
-        INSERT INTO operation_items (
-          id, operation_id, item_key, entity_type, entity_id, status, updated_at
-        ) SELECT ?, ?, ?, 'webhook_delivery', ?, 'pending', unixepoch()
-           WHERE EXISTS (SELECT 1 FROM operation_jobs WHERE id = ?)
-      `,
-      ).bind(
-        crypto.randomUUID(),
-        operationId,
-        idempotencyKey,
-        deliveryId,
-        operationId,
-      ),
-      this.env.DB.prepare(
-        `
-        INSERT INTO audit_events (
-          id, actor_kind, origin, metadata_version, organisation_id, event_id, actor_person_id, action,
-          entity_type, entity_id, correlation_id, metadata_json, created_at
-        ) SELECT ?, 'person', 'admin_ui', 1, ?, ?, ?, 'webhook.test_queued', 'webhook_delivery', ?,
-                 ?, ?, unixepoch()
-           WHERE EXISTS (SELECT 1 FROM operation_jobs WHERE id = ?)
-      `,
-      ).bind(
-        crypto.randomUUID(),
-        viewer.organisationId,
-        viewer.eventId,
-        viewer.personId,
-        deliveryId,
-        correlationId,
-        JSON.stringify({ operationId, endpointId: endpoint.id }),
-        operationId,
-      ),
-    ]);
+           ) AND NOT EXISTS (
+             SELECT 1 FROM webhook_deliveries
+              WHERE endpoint_id = ? AND idempotency_key = ?
+           )`,
+          [deliveryId, endpointId, endpointId, idempotencyKey],
+        ),
+      ]);
+    } catch (error) {
+      if (!isAtomicBatchGuardError(error)) throw error;
+      throw await this.testEligibilityConflict(viewer, endpointId);
+    }
     if ((created.meta.changes ?? 0) !== 1) {
       const converged = await this.env.DB.prepare(
         `SELECT delivery.id AS deliveryId, item.operation_id AS operationId,
@@ -1090,6 +1094,28 @@ export class WebhookService {
       throw new WebhookQueueUnavailableError(operationId);
     }
     return { operationId, deliveryId, status: "queued", replayed: false };
+  }
+
+  private async testEligibilityConflict(viewer: Viewer, endpointId: string) {
+    const endpoint = await this.env.DB.prepare(
+      `
+      SELECT we.status, we.secret_ciphertext AS secretCiphertext
+        FROM webhook_endpoints we
+        JOIN events e ON e.id = we.event_id AND e.organisation_id = ?
+       WHERE we.id = ? AND we.event_id = ?
+       LIMIT 1
+    `,
+    )
+      .bind(viewer.organisationId, endpointId, viewer.eventId)
+      .first<{ status: string; secretCiphertext: string }>();
+    if (!endpoint) return new WebhookEndpointNotFoundError();
+    if (webhookSecretWasErased(endpoint.secretCiphertext)) {
+      return new WebhookEndpointCredentialsErasedError();
+    }
+    if (endpoint.status === "disabled") {
+      return new Error("Enable this webhook endpoint before sending a test.");
+    }
+    return new Error("The webhook test could not be queued.");
   }
 
   private async markQueueFailure(

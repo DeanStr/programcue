@@ -81,6 +81,16 @@ describe("outbound webhooks", () => {
         }),
       ]),
     );
+    await expect(service.queueTest(viewer, created.id)).rejects.toBeInstanceOf(
+      WebhookEndpointCredentialsErasedError,
+    );
+    await expect(
+      testEnv.DB.prepare(
+        "SELECT COUNT(*) AS total FROM webhook_deliveries WHERE endpoint_id = ?",
+      )
+        .bind(created.id)
+        .first<{ total: number }>(),
+    ).resolves.toEqual({ total: 0 });
   });
 
   it("fails fast when a person-originated event omits its audit origin", async () => {

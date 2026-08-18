@@ -1,4 +1,8 @@
 import { eventLocalEndOfDayEpoch } from "~/modules/schedule/schedule-time";
+import {
+  atomicBatchGuardStatement,
+  isAtomicBatchGuardError,
+} from "~/platform/database/atomic-batch-guard.server";
 import { DEMO_EVENT_ID } from "~/platform/demo/demo-identities";
 import { eventVisitorKeyHash } from "./public-itinerary-token.server";
 import type { PublishedProgramme } from "./public-programme-service.server";
@@ -39,6 +43,48 @@ export class PublishedProgrammeItineraryNotFoundError extends Error {
     super(message);
     this.name = "PublishedProgrammeItineraryNotFoundError";
   }
+}
+
+function requirePublishedItineraryItemStatement(
+  env: CloudflareEnvironment,
+  eventId: string,
+  sessionId: string,
+  versionId: string,
+  identityClause: string,
+  identityValue: string,
+) {
+  return atomicBatchGuardStatement(
+    env,
+    `NOT EXISTS (
+       SELECT 1
+         FROM public_itinerary_items item
+         JOIN public_itineraries itinerary
+           ON itinerary.id = item.itinerary_id
+         JOIN sessions session
+           ON session.id = item.session_id
+          AND session.event_id = itinerary.event_id
+         JOIN schedule_entries entry
+           ON entry.session_id = session.id
+          AND entry.event_id = session.event_id
+         JOIN schedule_versions current_version
+           ON current_version.id = entry.schedule_version_id
+          AND current_version.event_id = entry.event_id
+          AND current_version.status = 'published'
+         JOIN schedule_session_contents content
+           ON content.schedule_version_id = entry.schedule_version_id
+          AND content.event_id = entry.event_id
+          AND content.session_id = session.id
+        WHERE itinerary.event_id = ?
+          AND ${identityClause}
+          AND item.session_id = ?
+          AND (itinerary.expires_at IS NULL OR itinerary.expires_at > unixepoch())
+          AND entry.schedule_version_id = ?
+          AND session.status = 'published'
+          AND session.visibility = 'public'
+          AND content.visibility = 'public'
+     )`,
+    [eventId, identityValue, sessionId, versionId],
+  );
 }
 
 export class PublicItineraryService {
@@ -199,38 +245,15 @@ export class PublicItineraryService {
     return expiresAt;
   }
 
-  private async requireItineraryItem(
-    eventId: string,
-    sessionId: string,
-    identity: { personId: string } | { visitorHash: string },
-  ) {
-    const item =
-      "personId" in identity
-        ? await this.env.DB.prepare(
-            `SELECT 1 AS present
-               FROM public_itinerary_items item
-               JOIN public_itineraries itinerary
-                 ON itinerary.id = item.itinerary_id
-              WHERE itinerary.event_id = ?
-                AND itinerary.person_id = ?
-                AND item.session_id = ?
-                AND (itinerary.expires_at IS NULL OR itinerary.expires_at > unixepoch())`,
-          )
-            .bind(eventId, identity.personId, sessionId)
-            .first()
-        : await this.env.DB.prepare(
-            `SELECT 1 AS present
-               FROM public_itinerary_items item
-               JOIN public_itineraries itinerary
-                 ON itinerary.id = item.itinerary_id
-              WHERE itinerary.event_id = ?
-                AND itinerary.visitor_key_hash = ?
-                AND item.session_id = ?
-                AND (itinerary.expires_at IS NULL OR itinerary.expires_at > unixepoch())`,
-          )
-            .bind(eventId, identity.visitorHash, sessionId)
-            .first();
-    if (!item) throw new PublishedProgrammeSessionNotFoundError();
+  private async commitItineraryAdd(statements: D1PreparedStatement[]) {
+    try {
+      await this.env.DB.batch(statements);
+    } catch (error) {
+      if (isAtomicBatchGuardError(error)) {
+        throw new PublishedProgrammeSessionNotFoundError();
+      }
+      throw error;
+    }
   }
 
   async syncItinerary(
@@ -384,7 +407,7 @@ export class PublicItineraryService {
     if (identity.personId) {
       const itineraryId = crypto.randomUUID();
       if (intent === "add") {
-        await this.env.DB.batch([
+        await this.commitItineraryAdd([
           this.env.DB.prepare(
             `INSERT INTO public_itineraries (
                id, event_id, person_id, expires_at, created_at, updated_at
@@ -419,10 +442,15 @@ export class PublicItineraryService {
             identity.personId,
             programme.version.id,
           ),
+          requirePublishedItineraryItemStatement(
+            this.env,
+            programme.event.id,
+            sessionId,
+            programme.version.id,
+            "itinerary.person_id = ?",
+            identity.personId,
+          ),
         ]);
-        await this.requireItineraryItem(programme.event.id, sessionId, {
-          personId: identity.personId,
-        });
       } else {
         await this.env.DB.prepare(
           `DELETE FROM public_itinerary_items
@@ -490,6 +518,8 @@ export class PublicItineraryService {
               AND person_id IS NULL
               AND expires_at IS NOT NULL AND expires_at <= unixepoch()`,
         ).bind(expiredExistingId, programme.event.id, visitorHash),
+      ]);
+      await this.commitItineraryAdd([
         this.env.DB.prepare(
           `INSERT OR IGNORE INTO public_itineraries (id, event_id, visitor_key_hash, expires_at, created_at, updated_at) VALUES (?, ?, ?, ?, unixepoch(), unixepoch())`,
         ).bind(itineraryId, programme.event.id, visitorHash, expiresAt),
@@ -518,10 +548,15 @@ export class PublicItineraryService {
           visitorHash,
           programme.version.id,
         ),
+        requirePublishedItineraryItemStatement(
+          this.env,
+          programme.event.id,
+          sessionId,
+          programme.version.id,
+          "itinerary.visitor_key_hash = ?",
+          visitorHash,
+        ),
       ]);
-      await this.requireItineraryItem(programme.event.id, sessionId, {
-        visitorHash,
-      });
     } else if (existing) {
       await this.env.DB.prepare(
         `DELETE FROM public_itinerary_items

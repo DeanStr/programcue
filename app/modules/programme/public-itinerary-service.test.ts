@@ -297,6 +297,11 @@ describe("published programme and itinerary", () => {
       event: { ...programme!.event, endDate: "2099-05-22" },
     };
     const sessionId = activeProgramme.sessions[0]!.id;
+    const itinerariesBefore = await env.DB.prepare(
+      `SELECT COUNT(*) AS total FROM public_itineraries WHERE event_id = ?`,
+    )
+      .bind(activeProgramme.event.id)
+      .first<{ total: number }>();
     await env.DB.prepare(
       `UPDATE sessions SET visibility = 'hidden' WHERE id = ? AND event_id = ?`,
     )
@@ -311,6 +316,13 @@ describe("published programme and itinerary", () => {
           "add",
         ),
       ).rejects.toBeInstanceOf(PublishedProgrammeSessionNotFoundError);
+      await expect(
+        env.DB.prepare(
+          `SELECT COUNT(*) AS total FROM public_itineraries WHERE event_id = ?`,
+        )
+          .bind(activeProgramme.event.id)
+          .first<{ total: number }>(),
+      ).resolves.toEqual({ total: itinerariesBefore?.total ?? 0 });
       const fetcher = vi.fn(async () =>
         Response.json({
           success: true,
@@ -358,6 +370,71 @@ describe("published programme and itinerary", () => {
       }
       expect(response.init?.status).toBe(404);
       expect(response.data).toMatchObject({ ok: false });
+    } finally {
+      await env.DB.prepare(
+        `UPDATE sessions SET visibility = 'public' WHERE id = ? AND event_id = ?`,
+      )
+        .bind(sessionId, activeProgramme.event.id)
+        .run();
+    }
+  });
+
+  it("does not treat a leftover hidden session as a successful add", async () => {
+    const service = new PublicProgrammeService({
+      ...(env as unknown as CloudflareEnvironment),
+      DEMO_MODE: "false",
+    } as CloudflareEnvironment);
+    const programme = await service.getPublished("future-of-events-2027");
+    expect(programme).not.toBeNull();
+    const activeProgramme = {
+      ...programme!,
+      event: { ...programme!.event, endDate: "2099-05-22" },
+    };
+    const sessionId = activeProgramme.sessions[0]!.id;
+    const { token } = await service.updateItinerary(
+      activeProgramme,
+      { personId: null, visitorToken: null },
+      sessionId,
+      "add",
+    );
+    await env.DB.prepare(
+      `UPDATE sessions SET visibility = 'hidden' WHERE id = ? AND event_id = ?`,
+    )
+      .bind(sessionId, activeProgramme.event.id)
+      .run();
+    try {
+      await expect(
+        service.updateItinerary(
+          activeProgramme,
+          { personId: null, visitorToken: token },
+          sessionId,
+          "add",
+        ),
+      ).rejects.toBeInstanceOf(PublishedProgrammeSessionNotFoundError);
+      expect(
+        await service.itinerary(activeProgramme, {
+          personId: null,
+          visitorToken: token,
+        }),
+      ).toEqual([]);
+      const visitorHash = await eventVisitorKeyHash(
+        env as unknown as CloudflareEnvironment,
+        token!,
+        activeProgramme.event.id,
+      );
+      await expect(
+        env.DB.prepare(
+          `SELECT COUNT(*) AS total
+             FROM public_itinerary_items item
+             JOIN public_itineraries itinerary
+               ON itinerary.id = item.itinerary_id
+            WHERE itinerary.event_id = ?
+              AND itinerary.visitor_key_hash = ?
+              AND item.session_id = ?`,
+        )
+          .bind(activeProgramme.event.id, visitorHash, sessionId)
+          .first<{ total: number }>(),
+      ).resolves.toEqual({ total: 1 });
     } finally {
       await env.DB.prepare(
         `UPDATE sessions SET visibility = 'public' WHERE id = ? AND event_id = ?`,

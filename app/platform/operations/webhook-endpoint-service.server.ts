@@ -2,6 +2,10 @@ import { z } from "zod";
 
 import type { Viewer } from "~/platform/auth/authorize.server";
 import {
+  atomicBatchGuardStatement,
+  isAtomicBatchGuardError,
+} from "~/platform/database/atomic-batch-guard.server";
+import {
   createWebhookSecret,
   decryptWebhookSecret,
   encryptWebhookSecret,
@@ -335,60 +339,88 @@ export class WebhookEndpointService {
       )
       .first();
     if (recovered) return { endpointId, status };
-    if (status === "active") {
-      const current = await this.env.DB.prepare(
-        `SELECT secret_ciphertext AS secretCiphertext
-           FROM webhook_endpoints
-          WHERE id = ? AND event_id = ? AND organisation_id = ?`,
-      )
-        .bind(endpointId, viewer.eventId, viewer.organisationId)
-        .first<{ secretCiphertext: string }>();
-      if (!current) throw new WebhookEndpointNotFoundError();
-      if (webhookSecretWasErased(current.secretCiphertext)) {
-        throw new WebhookEndpointCredentialsErasedError();
-      }
-    }
-    const [updated] = await this.env.DB.batch([
-      this.env.DB.prepare(
-        `
-        UPDATE webhook_endpoints
-           SET status = ?, disabled_at = CASE WHEN ? = 'disabled' THEN unixepoch() ELSE NULL END,
-               failure_count = CASE WHEN ? = 'active' THEN 0 ELSE failure_count END,
-               last_operation_id = ?,
-               updated_at = unixepoch()
-         WHERE id = ? AND event_id = ? AND organisation_id = ?
-      `,
-      ).bind(
-        status,
-        status,
-        status,
-        operationId,
-        endpointId,
-        viewer.eventId,
-        viewer.organisationId,
-      ),
-      this.env.DB.prepare(
-        `
-        INSERT INTO audit_events (
-          id, actor_kind, origin, metadata_version, organisation_id, event_id, actor_person_id, action,
-          entity_type, entity_id, correlation_id, metadata_json, created_at
-        ) SELECT ?, 'person', 'admin_ui', 1, ?, ?, ?, ?, 'webhook_endpoint', ?, ?, '{}', unixepoch()
-           WHERE changes() = 1
-      `,
-      ).bind(
-        crypto.randomUUID(),
-        viewer.organisationId,
-        viewer.eventId,
-        viewer.personId,
-        `webhook_endpoint.${status === "active" ? "enabled" : "disabled"}`,
-        endpointId,
-        operationId,
-      ),
-    ]);
-    if ((updated.meta.changes ?? 0) !== 1) {
-      throw new WebhookEndpointNotFoundError();
+    try {
+      await this.env.DB.batch([
+        this.env.DB.prepare(
+          `
+          UPDATE webhook_endpoints
+             SET status = ?, disabled_at = CASE WHEN ? = 'disabled' THEN unixepoch() ELSE NULL END,
+                 failure_count = CASE WHEN ? = 'active' THEN 0 ELSE failure_count END,
+                 last_operation_id = ?,
+                 updated_at = unixepoch()
+           WHERE id = ? AND event_id = ? AND organisation_id = ?
+             AND (? = 'disabled' OR secret_ciphertext NOT LIKE 'retained-%')
+        `,
+        ).bind(
+          status,
+          status,
+          status,
+          operationId,
+          endpointId,
+          viewer.eventId,
+          viewer.organisationId,
+          status,
+        ),
+        this.env.DB.prepare(
+          `
+          INSERT INTO audit_events (
+            id, actor_kind, origin, metadata_version, organisation_id, event_id, actor_person_id, action,
+            entity_type, entity_id, correlation_id, metadata_json, created_at
+          ) SELECT ?, 'person', 'admin_ui', 1, ?, ?, ?, ?, 'webhook_endpoint', ?, ?, '{}', unixepoch()
+             WHERE changes() = 1
+        `,
+        ).bind(
+          crypto.randomUUID(),
+          viewer.organisationId,
+          viewer.eventId,
+          viewer.personId,
+          `webhook_endpoint.${status === "active" ? "enabled" : "disabled"}`,
+          endpointId,
+          operationId,
+        ),
+        atomicBatchGuardStatement(
+          this.env,
+          `NOT EXISTS (
+             SELECT 1 FROM webhook_endpoints
+              WHERE id = ? AND event_id = ? AND organisation_id = ?
+                AND status = ? AND last_operation_id = ?
+           )`,
+          [
+            endpointId,
+            viewer.eventId,
+            viewer.organisationId,
+            status,
+            operationId,
+          ],
+        ),
+      ]);
+    } catch (error) {
+      if (!isAtomicBatchGuardError(error)) throw error;
+      throw await this.statusConflict(viewer, endpointId, status);
     }
     return { endpointId, status };
+  }
+
+  private async statusConflict(
+    viewer: Viewer,
+    endpointId: string,
+    status: "active" | "disabled",
+  ): Promise<Error> {
+    const current = await this.env.DB.prepare(
+      `SELECT secret_ciphertext AS secretCiphertext
+         FROM webhook_endpoints
+        WHERE id = ? AND event_id = ? AND organisation_id = ?`,
+    )
+      .bind(endpointId, viewer.eventId, viewer.organisationId)
+      .first<{ secretCiphertext: string }>();
+    if (
+      status === "active" &&
+      current &&
+      webhookSecretWasErased(current.secretCiphertext)
+    ) {
+      return new WebhookEndpointCredentialsErasedError();
+    }
+    return new WebhookEndpointNotFoundError();
   }
 
   async rotateSecret(
