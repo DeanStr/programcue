@@ -170,9 +170,7 @@ async function waitForSurfaceReady(page: Page, name: string) {
     ).toBeVisible();
   } else if (name === "evaluation-admin") {
     await expect(
-      page.getByRole("navigation", {
-        name: "Evaluation administration sections",
-      }),
+      page.getByRole("navigation", { name: "Evaluation views" }),
     ).toBeVisible();
     await expect(
       page.getByRole("heading", {
@@ -552,11 +550,8 @@ test.describe
         await expect(
           page.getByRole("heading", { level: 1 }).first(),
         ).toBeVisible();
-        if (
-          testInfo.project.name === "mobile-chromium" &&
-          surface.name === "evaluation-admin"
-        ) {
-          await page.getByRole("button", { name: /Proposal queue/ }).click();
+        if (surface.name === "evaluation-admin") {
+          await page.getByRole("link", { name: "Assignments" }).click();
         }
         await waitForSurfaceReady(page, surface.name);
         // Locator screenshots stitch long pages from viewport-sized tiles.
