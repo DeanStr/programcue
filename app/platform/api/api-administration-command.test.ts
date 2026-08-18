@@ -889,4 +889,54 @@ describe("versioned administration commands", () => {
       ),
     );
   });
+
+  it("rejects enabling a webhook whose signing secret was erased", async () => {
+    const suffix = crypto.randomUUID();
+    const created = await result(
+      await command(
+        "administrator",
+        "webhook-endpoints",
+        "new",
+        "save",
+        {
+          name: `Erased webhook ${suffix}`,
+          url: "https://hooks.example.com/erased",
+          eventTypes: ["task.updated"],
+        },
+        `webhook-erased-save-${suffix}`,
+      ),
+    );
+    const endpointId = String(created.result.endpointId);
+    await testEnv.DB.prepare(
+      `UPDATE webhook_endpoints
+          SET status = 'disabled', secret_ciphertext = 'retained-' || id
+        WHERE id = ? AND event_id = ?`,
+    )
+      .bind(endpointId, eventId)
+      .run();
+
+    const enabled = await command(
+      "administrator",
+      "webhook-endpoints",
+      endpointId,
+      "status",
+      { status: "active" },
+      `webhook-erased-enable-${suffix}`,
+    );
+    expect(enabled.status).toBe(409);
+    await expect(enabled.json()).resolves.toMatchObject({
+      error: {
+        code: "WEBHOOK_ENDPOINT_CREDENTIALS_ERASED",
+        message:
+          "This webhook endpoint's signing secret was erased during participant retention. Rotate the secret or create a new endpoint before enabling it.",
+      },
+    });
+    await expect(
+      testEnv.DB.prepare(
+        "SELECT status FROM webhook_endpoints WHERE id = ? AND event_id = ?",
+      )
+        .bind(endpointId, eventId)
+        .first(),
+    ).resolves.toEqual({ status: "disabled" });
+  });
 });

@@ -199,6 +199,40 @@ export class PublicItineraryService {
     return expiresAt;
   }
 
+  private async requireItineraryItem(
+    eventId: string,
+    sessionId: string,
+    identity: { personId: string } | { visitorHash: string },
+  ) {
+    const item =
+      "personId" in identity
+        ? await this.env.DB.prepare(
+            `SELECT 1 AS present
+               FROM public_itinerary_items item
+               JOIN public_itineraries itinerary
+                 ON itinerary.id = item.itinerary_id
+              WHERE itinerary.event_id = ?
+                AND itinerary.person_id = ?
+                AND item.session_id = ?
+                AND (itinerary.expires_at IS NULL OR itinerary.expires_at > unixepoch())`,
+          )
+            .bind(eventId, identity.personId, sessionId)
+            .first()
+        : await this.env.DB.prepare(
+            `SELECT 1 AS present
+               FROM public_itinerary_items item
+               JOIN public_itineraries itinerary
+                 ON itinerary.id = item.itinerary_id
+              WHERE itinerary.event_id = ?
+                AND itinerary.visitor_key_hash = ?
+                AND item.session_id = ?
+                AND (itinerary.expires_at IS NULL OR itinerary.expires_at > unixepoch())`,
+          )
+            .bind(eventId, identity.visitorHash, sessionId)
+            .first();
+    if (!item) throw new PublishedProgrammeSessionNotFoundError();
+  }
+
   async syncItinerary(
     programme: PublishedProgramme,
     identity: ItineraryIdentity,
@@ -386,6 +420,9 @@ export class PublicItineraryService {
             programme.version.id,
           ),
         ]);
+        await this.requireItineraryItem(programme.event.id, sessionId, {
+          personId: identity.personId,
+        });
       } else {
         await this.env.DB.prepare(
           `DELETE FROM public_itinerary_items
@@ -482,6 +519,9 @@ export class PublicItineraryService {
           programme.version.id,
         ),
       ]);
+      await this.requireItineraryItem(programme.event.id, sessionId, {
+        visitorHash,
+      });
     } else if (existing) {
       await this.env.DB.prepare(
         `DELETE FROM public_itinerary_items

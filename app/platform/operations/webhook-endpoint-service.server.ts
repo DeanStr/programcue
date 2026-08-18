@@ -11,8 +11,10 @@ import {
   outboundWebhookEventTypes,
 } from "~/platform/operations/webhook-schema";
 import {
+  WebhookEndpointCredentialsErasedError,
   WebhookEndpointNotFoundError,
   WebhookQueueConfigurationError,
+  webhookSecretWasErased,
 } from "./webhook-errors";
 
 type WebhookEnvironment = CloudflareEnvironment & {
@@ -95,6 +97,7 @@ export type WebhookEndpointListItem = {
   url: string;
   eventTypes: string[];
   status: "active" | "disabled" | "failing";
+  credentialsErased: boolean;
   failureCount: number;
   createdAt: number;
   updatedAt: number;
@@ -138,6 +141,7 @@ export class WebhookEndpointService {
       `
       SELECT we.id, we.name, we.url, we.event_types_json AS eventTypesJson,
              we.status, we.failure_count AS failureCount,
+             we.secret_ciphertext AS secretCiphertext,
              we.created_at AS createdAt, we.updated_at AS updatedAt,
              wd.id AS deliveryId, wd.status AS deliveryStatus,
              wd.attempt_count AS deliveryAttemptCount,
@@ -165,6 +169,7 @@ export class WebhookEndpointService {
         url: string;
         eventTypesJson: string;
         status: "active" | "disabled" | "failing";
+        secretCiphertext: string;
         failureCount: number;
         createdAt: number;
         updatedAt: number;
@@ -177,6 +182,7 @@ export class WebhookEndpointService {
     return rows.results.map(
       ({
         eventTypesJson,
+        secretCiphertext,
         deliveryId,
         deliveryStatus,
         deliveryAttemptCount,
@@ -202,6 +208,7 @@ export class WebhookEndpointService {
         }
         return {
           ...endpoint,
+          credentialsErased: webhookSecretWasErased(secretCiphertext),
           eventTypes: eventTypes.data,
           latestDelivery:
             deliveryId &&
@@ -328,6 +335,19 @@ export class WebhookEndpointService {
       )
       .first();
     if (recovered) return { endpointId, status };
+    if (status === "active") {
+      const current = await this.env.DB.prepare(
+        `SELECT secret_ciphertext AS secretCiphertext
+           FROM webhook_endpoints
+          WHERE id = ? AND event_id = ? AND organisation_id = ?`,
+      )
+        .bind(endpointId, viewer.eventId, viewer.organisationId)
+        .first<{ secretCiphertext: string }>();
+      if (!current) throw new WebhookEndpointNotFoundError();
+      if (webhookSecretWasErased(current.secretCiphertext)) {
+        throw new WebhookEndpointCredentialsErasedError();
+      }
+    }
     const [updated] = await this.env.DB.batch([
       this.env.DB.prepare(
         `

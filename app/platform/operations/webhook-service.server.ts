@@ -21,10 +21,12 @@ import {
   webhookDeliveryMessageSchema,
 } from "~/platform/operations/webhook-schema";
 import {
+  WebhookEndpointCredentialsErasedError,
   WebhookEndpointNotFoundError,
   WebhookEventIdempotencyConflictError,
   WebhookQueueConfigurationError,
   WebhookQueueUnavailableError,
+  webhookSecretWasErased,
 } from "./webhook-errors";
 
 type WebhookEnvironment = CloudflareEnvironment & {
@@ -169,6 +171,7 @@ function webhookRequestHash(input: {
 }
 
 export {
+  WebhookEndpointCredentialsErasedError,
   WebhookEndpointNotFoundError,
   WebhookEventIdempotencyConflictError,
   WebhookQueueConfigurationError,
@@ -894,7 +897,7 @@ export class WebhookService {
   ) {
     const endpoint = await this.env.DB.prepare(
       `
-      SELECT we.id, we.name, we.status
+      SELECT we.id, we.name, we.status, we.secret_ciphertext AS secretCiphertext
         FROM webhook_endpoints we
         JOIN events e ON e.id = we.event_id AND e.organisation_id = ?
        WHERE we.id = ? AND we.event_id = ?
@@ -902,8 +905,16 @@ export class WebhookService {
     `,
     )
       .bind(viewer.organisationId, endpointId, viewer.eventId)
-      .first<{ id: string; name: string; status: string }>();
+      .first<{
+        id: string;
+        name: string;
+        status: string;
+        secretCiphertext: string;
+      }>();
     if (!endpoint) throw new WebhookEndpointNotFoundError();
+    if (webhookSecretWasErased(endpoint.secretCiphertext)) {
+      throw new WebhookEndpointCredentialsErasedError();
+    }
     if (endpoint.status === "disabled") {
       throw new Error("Enable this webhook endpoint before sending a test.");
     }

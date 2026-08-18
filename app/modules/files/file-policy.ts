@@ -214,8 +214,8 @@ export class FilePolicyError extends Error {
 type FileDeclaration = Pick<File, "name" | "size" | "type">;
 
 const UNSAFE_FILENAME_CHARACTERS =
-  // biome-ignore lint/suspicious/noControlCharactersInRegex: Upload names reject ASCII controls and Unicode bidi overrides.
-  /[\u0000-\u001f\u007f\u202a-\u202e\u2066-\u2069<>:"/\\|?*]/u;
+  // biome-ignore lint/suspicious/noControlCharactersInRegex: Upload names reject ASCII controls, Unicode bidi overrides, and path separators.
+  /[\u0000-\u001f\u007f\u202a-\u202e\u2066-\u2069/\\]/u;
 
 function extension(filename: string) {
   return filename.toLowerCase().split(".").at(-1) ?? "";

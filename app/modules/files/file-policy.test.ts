@@ -75,6 +75,28 @@ describe("event file policy", () => {
         CANONICAL_EVENT_FILE_POLICY,
       ),
     ).toThrow(/unsupported characters/);
+    expect(() =>
+      validateDirectFileDeclaration(
+        "slides",
+        {
+          name: "nested/path.pdf",
+          type: "application/pdf",
+          size: FILE_SIZE_MIB,
+        },
+        CANONICAL_EVENT_FILE_POLICY,
+      ),
+    ).toThrow(/unsupported characters/);
+    expect(() =>
+      validateDirectFileDeclaration(
+        "slides",
+        {
+          name: "Talk: Q&A.pdf",
+          type: "application/pdf",
+          size: FILE_SIZE_MIB,
+        },
+        CANONICAL_EVENT_FILE_POLICY,
+      ),
+    ).not.toThrow();
   });
 
   it("enforces the resolved event limit for a declared upload", () => {

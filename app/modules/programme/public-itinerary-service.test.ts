@@ -16,6 +16,7 @@ import { eventVisitorKeyHash } from "./public-itinerary-token.server";
 import {
   PublicProgrammeService,
   PublishedProgrammeItineraryNotFoundError,
+  PublishedProgrammeSessionNotFoundError,
   readCookie,
 } from "./public-programme-service.server";
 
@@ -302,36 +303,61 @@ describe("published programme and itinerary", () => {
       .bind(sessionId, activeProgramme.event.id)
       .run();
     try {
-      const { token } = await service.updateItinerary(
-        activeProgramme,
-        { personId: null, visitorToken: null },
-        sessionId,
-        "add",
-      );
-      expect(token).toEqual(expect.any(String));
-      const visitorHash = await eventVisitorKeyHash(
-        env as unknown as CloudflareEnvironment,
-        token as string,
-        activeProgramme.event.id,
-      );
       await expect(
-        service.itinerary(activeProgramme, {
-          personId: null,
-          visitorToken: token,
+        service.updateItinerary(
+          activeProgramme,
+          { personId: null, visitorToken: null },
+          sessionId,
+          "add",
+        ),
+      ).rejects.toBeInstanceOf(PublishedProgrammeSessionNotFoundError);
+      const fetcher = vi.fn(async () =>
+        Response.json({
+          success: true,
+          hostname: "programcue.test",
+          action: "public_itinerary_create",
         }),
-      ).resolves.toEqual([]);
-      expect(
-        await env.DB.prepare(
-          `SELECT COUNT(*) AS total
-             FROM public_itinerary_items item
-             JOIN public_itineraries itinerary ON itinerary.id = item.itinerary_id
-            WHERE itinerary.event_id = ?
-              AND itinerary.visitor_key_hash = ?
-              AND item.session_id = ?`,
-        )
-          .bind(activeProgramme.event.id, visitorHash, sessionId)
-          .first(),
-      ).toEqual({ total: 0 });
+      );
+      vi.stubGlobal("fetch", fetcher);
+      const context = new RouterContextProvider();
+      context.set(cloudflareContext, {
+        env: {
+          ...(env as unknown as CloudflareEnvironment),
+          APP_ENV: "production",
+          DEMO_MODE: "false",
+          EVALUATION_MODE: "false",
+          BETTER_AUTH_URL: "https://programcue.test",
+          BETTER_AUTH_SECRET:
+            "programme-abuse-test-secret-with-at-least-thirty-two-characters",
+          TURNSTILE_SITE_KEY: "programme-site-key",
+          TURNSTILE_SECRET_KEY: "programme-secret-key",
+        } as unknown as CloudflareEnvironment,
+        ctx: {} as ExecutionContext,
+      });
+      const response = await publicProgrammePageAction({
+        request: new Request(
+          "https://programcue.test/public/programme/future-of-events-2027",
+          {
+            method: "POST",
+            headers: {
+              "cf-connecting-ip": "203.0.113.209",
+              "content-type": "application/x-www-form-urlencoded",
+            },
+            body: new URLSearchParams({
+              intent: "add",
+              sessionId,
+              "turnstile-token": "verified-itinerary-token",
+            }),
+          },
+        ),
+        params: { slug: "future-of-events-2027" },
+        context,
+      } as never);
+      if (response instanceof Response) {
+        throw new Error("Hidden itinerary add returned a raw response.");
+      }
+      expect(response.init?.status).toBe(404);
+      expect(response.data).toMatchObject({ ok: false });
     } finally {
       await env.DB.prepare(
         `UPDATE sessions SET visibility = 'public' WHERE id = ? AND event_id = ?`,
@@ -379,6 +405,8 @@ describe("published programme and itinerary", () => {
     const secondOrganisationId = `itinerary-org-${suffix}`;
     const secondEventId = `itinerary-event-${suffix}`;
     const secondSessionId = `itinerary-session-${suffix}`;
+    const secondVersionId = `itinerary-version-${suffix}`;
+    const secondRoomId = `itinerary-room-${suffix}`;
     await env.DB.batch([
       env.DB.prepare(
         `INSERT INTO organisations (id, name, slug)
@@ -399,6 +427,35 @@ describe("published programme and itinerary", () => {
         ) VALUES (?, ?, 'Second itinerary session', ?, 'presentation', 30,
                   'published', 'public', 1, unixepoch(), unixepoch())`,
       ).bind(secondSessionId, secondEventId, `itinerary-session-${suffix}`),
+      env.DB.prepare(
+        `INSERT INTO rooms (id, event_id, name, capacity, position)
+         VALUES (?, ?, 'Second itinerary room', 100, 0)`,
+      ).bind(secondRoomId, secondEventId),
+      env.DB.prepare(
+        `INSERT INTO schedule_versions (
+           id, event_id, version_number, name, status, created_by_person_id,
+           created_at, published_at
+         ) VALUES (?, ?, 1, 'Second itinerary schedule', 'published',
+                   'person-demo-admin', unixepoch(), unixepoch())`,
+      ).bind(secondVersionId, secondEventId),
+      env.DB.prepare(
+        `UPDATE schedule_session_contents
+            SET content_status = 'approved', approved_by_person_id = NULL,
+                approved_at = unixepoch(), approval_source = 'legacy_publication'
+          WHERE schedule_version_id = ? AND event_id = ? AND session_id = ?`,
+      ).bind(secondVersionId, secondEventId, secondSessionId),
+      env.DB.prepare(
+        `INSERT INTO schedule_entries (
+           id, event_id, schedule_version_id, session_id, room_id,
+           starts_at, ends_at, created_at, updated_at
+         ) VALUES (?, ?, ?, ?, ?, 4070908800, 4070910600, unixepoch(), unixepoch())`,
+      ).bind(
+        `itinerary-entry-${suffix}`,
+        secondEventId,
+        secondVersionId,
+        secondSessionId,
+        secondRoomId,
+      ),
     ]);
     const secondProgramme = {
       ...activeProgramme,
@@ -410,6 +467,10 @@ describe("published programme and itinerary", () => {
         startDate: "2099-01-01",
         endDate: "2099-01-02",
         timezone: "UTC",
+      },
+      version: {
+        ...activeProgramme.version,
+        id: secondVersionId,
       },
       sessions: [
         {

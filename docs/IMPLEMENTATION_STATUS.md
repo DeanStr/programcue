@@ -174,7 +174,7 @@ or unchanged.
 
 A later isolated high-signal test pass found and fixed production defects in
 weighted 1–10 scoring, DST midnight schedule/close/due-date helpers, CFP
-activation, recusal and self-review assignment, hidden conditional review
+activation, recusal and email-based self-review assignment, hidden conditional review
 attachments, private cache policy, applicant/itinerary host cookies, file-scan
 queued retry, and accepted-speaker/task reminder audience filters. Follow-up
 review of those uncommitted fixes kept Airtable repository connections connected

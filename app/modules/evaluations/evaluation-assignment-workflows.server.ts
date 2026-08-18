@@ -210,14 +210,29 @@ export class EvaluationAssignmentWorkflows extends EvaluationServiceFoundation {
         SELECT 1 FROM submissions own_submission
          WHERE own_submission.event_id = ?
            AND own_submission.id IN (${targetPlaceholders})
-           AND own_submission.submitter_person_id IN (${evaluatorPlaceholders})
+           AND (
+             own_submission.submitter_person_id IN (${evaluatorPlaceholders})
+             OR EXISTS (
+               SELECT 1 FROM people evaluator
+                WHERE evaluator.id IN (${evaluatorPlaceholders})
+                  AND trim(evaluator.email) <> ''
+                  AND evaluator.email = own_submission.submitter_email COLLATE NOCASE
+             )
+           )
       )
       AND NOT EXISTS (
         SELECT 1 FROM submission_speakers own_speaker
          WHERE own_speaker.event_id = ?
            AND own_speaker.submission_id IN (${targetPlaceholders})
-           AND own_speaker.person_id IN (${evaluatorPlaceholders})
-           AND own_speaker.invitation_status = 'claimed'
+           AND (
+             own_speaker.person_id IN (${evaluatorPlaceholders})
+             OR EXISTS (
+               SELECT 1 FROM people evaluator
+                WHERE evaluator.id IN (${evaluatorPlaceholders})
+                  AND trim(evaluator.email) <> ''
+                  AND evaluator.email = own_speaker.email COLLATE NOCASE
+             )
+           )
       )`
           : `AND NOT EXISTS (
         SELECT 1 FROM session_speakers own_session_speaker
@@ -265,8 +280,10 @@ export class EvaluationAssignmentWorkflows extends EvaluationServiceFoundation {
             viewer.eventId,
             ...parsed.targetIds,
             ...evaluatorPersonIds,
+            ...evaluatorPersonIds,
             viewer.eventId,
             ...parsed.targetIds,
+            ...evaluatorPersonIds,
             ...evaluatorPersonIds,
           ]
         : [viewer.eventId, ...parsed.targetIds, ...evaluatorPersonIds]),

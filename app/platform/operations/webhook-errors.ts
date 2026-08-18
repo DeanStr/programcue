@@ -5,6 +5,19 @@ export class WebhookEndpointNotFoundError extends Error {
   }
 }
 
+export class WebhookEndpointCredentialsErasedError extends Error {
+  constructor() {
+    super(
+      "This webhook endpoint's signing secret was erased during participant retention. Rotate the secret or create a new endpoint before enabling it.",
+    );
+    this.name = "WebhookEndpointCredentialsErasedError";
+  }
+}
+
+export function webhookSecretWasErased(ciphertext: string) {
+  return ciphertext.startsWith("retained-");
+}
+
 /**
  * `operationId` stays on the error so callers can link to the exact record; it
  * is not spelled out in the message, because a bare identifier is not something

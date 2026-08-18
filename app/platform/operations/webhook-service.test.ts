@@ -7,6 +7,7 @@ import { signWebhookPayload } from "~/platform/operations/webhook-crypto.server"
 import {
   validateWebhookUrl,
   WebhookAuditOriginRequiredError,
+  WebhookEndpointCredentialsErasedError,
   WebhookEventIdempotencyConflictError,
   WebhookQueueConfigurationError,
   WebhookService,
@@ -46,6 +47,39 @@ describe("outbound webhooks", () => {
     );
     expect(() => validateWebhookUrl("https://service.internal/events")).toThrow(
       "public DNS",
+    );
+  });
+
+  it("does not re-enable an endpoint whose signing secret was erased", async () => {
+    const testEnv = {
+      ...(env as unknown as CloudflareEnvironment),
+      WEBHOOK_CREDENTIALS_KEY: credentialKey,
+      OPERATIONS_QUEUE: { send: async () => undefined },
+    } as unknown as CloudflareEnvironment;
+    const service = new WebhookService(testEnv);
+    const created = await service.create(viewer, {
+      name: `Erased secret ${crypto.randomUUID()}`,
+      url: "https://hooks.example.com/erased",
+      eventTypes: ["submission.created"],
+    });
+    await testEnv.DB.prepare(
+      `UPDATE webhook_endpoints
+          SET status = 'disabled', secret_ciphertext = 'retained-' || id
+        WHERE id = ? AND event_id = ?`,
+    )
+      .bind(created.id, viewer.eventId)
+      .run();
+    await expect(
+      service.setStatus(viewer, created.id, "active"),
+    ).rejects.toBeInstanceOf(WebhookEndpointCredentialsErasedError);
+    await expect(service.list(viewer)).resolves.toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          id: created.id,
+          status: "disabled",
+          credentialsErased: true,
+        }),
+      ]),
     );
   });
 

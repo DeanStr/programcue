@@ -16,6 +16,7 @@ import { ApiAdministrationCommandService } from "~/platform/api/api-administrati
 import { apiAdministrationFamilySchema } from "~/platform/api/api-command-contract";
 import { requireEventRole } from "~/platform/auth/authorize.server";
 import { getCloudflareContext } from "~/platform/cloudflare-context";
+import { WebhookEndpointCredentialsErasedError } from "~/platform/operations/webhook-errors";
 import type { Route } from "./+types/api-administration-command";
 
 function requireSameOrigin(request: Request) {
@@ -53,6 +54,13 @@ function commandError(error: unknown) {
           ? "RESOURCE_NOT_FOUND"
           : "ADMINISTRATION_COMMAND_FAILED",
       error.statusText || "The administration command failed",
+    );
+  }
+  if (error instanceof WebhookEndpointCredentialsErasedError) {
+    return new ApiError(
+      409,
+      "WEBHOOK_ENDPOINT_CREDENTIALS_ERASED",
+      error.message,
     );
   }
   if (

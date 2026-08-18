@@ -4,6 +4,7 @@ import { beforeEach, describe, expect, it } from "vitest";
 import type { Viewer } from "~/platform/auth/authorize.server";
 import { ensureDemoData } from "~/platform/demo/seed.server";
 import {
+  EvaluationRevisionConflictError,
   EvaluationService,
   EvaluationStateError,
 } from "./evaluation-service.server";
@@ -1073,6 +1074,61 @@ describe("evaluation vertical slice", () => {
         ).rejects.toThrow(/missing its immutable routing snapshot/i);
       } finally {
         await resetEvaluationFixture();
+      }
+    });
+
+    it("does not assign a reviewer whose email is listed as an unclaimed co-speaker", async () => {
+      await resetEvaluationFixture();
+      const service = new EvaluationService(
+        env as unknown as CloudflareEnvironment,
+      );
+      await service.savePlan(admin, {
+        revision: 0,
+        name: "Self-review email plan",
+        status: "active",
+        rounds: [
+          {
+            id: "eval-self-review-email-round",
+            name: "Initial review",
+            anonymous: false,
+            criteria,
+          },
+        ],
+      });
+      await addRoundReviewer("eval-self-review-email-round");
+      try {
+        await env.DB.prepare(
+          `INSERT INTO submission_speakers (
+             id, event_id, submission_id, person_id, email, display_name,
+             position, invitation_status, is_primary, created_at, updated_at
+           ) VALUES (
+             'eval-pending-self-review', ?, 'eval-test-submission', NULL,
+             ?, 'Jordan Lee', 1, 'pending', 0, unixepoch(), unixepoch()
+           )`,
+        )
+          .bind(admin.eventId, evaluator.email)
+          .run();
+        await expect(
+          service.assign(admin, {
+            roundId: "eval-self-review-email-round",
+            targetType: "submission",
+            targetIds: ["eval-test-submission"],
+            evaluatorPersonIds: [evaluator.personId],
+          }),
+        ).rejects.toBeInstanceOf(EvaluationRevisionConflictError);
+        await expect(
+          env.DB.prepare(
+            `SELECT COUNT(*) AS total FROM evaluator_assignments
+              WHERE event_id = ? AND submission_id = 'eval-test-submission'
+                AND evaluator_person_id = ?`,
+          )
+            .bind(admin.eventId, evaluator.personId)
+            .first(),
+        ).resolves.toEqual({ total: 0 });
+      } finally {
+        await env.DB.prepare(
+          "DELETE FROM submission_speakers WHERE id = 'eval-pending-self-review'",
+        ).run();
       }
     });
 

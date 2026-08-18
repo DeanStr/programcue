@@ -26,6 +26,7 @@ import { requireCurrentEventRole } from "~/platform/auth/current-event.server";
 import { getCloudflareContext } from "~/platform/cloudflare-context";
 import { outboundWebhookEventTypes } from "~/platform/operations/webhook-schema";
 import {
+  WebhookEndpointCredentialsErasedError,
   WebhookEndpointNotFoundError,
   WebhookQueueUnavailableError,
   WebhookService,
@@ -169,6 +170,18 @@ export async function action({ request, context }: Route.ActionArgs) {
           operationId: error.operationId,
         },
         { status: 503 },
+      );
+    }
+    if (error instanceof WebhookEndpointCredentialsErasedError) {
+      return data(
+        {
+          ok: false as const,
+          message: error.message,
+          token: null,
+          webhookSecret: null,
+          operationId: null,
+        },
+        { status: 409 },
       );
     }
     if (error instanceof WebhookEndpointNotFoundError) {
@@ -606,6 +619,9 @@ export default function ApiSettings({ loaderData }: Route.ComponentProps) {
                     {endpoint.failureCount
                       ? ` · ${endpoint.failureCount} consecutive failures`
                       : ""}
+                    {endpoint.credentialsErased
+                      ? " · Signing secret erased; create a new endpoint or rotate the secret before enabling"
+                      : ""}
                     {" · "}
                     {endpoint.latestDelivery ? (
                       <>
@@ -638,7 +654,8 @@ export default function ApiSettings({ loaderData }: Route.ComponentProps) {
                     domain="webhookEndpoint"
                     status={endpoint.status}
                   />
-                  {endpoint.status !== "disabled" ? (
+                  {endpoint.status !== "disabled" &&
+                  !endpoint.credentialsErased ? (
                     <Form method="post">
                       <input type="hidden" name="intent" value="test-webhook" />
                       <input
@@ -667,29 +684,31 @@ export default function ApiSettings({ loaderData }: Route.ComponentProps) {
                       </button>
                     </Form>
                   ) : null}
-                  <Form method="post">
-                    <input
-                      type="hidden"
-                      name="intent"
-                      value={
-                        endpoint.status === "disabled"
-                          ? "enable-webhook"
-                          : "disable-webhook"
-                      }
-                    />
-                    <input
-                      type="hidden"
-                      name="endpointId"
-                      value={endpoint.id}
-                    />
-                    <button
-                      className={`btn small${endpoint.status === "disabled" ? "" : " danger"}`}
-                      type="submit"
-                      disabled={navigation.state !== "idle"}
-                    >
-                      {endpoint.status === "disabled" ? "Enable" : "Disable"}
-                    </button>
-                  </Form>
+                  {endpoint.credentialsErased ? null : (
+                    <Form method="post">
+                      <input
+                        type="hidden"
+                        name="intent"
+                        value={
+                          endpoint.status === "disabled"
+                            ? "enable-webhook"
+                            : "disable-webhook"
+                        }
+                      />
+                      <input
+                        type="hidden"
+                        name="endpointId"
+                        value={endpoint.id}
+                      />
+                      <button
+                        className={`btn small${endpoint.status === "disabled" ? "" : " danger"}`}
+                        type="submit"
+                        disabled={navigation.state !== "idle"}
+                      >
+                        {endpoint.status === "disabled" ? "Enable" : "Disable"}
+                      </button>
+                    </Form>
+                  )}
                 </div>
               </li>
             ))}
