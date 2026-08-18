@@ -219,6 +219,7 @@ export class SubmissionApplicantWorkflows extends SubmissionServiceFoundation {
         form: browserForm,
         applicant: null,
         drafts: [],
+        otherEventApplications: [],
         invitations: [],
         speakerProfile: null,
         selected: null,
@@ -228,14 +229,15 @@ export class SubmissionApplicantWorkflows extends SubmissionServiceFoundation {
         selectedCanRevise: false,
       };
     }
-    const [drafts, invitations, claimedProfile] = await Promise.all([
-      applicant.claimOnly
-        ? Promise.resolve([])
-        : this.repository.getApplicantDrafts(form.id, applicant),
-      this.repository.getCoSpeakerInvitations(form.id, applicant),
-      applicant.verified
-        ? this.env.DB.prepare(
-            `SELECT 1 AS available
+    const [drafts, invitations, claimedProfile, otherEventApplications] =
+      await Promise.all([
+        applicant.claimOnly
+          ? Promise.resolve([])
+          : this.repository.getApplicantDrafts(form.id, applicant),
+        this.repository.getCoSpeakerInvitations(form.id, applicant),
+        applicant.verified
+          ? this.env.DB.prepare(
+              `SELECT 1 AS available
                FROM submission_speakers speaker
                JOIN submissions submission
                  ON submission.id = speaker.submission_id
@@ -246,11 +248,41 @@ export class SubmissionApplicantWorkflows extends SubmissionServiceFoundation {
               WHERE speaker.person_id = ? AND speaker.invitation_status = 'claimed'
                 AND version.form_id = ? AND speaker.event_id = ?
               LIMIT 1`,
-          )
-            .bind(applicant.personId, form.id, form.eventId)
-            .first<{ available: number }>()
-        : Promise.resolve(null),
-    ]);
+            )
+              .bind(applicant.personId, form.id, form.eventId)
+              .first<{ available: number }>()
+          : Promise.resolve(null),
+        applicant.verified &&
+        applicant.personId &&
+        !applicant.claimOnly &&
+        !claimAccess &&
+        !claimedContext
+          ? this.env.DB.prepare(
+              `SELECT submission.id, submission.title, submission.status,
+                      form.name AS formName, form.public_slug AS formSlug
+                 FROM submissions submission
+                 JOIN form_versions version
+                   ON version.id = submission.form_version_id
+                  AND version.event_id = submission.event_id
+                 JOIN form_definitions form
+                   ON form.id = version.form_id
+                  AND form.event_id = submission.event_id
+                WHERE submission.event_id = ?
+                  AND submission.submitter_person_id = ?
+                  AND form.id <> ?
+                  AND submission.status <> 'withdrawn'
+                ORDER BY submission.updated_at DESC`,
+            )
+              .bind(form.eventId, applicant.personId, form.id)
+              .all<{
+                id: string;
+                title: string;
+                status: string;
+                formName: string;
+                formSlug: string;
+              }>()
+          : Promise.resolve({ results: [] }),
+      ]);
     const requestedDraft = selectedId !== null && selectedId !== undefined;
     const selected = requestedDraft
       ? (drafts.find((draft) => draft.id === selectedId) ?? null)
@@ -279,6 +311,7 @@ export class SubmissionApplicantWorkflows extends SubmissionServiceFoundation {
       form: applicantFormView(form),
       applicant,
       drafts,
+      otherEventApplications: otherEventApplications.results,
       invitations,
       speakerProfile:
         applicant.verified && claimedProfile

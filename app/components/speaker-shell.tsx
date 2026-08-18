@@ -145,7 +145,7 @@ export function SpeakerShell({
             <UserRound aria-hidden size={17} /> <span>Profile</span>
           </NavLink>
         </nav>
-        <main id="main" className="speaker-main">
+        <main id="main" className="speaker-main" tabIndex={-1}>
           {children}
         </main>
       </div>

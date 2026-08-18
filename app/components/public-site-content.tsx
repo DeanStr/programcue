@@ -582,7 +582,7 @@ export function PublicEventSiteWorkspace({
           </p>
         </div>
       </section>
-      <main id="main" className="public-main">
+      <main id="main" className="public-main" tabIndex={-1}>
         <div className="public-content">
           <PublicSiteHome event={event} programme={null} site={site} />
         </div>

@@ -2,10 +2,17 @@ import {
   isRouteErrorResponse,
   Link,
   Outlet,
+  useLocation,
   useRevalidator,
+  useRouteLoaderData,
 } from "react-router";
 import { AdminShell } from "~/components/admin-shell";
 import { routeErrorCopy, routeErrorMessage } from "~/lib/route-error-copy";
+import {
+  routeErrorRecovery,
+  sanitizeRouteErrorMessage,
+  shouldOfferErrorRetry,
+} from "~/lib/route-error-recovery";
 import { EventService } from "~/modules/events/event-service.server";
 import {
   loadCurrentEventAdminShellContext,
@@ -51,12 +58,14 @@ export function adminLayoutAllowedRoles(pathname: string) {
 export function adminErrorReturn(
   status: number | null,
   adminContextLoaded: boolean,
+  options: { pathname?: string; evaluation?: boolean } = {},
 ) {
-  return !adminContextLoaded &&
-    status !== null &&
-    [400, 403, 428].includes(status)
-    ? { href: "/events/select", label: "Choose an event" }
-    : { href: "/admin/command", label: "Go to Command Centre" };
+  return routeErrorRecovery({
+    status,
+    pathname: options.pathname ?? "/admin/command",
+    evaluation: Boolean(options.evaluation),
+    adminContextLoaded,
+  });
 }
 
 export async function loader({ request, context }: Route.LoaderArgs) {
@@ -151,33 +160,47 @@ export default function AdminLayout({ loaderData }: Route.ComponentProps) {
  */
 export function ErrorBoundary({ error, loaderData }: Route.ErrorBoundaryProps) {
   const revalidator = useRevalidator();
+  const location = useLocation();
+  const rootData = useRouteLoaderData("root") as
+    | { evaluation?: { name: string } | null }
+    | undefined;
 
   const routeError = isRouteErrorResponse(error) ? error : null;
   const title = routeError
     ? routeErrorCopy(routeError.status).title
     : "This page could not load";
   const message = routeError
-    ? routeErrorMessage(routeError.status, routeError.data)
+    ? sanitizeRouteErrorMessage(
+        routeError.status,
+        routeErrorMessage(routeError.status, routeError.data),
+      )
     : "The page failed to load. Check your latest changes before trying again.";
   const errorReturn = adminErrorReturn(
     routeError?.status ?? null,
     Boolean(loaderData),
+    {
+      pathname: location.pathname,
+      evaluation: Boolean(rootData?.evaluation),
+    },
   );
+  const showRetry = shouldOfferErrorRetry(routeError?.status ?? null);
 
   const errorContent = (
     <section className="card pad" style={{ maxWidth: 620 }}>
       <h1 style={{ fontSize: "var(--text-xl)", margin: 0 }}>{title}</h1>
       <p className="subtle">{message}</p>
       <div className="page-actions mt">
-        <button
-          className="btn primary"
-          disabled={revalidator.state === "loading"}
-          onClick={() => revalidator.revalidate()}
-          type="button"
-        >
-          {revalidator.state === "loading" ? "Retrying…" : "Try again"}
-        </button>
-        <Link className="btn" to={errorReturn.href}>
+        {showRetry ? (
+          <button
+            className="btn"
+            disabled={revalidator.state === "loading"}
+            onClick={() => revalidator.revalidate()}
+            type="button"
+          >
+            {revalidator.state === "loading" ? "Retrying…" : "Try again"}
+          </button>
+        ) : null}
+        <Link className="btn primary" to={errorReturn.href}>
           {errorReturn.label}
         </Link>
       </div>

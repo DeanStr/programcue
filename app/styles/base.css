@@ -86,7 +86,7 @@ a {
   background: var(--nav);
   color: var(--nav-text);
   position: fixed;
-  inset: 0 auto 0 0;
+  inset: var(--eval-banner-offset, 0px) auto 0 0;
   width: var(--sidebar);
   display: flex;
   flex-direction: column;
@@ -269,7 +269,7 @@ a {
   position: fixed;
   left: var(--sidebar);
   right: 0;
-  top: 0;
+  top: var(--eval-banner-offset, 0px);
   height: var(--topbar);
   background: var(--surface);
   border-bottom: 1px solid var(--line);

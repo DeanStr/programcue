@@ -210,14 +210,24 @@ export function PublicEventHeader({
         </nav>
       </details>
       {itinerary ? (
-        <a className="btn public-itinerary-link" href={itineraryHref}>
+        <a
+          className="btn public-itinerary-link"
+          href={itineraryHref}
+          aria-label={`${
+            itinerary.shared
+              ? PUBLIC_EVENT_NAVIGATION_LABELS.sharedItinerary
+              : PUBLIC_EVENT_NAVIGATION_LABELS.itinerary
+          }, ${itinerary.savedCount} saved`}
+        >
           <Heart aria-hidden="true" size={15} />
           <span>
             {itinerary.shared
               ? PUBLIC_EVENT_NAVIGATION_LABELS.sharedItinerary
               : PUBLIC_EVENT_NAVIGATION_LABELS.itinerary}
           </span>
-          <span className="status info">{itinerary.savedCount}</span>
+          <span className="status info" aria-hidden="true">
+            {itinerary.savedCount}
+          </span>
         </a>
       ) : null}
     </header>

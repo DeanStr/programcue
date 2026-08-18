@@ -75,7 +75,7 @@ export function ReviewerShell({
           </Form>
         </div>
       </header>
-      <main className="speaker-main" id="main">
+      <main className="speaker-main" id="main" tabIndex={-1}>
         {children}
       </main>
     </div>

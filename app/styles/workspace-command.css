@@ -708,6 +708,15 @@
   font-size: var(--text-xs);
 }
 
+.pc-speaker-meta {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+.pc-speaker-meta small {
+  display: block;
+}
+
 ol.timeline {
   display: grid;
   gap: var(--space-3);

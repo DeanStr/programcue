@@ -5,6 +5,8 @@
 }
 .application-main {
   width: 100%;
+  max-width: 100%;
+  overflow-x: clip;
 }
 .application-layout {
   display: grid;
@@ -14,7 +16,7 @@
 .application-drafts {
   align-self: start;
   position: sticky;
-  top: 82px;
+  top: calc(82px + var(--eval-banner-offset, 0px));
 }
 .application-drafts .queue-card {
   display: block;

@@ -95,6 +95,7 @@ export default function CommunicationUnsubscribe() {
     <main
       className="design-board"
       id="main"
+      tabIndex={-1}
       style={{ minHeight: "100vh", display: "grid", placeItems: "center" }}
     >
       <section

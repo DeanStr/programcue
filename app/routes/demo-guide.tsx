@@ -462,7 +462,11 @@ export default function DemoGuide({ loaderData }: Route.ComponentProps) {
   const selectedIdentity = loaderData.viewer;
 
   return (
-    <main id="main" className="design-board pc-design-board pc-demo">
+    <main
+      id="main"
+      className="design-board pc-design-board pc-demo"
+      tabIndex={-1}
+    >
       {dialog}
       <PageHeader
         eyebrow="Environment-gated evaluator mode"

@@ -161,19 +161,23 @@ export const meta = () => [{ title: "Choose event · Program Cue" }];
 
 export default function EventSelector({ loaderData }: Route.ComponentProps) {
   return (
-    <main className="pc-event-select" id="main">
+    <main className="pc-event-select" id="main" tabIndex={-1}>
       <section className="pc-event-select-panel">
         <header className="pc-event-select-head">
           <BrandMark />
-          <h1>Choose an event</h1>
+          <h1>
+            {loaderData.events.length === 0
+              ? "No event access yet"
+              : "Choose an event"}
+          </h1>
           <p>
-            Select the event that subsequent private pages and changes should
-            use.
+            {loaderData.events.length === 0
+              ? "An organiser must invite this account before a private workspace can open."
+              : "Select the event that subsequent private pages and changes should use."}
           </p>
         </header>
         {loaderData.events.length === 0 ? (
           <div className="pc-event-select-empty" role="status">
-            <strong>No event access yet. </strong>
             You do not currently have an accepted event role or a pending
             invitation. Ask an event organiser to invite this account, then
             return here to accept it.

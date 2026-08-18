@@ -16,7 +16,14 @@
 .schedule-room-board > .time,
 .schedule-room-board > .schedule-drop {
   min-width: 0;
-  overflow-wrap: anywhere;
+}
+.schedule-room-board > .header {
+  overflow: hidden;
+}
+.schedule-room-board > .header small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .schedule-room-board > .header {
   position: sticky;

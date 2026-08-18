@@ -610,6 +610,9 @@
   outline-offset: var(--focus-halo-width);
 }
 .reviewer-shell .review-conflict-action {
+  position: sticky;
+  top: calc(var(--eval-banner-offset, 0px) + 64px);
+  z-index: 2;
   display: grid;
   grid-template-columns: auto minmax(0, 1fr);
   gap: var(--space-1) var(--space-2);

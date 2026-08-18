@@ -579,6 +579,16 @@ export async function action({ request, context }: Route.ActionArgs) {
       )
       .run();
   }
+  const scenarioState = isScenarioIdentityKey(identityKey)
+    ? await readEvaluationScenarioGuideState(env, session.fixtureGeneration)
+    : null;
+  const destination = choosesApplicantEvent
+    ? "/events/select"
+    : scenarioState && isScenarioIdentityKey(identityKey)
+      ? scenarioPresentation(identityKey, scenarioState).destination
+      : selected.definition.destination;
+  const stampsCurrentEvent =
+    !choosesApplicantEvent && destination !== "/events/select";
   const headers = new Headers();
   headers.append(
     "set-cookie",
@@ -586,21 +596,10 @@ export async function action({ request, context }: Route.ActionArgs) {
   );
   headers.append(
     "set-cookie",
-    choosesApplicantEvent
-      ? clearCurrentEventCookie(env)
-      : currentEventCookie(EVALUATION_EVENT_ID, env),
+    stampsCurrentEvent
+      ? currentEventCookie(EVALUATION_EVENT_ID, env)
+      : clearCurrentEventCookie(env),
   );
-  const destination = choosesApplicantEvent
-    ? "/events/select"
-    : isScenarioIdentityKey(identityKey)
-      ? scenarioPresentation(
-          identityKey,
-          await readEvaluationScenarioGuideState(
-            env,
-            session.fixtureGeneration,
-          ),
-        ).destination
-      : selected.definition.destination;
   return redirectDocument(destination, {
     status: 303,
     headers,

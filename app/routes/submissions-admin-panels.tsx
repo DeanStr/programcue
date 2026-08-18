@@ -76,6 +76,7 @@ export function SubmissionAdminDetailPanel({
           {submission.status !== "draft" && submission.hasEvaluationPlan ? (
             <Link
               className="btn"
+              reloadDocument
               to={`/admin/review?submission=${encodeURIComponent(submission.id)}&view=assignments#review-submission-${encodeURIComponent(submission.id)}`}
             >
               Open in Review
@@ -293,7 +294,7 @@ export function SubmissionAdminDetailPanel({
                     .slice(0, 2)
                     .join("")}
                 </span>
-                <span>
+                <span className="pc-speaker-meta">
                   <strong>{speaker.name}</strong>
                   <small>
                     {speaker.roleLabel ?? "Role not recorded"} · {speaker.email}

@@ -2262,6 +2262,63 @@ describe("evaluation vertical slice", () => {
       const submittedWorkspace = await service.getReviewerWorkspace(evaluator);
       expect(submittedWorkspace.selected?.status).toBe("submitted");
       expect(submittedWorkspace.review?.status).toBe("submitted");
+      await env.DB.prepare(
+        `UPDATE submissions SET status = 'waitlisted' WHERE id = ? AND event_id = ?`,
+      )
+        .bind("eval-test-submission", evaluator.eventId)
+        .run();
+      try {
+        const waitlistedWorkspace = await service.getReviewerWorkspace(
+          evaluator,
+          submittedWorkspace.selected!.id,
+        );
+        expect(waitlistedWorkspace.selected?.id).toBe(
+          submittedWorkspace.selected!.id,
+        );
+        expect(waitlistedWorkspace.review?.status).toBe("submitted");
+        await env.DB.prepare(
+          `UPDATE evaluation_rounds SET status = 'closed'
+            WHERE id = 'eval-test-round' AND event_id = ?`,
+        )
+          .bind(evaluator.eventId)
+          .run();
+        await env.DB.prepare(
+          `UPDATE evaluation_plans SET status = 'closed'
+            WHERE event_id = ? AND status = 'active'`,
+        )
+          .bind(evaluator.eventId)
+          .run();
+        const closedRoundWorkspace = await service.getReviewerWorkspace(
+          evaluator,
+          submittedWorkspace.selected!.id,
+        );
+        expect(closedRoundWorkspace.selected?.id).toBe(
+          submittedWorkspace.selected!.id,
+        );
+        expect(closedRoundWorkspace.review).toMatchObject({
+          status: "submitted",
+          weightedScore: 4.25,
+          recommendation: "accept",
+          privateNotes: "Recommend acceptance.",
+          submitterFeedback: "Useful proposal.",
+          revision: 2,
+        });
+      } finally {
+        await env.DB.batch([
+          env.DB.prepare(
+            `UPDATE evaluation_rounds SET status = 'active'
+              WHERE id = 'eval-test-round' AND event_id = ?`,
+          ).bind(evaluator.eventId),
+          env.DB.prepare(
+            `UPDATE evaluation_plans SET status = 'active'
+              WHERE event_id = ? AND status = 'closed'`,
+          ).bind(evaluator.eventId),
+          env.DB.prepare(
+            `UPDATE submissions SET status = 'submitted'
+              WHERE id = ? AND event_id = ?`,
+          ).bind("eval-test-submission", evaluator.eventId),
+        ]);
+      }
       await expect(
         service.saveReview(
           evaluator,

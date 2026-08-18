@@ -61,7 +61,7 @@ const ELEVATION = [
 
 export default function DesignSystem() {
   return (
-    <main id="main" className="design-board pc-design-board">
+    <main id="main" className="design-board pc-design-board" tabIndex={-1}>
       <PageHeader
         eyebrow="Product system · v0.4"
         title="Program Cue design system"

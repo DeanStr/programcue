@@ -39,6 +39,27 @@ describe("admin layout role routing", () => {
     }
   });
 
+  it("returns 401s to sign-in instead of Command Centre", () => {
+    expect(adminErrorReturn(401, true, { pathname: "/admin/command" })).toEqual(
+      {
+        href: "/sign-in",
+        label: "Sign in",
+      },
+    );
+  });
+
+  it("returns evaluation refusals to the persona guide", () => {
+    expect(
+      adminErrorReturn(403, false, {
+        pathname: "/admin/command",
+        evaluation: true,
+      }),
+    ).toEqual({
+      href: "/evaluate",
+      label: "Choose an evaluation persona",
+    });
+  });
+
   it("returns unexpected failures to the administrator home", () => {
     expect(adminErrorReturn(500, false)).toEqual({
       href: "/admin/command",

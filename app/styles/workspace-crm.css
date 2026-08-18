@@ -143,6 +143,7 @@
 }
 
 .crm-workspace > .crm-disclosure {
+  flex: 0 0 auto;
   margin-bottom: var(--space-3);
 }
 

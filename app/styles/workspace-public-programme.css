@@ -71,7 +71,7 @@
   border-bottom: 1px solid var(--border-editorial);
   gap: var(--space-6);
   position: sticky;
-  top: 0;
+  top: var(--eval-banner-offset, 0px);
   /* Opaque. At 88% the page scrolled visibly through the masthead — a primary
      button underneath read straight through the event name. */
   background: var(--surface-editorial);
@@ -741,7 +741,10 @@
 }
 .programme-day-divider {
   position: sticky;
-  top: 68px; /* flush under the masthead, so nothing shows through a gap */
+  top: calc(
+    68px +
+    var(--eval-banner-offset, 0px)
+  ); /* flush under the masthead */
   z-index: 2;
   display: flex;
   align-items: baseline;
@@ -1770,11 +1773,11 @@
    showing a sliver of the panel's primary button in the gap. */
 .public-main > aside {
   position: sticky;
-  top: 68px;
+  top: calc(68px + var(--eval-banner-offset, 0px));
   display: grid;
   align-content: start;
   gap: var(--space-5);
-  max-height: calc(100dvh - 68px);
+  max-height: calc(100dvh - 68px - var(--eval-banner-offset, 0px));
   padding-bottom: var(--space-6);
   overflow-y: auto;
   overscroll-behavior: contain;

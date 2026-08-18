@@ -79,6 +79,34 @@ export default function SpeakerDashboard({ loaderData }: Route.ComponentProps) {
             requiredResourceCount={loaderData.requiredResourceCount}
             acknowledgedResourceCount={loaderData.acknowledgedResourceCount}
           />
+          {loaderData.applications.length ? (
+            <section
+              className="card pad mt"
+              aria-labelledby="speaker-apps-heading"
+            >
+              <div className="card-title">
+                <h2 id="speaker-apps-heading">Your applications</h2>
+                <Link className="btn small" to="/participant/applications">
+                  View applications
+                </Link>
+              </div>
+              <ul className="list-clean stack">
+                {loaderData.applications.map((application) => (
+                  <li key={application.id}>
+                    <Link
+                      to={`/participant/applications?application=${encodeURIComponent(application.id)}#participant-application-detail`}
+                    >
+                      {application.title}
+                    </Link>
+                    <span className="subtle">
+                      {" "}
+                      · {application.status.replaceAll("_", " ")}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            </section>
+          ) : null}
 
           <section className="mt" aria-labelledby="speaker-workspaces-heading">
             <div className="card-title">
@@ -93,8 +121,15 @@ export default function SpeakerDashboard({ loaderData }: Route.ComponentProps) {
                   to: "/participant/applications",
                   icon: ClipboardList,
                   label: "Applications",
-                  detail: "",
                   value: `${loaderData.applications.length}`,
+                  detail: loaderData.applications
+                    .map((application) =>
+                      application.status.replaceAll("_", " "),
+                    )
+                    .filter(
+                      (status, index, all) => all.indexOf(status) === index,
+                    )
+                    .join(" · "),
                   unit:
                     loaderData.applications.length === 1
                       ? "application"

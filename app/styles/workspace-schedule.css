@@ -287,10 +287,14 @@
 }
 .schedule-stage .schedule-conflicts {
   position: static;
+  flex-shrink: 0;
   max-height: none;
   border-top: 0;
   border-top-left-radius: 0;
   border-top-right-radius: 0;
+}
+.schedule-standard-calendar-list {
+  padding-bottom: var(--space-8);
 }
 
 /* --- Inbox --------------------------------------------------------------- */

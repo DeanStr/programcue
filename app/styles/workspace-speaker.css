@@ -3,6 +3,9 @@
   min-height: 100dvh;
   background: var(--canvas);
 }
+#participant-application-detail {
+  scroll-margin-top: calc(var(--eval-banner-offset, 0px) + 88px);
+}
 .speaker-top {
   height: 68px;
   background: var(--surface);
@@ -12,7 +15,7 @@
   padding: var(--space-3) var(--space-6);
   gap: var(--space-5);
   position: sticky;
-  top: 0;
+  top: var(--eval-banner-offset, 0px);
   z-index: 30;
   box-shadow: none;
 }

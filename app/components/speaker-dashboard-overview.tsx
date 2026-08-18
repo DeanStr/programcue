@@ -193,9 +193,13 @@ export function SpeakerDashboardOverview({
             </Link>
           ) : null}
           <p className="speaker-next-facts">
-            {completedStages} of {milestones.length} stages ready
+            {completedStages} of {milestones.length} stages complete
             <span aria-hidden="true"> · </span>
-            {completedCount} of {requirementCount || 0} requirements
+            {requirementCount
+              ? `${completedCount} of ${requirementCount} requirements complete`
+              : requiredResourceCount
+                ? `${acknowledgedResourceCount} of ${requiredResourceCount} resources acknowledged`
+                : "No task requirements"}
           </p>
         </div>
       </section>

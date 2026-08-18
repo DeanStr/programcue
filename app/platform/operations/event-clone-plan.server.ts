@@ -197,6 +197,17 @@ function cloneFormSlug(eventSlug: string, name: string, formId: string) {
   return `${eventSlug}-${nameSlug}-${formId.slice(0, 8)}`;
 }
 
+export type EventClonePlanReusedSender = {
+  id: string;
+  sourceEventId: string;
+  name: string;
+  fromName: string;
+  fromEmail: string;
+  replyToEmail: string | null;
+  provider: string;
+  providerSenderId: string | null;
+};
+
 type EventClonePlanInput = {
   name: string;
   slug: string;
@@ -204,6 +215,7 @@ type EventClonePlanInput = {
   startDate: string;
   endDate: string;
   repositoryProvider: "d1" | "airtable";
+  reusedSender?: EventClonePlanReusedSender | null;
 };
 
 export function buildEventClonePlan(
@@ -302,6 +314,15 @@ export function buildEventClonePlan(
   const eventId = crypto.randomUUID();
   const operationId = crypto.randomUUID();
   const correlationId = crypto.randomUUID();
+  const clonedSenderProfileId = input.reusedSender ? crypto.randomUUID() : null;
+  const reusedSenderEvidence =
+    input.reusedSender && clonedSenderProfileId
+      ? {
+          reusedSenderProfileId: input.reusedSender.id,
+          reusedSenderSourceEventId: input.reusedSender.sourceEventId,
+          clonedSenderProfileId,
+        }
+      : {};
   const formIds = new Map(
     forms.results.map((row) => [row.id, crypto.randomUUID()]),
   );
@@ -650,6 +671,7 @@ export function buildEventClonePlan(
         sourceEventId: viewer.eventId,
         targetEventId: eventId,
         requestedRepositoryProvider: input.repositoryProvider,
+        ...reusedSenderEvidence,
       }),
       pendingAirtable
         ? null
@@ -682,6 +704,7 @@ export function buildEventClonePlan(
         slug: input.slug,
         copied,
         requestedRepositoryProvider: input.repositoryProvider,
+        ...reusedSenderEvidence,
       }),
     ),
     env.DB.prepare(
@@ -696,8 +719,79 @@ export function buildEventClonePlan(
       viewer.personId,
       eventId,
       correlationId,
-      JSON.stringify({ operationId, sourceEventId: viewer.eventId, copied }),
+      JSON.stringify({
+        operationId,
+        sourceEventId: viewer.eventId,
+        copied,
+        ...reusedSenderEvidence,
+      }),
     ),
+    ...(input.reusedSender && clonedSenderProfileId
+      ? [
+          env.DB.prepare(
+            `INSERT INTO sender_profiles (
+               id, event_id, name, from_name, from_email, reply_to_email,
+               provider, provider_sender_id, status, created_at, updated_at
+             )
+             SELECT ?, ?, verified.name, verified.from_name, verified.from_email,
+                    verified.reply_to_email, verified.provider,
+                    verified.provider_sender_id, 'verified',
+                    unixepoch(), unixepoch()
+               FROM (SELECT 1 AS probe)
+               LEFT JOIN (
+                 SELECT sender.name, sender.from_name, sender.from_email,
+                        sender.reply_to_email, sender.provider,
+                        sender.provider_sender_id
+                   FROM sender_profiles sender
+                   JOIN events event ON event.id = sender.event_id
+                  WHERE sender.id = ? AND sender.event_id = ?
+                    AND event.organisation_id = ?
+                    AND event.activation_status = 'active'
+                    AND sender.status = 'verified' AND sender.provider = ?
+                    AND sender.name = ? AND sender.from_name = ?
+                    AND sender.from_email = ? AND sender.reply_to_email IS ?
+                    AND sender.provider_sender_id IS ?
+                    AND (sender.provider <> 'resend'
+                         OR sender.provider_sender_id IS NOT NULL)
+               ) verified ON 1 = 1`,
+          ).bind(
+            clonedSenderProfileId,
+            eventId,
+            input.reusedSender.id,
+            input.reusedSender.sourceEventId,
+            viewer.organisationId,
+            input.reusedSender.provider,
+            input.reusedSender.name,
+            input.reusedSender.fromName,
+            input.reusedSender.fromEmail,
+            input.reusedSender.replyToEmail,
+            input.reusedSender.providerSenderId,
+          ),
+          env.DB.prepare(
+            `INSERT INTO audit_events (
+               id, actor_kind, origin, metadata_version, organisation_id,
+               event_id, actor_person_id, action, entity_type, entity_id,
+               correlation_id, metadata_json, created_at
+             ) VALUES (?, 'person', 'admin_ui', 1, ?, ?, ?,
+                       'communication.sender.reused', 'sender_profile', ?, ?, ?,
+                       unixepoch())`,
+          ).bind(
+            crypto.randomUUID(),
+            viewer.organisationId,
+            eventId,
+            viewer.personId,
+            clonedSenderProfileId,
+            correlationId,
+            JSON.stringify({
+              sourceEventId: input.reusedSender.sourceEventId,
+              sourceSenderProfileId: input.reusedSender.id,
+              provider: input.reusedSender.provider,
+              providerSenderId: input.reusedSender.providerSenderId,
+              fromEmail: input.reusedSender.fromEmail,
+            }),
+          ),
+        ]
+      : []),
   );
   return {
     statements,

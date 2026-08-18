@@ -7,7 +7,14 @@ export function EvaluationDiscussionPanel() {
   const { loaderData, navigation } = useEvaluationAdminModel();
   const discussion = loaderData.reviewDiscussion;
   const history = useEvaluationDiscussionHistory(discussion);
-  if (!discussion) return null;
+  if (!discussion) {
+    return (
+      <p className="subtle">
+        Choose a proposal with Open discussion, or add <code>?submission=</code>{" "}
+        to the Results URL, to load that committee thread.
+      </p>
+    );
+  }
   if (!loaderData.reviewDiscussionTitle) {
     throw new Error("The evaluation discussion target title is unavailable.");
   }

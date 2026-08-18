@@ -135,8 +135,14 @@ export function ReviewScorePanel() {
   const unconfirmedAiCriterionIds = unchangedAiCriterionIds.filter(
     (criterionId) => !confirmedAiCriterionIds.has(criterionId),
   );
+  const rubricComplete =
+    completedCriterionCount >= requiredCriterionCount &&
+    recoveryPayload.recommendation.trim() !== "" &&
+    recoveryPayload.confidence.trim() !== "";
   const submitAllowed =
-    conflictChoice === "affirmed" && unconfirmedAiCriterionIds.length === 0;
+    conflictChoice === "affirmed" &&
+    unconfirmedAiCriterionIds.length === 0 &&
+    rubricComplete;
   const submitBlockedReason =
     conflictChoice === "conflict"
       ? "Declare the conflict to return this assignment. A conflicted review cannot be submitted."
@@ -144,7 +150,9 @@ export function ReviewScorePanel() {
         ? "Answer the conflict of interest question before submitting."
         : unconfirmedAiCriterionIds.length
           ? "Confirm every unchanged AI-derived criterion before submitting."
-          : undefined;
+          : !rubricComplete
+            ? `Complete the required criteria, recommendation and confidence before submitting (${completedCriterionCount} of ${requiredCriterionCount} criteria).`
+            : undefined;
   const reviewerSuggestion = workspace.reviewerAiSuggestion;
   const suggestionByCriterionId = new Map(
     reviewerSuggestion?.suggestions.map((suggestion) => [
@@ -694,7 +702,7 @@ export function ReviewWorkspaceState() {
     <section className="card pad">
       <EmptyState
         title="No assigned reviews"
-        description="Your active assignments will appear here."
+        description="Open assignments and completed scoring records appear here. If you have finished a review, it should stay in this queue even after the round closes."
         headingLevel={2}
       />
     </section>

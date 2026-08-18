@@ -367,7 +367,7 @@ function AccessGate({
     if (actionData && !actionData.ok) errorRef.current?.focus();
   }, [actionData]);
   return (
-    <main className="pc-eval-gate" id="main">
+    <main className="pc-eval-gate" id="main" tabIndex={-1}>
       <div className="pc-eval-gate-panel">
         <section className="pc-eval-ground pc-eval-gate-intro">
           <div className="pc-eval-brand">
@@ -516,7 +516,11 @@ export function EvaluationAccessSurface({
   }
 
   return (
-    <main className="design-board pc-design-board pc-eval-board" id="main">
+    <main
+      className="design-board pc-design-board pc-eval-board"
+      id="main"
+      tabIndex={-1}
+    >
       <header className="pc-eval-hero">
         <div className="pc-eval-ground pc-eval-hero-top">
           <div className="pc-eval-hero-copy">

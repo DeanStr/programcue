@@ -555,11 +555,14 @@ export function EvaluationSubmissionQueue() {
                       </span>
                     </td>
                     <td data-label="Reviews">
-                      {submission.completedReviewCount} /{" "}
-                      {submission.assignmentCount}
+                      <span>
+                        {submission.completedReviewCount} /{" "}
+                        {submission.assignmentCount}
+                      </span>
                       {loaderData.resultsRoundId ? (
-                        <small>
+                        <div>
                           <Link
+                            className="pc-eval-text-action"
                             to={`/admin/review?${new URLSearchParams({
                               resultsRound: loaderData.resultsRoundId,
                               submission: submission.id,
@@ -572,7 +575,7 @@ export function EvaluationSubmissionQueue() {
                           >
                             Open discussion
                           </Link>
-                        </small>
+                        </div>
                       ) : null}
                     </td>
                     <td data-label="Average">

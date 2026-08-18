@@ -257,6 +257,12 @@ export function SpeakerProfilePanel({
             src={`/participant/files/${headshot.id}?view=headshot`}
             alt={`${portal.profile.name} headshot`}
           />
+        ) : portal.profile.programmePortraitUrl ? (
+          <img
+            className="speaker-headshot-image"
+            src={portal.profile.programmePortraitUrl}
+            alt={`${portal.profile.name} programme portrait`}
+          />
         ) : (
           <span className="speaker-headshot-placeholder">
             <span>No portrait yet</span>
@@ -265,12 +271,18 @@ export function SpeakerProfilePanel({
         <div className="stack">
           <div>
             <strong>
-              {headshot ? "Current headshot" : "Add your headshot"}
+              {headshot
+                ? "Current headshot"
+                : portal.profile.programmePortraitUrl
+                  ? "Programme portrait in use"
+                  : "Add your headshot"}
             </strong>
             <p className="subtle">
               {headshot
                 ? `${headshot.downloadFilename} · uploaded ${formatUploadTimestamp(requireValue(headshot.downloadUploadedAt, "Required headshot.downloadUploadedAt is unavailable."), portal.event.timezone)}`
-                : "Upload a JPG, PNG or WebP file for organiser review and your published profile."}
+                : portal.profile.programmePortraitUrl
+                  ? "Attendees already see this bundled programme portrait. Upload a headshot to replace it."
+                  : "Upload a JPG, PNG or WebP file for organiser review and your published profile."}
             </p>
           </div>
           <Link className="btn" to="/participant/files#headshot-upload">

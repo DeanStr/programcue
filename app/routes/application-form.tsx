@@ -579,6 +579,7 @@ function AuthenticatedApplicationWorkspace({
   const {
     form,
     drafts,
+    otherEventApplications,
     invitations,
     speakerProfile,
     selected,
@@ -736,8 +737,35 @@ function AuthenticatedApplicationWorkspace({
         <aside className="card pad application-drafts">
           <div className="card-title">
             <h2>Your applications</h2>
-            <span className="pill right">{drafts.length}</span>
+            <span className="pill right">
+              {drafts.length + otherEventApplications.length}
+            </span>
           </div>
+          {otherEventApplications.length ? (
+            <div className="stack mb">
+              <p className="subtle">
+                You already have {otherEventApplications.length} application
+                {otherEventApplications.length === 1 ? "" : "s"} on this event.
+              </p>
+              {otherEventApplications.map((application) => (
+                <Link
+                  className="queue-card"
+                  key={application.id}
+                  to={acceptedParticipantManagementHref(
+                    form.eventId,
+                    application.id,
+                  )}
+                >
+                  <DomainStatusBadge
+                    domain="submission"
+                    status={application.status}
+                  />
+                  <h3>{application.title}</h3>
+                  <small className="subtle">{application.formName}</small>
+                </Link>
+              ))}
+            </div>
+          ) : null}
           {drafts.length ? (
             <div className="stack">
               {drafts.map((draft) => (
@@ -831,7 +859,9 @@ function AuthenticatedApplicationWorkspace({
                   ? "Sign in to manage applications"
                   : historicalClaimPortal
                     ? "No applications to show"
-                    : "Create your first application"}
+                    : otherEventApplications.length
+                      ? "Start another application on this form"
+                      : "Create your first application"}
               </h2>
               <p className="subtle">
                 {applicant.claimOnly
@@ -882,7 +912,7 @@ export default function ApplicationForm({ loaderData }: Route.ComponentProps) {
   const location = useLocation();
   if ("unavailable" in loaderData)
     return (
-      <main id="main" className="design-board">
+      <main id="main" className="design-board" tabIndex={-1}>
         <section
           className="card pad"
           style={{ maxWidth: 620, margin: "8vh auto" }}
@@ -1026,6 +1056,7 @@ export default function ApplicationForm({ loaderData }: Route.ComponentProps) {
       <main
         id="main"
         className="application-main"
+        tabIndex={-1}
         style={{
           maxWidth: applicant ? 1120 : 760,
           margin: "30px auto",

@@ -21,6 +21,26 @@ import type { Route } from "./+types/participant-applications";
 
 export const meta = () => [{ title: "Applications · Program Cue" }];
 
+function applicationDecisionCopy(status: string) {
+  if (status === "waitlisted") {
+    return "This proposal is on the waitlist. It has not been accepted or rejected. The event team will contact you if a place opens.";
+  }
+  if (status === "accepted") {
+    return "This proposal was accepted. Use My sessions and your profile for speaker preparation.";
+  }
+  if (status === "rejected") {
+    return "This proposal was not selected. The submitted answers remain available here as a record.";
+  }
+  if (
+    status === "in_review" ||
+    status === "assigned" ||
+    status === "decision_ready"
+  ) {
+    return "This proposal is under review. You will see an accepted, waitlisted or rejected outcome here when a decision is released.";
+  }
+  return null;
+}
+
 export async function loader({ request, context }: Route.LoaderArgs) {
   const { env, viewer } = await requireSpeakerWorkspace(request, context);
   const selectedApplicationId = new URL(request.url).searchParams.get(
@@ -180,6 +200,16 @@ function ApplicationDetail({
           </div>
           <DomainStatusBadge domain="submission" status={application.status} />
         </div>
+        {applicationDecisionCopy(application.status) ? (
+          <div className="validation-item info" role="status">
+            <strong>
+              {application.status
+                .replaceAll("_", " ")
+                .replace(/^\w/, (letter) => letter.toUpperCase())}
+            </strong>
+            <span>{applicationDecisionCopy(application.status)}</span>
+          </div>
+        ) : null}
         {actionResult?.applicationId === application.id ? (
           <div
             className={`validation-item ${actionResult.ok ? "ok" : actionResult.partial ? "warn" : "error"}`}

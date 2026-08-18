@@ -111,10 +111,15 @@ function PublicProgrammeViewNavigation({
           key={view.label}
           className={view.active ? "active" : undefined}
           aria-current={view.active ? "page" : undefined}
+          aria-label={view.label}
           to={view.href}
         >
-          <span className="public-view-full">{view.label}</span>
-          <span className="public-view-short">{view.shortLabel}</span>
+          <span className="public-view-full" aria-hidden="true">
+            {view.label}
+          </span>
+          <span className="public-view-short" aria-hidden="true">
+            {view.shortLabel}
+          </span>
         </Link>
       ))}
     </nav>
@@ -1211,6 +1216,7 @@ export function PublicProgrammeWorkspace({
         aria-label={embedded ? "Embedded programme preview" : undefined}
         id="main"
         className="public-page-main"
+        tabIndex={-1}
       >
         {showHero ? <PublicProgrammeHero model={model} /> : null}
         {!embedded ? <PublicProgrammeViewNavigation model={model} /> : null}

@@ -106,7 +106,7 @@ export function PublicApplicationLanding({
   );
 
   return (
-    <main className="cfp-landing" id="main">
+    <main className="cfp-landing" id="main" tabIndex={-1}>
       <section
         className={`cfp-masthead${presentation.heroImagePath ? " has-image" : ""}`}
         style={

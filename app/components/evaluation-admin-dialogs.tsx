@@ -493,7 +493,7 @@ export function ReviewReopenDialog() {
           <span>
             Reopening creates a new review revision
             {reopenAssignment.targetType === "submission"
-              ? " and supersedes any current moderation for this submission. Released decisions cannot be reopened here."
+              ? " and supersedes any current moderation for this submission."
               : ". The frozen session source remains unchanged."}
           </span>
         </div>
@@ -524,6 +524,7 @@ export function DecisionDialog() {
   >("accepted");
   const [sessionTrackId, setSessionTrackId] = useState("");
   const [sessionFormatKey, setSessionFormatKey] = useState("");
+  const [sessionDurationMinutes, setSessionDurationMinutes] = useState("60");
   const defaultSessionTrackId =
     selected?.tracks.length === 1 ? selected.tracks[0].id : "";
   const selectedSessionTrack = selected?.tracks.find(
@@ -548,16 +549,25 @@ export function DecisionDialog() {
     setSessionTrackId(
       draft ? (draft.sessionTrackId ?? "") : defaultSessionTrackId,
     );
-    setSessionFormatKey(
+    const nextFormatKey = draft
+      ? (draft.sessionFormatKey ?? "")
+      : (matchingSubmittedFormat?.key ?? "");
+    setSessionFormatKey(nextFormatKey);
+    const formatDuration = loaderData.sessionFormats.find(
+      (format) => format.key === nextFormatKey,
+    )?.defaultDurationMinutes;
+    setSessionDurationMinutes(
       draft
-        ? (draft.sessionFormatKey ?? "")
-        : (matchingSubmittedFormat?.key ?? ""),
+        ? String(draft.sessionDurationMinutes ?? formatDuration ?? 60)
+        : String(formatDuration ?? 60),
     );
   }, [
     defaultSessionTrackId,
+    loaderData.sessionFormats,
     matchingSubmittedFormat?.key,
     selected?.decisionDraft?.decision,
     selected?.decisionDraft?.revisionNumber,
+    selected?.decisionDraft?.sessionDurationMinutes,
     selected?.decisionDraft?.sessionFormatKey,
     selected?.decisionDraft?.sessionTrackId,
     selected?.id,
@@ -621,7 +631,16 @@ export function DecisionDialog() {
             className="select"
             name="sessionFormatKey"
             value={sessionFormatKey}
-            onChange={(event) => setSessionFormatKey(event.target.value)}
+            onChange={(event) => {
+              const nextKey = event.target.value;
+              setSessionFormatKey(nextKey);
+              const formatDuration = loaderData.sessionFormats.find(
+                (format) => format.key === nextKey,
+              )?.defaultDurationMinutes;
+              if (formatDuration) {
+                setSessionDurationMinutes(String(formatDuration));
+              }
+            }}
             required={decision === "accepted"}
             disabled={decision !== "accepted"}
           >
@@ -708,11 +727,8 @@ export function DecisionDialog() {
             name="sessionDurationMinutes"
             min="5"
             max="1440"
-            defaultValue={
-              selected.decisionDraft
-                ? (selected.decisionDraft.sessionDurationMinutes ?? "")
-                : "60"
-            }
+            value={sessionDurationMinutes}
+            onChange={(event) => setSessionDurationMinutes(event.target.value)}
             required
           />
           <span className="help">

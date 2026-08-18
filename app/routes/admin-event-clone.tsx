@@ -71,6 +71,8 @@ export async function action({ request, context }: Route.ActionArgs) {
       personalAccessToken: form.get("personalAccessToken") ?? undefined,
       baseId: form.get("baseId") ?? undefined,
       tableName: form.get("tableName") ?? undefined,
+      reusedSenderProfileId:
+        String(form.get("reusedSenderProfileId") ?? "").trim() || undefined,
     });
     return data({
       ok: true as const,
@@ -304,6 +306,28 @@ export default function AdminEventClone({ loaderData }: Route.ComponentProps) {
                   </small>
                 </span>
               </label>
+            </fieldset>
+            <fieldset className="event-setup-create-choices pc-plain-fieldset stack">
+              <legend className="label">Email sender</legend>
+              <label className="label">
+                Reuse verified sender
+                <select className="field" name="reusedSenderProfileId">
+                  <option value="">None — configure later</option>
+                  {loaderData.reusableSenderProfiles.map((profile) => (
+                    <option key={profile.id} value={profile.id}>
+                      {profile.fromName} &lt;{profile.fromEmail}&gt; ·{" "}
+                      {profile.sourceEventName}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <p className="help">
+                {loaderData.emailProviderIssue
+                  ? `Sender reuse is unavailable: ${loaderData.emailProviderIssue}`
+                  : loaderData.reusableSenderProfiles.length > 0
+                    ? "Copies the selected verified sender into the cloned event. Choose None to configure it later in Communications."
+                    : "No verified sender is available in an active event in this organisation."}
+              </p>
             </fieldset>
             {repositoryProvider === "airtable" ? (
               <div className="event-setup-create-choices stack">

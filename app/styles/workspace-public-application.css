@@ -172,8 +172,8 @@
 .cfp-entry {
   grid-area: entry;
   position: sticky;
-  top: 84px;
-  scroll-margin-top: 84px;
+  top: calc(84px + var(--eval-banner-offset, 0px));
+  scroll-margin-top: calc(84px + var(--eval-banner-offset, 0px));
 }
 .application-account-actions {
   margin-left: auto;

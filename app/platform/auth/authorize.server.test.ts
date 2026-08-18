@@ -734,7 +734,17 @@ describe("event role access copy", () => {
     expect(eventRoleAccessMessage(["owner", "administrator"])).toContain(
       "event administrators",
     );
-    expect(eventRoleAccessMessage(["evaluator"])).toContain("reviewers");
+    expect(eventRoleAccessMessage(["evaluator"])).toContain(
+      "organiser must invite",
+    );
+    expect(
+      eventRoleAccessMessage([
+        "owner",
+        "administrator",
+        "committee_chair",
+        "evaluator",
+      ]),
+    ).toContain("organiser must invite");
     expect(eventRoleAccessMessage(["speaker", "submitter"])).toContain(
       "participant workspace",
     );

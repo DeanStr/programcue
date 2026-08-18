@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useLayoutEffect, useRef } from "react";
 import {
   Form,
   isRouteErrorResponse,
@@ -20,6 +20,11 @@ import {
   UNKNOWN_ROUTE_ERROR_MESSAGE,
   UNKNOWN_ROUTE_ERROR_TITLE,
 } from "~/lib/route-error-copy";
+import {
+  routeErrorRecovery,
+  sanitizeRouteErrorMessage,
+  shouldOfferErrorRetry,
+} from "~/lib/route-error-recovery";
 import { getCloudflareContext } from "~/platform/cloudflare-context";
 import { installDraftRecoverySignOutCleanup } from "~/platform/drafts/draft-recovery";
 import {
@@ -121,9 +126,36 @@ function EvaluationBanner({
   evaluation: { name: string; label: string } | null | undefined;
 }) {
   const embedded = useLocation().pathname.startsWith("/embed/");
-  if (!evaluation || embedded) return null;
+  const visible = Boolean(evaluation && !embedded);
+  const bannerRef = useRef<HTMLElement>(null);
+  useLayoutEffect(() => {
+    if (!visible) {
+      document.documentElement.style.removeProperty("--eval-banner-offset");
+      return;
+    }
+    const node = bannerRef.current;
+    if (!node) {
+      document.documentElement.style.removeProperty("--eval-banner-offset");
+      return;
+    }
+    const publish = () => {
+      document.documentElement.style.setProperty(
+        "--eval-banner-offset",
+        `${Math.ceil(node.getBoundingClientRect().height)}px`,
+      );
+    };
+    publish();
+    const observer = new ResizeObserver(publish);
+    observer.observe(node);
+    return () => {
+      observer.disconnect();
+      document.documentElement.style.removeProperty("--eval-banner-offset");
+    };
+  }, [visible]);
+  if (!evaluation || !visible) return null;
   return (
     <aside
+      ref={bannerRef}
       className="pc-status-notice is-warning pc-eval-banner"
       aria-label="Evaluation session"
     >
@@ -176,28 +208,31 @@ export default function App({ loaderData }: Route.ComponentProps) {
 }
 
 export function ErrorBoundary({ error }: Route.ErrorBoundaryProps) {
+  const location = useLocation();
   const rootData = useRouteLoaderData("root") as
     | Route.ComponentProps["loaderData"]
     | undefined;
   let title = UNKNOWN_ROUTE_ERROR_TITLE;
   let message = UNKNOWN_ROUTE_ERROR_MESSAGE;
-  // Home, not Event Setup: an arbitrary failure is not evidence the user was
-  // setting up an event.
-  let returnHref = "/admin/command";
-  let returnLabel = "Go to Command Centre";
+  let status: number | null = null;
 
   if (isRouteErrorResponse(error)) {
+    status = error.status;
     title = routeErrorCopy(error.status).title;
-    message = routeErrorMessage(error.status, error.data);
-    if ([400, 403, 428].includes(error.status)) {
-      returnHref = rootData?.evaluation ? "/evaluate" : "/events/select";
-      returnLabel = rootData?.evaluation
-        ? "Choose an evaluation persona"
-        : "Choose an event";
-    }
+    message = sanitizeRouteErrorMessage(
+      error.status,
+      routeErrorMessage(error.status, error.data),
+    );
   } else if (error instanceof Error && import.meta.env.DEV) {
     message = error.message;
   }
+
+  const recovery = routeErrorRecovery({
+    status,
+    pathname: location.pathname,
+    evaluation: Boolean(rootData?.evaluation),
+  });
+  const showRetry = shouldOfferErrorRetry(status);
 
   return (
     <>
@@ -211,15 +246,17 @@ export function ErrorBoundary({ error }: Route.ErrorBoundaryProps) {
           <h1>{title}</h1>
           <p className="subtle">{message}</p>
           <div className="page-actions mt">
-            <button
-              className="btn"
-              onClick={() => window.location.reload()}
-              type="button"
-            >
-              Try again
-            </button>
-            <Link className="btn primary" to={returnHref}>
-              {returnLabel}
+            {showRetry ? (
+              <button
+                className="btn"
+                onClick={() => window.location.reload()}
+                type="button"
+              >
+                Try again
+              </button>
+            ) : null}
+            <Link className="btn primary" to={recovery.href}>
+              {recovery.label}
             </Link>
           </div>
         </section>

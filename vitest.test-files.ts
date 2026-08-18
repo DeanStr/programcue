@@ -63,6 +63,7 @@ export const nodeOnlyTestFiles = [
   "app/modules/submissions/submission-schema.test.ts",
   "app/modules/speakers/speaker-schema.test.ts",
   "app/lib/slug.test.ts",
+  "app/lib/route-error-recovery.test.ts",
   "app/lib/client-search-revalidation.test.ts",
   "app/platform/operations/csv.test.ts",
   "app/platform/http/api-cors.test.ts",

@@ -67,13 +67,21 @@ export function EvaluationModerationPanel() {
                     {assignment.status === "submitted" &&
                     (assignment.reviewStatus === "submitted" ||
                       assignment.reviewStatus === "locked") ? (
-                      <button
-                        type="button"
-                        className="btn small"
-                        onClick={() => setReopenAssignmentId(assignment.id)}
-                      >
-                        Reopen review
-                      </button>
+                      ["accepted", "waitlisted", "rejected"].includes(
+                        submission.status,
+                      ) && !submission.reviewableInCurrentCycle ? (
+                        <span className="subtle">
+                          Released decisions cannot be reopened here.
+                        </span>
+                      ) : (
+                        <button
+                          type="button"
+                          className="btn small"
+                          onClick={() => setReopenAssignmentId(assignment.id)}
+                        >
+                          Reopen review
+                        </button>
+                      )
                     ) : null}
                   </div>
                 ))}

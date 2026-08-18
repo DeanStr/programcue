@@ -1,4 +1,7 @@
 .pc-eval-banner {
+  position: sticky;
+  top: 0;
+  z-index: 80;
   border-radius: 0;
   margin: 0;
   justify-content: center;
@@ -23,10 +26,18 @@
 @media (max-width: 760px) {
   .pc-eval-banner {
     justify-content: flex-start;
+    align-items: flex-start;
+    gap: var(--space-2);
+    padding-block: var(--space-2);
     padding-inline: var(--space-3);
   }
   .pc-eval-banner-identity {
-    flex: 1 1 100%;
+    flex: 1 1 auto;
+    min-width: 0;
+  }
+  .pc-eval-banner-actions {
+    flex: 1 1 auto;
+    justify-content: flex-start;
   }
 }
 

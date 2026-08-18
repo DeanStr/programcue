@@ -427,6 +427,7 @@ export default function SignIn({ loaderData }: Route.ComponentProps) {
       <main
         className="design-board"
         id="main"
+        tabIndex={-1}
         style={{ minHeight: "100vh", display: "grid", placeItems: "center" }}
       >
         <section
@@ -485,7 +486,7 @@ export default function SignIn({ loaderData }: Route.ComponentProps) {
     );
   }
   return (
-    <main className="auth-shell" id="main">
+    <main className="auth-shell" id="main" tabIndex={-1}>
       <section className="auth-card">
         <div className="auth-brand">
           <BrandMark />

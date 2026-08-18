@@ -701,23 +701,25 @@ export default function AdminSpeakerDetail({
                         {session.roleLabel ?? "Speaker"}
                       </td>
                       <td data-label="Participation">
-                        <span
-                          className={`status ${session.participationStatus === "confirmed" ? "success" : session.status === "cancelled" ? "" : "warning"}`}
-                        >
-                          {session.participationStatus === "confirmed"
-                            ? "Confirmed"
-                            : session.status === "cancelled"
-                              ? "Not required"
-                              : "Pending"}
+                        <span className="pc-speaker-meta">
+                          <span
+                            className={`status ${session.participationStatus === "confirmed" ? "success" : session.status === "cancelled" ? "" : "warning"}`}
+                          >
+                            {session.participationStatus === "confirmed"
+                              ? "Confirmed"
+                              : session.status === "cancelled"
+                                ? "Not required"
+                                : "Pending"}
+                          </span>
+                          {session.participationConfirmedAt !== null ? (
+                            <small className="subtle">
+                              {formatTimestamp(
+                                session.participationConfirmedAt,
+                                event.timezone,
+                              )}
+                            </small>
+                          ) : null}
                         </span>
-                        {session.participationConfirmedAt !== null ? (
-                          <small className="subtle">
-                            {formatTimestamp(
-                              session.participationConfirmedAt,
-                              event.timezone,
-                            )}
-                          </small>
-                        ) : null}
                       </td>
                       <td data-label="Status">
                         <DomainStatusBadge

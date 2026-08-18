@@ -258,7 +258,7 @@ export default function AdminContentSession({
                     <strong>
                       Schedule v{revision.scheduleVersionNumber} · content r
                       {revision.revisionNumber}
-                    </strong>
+                    </strong>{" "}
                     <small className="subtle">
                       {revision.changeKind.replaceAll("_", " ")} by{" "}
                       {revision.editorName ?? "System baseline"} ·{" "}

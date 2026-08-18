@@ -417,7 +417,7 @@ export function ScheduleCanvasPanel({
               <div
                 className="schedule-room-board"
                 style={{
-                  gridTemplateColumns: `56px repeat(${workspace.rooms.length}, minmax(120px, 1fr))`,
+                  gridTemplateColumns: `4.5rem repeat(${workspace.rooms.length}, minmax(120px, 1fr))`,
                 }}
               >
                 <div className="header corner">

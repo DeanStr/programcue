@@ -75,13 +75,8 @@ export function eventRoleAccessMessage(
   ) {
     return "This page is for committee chairs and administrators. Your current role cannot open it.";
   }
-  if (
-    roles.has("evaluator") &&
-    !roles.has("owner") &&
-    !roles.has("administrator") &&
-    !roles.has("committee_chair")
-  ) {
-    return "This page is for reviewers with accepted event access. Your current role cannot open it.";
+  if (roles.has("evaluator")) {
+    return "This page is for reviewers with accepted event access. An organiser must invite this account before review work can begin.";
   }
   if (
     (roles.has("speaker") || roles.has("submitter")) &&

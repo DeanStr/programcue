@@ -271,16 +271,22 @@ export function EvaluationUnifiedResults() {
                     </td>
                     <td data-label="Actions" className="pc-eval-overflow-cell">
                       {result.targetType === "proposal" ? (
-                        <button
-                          className="pc-eval-text-action is-primary"
-                          type="button"
-                          onClick={() => {
-                            setNoReviewOverrideConfirmed(false);
-                            setDecisionId(result.id);
-                          }}
-                        >
-                          Decide
-                        </button>
+                        result.decisionHistory.some(
+                          (decision) => decision.status === "published",
+                        ) ? (
+                          <span className="status success">Final</span>
+                        ) : (
+                          <button
+                            className="pc-eval-text-action is-primary"
+                            type="button"
+                            onClick={() => {
+                              setNoReviewOverrideConfirmed(false);
+                              setDecisionId(result.id);
+                            }}
+                          >
+                            Decide
+                          </button>
+                        )
                       ) : (
                         <Link
                           className="pc-eval-text-action is-primary"

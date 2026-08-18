@@ -3,6 +3,7 @@ import { data, Form, useActionData, useNavigation } from "react-router";
 import { ZodError } from "zod";
 import { SpeakerActionNotice } from "~/components/speaker-action-notice";
 import { useSpeakerWorkspace } from "~/components/speaker-workspace-context";
+import { useConfirm } from "~/components/ui/confirm-dialog";
 import { DomainStatusBadge } from "~/components/ui/domain-status-badge";
 import { EventDateTime } from "~/components/ui/event-date-time";
 import {
@@ -83,6 +84,7 @@ export default function SpeakerSessions(_props: Route.ComponentProps) {
   const { portal } = useSpeakerWorkspace();
   const actionData = useActionData<typeof action>();
   const navigation = useNavigation();
+  const { confirm, dialog } = useConfirm();
   const busy = navigation.state !== "idle";
   const sessions = [...portal.sessions].sort((left, right) => {
     const rank = (session: (typeof portal.sessions)[number]) =>
@@ -94,6 +96,7 @@ export default function SpeakerSessions(_props: Route.ComponentProps) {
   });
   return (
     <>
+      {dialog}
       <div className="page-head">
         <div>
           <h1>My sessions</h1>
@@ -132,7 +135,11 @@ export default function SpeakerSessions(_props: Route.ComponentProps) {
                         <h3>{session.title}</h3>
                         <DomainStatusBadge
                           domain="session"
-                          status={session.status}
+                          status={
+                            session.status === "scheduled" && !session.startsAt
+                              ? "unscheduled"
+                              : session.status
+                          }
                         />
                       </div>
                       {session.description ? (
@@ -191,9 +198,24 @@ export default function SpeakerSessions(_props: Route.ComponentProps) {
                           />
                           <button
                             className="btn primary"
-                            type="submit"
+                            type="button"
                             disabled={busy}
                             aria-label={`Confirm participation in ${session.title}`}
+                            onClick={(event) => {
+                              const form = event.currentTarget.form;
+                              if (!form) return;
+                              confirm(
+                                {
+                                  title: "Confirm participation?",
+                                  description:
+                                    "This tells the event team you will take part. There is no self-service undo after you confirm.",
+                                  records: [session.title],
+                                  confirmLabel: "Confirm participation",
+                                  tone: "primary",
+                                },
+                                () => form.requestSubmit(),
+                              );
+                            }}
                           >
                             Confirm participation
                           </button>

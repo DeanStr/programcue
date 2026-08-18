@@ -33,6 +33,40 @@ const viewer: Viewer = {
   demo: true,
 };
 
+async function insertSenderProfile({
+  id = crypto.randomUUID(),
+  eventId = viewer.eventId,
+  provider = "resend",
+  status = "verified",
+  providerSenderId = provider === "resend" ? `domain-${id}` : null,
+}: {
+  id?: string;
+  eventId?: string;
+  provider?: "resend" | "mailpit";
+  status?: "unverified" | "verified" | "disabled";
+  providerSenderId?: string | null;
+} = {}) {
+  await env.DB.prepare(
+    `INSERT INTO sender_profiles (
+       id, event_id, name, from_name, from_email, reply_to_email, provider,
+       provider_sender_id, status, created_at, updated_at
+     ) VALUES (?, ?, ?, 'Program Cue Events', ?, ?, ?, ?, ?,
+               unixepoch(), unixepoch())`,
+  )
+    .bind(
+      id,
+      eventId,
+      `Sender ${id}`,
+      `events-${id}@example.com`,
+      `reply-${id}@example.com`,
+      provider,
+      providerSenderId,
+      status,
+    )
+    .run();
+  return id;
+}
+
 function preparedConnection(): PreparedAirtableRepositoryConnection {
   return {
     connectionId: crypto.randomUUID(),
@@ -976,5 +1010,134 @@ describe("event cloning", () => {
         .bind(cloned.eventId)
         .first<{ count: number }>(),
     ).resolves.toEqual({ count: 2 });
+  });
+
+  it("copies a verified sender inside the clone transaction and records reuse evidence", async () => {
+    const sourceSenderId = await insertSenderProfile();
+    const token = crypto.randomUUID().slice(0, 8);
+    const cloned = await new EventCloneService(
+      env as unknown as CloudflareEnvironment,
+    ).clone(viewer, {
+      name: `Sender reuse clone ${token}`,
+      slug: `sender-reuse-clone-${token}`,
+      timezone: "America/Toronto",
+      startDate: "2028-05-20",
+      endDate: "2028-05-22",
+      repositoryProvider: "d1",
+      reusedSenderProfileId: sourceSenderId,
+    });
+
+    const copied = await env.DB.prepare(
+      `SELECT name, from_name AS fromName, from_email AS fromEmail,
+              reply_to_email AS replyToEmail, provider,
+              provider_sender_id AS providerSenderId, status
+         FROM sender_profiles WHERE event_id = ?`,
+    )
+      .bind(cloned.eventId)
+      .first();
+    expect(copied).toEqual({
+      name: `Sender ${sourceSenderId}`,
+      fromName: "Program Cue Events",
+      fromEmail: `events-${sourceSenderId}@example.com`,
+      replyToEmail: `reply-${sourceSenderId}@example.com`,
+      provider: "resend",
+      providerSenderId: `domain-${sourceSenderId}`,
+      status: "verified",
+    });
+    const evidence = await env.DB.prepare(
+      `SELECT
+         (SELECT COUNT(*) FROM sender_profiles WHERE event_id = ?) AS senders,
+         (SELECT COUNT(*) FROM audit_events
+           WHERE event_id = ? AND action = 'communication.sender.reused')
+           AS reuseAudits,
+         (SELECT json_extract(payload_json, '$.reusedSenderProfileId')
+            FROM operation_jobs WHERE id = ?) AS selectedSenderId,
+         (SELECT json_extract(metadata_json, '$.reusedSenderProfileId')
+            FROM audit_events
+           WHERE entity_id = ? AND action = 'event.cloned') AS clonedAuditSenderId`,
+    )
+      .bind(cloned.eventId, cloned.eventId, cloned.operationId, cloned.eventId)
+      .first();
+    expect(evidence).toEqual({
+      senders: 1,
+      reuseAudits: 1,
+      selectedSenderId: sourceSenderId,
+      clonedAuditSenderId: sourceSenderId,
+    });
+  });
+
+  it("rejects sender reuse when the selected profile is no longer verified", async () => {
+    const sourceSenderId = await insertSenderProfile({ status: "disabled" });
+    const slug = `stale-sender-clone-${crypto.randomUUID().slice(0, 8)}`;
+
+    await expect(
+      new EventCloneService(env as unknown as CloudflareEnvironment).clone(
+        viewer,
+        {
+          name: "Stale sender clone",
+          slug,
+          timezone: "America/Toronto",
+          startDate: "2028-05-20",
+          endDate: "2028-05-22",
+          repositoryProvider: "d1",
+          reusedSenderProfileId: sourceSenderId,
+        },
+      ),
+    ).rejects.toBeInstanceOf(EventCloneConfigurationError);
+    await expect(
+      env.DB.prepare("SELECT 1 FROM events WHERE slug = ?").bind(slug).first(),
+    ).resolves.toBeNull();
+  });
+
+  it("rejects sender reuse when the source event is deactivated during the clone batch", async () => {
+    const sourceSenderId = await insertSenderProfile();
+    const slug = `deactivated-sender-source-${crypto.randomUUID().slice(0, 8)}`;
+    const testEnv = env as unknown as CloudflareEnvironment;
+    const racingEnv = {
+      ...testEnv,
+      DB: {
+        prepare: testEnv.DB.prepare.bind(testEnv.DB),
+        batch: async (statements: D1PreparedStatement[]) => {
+          await testEnv.DB.prepare(
+            `UPDATE events SET activation_status = 'discarded'
+              WHERE id = ? AND organisation_id = ?`,
+          )
+            .bind(viewer.eventId, viewer.organisationId)
+            .run();
+          return testEnv.DB.batch(statements);
+        },
+      },
+    } as unknown as CloudflareEnvironment;
+
+    try {
+      await expect(
+        new EventCloneService(racingEnv).clone(viewer, {
+          name: "Deactivated sender source clone",
+          slug,
+          timezone: "America/Toronto",
+          startDate: "2028-05-20",
+          endDate: "2028-05-22",
+          repositoryProvider: "d1",
+          reusedSenderProfileId: sourceSenderId,
+        }),
+      ).rejects.toBeInstanceOf(EventCloneConfigurationError);
+      await expect(
+        env.DB.prepare("SELECT 1 FROM events WHERE slug = ?")
+          .bind(slug)
+          .first(),
+      ).resolves.toBeNull();
+      await expect(
+        env.DB.prepare(
+          "SELECT 1 FROM sender_profiles WHERE id IS NULL OR event_id IS NULL",
+        ).first(),
+      ).resolves.toBeNull();
+    } finally {
+      await env.DB.prepare(
+        `UPDATE events SET activation_status = 'active'
+          WHERE id = ? AND organisation_id = ?`,
+      )
+        .bind(viewer.eventId, viewer.organisationId)
+        .run();
+    }
   });
 });

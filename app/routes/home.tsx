@@ -1,4 +1,4 @@
-import { Form, redirect } from "react-router";
+import { Form, redirect, useRouteLoaderData } from "react-router";
 import { BrandMark } from "~/components/brand-mark";
 import type { ViewerRole } from "~/platform/auth/authorize.server";
 import {
@@ -52,11 +52,16 @@ export const headers: Route.HeadersFunction = () => ({
 });
 
 export default function Home({ loaderData }: Route.ComponentProps) {
+  const rootData = useRouteLoaderData("root") as
+    | { evaluation?: { name: string } | null }
+    | undefined;
   if (loaderData.hasWorkspaceAccess) return null;
+  const evaluation = Boolean(rootData?.evaluation);
   return (
     <main
       className="design-board"
       id="main"
+      tabIndex={-1}
       style={{ minHeight: "100dvh", display: "grid", placeItems: "center" }}
     >
       <section
@@ -70,17 +75,21 @@ export default function Home({ loaderData }: Route.ComponentProps) {
         <span className="pc-page-eyebrow">Account ready</span>
         <h1>No workspace access yet</h1>
         <p>
-          Your account is signed in, but it has not been granted access to an
-          organisation or event.
+          {evaluation
+            ? "This evaluation identity has no event membership yet. An organiser must invite the account before a private workspace can open."
+            : "Your account is signed in, but it has not been granted access to an organisation or event."}
         </p>
         <p className="subtle">
-          Open an event invitation or a published application link to join the
-          relevant workspace. Signing up alone never grants private access.
+          {evaluation
+            ? "Return to the evaluation guide to switch persona. A published application link will not grant reviewer access."
+            : "Open an event invitation or a published application link to join the relevant workspace. Signing up alone never grants private access."}
         </p>
         <Form method="post" action="/sign-out">
-          <input type="hidden" name="returnTo" value="/" />
+          {evaluation ? null : (
+            <input type="hidden" name="returnTo" value="/" />
+          )}
           <button className="btn" type="submit">
-            Sign out
+            {evaluation ? "Change persona" : "Sign out"}
           </button>
         </Form>
       </section>

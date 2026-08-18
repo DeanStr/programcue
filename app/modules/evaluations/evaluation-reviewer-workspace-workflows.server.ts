@@ -16,6 +16,30 @@ import {
 } from "./evaluation-service-foundation.server";
 import { reviewableSubmissionSql } from "./evaluation-submission-review-eligibility.server";
 
+function reviewerAssignmentVisibleSql(
+  assignmentAlias: "a",
+  planAlias: "plan",
+  roundAlias: "r" | "round",
+  submissionAlias: "submission",
+  sessionAlias: "session",
+) {
+  return `(
+    ${assignmentAlias}.status = 'submitted'
+    OR (
+      ${planAlias}.status = 'active'
+      AND ${roundAlias}.status = 'active'
+      AND (${roundAlias}.opens_at IS NULL OR ${roundAlias}.opens_at <= unixepoch())
+      AND (${roundAlias}.closes_at IS NULL OR ${roundAlias}.closes_at > unixepoch())
+      AND (
+        (${assignmentAlias}.submission_id IS NOT NULL
+         AND ${reviewableSubmissionSql(submissionAlias, "review")})
+        OR (${assignmentAlias}.session_id IS NOT NULL
+            AND ${sessionAlias}.status NOT IN ('cancelled','archived'))
+      )
+    )
+  )`;
+}
+
 function parseReviewerCriterionOptions(
   value: string,
   criterionId: string,
@@ -177,16 +201,7 @@ export class EvaluationReviewerWorkspaceWorkflows extends EvaluationServiceFound
         JOIN events event ON event.id = a.event_id AND event.organisation_id = ?
        WHERE a.event_id = ? AND a.evaluator_person_id = ?
          AND a.status NOT IN ('recused','cancelled')
-         AND plan.status = 'active'
-         AND r.status = 'active'
-         AND (r.opens_at IS NULL OR r.opens_at <= unixepoch())
-         AND (r.closes_at IS NULL OR r.closes_at > unixepoch())
-         AND (
-           (a.submission_id IS NOT NULL
-            AND ${reviewableSubmissionSql("submission", "review")})
-           OR (a.session_id IS NOT NULL
-               AND session.status NOT IN ('cancelled','archived'))
-         )
+         AND ${reviewerAssignmentVisibleSql("a", "plan", "r", "submission", "session")}
        ORDER BY CASE a.status WHEN 'in_progress' THEN 0 WHEN 'reopened' THEN 0 WHEN 'assigned' THEN 1 ELSE 2 END,
                 a.due_at, a.assigned_at
     `,
@@ -306,7 +321,10 @@ export class EvaluationReviewerWorkspaceWorkflows extends EvaluationServiceFound
            AND pool.person_id = a.evaluator_person_id
           JOIN events event ON event.id = a.event_id AND event.organisation_id = ?
          WHERE a.id = ? AND a.event_id = ? AND a.evaluator_person_id = ?
-           AND plan.status = 'active' AND round.status = 'active'
+           AND (
+             a.status = 'submitted'
+             OR (plan.status = 'active' AND round.status = 'active')
+           )
          ORDER BY c.position
       `,
       )
@@ -339,15 +357,7 @@ export class EvaluationReviewerWorkspaceWorkflows extends EvaluationServiceFound
           AND pool.person_id = a.evaluator_person_id
          JOIN events event ON event.id = a.event_id AND event.organisation_id = ?
          WHERE a.id = ? AND a.event_id = ? AND a.evaluator_person_id = ?
-           AND plan.status = 'active' AND round.status = 'active'
-           AND (round.opens_at IS NULL OR round.opens_at <= unixepoch())
-           AND (round.closes_at IS NULL OR round.closes_at > unixepoch())
-           AND (
-             (a.submission_id IS NOT NULL
-              AND ${reviewableSubmissionSql("submission", "review")})
-             OR (a.session_id IS NOT NULL
-                 AND session.status NOT IN ('cancelled','archived'))
-           )
+           AND ${reviewerAssignmentVisibleSql("a", "plan", "round", "submission", "session")}
       `,
       )
         .bind(
@@ -384,7 +394,10 @@ export class EvaluationReviewerWorkspaceWorkflows extends EvaluationServiceFound
            AND pool.person_id = a.evaluator_person_id
           JOIN events event ON event.id = a.event_id AND event.organisation_id = ?
          WHERE r.assignment_id = ? AND r.event_id = ? AND a.evaluator_person_id = ?
-           AND plan.status = 'active' AND round.status = 'active'
+           AND (
+             a.status = 'submitted'
+             OR (plan.status = 'active' AND round.status = 'active')
+           )
       `,
       )
         .bind(
@@ -441,14 +454,8 @@ export class EvaluationReviewerWorkspaceWorkflows extends EvaluationServiceFound
           JOIN events event ON event.id = a.event_id AND event.organisation_id = ?
          WHERE a.id = ? AND a.event_id = ? AND a.evaluator_person_id = ?
            AND a.status NOT IN ('recused','cancelled')
-           AND plan.status = 'active' AND round.status = 'active'
            AND round.blinded_reviewing = 0
-           AND (
-             (a.submission_id IS NOT NULL
-              AND ${reviewableSubmissionSql("submission", "review")})
-             OR (a.session_id IS NOT NULL
-                 AND session.status NOT IN ('cancelled','archived'))
-           )
+           AND ${reviewerAssignmentVisibleSql("a", "plan", "round", "submission", "session")}
            AND fa.status = 'active'
            AND fv.upload_status = 'uploaded'
            AND fv.signature_status = 'valid' AND fv.scan_status = 'clean'
@@ -671,24 +678,29 @@ export class EvaluationReviewerWorkspaceWorkflows extends EvaluationServiceFound
                 )
                 AND a.evaluator_person_id = ?
                 AND a.status NOT IN ('recused','cancelled')
-                AND plan.status = 'active'
-                AND round.status = 'active'
-                AND (round.opens_at IS NULL OR round.opens_at <= unixepoch())
-                AND (round.closes_at IS NULL OR round.closes_at > unixepoch())
                 AND round.blinded_reviewing = 0
                 AND (
-                  (
-                    fa.target_type = 'session'
-                    AND EXISTS (
-                      SELECT 1 FROM sessions active_session
-                       WHERE active_session.id = fa.target_id
-                         AND active_session.event_id = fa.event_id
-                         AND active_session.status NOT IN ('cancelled','archived')
-                    )
-                  )
+                  a.status = 'submitted'
                   OR (
-                    fa.target_type = 'submission'
-                    AND ${reviewableSubmissionSql("submission", "review")}
+                    plan.status = 'active'
+                    AND round.status = 'active'
+                    AND (round.opens_at IS NULL OR round.opens_at <= unixepoch())
+                    AND (round.closes_at IS NULL OR round.closes_at > unixepoch())
+                    AND (
+                      (
+                        fa.target_type = 'session'
+                        AND EXISTS (
+                          SELECT 1 FROM sessions active_session
+                           WHERE active_session.id = fa.target_id
+                             AND active_session.event_id = fa.event_id
+                             AND active_session.status NOT IN ('cancelled','archived')
+                        )
+                      )
+                      OR (
+                        fa.target_type = 'submission'
+                        AND ${reviewableSubmissionSql("submission", "review")}
+                      )
+                    )
                   )
                 )
            )

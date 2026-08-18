@@ -1,5 +1,6 @@
 import type { AirtableProviderBoundary } from "~/modules/airtable/airtable-provider-boundary.server";
 import { parseEventFilePolicy } from "~/modules/files/file-policy";
+import { PublishedHeadshotService } from "~/modules/programme/published-headshot-service.server";
 import type { Viewer } from "~/platform/auth/authorize.server";
 import { readSpeakerProfileHistory } from "./speaker-profile-revision.server";
 
@@ -122,6 +123,7 @@ export class SpeakerPortalService {
           .bind(viewer.eventId, viewer.organisationId)
           .first<{
             name: string;
+            slug: string;
             timezone: string;
             startsAt: number;
             endsAt: number;
@@ -243,9 +245,21 @@ export class SpeakerPortalService {
             releasedAt: number | null;
           }>()
       : { results: [] };
-    const { filePolicyJson, ...eventSummary } = event;
+    const { filePolicyJson, slug: _eventSlug, ...eventSummary } = event;
+    const hasReleasedHeadshot = files.results.some(
+      (file) => file.kind === "headshot" && file.releasedAt,
+    );
+    const programmePortraitUrl = hasReleasedHeadshot
+      ? null
+      : new PublishedHeadshotService(this.env).bundledFixtureHeadshot(
+          { id: viewer.eventId },
+          viewer.personId,
+        );
     return {
-      profile,
+      profile: {
+        ...profile,
+        programmePortraitUrl,
+      },
       profileHistory,
       event: {
         ...eventSummary,
