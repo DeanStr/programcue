@@ -488,6 +488,7 @@ test("organisers preview unpublished edits and publish a replacement", async ({
 }) => {
   test.setTimeout(180_000);
   await page.goto("/admin/site");
+  await page.locator("body[data-hydrated='true']").waitFor();
   await expect(
     page.getByRole("heading", { name: "Event website" }),
   ).toBeVisible();

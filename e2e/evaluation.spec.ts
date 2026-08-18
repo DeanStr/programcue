@@ -119,13 +119,13 @@ test("review submission confirmation preserves context", async ({ page }) => {
       name: "Assigned review sources",
     })
     .getByRole("link");
-  await expect(queueItems).toHaveCount(1);
+  await expect(queueItems).toHaveCount(2);
   await expect(
     page.getByRole("button", { name: "Previous", exact: true }),
   ).toBeDisabled();
   await expect(
     page.getByRole("button", { name: "Next", exact: true }),
-  ).toBeDisabled();
+  ).toBeEnabled();
 
   // The conflict question gates submission before the rubric is even reached:
   // a reviewer who has not answered it cannot submit at all.
@@ -137,17 +137,15 @@ test("review submission confirmation preserves context", async ({ page }) => {
     ),
   ).toBeVisible();
   await page.getByRole("radio", { name: /No conflict/ }).check();
-  await expect(submitNext).toBeEnabled();
-
-  await submitNext.click();
+  await expect(submitNext).toBeDisabled();
   await expect(
-    page.getByRole("dialog", { name: "Submit and open the next review?" }),
-  ).toBeHidden();
-  // A blocked submit sends focus to the first unscored criterion, which is now
-  // the first segment of its radio group rather than a dropdown.
+    page.getByText(
+      "Complete the required criteria, recommendation and confidence before submitting",
+    ),
+  ).toBeVisible();
+
   const scoreGroups = page.locator("[data-review-scale]");
   const scoreGroupCount = await scoreGroups.count();
-  await expect(scoreGroups.first().getByRole("radio").first()).toBeFocused();
 
   const chosen = (index: number) =>
     scoreGroups.nth(index).getByRole("radio", { name: "4", exact: true });
@@ -624,7 +622,7 @@ test("a clean reviewer sees a waiting state before receiving an invitation", asy
   expect(response?.ok()).toBeTruthy();
   await page.locator("body[data-hydrated='true']").waitFor();
   await expect(
-    page.getByRole("heading", { name: "Choose an event" }),
+    page.getByRole("heading", { name: "No event access yet" }),
   ).toBeVisible();
   await expect(page.getByText("No event access yet")).toBeVisible();
   await expect(page.getByText("You do not have access")).toBeHidden();

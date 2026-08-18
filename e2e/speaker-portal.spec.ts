@@ -1,5 +1,7 @@
 import { expect, type Page, test } from "@playwright/test";
 
+import { acceptConfirm } from "./support/confirm-dialog";
+
 test("speaker profile, sessions and D1 task state render through the production portal", async ({
   page,
 }) => {
@@ -61,6 +63,7 @@ test("speaker profile, sessions and D1 task state render through the production 
   await sessionCard
     .getByRole("button", { name: "Confirm participation" })
     .click();
+  await acceptConfirm(page);
   await expect(page.getByRole("status")).toContainText(
     "Participation confirmed",
   );

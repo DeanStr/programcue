@@ -434,9 +434,11 @@ test.describe
       await coSpeakerDialog
         .getByRole("button", { name: "Send invitation" })
         .click();
-      await expect(applicationDetail.getByRole("status")).toContainText(
-        "Marcus Okafor was added as co-speaker",
-      );
+      await expect(
+        applicationDetail
+          .getByRole("status")
+          .filter({ hasText: "Marcus Okafor was added as co-speaker" }),
+      ).toContainText("Marcus Okafor was added as co-speaker");
       const marcusRelationship = applicationDetail.locator("li").filter({
         hasText: "Marcus Okafor",
       });
