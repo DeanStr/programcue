@@ -245,6 +245,7 @@ test.describe
 
       await switchDemoRole(page, "sbek_speaker", "/apply/form");
       await waitForInterface(page, "/apply/form");
+      await page.getByText("Already started?", { exact: true }).click();
       await page.getByLabel("Email address").fill(PRIYA_EMAIL);
       await page
         .getByRole("button", { name: "Send verification code" })

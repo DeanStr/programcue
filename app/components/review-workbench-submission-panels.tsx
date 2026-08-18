@@ -418,16 +418,8 @@ export function ReviewSubmissionPanel() {
       ) : null}
       {workspace.reviewerAiSetting.supported ? (
         <div className="review-ai-aside">
-          {workspace.reviewerAiSetting.enabled ? (
-            <>
-              <h3>AI reviewer suggestions</h3>
-              <ReviewerAiSuggestionPanel key={selected.id} />
-            </>
-          ) : (
-            <p className="review-ai-disabled subtle">
-              AI suggestions are off for this event.
-            </p>
-          )}
+          <h3>AI reviewer suggestions</h3>
+          <ReviewerAiSuggestionPanel key={selected.id} />
         </div>
       ) : null}
     </article>

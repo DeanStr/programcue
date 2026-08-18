@@ -28,13 +28,14 @@ test("assistant fails explicitly when the OpenAI credential is unavailable", asy
   await expect(
     page.getByRole("heading", { name: "Event Assistant" }),
   ).toBeVisible();
-  await expect(
-    page.getByText("AI provider is not configured", { exact: true }),
-  ).toBeVisible();
+  const providerStatus = page.getByRole("status").filter({
+    hasText: /not configured/i,
+  });
+  await expect(providerStatus).toBeVisible();
+  await expect(providerStatus).toContainText(/will not simulate a response/i);
   await expect(
     page.getByRole("button", { name: "Ask assistant" }),
   ).toBeDisabled();
-  await expect(page.getByText(/simulate a response/i)).toBeVisible();
 });
 
 test("assistant task preview requires confirmation and executes through the real task command", async ({
@@ -204,12 +205,9 @@ test("contextual AI actions stay inside the readiness and review workflows", asy
   expect((await actionResponse).headers()["cache-control"]).toBe(
     "private, no-store",
   );
-  const readinessAdvisor = page.locator("section.card").filter({
-    has: page.getByRole("heading", { name: "AI readiness advisor" }),
-  });
-  await expect(readinessAdvisor.getByRole("alert")).toContainText(
-    "OpenAI credentials are not configured for this installation.",
-  );
+  await expect(
+    page.locator(".command-advisor").getByRole("alert"),
+  ).toContainText(/not configured/i);
 
   await page.context().addCookies([
     {
@@ -327,8 +325,8 @@ test("a non-actionable failed operation can be archived without erasing its hist
   expect(notificationCount).toBeGreaterThan(0);
 
   const failedOperation = page
-    .getByRole("table")
-    .getByRole("row")
+    .getByRole("list", { name: "Background operations" })
+    .getByRole("listitem")
     .filter({ hasText: fixtureData.operationId });
   await expect(failedOperation).toContainText("Ai context run");
   await expect(failedOperation).toContainText(
@@ -345,7 +343,9 @@ test("a non-actionable failed operation can be archived without erasing its hist
         "The failure was acknowledged and removed from active operational alerts.",
     }),
   ).toBeVisible();
-  await expect(failedOperation).toContainText("Alert archived by");
+  await expect(
+    failedOperation.getByRole("button", { name: "Archive alert" }),
+  ).toHaveCount(0);
   await expect(failedOperation).toContainText(
     "failed before the bug was corrected",
   );
@@ -387,7 +387,11 @@ test("failed operation history exposes every bounded page", async ({
   await expect(firstPageNavigation).toContainText(
     "Showing 1–50 of 51 failed operations",
   );
-  await expect(page.getByRole("table").locator("tbody tr")).toHaveCount(50);
+  await expect(
+    page
+      .getByRole("list", { name: "Background operations" })
+      .locator(":scope > li"),
+  ).toHaveCount(50);
 
   await firstPageNavigation.getByRole("link", { name: "Next page" }).click();
   await expect(page).toHaveURL(/(?:\?|&)page=2(?:&|$)/);
@@ -397,7 +401,11 @@ test("failed operation history exposes every bounded page", async ({
   await expect(secondPageNavigation).toContainText(
     "Showing 51–51 of 51 failed operations",
   );
-  await expect(page.getByRole("table").locator("tbody tr")).toHaveCount(1);
+  await expect(
+    page
+      .getByRole("list", { name: "Background operations" })
+      .locator(":scope > li"),
+  ).toHaveCount(1);
   await expect(
     secondPageNavigation.getByRole("link", { name: "Previous page" }),
   ).toBeVisible();

@@ -200,6 +200,7 @@ test.describe
       await expectStatus(page, "Published a new immutable form version");
 
       await waitForInterface(page, "/admin/tasks");
+      await page.getByText("Plan and onboarding", { exact: true }).click();
       await page.getByLabel(/I confirm these forms should be created/i).check();
       await page.getByRole("button", { name: "Create travel forms" }).click();
       await expectStatus(
@@ -214,6 +215,7 @@ test.describe
       );
 
       await waitForInterface(page, "/apply/form");
+      await page.getByText("Already started?", { exact: true }).click();
       await page.getByLabel("Email address").fill(APPLICANT_EMAIL);
       await page
         .getByRole("button", { name: "Send verification code" })

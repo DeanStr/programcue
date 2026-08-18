@@ -408,6 +408,7 @@ test.describe
         "application_request_code",
         "test-request-token",
       );
+      await page.getByText("Already started?", { exact: true }).click();
       await page
         .getByLabel("Email address")
         .fill(`turnstile-transition-${Date.now()}@example.com`);
@@ -462,6 +463,7 @@ test.describe
       await expect(
         page.getByRole("button", { name: "Start application" }),
       ).toBeVisible();
+      await page.getByText("Already started?", { exact: true }).click();
       await page.getByLabel("Email address").fill(email);
       await page
         .getByRole("button", { name: "Send verification code" })
@@ -813,6 +815,7 @@ test.describe
       ).toBeVisible();
       await page.getByRole("link", { name: "Continue to application" }).click();
 
+      await page.getByText("Already started?", { exact: true }).click();
       await page
         .getByLabel("Email address")
         .fill(`conditional-form-${unique}@example.com`);

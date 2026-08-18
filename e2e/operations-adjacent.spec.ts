@@ -260,14 +260,12 @@ test("CSV import exposes a durable preview before confirming", async ({
     .getByRole("status")
     .filter({ hasText: /Imported \d+ rooms records/ });
   await expect(importStatus).toBeVisible();
-  const operationsTable = page.getByRole("table").filter({
-    has: page.getByRole("columnheader", { name: "Operation", exact: true }),
-  });
-  const operationRow = operationsTable
-    .getByRole("row")
+  const operationRow = page
+    .getByRole("list", { name: "Background operations" })
+    .getByRole("listitem")
     .filter({ hasText: operationId! });
   await expect(
-    operationRow.getByRole("link", { name: "Data import", exact: true }),
+    operationRow.getByRole("link", { name: /Data import/ }),
   ).toBeVisible();
 });
 
@@ -320,11 +318,9 @@ test("task import previews disclose every lifecycle transition before confirmati
   await dismissConfirm(page);
   await expect(page.getByText("Preview ready to commit")).toBeVisible();
 
-  const operationsTable = page.getByRole("table").filter({
-    has: page.getByRole("columnheader", { name: "Operation", exact: true }),
-  });
-  const operationRow = operationsTable
-    .getByRole("row")
+  const operationRow = page
+    .getByRole("list", { name: "Background operations" })
+    .getByRole("listitem")
     .filter({ hasText: operationId! });
   await operationRow.getByRole("button", { name: "Cancel" }).click();
   await expect(
