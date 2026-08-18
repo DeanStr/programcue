@@ -295,11 +295,8 @@ function CommandReadinessCommand() {
           AI prioritisation is advisory and cites the current readiness
           snapshot. No task or message is created.
         </p>
-        <button
-          className="command-advisor-cmd"
-          type="submit"
-          disabled={pending}
-        >
+        <button className="btn" type="submit" disabled={pending}>
+          <Sparkles aria-hidden size={14} />
           {pending ? "Inspecting readiness…" : "Summarise readiness blockers"}
         </button>
       </fetcher.Form>

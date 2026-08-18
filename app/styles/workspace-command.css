@@ -426,7 +426,7 @@
 }
 
 /* --- Draft and delivery -------------------------------------------------
-   No card. Two fields, one sparkle. Advisor is a command line. */
+   No card. Two fields, one sparkle. */
 .command-support {
   align-items: start;
   display: grid;
@@ -514,31 +514,6 @@
   color: var(--state-bad-text);
 }
 
-.command-advisor-cmd {
-  display: inline-flex;
-  align-items: center;
-  min-height: 32px;
-  padding: 0;
-  border: 0;
-  background: transparent;
-  color: var(--text-secondary);
-  font: inherit;
-  font-size: var(--text-sm);
-  font-weight: var(--weight-medium);
-  text-decoration: underline;
-  text-decoration-color: var(--border-strong);
-  text-underline-offset: 3px;
-}
-.command-advisor-cmd:hover,
-.command-advisor-cmd:focus-visible {
-  color: var(--brand-700);
-  text-decoration-color: currentColor;
-}
-.command-advisor-cmd:disabled {
-  color: var(--text-tertiary);
-  text-decoration: none;
-  cursor: wait;
-}
 .command-delivery {
   padding-top: var(--space-4);
   border-top: 1px solid var(--border);
