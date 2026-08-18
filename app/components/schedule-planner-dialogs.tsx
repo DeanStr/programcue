@@ -700,6 +700,7 @@ export function SchedulePublicationDialog({
               type="button"
               disabled={revalidator.state !== "idle" || publishing}
               onClick={() => {
+                setPublishAttempted(false);
                 void revalidator.revalidate();
               }}
             >

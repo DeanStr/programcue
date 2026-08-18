@@ -86,6 +86,40 @@ describe("public-site publication change summary", () => {
       "Featured speakers added: Alex Morgan",
       "Featured sessions added: Opening keynote",
       "Theme: Light → Dark",
+    ]);
+  });
+
+  it("reports remaining editorial only when it is not already listed", () => {
+    const published = {
+      ...defaultPublicSiteDraft(),
+      theme: "light" as const,
+      sponsors: [],
+    };
+    const themeOnly = defaultPublicSiteDraft();
+    themeOnly.theme = "dark";
+    expect(
+      publicationChangeSummary({
+        draft: themeOnly,
+        sponsors: [],
+        published: { configuration: published },
+        speakerNames: new Map(),
+        sessionNames: new Map(),
+      }),
+    ).toEqual(["Theme: Light → Dark"]);
+
+    const withCopy = defaultPublicSiteDraft();
+    withCopy.theme = "dark";
+    withCopy.tagline = "A revised public homepage.";
+    expect(
+      publicationChangeSummary({
+        draft: withCopy,
+        sponsors: [],
+        published: { configuration: published },
+        speakerNames: new Map(),
+        sessionNames: new Map(),
+      }),
+    ).toEqual([
+      "Theme: Light → Dark",
       "Homepage or fixed-page editorial content changed.",
     ]);
   });

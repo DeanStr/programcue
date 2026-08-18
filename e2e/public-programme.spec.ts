@@ -155,29 +155,29 @@ test("public session detail exposes its canonical share link", async ({
   page,
 }) => {
   await waitForInterface(page, "/public/programme/future-of-events-2027");
+  await expect(
+    page.getByRole("button", { name: "Copy session link" }),
+  ).toBeVisible();
+  const sessionPage = page.getByRole("link", { name: "Open session page" });
+  await expect(sessionPage).toBeVisible();
+
   await page
     .locator(".programme-entry")
     .filter({ hasText: "The Future of Attendee Engagement" })
     .locator(".programme-row")
     .click();
-
-  await expect(
-    page.getByRole("button", { name: "Copy session link" }),
-  ).toBeVisible();
-  const shareLink = page.getByRole("link", {
-    name: "Shareable session link",
-  });
-  await expect(shareLink).toHaveAttribute(
-    "href",
-    "/public/programme/future-of-events-2027/sessions?session=demo-session-1",
-  );
-  await shareLink.click();
   await expect(page).toHaveURL(
     "/public/programme/future-of-events-2027/sessions?session=demo-session-1",
   );
   await expect(page).toHaveTitle(
     "The Future of Attendee Engagement · Future of Events 2027",
   );
+  await expect(
+    page.getByRole("button", { name: "Copy session link" }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("link", { name: "Open session page" }),
+  ).toHaveCount(0);
 });
 
 test("public programme clears unavailable saved facets honestly", async ({

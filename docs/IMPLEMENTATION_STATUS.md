@@ -743,7 +743,8 @@ before applying the empty placeholder. Confirmation remains disabled while any b
 visible, and the authoritative mutation rechecks the exact schedule revision
 and every invariant rather than trusting the preview. A leftover failed
 publish result is not shown when the dialog reopens until this instance
-submits again.
+submits again, and refreshing the preview after a revision conflict
+clears that leftover error.
 
 Auto-placement readiness uses the same deterministic planner as preview and
 confirmation. Eligible sessions enable the action, while unavailable sessions
@@ -1069,7 +1070,10 @@ revoked and deleted during file erasure.
   canonicalises to the sessions view and keeps the incoming query, including a
   shared-itinerary token, while duplicate, mixed, embedded or
   unavailable selections still fail explicitly. Session details reuse the
-  speaker copy/share actions. Featured-record pickers cap the available list
+  speaker copy/share actions and offer Open session page only when the
+  current URL is not already that session. Later website publication
+  summaries do not repeat theme, order, featured-record or enablement
+  changes in the generic editorial line. Featured-record pickers cap the available list
   at 20. The homepage's glance panel is a dark event surface in the masthead's
   language; `programmeAccentPalette` derives separate inks for light paper, the
   dark `--accent-soft` fill and solid accent fills, and unit coverage checks

@@ -1,6 +1,6 @@
 import { CalendarDays, MapPin, Search } from "lucide-react";
 import { type CSSProperties, useState } from "react";
-import { Link } from "react-router";
+import { Link, useLocation } from "react-router";
 import {
   PublicEventFooter,
   PublicEventHeader,
@@ -729,6 +729,7 @@ function ItineraryPanel({ model }: { model: PublicProgrammeModel }) {
  * 400px from the "Show more" that withheld it.
  */
 function SessionDetailPanel({ model }: { model: PublicProgrammeModel }) {
+  const location = useLocation();
   const {
     selected,
     programme,
@@ -740,6 +741,14 @@ function SessionDetailPanel({ model }: { model: PublicProgrammeModel }) {
     sessionDetailRef,
   } = model;
   if (!selected) return null;
+  const sessionPagePath = publicSessionDetailPath(
+    programme.event.slug,
+    selected.id,
+  );
+  const onSessionPage =
+    location.pathname ===
+      publicProgrammeSurfacePath(programme.event.slug, "sessions") &&
+    new URLSearchParams(location.search).get("session") === selected.id;
   const classification = [
     model.showEmbedField("track") ? selected.track : null,
     model.showEmbedField("format") ? selected.format : null,
@@ -887,7 +896,7 @@ function SessionDetailPanel({ model }: { model: PublicProgrammeModel }) {
       <div className="public-profile-actions">
         <PublicShareActions
           url={new URL(
-            publicSessionDetailPath(programme.event.slug, selected.id),
+            sessionPagePath,
             model.loaderData.canonicalUrl,
           ).toString()}
           title={`${selected.title} · ${programme.event.name}`}
@@ -901,12 +910,11 @@ function SessionDetailPanel({ model }: { model: PublicProgrammeModel }) {
           resetKey={selected.id}
           failedMessage="This browser could not share the session. Copy the address from the address bar instead."
         />
-        <Link
-          className="btn small"
-          to={publicSessionDetailPath(programme.event.slug, selected.id)}
-        >
-          Shareable session link
-        </Link>
+        {onSessionPage ? null : (
+          <Link className="btn small" to={sessionPagePath}>
+            Open session page
+          </Link>
+        )}
       </div>
     </section>
   );

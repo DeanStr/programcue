@@ -62,6 +62,22 @@ function unpublishedComparisonSnapshot(
   };
 }
 
+function remainingEditorial(configuration: PublicSiteDraft) {
+  return {
+    tagline: configuration.tagline,
+    introductionHeading: configuration.introductionHeading,
+    statisticVisibility: configuration.statisticVisibility,
+    faqItems: configuration.faqItems,
+    postEvent: configuration.postEvent,
+    pages: Object.fromEntries(
+      PUBLIC_SITE_PAGE_TYPES.map((page) => {
+        const { enabled: _enabled, ...copy } = configuration.pages[page];
+        return [page, copy];
+      }),
+    ),
+  };
+}
+
 function faqIsPublic(draft: PublicSiteDraft) {
   return draft.sectionVisibility.faq || draft.pages.faq.enabled;
 }
@@ -149,11 +165,11 @@ export function publicationChangeSummary(input: {
     ) {
       changes.push("Editorial homepage content will be published.");
     }
-  } else {
-    const { sponsors: _sponsors, ...beforeEditorial } = before;
-    if (JSON.stringify(beforeEditorial) !== JSON.stringify(input.draft)) {
-      changes.push("Homepage or fixed-page editorial content changed.");
-    }
+  } else if (
+    JSON.stringify(remainingEditorial(before)) !==
+    JSON.stringify(remainingEditorial(input.draft))
+  ) {
+    changes.push("Homepage or fixed-page editorial content changed.");
   }
   if (!firstPublish) {
     const beforeSponsors = new Map(
