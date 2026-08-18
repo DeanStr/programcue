@@ -342,6 +342,25 @@ test.describe
       await expect(fieldSettings).toBeFocused();
     });
 
+    test("cancels a palette drop released outside the form canvas", async ({
+      page,
+    }) => {
+      await page.goto("/admin/submissions/form");
+      const editor = page.getByLabel("Visual call-for-speakers form editor");
+      await expect(editor).toBeVisible();
+      const fields = editor.locator(".fb-canvas-field");
+      const initialFieldCount = await fields.count();
+      const settings = page.locator("#form-builder-field-settings");
+      await expect(settings).toBeVisible();
+
+      await dragWithPointer(
+        page,
+        editor.getByRole("button", { name: "Add URL" }),
+        settings,
+      );
+      await expect(fields).toHaveCount(initialFieldCount);
+    });
+
     test("form builder fails closed before JavaScript is available", async ({
       baseURL,
       browser,

@@ -283,6 +283,7 @@ export default function AdminSection({ loaderData }: Route.ComponentProps) {
             <section
               className="table-wrap programme-table-wrap"
               aria-label="Programme records"
+              // biome-ignore lint/a11y/noNoninteractiveTabindex: Scrollable data regions need keyboard focus so arrow keys can expose overflow content.
               tabIndex={0}
             >
               <table className="data-table">

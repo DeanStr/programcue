@@ -960,10 +960,9 @@ export function EvaluationUnifiedResults() {
                                 </details>
                               );
                             })()}
-
-                              </div>
-                            </div>
-                          </details>
+                          </div>
+                        </div>
+                      </details>
                     </td>
                   </tr>
                 );

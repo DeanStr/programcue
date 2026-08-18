@@ -78,6 +78,16 @@ const formCollisionDetection: CollisionDetection = (args) => {
     (container) => container.data.current?.kind === "insertion-target",
   );
   if (!insertionTargets.length) return [];
+  const canvasBoundary = args.droppableContainers.find(
+    (container) => container.data.current?.kind === "canvas-boundary",
+  );
+  const pointerOnCanvas = canvasBoundary
+    ? pointerWithin({
+        ...args,
+        droppableContainers: [canvasBoundary],
+      }).length > 0
+    : false;
+  if (!pointerOnCanvas) return [];
   const paddedTargets = insertionTargets.map((container) => {
     const rect = container.rect.current;
     if (!rect) return container;

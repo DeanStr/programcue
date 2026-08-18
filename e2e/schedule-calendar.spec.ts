@@ -147,7 +147,7 @@ test("schedule and programme render the event calendar date and timezone", async
     page.getByRole("heading", { name: "Thu, May 20 · Room view" }),
   ).toBeVisible();
   await expect(
-    page.getByText("9:00 AM", { exact: true }).first(),
+    page.locator(".schedule-room-board .time").filter({ hasText: "9:00 AM" }),
   ).toBeVisible();
   await page.getByRole("button", { name: /Fri, May 21.*2 placed/ }).click();
   await expect(
@@ -160,7 +160,7 @@ test("schedule and programme render the event calendar date and timezone", async
     }),
   ).toBeVisible();
   await expect(
-    page.getByText("9:30 AM", { exact: true }).first(),
+    page.locator(".schedule-room-board .time").filter({ hasText: "9:30 AM" }),
   ).toBeVisible();
   await expect(
     page.locator(".schedule-session-source").first(),
@@ -195,7 +195,9 @@ test("schedule and programme render the event calendar date and timezone", async
     page.getByText("Event timezone · America/Toronto"),
   ).toBeVisible();
   await expect(
-    page.getByText(/May 20, 2027.*9:00 AM.*(?:EDT|GMT-4)/).first(),
+    page
+      .locator(".programme-table-wrap")
+      .getByText(/May 20, 2027.*9:00 AM.*(?:EDT|GMT-4)/),
   ).toBeVisible();
   const iframeCode = page.getByRole("textbox", { name: "Iframe code" });
   await expect(iframeCode).toHaveValue(
@@ -210,11 +212,7 @@ test("schedule and programme render the event calendar date and timezone", async
     "href",
     /format=html$/,
   );
-  const publicMetric = page
-    .locator(".metric")
-    .filter({ hasText: "Published public" });
-  await expect(publicMetric.locator(".value")).toHaveText("5");
-  await expect(publicMetric).toContainText("Scheduled and public");
+  await expect(page.locator(".programme-pulse")).toContainText("5 public");
 });
 
 test("focuses the exact named schedule record", async ({ page }) => {
