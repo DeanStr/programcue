@@ -265,7 +265,7 @@ test("previews every public widget type and applies granular field selection", a
         fieldFrame.locator(
           ".public-surface-detail .public-session-speaker-names",
         ),
-      ).toBeVisible();
+      ).toHaveCount(0);
     }
   }
 

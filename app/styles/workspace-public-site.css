@@ -410,12 +410,7 @@
   letter-spacing: var(--tracking-snug);
   text-wrap: balance;
 }
-.public-site-introduction.is-compact .public-site-lede {
-  max-width: 20ch;
-  font-size: clamp(var(--text-2xl), 4.6cqw, var(--display-2));
-  line-height: 1.08;
-  letter-spacing: var(--tracking-tight);
-}
+
 .public-site-actions {
   display: flex;
   flex-wrap: wrap;
@@ -713,15 +708,13 @@ a.public-site-feature-card:focus-visible img {
 }
 .public-site-speakers .public-site-feature-grid {
   --portrait: clamp(148px, 18cqw, 220px);
-  grid-template-columns: repeat(auto-fill, minmax(min(100%, 196px), 1fr));
+  grid-template-columns: repeat(
+      auto-fill,
+      minmax(min(100%, 196px), var(--portrait))
+    );
+  justify-content: start;
   gap: clamp(var(--space-6), 3.2cqw, var(--space-8))
     clamp(var(--space-5), 3cqw, var(--space-8));
-}
-.public-site-speakers.is-pair .public-site-feature-grid {
-  --portrait: 100%;
-  width: min(100%, 1080px);
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: clamp(var(--space-5), 2.8cqw, var(--space-8));
 }
 @container event-home (min-width: 761px) {
   .public-site-speakers:has(.public-site-feature-grid > :only-child) {
@@ -759,16 +752,7 @@ a.public-site-feature-card:focus-visible img {
     0 0 0 1px color-mix(in srgb, var(--event-accent) 18%, transparent),
     var(--elev-2);
 }
-.public-site-speakers.is-pair .public-site-feature-card img,
-.public-site-speakers.is-pair
-  .public-site-feature-grid:not(.sessions)
-  .public-site-feature-card
-  > svg {
-  max-width: none;
-}
-.public-site-speakers.is-pair .public-site-feature-card strong {
-  font-size: clamp(var(--text-xl), 2.1cqw, var(--text-2xl));
-}
+
 .public-site-speakers
   .public-site-feature-grid:not(.sessions)
   .public-site-feature-card
@@ -875,7 +859,7 @@ a.public-site-feature-card:focus-visible .public-site-speaker-profile-cue {
   max-width: 28ch;
 }
 .public-site-faq-section.is-interview .public-site-section-heading h2 {
-  font-size: var(--text-sm);
+  font-size: var(--text-lg);
   font-weight: var(--weight-semibold);
   letter-spacing: var(--tracking-snug);
   color: var(--accent-ink);
@@ -1085,20 +1069,13 @@ a.public-site-feature-card:focus-visible .public-site-speaker-profile-cue {
   .public-site-lede {
     font-size: var(--text-lg);
   }
-  .public-site-introduction.is-compact .public-site-lede {
-    font-size: var(--text-2xl);
-  }
   .public-site-sessions .public-site-feature-grid {
     grid-template-columns: minmax(0, 1fr);
   }
   .public-site-speakers .public-site-feature-grid {
     --portrait: 160px;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-template-columns: repeat(2, minmax(0, var(--portrait)));
     gap: var(--space-5) var(--space-4);
-  }
-  .public-site-speakers.is-pair .public-site-feature-grid {
-    --portrait: 100%;
-    width: 100%;
   }
   .public-site-speakers .public-site-feature-card small {
     font-size: var(--text-xs);
@@ -1106,11 +1083,8 @@ a.public-site-feature-card:focus-visible .public-site-speaker-profile-cue {
   .public-site-speakers .public-site-feature-card strong {
     font-size: var(--text-base);
   }
-  .public-site-speakers.is-pair .public-site-feature-card strong {
-    font-size: var(--text-lg);
-  }
   .public-site-faq-section.is-interview .public-site-section-heading h2 {
-    font-size: var(--text-sm);
+    font-size: var(--text-base);
   }
   .public-site-venue .public-site-map-link {
     width: 100%;

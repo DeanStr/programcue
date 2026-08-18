@@ -130,6 +130,11 @@ function zodFieldErrors(error: ZodError) {
   return errors;
 }
 
+function hasFormPropertyErrors(errors?: Record<string, string[]>) {
+  if (!errors) return false;
+  return Object.keys(errors).some((key) => !key.startsWith("schema.fields"));
+}
+
 function jsonValue(formData: FormData, key: string) {
   try {
     return JSON.parse(String(formData.get(key) ?? ""));
@@ -704,6 +709,21 @@ export default function FormBuilder({ loaderData }: Route.ComponentProps) {
                 onOperationBlocked={(message) =>
                   reportClientValidation(message, "canvas")
                 }
+                footer={
+                  <div className="fb-canvas-footer">
+                    <p className="fb-pane-note">
+                      Drag fields from the palette into the form or drag
+                      existing fields to reorder them. Select a field to edit
+                      its settings; keyboard users can add from the palette and
+                      reorder in Form structure.
+                    </p>
+                    {!clientReady ? (
+                      <p className="fb-pane-note">
+                        JavaScript is required to edit or save this form.
+                      </p>
+                    ) : null}
+                  </div>
+                }
               />
             </div>
           </section>
@@ -722,6 +742,9 @@ export default function FormBuilder({ loaderData }: Route.ComponentProps) {
               routingTracks={loaderData.routingTracks}
               paneSwitch={dockSwitch}
               hidden={previewOpen}
+              formPropertiesForceOpen={hasFormPropertyErrors(
+                actionData?.errors,
+              )}
               formProperties={
                 <>
                   <div className="fb-form-settings">
@@ -811,17 +834,6 @@ export default function FormBuilder({ loaderData }: Route.ComponentProps) {
                       errors={actionData?.errors}
                     />
                   </div>
-                  <p className="fb-pane-note">
-                    Drag fields from the palette into the form or drag existing
-                    fields to reorder them. Select a field to edit its settings;
-                    keyboard users can add from the palette and reorder in Form
-                    structure.
-                  </p>
-                  {!clientReady ? (
-                    <p className="fb-pane-note">
-                      JavaScript is required to edit or save this form.
-                    </p>
-                  ) : null}
                 </>
               }
             />

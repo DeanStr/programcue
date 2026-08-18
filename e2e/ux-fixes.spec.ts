@@ -58,7 +58,9 @@ test("authenticated application stays within the mobile viewport", async ({
 
   await waitForInterface(page, "/apply/form");
   await expect(page.getByText(/April 30, 2027/).first()).toBeVisible();
-  await page.getByText("Already started?", { exact: true }).click();
+  await expect(
+    page.getByRole("heading", { name: "Resume an application" }),
+  ).toBeVisible();
   await page.getByLabel("Email address").fill(email);
   await page.getByRole("button", { name: "Send verification code" }).click();
   await page.getByLabel("Six-digit code").fill("424242");

@@ -215,7 +215,9 @@ test.describe
       );
 
       await waitForInterface(page, "/apply/form");
-      await page.getByText("Already started?", { exact: true }).click();
+      await expect(
+        page.getByRole("heading", { name: "Resume an application" }),
+      ).toBeVisible();
       await page.getByLabel("Email address").fill(APPLICANT_EMAIL);
       await page
         .getByRole("button", { name: "Send verification code" })

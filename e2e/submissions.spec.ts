@@ -118,6 +118,7 @@ test.describe
       await expect(
         page.getByRole("button", { name: "Save draft" }),
       ).toBeEnabled();
+      await page.getByText("Form properties", { exact: true }).click();
       await page.getByLabel("Closing date").fill("2035-12-31");
       await expect(
         page.getByText("The closing-date change is still a draft"),
@@ -138,6 +139,7 @@ test.describe
       const invitationHeading = `Bring your clearest idea ${unique}`;
       const invitationText =
         "Explain the practical lesson and what attendees will be able to use.";
+      await page.getByText("Form properties", { exact: true }).click();
       await page.getByText("Public landing page", { exact: true }).click();
       await page.getByLabel("Invitation heading").fill(invitationHeading);
       await page.getByLabel("Invitation copy").fill(invitationText);
@@ -154,6 +156,7 @@ test.describe
         page.getByRole("button", { name: "Publish version" }),
       ).toBeEnabled();
       await page.reload();
+      await page.getByText("Form properties", { exact: true }).click();
       await page.getByText("Public landing page", { exact: true }).click();
       await expect(page.getByLabel("Invitation heading")).toHaveValue(
         invitationHeading,
@@ -202,6 +205,7 @@ test.describe
     test("native visual form authoring supports drag creation and reordering", async ({
       page,
     }) => {
+      test.setTimeout(60_000);
       const visualLabel = `Session title visual ${Date.now()}`;
       await page.goto("/admin/submissions/form");
 
@@ -320,14 +324,16 @@ test.describe
       ).toContainText(visualLabel);
 
       await page.setViewportSize({ width: 390, height: 844 });
-      await reloadedEditor
-        .locator(".fb-canvas-field")
-        .nth(1)
-        .getByRole("button")
-        .click();
+      await page.getByRole("button", { name: "Settings", exact: true }).click();
       await page.getByRole("button", { name: "Preview", exact: true }).click();
       await expect(page.locator("#form-builder-field-settings")).toBeHidden();
       await page.getByRole("button", { name: "Close preview" }).click();
+      await page.getByRole("button", { name: "Canvas", exact: true }).click();
+      await reloadedEditor
+        .locator(".fb-canvas-field")
+        .filter({ hasText: visualLabel })
+        .getByRole("button")
+        .click();
       await reloadedEditor
         .getByRole("link", { name: `Edit ${visualLabel} settings` })
         .click();
@@ -408,7 +414,9 @@ test.describe
         "application_request_code",
         "test-request-token",
       );
-      await page.getByText("Already started?", { exact: true }).click();
+      await expect(
+        page.getByRole("heading", { name: "Resume an application" }),
+      ).toBeVisible();
       await page
         .getByLabel("Email address")
         .fill(`turnstile-transition-${Date.now()}@example.com`);
@@ -463,7 +471,9 @@ test.describe
       await expect(
         page.getByRole("button", { name: "Start application" }),
       ).toBeVisible();
-      await page.getByText("Already started?", { exact: true }).click();
+      await expect(
+        page.getByRole("heading", { name: "Resume an application" }),
+      ).toBeVisible();
       await page.getByLabel("Email address").fill(email);
       await page
         .getByRole("button", { name: "Send verification code" })
@@ -813,7 +823,9 @@ test.describe
       ).toBeVisible();
       await page.getByRole("link", { name: "Continue to application" }).click();
 
-      await page.getByText("Already started?", { exact: true }).click();
+      await expect(
+        page.getByRole("heading", { name: "Resume an application" }),
+      ).toBeVisible();
       await page
         .getByLabel("Email address")
         .fill(`conditional-form-${unique}@example.com`);

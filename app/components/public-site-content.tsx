@@ -191,9 +191,7 @@ export function PublicSiteHome({
     introduction: (
       <HomeSection
         title={configuration.introductionHeading}
-        className={`public-site-introduction${
-          (event.description?.trim().length ?? 0) < 140 ? " is-compact" : ""
-        }`}
+        className="public-site-introduction"
       >
         <p className="public-site-lede">{event.description}</p>
         <div className="public-site-actions">
@@ -233,9 +231,7 @@ export function PublicSiteHome({
       <HomeSection
         title="Featured speakers"
         kicker="The people on stage"
-        className={`public-site-speakers${
-          featuredSpeakers.length <= 2 ? " is-pair" : ""
-        }`}
+        className="public-site-speakers"
       >
         <div className="public-site-feature-grid">
           {featuredSpeakers.map((speaker) => (

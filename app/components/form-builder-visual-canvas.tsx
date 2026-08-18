@@ -5,8 +5,9 @@ import {
   type DragEndEvent,
   DragOverlay,
   type DragStartEvent,
-  PointerSensor,
+  MouseSensor,
   pointerWithin,
+  TouchSensor,
   useDraggable,
   useDroppable,
   useSensor,
@@ -73,25 +74,34 @@ function fieldsInSectionOrder(input: SaveFormInput) {
 }
 
 const formCollisionDetection: CollisionDetection = (args) => {
-  const canvasTargets = args.droppableContainers.filter(
-    (container) => container.data.current?.kind === "canvas-boundary",
-  );
-  if (!pointerWithin({ ...args, droppableContainers: canvasTargets }).length) {
-    return [];
-  }
   const insertionTargets = args.droppableContainers.filter(
     (container) => container.data.current?.kind === "insertion-target",
   );
+  if (!insertionTargets.length) return [];
+  const paddedTargets = insertionTargets.map((container) => {
+    const rect = container.rect.current;
+    if (!rect) return container;
+    const pad = 16;
+    return {
+      ...container,
+      rect: {
+        current: {
+          ...rect,
+          top: rect.top - pad,
+          bottom: rect.bottom + pad,
+          height: rect.height + pad * 2,
+        },
+      },
+    };
+  });
   const directInsertionTarget = pointerWithin({
     ...args,
-    droppableContainers: insertionTargets,
+    droppableContainers: paddedTargets,
   });
   if (directInsertionTarget.length) return directInsertionTarget;
   return closestCenter({
     ...args,
-    droppableContainers: insertionTargets.length
-      ? insertionTargets
-      : args.droppableContainers,
+    droppableContainers: paddedTargets,
   });
 };
 
@@ -285,13 +295,11 @@ function CanvasPage({
   selectedId,
   onSelect,
   onOpenSettings,
-  insert,
 }: {
   input: SaveFormInput;
   selectedId: string | undefined;
   onSelect(fieldId: string): void;
   onOpenSettings(): void;
-  insert?: ReactNode;
 }) {
   const canvas = useDroppable({
     id: "form-canvas-boundary",
@@ -358,7 +366,6 @@ function CanvasPage({
         {!input.schema.fields.length ? (
           <p className="fb-canvas-empty">Drag a field here to begin.</p>
         ) : null}
-        {insert}
       </div>
     </div>
   );
@@ -372,6 +379,7 @@ export function FormBuilderVisualCanvas({
   onOpenSettings,
   operationMessage,
   onOperationBlocked,
+  footer,
 }: {
   input: SaveFormInput;
   selectedId: string | undefined;
@@ -380,9 +388,13 @@ export function FormBuilderVisualCanvas({
   onOpenSettings(): void;
   operationMessage: string | null;
   onOperationBlocked(message: string): void;
+  footer?: ReactNode;
 }) {
   const sensors = useSensors(
-    useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
+    useSensor(MouseSensor, { activationConstraint: { distance: 6 } }),
+    useSensor(TouchSensor, {
+      activationConstraint: { delay: 150, tolerance: 5 },
+    }),
   );
   const [draggedItem, setDraggedItem] = useState<DraggedItem | null>(null);
 
@@ -472,35 +484,34 @@ export function FormBuilderVisualCanvas({
           selectedId={selectedId}
           onSelect={onSelect}
           onOpenSettings={onOpenSettings}
-          insert={
-            <fieldset
-              className="fb-canvas-palette pc-plain-fieldset"
-              aria-label="Field palette"
-            >
-              <strong>Add a field</strong>
-              <span>Drag onto the page, or select to append.</span>
-              <div className="fb-canvas-palette-fields">
-                {FORM_FIELD_TYPES.map(({ value, label }) => (
-                  <PaletteField
-                    key={value}
-                    type={value}
-                    label={label}
-                    add={() => addField(value)}
-                  />
-                ))}
-              </div>
-              {operationMessage ? (
-                <div
-                  className="validation-item error fb-canvas-operation-message"
-                  role="alert"
-                >
-                  <strong>Canvas action blocked</strong>
-                  <span>{operationMessage}</span>
-                </div>
-              ) : null}
-            </fieldset>
-          }
         />
+        <fieldset
+          className="fb-canvas-palette pc-plain-fieldset"
+          aria-label="Field palette"
+        >
+          <strong>Add a field</strong>
+          <span>Drag onto the page, or select to append.</span>
+          <div className="fb-canvas-palette-fields">
+            {FORM_FIELD_TYPES.map(({ value, label }) => (
+              <PaletteField
+                key={value}
+                type={value}
+                label={label}
+                add={() => addField(value)}
+              />
+            ))}
+          </div>
+          {operationMessage ? (
+            <div
+              className="validation-item error fb-canvas-operation-message"
+              role="alert"
+            >
+              <strong>Canvas action blocked</strong>
+              <span>{operationMessage}</span>
+            </div>
+          ) : null}
+        </fieldset>
+        {footer}
       </section>
       <DragOverlay dropAnimation={null}>
         {draggedItem ? (

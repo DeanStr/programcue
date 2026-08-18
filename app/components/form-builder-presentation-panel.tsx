@@ -1,3 +1,4 @@
+import { useEffect, useState } from "react";
 import { CharacterCount } from "~/components/ui/character-count";
 import type { SaveFormInput } from "~/modules/submissions/submission-schema";
 
@@ -21,6 +22,14 @@ export function PresentationSettingsPanel({
 }) {
   const presentation = input.schema.presentation;
   const suggestedMinutes = suggestedCompletionMinutes(input);
+  const presentationHasErrors = Boolean(
+    errors &&
+      Object.keys(errors).some((key) => key.startsWith("schema.presentation")),
+  );
+  const [landingOpen, setLandingOpen] = useState(presentationHasErrors);
+  useEffect(() => {
+    if (presentationHasErrors) setLandingOpen(true);
+  }, [presentationHasErrors]);
   const update = (patch: Partial<SaveFormInput["schema"]["presentation"]>) =>
     change({
       ...input,
@@ -31,7 +40,17 @@ export function PresentationSettingsPanel({
     });
 
   return (
-    <details className="fb-disclosure">
+    <details
+      className="fb-disclosure"
+      open={landingOpen || presentationHasErrors}
+      onToggle={(event) => {
+        if (presentationHasErrors) {
+          setLandingOpen(true);
+          return;
+        }
+        setLandingOpen(event.currentTarget.open);
+      }}
+    >
       <summary>
         <span>
           <strong>Public landing page</strong>

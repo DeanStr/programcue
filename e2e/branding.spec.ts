@@ -31,7 +31,7 @@ test("branding draft previews and publishes across participant-facing surfaces",
   await page.goto("/admin/branding");
   await expect(page.getByRole("heading", { name: "Branding" })).toBeVisible();
 
-  await page.getByLabel("Brand accent").fill("#0d9488");
+  await page.getByLabel("Brand accent", { exact: true }).fill("#0d9488");
   await page
     .getByLabel("Welcome message")
     .fill("Welcome to the browser-verified participant workspace.");

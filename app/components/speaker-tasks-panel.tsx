@@ -453,32 +453,30 @@ export function SpeakerTasksPanel({
                     </Form>
                   </div>
                 ) : null}
-                {open ? (
-                  <details className="speaker-task-comment">
-                    <summary>Add a comment</summary>
-                    <Form method="post" className="speaker-task-comment-form">
-                      <input type="hidden" name="intent" value="comment" />
+                <details className="speaker-task-comment">
+                  <summary>Add a comment</summary>
+                  <Form method="post" className="speaker-task-comment-form">
+                    <input type="hidden" name="intent" value="comment" />
+                    <input
+                      type="hidden"
+                      name="intentId"
+                      value={`${intentId}:${task.id}`}
+                    />
+                    <input type="hidden" name="taskId" value={task.id} />
+                    <label className="label">
+                      Message
                       <input
-                        type="hidden"
-                        name="intentId"
-                        value={`${intentId}:${task.id}`}
+                        className="field"
+                        name="body"
+                        required
+                        maxLength={2_000}
                       />
-                      <input type="hidden" name="taskId" value={task.id} />
-                      <label className="label">
-                        Message
-                        <input
-                          className="field"
-                          name="body"
-                          required
-                          maxLength={2_000}
-                        />
-                      </label>
-                      <button className="btn" type="submit" disabled={busy}>
-                        Send
-                      </button>
-                    </Form>
-                  </details>
-                ) : null}
+                    </label>
+                    <button className="btn" type="submit" disabled={busy}>
+                      Send
+                    </button>
+                  </Form>
+                </details>
               </article>
             );
           })

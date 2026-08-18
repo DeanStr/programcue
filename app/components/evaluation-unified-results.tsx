@@ -287,22 +287,20 @@ export function EvaluationUnifiedResults() {
                           Assign
                         </Link>
                       )}
-                      <details className="pc-eval-overflow">
-                        <summary
-                          aria-label={`More actions for ${result.title}`}
-                        >
-                          ⋯
-                        </summary>
-                        <div className="pc-eval-overflow-menu">
-                          {result.targetType === "proposal" ? (
+                      {result.targetType === "proposal" ? (
+                        <details className="pc-eval-overflow">
+                          <summary
+                            aria-label={`More actions for ${result.title}`}
+                          >
+                            ⋯
+                          </summary>
+                          <div className="pc-eval-overflow-menu">
                             <Link
                               className="pc-eval-text-action"
                               to={`?resultsRound=${encodeURIComponent(loaderData.resultsRoundId ?? "")}&${focusName}=${encodeURIComponent(result.id)}&view=assignments#evaluation-assignments`}
                             >
                               Assign
                             </Link>
-                          ) : null}
-                          {result.targetType === "proposal" ? (
                             <button
                               className="pc-eval-text-action"
                               type="button"
@@ -312,9 +310,9 @@ export function EvaluationUnifiedResults() {
                             >
                               Moderate
                             </button>
-                          ) : null}
-                        </div>
-                      </details>
+                          </div>
+                        </details>
+                      ) : null}
                       <details className="pc-eval-row-detail">
                         <summary>Review and decision detail</summary>
                         <div className="stack mt">

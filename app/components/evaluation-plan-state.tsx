@@ -260,6 +260,8 @@ function EvaluationAdminViews() {
   const [storedView, setStoredView] = useState<EvaluationAdminView>("results");
   const [discussionOpen, setDiscussionOpen] = useState(false);
 
+  const view = searchView ?? storedView;
+
   useEffect(() => {
     const params = new URLSearchParams(location.search);
     const discussionTargeted =
@@ -275,13 +277,11 @@ function EvaluationAdminViews() {
     sessionStorage.setItem(EVALUATION_VIEW_STORAGE_KEY, next);
   }, [location.hash, location.search, searchView]);
 
-  const view = searchView ?? storedView;
-
   useEffect(() => {
     const id = location.hash.replace(/^#/, "");
-    if (!id.startsWith("review-submission-")) return;
+    if (!id.startsWith("review-submission-") || view !== "assignments") return;
     document.getElementById(id)?.scrollIntoView({ block: "center" });
-  }, [location.hash]);
+  }, [location.hash, view]);
 
   return (
     <>

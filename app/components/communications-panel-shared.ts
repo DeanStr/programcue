@@ -36,21 +36,3 @@ export function communicationCategoryLabel(category: string) {
     .replaceAll("_", " ")
     .replace(/^./, (value) => value.toUpperCase());
 }
-
-/** Human title from a durable communication id such as `decision-communication:…`. */
-export function communicationListTitle(id: string, kind: string) {
-  const [, rest] = id.split(":");
-  if (rest) {
-    const name = rest
-      .replace(/^demo-showcase-/u, "")
-      .replace(/-operation$/u, "")
-      .replaceAll("-", " ");
-    return name.replace(/^./u, (letter) => letter.toUpperCase());
-  }
-  return communicationCategoryLabel(kind || "communication");
-}
-
-export function communicationListReference(id: string) {
-  const separator = id.indexOf(":");
-  return separator >= 0 ? id.slice(separator + 1) : id;
-}

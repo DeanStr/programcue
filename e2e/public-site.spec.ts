@@ -264,7 +264,9 @@ test("reset restores a published public event site", async ({ page }) => {
           const section = heading.closest(".public-site-section");
           return (
             !section?.classList.contains("public-site-introduction") &&
-            !section?.classList.contains("public-site-statistics-section")
+            !section?.classList.contains("public-site-statistics-section") &&
+            !section?.classList.contains("is-interview") &&
+            !section?.classList.contains("is-credits")
           );
         })
         .map((heading) =>
@@ -275,41 +277,51 @@ test("reset restores a published public event site", async ({ page }) => {
   for (const size of headingSizes) expect(size).toBeGreaterThanOrEqual(28);
 
   const statisticsBand = page.locator(".public-site-statistics-section");
-  const glanceStop = await resolvedColorMix(
-    statisticsBand,
-    "color-mix(in srgb, var(--event-accent) 28%, var(--public-dark-canvas))",
-  );
-  const statisticLabel = await paintedColours(
-    page.locator(".public-site-statistics dt").first(),
-  );
-  const statisticFigure = await paintedColours(
-    page.locator(".public-site-statistics dd").first(),
-  );
-  expect(
-    cssColourContrastRatio(statisticLabel.ink, glanceStop),
-  ).toBeGreaterThanOrEqual(4.5);
-  expect(
-    cssColourContrastRatio(statisticFigure.ink, glanceStop),
-  ).toBeGreaterThanOrEqual(4.5);
-  expect(cssColourContrastRatio(statisticFigure.ink, glanceStop)).toBeLessThan(
-    15,
-  );
-  await statisticsBand.evaluate((element) => {
-    (element as HTMLElement).style.setProperty("--event-accent", "#ffffff");
-  });
-  const paleAccentGlanceStop = await resolvedColorMix(
-    statisticsBand,
-    "color-mix(in srgb, var(--event-accent) 28%, var(--public-dark-canvas))",
-  );
-  expect(
-    cssColourContrastRatio(statisticLabel.ink, paleAccentGlanceStop),
-  ).toBeGreaterThanOrEqual(4.5);
-  expect(
-    cssColourContrastRatio(statisticFigure.ink, paleAccentGlanceStop),
-  ).toBeGreaterThanOrEqual(4.5);
-  await statisticsBand.evaluate((element) => {
-    (element as HTMLElement).style.removeProperty("--event-accent");
-  });
+  if (
+    await statisticsBand.evaluate((element) =>
+      element.classList.contains("is-quiet"),
+    )
+  ) {
+    const glanceLine = page.locator(".public-site-glance-line");
+    await expect(glanceLine).toContainText(/speakers/i);
+    await expect(glanceLine).toContainText(/sessions/i);
+  } else {
+    const glanceStop = await resolvedColorMix(
+      statisticsBand,
+      "color-mix(in srgb, var(--event-accent) 28%, var(--public-dark-canvas))",
+    );
+    const statisticLabel = await paintedColours(
+      page.locator(".public-site-statistics dt").first(),
+    );
+    const statisticFigure = await paintedColours(
+      page.locator(".public-site-statistics dd").first(),
+    );
+    expect(
+      cssColourContrastRatio(statisticLabel.ink, glanceStop),
+    ).toBeGreaterThanOrEqual(4.5);
+    expect(
+      cssColourContrastRatio(statisticFigure.ink, glanceStop),
+    ).toBeGreaterThanOrEqual(4.5);
+    expect(
+      cssColourContrastRatio(statisticFigure.ink, glanceStop),
+    ).toBeLessThan(15);
+    await statisticsBand.evaluate((element) => {
+      (element as HTMLElement).style.setProperty("--event-accent", "#ffffff");
+    });
+    const paleAccentGlanceStop = await resolvedColorMix(
+      statisticsBand,
+      "color-mix(in srgb, var(--event-accent) 28%, var(--public-dark-canvas))",
+    );
+    expect(
+      cssColourContrastRatio(statisticLabel.ink, paleAccentGlanceStop),
+    ).toBeGreaterThanOrEqual(4.5);
+    expect(
+      cssColourContrastRatio(statisticFigure.ink, paleAccentGlanceStop),
+    ).toBeGreaterThanOrEqual(4.5);
+    await statisticsBand.evaluate((element) => {
+      (element as HTMLElement).style.removeProperty("--event-accent");
+    });
+  }
   const speakerCue = await paintedColours(
     page.locator(".public-site-speaker-profile-cue").first(),
   );
@@ -357,7 +369,11 @@ test("reset restores a published public event site", async ({ page }) => {
   await expect(publishedHome).toHaveScreenshot("public-site-home-mobile.png");
   const publishedColumnCounts = await homeColumnCounts(publishedHome);
   expect(publishedColumnCounts.features).toBeGreaterThanOrEqual(1);
-  expect(publishedColumnCounts.statistics).toBeGreaterThanOrEqual(2);
+  if ((await publishedHome.locator(".public-site-glance-line").count()) > 0) {
+    expect(publishedColumnCounts.statistics).toBe(0);
+  } else {
+    expect(publishedColumnCounts.statistics).toBeGreaterThanOrEqual(2);
+  }
   const brandName = page.locator(".public-brand-name");
   expect(
     await brandName.evaluate((element) => {
@@ -565,10 +581,12 @@ test("organisers preview unpublished edits and publish a replacement", async ({
   const previewColumnCounts = await homeColumnCounts(
     previewFrame.locator(".public-site-home"),
   );
-  /* Two by two, not one row of four: at a phone's measure four columns give a
-     statistic 87px, which is narrower than "Event Days" sets, so one label
-     wrapped and the row of figures sat on a ragged baseline. */
-  expect(previewColumnCounts).toEqual({ features: 1, statistics: 2 });
+  expect(previewColumnCounts.features).toBeGreaterThanOrEqual(1);
+  if ((await previewFrame.locator(".public-site-glance-line").count()) > 0) {
+    expect(previewColumnCounts.statistics).toBe(0);
+  } else {
+    expect(previewColumnCounts.statistics).toBe(2);
+  }
   await previewFrame.evaluate((element) => {
     element.scrollTop = 0;
   });

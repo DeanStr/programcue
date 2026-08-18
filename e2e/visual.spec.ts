@@ -558,13 +558,16 @@ test.describe
         // Normalize already-covered fixed navigation so it is not repeated at
         // every stitch boundary; the dashboard baseline owns the speaker nav.
         const fullPageCaptureCss =
-          testInfo.project.name === "mobile-chromium" &&
-          surface.name === "evaluation-admin"
-            ? ".pc-admin-section-nav { position: static !important; }"
+          surface.name === "programme-admin"
+            ? // The install snippet includes the local origin and port.
+              ".programme-embed-code { color: transparent !important; }"
             : testInfo.project.name === "mobile-chromium" &&
-                surface.role === "speaker"
-              ? ".speaker-nav { visibility: hidden !important; }"
-              : null;
+                surface.name === "evaluation-admin"
+              ? ".pc-admin-section-nav { position: static !important; }"
+              : testInfo.project.name === "mobile-chromium" &&
+                  surface.role === "speaker"
+                ? ".speaker-nav { visibility: hidden !important; }"
+                : null;
         const fullPageCaptureStyle = fullPageCaptureCss
           ? await page.addStyleTag({ content: fullPageCaptureCss })
           : null;

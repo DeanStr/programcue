@@ -7,7 +7,6 @@ import { requireValue } from "~/lib/required-value";
 import type { CommunicationsCentreLoaderData } from "~/routes/communications-centre";
 import {
   communicationCategoryLabel,
-  communicationListTitle,
   formatCommunicationListDate,
   formatCommunicationDate as formatDate,
   type PendingIntent,
@@ -38,8 +37,12 @@ export function RecentCommunications({
           {loaderData.communications.map((item) => (
             <li className="comms-activity-row" key={item.id}>
               <div className="comms-activity-identity">
-                <strong>{communicationListTitle(item.id, item.kind)}</strong>
+                <strong>
+                  {communicationCategoryLabel(item.kind || "communication")}
+                </strong>
                 <small>
+                  {item.id}
+                  {" · "}
                   {formatCommunicationListDate(
                     item.createdAt,
                     loaderData.eventTimezone,

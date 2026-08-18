@@ -233,7 +233,7 @@ function AccessPanel({
       )}
       <h2>
         {!accepting
-          ? "Already started?"
+          ? "Resume an application"
           : form.allowAnonymousDrafts
             ? "Ready to propose a session?"
             : "Verify to begin"}
@@ -294,16 +294,13 @@ function AccessPanel({
         </Form>
       ) : null}
       {form.allowAnonymousDrafts && accepting ? (
-        <details
-          className="cfp-returning pc-disclosure"
-          open={actionData && !actionData.ok ? true : undefined}
-        >
-          <summary>Already started?</summary>
+        <div className="cfp-returning">
+          <h3 className="cfp-returning-heading">Resume an application</h3>
           <p className="help">
             Recover verified drafts on this or another device.
           </p>
           {recoverForm}
-        </details>
+        </div>
       ) : (
         <div className={form.allowAnonymousDrafts ? "cfp-returning" : "mt"}>
           {recoverForm}

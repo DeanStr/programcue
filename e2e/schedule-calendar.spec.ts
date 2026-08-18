@@ -348,7 +348,7 @@ test.describe("mutable schedule authoring", () => {
     ).toBeVisible();
     await expect(page.getByLabel("Approved status").first()).toBeVisible();
 
-    await page.getByRole("link", { name: "Edit current content" }).click();
+    await page.getByRole("link", { name: "Open schedule" }).click();
     await editor.getByLabel("Title").fill("Edited content returns to draft");
     await expect(editor.getByText("Saved", { exact: true })).toBeVisible({
       timeout: 10_000,

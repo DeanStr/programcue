@@ -307,9 +307,14 @@ a.content-review-title:focus-visible {
 }
 .programme-embed-disclosure-summary {
   display: flex;
-  align-items: center;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--space-2) var(--space-3);
   cursor: pointer;
   list-style: none;
+}
+.programme-embed-disclosure-summary .help {
+  margin: 0;
 }
 .programme-embed-disclosure-summary::-webkit-details-marker,
 .programme-embed-disclosure-summary::marker {

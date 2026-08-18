@@ -1,5 +1,5 @@
 import { FileText } from "lucide-react";
-import { useMemo, useRef } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Form, Link } from "react-router";
 
 import { DraftRecoveryStatus } from "~/components/draft-recovery-feedback";
@@ -122,6 +122,11 @@ export function TemplateEditor({
   onChange: (draft: TemplateDraftFields) => void;
 }) {
   const bodyRef = useRef<HTMLTextAreaElement>(null);
+  const metadataRequired = !selected || !draft.physicalAddress.trim();
+  const [metadataOpen, setMetadataOpen] = useState(metadataRequired);
+  useEffect(() => {
+    if (metadataRequired) setMetadataOpen(true);
+  }, [metadataRequired]);
   // Typing `{{recipient.firstName}}` by hand is where the unfillable fields
   // came from, so the fields that exist are offered rather than remembered.
   const insertMergeField = (field: string) => {
@@ -206,7 +211,17 @@ export function TemplateEditor({
             ))}
           </div>
         </details>
-        <details className="pc-disclosure comms-merge-fields">
+        <details
+          className="pc-disclosure comms-merge-fields"
+          open={metadataOpen || metadataRequired}
+          onToggle={(event) => {
+            if (metadataRequired) {
+              setMetadataOpen(true);
+              return;
+            }
+            setMetadataOpen(event.currentTarget.open);
+          }}
+        >
           <summary>Template name, type and footer</summary>
           <div className="stack mt">
             <div className="form-row">

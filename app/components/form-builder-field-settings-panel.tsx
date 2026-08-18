@@ -21,6 +21,7 @@ export function FieldSettingsPanel({
   paneSwitch,
   hidden,
   formProperties,
+  formPropertiesForceOpen = false,
 }: {
   input: SaveFormInput;
   selected: FormField | undefined;
@@ -33,10 +34,21 @@ export function FieldSettingsPanel({
   paneSwitch?: ReactNode;
   hidden?: boolean;
   formProperties?: ReactNode;
+  formPropertiesForceOpen?: boolean;
 }) {
   const [allowIdChange, setAllowIdChange] = useState(false);
   const displayFields = formFieldsInDisplayOrder(input.schema);
   const selectedIndex = selected ? displayFields.indexOf(selected) : -1;
+  const [propertiesOpen, setPropertiesOpen] = useState(
+    () => formPropertiesForceOpen || selectedIndex < 0,
+  );
+  useEffect(() => {
+    if (formPropertiesForceOpen) {
+      setPropertiesOpen(true);
+      return;
+    }
+    if (selectedIndex >= 0) setPropertiesOpen(false);
+  }, [formPropertiesForceOpen, selectedIndex]);
   // biome-ignore lint/correctness/useExhaustiveDependencies: Changing the selected field deliberately revokes the transient permission to edit its stable ID.
   useEffect(() => setAllowIdChange(false), [selectedIndex]);
   const idReferenced = selected
@@ -77,6 +89,27 @@ export function FieldSettingsPanel({
         {paneSwitch ? <span className="right">{paneSwitch}</span> : null}
       </div>
       <div className="fb-pane-body fb-inspector-body">
+        {formProperties ? (
+          <details
+            className="fb-disclosure"
+            open={propertiesOpen || formPropertiesForceOpen}
+            onToggle={(event) => {
+              if (formPropertiesForceOpen) {
+                setPropertiesOpen(true);
+                return;
+              }
+              setPropertiesOpen(event.currentTarget.open);
+            }}
+          >
+            <summary>
+              <span>
+                <strong>Form properties</strong>
+                <small>Name, public URL, access, landing page</small>
+              </span>
+            </summary>
+            <div className="fb-disclosure-fields">{formProperties}</div>
+          </details>
+        ) : null}
         {selected ? (
           <>
             <label className="fb-prop-row">
@@ -450,17 +483,6 @@ export function FieldSettingsPanel({
             </p>
           ) : null}
         </div>
-        {formProperties ? (
-          <details className="fb-disclosure">
-            <summary>
-              <span>
-                <strong>Form properties</strong>
-                <small>Name, public URL, access, landing page</small>
-              </span>
-            </summary>
-            <div className="fb-disclosure-fields">{formProperties}</div>
-          </details>
-        ) : null}
       </div>
     </section>
   );

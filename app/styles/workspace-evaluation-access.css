@@ -1053,6 +1053,9 @@
   .pc-eval-admin .pc-eval-table .pc-eval-overflow-cell {
     white-space: normal;
   }
+  .pc-eval-admin .pc-responsive-table tr:has(.pc-eval-overflow[open]) {
+    overflow: visible;
+  }
 }
 @media (max-width: 900px) {
   .pc-eval-metrics {

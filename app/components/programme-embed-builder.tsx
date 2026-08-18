@@ -1,4 +1,5 @@
 import { Check, Clipboard, ExternalLink, RotateCcw } from "lucide-react";
+import { useState } from "react";
 import { Form } from "react-router";
 import { DerivedSlugField } from "~/components/ui/derived-slug-field";
 import { EventDateTime } from "~/components/ui/event-date-time";
@@ -861,14 +862,29 @@ export function ProgrammeEmbedBuilder({
     sessions,
     managedEmbeds,
   });
+  const [embedOpen, setEmbedOpen] = useState(true);
+  const activeEmbedCount = managedEmbeds.filter(
+    (embed) => embed.status === "active",
+  ).length;
+  const embedStatus =
+    managedEmbeds.length === 0
+      ? "No managed embeds yet"
+      : `${managedEmbeds.length} managed${
+          activeEmbedCount ? ` · ${activeEmbedCount} active` : ""
+        }`;
   return (
     <section
       className="programme-embed-builder"
       aria-labelledby="programme-embed-title"
     >
-      <details className="programme-embed-disclosure">
+      <details
+        className="programme-embed-disclosure"
+        open={embedOpen}
+        onToggle={(event) => setEmbedOpen(event.currentTarget.open)}
+      >
         <summary className="programme-embed-disclosure-summary">
           <h2 id="programme-embed-title">Configure embed</h2>
+          <span className="help">{embedStatus}</span>
         </summary>
         <EmbedConfigurationWorkflow
           workflow={configurationWorkflow}
