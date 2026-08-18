@@ -166,6 +166,26 @@ describe("participant retention", () => {
         .bind(seeded.eventId)
         .first(),
     ).toEqual({ total: 0 });
+    const retainedSessionSpeakers = await seeded.testEnv.DB.prepare(
+      `SELECT person_id AS personId
+         FROM session_speakers
+        WHERE event_id = ?
+        ORDER BY position`,
+    )
+      .bind(seeded.eventId)
+      .all<{ personId: string }>();
+    expect(retainedSessionSpeakers.results).toHaveLength(2);
+    expect(
+      retainedSessionSpeakers.results.every(({ personId }) =>
+        personId.startsWith("retained-participant-"),
+      ),
+    ).toBe(true);
+    expect(retainedSessionSpeakers.results).not.toEqual(
+      expect.arrayContaining([
+        { personId: seeded.exclusiveId },
+        { personId: "person-demo-owner" },
+      ]),
+    );
     const workflowRows = await seeded.testEnv.DB.prepare(
       `SELECT person_id AS personId
          FROM event_speaker_workflows

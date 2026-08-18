@@ -1869,7 +1869,7 @@ describe("evaluation vertical slice", () => {
         reason: "The committee received material correcting evidence.",
         confirmed: true,
       });
-      expect(reopened.notificationCancelled).toBe(true);
+      expect(reopened.notificationOutcome).toBe("cancelled_before_delivery");
       expect(executeIdempotent).toHaveBeenCalledWith(
         expect.objectContaining({ eventId: admin.eventId }),
         expect.objectContaining({ operation: "evaluation.decision.reopen" }),
@@ -1881,6 +1881,16 @@ describe("evaluation vertical slice", () => {
           `SELECT submission.status, decision.status AS decisionStatus,
                   (SELECT operation.status FROM operation_jobs operation
                     WHERE operation.id = ?) AS notificationStatus,
+                  (SELECT communication.status FROM communications communication
+                    WHERE communication.operation_id = ?
+                      AND communication.event_id = decision.event_id) AS communicationStatus,
+                  (SELECT delivery.status FROM communication_deliveries delivery
+                    JOIN communications communication
+                      ON communication.id = delivery.communication_id
+                     AND communication.event_id = delivery.event_id
+                     AND communication.operation_id = ?) AS deliveryStatus,
+                  (SELECT item.status FROM operation_items item
+                    WHERE item.operation_id = ?) AS itemStatus,
                   (SELECT COUNT(*) FROM audit_events audit
                     WHERE audit.entity_id = decision.id
                       AND audit.action = 'decision.reopened') AS reopenAuditCount
@@ -1890,12 +1900,21 @@ describe("evaluation vertical slice", () => {
             WHERE submission.id = 'eval-test-submission'
               AND decision.id = ?`,
         )
-          .bind(released.notificationOperationId, released.decisionId)
+          .bind(
+            released.notificationOperationId,
+            released.notificationOperationId,
+            released.notificationOperationId,
+            released.notificationOperationId,
+            released.decisionId,
+          )
           .first(),
       ).resolves.toEqual({
         status: "decision_ready",
         decisionStatus: "superseded",
         notificationStatus: "cancelled",
+        communicationStatus: "cancelled",
+        deliveryStatus: "cancelled",
+        itemStatus: "skipped",
         reopenAuditCount: 1,
       });
 
@@ -1958,10 +1977,304 @@ describe("evaluation vertical slice", () => {
       });
     });
 
+    it("reopens a released rejection after its notification has already been delivered", async () => {
+      await resetEvaluationFixture();
+      const service = new EvaluationService(evaluationEnvironment());
+      const released = await service.decide(admin, {
+        submissionId: "eval-test-submission",
+        decision: "rejected",
+        rationale: "Initial outcome before delivery completed.",
+        release: true,
+        confirmedWithoutReview: true,
+      });
+      await env.DB.batch([
+        env.DB.prepare(
+          `UPDATE operation_jobs
+              SET status = 'completed', completed_at = unixepoch(),
+                  updated_at = unixepoch()
+            WHERE id = ? AND event_id = ?`,
+        ).bind(released.notificationOperationId, admin.eventId),
+        env.DB.prepare(
+          `UPDATE communications
+              SET status = 'sent', sent_at = unixepoch(), updated_at = unixepoch()
+            WHERE operation_id = ? AND event_id = ?`,
+        ).bind(released.notificationOperationId, admin.eventId),
+        env.DB.prepare(
+          `UPDATE communication_deliveries
+              SET status = 'sent', updated_at = unixepoch()
+            WHERE event_id = ? AND communication_id IN (
+              SELECT communication.id FROM communications communication
+               WHERE communication.operation_id = ?
+                 AND communication.event_id = communication_deliveries.event_id
+            )`,
+        ).bind(admin.eventId, released.notificationOperationId),
+        env.DB.prepare(
+          `UPDATE operation_items
+              SET status = 'completed', completed_at = unixepoch(),
+                  updated_at = unixepoch()
+            WHERE operation_id = ?`,
+        ).bind(released.notificationOperationId),
+      ]);
+
+      const reopened = await service.reopenDecision(admin, {
+        submissionId: "eval-test-submission",
+        reason: "The committee received material correcting evidence.",
+        confirmed: true,
+      });
+      expect(reopened.notificationOutcome).toBe("already_delivered");
+      await expect(
+        env.DB.prepare(
+          `SELECT submission.status, decision.status AS decisionStatus,
+                  (SELECT operation.status FROM operation_jobs operation
+                    WHERE operation.id = ?) AS notificationStatus,
+                  (SELECT communication.status FROM communications communication
+                    WHERE communication.operation_id = ?
+                      AND communication.event_id = decision.event_id) AS communicationStatus,
+                  (SELECT delivery.status FROM communication_deliveries delivery
+                    JOIN communications communication
+                      ON communication.id = delivery.communication_id
+                     AND communication.event_id = delivery.event_id
+                     AND communication.operation_id = ?) AS deliveryStatus,
+                  (SELECT item.status FROM operation_items item
+                    WHERE item.operation_id = ?) AS itemStatus
+             FROM submissions submission
+             JOIN submission_decisions decision
+               ON decision.submission_id = submission.id
+            WHERE submission.id = 'eval-test-submission'
+              AND decision.id = ?`,
+        )
+          .bind(
+            released.notificationOperationId,
+            released.notificationOperationId,
+            released.notificationOperationId,
+            released.notificationOperationId,
+            released.decisionId,
+          )
+          .first(),
+      ).resolves.toEqual({
+        status: "decision_ready",
+        decisionStatus: "superseded",
+        notificationStatus: "completed",
+        communicationStatus: "sent",
+        deliveryStatus: "sent",
+        itemStatus: "completed",
+      });
+    });
+
+    it("fails closed when a released decision has no notification link or legacy marker", async () => {
+      await resetEvaluationFixture();
+      const decisionId = "eval-unlinked-decision";
+      await env.DB.batch([
+        env.DB.prepare(
+          `INSERT INTO submission_decisions (
+             id, event_id, submission_id, revision_number, status, decision,
+             decided_by_person_id, rationale, notification_feedback_json,
+             effect_preview_json, decided_at, published_at
+           ) VALUES (?, ?, 'eval-test-submission', 1, 'published', 'rejected',
+                     ?, 'Unlinked fixture outcome', '[]', '{}',
+                     unixepoch(), unixepoch())`,
+        ).bind(decisionId, admin.eventId, admin.personId),
+        env.DB.prepare(
+          `UPDATE submissions
+              SET status = 'rejected', updated_at = unixepoch()
+            WHERE id = 'eval-test-submission' AND event_id = ?`,
+        ).bind(admin.eventId),
+      ]);
+
+      await expect(
+        new EvaluationService(evaluationEnvironment()).reopenDecision(admin, {
+          submissionId: "eval-test-submission",
+          reason: "The committee received material correcting evidence.",
+          confirmed: true,
+        }),
+      ).rejects.toThrow(
+        /missing its notification operation without the migration audit marker/i,
+      );
+      await expect(
+        env.DB.prepare(
+          `SELECT submission.status, decision.status AS decisionStatus,
+                  decision.notification_operation_id AS notificationOperationId,
+                  (SELECT COUNT(*) FROM audit_events audit
+                    WHERE audit.entity_id = decision.id
+                      AND audit.action = 'decision.reopened') AS reopenAuditCount
+             FROM submissions submission
+             JOIN submission_decisions decision
+               ON decision.submission_id = submission.id
+              AND decision.event_id = submission.event_id
+            WHERE submission.id = 'eval-test-submission'
+              AND decision.id = ?`,
+        )
+          .bind(decisionId)
+          .first(),
+      ).resolves.toEqual({
+        status: "rejected",
+        decisionStatus: "published",
+        notificationOperationId: null,
+        reopenAuditCount: 0,
+      });
+    });
+
+    it("fails closed when a linked notification operation has no communication graph", async () => {
+      await resetEvaluationFixture();
+      const decisionId = "eval-missing-graph-decision";
+      const operationId = "eval-missing-graph-operation";
+      await env.DB.batch([
+        env.DB.prepare(
+          `INSERT INTO operation_jobs (
+             id, organisation_id, event_id, requested_by_person_id, type,
+             idempotency_key, correlation_id, status, payload_json,
+             created_at, updated_at
+           ) VALUES (?, ?, ?, ?, 'decision.notification', ?, ?, 'queued',
+                     '{}', unixepoch(), unixepoch())`,
+        ).bind(
+          operationId,
+          admin.organisationId,
+          admin.eventId,
+          admin.personId,
+          `eval-missing-graph:${operationId}`,
+          operationId,
+        ),
+        env.DB.prepare(
+          `INSERT INTO submission_decisions (
+             id, event_id, submission_id, revision_number, status, decision,
+             decided_by_person_id, rationale, notification_feedback_json,
+             effect_preview_json, notification_operation_id, decided_at,
+             published_at
+           ) VALUES (?, ?, 'eval-test-submission', 1, 'published', 'rejected',
+                     ?, 'Missing graph fixture outcome', '[]', '{}', ?,
+                     unixepoch(), unixepoch())`,
+        ).bind(decisionId, admin.eventId, admin.personId, operationId),
+        env.DB.prepare(
+          `UPDATE submissions
+              SET status = 'rejected', updated_at = unixepoch()
+            WHERE id = 'eval-test-submission' AND event_id = ?`,
+        ).bind(admin.eventId),
+      ]);
+
+      await expect(
+        new EvaluationService(evaluationEnvironment()).reopenDecision(admin, {
+          submissionId: "eval-test-submission",
+          reason: "The committee received material correcting evidence.",
+          confirmed: true,
+        }),
+      ).rejects.toThrow(
+        /complete audit, decision, submission, change, and notification evidence|changed before it could be reopened/i,
+      );
+      await expect(
+        env.DB.prepare(
+          `SELECT submission.status, decision.status AS decisionStatus,
+                  (SELECT COUNT(*) FROM audit_events audit
+                    WHERE audit.entity_id = decision.id
+                      AND audit.action = 'decision.reopened') AS reopenAuditCount
+             FROM submissions submission
+             JOIN submission_decisions decision
+               ON decision.submission_id = submission.id
+              AND decision.event_id = submission.event_id
+            WHERE submission.id = 'eval-test-submission'
+              AND decision.id = ?`,
+        )
+          .bind(decisionId)
+          .first(),
+      ).resolves.toEqual({
+        status: "rejected",
+        decisionStatus: "published",
+        reopenAuditCount: 0,
+      });
+    });
+
+    it("reopens a documented pre-migration unlinked decision", async () => {
+      await resetEvaluationFixture();
+      const decisionId = "eval-legacy-unlinked-decision";
+      await env.DB.batch([
+        env.DB.prepare(
+          `INSERT INTO submission_decisions (
+             id, event_id, submission_id, revision_number, status, decision,
+             decided_by_person_id, rationale, notification_feedback_json,
+             effect_preview_json, decided_at, published_at
+           ) VALUES (?, ?, 'eval-test-submission', 1, 'published', 'rejected',
+                     ?, 'Legacy unlinked fixture outcome', '[]', '{}',
+                     unixepoch(), unixepoch())`,
+        ).bind(decisionId, admin.eventId, admin.personId),
+        env.DB.prepare(
+          `UPDATE submissions
+              SET status = 'rejected', updated_at = unixepoch()
+            WHERE id = 'eval-test-submission' AND event_id = ?`,
+        ).bind(admin.eventId),
+      ]);
+      await env.DB.exec(
+        "DROP TRIGGER decision_notification_legacy_unlinked_set_closed",
+      );
+      try {
+        await env.DB.prepare(
+          `INSERT INTO audit_events (
+             id, actor_kind, origin, metadata_version, organisation_id, event_id,
+             action, entity_type, entity_id, metadata_json, created_at
+           ) VALUES (?, 'system', 'internal', 1, ?, ?,
+                     'decision.notification.legacy_unlinked',
+                     'submission_decision', ?,
+                     '{"reason":"release predates pinned notification evidence","deliveryOutcome":"not asserted by migration"}',
+                     unixepoch())`,
+        )
+          .bind(
+            `migration-0041-decision-notification-unlinked:${decisionId}`,
+            admin.organisationId,
+            admin.eventId,
+            decisionId,
+          )
+          .run();
+      } finally {
+        await env.DB.prepare(
+          `CREATE TRIGGER decision_notification_legacy_unlinked_set_closed
+           BEFORE INSERT ON audit_events
+           WHEN NEW.action = 'decision.notification.legacy_unlinked'
+           BEGIN
+             SELECT RAISE(ABORT, 'legacy unlinked decision notification set is closed');
+           END`,
+        ).run();
+      }
+
+      const reopened = await new EvaluationService(
+        evaluationEnvironment(),
+      ).reopenDecision(admin, {
+        submissionId: "eval-test-submission",
+        reason: "The committee received material correcting evidence.",
+        confirmed: true,
+      });
+      expect(reopened.notificationOutcome).toBe("legacy_unverified");
+      await expect(
+        env.DB.prepare(
+          `SELECT submission.status, decision.status AS decisionStatus
+             FROM submissions submission
+             JOIN submission_decisions decision
+               ON decision.submission_id = submission.id
+              AND decision.event_id = submission.event_id
+            WHERE submission.id = 'eval-test-submission'
+              AND decision.id = ?`,
+        )
+          .bind(decisionId)
+          .first(),
+      ).resolves.toEqual({
+        status: "decision_ready",
+        decisionStatus: "superseded",
+      });
+    });
+
     it.each([
       [
         "audit insertion",
         /INSERT INTO audit_events[\s\S]*'decision\.reopened'/u,
+      ],
+      [
+        "communication cancellation",
+        /UPDATE communications\s+SET status = 'cancelled'/u,
+      ],
+      [
+        "delivery cancellation",
+        /UPDATE communication_deliveries\s+SET status = 'cancelled'/u,
+      ],
+      [
+        "operation-item skipping",
+        /UPDATE operation_items\s+SET status = 'skipped'/u,
       ],
       [
         "decision supersession",
@@ -2027,7 +2340,7 @@ describe("evaluation vertical slice", () => {
             confirmed: true,
           }),
         ).rejects.toThrow(
-          /complete audit, decision, submission, and change evidence|changed before it could be reopened/i,
+          /complete audit, decision, submission, change, and notification evidence|changed before it could be reopened/i,
         );
         expect(fault.suppressed()).toBe(1);
         await expect(

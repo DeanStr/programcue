@@ -417,8 +417,18 @@ than defaulted from role. Prepared webhook audit evidence inherits the exact
 actor and origin from its immutable source audit within the same batch;
 standalone webhook calls without an API-key actor must explicitly declare
 `admin_ui`, `participant_ui`, `public_form`, `api` or `internal`, and a missing
-origin fails before endpoint discovery. This is repository evidence until the
-candidate is deployed.
+origin fails before endpoint discovery. Decision reopen now requires the same
+kind of complete current-state guard for its notification graph: the linked
+operation must be `cancelled` or `completed`, with its communication, delivery
+and operation-item rows present and no leftover cancellable communication,
+delivery or operation item. A NULL notification link is
+accepted only with the exact closed `decision.notification.legacy_unlinked`
+audit; any other missing operation fails before supersession. Fault injection
+that suppresses communication cancellation, delivery cancellation or item
+skipping rolls the reopen back. An already-delivered notification can still
+be reopened and is reported as `already_delivered`; a 0041-marked unlinked
+release is reported as `legacy_unverified` rather than as a send. This is
+repository evidence until the candidate is deployed.
 
 Priority 0 review hardening keeps the client autosave CAS token at the last
 revision explicitly acknowledged by the current assignment's save request.
@@ -904,7 +914,13 @@ revoked and deleted during file erasure.
   confirmed membership, and inserts an `event` change for any published
   programme that still has a public pending speaker so pre-cut cursors
   become stale. Confirming a public published-programme relationship writes
-  the matching `person` change in the same guarded batch.
+  the matching `person` change in the same guarded batch. Migration
+  `0043_session_speaker_identity_immutable.sql` makes `session_speakers`
+  `event_id` and `session_id` immutable, and allows `person_id` to change
+  only for a participant-retention remap onto an archived
+  `retained-participant-*` identity after featured-speaker references are
+  withdrawn. The release validator requires that trigger after 0043 is
+  applied.
   Approved public schedule content remains the separate `0021` immutable-
   publication invariant; the lightweight featured-ID reader does not
   reproduce that full snapshot-integrity query.

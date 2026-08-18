@@ -166,10 +166,10 @@ export abstract class ParticipantRetentionExecution extends ParticipantRetention
           `INSERT INTO people (
              id, email, display_name, email_verified, image_url, biography,
              pronunciation, organisation_name, job_title, profile_status,
-             created_at, updated_at
+             last_operation_id, created_at, updated_at
            )
            SELECT ?, ?, 'Anonymised participant', 0, NULL, NULL, NULL, NULL,
-                  NULL, 'archived', unixepoch(), unixepoch()
+                  NULL, 'archived', ?, unixepoch(), unixepoch()
             WHERE ${eventClaimGuard()}
               AND EXISTS (
                 SELECT 1 FROM people person
@@ -178,6 +178,7 @@ export abstract class ParticipantRetentionExecution extends ParticipantRetention
         ).bind(
           mapping.pseudonymId,
           mapping.pseudonymEmail,
+          operationId,
           viewer.eventId,
           viewer.organisationId,
           operationId,

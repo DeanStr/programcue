@@ -19,7 +19,9 @@ import {
   requiredReviewerAiReviewColumns,
   requiredReviewerAiSchemaObjects,
   requiredReviewerAiSuggestionColumns,
+  requiredSpeakerRelationshipIdentityObjects,
   reviewerAiMigrationName,
+  speakerRelationshipIdentityGuardMigrationName,
   validateRemoteSchemaEvidence,
 } from "./validate-remote-schema.mjs";
 import { validateProductionHealth } from "./verify-production-health.mjs";
@@ -43,6 +45,10 @@ const programmeMembershipGuardMigrations = [
 const publicSpeakerConfirmationGuardMigrations = [
   ...programmeMembershipGuardMigrations,
   publicSpeakerConfirmationGuardMigrationName,
+];
+const speakerRelationshipIdentityGuardMigrations = [
+  ...publicSpeakerConfirmationGuardMigrations,
+  speakerRelationshipIdentityGuardMigrationName,
 ];
 const repositoryRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 
@@ -145,6 +151,17 @@ function remoteEvidence(appliedMigrations = migrations) {
                   : "CREATE TRIGGER prevent_referenced_public_speaker_relationship_delete BEFORE DELETE ON session_speakers WHEN OLD.visibility = 'public' AND EXISTS (SELECT 1 FROM event_public_site_references reference WHERE reference.kind = 'speaker') AND session_id <> OLD.session_id BEGIN SELECT RAISE(ABORT, 'Remove this featured speaker from published event sites before hiding or removing their final public session relationship'); END",
           }),
         ),
+        ...(appliedMigrations.includes(
+          speakerRelationshipIdentityGuardMigrationName,
+        )
+          ? [...requiredSpeakerRelationshipIdentityObjects].map(
+              ([name, type]) => ({
+                name,
+                type,
+                sql: "CREATE TRIGGER session_speakers_identity_immutable BEFORE UPDATE OF event_id, session_id, person_id ON session_speakers WHEN NEW.event_id <> OLD.event_id OR NEW.session_id <> OLD.session_id OR (NEW.person_id <> OLD.person_id AND NOT (NEW.person_id LIKE 'retained-participant-%' AND profile_status = 'archived' AND retained.last_operation_id = event.last_operation_id AND participant_retention_completed_at IS NULL AND NOT EXISTS (SELECT 1 FROM event_public_site_references reference WHERE reference.kind = 'speaker' AND reference.record_id = OLD.person_id))) BEGIN SELECT RAISE(ABORT, 'Session speaker relationship identity is immutable'); END",
+              }),
+            )
+          : []),
       ],
     },
     { success: true, results: columnEvidence(requiredReviewerAiReviewColumns) },
@@ -400,6 +417,71 @@ test("remote schema validation requires the exact migration ledger and deployed 
     /featured-speaker relationship visibility trigger has the wrong protection contract/u,
   );
 
+  assert.deepEqual(
+    validateRemoteSchemaEvidence(
+      remoteEvidence(speakerRelationshipIdentityGuardMigrations),
+      speakerRelationshipIdentityGuardMigrations,
+    ),
+    {
+      migrationCount: 10,
+      pendingMigrationCount: 0,
+      brandingColumnCount: 7,
+      brandingObjectCount: 11,
+      reviewerAiColumnCount: 12,
+      reviewerAiObjectCount: 14,
+      publicSiteColumnCount: 28,
+      publicSiteObjectCount: 6,
+      publicSiteForeignKeyCount: 9,
+    },
+  );
+
+  const missingIdentityTrigger = remoteEvidence(
+    speakerRelationshipIdentityGuardMigrations,
+  );
+  missingIdentityTrigger[2].results = missingIdentityTrigger[2].results.filter(
+    ({ name }) => name !== "session_speakers_identity_immutable",
+  );
+  assert.throws(
+    () =>
+      validateRemoteSchemaEvidence(
+        missingIdentityTrigger,
+        speakerRelationshipIdentityGuardMigrations,
+      ),
+    /missing required trigger session_speakers_identity_immutable/u,
+  );
+
+  const staleIdentityTrigger = remoteEvidence(
+    speakerRelationshipIdentityGuardMigrations,
+  );
+  staleIdentityTrigger[2].results.find(
+    ({ name }) => name === "session_speakers_identity_immutable",
+  ).sql =
+    "CREATE TRIGGER session_speakers_identity_immutable BEFORE UPDATE OF visibility ON session_speakers BEGIN SELECT 1; END";
+  assert.throws(
+    () =>
+      validateRemoteSchemaEvidence(
+        staleIdentityTrigger,
+        speakerRelationshipIdentityGuardMigrations,
+      ),
+    /session-speaker identity trigger has the wrong protection contract/u,
+  );
+
+  const invertedFeaturedIdentityTrigger = remoteEvidence(
+    speakerRelationshipIdentityGuardMigrations,
+  );
+  invertedFeaturedIdentityTrigger[2].results.find(
+    ({ name }) => name === "session_speakers_identity_immutable",
+  ).sql =
+    "CREATE TRIGGER session_speakers_identity_immutable BEFORE UPDATE OF event_id, session_id, person_id ON session_speakers WHEN NEW.event_id <> OLD.event_id OR NEW.session_id <> OLD.session_id OR NOT (NEW.person_id LIKE 'retained-participant-%' AND profile_status = 'archived' AND participant_retention_completed_at IS NULL AND EXISTS (SELECT 1 FROM event_public_site_references reference WHERE reference.kind = 'speaker')) BEGIN SELECT RAISE(ABORT, 'Session speaker relationship identity is immutable'); END";
+  assert.throws(
+    () =>
+      validateRemoteSchemaEvidence(
+        invertedFeaturedIdentityTrigger,
+        speakerRelationshipIdentityGuardMigrations,
+      ),
+    /session-speaker identity trigger has the wrong protection contract/u,
+  );
+
   const invalidPublicSiteColumn = remoteEvidence();
   invalidPublicSiteColumn[8].results.find(
     ({ tableName, name }) =>
@@ -507,6 +589,42 @@ test("confirmed public-speaker migration fails closed and invalidates pending pu
   assert.match(
     migration,
     /INSERT INTO event_changes[\s\S]*migration-0042-public-speaker-eligibility[\s\S]*participation_status = 'pending'/u,
+  );
+  assert.doesNotMatch(migration, /^SELECT RAISE\(/mu);
+});
+
+test("session-speaker identity migration makes relationship identity immutable", async () => {
+  const migration = await readFile(
+    resolve(
+      repositoryRoot,
+      "migrations",
+      speakerRelationshipIdentityGuardMigrationName,
+    ),
+    "utf8",
+  );
+  assert.match(
+    migration,
+    /CREATE TRIGGER session_speakers_identity_immutable/u,
+  );
+  assert.match(
+    migration,
+    /BEFORE UPDATE OF event_id, session_id, person_id ON session_speakers/u,
+  );
+  assert.match(migration, /NEW\.person_id <> OLD\.person_id/u);
+  assert.match(migration, /NEW\.person_id LIKE 'retained-participant-%'/u);
+  assert.match(
+    migration,
+    /retained\.last_operation_id = event\.last_operation_id/u,
+  );
+  assert.match(migration, /participant_retention_completed_at IS NULL/u);
+  assert.match(
+    migration,
+    /NOT EXISTS \(\s*SELECT 1 FROM event_public_site_references reference/u,
+  );
+  assert.match(migration, /reference\.record_id = OLD\.person_id/u);
+  assert.match(
+    migration,
+    /Session speaker relationship identity is immutable/u,
   );
   assert.doesNotMatch(migration, /^SELECT RAISE\(/mu);
 });

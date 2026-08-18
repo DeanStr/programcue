@@ -17,6 +17,8 @@ export const publicSiteProgrammeMembershipGuardMigrationName =
   "0040_align_featured_speaker_session_guard.sql";
 export const publicSpeakerConfirmationGuardMigrationName =
   "0042_confirmed_public_speaker_eligibility.sql";
+export const speakerRelationshipIdentityGuardMigrationName =
+  "0043_session_speaker_identity_immutable.sql";
 
 export const requiredBrandAssetColumns = new Map([
   ["width_px", { type: "INTEGER", notnull: 0, defaultValue: null }],
@@ -156,6 +158,10 @@ export const requiredFeaturedSpeakerRelationshipObjects = new Map([
     "trigger",
   ],
   ["prevent_referenced_public_speaker_relationship_delete", "trigger"],
+]);
+
+export const requiredSpeakerRelationshipIdentityObjects = new Map([
+  ["session_speakers_identity_immutable", "trigger"],
 ]);
 
 export const requiredPublicSiteForeignKeys = [
@@ -405,6 +411,10 @@ export function validateRemoteSchemaEvidence(
   const publicSpeakerConfirmationGuardsApplied = appliedMigrationNames.includes(
     publicSpeakerConfirmationGuardMigrationName,
   );
+  const speakerRelationshipIdentityGuardsApplied =
+    appliedMigrationNames.includes(
+      speakerRelationshipIdentityGuardMigrationName,
+    );
   if (featuredSpeakerRelationshipGuardsApplied && !publicSiteApplied) {
     throw new Error(
       "Remote D1 applied featured-speaker relationship guards without the public event-site baseline.",
@@ -598,6 +608,50 @@ export function validateRemoteSchemaEvidence(
         );
       }
     }
+    if (speakerRelationshipIdentityGuardsApplied) {
+      for (const [name, type] of requiredSpeakerRelationshipIdentityObjects) {
+        if (objects.get(name) !== type) {
+          throw new Error(`Remote D1 is missing required ${type} ${name}.`);
+        }
+      }
+      const identityTrigger = objectRows.find(
+        (row) => row.name === "session_speakers_identity_immutable",
+      );
+      const identityTriggerSql =
+        typeof identityTrigger?.sql === "string" ? identityTrigger.sql : "";
+      if (
+        !/BEFORE\s+UPDATE\s+OF\s+event_id\s*,\s*session_id\s*,\s*person_id\s+ON\s+session_speakers/iu.test(
+          identityTriggerSql,
+        ) ||
+        !/NEW\.event_id\s*<>\s*OLD\.event_id/iu.test(identityTriggerSql) ||
+        !/NEW\.session_id\s*<>\s*OLD\.session_id/iu.test(identityTriggerSql) ||
+        !/NEW\.person_id\s*<>\s*OLD\.person_id/iu.test(identityTriggerSql) ||
+        !/NEW\.person_id\s+LIKE\s+'retained-participant-%'/iu.test(
+          identityTriggerSql,
+        ) ||
+        !/profile_status\s*=\s*'archived'/iu.test(identityTriggerSql) ||
+        !/retained\.last_operation_id\s*=\s*event\.last_operation_id/iu.test(
+          identityTriggerSql,
+        ) ||
+        !/participant_retention_completed_at\s+IS\s+NULL/iu.test(
+          identityTriggerSql,
+        ) ||
+        !/NOT\s+EXISTS\s*\(\s*SELECT\s+1\s+FROM\s+event_public_site_references\s+reference/iu.test(
+          identityTriggerSql,
+        ) ||
+        !/reference\.kind\s*=\s*'speaker'/iu.test(identityTriggerSql) ||
+        !/reference\.record_id\s*=\s*OLD\.person_id/iu.test(
+          identityTriggerSql,
+        ) ||
+        !/RAISE\s*\(\s*ABORT\s*,\s*'Session speaker relationship identity is immutable'\s*\)/iu.test(
+          identityTriggerSql,
+        )
+      ) {
+        throw new Error(
+          "Remote D1 session-speaker identity trigger has the wrong protection contract.",
+        );
+      }
+    }
     const publicSiteForeignKeys = successfulResults(
       response[9],
       "public-site foreign keys",
@@ -688,6 +742,7 @@ function run() {
     ...requiredReviewerAiSchemaObjects.keys(),
     ...requiredPublicSiteSchemaObjects.keys(),
     ...requiredFeaturedSpeakerRelationshipObjects.keys(),
+    ...requiredSpeakerRelationshipIdentityObjects.keys(),
   ]
     .map((name) => `'${name.replaceAll("'", "''")}'`)
     .join(", ");

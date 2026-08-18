@@ -783,9 +783,12 @@ export async function action({ request, context }: ActionFunctionArgs) {
       }
       return {
         ok: true,
-        message: result.notificationCancelled
-          ? "Decision reopened for correction and its pending notification was cancelled. Messages already sent cannot be recalled; record and release the corrected outcome explicitly."
-          : "Decision reopened for correction. Messages already sent cannot be recalled; record and release the corrected outcome explicitly.",
+        message:
+          result.notificationOutcome === "cancelled_before_delivery"
+            ? "Decision reopened for correction and its pending notification was cancelled. Messages already sent cannot be recalled; record and release the corrected outcome explicitly."
+            : result.notificationOutcome === "legacy_unverified"
+              ? "Decision reopened for correction. This release predates pinned notification evidence, so delivery is not asserted. Messages that were sent cannot be recalled; record and release the corrected outcome explicitly."
+              : "Decision reopened for correction. No pending notification remained to cancel. Messages already sent cannot be recalled; record and release the corrected outcome explicitly.",
       };
     }
     return data(

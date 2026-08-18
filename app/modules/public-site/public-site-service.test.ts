@@ -1350,6 +1350,73 @@ describe("public event site publication", () => {
     expect(speaker?.sessionIds).toEqual(["schedule-test-one"]);
   });
 
+  it("blocks rewriting session speaker relationship identity", async () => {
+    await publishProgramme();
+    await publishFeaturedSpeakerSite();
+
+    await expect(
+      env.DB.prepare(
+        `UPDATE session_speakers
+            SET person_id = 'person-demo-submitter'
+          WHERE session_id = ? AND event_id = ? AND person_id = ?`,
+      )
+        .bind("schedule-test-one", viewer.eventId, "person-demo-speaker")
+        .run(),
+    ).rejects.toThrow(/relationship identity is immutable/i);
+    await expect(
+      env.DB.prepare(
+        `UPDATE session_speakers
+            SET session_id = 'schedule-test-two'
+          WHERE session_id = ? AND event_id = ? AND person_id = ?`,
+      )
+        .bind("schedule-test-one", viewer.eventId, "person-demo-speaker")
+        .run(),
+    ).rejects.toThrow(/relationship identity is immutable/i);
+    const retainedPersonId = "retained-participant-featured-bypass";
+    await env.DB.prepare(
+      `INSERT INTO people (
+         id, email, display_name, email_verified, profile_status,
+         created_at, updated_at
+       ) VALUES (?, ?, 'Anonymised participant', 0, 'archived',
+                 unixepoch(), unixepoch())`,
+    )
+      .bind(retainedPersonId, `${retainedPersonId}@example.com`)
+      .run();
+    await expect(
+      env.DB.prepare(
+        `UPDATE session_speakers
+            SET person_id = ?
+          WHERE session_id = ? AND event_id = ? AND person_id = ?`,
+      )
+        .bind(
+          retainedPersonId,
+          "schedule-test-one",
+          viewer.eventId,
+          "person-demo-speaker",
+        )
+        .run(),
+    ).rejects.toThrow(/relationship identity is immutable/i);
+    await env.DB.prepare(
+      `UPDATE session_speakers
+          SET person_id = person_id
+        WHERE session_id = ? AND event_id = ? AND person_id = ?`,
+    )
+      .bind("schedule-test-one", viewer.eventId, "person-demo-speaker")
+      .run();
+    expect(
+      await env.DB.prepare(
+        `SELECT session_id AS sessionId, person_id AS personId
+           FROM session_speakers
+          WHERE session_id = ? AND event_id = ? AND person_id = ?`,
+      )
+        .bind("schedule-test-one", viewer.eventId, "person-demo-speaker")
+        .first(),
+    ).toEqual({
+      sessionId: "schedule-test-one",
+      personId: "person-demo-speaker",
+    });
+  });
+
   it("blocks changing the final featured relationship away from confirmed", async () => {
     await publishProgramme();
     await publishFeaturedSpeakerSite();
@@ -1407,6 +1474,34 @@ describe("public event site publication", () => {
         (candidate) => candidate.id === "person-demo-speaker",
       )?.sessionIds,
     ).toEqual(["schedule-test-two"]);
+  });
+
+  it("blocks remapping an unfeatured speaker onto an unrelated retained identity", async () => {
+    await publishProgramme();
+    const retainedPersonId = "retained-participant-unrelated-identity";
+    await env.DB.prepare(
+      `INSERT INTO people (
+         id, email, display_name, email_verified, profile_status,
+         created_at, updated_at
+       ) VALUES (?, ?, 'Anonymised participant', 0, 'archived',
+                 unixepoch(), unixepoch())`,
+    )
+      .bind(retainedPersonId, `${retainedPersonId}@example.com`)
+      .run();
+    await expect(
+      env.DB.prepare(
+        `UPDATE session_speakers
+            SET person_id = ?
+          WHERE session_id = ? AND event_id = ? AND person_id = ?`,
+      )
+        .bind(
+          retainedPersonId,
+          "schedule-test-one",
+          viewer.eventId,
+          "person-demo-speaker",
+        )
+        .run(),
+    ).rejects.toThrow(/relationship identity is immutable/i);
   });
 
   it("lets an unfeatured speaker move between pending and confirmed", async () => {

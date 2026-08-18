@@ -38,6 +38,119 @@ import {
 } from "./evaluation-errors";
 import { decisionReopenSchema, decisionSchema } from "./evaluation-schema";
 
+export type DecisionReopenNotificationOutcome =
+  | "cancelled_before_delivery"
+  | "already_delivered"
+  | "legacy_unverified";
+
+const decisionReopenLegacyUnlinkedSql = `
+  EXISTS (
+    SELECT 1 FROM audit_events legacy_unlinked
+     WHERE legacy_unlinked.id =
+           'migration-0041-decision-notification-unlinked:' || ?
+       AND legacy_unlinked.organisation_id = ?
+       AND legacy_unlinked.event_id = ?
+       AND legacy_unlinked.actor_kind = 'system'
+       AND legacy_unlinked.origin = 'internal'
+       AND legacy_unlinked.action = 'decision.notification.legacy_unlinked'
+       AND legacy_unlinked.entity_type = 'submission_decision'
+       AND legacy_unlinked.entity_id = ?
+  )`;
+
+const decisionReopenNotificationGraphIntactSql = `
+  (
+    (
+      ? IS NULL
+      AND ${decisionReopenLegacyUnlinkedSql}
+    )
+    OR (
+      ? IS NOT NULL
+      AND EXISTS (
+        SELECT 1 FROM operation_jobs obsolete_notification
+         WHERE obsolete_notification.id = ?
+           AND obsolete_notification.event_id = ?
+           AND obsolete_notification.organisation_id = ?
+           AND obsolete_notification.type = 'decision.notification'
+           AND obsolete_notification.status IN ('cancelled','completed')
+      )
+      AND EXISTS (
+        SELECT 1 FROM communications communication
+         WHERE communication.operation_id = ?
+           AND communication.event_id = ?
+      )
+      AND EXISTS (
+        SELECT 1 FROM communication_deliveries delivery
+         JOIN communications communication
+           ON communication.id = delivery.communication_id
+          AND communication.event_id = delivery.event_id
+          AND communication.operation_id = ?
+        WHERE delivery.event_id = ?
+      )
+      AND EXISTS (
+        SELECT 1 FROM operation_items item
+         WHERE item.operation_id = ?
+      )
+      AND NOT EXISTS (
+        SELECT 1 FROM communications communication
+         WHERE communication.operation_id = ?
+           AND communication.event_id = ?
+           AND communication.status IN ('draft','scheduled','queued','failed')
+      )
+      AND NOT EXISTS (
+        SELECT 1 FROM communication_deliveries delivery
+         JOIN communications communication
+           ON communication.id = delivery.communication_id
+          AND communication.event_id = delivery.event_id
+          AND communication.operation_id = ?
+        WHERE delivery.event_id = ?
+          AND delivery.status IN ('queued','failed')
+      )
+      AND NOT EXISTS (
+        SELECT 1 FROM operation_items item
+         WHERE item.operation_id = ?
+           AND item.status IN ('pending','failed')
+      )
+    )
+  )`;
+
+function decisionReopenLegacyUnlinkedBindings(
+  decisionId: string,
+  organisationId: string,
+  eventId: string,
+) {
+  return [decisionId, organisationId, eventId, decisionId] as const;
+}
+
+function decisionReopenNotificationGraphBindings(
+  notificationOperationId: string | null,
+  decisionId: string,
+  eventId: string,
+  organisationId: string,
+) {
+  return [
+    notificationOperationId,
+    ...decisionReopenLegacyUnlinkedBindings(
+      decisionId,
+      organisationId,
+      eventId,
+    ),
+    notificationOperationId,
+    notificationOperationId,
+    eventId,
+    organisationId,
+    notificationOperationId,
+    eventId,
+    notificationOperationId,
+    eventId,
+    notificationOperationId,
+    notificationOperationId,
+    eventId,
+    notificationOperationId,
+    eventId,
+    notificationOperationId,
+  ] as const;
+}
+
 export class EvaluationDecisionService {
   constructor(private readonly env: CloudflareEnvironment) {}
 
@@ -50,7 +163,21 @@ export class EvaluationDecisionService {
     const released = await this.env.DB.prepare(
       `SELECT decision.id AS decisionId, decision.decision,
               submission.status AS submissionStatus, submission.revision,
-              decision.notification_operation_id AS notificationOperationId
+              decision.notification_operation_id AS notificationOperationId,
+              EXISTS (
+                SELECT 1 FROM audit_events legacy_unlinked
+                 WHERE legacy_unlinked.id =
+                       'migration-0041-decision-notification-unlinked:' ||
+                       decision.id
+                   AND legacy_unlinked.organisation_id = event.organisation_id
+                   AND legacy_unlinked.event_id = decision.event_id
+                   AND legacy_unlinked.actor_kind = 'system'
+                   AND legacy_unlinked.origin = 'internal'
+                   AND legacy_unlinked.action =
+                       'decision.notification.legacy_unlinked'
+                   AND legacy_unlinked.entity_type = 'submission_decision'
+                   AND legacy_unlinked.entity_id = decision.id
+              ) AS hasLegacyUnlinkedMarker
          FROM submission_decisions decision
          JOIN submissions submission
            ON submission.id = decision.submission_id
@@ -68,6 +195,7 @@ export class EvaluationDecisionService {
         submissionStatus: string;
         revision: number;
         notificationOperationId: string | null;
+        hasLegacyUnlinkedMarker: number;
       }>();
     if (!released) {
       throw new EvaluationStateError(
@@ -84,6 +212,14 @@ export class EvaluationDecisionService {
         "The submission no longer matches its released decision. Refresh before reopening it.",
       );
     }
+    if (
+      released.notificationOperationId === null &&
+      Number(released.hasLegacyUnlinkedMarker) !== 1
+    ) {
+      throw new EvaluationStateError(
+        "The released decision is missing its notification operation without the migration audit marker.",
+      );
+    }
     return { parsed, released };
   }
 
@@ -92,18 +228,10 @@ export class EvaluationDecisionService {
     const operationId = crypto.randomUUID();
     const auditEventId = crypto.randomUUID();
     const nextRevision = released.revision + 1;
-    const [
-      auditInsert,
-      ,
-      ,
-      ,
-      notificationCancellation,
-      decisionUpdate,
-      submissionUpdate,
-      eventChange,
-    ] = await this.env.DB.batch([
-      this.env.DB.prepare(
-        `INSERT INTO audit_events (
+    const [auditInsert, , , , , decisionUpdate, submissionUpdate, eventChange] =
+      await this.env.DB.batch([
+        this.env.DB.prepare(
+          `INSERT INTO audit_events (
              id, actor_kind, origin, metadata_version, organisation_id, event_id,
              actor_person_id, action, entity_type, entity_id, correlation_id,
              metadata_json, created_at
@@ -125,34 +253,46 @@ export class EvaluationDecisionService {
               AND decision.decision = ? AND decision.decision <> 'accepted'
               AND submission.revision = ? AND submission.status = ?
               AND (
-                ? IS NULL
-                OR NOT EXISTS (
-                  SELECT 1 FROM operation_jobs active_notification
-                   WHERE active_notification.id = ?
-                     AND active_notification.event_id = decision.event_id
-                     AND active_notification.organisation_id = event.organisation_id
-                     AND active_notification.status = 'running'
+                (
+                  ? IS NULL
+                  AND ${decisionReopenLegacyUnlinkedSql}
+                )
+                OR (
+                  ? IS NOT NULL
+                  AND NOT EXISTS (
+                    SELECT 1 FROM operation_jobs active_notification
+                     WHERE active_notification.id = ?
+                       AND active_notification.event_id = decision.event_id
+                       AND active_notification.organisation_id = event.organisation_id
+                       AND active_notification.status = 'running'
+                  )
                 )
               )`,
-      ).bind(
-        auditEventId,
-        viewer.organisationId,
-        viewer.eventId,
-        viewer.personId,
-        operationId,
-        parsed.reason,
-        viewer.organisationId,
-        released.decisionId,
-        viewer.eventId,
-        parsed.submissionId,
-        released.decision,
-        released.revision,
-        released.decision,
-        released.notificationOperationId,
-        released.notificationOperationId,
-      ),
-      this.env.DB.prepare(
-        `UPDATE communications
+        ).bind(
+          auditEventId,
+          viewer.organisationId,
+          viewer.eventId,
+          viewer.personId,
+          operationId,
+          parsed.reason,
+          viewer.organisationId,
+          released.decisionId,
+          viewer.eventId,
+          parsed.submissionId,
+          released.decision,
+          released.revision,
+          released.decision,
+          released.notificationOperationId,
+          ...decisionReopenLegacyUnlinkedBindings(
+            released.decisionId,
+            viewer.organisationId,
+            viewer.eventId,
+          ),
+          released.notificationOperationId,
+          released.notificationOperationId,
+        ),
+        this.env.DB.prepare(
+          `UPDATE communications
               SET status = 'cancelled', cancelled_at = unixepoch(),
                   updated_at = unixepoch()
             WHERE operation_id = ? AND event_id = ?
@@ -161,15 +301,15 @@ export class EvaluationDecisionService {
                 SELECT 1 FROM audit_events
                  WHERE id = ? AND organisation_id = ? AND event_id = ?
               )`,
-      ).bind(
-        released.notificationOperationId,
-        viewer.eventId,
-        auditEventId,
-        viewer.organisationId,
-        viewer.eventId,
-      ),
-      this.env.DB.prepare(
-        `UPDATE communication_deliveries
+        ).bind(
+          released.notificationOperationId,
+          viewer.eventId,
+          auditEventId,
+          viewer.organisationId,
+          viewer.eventId,
+        ),
+        this.env.DB.prepare(
+          `UPDATE communication_deliveries
               SET status = 'cancelled', updated_at = unixepoch()
             WHERE event_id = ? AND status IN ('queued','failed')
               AND communication_id IN (
@@ -178,9 +318,9 @@ export class EvaluationDecisionService {
                    AND communication.event_id = communication_deliveries.event_id
                    AND communication.status = 'cancelled'
               )`,
-      ).bind(viewer.eventId, released.notificationOperationId),
-      this.env.DB.prepare(
-        `UPDATE operation_items
+        ).bind(viewer.eventId, released.notificationOperationId),
+        this.env.DB.prepare(
+          `UPDATE operation_items
               SET status = 'skipped', error_code = 'DECISION_REOPENED',
                   error_message = 'The original decision was reopened before delivery.',
                   completed_at = unixepoch(), updated_at = unixepoch()
@@ -189,14 +329,14 @@ export class EvaluationDecisionService {
                 SELECT 1 FROM audit_events
                  WHERE id = ? AND organisation_id = ? AND event_id = ?
               )`,
-      ).bind(
-        released.notificationOperationId,
-        auditEventId,
-        viewer.organisationId,
-        viewer.eventId,
-      ),
-      this.env.DB.prepare(
-        `UPDATE operation_jobs
+        ).bind(
+          released.notificationOperationId,
+          auditEventId,
+          viewer.organisationId,
+          viewer.eventId,
+        ),
+        this.env.DB.prepare(
+          `UPDATE operation_jobs
               SET status = 'cancelled', last_error = NULL,
                   completed_at = unixepoch(), claim_token = NULL,
                   claim_expires_at = NULL, updated_at = unixepoch()
@@ -210,16 +350,16 @@ export class EvaluationDecisionService {
                 SELECT 1 FROM audit_events
                  WHERE id = ? AND organisation_id = ? AND event_id = ?
               )`,
-      ).bind(
-        released.notificationOperationId,
-        viewer.eventId,
-        viewer.organisationId,
-        auditEventId,
-        viewer.organisationId,
-        viewer.eventId,
-      ),
-      this.env.DB.prepare(
-        `UPDATE submission_decisions
+        ).bind(
+          released.notificationOperationId,
+          viewer.eventId,
+          viewer.organisationId,
+          auditEventId,
+          viewer.organisationId,
+          viewer.eventId,
+        ),
+        this.env.DB.prepare(
+          `UPDATE submission_decisions
             SET status = 'superseded'
           WHERE id = ? AND event_id = ? AND submission_id = ?
             AND status = 'published' AND decision = ?
@@ -233,32 +373,26 @@ export class EvaluationDecisionService {
               SELECT 1 FROM audit_events
                WHERE id = ? AND organisation_id = ? AND event_id = ?
             )
-            AND (
-              ? IS NULL
-              OR EXISTS (
-                SELECT 1 FROM operation_jobs obsolete_notification
-                 WHERE obsolete_notification.id = ?
-                   AND obsolete_notification.event_id = submission_decisions.event_id
-                   AND obsolete_notification.organisation_id = ?
-                   AND obsolete_notification.status IN ('cancelled','completed')
-              )
-            )`,
-      ).bind(
-        released.decisionId,
-        viewer.eventId,
-        parsed.submissionId,
-        released.decision,
-        released.revision,
-        released.decision,
-        auditEventId,
-        viewer.organisationId,
-        viewer.eventId,
-        released.notificationOperationId,
-        released.notificationOperationId,
-        viewer.organisationId,
-      ),
-      this.env.DB.prepare(
-        `UPDATE submissions
+            AND ${decisionReopenNotificationGraphIntactSql}`,
+        ).bind(
+          released.decisionId,
+          viewer.eventId,
+          parsed.submissionId,
+          released.decision,
+          released.revision,
+          released.decision,
+          auditEventId,
+          viewer.organisationId,
+          viewer.eventId,
+          ...decisionReopenNotificationGraphBindings(
+            released.notificationOperationId,
+            released.decisionId,
+            viewer.eventId,
+            viewer.organisationId,
+          ),
+        ),
+        this.env.DB.prepare(
+          `UPDATE submissions
             SET status = 'decision_ready', revision = revision + 1,
                 last_operation_id = ?, updated_at = unixepoch()
           WHERE id = ? AND event_id = ? AND revision = ? AND status = ?
@@ -271,19 +405,19 @@ export class EvaluationDecisionService {
               SELECT 1 FROM audit_events
                WHERE id = ? AND organisation_id = ? AND event_id = ?
             )`,
-      ).bind(
-        operationId,
-        parsed.submissionId,
-        viewer.eventId,
-        released.revision,
-        released.decision,
-        released.decisionId,
-        auditEventId,
-        viewer.organisationId,
-        viewer.eventId,
-      ),
-      this.env.DB.prepare(
-        `INSERT INTO event_changes (
+        ).bind(
+          operationId,
+          parsed.submissionId,
+          viewer.eventId,
+          released.revision,
+          released.decision,
+          released.decisionId,
+          auditEventId,
+          viewer.organisationId,
+          viewer.eventId,
+        ),
+        this.env.DB.prepare(
+          `INSERT INTO event_changes (
            event_id, entity_type, entity_id, change_type, correlation_id,
            created_at
          )
@@ -292,17 +426,17 @@ export class EvaluationDecisionService {
             SELECT 1 FROM submissions
              WHERE id = ? AND event_id = ? AND last_operation_id = ?
           )`,
-      ).bind(
-        viewer.eventId,
-        released.decisionId,
-        operationId,
-        parsed.submissionId,
-        viewer.eventId,
-        operationId,
-      ),
-      atomicBatchGuardStatement(
-        this.env,
-        `EXISTS (
+        ).bind(
+          viewer.eventId,
+          released.decisionId,
+          operationId,
+          parsed.submissionId,
+          viewer.eventId,
+          operationId,
+        ),
+        atomicBatchGuardStatement(
+          this.env,
+          `EXISTS (
             SELECT 1 FROM audit_events audit WHERE audit.id = ?
           ) AND NOT (
             EXISTS (
@@ -329,38 +463,44 @@ export class EvaluationDecisionService {
                WHERE change.event_id = ? AND change.entity_type = 'submission_decision'
                  AND change.entity_id = ? AND change.change_type = 'updated'
                  AND change.correlation_id = ?
-            )
+            ) AND ${decisionReopenNotificationGraphIntactSql}
           )`,
-        [
-          auditEventId,
-          auditEventId,
-          viewer.organisationId,
-          viewer.eventId,
-          viewer.personId,
-          released.decisionId,
-          operationId,
-          parsed.reason,
-          parsed.submissionId,
-          released.decisionId,
-          viewer.eventId,
-          parsed.submissionId,
-          viewer.eventId,
-          nextRevision,
-          operationId,
-          viewer.eventId,
-          released.decisionId,
-          operationId,
-        ],
-      ),
-    ]).catch((error: unknown) => {
-      if (isAtomicBatchGuardError(error)) {
-        throw new Error(
-          "The reopened decision could not record its complete audit, decision, submission, and change evidence.",
-          { cause: error },
-        );
-      }
-      throw error;
-    });
+          [
+            auditEventId,
+            auditEventId,
+            viewer.organisationId,
+            viewer.eventId,
+            viewer.personId,
+            released.decisionId,
+            operationId,
+            parsed.reason,
+            parsed.submissionId,
+            released.decisionId,
+            viewer.eventId,
+            parsed.submissionId,
+            viewer.eventId,
+            nextRevision,
+            operationId,
+            viewer.eventId,
+            released.decisionId,
+            operationId,
+            ...decisionReopenNotificationGraphBindings(
+              released.notificationOperationId,
+              released.decisionId,
+              viewer.eventId,
+              viewer.organisationId,
+            ),
+          ],
+        ),
+      ]).catch((error: unknown) => {
+        if (isAtomicBatchGuardError(error)) {
+          throw new Error(
+            "The reopened decision could not record its complete audit, decision, submission, change, and notification evidence.",
+            { cause: error },
+          );
+        }
+        throw error;
+      });
     if (
       (auditInsert.meta.changes ?? 0) !== 1 ||
       (decisionUpdate.meta.changes ?? 0) !== 1 ||
@@ -374,8 +514,54 @@ export class EvaluationDecisionService {
     return {
       decisionId: released.decisionId,
       submissionId: parsed.submissionId,
-      notificationCancelled: (notificationCancellation.meta.changes ?? 0) === 1,
+      notificationOutcome: await this.notificationReopenOutcome(
+        viewer,
+        released.decisionId,
+        released.notificationOperationId,
+      ),
     };
+  }
+
+  private async notificationReopenOutcome(
+    viewer: Viewer,
+    decisionId: string,
+    notificationOperationId: string | null,
+  ): Promise<DecisionReopenNotificationOutcome> {
+    if (notificationOperationId === null) {
+      const legacyUnlinked = await this.env.DB.prepare(
+        `SELECT 1 AS present WHERE ${decisionReopenLegacyUnlinkedSql}`,
+      )
+        .bind(
+          ...decisionReopenLegacyUnlinkedBindings(
+            decisionId,
+            viewer.organisationId,
+            viewer.eventId,
+          ),
+        )
+        .first();
+      if (!legacyUnlinked) {
+        throw new Error(
+          "The reopened decision is missing its notification operation without the migration audit marker.",
+        );
+      }
+      return "legacy_unverified";
+    }
+    const notification = await this.env.DB.prepare(
+      `SELECT status FROM operation_jobs
+        WHERE id = ? AND event_id = ? AND organisation_id = ?
+          AND type = 'decision.notification'`,
+    )
+      .bind(notificationOperationId, viewer.eventId, viewer.organisationId)
+      .first<{ status: string }>();
+    if (notification?.status === "cancelled") {
+      return "cancelled_before_delivery";
+    }
+    if (notification?.status === "completed") {
+      return "already_delivered";
+    }
+    throw new Error(
+      "The reopened decision left its notification graph in an unexpected state.",
+    );
   }
 
   private async recoverDecision(viewer: Viewer, commandId?: string) {

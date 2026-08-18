@@ -800,61 +800,111 @@ export function EvaluationUnifiedResults() {
                               ) {
                                 return null;
                               }
+                              const hasLinkedNotification =
+                                releasedDecision.notificationEvidenceState ===
+                                  "available" ||
+                                releasedDecision.notificationEvidenceState ===
+                                  "retained";
+                              const originalOutcomeAlreadySent =
+                                hasLinkedNotification &&
+                                releasedDecision.notificationOperationStatus ===
+                                  "completed";
+                              const pendingNotificationCancellable =
+                                hasLinkedNotification &&
+                                [
+                                  "queued",
+                                  "queue_failed",
+                                  "received",
+                                  "retrying",
+                                  "failed",
+                                  "partially_failed",
+                                ].includes(
+                                  releasedDecision.notificationOperationStatus,
+                                );
+                              const notificationInProgress =
+                                hasLinkedNotification &&
+                                releasedDecision.notificationOperationStatus ===
+                                  "running";
                               return (
                                 <details className="mt">
                                   <summary className="btn small">
                                     Reopen released decision
                                   </summary>
-                                  <Form method="post" className="stack mt">
-                                    <input
-                                      type="hidden"
-                                      name="intent"
-                                      value="reopen-decision"
-                                    />
-                                    <input
-                                      type="hidden"
-                                      name="submissionId"
-                                      value={result.id}
-                                    />
-                                    <div className="validation-item warn">
+                                  {notificationInProgress ? (
+                                    <div className="validation-item warn mt">
                                       <strong>
-                                        Prior messages cannot be recalled
+                                        Decision email is still sending
                                       </strong>
                                       <span>
-                                        Reopening supersedes the released{" "}
-                                        {humanise(releasedDecision.decision)}{" "}
-                                        outcome and returns this proposal to
-                                        decision-ready state. You must release
-                                        the corrected outcome separately.
+                                        Reopening is blocked while the original
+                                        notification operation is running. Wait
+                                        until delivery completes or the send
+                                        fails, then reopen. Messages already
+                                        sent cannot be recalled.
                                       </span>
                                     </div>
-                                    <label className="label">
-                                      Correction reason
-                                      <textarea
-                                        className="textarea"
-                                        name="reason"
-                                        minLength={10}
-                                        maxLength={2_000}
-                                        required
-                                      />
-                                    </label>
-                                    <label className="speaker-confirm">
+                                  ) : (
+                                    <Form method="post" className="stack mt">
                                       <input
-                                        type="checkbox"
-                                        name="confirmed"
-                                        value="true"
-                                        required
+                                        type="hidden"
+                                        name="intent"
+                                        value="reopen-decision"
                                       />
-                                      I understand the prior notification cannot
-                                      be recalled.
-                                    </label>
-                                    <button
-                                      type="submit"
-                                      className="btn small danger"
-                                    >
-                                      Confirm reopen
-                                    </button>
-                                  </Form>
+                                      <input
+                                        type="hidden"
+                                        name="submissionId"
+                                        value={result.id}
+                                      />
+                                      <div className="validation-item warn">
+                                        <strong>
+                                          {originalOutcomeAlreadySent
+                                            ? "The original decision email has already been sent"
+                                            : "Prior messages cannot be recalled"}
+                                        </strong>
+                                        <span>
+                                          Reopening supersedes the released{" "}
+                                          {humanise(releasedDecision.decision)}{" "}
+                                          outcome and returns this proposal to
+                                          decision-ready state. You must release
+                                          the corrected outcome separately.
+                                          {originalOutcomeAlreadySent
+                                            ? " The original outcome has already been sent and cannot be recalled."
+                                            : pendingNotificationCancellable
+                                              ? " A pending notification will be cancelled; messages already sent cannot be recalled."
+                                              : " No pending notification remains to cancel; messages already sent cannot be recalled."}
+                                        </span>
+                                      </div>
+                                      <label className="label">
+                                        Correction reason
+                                        <textarea
+                                          className="textarea"
+                                          name="reason"
+                                          minLength={10}
+                                          maxLength={2_000}
+                                          required
+                                        />
+                                      </label>
+                                      <label className="speaker-confirm">
+                                        <input
+                                          type="checkbox"
+                                          name="confirmed"
+                                          value="true"
+                                          required
+                                        />
+                                        {originalOutcomeAlreadySent
+                                          ? "I understand the original decision email has already been sent and cannot be recalled."
+                                          : pendingNotificationCancellable
+                                            ? "I understand a pending notification will be cancelled and messages already sent cannot be recalled."
+                                            : "I understand there is no pending notification to cancel and messages already sent cannot be recalled."}
+                                      </label>
+                                      <button
+                                        type="submit"
+                                        className="btn small danger"
+                                      >
+                                        Confirm reopen
+                                      </button>
+                                    </Form>
+                                  )}
                                 </details>
                               );
                             })()}
