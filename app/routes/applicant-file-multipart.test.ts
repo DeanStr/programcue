@@ -319,7 +319,7 @@ describe("applicant direct multipart boundary", () => {
       }),
     );
     vi.stubGlobal("fetch", siteverify);
-    const cookie = started.cookie.split(";")[0];
+    const cookie = `__Host-${started.cookie.split(";")[0]}`;
     const idempotencyKey = crypto.randomUUID();
     const call = () =>
       invoke(

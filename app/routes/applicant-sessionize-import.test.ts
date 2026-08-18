@@ -106,7 +106,7 @@ describe("applicant Sessionize profile import route", () => {
             headers: {
               "cf-connecting-ip": "203.0.113.222",
               "content-type": "application/json",
-              cookie: verified.cookie.split(";", 1)[0]!,
+              cookie: `__Host-${verified.cookie.split(";", 1)[0]!}`,
             },
             body: JSON.stringify({ profile: "avery-example" }),
           },
