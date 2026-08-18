@@ -83,6 +83,7 @@ test("mobile administration sections reveal linked content without overflow", as
     page.getByRole("heading", { name: "Overall readiness" }),
   ).toBeVisible();
   await expect(page.getByRole("heading", { name: "Workflows" })).toBeVisible();
+  await expect(page.getByLabel("Operational focus")).toBeVisible();
   await page.getByText("Foundation and purpose", { exact: true }).click();
   const reminderSelector = page.getByLabel("Approved reminder foundation");
   await expect(reminderSelector).toBeVisible();
@@ -152,19 +153,31 @@ test("mobile administration sections reveal linked content without overflow", as
   await expect(evaluationAccess.getByLabel("Name")).toBeHidden();
   await page.getByText("Manage evaluation access", { exact: true }).click();
   await expect(evaluationAccess.getByLabel("Name")).toBeVisible();
-  await page
+  const assignments = page
     .getByRole("navigation", { name: "Evaluation views" })
-    .getByRole("link", { name: "Assignments" })
-    .click();
+    .getByRole("link", { name: "Assignments" });
+  await expect(assignments).toHaveAttribute(
+    "href",
+    /[?&]view=assignments(?:&|$)/,
+  );
+  await expect(assignments).not.toHaveAttribute("href", /#/);
+  await assignments.click();
+  await expect(
+    page.getByRole("heading", { name: "Proposal assignments and decisions" }),
+  ).toBeInViewport();
   await expect(
     page.getByRole("button", { name: "Assign" }).first(),
   ).toBeVisible();
   await expect(
     page.getByRole("button", { name: "Decide" }).first(),
   ).toBeVisible();
-  await expect(
-    page.getByRole("combobox", { name: /Evaluator or team for / }).first(),
-  ).toBeVisible();
+  const evaluator = page
+    .getByRole("combobox", { name: /Evaluator or team for / })
+    .first();
+  await expect(evaluator).toBeVisible();
+  const evaluatorBox = await evaluator.boundingBox();
+  expect(evaluatorBox).not.toBeNull();
+  expect(evaluatorBox!.height).toBeLessThan(48);
   await expectNoHorizontalPageOverflow(page);
 });
 

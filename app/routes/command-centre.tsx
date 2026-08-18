@@ -180,7 +180,7 @@ function CommandReminderComposer({
 }) {
   const fetcher = useFetcher<ContextActionResponse>();
   const pending = fetcher.state !== "idle";
-  const canDraft = options.configured && options.templates.length > 0;
+  const canDraft = options.configured;
   return (
     <div className="command-composer">
       <div className="command-panel-head">
@@ -251,8 +251,9 @@ function CommandReminderComposer({
             {pending ? "Drafting preview…" : "Draft preview"}
           </button>
           {canDraft ? null : (
-            <p className="command-inline-note">
-              Drafting is unavailable until an AI provider is configured.
+            <p className="command-inline-note" role="alert">
+              {options.problem ??
+                "Drafting is unavailable until reminder delivery is configured."}
             </p>
           )}
         </div>
@@ -278,8 +279,22 @@ function CommandReadinessCommand() {
   const pending = fetcher.state !== "idle";
   return (
     <div className="command-advisor">
-      <fetcher.Form method="post" action="/ai/context">
+      <fetcher.Form method="post" action="/ai/context" className="stack">
         <input type="hidden" name="kind" value="readiness_summary" />
+        <label className="label">
+          Operational focus
+          <input
+            className="field"
+            type="text"
+            name="focus"
+            maxLength={500}
+            placeholder="Optional — leave blank for a complete overview"
+          />
+        </label>
+        <p className="help">
+          AI prioritisation is advisory and cites the current readiness
+          snapshot. No task or message is created.
+        </p>
         <button
           className="command-advisor-cmd"
           type="submit"

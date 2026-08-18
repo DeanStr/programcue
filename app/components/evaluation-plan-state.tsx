@@ -289,14 +289,14 @@ function EvaluationAdminViews() {
       <nav className="pc-eval-switcher" aria-label="Evaluation views">
         {(
           [
-            ["results", "Results", "evaluation-results"],
-            ["assignments", "Assignments", "evaluation-assignments"],
-            ["setup", "Setup", "evaluation-setup"],
+            ["results", "Results"],
+            ["assignments", "Assignments"],
+            ["setup", "Setup"],
           ] as const
-        ).map(([key, label, hash]) => (
+        ).map(([key, label]) => (
           <Link
             key={key}
-            to={{ search: withViewParam(location.search, key), hash }}
+            to={{ search: withViewParam(location.search, key) }}
             className={view === key ? "is-current" : undefined}
             aria-current={view === key ? "page" : undefined}
           >

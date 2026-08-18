@@ -941,6 +941,13 @@
 .pc-eval-admin .inline-form .pc-eval-control {
   flex: 1 1 8rem;
 }
+@media (max-width: 760px) {
+  .pc-eval-admin .inline-form .pc-eval-control {
+    flex: 0 0 auto;
+    width: 100%;
+    max-width: none;
+  }
+}
 .pc-eval-datetime {
   min-height: var(--control-height);
   font: inherit;

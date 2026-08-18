@@ -481,13 +481,13 @@ test("custom toggles retain their complete track at desktop and phone widths", a
     await openRecordPanel(page, "Programme tracks");
     const toggle = page.locator('label.toggle input[type="checkbox"]').first();
     await expect(toggle).toBeVisible();
-    await expect(toggle).toHaveCSS("width", "38px");
-    await expect(toggle).toHaveCSS("height", "22px");
+    await expect(toggle).toHaveCSS("width", "36px");
+    await expect(toggle).toHaveCSS("height", "20px");
     expect(
       await toggle.evaluate((element) =>
         getComputedStyle(element, "::after").getPropertyValue("width"),
       ),
-    ).toBe("18px");
+    ).toBe("16px");
   }
 });
 
