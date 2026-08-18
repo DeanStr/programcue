@@ -32,14 +32,21 @@
   gap: var(--space-4);
   min-width: 0;
 }
+/* Stick the column, not the preview card. Pinning only the card left
+   Promotion sliding up behind it. Cap the column so the 720px frame and
+   announcement tools stay reachable instead of pinning off-screen. */
 .public-site-preview-stack {
-  display: grid;
-  gap: var(--space-4);
-  min-width: 0;
-}
-.public-site-preview {
   position: sticky;
   top: calc(var(--topbar) + var(--space-4));
+  display: grid;
+  align-content: start;
+  gap: var(--space-4);
+  min-width: 0;
+  max-height: calc(100dvh - var(--topbar) - var(--space-4) - var(--space-6));
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+.public-site-preview {
   min-width: 0;
 }
 .public-site-rail-form,
@@ -1228,8 +1235,10 @@ a.public-site-feature-card:focus-visible .public-site-speaker-profile-cue {
   .public-site-admin-workspace {
     grid-template-columns: 1fr;
   }
-  .public-site-preview {
+  .public-site-preview-stack {
     position: static;
+    max-height: none;
+    overflow: visible;
   }
   .public-site-admin-workspace.is-preview > .public-site-editor-stack {
     display: none;

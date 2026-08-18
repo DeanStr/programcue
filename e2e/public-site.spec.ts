@@ -954,3 +954,64 @@ test("organisers first-publish a bounded site on a blank event", async ({
     eventNavigation.getByRole("link", { name: "About" }),
   ).toBeVisible();
 });
+
+test("draft preview stays in its column and does not cover promotion", async ({
+  page,
+}) => {
+  await page.goto("/admin/site");
+  await expect(
+    page.getByRole("heading", { name: "Draft preview" }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("heading", { name: "Announcement handoff" }),
+  ).toBeVisible();
+
+  const stack = page.locator(".public-site-preview-stack");
+  const preview = page.locator(".public-site-preview");
+  await expect
+    .poll(() => stack.evaluate((element) => getComputedStyle(element).position))
+    .toBe("sticky");
+  await expect
+    .poll(() =>
+      preview.evaluate((element) => getComputedStyle(element).position),
+    )
+    .not.toBe("sticky");
+
+  await openSiteCollection(page, "Sponsors");
+  await openSiteCollection(page, "Session recordings");
+  await page
+    .locator(".public-site-editor-stack")
+    .getByRole("heading", { name: "Session recordings" })
+    .scrollIntoViewIfNeeded();
+
+  await expect(
+    page.getByRole("heading", { name: "Draft preview" }),
+  ).toBeInViewport();
+
+  const overlap = await page.evaluate(() => {
+    const previewCard = document.querySelector(".public-site-preview");
+    const promotion = document.querySelector(".public-site-promotion");
+    if (
+      !(previewCard instanceof HTMLElement) ||
+      !(promotion instanceof HTMLElement)
+    ) {
+      return true;
+    }
+    const a = previewCard.getBoundingClientRect();
+    const b = promotion.getBoundingClientRect();
+    return (
+      a.right > b.left + 1 &&
+      a.left < b.right - 1 &&
+      a.bottom > b.top + 1 &&
+      a.top < b.bottom - 1
+    );
+  });
+  expect(overlap).toBe(false);
+
+  await page
+    .getByRole("heading", { name: "Announcement handoff" })
+    .scrollIntoViewIfNeeded();
+  await expect(
+    page.getByRole("heading", { name: "Announcement handoff" }),
+  ).toBeInViewport();
+});
