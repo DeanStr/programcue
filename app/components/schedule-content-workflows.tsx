@@ -294,7 +294,7 @@ export function ScheduleContentWorkflows({
       />
       {session ? (
         <SessionContentEditor
-          key={`session:${session.id}`}
+          key={`session:${workspace.version?.id ?? "none"}:${session.id}`}
           workspace={workspace}
           session={session}
           recoveryScope={recoveryScope}
