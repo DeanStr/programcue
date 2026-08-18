@@ -781,10 +781,9 @@
   color: var(--text-primary);
 }
 .reviewer-shell .review-save-state {
-  flex: 1 1 0;
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  flex: 1 0 auto;
+  min-width: 6.5rem;
+  overflow: visible;
   white-space: nowrap;
   color: var(--text-tertiary);
   font-size: var(--text-2xs);

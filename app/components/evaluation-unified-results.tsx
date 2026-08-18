@@ -44,6 +44,7 @@ export function EvaluationUnifiedResults() {
   function pageHref(page: number) {
     const next = new URLSearchParams(searchParams);
     next.set("page", String(page));
+    next.set("view", "results");
     return `?${next.toString()}#evaluation-results`;
   }
 
@@ -60,6 +61,7 @@ export function EvaluationUnifiedResults() {
       >
         <summary>Filter and sort</summary>
         <Form method="get" className="inline-form pc-eval-toolbar">
+          <input type="hidden" name="view" value="results" />
           <label className="label">
             View preset
             <select
@@ -293,7 +295,7 @@ export function EvaluationUnifiedResults() {
                       ) : (
                         <Link
                           className="pc-eval-text-action is-primary"
-                          to={`?resultsRound=${encodeURIComponent(loaderData.resultsRoundId ?? "")}&${focusName}=${encodeURIComponent(result.id)}#evaluation-assignments`}
+                          to={`?resultsRound=${encodeURIComponent(loaderData.resultsRoundId ?? "")}&${focusName}=${encodeURIComponent(result.id)}&view=assignments#evaluation-assignments`}
                         >
                           Assign
                         </Link>
@@ -308,7 +310,7 @@ export function EvaluationUnifiedResults() {
                           {result.targetType === "proposal" ? (
                             <Link
                               className="pc-eval-text-action"
-                              to={`?resultsRound=${encodeURIComponent(loaderData.resultsRoundId ?? "")}&${focusName}=${encodeURIComponent(result.id)}#evaluation-assignments`}
+                              to={`?resultsRound=${encodeURIComponent(loaderData.resultsRoundId ?? "")}&${focusName}=${encodeURIComponent(result.id)}&view=assignments#evaluation-assignments`}
                             >
                               Assign
                             </Link>

@@ -76,7 +76,7 @@ export function SubmissionAdminDetailPanel({
           {submission.status !== "draft" && submission.hasEvaluationPlan ? (
             <Link
               className="btn"
-              to={`/admin/review?submission=${encodeURIComponent(submission.id)}#review-submission-${encodeURIComponent(submission.id)}`}
+              to={`/admin/review?submission=${encodeURIComponent(submission.id)}&view=assignments#review-submission-${encodeURIComponent(submission.id)}`}
             >
               Open in Review
             </Link>

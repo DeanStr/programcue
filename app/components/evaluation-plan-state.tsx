@@ -241,8 +241,22 @@ function viewFromHash(hash: string): EvaluationAdminView {
   return "results";
 }
 
+function viewFromSearch(search: string): EvaluationAdminView | null {
+  const value = new URLSearchParams(search).get("view");
+  return isEvaluationAdminView(value) ? value : null;
+}
+
+function withViewParam(search: string, view: EvaluationAdminView): string {
+  const params = new URLSearchParams(
+    search.startsWith("?") ? search.slice(1) : search,
+  );
+  params.set("view", view);
+  return `?${params.toString()}`;
+}
+
 function EvaluationAdminViews() {
   const location = useLocation();
+  const searchView = viewFromSearch(location.search);
   const [storedView, setStoredView] = useState<EvaluationAdminView>("results");
   const [discussionOpen, setDiscussionOpen] = useState(false);
 
@@ -253,17 +267,15 @@ function EvaluationAdminViews() {
       params.has("submission") ||
       params.has("session");
     setDiscussionOpen(discussionTargeted);
-    if (location.hash) {
-      const next = viewFromHash(location.hash);
-      setStoredView(next);
-      sessionStorage.setItem(EVALUATION_VIEW_STORAGE_KEY, next);
-      return;
-    }
+    const fromHash = location.hash ? viewFromHash(location.hash) : null;
     const stored = sessionStorage.getItem(EVALUATION_VIEW_STORAGE_KEY);
-    if (isEvaluationAdminView(stored)) setStoredView(stored);
-  }, [location.hash, location.search]);
+    const next = searchView ?? fromHash ?? stored;
+    if (!isEvaluationAdminView(next)) return;
+    setStoredView(next);
+    sessionStorage.setItem(EVALUATION_VIEW_STORAGE_KEY, next);
+  }, [location.hash, location.search, searchView]);
 
-  const view = location.hash ? viewFromHash(location.hash) : storedView;
+  const view = searchView ?? storedView;
 
   useEffect(() => {
     const id = location.hash.replace(/^#/, "");
@@ -284,7 +296,7 @@ function EvaluationAdminViews() {
         ).map(([key, label, hash]) => (
           <Link
             key={key}
-            to={{ search: location.search, hash }}
+            to={{ search: withViewParam(location.search, key), hash }}
             className={view === key ? "is-current" : undefined}
             aria-current={view === key ? "page" : undefined}
           >

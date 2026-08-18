@@ -106,6 +106,7 @@ export function EvaluationDiscussionPanel() {
               to={`/admin/review?${new URLSearchParams({
                 resultsRound: discussion.target.roundId,
                 sort: loaderData.resultSort,
+                view: "results",
                 ...(loaderData.reviewFilter
                   ? { filter: loaderData.reviewFilter }
                   : {}),
