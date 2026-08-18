@@ -1,12 +1,9 @@
 import {
   ArrowLeft,
-  CalendarPlus,
   History,
   Merge,
   MessageSquarePlus,
   Network,
-  Tag,
-  UserRound,
 } from "lucide-react";
 import type { FormEvent } from "react";
 import {
@@ -188,421 +185,397 @@ export default function AdminCrmContact({ loaderData }: Route.ComponentProps) {
   return (
     <>
       {dialog}
-      <div className="page-head pc-page-header">
-        <div>
-          <span className="pc-page-eyebrow">Organization Speaker Network</span>
-          <h1>{contact.name}</h1>
-          <p>
-            {[contact.jobTitle, contact.organisationName]
-              .filter(Boolean)
-              .join(" · ") || "No title or company recorded"}{" "}
-            · {contact.email}
-          </p>
-        </div>
-        <div className="page-actions">
-          <Link className="btn" to="/admin/crm">
-            <ArrowLeft aria-hidden size={15} /> Speaker Network directory
-          </Link>
-          <Link className="btn" to="/admin/crm/pipeline">
-            <Network aria-hidden size={15} /> Pipeline
-          </Link>
-        </div>
-      </div>
-      {actionData ? (
-        <div
-          className={`validation-item ${actionData.ok ? "ok" : "error"} card pad mb`}
-          role={actionData.ok ? "status" : "alert"}
-        >
-          <strong>{actionData.ok ? "✓" : "△"}</strong>
-          <div className="stack">
-            <span>{actionData.message}</span>
-            {actionData.ok && actionData.handoff ? (
-              <Form method="post" action="/events/select">
-                <input
-                  type="hidden"
-                  name="eventId"
-                  value={actionData.handoff.eventId}
-                />
-                <input
-                  type="hidden"
-                  name="returnTo"
-                  value={`/admin/speakers?person=${encodeURIComponent(actionData.handoff.personId)}`}
-                />
-                <button className="btn small" type="submit">
-                  Switch to target event and open prospect
-                </button>
-              </Form>
-            ) : null}
-          </div>
-        </div>
-      ) : null}
-
-      {contact.duplicates.length ? (
-        <section className="card pad mb" aria-labelledby="duplicate-heading">
-          <div className="card-title">
-            <div>
-              <span className="pc-section-kicker">Identity safety</span>
-              <h2 id="duplicate-heading">Possible duplicate contacts</h2>
-            </div>
-            <Merge aria-hidden className="subtle" />
-          </div>
-          <p>
-            These contacts have the same normalized name. Choose which record
-            remains visible as the primary Speaker Network contact. Linked
-            identities are refused rather than merged unsafely.
-          </p>
-          <div className="stack mt">
-            {contact.duplicates.map((duplicate) => (
-              <div className="card pad" key={duplicate.personId}>
-                <strong>{contact.name}</strong>
-                <p>
-                  {contact.email} ↔ {duplicate.email}
-                </p>
-                <div className="row-actions">
-                  <Form
-                    method="post"
-                    onSubmit={(event) =>
-                      confirmMerge(event, contact.email, duplicate.email)
-                    }
-                  >
-                    <input type="hidden" name="_intent" value="merge" />
-                    <input
-                      type="hidden"
-                      name="primaryId"
-                      value={contact.personId}
-                    />
-                    <input
-                      type="hidden"
-                      name="secondaryId"
-                      value={duplicate.personId}
-                    />
-                    <button
-                      type="submit"
-                      className="btn danger"
-                      disabled={busy}
-                    >
-                      Keep {contact.email} as primary
-                    </button>
-                  </Form>
-                  <Form
-                    method="post"
-                    onSubmit={(event) =>
-                      confirmMerge(event, duplicate.email, contact.email)
-                    }
-                  >
-                    <input type="hidden" name="_intent" value="merge" />
-                    <input
-                      type="hidden"
-                      name="primaryId"
-                      value={duplicate.personId}
-                    />
-                    <input
-                      type="hidden"
-                      name="secondaryId"
-                      value={contact.personId}
-                    />
-                    <button
-                      type="submit"
-                      className="btn danger"
-                      disabled={busy}
-                    >
-                      Keep {duplicate.email} as primary
-                    </button>
-                  </Form>
-                </div>
-              </div>
-            ))}
-          </div>
-        </section>
-      ) : null}
-
-      <div className="grid grid-2 mb">
-        <section className="card pad">
-          <div className="card-title">
-            <div>
-              <span className="pc-section-kicker">Canonical identity</span>
-              <h2>Profile</h2>
-            </div>
-            <UserRound aria-hidden className="subtle" />
-          </div>
-          <dl className="crm-detail-list mt">
-            <div>
-              <dt>Email</dt>
-              <dd>{contact.email}</dd>
-            </div>
-            <div>
-              <dt>Job title</dt>
-              <dd>{contact.jobTitle ?? "Not recorded"}</dd>
-            </div>
-            <div>
-              <dt>Company</dt>
-              <dd>{contact.organisationName ?? "Not recorded"}</dd>
-            </div>
-            <div>
-              <dt>Profile status</dt>
-              <dd>{contact.profileStatus}</dd>
-            </div>
-          </dl>
-          <h3 className="mt">Biography</h3>
-          <p>{contact.biography ?? "No biography recorded."}</p>
-        </section>
-        <section className="card pad">
-          <div className="card-title">
-            <div>
-              <span className="pc-section-kicker">Organizer metadata</span>
-              <h2>Tags</h2>
-            </div>
-            <Tag aria-hidden className="subtle" />
-          </div>
-          <div className="crm-chip-row mt">
-            {contact.tags.map((tag) => (
-              <Form method="post" key={tag}>
-                <input type="hidden" name="_intent" value="remove_tag" />
-                <input type="hidden" name="tag" value={tag} />
-                <button
-                  type="submit"
-                  className="crm-chip"
-                  aria-label={`Remove ${tag} tag`}
-                >
-                  {tag} ×
-                </button>
-              </Form>
-            ))}
-            {!contact.tags.length ? (
-              <span className="subtle">No tags yet</span>
-            ) : null}
-          </div>
-          <Form method="post" className="form-row mt">
-            <input type="hidden" name="_intent" value="add_tag" />
-            <label className="label">
-              Add tag
-              <input className="field" name="tag" placeholder="AI" required />
-            </label>
-            <button type="submit" className="btn" disabled={busy}>
-              Add tag
-            </button>
-          </Form>
-        </section>
-      </div>
-
-      <section className="card pad mb" aria-labelledby="notes-heading">
-        <div className="card-title">
+      <div className="crm-workspace">
+        <div className="page-head pc-page-header">
           <div>
-            <span className="pc-section-kicker">Private organizer context</span>
-            <h2 id="notes-heading">Internal notes</h2>
+            <h1>{contact.name}</h1>
+            <p className="crm-caption">
+              {[contact.jobTitle, contact.organisationName]
+                .filter(Boolean)
+                .join(" · ") || "No title or company recorded"}{" "}
+              · {contact.email}
+            </p>
           </div>
-          <MessageSquarePlus aria-hidden className="subtle" />
-        </div>
-        <Form method="post" className="stack mt">
-          <input type="hidden" name="_intent" value="add_note" />
-          <label className="label">
-            New internal note
-            <textarea
-              className="textarea"
-              name="body"
-              required
-              placeholder="Met at DevFlow 2026…"
-            />
-          </label>
-          <button type="submit" className="btn primary" disabled={busy}>
-            Save note
-          </button>
-        </Form>
-        <div className="stack mt">
-          {contact.notes.map((note) => (
-            <article className="card pad" key={note.id}>
-              <p>{note.body}</p>
-              <small className="subtle">
-                {note.authorName} · {formatTimestamp(note.createdAt)}
-              </small>
-            </article>
-          ))}
-          {!contact.notes.length ? (
-            <EmptyState
-              icon={MessageSquarePlus}
-              title="No internal notes"
-              description="Notes stay private to organisers and are never shown to the contact."
-            />
-          ) : null}
-        </div>
-      </section>
-
-      <section className="card pad mb" aria-labelledby="history-heading">
-        <div className="card-title">
-          <div>
-            <span className="pc-section-kicker">Cross-event history</span>
-            <h2 id="history-heading">Events and sessions</h2>
+          <div className="page-actions">
+            <Link className="btn" to="/admin/crm">
+              <ArrowLeft aria-hidden size={15} /> Speaker Network directory
+            </Link>
+            <Link className="btn" to="/admin/crm/pipeline">
+              <Network aria-hidden size={15} /> Pipeline
+            </Link>
           </div>
-          <History aria-hidden className="subtle" />
         </div>
-        {contact.connections.length ? (
-          <section
-            className="table-wrap mt"
-            aria-label="Contact event and session history"
-            // biome-ignore lint/a11y/noNoninteractiveTabindex: Scrollable data regions need keyboard focus so arrow keys can expose overflow content.
-            tabIndex={0}
+        <div className="crm-pulse">
+          {`${contact.connections.length} ${contact.connections.length === 1 ? "event" : "events"}`}
+          {contact.tags.length ? ` · ${contact.tags.join(" · ")}` : ""}
+          {contact.pipeline
+            ? ` · ${statusPresentation("crm", contact.pipeline.stage).label}`
+            : ""}
+        </div>
+        {actionData ? (
+          <div
+            className={`validation-item ${actionData.ok ? "ok" : "error"} card pad mb`}
+            role={actionData.ok ? "status" : "alert"}
           >
-            <table className="data-table">
-              <thead>
-                <tr>
-                  <th scope="col">Event</th>
-                  <th scope="col">Sessions</th>
-                  <th scope="col">Example session</th>
-                </tr>
-              </thead>
-              <tbody>
-                {contact.connections.map((connection) => (
-                  <tr key={connection.eventId}>
-                    <td>{connection.eventName}</td>
-                    <td>{connection.sessionCount}</td>
-                    <td>
-                      {connection.firstSessionTitle ?? "Speaker access only"}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </section>
-        ) : (
-          <EmptyState
-            icon={History}
-            title="No event history yet"
-            description="Sessions appear here once this contact is added to an event below."
-          />
-        )}
-      </section>
-
-      <div className="grid grid-2">
-        <section className="card pad" aria-labelledby="event-handoff-heading">
-          <div className="card-title">
-            <div>
-              <span className="pc-section-kicker">
-                Profile-preserving handoff
-              </span>
-              <h2 id="event-handoff-heading">Add to event</h2>
+            <strong>{actionData.ok ? "✓" : "△"}</strong>
+            <div className="stack">
+              <span>{actionData.message}</span>
+              {actionData.ok && actionData.handoff ? (
+                <Form method="post" action="/events/select">
+                  <input
+                    type="hidden"
+                    name="eventId"
+                    value={actionData.handoff.eventId}
+                  />
+                  <input
+                    type="hidden"
+                    name="returnTo"
+                    value={`/admin/speakers?person=${encodeURIComponent(actionData.handoff.personId)}`}
+                  />
+                  <button className="btn small" type="submit">
+                    Switch to target event and open prospect
+                  </button>
+                </Form>
+              ) : null}
             </div>
-            <CalendarPlus aria-hidden className="subtle" />
           </div>
-          <p className="subtle">
-            Adds this contact to the event roster as a prospect without creating
-            account access or sending email. Their organisation-scoped Network
-            profile remains visible in the Speakers workspace, where invitations
-            are sent explicitly.
-          </p>
+        ) : null}
+
+        {contact.duplicates.length ? (
+          <section className="card pad mb" aria-labelledby="duplicate-heading">
+            <div className="card-title">
+              <div>
+                <span className="pc-section-kicker">Identity safety</span>
+                <h2 id="duplicate-heading">Possible duplicate contacts</h2>
+              </div>
+              <Merge aria-hidden className="subtle" />
+            </div>
+            <p>
+              These contacts have the same normalized name. Choose which record
+              remains visible as the primary Speaker Network contact. Linked
+              identities are refused rather than merged unsafely.
+            </p>
+            <div className="stack mt">
+              {contact.duplicates.map((duplicate) => (
+                <div className="card pad" key={duplicate.personId}>
+                  <strong>{contact.name}</strong>
+                  <p>
+                    {contact.email} ↔ {duplicate.email}
+                  </p>
+                  <div className="row-actions">
+                    <Form
+                      method="post"
+                      onSubmit={(event) =>
+                        confirmMerge(event, contact.email, duplicate.email)
+                      }
+                    >
+                      <input type="hidden" name="_intent" value="merge" />
+                      <input
+                        type="hidden"
+                        name="primaryId"
+                        value={contact.personId}
+                      />
+                      <input
+                        type="hidden"
+                        name="secondaryId"
+                        value={duplicate.personId}
+                      />
+                      <button
+                        type="submit"
+                        className="btn danger"
+                        disabled={busy}
+                      >
+                        Keep {contact.email} as primary
+                      </button>
+                    </Form>
+                    <Form
+                      method="post"
+                      onSubmit={(event) =>
+                        confirmMerge(event, duplicate.email, contact.email)
+                      }
+                    >
+                      <input type="hidden" name="_intent" value="merge" />
+                      <input
+                        type="hidden"
+                        name="primaryId"
+                        value={duplicate.personId}
+                      />
+                      <input
+                        type="hidden"
+                        name="secondaryId"
+                        value={contact.personId}
+                      />
+                      <button
+                        type="submit"
+                        className="btn danger"
+                        disabled={busy}
+                      >
+                        Keep {duplicate.email} as primary
+                      </button>
+                    </Form>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </section>
+        ) : null}
+
+        <div className="crm-record-grid">
+          <section className="crm-record-section">
+            <h2>Profile</h2>
+            <dl className="crm-detail-list mt">
+              <div>
+                <dt>Email</dt>
+                <dd>{contact.email}</dd>
+              </div>
+              <div>
+                <dt>Job title</dt>
+                <dd>{contact.jobTitle ?? "Not recorded"}</dd>
+              </div>
+              <div>
+                <dt>Company</dt>
+                <dd>{contact.organisationName ?? "Not recorded"}</dd>
+              </div>
+              <div>
+                <dt>Profile status</dt>
+                <dd>{contact.profileStatus}</dd>
+              </div>
+            </dl>
+            <h3 className="mt">Biography</h3>
+            <p>{contact.biography ?? "No biography recorded."}</p>
+          </section>
+          <section className="crm-record-section">
+            <h2>Tags</h2>
+            <div className="crm-chip-row mt">
+              {contact.tags.map((tag) => (
+                <Form method="post" key={tag}>
+                  <input type="hidden" name="_intent" value="remove_tag" />
+                  <input type="hidden" name="tag" value={tag} />
+                  <button
+                    type="submit"
+                    className="crm-chip"
+                    aria-label={`Remove ${tag} tag`}
+                  >
+                    {tag} ×
+                  </button>
+                </Form>
+              ))}
+              {!contact.tags.length ? (
+                <span className="subtle">No tags yet</span>
+              ) : null}
+            </div>
+            <Form method="post" className="form-row mt">
+              <input type="hidden" name="_intent" value="add_tag" />
+              <label className="label">
+                Add tag
+                <input className="field" name="tag" placeholder="AI" required />
+              </label>
+              <button type="submit" className="btn" disabled={busy}>
+                Add tag
+              </button>
+            </Form>
+          </section>
+        </div>
+
+        <section className="crm-record-section" aria-labelledby="notes-heading">
+          <h2 id="notes-heading">Internal notes</h2>
           <Form method="post" className="stack mt">
-            <input type="hidden" name="_intent" value="add_to_event" />
-            <input
-              type="hidden"
-              name="idempotencyKey"
-              value={addToEventIdempotencyKey}
-            />
+            <input type="hidden" name="_intent" value="add_note" />
             <label className="label">
-              Target event
-              <select className="select" name="eventId" required>
-                {events.map((event) => (
-                  <option value={event.id} key={event.id}>
-                    {event.name}
-                  </option>
-                ))}
-              </select>
+              New internal note
+              <textarea
+                className="textarea"
+                name="body"
+                required
+                placeholder="Met at DevFlow 2026…"
+              />
             </label>
             <button type="submit" className="btn primary" disabled={busy}>
-              Add prospect to event
+              Save note
             </button>
           </Form>
-        </section>
-        <section
-          className="card pad"
-          aria-labelledby="pipeline-contact-heading"
-        >
-          <div className="card-title">
-            <div>
-              <span className="pc-section-kicker">Speaker sourcing</span>
-              <h2 id="pipeline-contact-heading">Pipeline</h2>
-            </div>
-            <Network aria-hidden className="subtle" />
+          <div className="stack mt">
+            {contact.notes.map((note) => (
+              <article className="card pad" key={note.id}>
+                <p>{note.body}</p>
+                <small className="subtle">
+                  {note.authorName} · {formatTimestamp(note.createdAt)}
+                </small>
+              </article>
+            ))}
+            {!contact.notes.length ? (
+              <EmptyState
+                icon={MessageSquarePlus}
+                title="No internal notes"
+                description="Notes stay private to organisers and are never shown to the contact."
+              />
+            ) : null}
           </div>
-          {contact.pipeline ? (
-            <div className="stack mt">
-              <p>
-                <DomainStatusBadge
-                  domain="crm"
-                  status={contact.pipeline.stage}
-                />
-                {contact.pipeline.score !== null
-                  ? ` · fit score ${contact.pipeline.score}`
-                  : ""}
-              </p>
-              {contact.pipeline.rationale ? (
-                <p>{contact.pipeline.rationale}</p>
-              ) : null}
-              <Form method="post" className="stack">
-                <input type="hidden" name="_intent" value="pipeline_note" />
-                <input
-                  type="hidden"
-                  name="entryId"
-                  value={contact.pipeline.id}
-                />
-                <label className="label">
-                  Pipeline note
-                  <textarea className="textarea" name="body" required />
-                </label>
-                <button type="submit" className="btn" disabled={busy}>
-                  Save pipeline note
-                </button>
-              </Form>
-              <div className="stack">
-                {contact.pipeline.activity.map((activity) => (
-                  <div className="validation-item" key={activity.id}>
-                    <strong>
-                      {activity.kind === "note" ? "Note" : "Stage"}
-                    </strong>
-                    <span>
-                      {activity.kind === "note"
-                        ? activity.body
-                        : `${activity.fromStage ?? "New"} → ${activity.toStage}`}
-                      <small className="subtle" style={{ display: "block" }}>
-                        {activity.actorName} ·{" "}
-                        {formatTimestamp(activity.createdAt)}
-                      </small>
-                    </span>
-                  </div>
-                ))}
-              </div>
-            </div>
+        </section>
+
+        <section
+          className="crm-record-section"
+          aria-labelledby="history-heading"
+        >
+          <h2 id="history-heading">Events and sessions</h2>
+          {contact.connections.length ? (
+            <section
+              className="table-wrap mt"
+              aria-label="Contact event and session history"
+              // biome-ignore lint/a11y/noNoninteractiveTabindex: Scrollable data regions need keyboard focus so arrow keys can expose overflow content.
+              tabIndex={0}
+            >
+              <table className="data-table">
+                <thead>
+                  <tr>
+                    <th scope="col">Event</th>
+                    <th scope="col">Sessions</th>
+                    <th scope="col">Example session</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {contact.connections.map((connection) => (
+                    <tr key={connection.eventId}>
+                      <td>{connection.eventName}</td>
+                      <td>{connection.sessionCount}</td>
+                      <td>
+                        {connection.firstSessionTitle ?? "Speaker access only"}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </section>
           ) : (
+            <EmptyState
+              icon={History}
+              title="No event history yet"
+              description="Sessions appear here once this contact is added to an event below."
+            />
+          )}
+        </section>
+
+        <div className="crm-record-grid">
+          <section
+            className="crm-record-section"
+            aria-labelledby="event-handoff-heading"
+          >
+            <h2 id="event-handoff-heading">Add to event</h2>
+            <p className="subtle">
+              Adds this contact to the event roster as a prospect without
+              creating account access or sending email. Their
+              organisation-scoped Network profile remains visible in the
+              Speakers workspace, where invitations are sent explicitly.
+            </p>
             <Form method="post" className="stack mt">
-              <input type="hidden" name="_intent" value="enroll" />
+              <input type="hidden" name="_intent" value="add_to_event" />
+              <input
+                type="hidden"
+                name="idempotencyKey"
+                value={addToEventIdempotencyKey}
+              />
               <label className="label">
-                Starting stage
-                <select className="select" name="stage">
-                  {crmStages.map((stage) => (
-                    <option value={stage} key={stage}>
-                      {statusPresentation("crm", stage).label}
+                Target event
+                <select className="select" name="eventId" required>
+                  {events.map((event) => (
+                    <option value={event.id} key={event.id}>
+                      {event.name}
                     </option>
                   ))}
                 </select>
               </label>
-              <label className="label">
-                Speaker fit score (optional)
-                <input
-                  className="field"
-                  type="number"
-                  name="score"
-                  min={0}
-                  max={100}
-                />
-              </label>
-              <label className="label">
-                Fit rationale
-                <textarea className="textarea" name="rationale" />
-              </label>
               <button type="submit" className="btn primary" disabled={busy}>
-                Enroll contact
+                Add prospect to event
               </button>
             </Form>
-          )}
-        </section>
+          </section>
+          <section
+            className="crm-record-section"
+            aria-labelledby="pipeline-contact-heading"
+          >
+            <h2 id="pipeline-contact-heading">Pipeline</h2>
+            {contact.pipeline ? (
+              <div className="stack mt">
+                <p>
+                  <DomainStatusBadge
+                    domain="crm"
+                    status={contact.pipeline.stage}
+                  />
+                  {contact.pipeline.score !== null
+                    ? ` · fit score ${contact.pipeline.score}`
+                    : ""}
+                </p>
+                {contact.pipeline.rationale ? (
+                  <p>{contact.pipeline.rationale}</p>
+                ) : null}
+                <Form method="post" className="stack">
+                  <input type="hidden" name="_intent" value="pipeline_note" />
+                  <input
+                    type="hidden"
+                    name="entryId"
+                    value={contact.pipeline.id}
+                  />
+                  <label className="label">
+                    Pipeline note
+                    <textarea className="textarea" name="body" required />
+                  </label>
+                  <button type="submit" className="btn" disabled={busy}>
+                    Save pipeline note
+                  </button>
+                </Form>
+                <div className="stack">
+                  {contact.pipeline.activity.map((activity) => (
+                    <div className="validation-item" key={activity.id}>
+                      <strong>
+                        {activity.kind === "note" ? "Note" : "Stage"}
+                      </strong>
+                      <span>
+                        {activity.kind === "note"
+                          ? activity.body
+                          : `${activity.fromStage ?? "New"} → ${activity.toStage}`}
+                        <small className="subtle" style={{ display: "block" }}>
+                          {activity.actorName} ·{" "}
+                          {formatTimestamp(activity.createdAt)}
+                        </small>
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ) : (
+              <Form method="post" className="stack mt">
+                <input type="hidden" name="_intent" value="enroll" />
+                <label className="label">
+                  Starting stage
+                  <select className="select" name="stage">
+                    {crmStages.map((stage) => (
+                      <option value={stage} key={stage}>
+                        {statusPresentation("crm", stage).label}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label className="label">
+                  Speaker fit score (optional)
+                  <input
+                    className="field"
+                    type="number"
+                    name="score"
+                    min={0}
+                    max={100}
+                  />
+                </label>
+                <label className="label">
+                  Fit rationale
+                  <textarea className="textarea" name="rationale" />
+                </label>
+                <button type="submit" className="btn primary" disabled={busy}>
+                  Enroll contact
+                </button>
+              </Form>
+            )}
+          </section>
+        </div>
       </div>
     </>
   );

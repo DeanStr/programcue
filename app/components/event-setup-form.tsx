@@ -837,6 +837,7 @@ export function EventSetupForm({
       <Form
         ref={captureEventSetupForm}
         method="post"
+        className="event-setup-form"
         onInput={(inputEvent) => {
           updateNamedFieldDirtyState(inputEvent.currentTarget);
           const input = inputEvent.target as HTMLInputElement;
@@ -891,7 +892,7 @@ export function EventSetupForm({
 
         <ErrorSummary errors={summaryErrors} />
 
-        <div className="page-head">
+        <div className="page-head event-setup-page-head">
           <div>
             <h1>Event settings</h1>
             <p>
@@ -953,12 +954,13 @@ export function EventSetupForm({
         ) : null}
 
         <AdminPageSectionNavigation
+          className="event-setup-section-nav"
           label="Event settings sections"
           links={[
             { id: "event-setup-identity", label: "Identity" },
-            { id: "event-setup-structure", label: "Programme structure" },
-            { id: "event-setup-access", label: "Access and roles" },
-            { id: "event-setup-data", label: "Data and files" },
+            { id: "event-setup-structure", label: "Structure" },
+            { id: "event-setup-access", label: "Access" },
+            { id: "event-setup-data", label: "Data" },
           ]}
         />
 
@@ -1039,14 +1041,12 @@ export function EventSetupForm({
             description="Who can administer this event, and how applicants reach the submission form."
             defaultExpandedOnMobile
           >
-            <div className="grid grid-2">
-              <EventAccessPanels
-                event={event}
-                onInvite={() => setInviteOpen(true)}
-                onRevoke={revokeAdministrator}
-                canManageAdministrators={canManageOrganisationAdministrators}
-              />
-            </div>
+            <EventAccessPanels
+              event={event}
+              onInvite={() => setInviteOpen(true)}
+              onRevoke={revokeAdministrator}
+              canManageAdministrators={canManageOrganisationAdministrators}
+            />
           </AdminPageSection>
 
           <AdminPageSection
@@ -1096,26 +1096,28 @@ export function EventSetupForm({
               Saved
             </p>
           )}
-          <button
-            type="button"
-            className="btn"
-            onClick={discardChanges}
-            disabled={!hasAnyUnsavedChanges || saving}
-          >
-            Discard changes
-          </button>
-          <button
-            type="submit"
-            className="btn primary"
-            disabled={saving || pendingRecordDraftPresent}
-            aria-describedby={
-              pendingRecordDraftPresent
-                ? "event-setup-pending-record-help"
-                : undefined
-            }
-          >
-            {saving ? "Saving…" : "Save event"}
-          </button>
+          <div className="event-setup-actions-buttons">
+            <button
+              type="button"
+              className="btn"
+              onClick={discardChanges}
+              disabled={!hasAnyUnsavedChanges || saving}
+            >
+              Discard changes
+            </button>
+            <button
+              type="submit"
+              className="btn primary"
+              disabled={saving || pendingRecordDraftPresent}
+              aria-describedby={
+                pendingRecordDraftPresent
+                  ? "event-setup-pending-record-help"
+                  : undefined
+              }
+            >
+              {saving ? "Saving…" : "Save event"}
+            </button>
+          </div>
         </div>
       </Form>
 

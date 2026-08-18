@@ -63,7 +63,7 @@ function OperationAutoRefresh({
 
   return (
     <span
-      className={`status ${transport === "unavailable" ? "danger" : transport === "polling" ? "warning" : "info"}`}
+      className={`help ops-live ${transport === "unavailable" ? "danger" : transport === "polling" ? "warning" : ""}`}
       role="status"
       aria-live="polite"
     >
@@ -96,7 +96,6 @@ export function OperationCentreWorkspace({
       <div className="page-head">
         <div>
           <h1>Operation Centre</h1>
-          <p>Inspect background work, provider failures and safe retries.</p>
         </div>
         <div className="page-actions">
           <OperationAutoRefresh
@@ -106,14 +105,9 @@ export function OperationCentreWorkspace({
           <Link className="btn" to="/admin/sessions/bulk">
             Bulk sessions
           </Link>
-          <Link className="btn" to="/admin/operations?panel=activity">
+          <Link className="btn primary" to="/admin/operations?panel=activity">
             Activity timeline
           </Link>
-          <span className="status info">
-            {loaderData.failurePagination
-              ? `${loaderData.failurePagination.from}–${loaderData.failurePagination.to} of ${loaderData.failurePagination.total} failed operations`
-              : `${loaderData.operations.length} recent operations`}
-          </span>
         </div>
       </div>
       {actionData ? (

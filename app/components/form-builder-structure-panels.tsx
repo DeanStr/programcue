@@ -1,4 +1,4 @@
-import { ChevronDown, ChevronUp } from "lucide-react";
+import { ChevronDown, ChevronUp, Plus, Trash2 } from "lucide-react";
 import { CharacterCount } from "~/components/ui/character-count";
 import { requireValue } from "~/lib/required-value";
 
@@ -147,11 +147,11 @@ export function FormStructurePanel({
     <section className="card fb-pane fb-outline">
       <div className="fb-pane-head">
         <h2>Form structure</h2>
-        <span className="status info right">Draft v{draftVersionNumber}</span>
+        <span className="fb-draft-pill right">Draft v{draftVersionNumber}</span>
       </div>
       <div className="fb-pane-body">
-        <label className="label mb">
-          Introduction
+        <label className="fb-intro-editor">
+          <span className="fb-kicker">Introduction</span>
           <textarea
             className="textarea fb-introduction"
             value={input.schema.introduction}
@@ -165,82 +165,88 @@ export function FormStructurePanel({
           />
           <CharacterCount value={input.schema.introduction} maximum={2_000} />
         </label>
-        <fieldset className="stack mb">
-          <legend className="label">Sections</legend>
+        <div className="fb-section-list">
+          <div className="fb-kicker-row">
+            <span className="fb-kicker">Sections</span>
+            <button className="fb-ghost-add" type="button" onClick={addSection}>
+              <Plus size={13} aria-hidden="true" /> Add section
+            </button>
+          </div>
           {input.schema.sections.map((section, index) => (
-            <div className="card pad" key={section.id}>
-              <label className="label">
-                Section title
-                <input
-                  className="field"
-                  value={section.title}
-                  maxLength={120}
-                  required
-                  onChange={(event) => {
-                    const sections = input.schema.sections.map((candidate) =>
-                      candidate.id === section.id
-                        ? { ...candidate, title: event.target.value }
-                        : candidate,
-                    );
-                    change({
-                      ...input,
-                      schema: { ...input.schema, sections },
-                    });
-                  }}
-                />
-              </label>
-              <label className="label mt">
-                Description (optional)
-                <textarea
-                  className="textarea"
-                  rows={2}
-                  value={section.description}
-                  maxLength={500}
-                  onChange={(event) => {
-                    const sections = input.schema.sections.map((candidate) =>
-                      candidate.id === section.id
-                        ? { ...candidate, description: event.target.value }
-                        : candidate,
-                    );
-                    change({
-                      ...input,
-                      schema: { ...input.schema, sections },
-                    });
-                  }}
-                />
-              </label>
-              <div className="page-actions mt">
+            <div className="fb-section-item" key={section.id}>
+              <div className="fb-section-item-main">
+                <label className="fb-section-title">
+                  <span className="sr-only">Section title</span>
+                  <input
+                    className="fb-inline-input"
+                    value={section.title}
+                    maxLength={120}
+                    required
+                    onChange={(event) => {
+                      const sections = input.schema.sections.map((candidate) =>
+                        candidate.id === section.id
+                          ? { ...candidate, title: event.target.value }
+                          : candidate,
+                      );
+                      change({
+                        ...input,
+                        schema: { ...input.schema, sections },
+                      });
+                    }}
+                  />
+                </label>
+                <label className="fb-section-desc">
+                  <span className="sr-only">Description (optional)</span>
+                  <textarea
+                    className="fb-inline-input"
+                    rows={2}
+                    value={section.description}
+                    maxLength={500}
+                    placeholder="Optional description"
+                    onChange={(event) => {
+                      const sections = input.schema.sections.map((candidate) =>
+                        candidate.id === section.id
+                          ? { ...candidate, description: event.target.value }
+                          : candidate,
+                      );
+                      change({
+                        ...input,
+                        schema: { ...input.schema, sections },
+                      });
+                    }}
+                  />
+                </label>
+              </div>
+              <div className="fb-section-item-actions">
                 <button
-                  className="btn small"
                   type="button"
+                  aria-label="Move up"
                   disabled={index === 0}
                   onClick={() => moveSection(index, -1)}
                 >
-                  <ChevronUp size={13} aria-hidden="true" /> Move up
+                  <ChevronUp size={13} aria-hidden="true" />
                 </button>
                 <button
-                  className="btn small"
                   type="button"
+                  aria-label="Move down"
                   disabled={index === input.schema.sections.length - 1}
                   onClick={() => moveSection(index, 1)}
                 >
-                  <ChevronDown size={13} aria-hidden="true" /> Move down
+                  <ChevronDown size={13} aria-hidden="true" />
                 </button>
                 <button
-                  className="btn small danger"
+                  className="is-danger"
                   type="button"
+                  aria-label="Remove"
                   disabled={input.schema.sections.length === 1}
                   onClick={() => removeSection(index)}
                 >
-                  Remove
+                  <Trash2 size={13} aria-hidden="true" />
                 </button>
               </div>
             </div>
           ))}
-          <button className="btn small" type="button" onClick={addSection}>
-            + Add section
-          </button>
-        </fieldset>
+        </div>
         {operationMessage ? (
           <div className="validation-item error mb" role="alert">
             <strong>Change blocked</strong>
@@ -268,15 +274,7 @@ export function FormStructurePanel({
                     {field.required ? "\u00a0*" : ""}
                   </span>
                   <span className="fb-field-kind">
-                    {formFieldTypeLabel(field.type)} ·{" "}
-                    {
-                      requireValue(
-                        input.schema.sections.find(
-                          (section) => section.id === field.sectionId,
-                        ),
-                        "Required input.schema.sections.find( (section) => section.id === field.sectionId, ) is unavailable.",
-                      ).title
-                    }
+                    {formFieldTypeLabel(field.type)}
                   </span>
                   {field.condition ? (
                     <span className="fb-field-condition">

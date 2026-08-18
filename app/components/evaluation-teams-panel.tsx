@@ -9,7 +9,7 @@ export function EvaluationTeamsPanel() {
     useEvaluationAdminModel();
   const { confirm, dialog } = useConfirm();
   return (
-    <section className="card pad mb">
+    <section className="card pad mb pc-eval-teams">
       {dialog}
       <div className="card-title">
         <div>

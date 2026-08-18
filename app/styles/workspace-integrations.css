@@ -1,24 +1,562 @@
-/* Integrations */
-.native-data {
+/*
+ * Integrations and API settings.
+ *
+ * Vercel connection instrument + Linear settings rows. One object carries
+ * status and fields. Empty is a sentence. Lists, not twin cards.
+ */
+
+.integ-page,
+.settings-page {
   display: grid;
-  grid-template-columns: 130px 1fr 1fr;
-  align-items: center;
-  gap: var(--space-4);
-  padding: var(--space-5);
-  background: var(--soft);
-  border-color: var(--brand-200);
+  gap: var(--space-6);
 }
+
+.integ-page-head,
+.settings-page-head {
+  margin-bottom: 0;
+}
+
+.integ-instrument,
+.settings-section {
+  min-width: 0;
+}
+
+.integ-instrument-head,
+.settings-section-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-3);
+}
+
+.integ-instrument-identity {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: var(--space-3);
+  min-width: 0;
+}
+
 .integration-logo {
-  width: 42px;
-  height: 42px;
+  width: 40px;
+  height: 40px;
   border-radius: var(--radius-sm);
   display: grid;
   place-items: center;
   background: var(--brand-50);
   color: var(--brand-700);
+  font-size: var(--text-sm);
   font-weight: var(--weight-extrabold);
+  letter-spacing: var(--tracking-snug);
 }
-.integration-row td {
+
+.integ-instrument-head h2,
+.settings-section-head h2 {
+  margin: 0;
+  font-size: var(--text-sm);
+  font-weight: var(--weight-semibold);
+  letter-spacing: var(--tracking-snug);
+  line-height: var(--leading-tight);
+}
+
+.integ-instrument-head p,
+.settings-section-head p {
+  margin: var(--space-1) 0 0;
+  max-width: 68ch;
+  color: var(--text-tertiary);
+  font-size: var(--text-xs);
+  line-height: var(--leading-snug);
+}
+
+.integ-status {
+  flex: 0 0 auto;
+  margin: 2px 0 0;
+  color: var(--text-tertiary);
+  font-size: var(--text-xs);
+  font-weight: var(--weight-semibold);
+}
+
+.integ-fields,
+.settings-rows {
+  display: grid;
+  margin-top: var(--space-4);
+}
+
+.integ-row,
+.settings-row {
+  display: grid;
+  grid-template-columns: minmax(0, 16rem) minmax(0, 1fr);
+  align-items: start;
+  gap: var(--space-3) var(--space-5);
+  min-width: 0;
+  min-inline-size: 0;
+  padding: var(--space-4) 0;
+  border-top: 1px solid var(--line);
+}
+
+.integ-row:first-child,
+.settings-row:first-child {
+  padding-top: var(--space-3);
+}
+
+.integ-row-copy,
+.settings-row-copy {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.integ-row-copy > label,
+.settings-row-copy > label,
+.settings-row > legend {
+  padding: 0;
+  color: var(--text-primary);
+  font-size: var(--text-xs);
+  font-weight: var(--weight-semibold);
+}
+
+.integ-row .help,
+.settings-row .help {
+  margin: 0;
+}
+
+.integ-row .field,
+.integ-row .select,
+.settings-row .field,
+.settings-row .select {
+  width: 100%;
+  min-width: 0;
+}
+.integ-row-commit .select,
+.settings-row-commit .select {
+  width: auto;
+  max-width: 16rem;
+}
+.integ-row-commit .page-actions,
+.settings-row-commit .page-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-start;
+  gap: var(--space-2);
+}
+
+.integ-row-stack,
+.settings-row-stack {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.integ-row-commit,
+.settings-row-commit {
+  align-items: center;
+}
+
+.integ-row-commit .page-actions,
+.settings-row-commit .page-actions {
+  justify-content: flex-end;
+}
+
+.integ-empty,
+.settings-empty,
+.integ-runs-empty {
+  margin: var(--space-3) 0 0;
+  color: var(--text-tertiary);
+  font-size: var(--text-sm);
+  line-height: var(--leading-snug);
+}
+
+.integ-switcher {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2) var(--space-3);
+  margin-top: var(--space-3);
+  padding-top: var(--space-3);
+  border-top: 1px solid var(--line);
+}
+
+.integ-switcher a {
+  font-size: var(--text-xs);
+  font-weight: var(--weight-semibold);
+}
+
+.integ-preview {
+  display: grid;
+  gap: var(--space-3);
+  margin-top: var(--space-4);
   padding-top: var(--space-4);
-  padding-bottom: var(--space-4);
+  border-top: 1px solid var(--line);
+}
+
+.integ-preview-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-3);
+}
+
+.integ-preview-head h3 {
+  margin: 0;
+  font-size: var(--text-sm);
+  font-weight: var(--weight-semibold);
+}
+
+.integ-preview-head .help {
+  margin: var(--space-1) 0 0;
+}
+
+.integ-change-list,
+.settings-list,
+.integ-run-list {
+  display: grid;
+  gap: 0;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.integ-change,
+.settings-item,
+.integ-run {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: var(--space-2) var(--space-4);
+  align-items: start;
+  padding: var(--space-3) 0;
+  border-top: 1px solid var(--line);
+}
+
+.integ-change:first-child,
+.settings-item:first-child,
+.integ-run:first-child {
+  border-top: 1px solid var(--line);
+}
+
+.integ-change-copy,
+.settings-item-copy,
+.integ-run-copy {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.integ-change-copy strong,
+.settings-item-copy strong,
+.integ-run-copy strong {
+  font-size: var(--text-sm);
+}
+
+.integ-change-copy small,
+.settings-item-copy small,
+.integ-run-copy small {
+  color: var(--text-tertiary);
+  font-size: var(--text-2xs);
+  line-height: var(--leading-snug);
+  overflow-wrap: anywhere;
+}
+
+.integ-change-meta,
+.settings-item-tools,
+.integ-run-tools {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--space-2);
+}
+
+.integ-change details {
+  grid-column: 1 / -1;
+}
+
+.integ-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  margin-top: var(--space-3);
+}
+
+.integ-runs {
+  margin: 0;
+  padding: 0;
+}
+
+.integ-runs-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-3);
+  margin: 0 0 var(--space-2);
+}
+
+.integ-runs-head h2 {
+  margin: 0;
+  font-size: var(--text-sm);
+  font-weight: var(--weight-semibold);
+}
+
+.integ-runs-head .help {
+  margin: 0;
+}
+
+.settings-pick-set {
+  display: grid;
+  gap: var(--space-2);
+  min-width: 0;
+}
+
+.settings-pick-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.settings-pick {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  min-width: 0;
+  max-width: 100%;
+  padding: 2px 2px 2px var(--space-2);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--surface-sunken);
+}
+
+.settings-pick code {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  font-size: var(--text-2xs);
+}
+
+.settings-pick-remove {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-xs);
+  background: transparent;
+  color: var(--text-tertiary);
+  cursor: pointer;
+}
+
+.settings-pick-remove:hover {
+  color: var(--text-primary);
+}
+.settings-pick-remove:focus-visible {
+  color: var(--text-primary);
+  outline: var(--focus-width) solid var(--focus-ring);
+  outline-offset: var(--focus-halo-width);
+}
+
+.settings-row .settings-pick-add {
+  width: auto;
+  max-width: 100%;
+  justify-self: start;
+}
+
+.settings-url-field {
+  min-width: 0;
+  width: 100%;
+  min-height: calc(var(--control-height) + 1.25em);
+  resize: vertical;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+
+.settings-contract {
+  margin: var(--space-3) 0 0;
+  max-width: 72ch;
+  color: var(--text-tertiary);
+  font-size: var(--text-xs);
+  line-height: var(--leading-snug);
+}
+.settings-rows > .settings-contract {
+  padding-top: var(--space-3);
+  border-top: 1px solid var(--line);
+}
+
+.settings-secret {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin-top: var(--space-2);
+  padding: var(--space-3);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  overflow: auto;
+}
+
+.settings-secret code {
+  min-width: max-content;
+  font-weight: var(--weight-semibold);
+}
+
+.settings-list {
+  margin-top: var(--space-2);
+}
+
+@media (max-width: 760px) {
+  .integ-row,
+  .settings-row {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .integ-instrument-head,
+  .settings-section-head,
+  .integ-preview-head,
+  .integ-change,
+  .settings-item,
+  .integ-run {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .integ-row-commit .page-actions,
+  .settings-row-commit .page-actions,
+  .integ-change-meta,
+  .settings-item-tools,
+  .integ-run-tools {
+    justify-content: flex-start;
+  }
+
+  .integ-row-commit .select,
+  .settings-row-commit .select,
+  .integ-row-commit .btn,
+  .settings-row-commit .btn {
+    width: 100%;
+    max-width: none;
+  }
+}
+
+@media (max-width: 390px) {
+  .settings-secret {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .settings-secret .btn {
+    width: 100%;
+  }
+}
+
+/* Operation Centre — Vercel deployment rows. The row is the link. */
+.ops-filters {
+  margin: 0 0 var(--space-3);
+}
+.ops-filters-form {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: end;
+  gap: var(--space-2) var(--space-3);
+}
+.ops-filters-form .label {
+  flex: 1 1 160px;
+  min-width: 0;
+}
+.ops-board {
+  margin: 0;
+  padding: 0;
+}
+.ops-board-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-3);
+  margin: 0 0 var(--space-2);
+}
+.ops-board-head h2 {
+  margin: 0;
+  font-size: var(--text-sm);
+}
+.ops-board-head .help {
+  margin: 0;
+}
+.ops-deploy-list {
+  display: grid;
+  gap: 0;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.ops-deploy {
+  display: grid;
+  gap: var(--space-2);
+  padding: var(--space-3) 0;
+  border-bottom: 1px solid var(--border);
+}
+.ops-deploy:first-child {
+  padding-top: var(--space-2);
+  border-top: 1px solid var(--border);
+}
+.ops-deploy:last-child {
+  border-bottom: 1px solid var(--border);
+}
+.ops-deploy-main {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: var(--space-3);
+  align-items: start;
+  color: inherit;
+  text-decoration: none;
+}
+.ops-deploy-copy {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+.ops-deploy-copy strong {
+  font-size: var(--text-sm);
+}
+.ops-deploy-copy small {
+  color: var(--text-tertiary);
+  font-size: var(--text-2xs);
+  line-height: var(--leading-snug);
+  overflow-wrap: anywhere;
+}
+.ops-deploy-tools {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+.ops-text-action {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--text-secondary);
+  font: inherit;
+  font-size: var(--text-2xs);
+  font-weight: var(--weight-semibold);
+  cursor: pointer;
+}
+.ops-text-action:hover {
+  color: var(--ink);
+}
+.ops-text-action.is-danger {
+  color: var(--state-bad-text);
+}
+.ops-live {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  margin: 0;
+  font-size: var(--text-2xs);
+  color: var(--text-tertiary);
+}
+.ops-live.danger {
+  color: var(--state-bad-text);
+}
+.ops-live.warning {
+  color: var(--state-warn-text);
+}
+
+@media (max-width: 900px) {
+  .ops-filters-form {
+    grid-template-columns: minmax(0, 1fr);
+  }
 }

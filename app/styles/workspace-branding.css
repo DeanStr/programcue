@@ -1,108 +1,385 @@
+/* Branding.
+ *
+ * Stripe / Vercel project-settings shape: a narrow instrument column and a
+ * preview that wears real chrome, not four equal buttons floating above a
+ * card. File pickers are custom dropzones over a real hidden input. */
+
+.branding-page-head {
+  margin-bottom: var(--space-5);
+}
+
 .branding-workspace {
   display: grid;
-  grid-template-columns: minmax(320px, 0.8fr) minmax(420px, 1.2fr);
-  gap: var(--space-5);
+  grid-template-columns: minmax(300px, 26rem) minmax(0, 1fr);
+  gap: var(--space-6);
   align-items: start;
 }
 
-.branding-editor-stack,
-.branding-preview-stack {
+.branding-editor-stack {
   display: grid;
   gap: var(--space-4);
+  min-width: 0;
 }
 
-.branding-editor-card h2,
-.branding-preview-card h2,
-.branding-publish-card h2 {
+.branding-preview-stack {
+  display: grid;
+  gap: 0;
+  min-width: 0;
+}
+
+/* Shared by Event website preview. Keep the toolbar family even though
+   Branding now uses preview chrome instead of a floating button row. */
+.branding-preview-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  justify-content: flex-end;
+}
+
+.branding-preview-toolbar .active {
+  border-color: var(--event-accent, var(--brand-600));
+  background: var(--state-info-surface);
+}
+
+.branding-identity,
+.branding-images {
+  display: grid;
+  gap: var(--space-4);
+  min-width: 0;
+}
+
+.branding-editor-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-3);
+}
+
+.branding-editor-head h2 {
   margin: 0;
-  font-size: var(--text-lg);
+  font-size: var(--text-sm);
+  font-weight: var(--weight-semibold);
+  letter-spacing: var(--tracking-snug);
+  line-height: var(--leading-tight);
+}
+
+.branding-editor-head .help {
+  margin: var(--space-1) 0 0;
+}
+
+/* Accent is one composed control: a live swatch that opens the picker, and a
+   hex field an operator can type, paste or quote from a brand guide. */
+.branding-accent-field {
+  display: grid;
+  gap: var(--space-1);
 }
 
 .branding-accent-control {
-  display: grid;
-  grid-template-columns: 48px 1fr;
-  gap: var(--space-2);
-  align-items: center;
-}
-
-.branding-accent-control input[type="color"] {
-  width: 48px;
-  height: 42px;
-  padding: 3px;
+  display: flex;
+  align-items: stretch;
+  min-height: 42px;
+  overflow: hidden;
   border: 1px solid var(--line);
   border-radius: var(--radius-sm);
   background: var(--surface);
 }
 
-.branding-asset-control {
-  display: grid;
-  grid-template-columns: 140px minmax(0, 1fr);
+.branding-accent-control:focus-within {
+  border-color: var(--brand-500);
+  outline: var(--focus-width) solid var(--focus-ring);
+  outline-offset: var(--focus-halo-width);
+  box-shadow: 0 0 0 var(--focus-halo-width) var(--focus-halo);
+}
+
+.branding-accent-swatch {
+  position: relative;
+  flex: 0 0 42px;
+  width: 42px;
+  border-right: 1px solid var(--line);
+}
+
+.branding-accent-swatch input[type="color"] {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  padding: 0;
+  border: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+
+.branding-accent-hex {
+  flex: 1;
+  min-width: 0;
+  width: 100%;
+  padding: 0 var(--space-3);
+  border: 0;
+  background: none;
+  color: var(--ink);
+  font: inherit;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.02em;
+  text-transform: lowercase;
+}
+
+.branding-accent-hex:focus {
+  outline: none;
+}
+
+.branding-identity-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
   gap: var(--space-3);
-  padding: var(--space-4) 0;
+  margin: var(--space-2) calc(-1 * var(--space-5)) calc(-1 * var(--space-5));
+  padding: var(--space-3) var(--space-5);
   border-top: 1px solid var(--line);
 }
 
-.branding-asset-preview {
-  width: 100%;
+.branding-identity-actions .help {
+  margin: 0;
+}
+
+.branding-asset {
   display: grid;
-  place-items: center;
-  min-height: 88px;
-  overflow: hidden;
-  border: 1px dashed var(--border-strong);
-  border-radius: var(--radius);
-  background: var(--surface-sunken);
-  color: var(--muted);
-  font-size: var(--text-xs);
+  gap: var(--space-2);
+  min-width: 0;
 }
 
-.branding-asset-preview.is-banner {
-  aspect-ratio: 16 / 7;
-  min-height: 0;
+.branding-asset-heading h3 {
+  margin: 0;
+  font-size: var(--text-sm);
+  font-weight: var(--weight-semibold);
 }
 
-.branding-asset-preview img {
-  width: 100%;
-  height: 100%;
-  max-height: 112px;
-  object-fit: contain;
+.branding-asset-heading .help,
+.branding-asset-current {
+  margin: var(--space-1) 0 0;
 }
 
-.branding-asset-preview.is-banner img {
-  object-fit: cover;
+.branding-asset-current {
+  color: var(--text-secondary);
+  font-size: var(--text-2xs);
+  font-variant-numeric: tabular-nums;
 }
 
 .branding-upload-form {
   display: grid;
   gap: var(--space-2);
-  margin-top: var(--space-2);
 }
 
-.branding-preview-toolbar,
-.branding-preview-tabs {
+/* Empty: one dashed mark + “Add logo”. Upload is sr-only until a file is
+   chosen. The hidden file input covers the mark and the prompt. */
+.branding-dropzone {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  min-width: 0;
+}
+
+.branding-dropzone-target {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  min-width: 0;
+  min-height: 56px;
+  flex: 1;
+  padding: var(--space-2);
+  border: 1px dashed var(--border-strong);
+  border-radius: var(--radius-sm);
+  background: var(--surface-sunken);
+}
+
+.branding-dropzone.has-asset .branding-dropzone-target,
+.branding-dropzone.has-selection .branding-dropzone-target {
+  border-style: solid;
+  border-color: var(--line);
+  background: var(--surface);
+}
+
+.branding-dropzone-mark {
+  flex: 0 0 28px;
+  width: 28px;
+  height: 28px;
+  border: 1.5px dashed var(--border-strong);
+  border-radius: 4px;
+}
+
+.branding-dropzone img {
+  flex: 0 0 40px;
+  width: 40px;
+  height: 40px;
+  object-fit: contain;
+}
+
+.branding-dropzone.is-banner img {
+  flex-basis: 72px;
+  width: 72px;
+  object-fit: cover;
+}
+
+.branding-file-input {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  opacity: 0;
+  font-size: 0;
+  cursor: pointer;
+}
+
+.branding-file-input:disabled {
+  cursor: not-allowed;
+}
+
+.branding-dropzone-target:hover,
+.branding-dropzone-target:focus-within {
+  outline: var(--focus-width) solid var(--focus-ring);
+  outline-offset: var(--focus-halo-width);
+}
+
+.branding-dropzone:has(.branding-file-input:disabled) {
+  opacity: 0.62;
+}
+
+.branding-file-input:focus-visible {
+  outline: var(--focus-width) solid var(--focus-ring);
+  outline-offset: var(--focus-halo-width);
+}
+
+.branding-dropzone-prompt {
+  min-width: 0;
+  margin: 0;
+  overflow: hidden;
+  color: var(--text-primary);
+  font-size: var(--text-xs);
+  font-weight: var(--weight-semibold);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.branding-dropzone-bar {
   display: flex;
   flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
   gap: var(--space-2);
 }
 
-.branding-preview-toolbar {
-  justify-content: flex-end;
+/* Preview chrome is a single instrument: title + device switch on the first
+   row, surface tabs as a segmented bar, then the framed stage. */
+.branding-preview {
+  min-width: 0;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  box-shadow: var(--elev-1);
 }
 
-.branding-preview-toolbar .active,
-.branding-preview-tabs .active {
-  border-color: var(--event-accent, var(--brand-600));
-  background: var(--state-info-surface);
+.branding-preview-chrome {
+  display: grid;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-4) 0;
+  background: var(--surface);
+}
+
+.branding-preview-chrome-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+}
+
+.branding-preview-chrome-title {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-2);
+  min-width: 0;
+}
+
+.branding-preview-chrome-title h2 {
+  margin: 0;
+  font-size: var(--text-sm);
+  font-weight: var(--weight-semibold);
+}
+
+.branding-preview-chrome-title .help {
+  margin: 2px 0 0;
+}
+
+.branding-preview-devices,
+.branding-preview-surfaces {
+  display: inline-flex;
+  align-items: stretch;
+  min-width: 0;
+  margin: 0;
+  padding: 3px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--surface-sunken);
+}
+
+.branding-preview-surfaces {
+  display: flex;
+  width: max-content;
+  max-width: 100%;
+}
+
+.branding-preview-devices button,
+.branding-preview-surfaces button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-1);
+  min-height: 30px;
+  margin: 0;
+  padding: 0 var(--space-3);
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--text-secondary);
+  font: inherit;
+  font-size: var(--text-2xs);
+  font-weight: var(--weight-semibold);
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.branding-preview-devices button.is-active,
+.branding-preview-surfaces button.is-active {
+  background: var(--surface);
+  color: var(--text-primary);
+  box-shadow: var(--elev-1);
+}
+
+.branding-preview-devices button:focus-visible,
+.branding-preview-surfaces button:focus-visible {
+  outline: var(--focus-width) solid var(--focus-ring);
+  outline-offset: var(--focus-halo-width);
+}
+
+.branding-preview-stage {
+  padding: var(--space-4) var(--space-4) var(--space-3);
+  background: var(--surface);
 }
 
 .branding-preview-frame {
   width: 100%;
   min-height: 390px;
-  margin-top: var(--space-4);
   overflow: hidden;
   border: 1px solid var(--line);
-  border-radius: var(--radius-lg);
+  border-radius: var(--radius-sm);
   background: var(--surface-canvas);
-  transition: width 160ms ease;
+  box-shadow: var(--elev-2);
+  transition: width 160ms var(--ease-out);
 }
 
 .branding-preview-frame.is-mobile {
@@ -126,6 +403,7 @@
   display: flex;
   align-items: center;
   gap: var(--space-2);
+  min-width: 0;
 }
 
 .branding-preview-identity > svg,
@@ -211,12 +489,18 @@
   color: var(--text-tertiary);
 }
 
-.branding-publish-card {
+.branding-preview-commit {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: var(--space-4);
-  border-color: color-mix(in srgb, var(--brand-600) 35%, var(--line));
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-4) var(--space-4);
+  border-top: 1px solid var(--line);
+  background: var(--surface);
+}
+
+.branding-preview-commit .help {
+  margin: 0;
 }
 
 @media (max-width: 1000px) {
@@ -225,17 +509,53 @@
   }
 }
 
+@media (max-width: 720px) {
+  .branding-preview-surfaces {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    width: 100%;
+  }
+}
+
 @media (max-width: 600px) {
-  .branding-asset-control {
-    grid-template-columns: 1fr;
-  }
-
-  .branding-asset-preview {
-    max-width: 180px;
-  }
-
-  .branding-publish-card {
+  .branding-preview-commit {
     align-items: stretch;
     flex-direction: column;
+  }
+
+  .branding-preview-devices button,
+  .branding-preview-surfaces button {
+    padding-inline: var(--space-2);
+  }
+
+  .branding-identity-actions {
+    flex-direction: column;
+    align-items: stretch;
+    margin-inline: calc(-1 * var(--space-5));
+  }
+}
+
+@media (max-width: 390px) {
+  .branding-preview-chrome {
+    padding-inline: var(--space-3);
+  }
+
+  .branding-preview-stage {
+    padding: var(--space-3);
+  }
+}
+
+@media (forced-colors: active) {
+  .branding-accent-control,
+  .branding-dropzone,
+  .branding-preview,
+  .branding-preview-devices,
+  .branding-preview-surfaces {
+    border: 1px solid CanvasText;
+  }
+
+  .branding-preview-devices button.is-active,
+  .branding-preview-surfaces button.is-active {
+    border: 1px solid Highlight;
   }
 }

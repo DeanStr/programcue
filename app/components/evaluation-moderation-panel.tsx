@@ -9,7 +9,7 @@ export function EvaluationModerationPanel() {
     activeRoundAssignments,
   } = useEvaluationAdminModel();
   return activeRound ? (
-    <section className="card pad mt">
+    <section className="card pad mt pc-eval-moderation">
       <div className="card-title">
         <div>
           <h2>Moderation and review control</h2>

@@ -46,16 +46,19 @@ function dayCount(start: string, end: string) {
 
 function HomeSection({
   title,
+  kicker,
   className = "",
   children,
 }: {
   title: string;
+  kicker?: string;
   className?: string;
   children: ReactNode;
 }) {
   return (
     <section className={`public-site-section ${className}`.trim()}>
       <div className="public-site-section-heading">
+        {kicker ? <p className="public-site-section-kicker">{kicker}</p> : null}
         <h2>{title}</h2>
       </div>
       {children}
@@ -175,6 +178,11 @@ export function PublicSiteHome({
         }
       : null,
   ].filter((item): item is { value: number; label: string } => item !== null);
+  const glanceQuiet = statistics.some(
+    (item) =>
+      (item.label === "speakers" && item.value <= 3) ||
+      (item.label === "sessions" && item.value <= 8),
+  );
 
   const sections: Record<
     (typeof configuration.sectionOrder)[number],
@@ -222,7 +230,13 @@ export function PublicSiteHome({
       </HomeSection>
     ),
     featured_speakers: (
-      <HomeSection title="Featured speakers" className="public-site-speakers">
+      <HomeSection
+        title="Featured speakers"
+        kicker="The people on stage"
+        className={`public-site-speakers${
+          featuredSpeakers.length <= 2 ? " is-pair" : ""
+        }`}
+      >
         <div className="public-site-feature-grid">
           {featuredSpeakers.map((speaker) => (
             <PreviewSafeLink
@@ -253,7 +267,13 @@ export function PublicSiteHome({
       </HomeSection>
     ),
     featured_sessions: (
-      <HomeSection title="Featured sessions" className="public-site-sessions">
+      <HomeSection
+        title="Featured sessions"
+        kicker="Start here"
+        className={`public-site-sessions${
+          featuredSessions.length <= 2 ? " is-pair" : ""
+        }`}
+      >
         <div className="public-site-feature-grid sessions">
           {featuredSessions.map((session) => (
             <PreviewSafeLink
@@ -271,6 +291,11 @@ export function PublicSiteHome({
                   {session.when}
                 </small>
                 <strong>{session.title}</strong>
+                {session.speakerNames.length ? (
+                  <small className="public-site-feature-who">
+                    {session.speakerNames.join(" · ")}
+                  </small>
+                ) : null}
                 <small>
                   {[session.track, session.format, session.room]
                     .filter(Boolean)
@@ -285,16 +310,26 @@ export function PublicSiteHome({
     statistics: (
       <HomeSection
         title="At a glance"
-        className="public-site-statistics-section"
+        className={`public-site-statistics-section${
+          glanceQuiet ? " is-quiet" : ""
+        }`}
       >
-        <dl className="public-site-statistics">
-          {statistics.map((statistic) => (
-            <div key={statistic.label}>
-              <dt>{statistic.label}</dt>
-              <dd>{statistic.value}</dd>
-            </div>
-          ))}
-        </dl>
+        {glanceQuiet ? (
+          <p className="public-site-glance-line">
+            {statistics
+              .map((statistic) => `${statistic.value} ${statistic.label}`)
+              .join(" · ")}
+          </p>
+        ) : (
+          <dl className="public-site-statistics">
+            {statistics.map((statistic) => (
+              <div key={statistic.label}>
+                <dt>{statistic.label}</dt>
+                <dd>{statistic.value}</dd>
+              </div>
+            ))}
+          </dl>
+        )}
       </HomeSection>
     ),
     venue: (
@@ -310,11 +345,21 @@ export function PublicSiteHome({
     faq: (
       <HomeSection
         title="Frequently asked questions"
-        className="public-site-faq-section"
+        kicker="Before you arrive"
+        className={`public-site-faq-section${
+          configuration.faqItems.length <= 3 ? " is-interview" : ""
+        }`}
       >
         <div className="public-site-faq">
-          {configuration.faqItems.map((item) => (
-            <details key={item.id}>
+          {configuration.faqItems.map((item, index) => (
+            <details
+              key={item.id}
+              open={
+                configuration.faqItems.length <= 3 && index === 1
+                  ? true
+                  : undefined
+              }
+            >
               <summary>{item.question}</summary>
               <RestrictedMarkdown>{item.answer}</RestrictedMarkdown>
             </details>
@@ -332,7 +377,14 @@ export function PublicSiteHome({
         ) : null,
       )}
       {configuration.pages.sponsors.enabled && configuration.sponsors.length ? (
-        <HomeSection title="Supported by" className="public-site-sponsor-strip">
+        <HomeSection
+          title="Supported by"
+          className={`public-site-sponsor-strip${
+            configuration.sponsors.some((sponsor) => sponsor.logoUrl)
+              ? ""
+              : " is-credits"
+          }`}
+        >
           <div className="public-site-sponsor-grid">
             {configuration.sponsors.slice(0, 8).map((sponsor) => (
               <PreviewSafeLink
@@ -351,7 +403,7 @@ export function PublicSiteHome({
                   />
                 ) : null}
                 <strong>{sponsor.name}</strong>
-                <small>{sponsor.tier}</small>
+                {sponsor.tier ? <small>{sponsor.tier}</small> : null}
               </PreviewSafeLink>
             ))}
           </div>

@@ -1,4 +1,4 @@
-import { ArrowLeft, Mail, UsersRound } from "lucide-react";
+import { ArrowLeft } from "lucide-react";
 import {
   data,
   Form,
@@ -112,12 +112,11 @@ export default function AdminCrmOutreach({ loaderData }: Route.ComponentProps) {
   const navigation = useNavigation();
   const busy = navigation.state !== "idle";
   return (
-    <>
+    <div className="crm-workspace">
       <div className="page-head pc-page-header">
         <div>
-          <span className="pc-page-eyebrow">Organization Speaker Network</span>
           <h1>Bulk speaker invitations</h1>
-          <p>
+          <p className="crm-caption">
             Select at least two speaker contacts, write an event-specific
             invitation, then use the existing authoritative preview and
             confirmation workflow.
@@ -128,25 +127,19 @@ export default function AdminCrmOutreach({ loaderData }: Route.ComponentProps) {
         </Link>
       </div>
       {actionData ? (
-        <div className="validation-item error card pad mb" role="alert">
+        <div className="validation-item error crm-notice" role="alert">
           <strong>△</strong>
           <span>{actionData.message}</span>
         </div>
       ) : null}
-      <Form method="post" className="stack">
+      <Form method="post" className="crm-compose">
         <input
           type="hidden"
           name="idempotencyKey"
           value={loaderData.idempotencyKey}
         />
-        <section className="card pad">
-          <div className="card-title">
-            <div>
-              <span className="pc-section-kicker">Recipients</span>
-              <h2>Selected contacts</h2>
-            </div>
-            <UsersRound aria-hidden className="subtle" />
-          </div>
+        <section>
+          <h2>Selected contacts</h2>
           <div className="stack mt">
             {loaderData.contacts.map((contact) => {
               const checked = loaderData.selected.some(
@@ -172,14 +165,8 @@ export default function AdminCrmOutreach({ loaderData }: Route.ComponentProps) {
             })}
           </div>
         </section>
-        <section className="card pad">
-          <div className="card-title">
-            <div>
-              <span className="pc-section-kicker">Event invitation</span>
-              <h2>Compose email</h2>
-            </div>
-            <Mail aria-hidden className="subtle" />
-          </div>
+        <section>
+          <h2>Compose email</h2>
           <label className="label mt">
             Related event
             <select
@@ -237,6 +224,6 @@ export default function AdminCrmOutreach({ loaderData }: Route.ComponentProps) {
           </button>
         </section>
       </Form>
-    </>
+    </div>
   );
 }

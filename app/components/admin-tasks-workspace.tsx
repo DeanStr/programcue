@@ -3,7 +3,6 @@ import {
   CheckCircle2,
   ListChecks,
   ListFilter,
-  ShieldCheck,
 } from "lucide-react";
 import { Form, Link } from "react-router";
 
@@ -45,15 +44,15 @@ export function AdminTasksWorkspace({
           </p>
         </div>
         <div className="page-actions">
-          <Link className="btn" to="/admin/tasks/bulk">
+          <Link className="btn primary" to="/admin/tasks/bulk">
             Bulk actions
           </Link>
-          <span className="status info">
-            <ShieldCheck aria-hidden size={14} /> Server authorised
-          </span>
         </div>
       </div>
-      <section className="card pad mb" aria-labelledby="task-filters-heading">
+      <section
+        className="card tasks-filters mb"
+        aria-labelledby="task-filters-heading"
+      >
         <div className="card-title">
           <h2 id="task-filters-heading">Filter assigned work</h2>
           <span className="help right">
@@ -123,7 +122,7 @@ export function AdminTasksWorkspace({
             </select>
           </label>
           <div className="page-actions" style={{ alignItems: "end" }}>
-            <button className="btn primary" type="submit">
+            <button className="btn" type="submit">
               Apply filters
             </button>
             <Link className="btn" to="/admin/tasks">
@@ -161,40 +160,59 @@ export function AdminTasksWorkspace({
           </div>
         </div>
       ) : null}
-      <div className="grid grid-5 mb">
-        <section className="card metric">
+      <div className="card tasks-summary mb">
+        <section className="metric">
           <div className="label">Readiness</div>
           <div className="value">{data.taskSummary.readiness}%</div>
           <a className="metric-note" href="#readiness-weighting">
             Impact-weighted
           </a>
         </section>
-        <section className="card metric">
+        <section className="metric">
           <div className="label">Outstanding</div>
           <div className="value">{data.taskSummary.outstanding}</div>
         </section>
-        <section className="card metric">
-          <div className="label">Evidence review</div>
-          <div className="value">{data.taskSummary.evidenceReview}</div>
-        </section>
-        <section className="card metric">
-          <div className="label">Blocked</div>
-          <div className="value">{data.taskSummary.blocked}</div>
-        </section>
-        <section className="card metric">
-          <div className="label">Overdue</div>
-          <div className="value">{data.taskSummary.overdue}</div>
-        </section>
+        {data.taskSummary.evidenceReview > 0 ? (
+          <section className="metric">
+            <div className="label">Evidence review</div>
+            <div className="value">{data.taskSummary.evidenceReview}</div>
+          </section>
+        ) : null}
+        {data.taskSummary.blocked > 0 ? (
+          <section className="metric">
+            <div className="label">Blocked</div>
+            <div className="value">{data.taskSummary.blocked}</div>
+          </section>
+        ) : null}
+        {data.taskSummary.overdue > 0 ? (
+          <section className="metric">
+            <div className="label">Overdue</div>
+            <div className="value">{data.taskSummary.overdue}</div>
+          </section>
+        ) : null}
       </div>
-      <div className="tasks-layout">
+      <div className="tasks-layout tasks-board">
         <AdminAssignedTasksPanel data={data} busy={busy} />
-        <div className="tasks-rail" id="readiness-weighting">
-          <ReadinessWeightingCard />
-          <AdminTaskPlanPanel
-            data={data}
-            busy={busy}
-            actionNotice={actionNotice}
-          />
+        <div className="tasks-rail tasks-side" id="readiness-weighting">
+          <details className="card pad tasks-plan-more">
+            <summary>Plan and onboarding</summary>
+            <ReadinessWeightingCard />
+            <AdminTaskPlanPanel
+              data={data}
+              busy={busy}
+              actionNotice={actionNotice}
+              mode="plan"
+            />
+          </details>
+          <details className="card pad tasks-plan-more">
+            <summary>Create a template</summary>
+            <AdminTaskPlanPanel
+              data={data}
+              busy={busy}
+              actionNotice={actionNotice}
+              mode="create"
+            />
+          </details>
         </div>
       </div>
     </>

@@ -39,7 +39,7 @@
      independent from copper product emphasis and orange panel rails. */
   --format-keynote-accent: #5b21b6;
   --teal: #0d9488;
-  --green: #16a34a;
+  --green: #3a5f42;
   --amber: #d97706;
   --red: #dc2626;
   --blue: #2563eb;
@@ -112,7 +112,7 @@
      The *-solid values are tuned to clear 3:1 against light tracks and go
      nearly black against navy. These are their counterparts for status dots
      and marks painted on --surface-inverse or --surface-nav. */
-  --state-good-on-dark: #5ee6a8;
+  --state-good-on-dark: #8fbf9a;
   --state-warn-on-dark: #facc15;
 
   /* --- Semantic text ----------------------------------------------------- */
@@ -135,23 +135,25 @@
      *-solid paints graphical objects and clears 3:1 against the #e8eae3 track
      (--green and --amber themselves do not: 2.80:1 and 2.71:1).
      *-text paints labels and clears 4.5:1 on white. */
-  --state-good-solid: #15803d;
-  --state-good-text: #166534;
-  --state-good-surface: #dcfce7;
+  /* Olive/forest, same temperature as the nav. Kelly #15803d was a cool
+     traffic light on warm paper and clashed with every 100% bar. */
+  --state-good-solid: #3a5f42;
+  --state-good-text: #2a4a32;
+  --state-good-surface: #e7efe8;
   /* Warning is deliberately gold rather than orange-brown. Copper owns brand
      and informational emphasis; a separate hue keeps operational risk legible
      at a glance without borrowing the red family used for failures. */
   --state-warn-solid: #8a6500;
   --state-warn-text: #6f5200;
-  --state-warn-surface: #fff8c5;
-  --state-warn-surface-subtle: #fffdf0;
+  --state-warn-surface: #f4edd4;
+  --state-warn-surface-subtle: #faf6ea;
   /* The counterpart to --state-bad-border, which already existed. Three files
      were typing this value by hand. */
   --state-warn-border: #d4a72c;
   --state-bad-solid: #dc2626;
   --state-bad-text: #991b1b;
-  --state-bad-surface: #fee2e2;
-  --state-bad-border: #fecaca;
+  --state-bad-surface: #f6eeec;
+  --state-bad-border: #e8cfc9;
   --state-info-solid: var(--brand-600);
   --state-info-text: var(--brand-700);
   --state-info-surface: var(--brand-50);
@@ -170,12 +172,12 @@
   --focus-ring: var(--brand-900);
   --focus-halo: #fff;
   --focus-width: 2px;
-  --focus-halo-width: 3px;
+  --focus-halo-width: 2px;
 
   /* --- Elevation ---------------------------------------------------------
      border contains, tint groups, shadow floats.
-     A card on canvas = 1px border + --elev-1. A panel inside a card = sunken
-     tint, no border, no shadow. A popover = --elev-3 and no border. */
+     A card on canvas = 1px hairline, no shadow. A panel inside a card =
+     sunken tint, no border, no shadow. A popover = --elev-3. */
   --elev-0: none;
   --elev-1: 0 1px 2px rgba(19, 32, 31, 0.06), 0 1px 1px rgba(19, 32, 31, 0.04);
   --elev-2: 0 2px 4px rgba(19, 32, 31, 0.06), 0 4px 10px rgba(19, 32, 31, 0.05);
@@ -187,24 +189,37 @@
   /* An overlay floats above the whole document, so it is one step beyond the
      page scale rather than another --elev-4 surface. */
   --elev-overlay:
-    0 2px 6px rgba(2, 6, 23, 0.12), 0 24px 48px rgba(2, 6, 23, 0.18),
-    0 48px 96px rgba(2, 6, 23, 0.16);
+    0 2px 8px rgba(19, 32, 31, 0.1), 0 24px 48px rgba(19, 32, 31, 0.16),
+    0 48px 80px rgba(19, 32, 31, 0.12);
 
   /* --- Scrim --------------------------------------------------------------
      Two weights, because a scrim states how much of the page is suspended. A
      decision suspends all of it; a menu belonging to one control suspends
      almost none, and dimming the page to 58% for an account menu was the
-     single loudest thing the administrator chrome did. */
-  --scrim: rgba(2, 6, 23, 0.55);
-  --scrim-soft: rgba(2, 6, 23, 0.22);
-  --scrim-blur: 3px;
+     single loudest thing the administrator chrome did. Forest ink, not the
+     cool navy that used to cast a blue veil over warm paper. */
+  --scrim: rgba(19, 32, 31, 0.52);
+  --scrim-soft: rgba(19, 32, 31, 0.18);
+  --scrim-blur: 4px;
 
-  /* --- Radius ------------------------------------------------------------- */
-  --radius-xs: 6px;
-  --radius-sm: 10px;
-  --radius: 14px;
-  --radius-lg: 20px;
+  /* --- Radius -------------------------------------------------------------
+     Tight enough to read as a product, not a kit of bubbly cards. 14/20 was
+     the tell against Linear and Stripe; the warm paper still keeps this from
+     going sharp. */
+  --radius-xs: 4px;
+  --radius-sm: 8px;
+  --radius: 10px;
+  --radius-lg: 16px;
   --radius-full: 999px;
+
+  /* Default control height sits on the 4px grid. 38px was an off-grid leftover
+     shared by every button and field. */
+  --control-height: 36px;
+  --control-height-sm: 32px;
+
+  /* Quiet chip fill. Cool slate (#f1f5f9) clashed with the paper canvas. */
+  --chip: #ecece4;
+  --toggle-off: #c5cbc2;
 
   /* --- Space -------------------------------------------------------------
      4px grid. Snap to the nearest step; do not introduce intermediate values. */

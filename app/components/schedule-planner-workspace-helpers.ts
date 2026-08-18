@@ -3,6 +3,23 @@ import type {
   AutoPlacementUnplaced,
 } from "~/modules/schedule/schedule-auto-placement";
 
+export function sessionFormatLabel(
+  formats: Array<{ key: string; label: string }>,
+  key: string,
+) {
+  return formats.find((format) => format.key === key)?.label ?? key;
+}
+
+export function isHourMark(epoch: number, timezone: string) {
+  const minute = new Intl.DateTimeFormat("en", {
+    minute: "2-digit",
+    timeZone: timezone,
+  })
+    .formatToParts(new Date(epoch * 1_000))
+    .find((part) => part.type === "minute")?.value;
+  return minute === "00";
+}
+
 export function localHour(epoch: number, timezone: string) {
   const hour = new Intl.DateTimeFormat("en", {
     hour: "numeric",

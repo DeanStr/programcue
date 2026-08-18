@@ -36,7 +36,7 @@ export function EmptyState({
       )}
     >
       <span className="pc-state-icon">
-        <Glyph aria-hidden size={22} />
+        <Glyph aria-hidden size={20} />
       </span>
       <Heading className="pc-empty-state-title">{title}</Heading>
       <p>{description}</p>

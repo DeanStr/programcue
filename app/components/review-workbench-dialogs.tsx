@@ -1,8 +1,5 @@
 import { Dialog } from "~/components/dialog";
-import {
-  DraftRecoveryFeedback,
-  DraftRecoveryStatus,
-} from "~/components/draft-recovery-feedback";
+import { DraftRecoveryFeedback } from "~/components/draft-recovery-feedback";
 import { useReviewWorkbenchModel } from "~/components/review-workbench-model";
 import { useConfirm } from "~/components/ui/confirm-dialog";
 
@@ -20,29 +17,30 @@ export function ReviewWorkbenchHeader() {
   return (
     <div className="page-head review-page-head">
       <div>
-        <h1>Review Workbench</h1>
-        <p>
-          Review assigned submissions and sessions without losing queue context.
-        </p>
+        <h1>Review workbench</h1>
+        <p>Score the open assignment without losing queue context.</p>
       </div>
       <div className="page-actions">
-        <DraftRecoveryStatus state={recovery.state} />
-        <span
-          className={`status ${dirty || committedWarning ? "warning" : saveFailed ? "danger" : fetcher.state === "idle" && hasSavedDraft ? "success" : "info"}`}
-        >
-          {readOnly
-            ? "Submitted"
-            : fetcher.state !== "idle"
-              ? "Saving…"
-              : committedWarning
-                ? "Saved · live update delayed"
-                : saveFailed
-                  ? "Save failed"
-                  : dirty
-                    ? "Unsaved changes"
-                    : hasSavedDraft
-                      ? "Saved"
-                      : "No draft yet"}
+        <span className="review-head-status">
+          {recovery.state === "checking"
+            ? "Checking recovery"
+            : recovery.state === "restore_available"
+              ? "Restore available"
+              : recovery.state === "conflict"
+                ? "Draft conflict"
+                : readOnly
+                  ? "Submitted"
+                  : fetcher.state !== "idle"
+                    ? "Saving"
+                    : committedWarning
+                      ? "Saved · live update delayed"
+                      : saveFailed
+                        ? "Save failed"
+                        : dirty
+                          ? "Unsaved"
+                          : hasSavedDraft
+                            ? "Saved"
+                            : "No draft yet"}
         </span>
       </div>
     </div>

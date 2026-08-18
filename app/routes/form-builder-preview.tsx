@@ -269,6 +269,9 @@ export default function FormBuilder({ loaderData }: Route.ComponentProps) {
   } | null>(null);
   const [previewOpen, setPreviewOpen] = useState(false);
   const [clientReady, setClientReady] = useState(false);
+  const [mobileSurface, setMobileSurface] = useState<
+    "structure" | "canvas" | "settings"
+  >("canvas");
   useEffect(() => setClientReady(true), []);
   useEffect(() => {
     if (!actionData?.errors) return;
@@ -348,35 +351,10 @@ export default function FormBuilder({ loaderData }: Route.ComponentProps) {
         value={JSON.stringify(input.routing)}
       />
 
-      <div className="page-head">
+      <div className="page-head fb-page-head">
         <div>
           <h1>Call for Speakers Form Builder</h1>
           <p>Design, test and publish immutable application versions.</p>
-        </div>
-        <div className="page-actions">
-          <button
-            className="btn"
-            type="submit"
-            name="_intent"
-            value="save"
-            disabled={!clientReady || navigationState !== "idle"}
-          >
-            {pendingIntent === "save" ? "Saving…" : "Save draft"}
-          </button>
-          <button
-            className="btn primary"
-            type="button"
-            onClick={() => setPublishOpen(true)}
-            disabled={
-              !clientReady ||
-              !input.id ||
-              dirty ||
-              loaderData.eventChoicesChanged ||
-              navigationState !== "idle"
-            }
-          >
-            {pendingIntent === "publish" ? "Publishing…" : "Publish version"}
-          </button>
         </div>
       </div>
 
@@ -539,260 +517,331 @@ export default function FormBuilder({ loaderData }: Route.ComponentProps) {
         </div>
       ) : null}
 
-      <div className="fb-toolbar">
-        <label className="label fb-toolbar-form">
-          Form
-          <select
-            className="select"
-            value={input.id ?? "new"}
-            onChange={(event) => {
-              window.location.assign(
-                event.target.value === "new"
-                  ? "/admin/submissions/form?new=1"
-                  : `/admin/submissions/form?form=${encodeURIComponent(event.target.value)}`,
-              );
-            }}
-          >
-            <option value="new">New form…</option>
-            {loaderData.forms.map((form) => (
-              <option key={form.id} value={form.id}>
-                {form.name} · {form.kind.replace("_", " ")}
-              </option>
-            ))}
-          </select>
-        </label>
-        <span className="fb-toolbar-state">
-          {dirty ? (
-            <span className="status warning">Unsaved changes</span>
-          ) : input.id ? (
-            <span className="status success">Draft saved</span>
-          ) : (
-            <span className="status warning">Not saved</span>
-          )}
-          <DraftRecoveryStatus state={recovery.state} />
-        </span>
-        {publicUrl ? (
-          <span className="fb-toolbar-links">
-            <Link
-              className="btn small"
-              to={publicUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-            >
-              Open public form
-              <span className="sr-only"> (opens in a new tab)</span>
-            </Link>
-            <button
-              className="btn small"
-              type="button"
-              onClick={async () => {
-                try {
-                  if (!navigator.clipboard) {
-                    throw new Error(
-                      "Clipboard access is unavailable in this browser context.",
-                    );
-                  }
-                  await navigator.clipboard.writeText(
-                    new URL(publicUrl, window.location.origin).href,
-                  );
-                  setCopyFeedback({
-                    ok: true,
-                    message: "Public form link copied.",
-                  });
-                } catch (error) {
-                  setCopyFeedback({
-                    ok: false,
-                    message:
-                      error instanceof Error
-                        ? error.message
-                        : "The public form link could not be copied.",
-                  });
-                }
+      <div className="fb-stage">
+        <div className="fb-toolbar">
+          <label className="fb-toolbar-form">
+            <span className="fb-toolbar-kicker">Form</span>
+            <select
+              className="select fb-toolbar-select"
+              value={input.id ?? "new"}
+              onChange={(event) => {
+                window.location.assign(
+                  event.target.value === "new"
+                    ? "/admin/submissions/form?new=1"
+                    : `/admin/submissions/form?form=${encodeURIComponent(event.target.value)}`,
+                );
               }}
             >
-              Copy public form link
-            </button>
-            {copyFeedback ? (
-              <span
-                className={copyFeedback.ok ? "help" : "field-error"}
-                role={copyFeedback.ok ? "status" : "alert"}
-              >
-                {copyFeedback.message}
-              </span>
-            ) : null}
+              <option value="new">New form…</option>
+              {loaderData.forms.map((form) => (
+                <option key={form.id} value={form.id}>
+                  {form.name}
+                </option>
+              ))}
+            </select>
+          </label>
+          <span className="fb-toolbar-rule" aria-hidden="true" />
+          <span className="fb-toolbar-state">
+            {dirty ? (
+              <span className="status warning">Unsaved changes</span>
+            ) : input.id ? (
+              <span className="status success">Draft saved</span>
+            ) : (
+              <span className="status warning">Not saved</span>
+            )}
+            <DraftRecoveryStatus state={recovery.state} />
           </span>
+          <span className="fb-toolbar-actions">
+            <button
+              className="btn small"
+              type="submit"
+              name="_intent"
+              value="save"
+              disabled={!clientReady || navigationState !== "idle"}
+            >
+              {pendingIntent === "save" ? "Saving…" : "Save draft"}
+            </button>
+            <button
+              className="btn small primary"
+              type="button"
+              onClick={() => setPublishOpen(true)}
+              disabled={
+                !clientReady ||
+                !input.id ||
+                dirty ||
+                loaderData.eventChoicesChanged ||
+                navigationState !== "idle"
+              }
+            >
+              {pendingIntent === "publish" ? "Publishing…" : "Publish version"}
+            </button>
+          </span>
+          {publicUrl ? (
+            <span className="fb-toolbar-links">
+              <Link
+                className="fb-toolbar-link"
+                to={publicUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                Open public form
+                <span className="sr-only"> (opens in a new tab)</span>
+              </Link>
+              <button
+                className="fb-toolbar-link"
+                type="button"
+                onClick={async () => {
+                  try {
+                    if (!navigator.clipboard) {
+                      throw new Error(
+                        "Clipboard access is unavailable in this browser context.",
+                      );
+                    }
+                    await navigator.clipboard.writeText(
+                      new URL(publicUrl, window.location.origin).href,
+                    );
+                    setCopyFeedback({
+                      ok: true,
+                      message: "Public form link copied.",
+                    });
+                  } catch (error) {
+                    setCopyFeedback({
+                      ok: false,
+                      message:
+                        error instanceof Error
+                          ? error.message
+                          : "The public form link could not be copied.",
+                    });
+                  }
+                }}
+              >
+                Copy public form link
+              </button>
+              {copyFeedback ? (
+                <span
+                  className={copyFeedback.ok ? "help" : "field-error"}
+                  role={copyFeedback.ok ? "status" : "alert"}
+                >
+                  {copyFeedback.message}
+                </span>
+              ) : null}
+            </span>
+          ) : null}
+        </div>
+
+        <fieldset
+          className="fb-mobile-surfaces pc-plain-fieldset"
+          aria-label="Editor surface"
+        >
+          <button
+            className="btn small"
+            type="button"
+            aria-pressed={mobileSurface === "structure"}
+            onClick={() => setMobileSurface("structure")}
+          >
+            Structure
+          </button>
+          <button
+            className="btn small"
+            type="button"
+            aria-pressed={mobileSurface === "canvas"}
+            onClick={() => setMobileSurface("canvas")}
+          >
+            Canvas
+          </button>
+          <button
+            className="btn small"
+            type="button"
+            aria-pressed={mobileSurface === "settings"}
+            onClick={() => setMobileSurface("settings")}
+          >
+            Settings
+          </button>
+        </fieldset>
+        <div
+          className={`fb-workbench${previewOpen ? " is-previewing" : ""} fb-surface-${mobileSurface}`}
+        >
+          <FormStructurePanel
+            input={input}
+            selectedId={selected?.id}
+            draftVersionNumber={
+              loaderData.workspace?.draftVersion.versionNumber ?? 1
+            }
+            change={change}
+            onSelect={setSelectedId}
+            operationMessage={
+              clientValidationLocation === "structure"
+                ? clientValidationMessage
+                : null
+            }
+            onOperationBlocked={(message) =>
+              reportClientValidation(message, "structure")
+            }
+          />
+
+          <section className="card fb-pane fb-canvas">
+            <div className="fb-pane-head">
+              <h2>Form canvas</h2>
+              <span className="fb-pane-hint right">
+                Changes update the draft immediately.
+              </span>
+            </div>
+            <div className="fb-pane-body">
+              <FormBuilderVisualCanvas
+                input={input}
+                selectedId={selected?.id}
+                change={change}
+                onSelect={setSelectedId}
+                onOpenSettings={() => {
+                  setPreviewOpen(false);
+                  setMobileSurface("settings");
+                }}
+                operationMessage={
+                  clientValidationLocation === "canvas"
+                    ? clientValidationMessage
+                    : null
+                }
+                onOperationBlocked={(message) =>
+                  reportClientValidation(message, "canvas")
+                }
+              />
+            </div>
+          </section>
+
+          <div
+            className={`card fb-pane fb-dock${previewOpen ? " is-previewing" : ""}`}
+          >
+            <FieldSettingsPanel
+              input={input}
+              selected={selected}
+              categoryField={categoryField}
+              change={change}
+              patchField={patchField}
+              setSelectedId={setSelectedId}
+              routingTeams={loaderData.routingTeams}
+              routingTracks={loaderData.routingTracks}
+              paneSwitch={dockSwitch}
+              hidden={previewOpen}
+              formProperties={
+                <>
+                  <div className="fb-form-settings">
+                    <label className="label">
+                      <span className="pc-field-label">
+                        <span>Form name</span>
+                        <span className="pc-required" aria-hidden="true">
+                          Required
+                        </span>
+                      </span>
+                      <input
+                        className="field"
+                        name="name"
+                        value={input.name}
+                        onChange={(event) =>
+                          change({ ...input, name: event.target.value })
+                        }
+                        required
+                      />
+                    </label>
+                    <DerivedSlugField
+                      source={input.name}
+                      value={input.publicSlug}
+                      onChange={(value) =>
+                        change({ ...input, publicSlug: value })
+                      }
+                      name="publicSlug"
+                      label="Public URL slug"
+                      maximumLength={120}
+                      customMaximumLength={null}
+                      initiallyDerived={!input.id}
+                      resetKey={input.id ?? "new"}
+                      publicPathPrefix="/apply/"
+                    />
+                    <label className="label">
+                      Record type
+                      <select
+                        className="select"
+                        name="kind"
+                        value={input.kind}
+                        onChange={(event) => {
+                          const kind = event.target
+                            .value as SaveFormInput["kind"];
+                          change({
+                            ...input,
+                            kind,
+                            schema: {
+                              ...input.schema,
+                              fields: input.schema.fields.map((field) =>
+                                field.id === "category"
+                                  ? {
+                                      ...field,
+                                      type:
+                                        kind === "direct_session"
+                                          ? ("select" as const)
+                                          : ("multi_select" as const),
+                                      help:
+                                        kind === "direct_session"
+                                          ? "Choose the programme track for this session."
+                                          : "Choose every programme track this proposal should be reviewed for.",
+                                    }
+                                  : field,
+                              ),
+                            },
+                          });
+                        }}
+                      >
+                        <option value="submission">
+                          Application for review
+                        </option>
+                        <option value="direct_session">
+                          Direct session intake
+                        </option>
+                      </select>
+                    </label>
+                  </div>
+                  <PublicationSettingsFields
+                    input={input}
+                    passwordConfigured={loaderData.passwordConfigured}
+                    change={change}
+                    eventTimezone={eventTimezone}
+                  />
+                  <div className="mt">
+                    <PresentationSettingsPanel
+                      input={input}
+                      change={change}
+                      errors={actionData?.errors}
+                    />
+                  </div>
+                  <p className="fb-pane-note">
+                    Drag fields from the palette into the form or drag existing
+                    fields to reorder them. Select a field to edit its settings;
+                    keyboard users can add from the palette and reorder in Form
+                    structure.
+                  </p>
+                  {!clientReady ? (
+                    <p className="fb-pane-note">
+                      JavaScript is required to edit or save this form.
+                    </p>
+                  ) : null}
+                </>
+              }
+            />
+            <ApplicantPreviewPanel
+              input={input}
+              brandAccent={loaderData.workspace?.brandAccent}
+              eventName={loaderData.workspace?.eventName}
+              paneSwitch={dockSwitch}
+              hidden={!previewOpen}
+              onClose={() => setPreviewOpen(false)}
+            />
+          </div>
+        </div>
+        {loaderData.workspace ? (
+          <FormVersionHistory
+            workspace={loaderData.workspace}
+            eventTimezone={eventTimezone}
+          />
         ) : null}
       </div>
-
-      <div className={`fb-workbench${previewOpen ? " is-previewing" : ""}`}>
-        <FormStructurePanel
-          input={input}
-          selectedId={selected?.id}
-          draftVersionNumber={
-            loaderData.workspace?.draftVersion.versionNumber ?? 1
-          }
-          change={change}
-          onSelect={setSelectedId}
-          operationMessage={
-            clientValidationLocation === "structure"
-              ? clientValidationMessage
-              : null
-          }
-          onOperationBlocked={(message) =>
-            reportClientValidation(message, "structure")
-          }
-        />
-
-        <section className="card fb-pane fb-canvas">
-          <div className="fb-pane-head">
-            <h2>Form canvas</h2>
-            <span className="help right">
-              Changes update the draft immediately.
-            </span>
-          </div>
-          <div className="fb-pane-body">
-            <FormBuilderVisualCanvas
-              input={input}
-              selectedId={selected?.id}
-              change={change}
-              onSelect={setSelectedId}
-              onOpenSettings={() => setPreviewOpen(false)}
-              operationMessage={
-                clientValidationLocation === "canvas"
-                  ? clientValidationMessage
-                  : null
-              }
-              onOperationBlocked={(message) =>
-                reportClientValidation(message, "canvas")
-              }
-            />
-            <p className="fb-pane-note mt">
-              Drag fields from the palette into the form or drag existing fields
-              to reorder them. Select a field to edit its settings; keyboard
-              users can add from the palette and reorder in Form structure.
-            </p>
-            {!clientReady ? (
-              <p className="fb-pane-note mt">
-                JavaScript is required to edit or save this form.
-              </p>
-            ) : null}
-
-            <h3 className="fb-subhead">Form settings</h3>
-            <div className="fb-form-settings mb">
-              <label className="label">
-                <span className="pc-field-label">
-                  <span>Form name</span>
-                  <span className="pc-required" aria-hidden="true">
-                    Required
-                  </span>
-                </span>
-                <input
-                  className="field"
-                  name="name"
-                  value={input.name}
-                  onChange={(event) =>
-                    change({ ...input, name: event.target.value })
-                  }
-                  required
-                />
-              </label>
-              <DerivedSlugField
-                source={input.name}
-                value={input.publicSlug}
-                onChange={(value) => change({ ...input, publicSlug: value })}
-                name="publicSlug"
-                label="Public URL slug"
-                maximumLength={120}
-                customMaximumLength={null}
-                initiallyDerived={!input.id}
-                resetKey={input.id ?? "new"}
-                publicPathPrefix="/apply/"
-              />
-              <label className="label">
-                Record type
-                <select
-                  className="select"
-                  name="kind"
-                  value={input.kind}
-                  onChange={(event) => {
-                    const kind = event.target.value as SaveFormInput["kind"];
-                    change({
-                      ...input,
-                      kind,
-                      schema: {
-                        ...input.schema,
-                        fields: input.schema.fields.map((field) =>
-                          field.id === "category"
-                            ? {
-                                ...field,
-                                type:
-                                  kind === "direct_session"
-                                    ? ("select" as const)
-                                    : ("multi_select" as const),
-                                help:
-                                  kind === "direct_session"
-                                    ? "Choose the programme track for this session."
-                                    : "Choose every programme track this proposal should be reviewed for.",
-                              }
-                            : field,
-                        ),
-                      },
-                    });
-                  }}
-                >
-                  <option value="submission">Application for review</option>
-                  <option value="direct_session">Direct session intake</option>
-                </select>
-              </label>
-            </div>
-            <PublicationSettingsFields
-              input={input}
-              passwordConfigured={loaderData.passwordConfigured}
-              change={change}
-              eventTimezone={eventTimezone}
-            />
-            <div className="mt">
-              <PresentationSettingsPanel
-                input={input}
-                change={change}
-                errors={actionData?.errors}
-              />
-            </div>
-          </div>
-        </section>
-
-        <div
-          className={`card fb-pane fb-dock${previewOpen ? " is-previewing" : ""}`}
-        >
-          <FieldSettingsPanel
-            input={input}
-            selected={selected}
-            categoryField={categoryField}
-            change={change}
-            patchField={patchField}
-            setSelectedId={setSelectedId}
-            routingTeams={loaderData.routingTeams}
-            routingTracks={loaderData.routingTracks}
-            paneSwitch={dockSwitch}
-            hidden={previewOpen}
-          />
-          <ApplicantPreviewPanel
-            input={input}
-            brandAccent={loaderData.workspace?.brandAccent}
-            eventName={loaderData.workspace?.eventName}
-            paneSwitch={dockSwitch}
-            hidden={!previewOpen}
-            onClose={() => setPreviewOpen(false)}
-          />
-        </div>
-      </div>
-
-      {loaderData.workspace ? (
-        <FormVersionHistory
-          workspace={loaderData.workspace}
-          eventTimezone={eventTimezone}
-        />
-      ) : null}
     </Form>
   );
 }

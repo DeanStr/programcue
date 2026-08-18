@@ -83,12 +83,17 @@ export default function SpeakerFiles(_props: Route.ComponentProps) {
     <>
       <div className="page-head">
         <div>
-          <span className="pc-page-eyebrow">Private participant workspace</span>
           <h1>Files</h1>
           <p>
             Upload, inspect and manage the files shared with the event team.
           </p>
         </div>
+        <p className="speaker-work-count">
+          <b className="pc-num">{portal.files.length}</b>
+          <span>
+            {portal.files.length === 1 ? "private file" : "private files"}
+          </span>
+        </p>
       </div>
       <SpeakerActionNotice notice={actionData} />
       <SpeakerFilesPanel portal={portal} busy={navigation.state !== "idle"} />

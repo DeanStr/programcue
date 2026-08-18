@@ -108,16 +108,18 @@ function submissionColumns(detailSearchParams: string) {
       enableHiding: false,
       cell: ({ row }) => (
         <div className="pc-record-stack">
-          <Link to={submissionDetailHref(row.original.id, detailSearchParams)}>
-            <strong>{row.original.title}</strong>
+          <Link
+            className="pc-record-title"
+            to={submissionDetailHref(row.original.id, detailSearchParams)}
+          >
+            {row.original.title}
           </Link>
-          <small className="subtle">
-            Reference {row.original.publicReference}
-          </small>
-          <small className="subtle">
-            {row.original.versionNumber
-              ? `Form v${row.original.versionNumber}`
-              : "Manual entry"}
+          <small className="pc-record-meta">
+            {`${row.original.publicReference} · ${
+              row.original.versionNumber
+                ? `Form v${row.original.versionNumber}`
+                : "Manual entry"
+            }`}
           </small>
         </div>
       ),
@@ -127,8 +129,8 @@ function submissionColumns(detailSearchParams: string) {
       header: "Submitter",
       cell: ({ row }) => (
         <div className="pc-record-stack">
-          <strong>{row.original.submitterName}</strong>
-          <small className="subtle pc-record-email">
+          <span className="pc-record-person">{row.original.submitterName}</span>
+          <small className="pc-record-email">
             {row.original.submitterEmail}
           </small>
         </div>
@@ -139,10 +141,11 @@ function submissionColumns(detailSearchParams: string) {
       header: "Category route",
       cell: ({ row }) => (
         <div className="pc-record-stack">
-          <span>{row.original.category || "Uncategorised"}</span>
-          <small className="subtle">{row.original.routedTo}</small>
-          <small className="subtle">
-            {routingStateLabels[row.original.routingState]}
+          <span className="pc-record-route">
+            {row.original.category || "Uncategorised"}
+          </span>
+          <small className="pc-record-meta">
+            {`${row.original.routedTo} · ${routingStateLabels[row.original.routingState]}`}
           </small>
         </div>
       ),
@@ -158,19 +161,6 @@ function submissionColumns(detailSearchParams: string) {
         <DomainStatusBadge domain="submission" status={row.original.status} />
       ),
     }),
-    columnHelper.display({
-      id: "action",
-      header: "Action",
-      enableHiding: false,
-      cell: ({ row }) => (
-        <Link
-          className="btn small"
-          to={submissionDetailHref(row.original.id, detailSearchParams)}
-        >
-          Open
-        </Link>
-      ),
-    }),
   ]);
 }
 
@@ -180,7 +170,7 @@ export function SubmissionDataGrid({
   submissions,
   columns: visibleOptionalColumns,
   density,
-  sort,
+  sort: _sort,
   detailSearchParams = "",
 }: {
   submissions: AdminSubmission[];
@@ -290,31 +280,14 @@ export function SubmissionDataGrid({
                 <X aria-hidden size={14} /> Clear selection
               </button>
             </>
-          ) : (
-            <span className="help">
-              Select applications to copy a reference working set.
-            </span>
-          )}
+          ) : null}
         </div>
-        <label className="label pc-data-grid-density">
-          Sort
+        <label className="pc-data-grid-density">
+          <span className="sr-only">Density</span>
+          <Rows3 aria-hidden size={14} />
           <select
             className="select"
-            value={sort}
-            onChange={(event) =>
-              setViewParameter("sort", event.target.value, "submittedAt-desc")
-            }
-          >
-            <option value="submittedAt-desc">Newest activity</option>
-            <option value="submittedAt-asc">Oldest activity</option>
-            <option value="title-asc">Application title A–Z</option>
-            <option value="title-desc">Application title Z–A</option>
-          </select>
-        </label>
-        <label className="label pc-data-grid-density">
-          <Rows3 aria-hidden size={14} /> Density
-          <select
-            className="select"
+            aria-label="Density"
             value={density}
             onChange={(event) =>
               setViewParameter("density", event.target.value, "comfortable")
@@ -403,11 +376,9 @@ export function SubmissionDataGrid({
                       className={
                         cell.column.id === "application"
                           ? "pc-record-primary-cell"
-                          : cell.column.id === "action"
-                            ? "pc-record-action-cell"
-                            : cell.column.id === "select"
-                              ? "pc-record-select-cell"
-                              : undefined
+                          : cell.column.id === "select"
+                            ? "pc-record-select-cell"
+                            : undefined
                       }
                       data-label={columnLabel(cell.column.id)}
                       key={cell.id}

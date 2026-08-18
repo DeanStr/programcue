@@ -70,7 +70,6 @@ export default function SpeakerProfile(_props: Route.ComponentProps) {
     <>
       <div className="page-head">
         <div>
-          <span className="pc-page-eyebrow">Public identity</span>
           <h1>Profile</h1>
           <p>
             Manage the identity and biography used for your applications and

@@ -6,14 +6,15 @@
   border-radius: var(--radius-sm);
   padding: var(--space-2) var(--space-3);
   color: var(--ink);
-  min-height: 38px;
+  min-height: var(--control-height);
 }
 /* Replace the OS chevron so selects match the rest of the control set and
-   can express the error state, which native chrome ignores. */
+   can express the error state, which native chrome ignores. Stroke is --muted
+   (#61716c), not the cool slate leftover. */
 .select {
   appearance: none;
   padding-right: var(--space-7);
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12'%3E%3Cpath d='M2 4.5 6 8.5 10 4.5' fill='none' stroke='%23617188' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12'%3E%3Cpath d='M2 4.5 6 8.5 10 4.5' fill='none' stroke='%2361716c' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
   background-repeat: no-repeat;
   background-position: right var(--space-3) center;
   background-size: 12px 12px;
@@ -26,7 +27,13 @@
 .textarea {
   transition:
     border-color var(--dur-fast) var(--ease-out),
-    box-shadow var(--dur-fast) var(--ease-out);
+    box-shadow var(--dur-fast) var(--ease-out),
+    background-color var(--dur-fast) var(--ease-out);
+}
+.field:hover:not(:focus):not(:disabled):not([readonly]),
+.select:hover:not(:focus):not(:disabled),
+.textarea:hover:not(:focus):not(:disabled):not([readonly]) {
+  border-color: var(--border-strong);
 }
 .field:focus,
 .select:focus,
@@ -66,7 +73,7 @@
 .label {
   display: grid;
   gap: var(--space-1);
-  font-weight: var(--weight-semibold);
+  font-weight: var(--weight-medium);
   font-size: var(--text-2xs);
 }
 .pc-repository-choice {
@@ -80,7 +87,6 @@
   width: 16px;
   height: 16px;
   margin-top: 2px;
-  accent-color: var(--brand-600);
 }
 .pc-repository-choice span,
 .pc-repository-choice small {
@@ -125,33 +131,46 @@
 }
 .toggle input[type="checkbox"] {
   appearance: none;
-  width: 38px;
-  height: 22px;
-  flex: 0 0 38px;
+  width: 36px;
+  height: 20px;
+  flex: 0 0 36px;
   margin: 0;
+  border: 0;
   border-radius: var(--radius-full);
-  background: var(--nav-text);
+  background: var(--toggle-off);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--ink) 10%, transparent);
   position: relative;
-  transition: background-color var(--dur-base) var(--ease-out);
+  cursor: pointer;
+  transition:
+    background-color var(--dur-base) var(--ease-out),
+    box-shadow var(--dur-base) var(--ease-out);
 }
 .toggle input[type="checkbox"]::after {
   content: "";
   position: absolute;
-  width: 18px;
-  height: 18px;
+  width: 16px;
+  height: 16px;
   border-radius: 50%;
   background: var(--surface);
   top: 2px;
   left: 2px;
-  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.2);
+  box-shadow:
+    0 1px 2px rgba(19, 32, 31, 0.16),
+    0 0 0 1px rgba(19, 32, 31, 0.04);
   /* Transform rather than left: it composites instead of triggering layout. */
   transition: transform var(--dur-base) var(--ease-out);
 }
 .toggle input[type="checkbox"]:checked {
   background: var(--brand-600);
+  box-shadow: none;
 }
 .toggle input[type="checkbox"]:checked::after {
   transform: translateX(16px);
+}
+.toggle input[type="checkbox"]:focus-visible {
+  outline: var(--focus-width) solid var(--focus-ring);
+  outline-offset: var(--focus-halo-width);
+  box-shadow: 0 0 0 var(--focus-halo-width) var(--focus-halo);
 }
 /* High Contrast Mode repaints background, and background is the whole of the
    checked state here. The track keeps a border so the knob has an enclosure to
@@ -181,14 +200,19 @@
 .tab {
   border: 0;
   background: transparent;
-  padding: var(--space-3) var(--space-3);
-  color: var(--muted);
-  font-weight: var(--weight-bold);
+  padding: var(--space-2) var(--space-3);
+  color: var(--text-tertiary);
+  font-weight: var(--weight-medium);
   border-bottom: 2px solid transparent;
+  margin-bottom: -1px;
+}
+.tab:hover {
+  color: var(--text-secondary);
 }
 .tab.active {
   color: var(--brand-700);
   border-color: var(--brand-600);
+  font-weight: var(--weight-semibold);
 }
 .pillbar {
   display: flex;
@@ -198,25 +222,29 @@
 .pill {
   display: inline-flex;
   align-items: center;
-  gap: var(--space-1);
-  background: #f1f5f9;
-  border: 1px solid var(--line);
-  border-radius: var(--radius-full);
-  padding: var(--space-1) var(--space-2);
+  gap: 6px;
+  background: color-mix(in srgb, var(--ink) 4%, var(--surface));
+  border: 0;
+  border-radius: var(--radius-xs);
+  padding: 2px var(--space-2);
   font-size: var(--text-2xs);
+  font-weight: var(--weight-medium);
   color: var(--text-secondary);
 }
 .pill.track {
-  background: var(--brand-50);
+  background: color-mix(in srgb, var(--brand-600) 6%, var(--surface));
+  border: 0;
   color: var(--brand-700);
 }
 .pill.format {
-  background: #ecfeff;
-  color: #0f766e;
+  background: color-mix(in srgb, var(--teal) 6%, var(--surface));
+  border: 0;
+  color: #0f5f56;
 }
 .pill.ai {
-  background: #f5f3ff;
-  color: #6d28d9;
+  background: color-mix(in srgb, var(--brand-600) 6%, var(--surface));
+  border: 0;
+  color: var(--brand-700);
 }
 .drawer {
   position: fixed;
@@ -226,7 +254,7 @@
   width: min(520px, 94vw);
   background: var(--surface);
   z-index: 220;
-  box-shadow: -18px 0 50px rgba(19, 32, 31, 0.18);
+  box-shadow: -16px 0 48px rgba(19, 32, 31, 0.16);
   overflow: auto;
 }
 .drawer-head {
@@ -254,16 +282,58 @@
 }
 
 /* Native checkbox and radio chrome, sized and coloured once. The toggle paints
-   its own 38px track and opts out by name rather than by outranking this rule,
+   its own track and opts out by name rather than by outranking this rule,
    because "a later declaration collapses the track to a 16px square" is a
    defect one reordering away. :where() keeps the exclusion weightless so the
-   .toggle block above still wins. */
-input[type="checkbox"]:not(:where(.toggle > input)),
+   .toggle block above still wins. Any descendant input is excluded, not only
+   a direct child. */
+input[type="checkbox"]:not(:where(.toggle input)),
 input[type="radio"] {
+  appearance: none;
   width: 16px;
   height: 16px;
-  accent-color: var(--brand-600);
+  margin: 0;
+  flex: none;
+  border: 1px solid var(--border-strong);
+  background: var(--surface);
   cursor: pointer;
+  transition:
+    background-color var(--dur-fast) var(--ease-out),
+    border-color var(--dur-fast) var(--ease-out),
+    box-shadow var(--dur-fast) var(--ease-out);
+}
+input[type="checkbox"]:not(:where(.toggle input)) {
+  border-radius: var(--radius-xs);
+}
+input[type="radio"] {
+  border-radius: var(--radius-full);
+}
+input[type="checkbox"]:not(:where(.toggle input)):hover,
+input[type="radio"]:hover {
+  border-color: var(--brand-400);
+}
+input[type="checkbox"]:not(:where(.toggle input)):checked {
+  background-color: var(--brand-600);
+  border-color: var(--brand-600);
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath fill='none' stroke='%23fff' stroke-width='2' stroke-linecap='round' stroke-linejoin='round' d='M3.5 8.5 6.5 11.5 12.5 4.5'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: center;
+  background-size: 12px 12px;
+}
+input[type="radio"]:checked {
+  background-color: var(--brand-600);
+  border-color: var(--brand-600);
+  background-image: radial-gradient(
+    circle,
+    var(--surface) 0 3px,
+    transparent 3.5px
+  );
+}
+input[type="checkbox"]:not(:where(.toggle input)):focus-visible,
+input[type="radio"]:focus-visible {
+  outline: var(--focus-width) solid var(--focus-ring);
+  outline-offset: var(--focus-halo-width);
+  box-shadow: 0 0 0 var(--focus-halo-width) var(--focus-halo);
 }
 
 /* Pointer-coarse targets. 38px is comfortable with a mouse and tight with a
@@ -277,12 +347,12 @@ input[type="radio"] {
     min-height: 44px;
   }
   .btn.small {
-    min-height: 38px;
+    min-height: 36px;
   }
   .icon-btn {
     width: 44px;
   }
-  input[type="checkbox"]:not(:where(.toggle > input)),
+  input[type="checkbox"]:not(:where(.toggle input)),
   input[type="radio"] {
     width: 20px;
     height: 20px;
@@ -299,9 +369,62 @@ input[type="radio"] {
 }
 /* A file input's intrinsic width is its button plus the file-name label, which
    min-width alone cannot shrink — it needs an explicit width to be containable. */
-input[type="file"].field {
+input[type="file"].field,
+input[type="file"] {
   min-width: 0;
   width: 100%;
+  padding-block: var(--space-1);
+  color: var(--text-secondary);
+}
+input[type="file"]::file-selector-button {
+  appearance: none;
+  margin-right: var(--space-3);
+  padding: var(--space-1) var(--space-3);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-xs);
+  background: var(--surface-sunken);
+  color: var(--text-primary);
+  font: inherit;
+  font-size: var(--text-2xs);
+  font-weight: var(--weight-semibold);
+  cursor: pointer;
+}
+input[type="file"]::file-selector-button:hover {
+  border-color: var(--border-strong);
+  background: var(--chip);
+}
+
+/* Date, time and month pickers keep the same field chrome. Do not key
+   visibility off `:in-range` — without min/max, WebKit matches neither
+   :in-range nor :out-of-range, so a filled required date can photograph
+   as an empty box. Values stay ink. */
+input[type="date"],
+input[type="datetime-local"],
+input[type="time"],
+input[type="month"] {
+  color-scheme: light;
+  color: var(--ink);
+}
+input[type="date"]::-webkit-calendar-picker-indicator,
+input[type="datetime-local"]::-webkit-calendar-picker-indicator,
+input[type="time"]::-webkit-calendar-picker-indicator,
+input[type="month"]::-webkit-calendar-picker-indicator {
+  width: 12px;
+  height: 12px;
+  cursor: pointer;
+  opacity: 1;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12'%3E%3Crect x='1.75' y='2.5' width='8.5' height='7.75' rx='1' fill='none' stroke='%2361716c' stroke-width='1.5'/%3E%3Cpath d='M1.75 5h8.5M4 1.75v1.5M8 1.75v1.5' fill='none' stroke='%2361716c' stroke-width='1.5' stroke-linecap='round'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: center;
+}
+
+@media (forced-colors: active) {
+  input[type="checkbox"]:not(:where(.toggle input)),
+  input[type="radio"] {
+    appearance: auto;
+    background: Canvas;
+    border: 1px solid CanvasText;
+  }
 }
 /* .label is a grid; its items default to min-width:auto and so refuse to
    shrink below their content. */

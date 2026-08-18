@@ -224,7 +224,7 @@ export default function SubmissionsAdmin({ loaderData }: Route.ComponentProps) {
     results;
   const categories = loaderData.categories;
   return (
-    <>
+    <div className="submissions-workspace">
       <div className="page-head">
         <div>
           <h1>Applications</h1>
@@ -237,36 +237,42 @@ export default function SubmissionsAdmin({ loaderData }: Route.ComponentProps) {
             Form Builder
           </Link>
           <Link className="btn primary" to="/admin/submissions/new">
-            Create application record
+            New
           </Link>
         </div>
       </div>
       <ActionNotice result={actionData} />
-      <div className="grid grid-4 mb">
-        <section className="card metric">
-          <div className="label">All applications</div>
-          <div className="value">{summary.eventTotal}</div>
-        </section>
-        <section className="card metric">
-          <div className="label">Submitted</div>
-          <div className="value">{summary.byStatus.submitted}</div>
-        </section>
-        <section className="card metric">
-          <div className="label">Private drafts</div>
-          <div className="value">{summary.byStatus.draft}</div>
-        </section>
-        <section className="card metric">
-          <div className="label">Routed teams</div>
-          <div className="value">{summary.routedTeamCount}</div>
-        </section>
-      </div>
-      <section className="card pad mb">
-        <Form method="get" className="form-row" role="search">
-          <input type="hidden" name="sort" value={filters.sort} />
+      <p className="submissions-pulse-line">
+        {[
+          `${summary.eventTotal} ${summary.eventTotal === 1 ? "application" : "applications"}`,
+          ...(
+            [
+              "assigned",
+              "waitlisted",
+              "submitted",
+              "draft",
+              "in_review",
+              "decision_ready",
+              "accepted",
+              "rejected",
+              "withdrawn",
+            ] as const
+          )
+            .filter((status) => summary.byStatus[status] > 0)
+            .map(
+              (status) =>
+                `${summary.byStatus[status]} ${statusPresentation("submission", status).label.toLowerCase()}`,
+            ),
+          matchingTotal === 0
+            ? "no matching rows"
+            : `${firstItem}–${lastItem} shown`,
+        ].join(" · ")}
+      </p>
+      <section className="submissions-board">
+        <Form method="get" className="submissions-toolbar" role="search">
           <input type="hidden" name="columns" value={view.columns.join(",")} />
-          <input type="hidden" name="density" value={view.density} />
-          <label className="label">
-            Search
+          <label className="submissions-filter">
+            <span>Search</span>
             <input
               className="field"
               name="query"
@@ -274,8 +280,8 @@ export default function SubmissionsAdmin({ loaderData }: Route.ComponentProps) {
               placeholder="Title, submitter or email"
             />
           </label>
-          <label className="label">
-            Routing attention
+          <label className="submissions-filter">
+            <span>Routing</span>
             <select
               className="select"
               name="routing"
@@ -288,8 +294,8 @@ export default function SubmissionsAdmin({ loaderData }: Route.ComponentProps) {
               <option value="manual_override">Manual routing override</option>
             </select>
           </label>
-          <label className="label">
-            Status
+          <label className="submissions-filter">
+            <span>Status</span>
             <select
               className="select"
               name="status"
@@ -313,8 +319,8 @@ export default function SubmissionsAdmin({ loaderData }: Route.ComponentProps) {
               ))}
             </select>
           </label>
-          <label className="label">
-            Track
+          <label className="submissions-filter">
+            <span>Track</span>
             <select
               className="select"
               name="category"
@@ -326,25 +332,39 @@ export default function SubmissionsAdmin({ loaderData }: Route.ComponentProps) {
               ))}
             </select>
           </label>
-          <div className="page-actions" style={{ alignSelf: "end" }}>
-            <button className="btn primary" type="submit">
-              Apply filters
+          <label className="submissions-filter submissions-filter-sort">
+            <span>Sort</span>
+            <select
+              className="select"
+              name="sort"
+              defaultValue={filters.sort ?? "submittedAt-desc"}
+            >
+              <option value="submittedAt-desc">Newest activity</option>
+              <option value="submittedAt-asc">Oldest activity</option>
+              <option value="title-asc">Application title A–Z</option>
+              <option value="title-desc">Application title Z–A</option>
+            </select>
+          </label>
+          <label className="submissions-filter">
+            <span>Density</span>
+            <select
+              className="select"
+              name="density"
+              defaultValue={view.density}
+            >
+              <option value="comfortable">Comfortable</option>
+              <option value="compact">Compact</option>
+            </select>
+          </label>
+          <div className="submissions-filter-actions">
+            <button className="btn small primary" type="submit">
+              Apply
             </button>
-            <Link className="btn" to="/admin/submissions">
+            <Link className="btn small" to="/admin/submissions">
               Clear
             </Link>
           </div>
         </Form>
-      </section>
-      <section className="card pad mb">
-        <div className="card-title">
-          <h2>Application queue</h2>
-          <span className="help right">
-            {matchingTotal === 0
-              ? `No matching applications · ${summary.eventTotal} applications in this event`
-              : `Showing ${firstItem}–${lastItem} of ${matchingTotal} matching applications · ${summary.eventTotal} applications in this event`}
-          </span>
-        </div>
         <SubmissionDataGrid
           key={`${page}:${filters.status}:${filters.category}:${filters.query}:${filters.routing}:${filters.sort}:${view.columns.join(",")}:${view.density}`}
           submissions={submissions}
@@ -354,9 +374,12 @@ export default function SubmissionsAdmin({ loaderData }: Route.ComponentProps) {
           detailSearchParams={queueSearchParams(view, page).toString()}
         />
         {totalPages > 1 ? (
-          <nav className="page-actions mt" aria-label="Submission pages">
+          <nav className="submissions-pager" aria-label="Submission pages">
             {page > 1 ? (
-              <Link className="btn" to={`?${listSearchParams(view, page - 1)}`}>
+              <Link
+                className="btn small"
+                to={`?${listSearchParams(view, page - 1)}`}
+              >
                 ← Previous
               </Link>
             ) : null}
@@ -364,13 +387,16 @@ export default function SubmissionsAdmin({ loaderData }: Route.ComponentProps) {
               Page {page} of {totalPages}
             </span>
             {page < totalPages ? (
-              <Link className="btn" to={`?${listSearchParams(view, page + 1)}`}>
+              <Link
+                className="btn small"
+                to={`?${listSearchParams(view, page + 1)}`}
+              >
                 Next →
               </Link>
             ) : null}
           </nav>
         ) : null}
       </section>
-    </>
+    </div>
   );
 }

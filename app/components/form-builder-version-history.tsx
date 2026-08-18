@@ -17,46 +17,28 @@ export function FormVersionHistory({
   eventTimezone: string;
 }) {
   return (
-    <section className="card pad mt">
-      <div className="card-title">
-        <h2>Version history</h2>
-        <span className="subtle right">
-          Published submissions retain their original form version.
+    <details className="fb-history" aria-label="Form version history">
+      <summary>
+        <strong>Version history</strong>
+        <span>
+          {workspace.versions.length}{" "}
+          {workspace.versions.length === 1 ? "version" : "versions"} · times in{" "}
+          {eventTimezone}
         </span>
-      </div>
-      <section
-        className="table-wrap"
-        aria-label="Form version history"
-        // biome-ignore lint/a11y/noNoninteractiveTabindex: Scrollable data regions need keyboard focus so arrow keys can expose overflow content.
-        tabIndex={0}
-      >
-        <table className="data-table">
-          <thead>
-            <tr>
-              <th>Version</th>
-              <th>Status</th>
-              <th>Published ({eventTimezone})</th>
-            </tr>
-          </thead>
-          <tbody>
-            {workspace.versions.map((version) => (
-              <tr key={version.id}>
-                <td>
-                  <strong>v{version.versionNumber}</strong>
-                </td>
-                <td>
-                  <DomainStatusBadge domain="version" status={version.status} />
-                </td>
-                <td>
-                  {version.publishedAt
-                    ? publishedLabel(version.publishedAt, eventTimezone)
-                    : "—"}
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </section>
-    </section>
+      </summary>
+      <ol className="fb-history-list">
+        {workspace.versions.map((version) => (
+          <li className="fb-history-item" key={version.id}>
+            <strong>v{version.versionNumber}</strong>
+            <DomainStatusBadge domain="version" status={version.status} />
+            <span className="fb-history-when">
+              {version.publishedAt
+                ? publishedLabel(version.publishedAt, eventTimezone)
+                : "Not published"}
+            </span>
+          </li>
+        ))}
+      </ol>
+    </details>
   );
 }

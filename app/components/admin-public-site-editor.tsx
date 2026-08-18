@@ -106,21 +106,21 @@ function OrderedFeaturedPicker({
               <div className="public-site-order-actions">
                 <button
                   type="button"
-                  className="btn small"
+                  className="icon-btn"
                   disabled={index === 0}
                   aria-label={`Move up ${item.title}`}
                   onClick={() => move(index, -1)}
                 >
-                  <ChevronUp aria-hidden size={14} /> Move up
+                  <ChevronUp aria-hidden size={14} />
                 </button>
                 <button
                   type="button"
-                  className="btn small"
+                  className="icon-btn"
                   disabled={index === selected.length - 1}
                   aria-label={`Move down ${item.title}`}
                   onClick={() => move(index, 1)}
                 >
-                  <ChevronDown aria-hidden size={14} /> Move down
+                  <ChevronDown aria-hidden size={14} />
                 </button>
                 <button
                   type="button"
@@ -356,19 +356,21 @@ function SiteSectionControls({
           <div className="public-site-order-actions">
             <button
               type="button"
-              className="btn small"
+              className="icon-btn"
               disabled={index === 0}
+              aria-label={`Move up ${publicSiteSectionLabels[section]}`}
               onClick={() => move(index, -1)}
             >
-              <ChevronUp aria-hidden size={14} /> Move up
+              <ChevronUp aria-hidden size={14} />
             </button>
             <button
               type="button"
-              className="btn small"
+              className="icon-btn"
               disabled={index === configuration.sectionOrder.length - 1}
+              aria-label={`Move down ${publicSiteSectionLabels[section]}`}
               onClick={() => move(index, 1)}
             >
-              <ChevronDown aria-hidden size={14} /> Move down
+              <ChevronDown aria-hidden size={14} />
             </button>
           </div>
         </li>
@@ -437,7 +439,7 @@ export function AdminPublicSiteEditor({
     [programme],
   );
   return (
-    <Form method="post" className="card pad">
+    <Form method="post" className="public-site-rail-form">
       <input type="hidden" name="intent" value="save-site" />
       <input type="hidden" name="commandId" value={commandId} />
       <input type="hidden" name="revision" value={draftRevision} />
@@ -448,8 +450,10 @@ export function AdminPublicSiteEditor({
       />
       <div className="card-title">
         <div>
-          <h2>Site identity and theme</h2>
-          <p className="help">Draft {draftRevision || "not saved"}</p>
+          <h2 className="public-site-rail-title">Site identity and theme</h2>
+          <p className="help public-site-rail-help">
+            Draft {draftRevision || "not saved"}
+          </p>
         </div>
       </div>
       <label className="label">
@@ -486,10 +490,8 @@ export function AdminPublicSiteEditor({
 
       <div className="card-title mt">
         <div>
-          <h2>Homepage sections</h2>
-          <p className="help">
-            Move buttons are authoritative and keyboard accessible.
-          </p>
+          <h2 className="public-site-rail-title">Homepage sections</h2>
+          <p className="help">Shown sections appear in this order.</p>
         </div>
       </div>
       <SiteSectionControls
@@ -580,7 +582,7 @@ export function AdminPublicSiteEditor({
 
       <div className="card-title mt">
         <div>
-          <h2>FAQ</h2>
+          <h2 className="public-site-rail-title">FAQ</h2>
           <p className="help">
             Answers support paragraphs, headings, lists, bold and HTTPS links.
           </p>
@@ -660,7 +662,7 @@ export function AdminPublicSiteEditor({
             </button>
             <div className="public-site-order-actions mt">
               <button
-                className="btn small"
+                className="icon-btn"
                 type="button"
                 disabled={index === 0}
                 aria-label={`Move up FAQ item ${index + 1}`}
@@ -675,10 +677,10 @@ export function AdminPublicSiteEditor({
                   })
                 }
               >
-                <ChevronUp aria-hidden size={14} /> Move up
+                <ChevronUp aria-hidden size={14} />
               </button>
               <button
-                className="btn small"
+                className="icon-btn"
                 type="button"
                 disabled={index === configuration.faqItems.length - 1}
                 aria-label={`Move down FAQ item ${index + 1}`}
@@ -693,7 +695,7 @@ export function AdminPublicSiteEditor({
                   })
                 }
               >
-                <ChevronDown aria-hidden size={14} /> Move down
+                <ChevronDown aria-hidden size={14} />
               </button>
             </div>
           </fieldset>
@@ -702,7 +704,7 @@ export function AdminPublicSiteEditor({
 
       <div className="card-title mt">
         <div>
-          <h2>Event pages</h2>
+          <h2 className="public-site-rail-title">Event pages</h2>
           <p className="help">
             Five fixed pages, no nesting or arbitrary routes.
           </p>

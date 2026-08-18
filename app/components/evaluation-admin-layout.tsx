@@ -91,24 +91,14 @@ export function EvaluationAssignmentUndo() {
 export function EvaluationAdminPage() {
   const { loaderData } = useEvaluationAdminModel();
   return (
-    <>
+    <div className="pc-eval-admin">
       <EvaluationHeader />
-      <AdminPageSectionNavigation
-        label="Evaluation administration sections"
-        links={
-          loaderData.plan
-            ? [
-                { id: "evaluation-overview", label: "Overview" },
-                { id: "evaluation-access", label: "Access" },
-                { id: "evaluation-rounds", label: "Rounds" },
-                { id: "evaluation-results", label: "Review results" },
-                { id: "evaluation-proposals", label: "Proposals" },
-                { id: "evaluation-sessions", label: "Sessions" },
-                { id: "evaluation-moderation", label: "Moderation" },
-              ]
-            : [{ id: "evaluation-setup", label: "Create plan" }]
-        }
-      />
+      {loaderData.plan ? null : (
+        <AdminPageSectionNavigation
+          label="Evaluation administration sections"
+          links={[{ id: "evaluation-setup", label: "Create plan" }]}
+        />
+      )}
       <EvaluationFilterNotice />
       <EvaluationActionNotice />
       <EvaluationAssignmentUndo />
@@ -118,6 +108,6 @@ export function EvaluationAdminPage() {
       <ModerationDialog />
       <ReviewReopenDialog />
       <DecisionDialog />
-    </>
+    </div>
   );
 }

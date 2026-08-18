@@ -68,6 +68,12 @@ export function ReviewQueuePanel() {
                 {assignment.category ?? "Uncategorised"}
               </span>
               <small className="queue-card-state">
+                {current ? (
+                  <>
+                    <span className="queue-card-current">Current</span>
+                    <span aria-hidden="true"> · </span>
+                  </>
+                ) : null}
                 {assignment.status.replaceAll("_", " ")}{" "}
                 <span aria-hidden="true">·</span>{" "}
                 <span className="pc-num">{assignment.reference}</span>
@@ -410,9 +416,20 @@ export function ReviewSubmissionPanel() {
           </ul>
         </>
       ) : null}
-      <div className="divider" />
-      <h3>AI reviewer suggestions</h3>
-      <ReviewerAiSuggestionPanel key={selected.id} />
+      {workspace.reviewerAiSetting.supported ? (
+        <div className="review-ai-aside">
+          {workspace.reviewerAiSetting.enabled ? (
+            <>
+              <h3>AI reviewer suggestions</h3>
+              <ReviewerAiSuggestionPanel key={selected.id} />
+            </>
+          ) : (
+            <p className="review-ai-disabled subtle">
+              AI suggestions are off for this event.
+            </p>
+          )}
+        </div>
+      ) : null}
     </article>
   );
 }

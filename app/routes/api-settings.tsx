@@ -4,9 +4,9 @@ import {
   Copy,
   KeyRound,
   Send,
-  ShieldCheck,
   Trash2,
   Webhook,
+  X,
 } from "lucide-react";
 import { useState } from "react";
 import { data, Form, Link, useActionData, useNavigation } from "react-router";
@@ -16,7 +16,6 @@ import {
   DomainStatusBadge,
   statusPresentation,
 } from "~/components/ui/domain-status-badge";
-import { EmptyState } from "~/components/ui/states";
 import {
   API_KEY_SCOPES,
   ApiKeyNameConflictError,
@@ -207,6 +206,66 @@ function epochLabel(epoch: number | null) {
     : "Never";
 }
 
+const WEBHOOK_URL_EXAMPLE = "https://hooks.example.com/program-cue";
+
+function SettingsTokenPicker({
+  name,
+  options,
+  addLabel,
+}: {
+  name: string;
+  options: readonly string[];
+  addLabel: string;
+}) {
+  const [selected, setSelected] = useState<string[]>([]);
+  const remaining = options.filter((option) => !selected.includes(option));
+  return (
+    <div className="settings-pick-set">
+      {selected.length ? (
+        <ul className="settings-pick-list">
+          {selected.map((value) => (
+            <li className="settings-pick" key={value}>
+              <input type="hidden" name={name} value={value} />
+              <code title={value}>{value}</code>
+              <button
+                type="button"
+                className="settings-pick-remove"
+                aria-label={`Remove ${value}`}
+                onClick={() =>
+                  setSelected((current) =>
+                    current.filter((item) => item !== value),
+                  )
+                }
+              >
+                <X aria-hidden size={12} />
+              </button>
+            </li>
+          ))}
+        </ul>
+      ) : null}
+      {remaining.length ? (
+        <select
+          className="select settings-pick-add"
+          aria-label={addLabel}
+          value=""
+          onChange={(event) => {
+            const value = event.target.value;
+            if (!value) return;
+            setSelected((current) => [...current, value]);
+          }}
+        >
+          <option value="">{addLabel}</option>
+          {remaining.map((option) => (
+            <option key={option} value={option}>
+              {option}
+            </option>
+          ))}
+        </select>
+      ) : null}
+    </div>
+  );
+}
+
 export default function ApiSettings({ loaderData }: Route.ComponentProps) {
   const actionData = useActionData<typeof action>();
   const navigation = useNavigation();
@@ -239,29 +298,26 @@ export default function ApiSettings({ loaderData }: Route.ComponentProps) {
     (key) => apiKeyLifecycleState(key, loaderData.generatedAt) === "active",
   ).length;
   return (
-    <>
+    <div className="settings-page">
       {dialog}
-      <div className="page-head pc-page-header">
+      <div className="page-head pc-page-header settings-page-head">
         <div>
           <span className="pc-page-eyebrow">Developer access</span>
           <h1>API &amp; webhooks</h1>
           <p>
-            Create event-scoped credentials with the minimum permissions an
-            integration needs.
+            Event-scoped credentials with the minimum permissions an integration
+            needs.
           </p>
         </div>
         <div className="page-actions">
           <Link className="btn" to="/api/docs">
             API reference
           </Link>
-          <span className="status info">
-            <ShieldCheck aria-hidden size={14} /> Scoped credentials
-          </span>
         </div>
       </div>
       {actionData ? (
         <div
-          className={`pc-status-notice ${actionData.ok ? "is-success" : "is-danger"} mb`}
+          className={`pc-status-notice ${actionData.ok ? "is-success" : "is-danger"}`}
           role={actionData.ok ? "status" : "alert"}
         >
           {actionData.ok ? (
@@ -274,7 +330,7 @@ export default function ApiSettings({ loaderData }: Route.ComponentProps) {
             <div>{actionData.message}</div>
             {actionData.token ? (
               <>
-                <div className="api-secret">
+                <div className="settings-secret">
                   <code>{actionData.token}</code>
                   <button
                     className="btn small"
@@ -294,7 +350,7 @@ export default function ApiSettings({ loaderData }: Route.ComponentProps) {
             ) : null}
             {actionData.webhookSecret ? (
               <>
-                <div className="api-secret">
+                <div className="settings-secret">
                   <code>{actionData.webhookSecret}</code>
                   <button
                     className="btn small"
@@ -325,400 +381,326 @@ export default function ApiSettings({ loaderData }: Route.ComponentProps) {
           </div>
         </div>
       ) : null}
-      <div className="grid grid-2 api-settings-grid">
-        <section className="card pad">
-          <div className="card-title">
-            <h2>Create an API key</h2>
-            <KeyRound aria-hidden size={19} />
+
+      <section className="settings-section" aria-labelledby="settings-keys">
+        <header className="settings-section-head">
+          <div>
+            <h2 id="settings-keys">API keys</h2>
+            <p>
+              The secret is stored only as a SHA-256 digest and is revealed
+              once. {activeKeyCount} active.
+            </p>
           </div>
-          <p className="subtle">
-            The secret is stored only as a SHA-256 digest and is revealed once.
-          </p>
-          <Form method="post" className="stack">
-            <input type="hidden" name="intent" value="create" />
-            <label className="label">
-              Key name
-              <input
-                className="field"
-                name="name"
-                placeholder="Website programme sync"
-                required
-                minLength={2}
-                maxLength={80}
-              />
-            </label>
-            <fieldset className="pc-plain-fieldset">
-              <legend className="label">Scopes</legend>
-              <div className="api-scope-list">
-                {loaderData.scopes.map((scope) => (
-                  <label className="speaker-confirm" key={scope}>
-                    <input type="checkbox" name="scopes" value={scope} />{" "}
-                    <code>{scope}</code>
-                  </label>
-                ))}
-              </div>
-            </fieldset>
-            <label className="label">
-              Expiry
-              <select className="select" name="expiresInDays" defaultValue="90">
+        </header>
+        <Form method="post" className="settings-rows">
+          <input type="hidden" name="intent" value="create" />
+          <div className="settings-row">
+            <div className="settings-row-copy">
+              <label htmlFor="settings-key-name">Key name</label>
+            </div>
+            <input
+              id="settings-key-name"
+              className="field"
+              name="name"
+              placeholder="Website programme sync"
+              required
+              minLength={2}
+              maxLength={80}
+            />
+          </div>
+          <fieldset className="settings-row settings-row-stack pc-plain-fieldset">
+            <legend>Scopes</legend>
+            <SettingsTokenPicker
+              name="scopes"
+              options={loaderData.scopes}
+              addLabel="Add scope"
+            />
+          </fieldset>
+          <div className="settings-row settings-row-commit">
+            <div className="settings-row-copy">
+              <label htmlFor="settings-key-expiry">Expiry</label>
+            </div>
+            <div className="page-actions">
+              <select
+                id="settings-key-expiry"
+                className="select"
+                name="expiresInDays"
+                defaultValue="90"
+              >
                 <option value="30">30 days</option>
                 <option value="90">90 days</option>
                 <option value="365">1 year</option>
                 <option value="">No expiry</option>
               </select>
-            </label>
-            <button
-              type="submit"
-              className="btn primary"
-              disabled={navigation.state !== "idle"}
-            >
-              <KeyRound aria-hidden size={14} /> Create key
-            </button>
-          </Form>
-        </section>
-        <section className="card pad">
-          <div className="card-title">
-            <h2>Event credentials</h2>
-            <span className="status neutral">{activeKeyCount} active</span>
+              <button
+                type="submit"
+                className="btn primary"
+                disabled={navigation.state !== "idle"}
+              >
+                <KeyRound aria-hidden size={14} /> Create key
+              </button>
+            </div>
           </div>
-          {loaderData.keys.length ? (
-            <section
-              className="table-wrap"
-              aria-label="Event API credentials"
-              // biome-ignore lint/a11y/noNoninteractiveTabindex: Scrollable data regions need keyboard focus so arrow keys can expose overflow content.
-              tabIndex={0}
-            >
-              <table className="data-table">
-                <thead>
-                  <tr>
-                    <th scope="col">Name</th>
-                    <th scope="col">Prefix and scopes</th>
-                    <th scope="col">Activity</th>
-                    <th scope="col">Actions</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {loaderData.keys.map((key) => {
-                    const lifecycle = apiKeyLifecycleState(
-                      key,
-                      loaderData.generatedAt,
-                    );
-                    return (
-                      <tr key={key.id}>
-                        <td>
-                          <strong>{key.name}</strong>
-                          <small className="subtle">
-                            Created {epochLabel(key.createdAt)}
-                          </small>
-                        </td>
-                        <td>
-                          <code>{key.prefix}…</code>
-                          <small className="subtle">
-                            {key.scopes.join(" · ")}
-                          </small>
-                        </td>
-                        <td>
-                          <span
-                            className={`status ${lifecycle === "active" ? "success" : lifecycle === "expired" ? "warn" : "danger"}`}
-                          >
-                            {lifecycle === "active"
-                              ? "Active"
-                              : lifecycle === "expired"
-                                ? "Expired"
-                                : "Revoked"}
-                          </span>
-                          <small className="subtle">
-                            Last used: {epochLabel(key.lastUsedAt)}
-                            <br />
-                            Expires: {epochLabel(key.expiresAt)}
-                          </small>
-                        </td>
-                        <td>
-                          {!key.revokedAt ? (
-                            <Form method="post">
-                              <input
-                                type="hidden"
-                                name="intent"
-                                value="revoke"
-                              />
-                              <input
-                                type="hidden"
-                                name="keyId"
-                                value={key.id}
-                              />
-                              <button
-                                className="btn small danger"
-                                aria-label={`Revoke ${key.name}`}
-                                type="button"
-                                disabled={navigation.state !== "idle"}
-                                onClick={(event) => {
-                                  const form = event.currentTarget.form;
-                                  confirm(
-                                    {
-                                      title: `Revoke ${key.name}?`,
-                                      description:
-                                        "Every integration authenticating with this key stops working immediately. Revocation cannot be undone; issue a replacement key instead.",
-                                      records: [
-                                        `${key.name} · ${key.prefix}… · ${key.scopes.join(", ")}`,
-                                      ],
-                                      confirmLabel: "Revoke key",
-                                    },
-                                    () => form?.requestSubmit(),
-                                  );
-                                }}
-                              >
-                                <Trash2 aria-hidden size={13} /> Revoke
-                              </button>
-                            </Form>
-                          ) : null}
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </section>
-          ) : (
-            <EmptyState
-              title="No API keys"
-              description="Create a narrowly scoped key for a trusted integration."
-              icon={KeyRound}
-            />
-          )}
-        </section>
-      </div>
-      <div className="grid grid-2 mt">
-        <section className="card pad">
-          <div className="card-title">
-            <h2>Create an outbound webhook</h2>
-            <Webhook aria-hidden size={19} />
-          </div>
-          <p className="subtle">
-            Program Cue signs each HTTPS request with a per-endpoint HMAC
-            secret. Provider work is never simulated.
-          </p>
-          <Form method="post" className="stack">
-            <input type="hidden" name="intent" value="create-webhook" />
-            <label className="label">
-              Endpoint name
-              <input
-                className="field"
-                name="name"
-                placeholder="Data warehouse"
-                required
-                minLength={2}
-                maxLength={80}
-              />
-            </label>
-            <label className="label">
-              HTTPS URL
-              <input
-                className="field"
-                name="url"
-                type="url"
-                placeholder="https://hooks.example.com/program-cue"
-                required
-              />
-            </label>
-            <fieldset className="pc-plain-fieldset">
-              <legend className="label">Event types</legend>
-              <div className="api-scope-list">
-                {loaderData.webhookEventTypes.map((eventType) => (
-                  <label className="speaker-confirm" key={eventType}>
-                    <input
-                      type="checkbox"
-                      name="eventTypes"
-                      value={eventType}
-                    />{" "}
-                    <code>{eventType}</code>
-                  </label>
-                ))}
-              </div>
-            </fieldset>
-            <button
-              className="btn primary"
-              type="submit"
-              disabled={navigation.state !== "idle"}
-            >
-              <Webhook aria-hidden size={14} /> Create endpoint
-            </button>
-          </Form>
-        </section>
-        <section className="card pad">
-          <div className="card-title">
-            <h2>Webhook delivery contract</h2>
-            <ShieldCheck aria-hidden size={19} />
-          </div>
-          <p>
-            Requests include a stable delivery id, event type, Unix timestamp
-            and <code>v1</code> HMAC-SHA256 signature over{" "}
-            <code>timestamp.payload</code>.
-          </p>
-          <ul>
-            <li>Reject timestamps outside your replay window.</li>
-            <li>Deduplicate with the delivery id.</li>
-            <li>Return any 2xx response only after accepting the event.</li>
-            <li>Redirects are not followed.</li>
-          </ul>
-          <p className="help">
-            Signing secrets are encrypted at rest and shown only once.
-          </p>
-        </section>
-      </div>
-      <section className="card pad mt">
-        <div className="card-title">
-          <h2>Outbound webhook endpoints</h2>
-          <span className="status info">
-            {loaderData.webhooks.length} configured
-          </span>
-        </div>
-        {loaderData.webhooks.length ? (
-          <section
-            className="table-wrap"
-            aria-label="Outbound webhook endpoints"
-            // biome-ignore lint/a11y/noNoninteractiveTabindex: Scrollable data regions need keyboard focus so arrow keys can expose overflow content.
-            tabIndex={0}
-          >
-            <table className="data-table">
-              <thead>
-                <tr>
-                  <th scope="col">Endpoint</th>
-                  <th scope="col">Events</th>
-                  <th scope="col">Status</th>
-                  <th scope="col">Latest delivery</th>
-                  <th scope="col">Actions</th>
-                </tr>
-              </thead>
-              <tbody>
-                {loaderData.webhooks.map((endpoint) => (
-                  <tr key={endpoint.id}>
-                    <td>
-                      <strong>{endpoint.name}</strong>
-                      <small className="subtle" style={{ display: "block" }}>
-                        {endpoint.url}
-                      </small>
-                    </td>
-                    <td>{endpoint.eventTypes.length} selected</td>
-                    <td>
-                      <DomainStatusBadge
-                        domain="webhookEndpoint"
-                        status={endpoint.status}
-                      />
-                      {endpoint.failureCount ? (
-                        <small className="subtle" style={{ display: "block" }}>
-                          {endpoint.failureCount} consecutive failures
-                        </small>
-                      ) : null}
-                    </td>
-                    <td>
-                      {endpoint.latestDelivery ? (
-                        <>
-                          {endpoint.latestDelivery.operationId ? (
-                            <Link
-                              to={`/admin/operations?operation=${encodeURIComponent(endpoint.latestDelivery.operationId)}`}
-                            >
+        </Form>
+        {loaderData.keys.length ? (
+          <ul className="settings-list" aria-label="Event API credentials">
+            {loaderData.keys.map((key) => {
+              const lifecycle = apiKeyLifecycleState(
+                key,
+                loaderData.generatedAt,
+              );
+              return (
+                <li className="settings-item" key={key.id}>
+                  <div className="settings-item-copy">
+                    <strong>{key.name}</strong>
+                    <small>
+                      <code>{key.prefix}…</code>
+                      {" · "}
+                      {key.scopes.join(" · ")}
+                    </small>
+                    <small>
+                      Created {epochLabel(key.createdAt)} · Last used{" "}
+                      {epochLabel(key.lastUsedAt)} · Expires{" "}
+                      {epochLabel(key.expiresAt)}
+                    </small>
+                  </div>
+                  <div className="settings-item-tools">
+                    <span
+                      className={`status ${lifecycle === "active" ? "success" : lifecycle === "expired" ? "warn" : "danger"}`}
+                    >
+                      {lifecycle === "active"
+                        ? "Active"
+                        : lifecycle === "expired"
+                          ? "Expired"
+                          : "Revoked"}
+                    </span>
+                    {!key.revokedAt ? (
+                      <Form method="post">
+                        <input type="hidden" name="intent" value="revoke" />
+                        <input type="hidden" name="keyId" value={key.id} />
+                        <button
+                          className="btn small danger"
+                          aria-label={`Revoke ${key.name}`}
+                          type="button"
+                          disabled={navigation.state !== "idle"}
+                          onClick={(event) => {
+                            const form = event.currentTarget.form;
+                            confirm(
                               {
-                                statusPresentation(
-                                  "webhookDelivery",
-                                  endpoint.latestDelivery.status,
-                                ).label
-                              }
-                            </Link>
-                          ) : (
-                            statusPresentation(
-                              "webhookDelivery",
-                              endpoint.latestDelivery.status,
-                            ).label
-                          )}
-                          <small
-                            className="subtle"
-                            style={{ display: "block" }}
-                          >
-                            {endpoint.latestDelivery.attemptCount} attempt
-                            {endpoint.latestDelivery.attemptCount === 1
-                              ? ""
-                              : "s"}
-                          </small>
-                        </>
-                      ) : (
-                        "Never"
-                      )}
-                    </td>
-                    <td>
-                      <div className="page-actions">
-                        {endpoint.status !== "disabled" ? (
-                          <Form method="post">
-                            <input
-                              type="hidden"
-                              name="intent"
-                              value="test-webhook"
-                            />
-                            <input
-                              type="hidden"
-                              name="endpointId"
-                              value={endpoint.id}
-                            />
-                            <button
-                              className="btn small"
-                              type="button"
-                              disabled={navigation.state !== "idle"}
-                              onClick={(event) => {
-                                const form = event.currentTarget.form;
-                                confirm(
-                                  {
-                                    title: `Send a signed test event to ${endpoint.name}?`,
-                                    description: `Program Cue makes a real signed HTTPS request to ${endpoint.url}. Follow the result in the Operation Centre.`,
-                                    confirmLabel: "Send test event",
-                                    tone: "primary",
-                                  },
-                                  () => form?.requestSubmit(),
-                                );
-                              }}
-                            >
-                              <Send aria-hidden size={13} /> Test
-                            </button>
-                          </Form>
-                        ) : null}
-                        <Form method="post">
-                          <input
-                            type="hidden"
-                            name="intent"
-                            value={
-                              endpoint.status === "disabled"
-                                ? "enable-webhook"
-                                : "disable-webhook"
-                            }
-                          />
-                          <input
-                            type="hidden"
-                            name="endpointId"
-                            value={endpoint.id}
-                          />
-                          <button
-                            className={`btn small${endpoint.status === "disabled" ? "" : " danger"}`}
-                            type="submit"
-                            disabled={navigation.state !== "idle"}
-                          >
-                            {endpoint.status === "disabled"
-                              ? "Enable"
-                              : "Disable"}
-                          </button>
-                        </Form>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </section>
+                                title: `Revoke ${key.name}?`,
+                                description:
+                                  "Every integration authenticating with this key stops working immediately. Revocation cannot be undone; issue a replacement key instead.",
+                                records: [
+                                  `${key.name} · ${key.prefix}… · ${key.scopes.join(", ")}`,
+                                ],
+                                confirmLabel: "Revoke key",
+                              },
+                              () => form?.requestSubmit(),
+                            );
+                          }}
+                        >
+                          <Trash2 aria-hidden size={13} /> Revoke
+                        </button>
+                      </Form>
+                    ) : null}
+                  </div>
+                </li>
+              );
+            })}
+          </ul>
         ) : (
-          <EmptyState
-            title="No outbound webhooks"
-            description="Create an endpoint to deliver signed event notifications."
-            icon={Webhook}
-          />
+          <p className="settings-empty">
+            No API keys. Create a narrowly scoped key for a trusted integration.
+          </p>
         )}
       </section>
-    </>
+
+      <section className="settings-section" aria-labelledby="settings-webhooks">
+        <header className="settings-section-head">
+          <div>
+            <h2 id="settings-webhooks">Webhooks</h2>
+            <p>
+              Program Cue signs each HTTPS request with a per-endpoint HMAC
+              secret. Provider work is never simulated.
+            </p>
+          </div>
+        </header>
+        <Form method="post" className="settings-rows">
+          <input type="hidden" name="intent" value="create-webhook" />
+          <div className="settings-row">
+            <div className="settings-row-copy">
+              <label htmlFor="settings-webhook-name">Endpoint name</label>
+            </div>
+            <input
+              id="settings-webhook-name"
+              className="field"
+              name="name"
+              placeholder="Data warehouse"
+              required
+              minLength={2}
+              maxLength={80}
+            />
+          </div>
+          <div className="settings-row">
+            <div className="settings-row-copy">
+              <label htmlFor="settings-webhook-url">HTTPS URL</label>
+            </div>
+            <textarea
+              id="settings-webhook-url"
+              className="field settings-url-field"
+              name="url"
+              inputMode="url"
+              autoComplete="url"
+              rows={2}
+              spellCheck={false}
+              placeholder={WEBHOOK_URL_EXAMPLE}
+              title={WEBHOOK_URL_EXAMPLE}
+              required
+              onInput={(event) => {
+                event.currentTarget.title =
+                  event.currentTarget.value || WEBHOOK_URL_EXAMPLE;
+              }}
+            />
+          </div>
+          <fieldset className="settings-row settings-row-stack pc-plain-fieldset">
+            <legend>Event types</legend>
+            <SettingsTokenPicker
+              name="eventTypes"
+              options={loaderData.webhookEventTypes}
+              addLabel="Add event type"
+            />
+          </fieldset>
+          <p className="settings-contract">
+            Requests include a stable delivery id, event type, Unix timestamp
+            and a <code>v1</code> HMAC-SHA256 signature over{" "}
+            <code>timestamp.payload</code>. Reject timestamps outside your
+            replay window, deduplicate with the delivery id, and return 2xx only
+            after accepting the event. Redirects are not followed. Signing
+            secrets are encrypted at rest and shown only once.
+          </p>
+          <div className="settings-row settings-row-commit">
+            <div className="settings-row-copy">
+              <span className="sr-only">Create webhook</span>
+            </div>
+            <div className="page-actions">
+              <button
+                className="btn primary"
+                type="submit"
+                disabled={navigation.state !== "idle"}
+              >
+                <Webhook aria-hidden size={14} /> Create endpoint
+              </button>
+            </div>
+          </div>
+        </Form>
+        {loaderData.webhooks.length ? (
+          <ul className="settings-list" aria-label="Outbound webhook endpoints">
+            {loaderData.webhooks.map((endpoint) => (
+              <li className="settings-item" key={endpoint.id}>
+                <div className="settings-item-copy">
+                  <strong>{endpoint.name}</strong>
+                  <small>{endpoint.url}</small>
+                  <small>
+                    {endpoint.eventTypes.length} event
+                    {endpoint.eventTypes.length === 1 ? "" : "s"}
+                    {endpoint.failureCount
+                      ? ` · ${endpoint.failureCount} consecutive failures`
+                      : ""}
+                    {" · "}
+                    {endpoint.latestDelivery ? (
+                      <>
+                        {endpoint.latestDelivery.operationId ? (
+                          <Link
+                            to={`/admin/operations?operation=${encodeURIComponent(endpoint.latestDelivery.operationId)}`}
+                          >
+                            {
+                              statusPresentation(
+                                "webhookDelivery",
+                                endpoint.latestDelivery.status,
+                              ).label
+                            }
+                          </Link>
+                        ) : (
+                          statusPresentation(
+                            "webhookDelivery",
+                            endpoint.latestDelivery.status,
+                          ).label
+                        )}
+                        {` · ${endpoint.latestDelivery.attemptCount} attempt${endpoint.latestDelivery.attemptCount === 1 ? "" : "s"}`}
+                      </>
+                    ) : (
+                      "Never delivered"
+                    )}
+                  </small>
+                </div>
+                <div className="settings-item-tools">
+                  <DomainStatusBadge
+                    domain="webhookEndpoint"
+                    status={endpoint.status}
+                  />
+                  {endpoint.status !== "disabled" ? (
+                    <Form method="post">
+                      <input type="hidden" name="intent" value="test-webhook" />
+                      <input
+                        type="hidden"
+                        name="endpointId"
+                        value={endpoint.id}
+                      />
+                      <button
+                        className="btn small"
+                        type="button"
+                        disabled={navigation.state !== "idle"}
+                        onClick={(event) => {
+                          const form = event.currentTarget.form;
+                          confirm(
+                            {
+                              title: `Send a signed test event to ${endpoint.name}?`,
+                              description: `Program Cue makes a real signed HTTPS request to ${endpoint.url}. Follow the result in the Operation Centre.`,
+                              confirmLabel: "Send test event",
+                              tone: "primary",
+                            },
+                            () => form?.requestSubmit(),
+                          );
+                        }}
+                      >
+                        <Send aria-hidden size={13} /> Test
+                      </button>
+                    </Form>
+                  ) : null}
+                  <Form method="post">
+                    <input
+                      type="hidden"
+                      name="intent"
+                      value={
+                        endpoint.status === "disabled"
+                          ? "enable-webhook"
+                          : "disable-webhook"
+                      }
+                    />
+                    <input
+                      type="hidden"
+                      name="endpointId"
+                      value={endpoint.id}
+                    />
+                    <button
+                      className={`btn small${endpoint.status === "disabled" ? "" : " danger"}`}
+                      type="submit"
+                      disabled={navigation.state !== "idle"}
+                    >
+                      {endpoint.status === "disabled" ? "Enable" : "Disable"}
+                    </button>
+                  </Form>
+                </div>
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <p className="settings-empty">
+            No outbound webhooks. Create an endpoint to deliver signed event
+            notifications.
+          </p>
+        )}
+      </section>
+    </div>
   );
 }

@@ -393,7 +393,7 @@ function SessionContentFieldsPanel() {
   } = useSessionContentEditorModel();
   return (
     <section
-      className="card pad mt"
+      className="schedule-inspector-panel"
       aria-labelledby="session-content-title"
       data-testid="session-content-editor"
     >
@@ -418,12 +418,10 @@ function SessionContentFieldsPanel() {
         </span>
       </div>
       {!editable ? (
-        <div className="validation-item warn mb">
-          <span>
-            This published version is read-only. Create the next draft before
-            changing session content.
-          </span>
-        </div>
+        <p className="help schedule-inspector-caption">
+          This published version is read-only. Create the next draft before
+          changing session content.
+        </p>
       ) : null}
       <DraftRecoveryFeedback recovery={recovery} />
       {serverError ? (
@@ -660,7 +658,7 @@ function SessionContentPreviewPanel() {
   } = useSessionContentEditorModel();
   return (
     <section
-      className="card pad mt"
+      className="schedule-inspector-panel"
       aria-labelledby="content-preview-title"
       data-testid="session-content-preview"
     >

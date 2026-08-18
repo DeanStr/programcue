@@ -183,7 +183,7 @@ export function Dialog({
                     className="icon-btn modal-close"
                     aria-label="Close"
                   >
-                    <X aria-hidden size={17} />
+                    <X aria-hidden size={16} />
                   </DialogPrimitive.Close>
                 ) : null}
               </div>

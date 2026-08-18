@@ -12,7 +12,10 @@ import {
 import type { SchedulePlannerWorkspaceData } from "./schedule-planner-panel-types";
 import { ScheduleSourcePanel } from "./schedule-planner-source-panel";
 import { ScheduleValidationPanel } from "./schedule-planner-validation-panel";
-import { conflictTypeLabel } from "./schedule-planner-workspace-helpers";
+import {
+  conflictTypeLabel,
+  sessionFormatLabel,
+} from "./schedule-planner-workspace-helpers";
 
 import { useSchedulePlannerController } from "./use-schedule-planner-controller";
 
@@ -27,6 +30,11 @@ export function SchedulePlannerWorkspace({
   workspace: SchedulePlannerWorkspaceData;
 }) {
   const [draftOpen, setDraftOpen] = useState(false);
+  const [inspectorOpen, setInspectorOpen] = useState(
+    () =>
+      workspace.version?.status === "draft" ||
+      Boolean(workspace.createdSessionId),
+  );
   const {
     actionNotices,
     actionResult,
@@ -81,18 +89,45 @@ export function SchedulePlannerWorkspace({
     view,
     visibleSessions,
   } = useSchedulePlannerController(workspace);
+  const unscheduledCount = workspace.sessions.length - scheduledSessionIds.size;
+  const showAutoPlaceButton =
+    workspace.version?.status === "draft" ||
+    workspace.autoPlacementReadiness.canPreview;
+  const showAutoPlaceReadiness =
+    workspace.version?.status === "draft" &&
+    !workspace.autoPlacementReadiness.canPreview;
 
   return (
-    <>
-      <div className="page-head">
+    <div className="schedule-page">
+      <div className="page-head schedule-page-head">
         <div>
           <h1>Schedule Planner</h1>
-          <p>Build and publish a conflict-checked programme.</p>
+          <p className="schedule-page-stats">
+            {workspace.entries.length} placed · {unscheduledCount} to place ·{" "}
+            {workspace.conflicts.length ? (
+              <button
+                type="button"
+                className="schedule-page-stats-jump"
+                onClick={() => {
+                  const panel = document.getElementById("schedule-validation");
+                  panel?.scrollIntoView({ block: "nearest" });
+                  panel
+                    ?.querySelector<HTMLElement>(".validation-item button")
+                    ?.focus({ preventScroll: true });
+                }}
+              >
+                {workspace.conflicts.length} conflict
+                {workspace.conflicts.length === 1 ? "" : "s"}
+              </button>
+            ) : (
+              "0 conflicts"
+            )}
+          </p>
         </div>
-        <div className="page-actions">
+        <div className="page-actions schedule-page-actions">
           {workspace.event.programmePublishedAt ? (
             <Link
-              className="btn"
+              className="btn ghost"
               to={`/public/programme/${workspace.event.publicSlug}`}
               target="_blank"
               rel="noreferrer"
@@ -100,33 +135,35 @@ export function SchedulePlannerWorkspace({
               Open public programme
             </Link>
           ) : null}
-          <Link className="btn" to="/admin/sessions/new">
+          <Link className="btn ghost" to="/admin/sessions/new">
             Create direct session
           </Link>
-          <button
-            className="btn"
-            type="button"
-            disabled={
-              !workspace.autoPlacementReadiness.canPreview ||
-              autoPlacementFetcher.state !== "idle"
-            }
-            title={workspace.autoPlacementReadiness.disabledReason ?? undefined}
-            onClick={() => {
-              clearAutoFeedback();
-              autoPlacementFetcher.submit(
-                { intent: "auto-place-preview" },
-                { method: "post" },
-              );
-            }}
-          >
-            {autoPlacementFetcher.state === "idle"
-              ? "Auto-place unscheduled sessions"
-              : "Preparing auto-place preview…"}
-          </button>
-          {workspace.version ? (
-            <span
-              className={`status ${workspace.version.status === "published" ? "success" : "info"}`}
+          {showAutoPlaceButton ? (
+            <button
+              className="btn ghost"
+              type="button"
+              disabled={
+                !workspace.autoPlacementReadiness.canPreview ||
+                autoPlacementFetcher.state !== "idle"
+              }
+              title={
+                workspace.autoPlacementReadiness.disabledReason ?? undefined
+              }
+              onClick={() => {
+                clearAutoFeedback();
+                autoPlacementFetcher.submit(
+                  { intent: "auto-place-preview" },
+                  { method: "post" },
+                );
+              }}
             >
+              {autoPlacementFetcher.state === "idle"
+                ? "Auto-place unscheduled sessions"
+                : "Preparing auto-place preview…"}
+            </button>
+          ) : null}
+          {workspace.version ? (
+            <span className="schedule-page-version">
               Version {workspace.version.versionNumber} ·{" "}
               {statusPresentation("version", workspace.version.status).label}
             </span>
@@ -188,9 +225,9 @@ export function SchedulePlannerWorkspace({
           <span>{autoError}</span>
         </div>
       ) : null}
-      {!workspace.autoPlacementReadiness.canPreview ? (
+      {showAutoPlaceReadiness ? (
         <section
-          className="validation-item schedule-notice warn mb"
+          className="schedule-readiness"
           aria-labelledby="auto-placement-readiness-heading"
           data-testid="auto-placement-readiness"
         >
@@ -366,61 +403,6 @@ export function SchedulePlannerWorkspace({
           ) : null}
         </div>
       ) : null}
-      <div className="schedule-summary card">
-        <div>
-          <strong className="pc-num">{workspace.sessions.length}</strong>
-          <small>Sessions</small>
-        </div>
-        <div>
-          <strong className="pc-num">{workspace.entries.length}</strong>
-          <small>Scheduled</small>
-        </div>
-        <div>
-          <strong className="pc-num">
-            {workspace.sessions.length - scheduledSessionIds.size}
-          </strong>
-          <small>Unscheduled</small>
-        </div>
-        {workspace.conflicts.length ? (
-          <button
-            type="button"
-            className="schedule-summary-jump"
-            onClick={() => {
-              const panel = document.getElementById("schedule-validation");
-              panel?.scrollIntoView({ block: "center" });
-              panel
-                ?.querySelector<HTMLElement>(".validation-item button")
-                ?.focus({ preventScroll: true });
-            }}
-          >
-            <strong className="pc-num tone-bad">
-              {workspace.conflicts.length}
-            </strong>
-            <small>Open conflicts · review</small>
-          </button>
-        ) : (
-          <div>
-            <strong className="pc-num tone-good">0</strong>
-            <small>Open conflicts</small>
-          </div>
-        )}
-      </div>
-      <fieldset
-        className="tabs mt pc-plain-fieldset"
-        aria-label="Schedule view"
-      >
-        {(["room", "list", "day", "week", "track"] as const).map((name) => (
-          <button
-            key={name}
-            type="button"
-            aria-pressed={view === name}
-            className={`tab${view === name ? " active" : ""}`}
-            onClick={() => setView(name)}
-          >
-            {name[0].toUpperCase() + name.slice(1)}
-          </button>
-        ))}
-      </fieldset>
       <DndContext
         id="schedule-planner-dnd-instructions"
         sensors={sensors}
@@ -455,7 +437,7 @@ export function SchedulePlannerWorkspace({
           place(event);
         }}
       >
-        <div className="schedule-workspace mt">
+        <div className="schedule-workspace">
           <ScheduleSourcePanel
             workspace={workspace}
             fetcher={fetcher}
@@ -477,38 +459,49 @@ export function SchedulePlannerWorkspace({
             quickEntry={quickEntry}
             unassign={unassign}
           />
-          <ScheduleCanvasPanel
-            workspace={workspace}
-            fetcher={fetcher}
-            view={view}
-            selectedDay={selectedDay}
-            eventDays={eventDays}
-            setSelectedDay={setSelectedDay}
-            placementAvailable={placementAvailable}
-            moveInStandardCalendar={moveInStandardCalendar}
-            resize={resize}
-            selectQuickSession={selectQuickSession}
-            trackGroups={trackGroups}
-            sessionById={sessionById}
-            roomScrollRef={roomScrollRef}
-            slots={slots}
-            entriesBySlot={entriesBySlot}
-            conflictSeverityByEntryId={conflictSeverityByEntryId}
-            revealedEntryIds={revealedEntryIds}
-          />
-          <ScheduleValidationPanel
-            workspace={workspace}
-            latestPlacementConflicts={actionNotices.conflicts}
-            fetcher={fetcher}
-            revealConflictEntries={revealConflictEntries}
-          />
+          <div className="schedule-stage">
+            <ScheduleCanvasPanel
+              workspace={workspace}
+              fetcher={fetcher}
+              view={view}
+              setView={setView}
+              selectedDay={selectedDay}
+              eventDays={eventDays}
+              setSelectedDay={setSelectedDay}
+              placementAvailable={placementAvailable}
+              moveInStandardCalendar={moveInStandardCalendar}
+              resize={resize}
+              selectQuickSession={selectQuickSession}
+              trackGroups={trackGroups}
+              sessionById={sessionById}
+              roomScrollRef={roomScrollRef}
+              slots={slots}
+              entriesBySlot={entriesBySlot}
+              conflictSeverityByEntryId={conflictSeverityByEntryId}
+              revealedEntryIds={revealedEntryIds}
+            />
+            <ScheduleValidationPanel
+              workspace={workspace}
+              latestPlacementConflicts={actionNotices.conflicts}
+              fetcher={fetcher}
+              revealConflictEntries={revealConflictEntries}
+            />
+          </div>
         </div>
         {/* Rendered in a portal above both panes. Without it the dragged card
             is clipped the moment it leaves the source list, which has
             overflow:auto, on its way to a board with overflow:hidden. */}
         <DragOverlay dropAnimation={null}>
           {draggingSessionId ? (
-            <div className="session-card is-dragging">
+            <div
+              className={`session-card is-dragging ${sessionById.get(draggingSessionId)?.format ?? ""}`}
+            >
+              <span className="session-card-format">
+                {sessionFormatLabel(
+                  workspace.sessionFormats,
+                  sessionById.get(draggingSessionId)?.format ?? "",
+                )}
+              </span>
               <strong>
                 {sessionById.get(draggingSessionId)?.title ?? "Session"}
               </strong>
@@ -519,16 +512,30 @@ export function SchedulePlannerWorkspace({
           ) : null}
         </DragOverlay>
       </DndContext>
-      <ScheduleContentWorkflows
-        workspace={workspace}
-        session={quickSession ?? null}
-        recoveryScope={workspace.recoveryScope}
-        calendarPreview={
-          quickSession
-            ? (workspace.calendarPreviews[quickSession.id] ?? null)
-            : null
-        }
-      />
+      <details
+        className="schedule-inspector"
+        open={inspectorOpen}
+        onToggle={(event) => setInspectorOpen(event.currentTarget.open)}
+      >
+        <summary>
+          <strong>Notes and session content</strong>
+          <span className="help">
+            {quickSession
+              ? quickSession.title
+              : "Schedule notes and the selected session"}
+          </span>
+        </summary>
+        <ScheduleContentWorkflows
+          workspace={workspace}
+          session={quickSession ?? null}
+          recoveryScope={workspace.recoveryScope}
+          calendarPreview={
+            quickSession
+              ? (workspace.calendarPreviews[quickSession.id] ?? null)
+              : null
+          }
+        />
+      </details>
       {autoPreview ? (
         <AutoPlacementPreviewDialog
           preview={autoPreview}
@@ -554,6 +561,6 @@ export function SchedulePlannerWorkspace({
           close={() => setDraftOpen(false)}
         />
       ) : null}
-    </>
+    </div>
   );
 }

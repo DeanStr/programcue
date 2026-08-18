@@ -138,7 +138,14 @@ export default function SpeakerDashboard({ loaderData }: Route.ComponentProps) {
                   unit: publishedProfile ? "Published" : "Draft",
                 },
               ].map((entry) => (
-                <Link className="pc-index-row" key={entry.to} to={entry.to}>
+                <Link
+                  className="pc-index-row"
+                  data-state={
+                    entry.unit === "Published" ? "published" : undefined
+                  }
+                  key={entry.to}
+                  to={entry.to}
+                >
                   <entry.icon aria-hidden className="pc-index-icon" />
                   <span className="pc-index-label">{entry.label}</span>
                   <span className="pc-index-detail">{entry.detail}</span>
@@ -154,29 +161,17 @@ export default function SpeakerDashboard({ loaderData }: Route.ComponentProps) {
             </nav>
           </section>
 
-          <section
-            className="card pad mt"
-            aria-labelledby="speaker-calendar-heading"
-          >
-            <div className="card-title">
-              <div>
-                <CalendarDays aria-hidden className="subtle" />
-                <h2 id="speaker-calendar-heading">Calendar connection</h2>
-                <p className="subtle">
-                  Connect your own calendar account for direct session updates.
-                  ICS invitations remain available without a connection.
-                </p>
-              </div>
-            </div>
-            <div className="page-actions">
-              <Link className="btn small" to="/oauth/calendar/google">
-                Connect Google Calendar
-              </Link>
-              <Link className="btn small" to="/oauth/calendar/microsoft">
-                Connect Microsoft 365
-              </Link>
-            </div>
-          </section>
+          <p className="speaker-calendar-note">
+            <CalendarDays aria-hidden size={14} />
+            <span>
+              <Link to="/oauth/calendar/google">Connect Google Calendar</Link>
+              {" or "}
+              <Link to="/oauth/calendar/microsoft">Microsoft 365</Link>
+              {
+                " for session updates. ICS invitations remain available without a connection."
+              }
+            </span>
+          </p>
         </div>
         <SpeakerUpdatesRail tasks={tasks} timezone={portal.event.timezone} />
       </div>

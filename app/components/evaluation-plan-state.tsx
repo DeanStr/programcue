@@ -1,3 +1,4 @@
+import { useEffect, useState } from "react";
 import { Form } from "react-router";
 
 import { useEvaluationAdminModel } from "~/components/evaluation-admin-model";
@@ -64,7 +65,7 @@ function ReviewerAiSettingCard() {
   )
     return null;
   return (
-    <section className="card pad">
+    <section className="card pad pc-eval-setting">
       <h2>Reviewer AI suggestions</h2>
       <p className="subtle">
         Event opt-in. Reviewers must request suggestions after saving an initial
@@ -145,7 +146,7 @@ export function EvaluationPlanState() {
             <label className="label">
               Opens ({loaderData.eventTimezone})
               <input
-                className="input"
+                className="input pc-eval-datetime"
                 type="datetime-local"
                 name="roundOpensAt"
               />
@@ -153,7 +154,7 @@ export function EvaluationPlanState() {
             <label className="label">
               Closes ({loaderData.eventTimezone})
               <input
-                className="input"
+                className="input pc-eval-datetime"
                 type="datetime-local"
                 name="roundClosesAt"
               />
@@ -205,62 +206,95 @@ export function EvaluationPlanState() {
       </section>
     </AdminPageSection>
   ) : (
+    <EvaluationAdminViews />
+  );
+}
+
+type EvaluationAdminView = "results" | "assignments" | "setup";
+
+function viewFromHash(hash: string): EvaluationAdminView {
+  const id = hash.replace(/^#/, "");
+  if (
+    id === "evaluation-assignments" ||
+    id === "evaluation-proposals" ||
+    id === "evaluation-sessions"
+  ) {
+    return "assignments";
+  }
+  if (
+    id === "evaluation-setup" ||
+    id === "evaluation-access" ||
+    id === "evaluation-rounds" ||
+    id === "evaluation-moderation"
+  ) {
+    return "setup";
+  }
+  return "results";
+}
+
+function EvaluationAdminViews() {
+  const [view, setView] = useState<EvaluationAdminView>("results");
+  useEffect(() => {
+    const apply = () => setView(viewFromHash(window.location.hash));
+    apply();
+    window.addEventListener("hashchange", apply);
+    return () => window.removeEventListener("hashchange", apply);
+  }, []);
+  return (
     <>
-      <AdminPageSection
-        id="evaluation-overview"
-        label="Evaluation overview"
-        description="Progress metrics and review-cycle controls"
-        defaultExpandedOnMobile
-      >
-        <EvaluationMetrics />
-        <ReviewerAiSettingCard />
-        <EvaluationReviewCyclePanel />
-      </AdminPageSection>
-      <AdminPageSection
-        id="evaluation-access"
-        label="Evaluation access"
-        description="Teams, reviewers and invitations"
-      >
-        <EvaluationTeamsPanel />
-      </AdminPageSection>
-      <AdminPageSection
-        id="evaluation-rounds"
-        label="Rounds and progression"
-        description="Rubrics, advancement and round state"
-      >
-        <EvaluationRoundsPanel />
-        <EvaluationProgressionPanel />
-      </AdminPageSection>
-      <AdminPageSection
-        id="evaluation-results"
-        label="Review results"
-        description="One score-ranked view across proposals and sessions"
-      >
-        <EvaluationUnifiedResults />
-      </AdminPageSection>
-      <EvaluationDiscussionPanel />
-      <AdminPageSection
-        id="evaluation-proposals"
-        label="Proposal queue"
-        description="Assignments, decisions and accepted-speaker invitations"
-      >
-        <EvaluationSubmissionQueue />
-        <AcceptedSpeakerInvitationsPanel />
-      </AdminPageSection>
-      <AdminPageSection
-        id="evaluation-sessions"
-        label="Session queue"
-        description="Accepted-session review targets"
-      >
-        <EvaluationSessionQueue />
-      </AdminPageSection>
-      <AdminPageSection
-        id="evaluation-moderation"
-        label="Moderation"
-        description="Review disagreements, overrides and reopen history"
-      >
-        <EvaluationModerationPanel />
-      </AdminPageSection>
+      <EvaluationMetrics />
+      <nav className="pc-eval-switcher" aria-label="Evaluation views">
+        {(
+          [
+            ["results", "Results", "#evaluation-results"],
+            ["assignments", "Assignments", "#evaluation-assignments"],
+            ["setup", "Setup", "#evaluation-setup"],
+          ] as const
+        ).map(([key, label, href]) => (
+          <a
+            key={key}
+            href={href}
+            className={view === key ? "is-current" : undefined}
+            aria-current={view === key ? "page" : undefined}
+            onClick={(event) => {
+              event.preventDefault();
+              setView(key);
+              window.history.replaceState(null, "", href);
+            }}
+          >
+            {label}
+          </a>
+        ))}
+      </nav>
+      {view === "results" ? (
+        <div id="evaluation-results" className="pc-eval-view">
+          <EvaluationUnifiedResults />
+          <details
+            id="evaluation-discussion"
+            className="pc-eval-discussion-disclosure"
+          >
+            <summary>Committee discussion</summary>
+            <EvaluationDiscussionPanel />
+          </details>
+        </div>
+      ) : null}
+      {view === "assignments" ? (
+        <div id="evaluation-assignments" className="pc-eval-view">
+          <EvaluationSubmissionQueue />
+          <AcceptedSpeakerInvitationsPanel />
+          <EvaluationSessionQueue />
+        </div>
+      ) : null}
+      {view === "setup" ? (
+        <div id="evaluation-setup" className="pc-eval-view">
+          <EvaluationRoundsPanel />
+          <EvaluationProgressionPanel />
+          <EvaluationTeamsPanel />
+          <ReviewerAiSettingCard />
+          <EvaluationReviewCyclePanel />
+          <EvaluationModerationPanel />
+        </div>
+      ) : null}
     </>
   );
 }

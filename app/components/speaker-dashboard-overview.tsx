@@ -1,4 +1,5 @@
 import { CheckCircle2, Circle, CircleDot, Megaphone, Mic2 } from "lucide-react";
+import type { CSSProperties } from "react";
 import { Form, Link } from "react-router";
 import {
   type SpeakerPortal,
@@ -144,47 +145,8 @@ export function SpeakerDashboardOverview({
           </p>
         </div>
       </div>
-      <section
-        className="card pad speaker-stepper-card mt"
-        aria-labelledby="speaker-stepper-heading"
-      >
-        <div className="card-title">
-          <h2 id="speaker-stepper-heading">Your preparation</h2>
-          <span className="subtle right pc-num">
-            {completedStages} of {milestones.length} stages complete
-          </span>
-        </div>
-        <ol className="speaker-stepper">
-          {milestones.map((milestone) => (
-            <li
-              className="speaker-stage"
-              key={milestone.key}
-              data-state={milestone.state}
-            >
-              <Link to={milestone.href} className="speaker-stage-link">
-                <span className="speaker-stage-marker" aria-hidden>
-                  {milestone.state === "complete" ? (
-                    <CheckCircle2 size={18} />
-                  ) : milestone.state === "in_progress" ? (
-                    <CircleDot size={18} />
-                  ) : (
-                    <Circle size={18} />
-                  )}
-                </span>
-                <span className="speaker-stage-copy">
-                  <strong>{milestone.label}</strong>
-                  <small className="subtle">{milestone.detail}</small>
-                </span>
-                <span className="sr-only">
-                  {MILESTONE_STATE_LABEL[milestone.state]}
-                </span>
-              </Link>
-            </li>
-          ))}
-        </ol>
-      </section>
-      <section className="card next-action mt">
-        <div>
+      <section className="card next-action speaker-next-hero mt">
+        <div className="speaker-next-copy">
           <span
             className={`status ${next ? speakerStatusClass(next.status) : resourceAction ? "warning" : "success"}`}
           >
@@ -216,7 +178,7 @@ export function SpeakerDashboardOverview({
                 ? "Read and acknowledge the current published resource."
                 : preparationComplete
                   ? "There are no outstanding requirements right now."
-                  : "Your task list is clear. Check the preparation stages above for remaining profile, session or resource status."}
+                  : "Your task list is clear. Check the preparation stages below for remaining profile, session or resource status."}
           </p>
           {next ? (
             <Link
@@ -230,7 +192,60 @@ export function SpeakerDashboardOverview({
               Open resource
             </Link>
           ) : null}
+          <p className="speaker-next-facts">
+            {completedStages} of {milestones.length} stages ready
+            <span aria-hidden="true"> · </span>
+            {completedCount} of {requirementCount || 0} requirements
+          </p>
         </div>
+      </section>
+      <section
+        className="card pad speaker-stepper-card mt"
+        aria-labelledby="speaker-stepper-heading"
+      >
+        <div className="card-title">
+          <h2 id="speaker-stepper-heading">Your preparation</h2>
+          <span className="subtle right pc-num">
+            {completedStages} of {milestones.length} stages complete
+          </span>
+        </div>
+        <div
+          className="speaker-stepper-meter"
+          aria-hidden
+          style={
+            {
+              "--speaker-progress": `${(completedStages / milestones.length) * 100}%`,
+            } as CSSProperties
+          }
+        />
+        <ol className="speaker-stepper">
+          {milestones.map((milestone) => (
+            <li
+              className="speaker-stage"
+              key={milestone.key}
+              data-state={milestone.state}
+            >
+              <Link to={milestone.href} className="speaker-stage-link">
+                <span className="speaker-stage-marker" aria-hidden>
+                  {milestone.state === "complete" ? (
+                    <CheckCircle2 size={16} />
+                  ) : milestone.state === "in_progress" ? (
+                    <CircleDot size={16} />
+                  ) : (
+                    <Circle size={16} />
+                  )}
+                </span>
+                <span className="speaker-stage-copy">
+                  <strong>{milestone.label}</strong>
+                  <small className="subtle">{milestone.detail}</small>
+                </span>
+                <span className="sr-only">
+                  {MILESTONE_STATE_LABEL[milestone.state]}
+                </span>
+              </Link>
+            </li>
+          ))}
+        </ol>
       </section>
     </>
   );

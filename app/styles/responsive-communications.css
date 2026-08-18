@@ -1,52 +1,30 @@
-/* Below the two-column workbench the version list stops being a rail: as a
-   full-width vertical list it puts five rows between the reader and the editor
-   they came for, so it becomes a single scrolling row of the same items. */
+/* Communications breakpoints. Keep the template list as a list — never a
+   two-up card grid that shears names. */
 @media (max-width: 1079px) {
   .comms-workbench .template-list {
-    grid-auto-flow: column;
-    grid-auto-columns: minmax(200px, 60%);
-    overflow-x: auto;
-    padding-bottom: var(--space-1);
-    overscroll-behavior-inline: contain;
+    display: grid;
+    grid-auto-flow: row;
+    grid-auto-columns: minmax(0, 1fr);
+    overflow-x: visible;
   }
-  /* Two columns inside a 60%-wide card leaves the name three words per line
-     and the state pill hanging off the scroll edge. */
-  .comms-workbench .template-item {
+  .comms-readiness-line {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: var(--space-2);
+  }
+  .comms-activity-row {
     grid-template-columns: minmax(0, 1fr);
-    align-items: start;
+    gap: var(--space-2);
   }
-  .comms-workbench .template-item .status {
-    grid-column: 1;
-    grid-row: auto;
-    justify-self: start;
-    margin-top: var(--space-1);
-  }
-  .comms-readiness-cells {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: var(--space-4);
-  }
-  .comms-readiness-cell:nth-child(2n) {
-    padding-right: 0;
-    border-right: 0;
+  .comms-activity-meta,
+  .comms-activity-actions {
+    justify-content: flex-start;
+    text-align: start;
   }
 }
 
 @media (max-width: 760px) {
-  .comms-readiness-cells {
-    grid-template-columns: minmax(0, 1fr);
-    gap: var(--space-3);
-  }
-  .comms-readiness-cell,
-  .comms-readiness-cell:nth-child(2n) {
-    padding: 0 0 var(--space-3);
-    border-right: 0;
-    border-bottom: 1px solid var(--border);
-  }
-  .comms-readiness-cell:last-child {
-    padding-bottom: 0;
-    border-bottom: 0;
-  }
-  .comms-workbench .template-list {
-    grid-auto-columns: minmax(200px, 75%);
+  .comms-workbench .template-item {
+    grid-template-columns: minmax(0, 1fr) auto;
   }
 }

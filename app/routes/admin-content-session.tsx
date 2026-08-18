@@ -126,10 +126,9 @@ export default function AdminContentSession({
   const current = loaderData.current;
   const editable = current.scheduleVersionStatus === "draft";
   return (
-    <>
+    <div className="content-library">
       <div className="page-head pc-page-header">
         <div>
-          <span className="pc-page-eyebrow">Attributed revision history</span>
           <h1>{current.title}</h1>
           <p>
             Review exact prior content, control public approval and restore
@@ -137,14 +136,14 @@ export default function AdminContentSession({
           </p>
         </div>
         <div className="page-actions">
-          <Link className="btn" to="/admin/content">
+          <Link className="content-text-action" to="/admin/content">
             Content &amp; files
           </Link>
           <Link
-            className="btn"
+            className="btn primary"
             to={`/admin/schedule?session=${encodeURIComponent(current.sessionId)}`}
           >
-            Edit current content
+            Open schedule
           </Link>
         </div>
       </div>
@@ -389,6 +388,6 @@ export default function AdminContentSession({
           </div>
         ) : null}
       </section>
-    </>
+    </div>
   );
 }

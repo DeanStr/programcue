@@ -1,4 +1,4 @@
-import { CalendarDays, CheckCircle2 } from "lucide-react";
+import { CheckCircle2 } from "lucide-react";
 import { Form, redirect } from "react-router";
 import { z } from "zod";
 import { BrandMark } from "~/components/brand-mark";
@@ -16,6 +16,7 @@ import {
 } from "~/platform/auth/current-event.server";
 import { safeReturnTo } from "~/platform/auth/return-to";
 import { getCloudflareContext } from "~/platform/cloudflare-context";
+import "~/styles/workspace-remaining.css";
 import type { Route } from "./+types/event-selector";
 
 const selectionSchema = z.object({
@@ -160,73 +161,65 @@ export const meta = () => [{ title: "Choose event · Program Cue" }];
 
 export default function EventSelector({ loaderData }: Route.ComponentProps) {
   return (
-    <main className="design-board" id="main">
-      <section
-        className="card pad"
-        style={{ maxWidth: 820, margin: "7vh auto" }}
-      >
-        <div className="page-head">
-          <div>
-            <span className="pc-page-eyebrow">Authorised workspaces</span>
-            <h1>Choose an event</h1>
-            <p>
-              Select the event that subsequent private pages and changes should
-              use.
-            </p>
-          </div>
+    <main className="pc-event-select" id="main">
+      <section className="pc-event-select-panel">
+        <header className="pc-event-select-head">
           <BrandMark />
-        </div>
-        <div className="stack">
-          {loaderData.events.length === 0 ? (
-            <div className="validation-item info" role="status">
-              <strong>No event access yet</strong>
-              <span>
-                You do not currently have an accepted event role or a pending
-                invitation. Ask an event organiser to invite this account, then
-                return here to accept it.
-              </span>
-            </div>
-          ) : null}
-          {loaderData.events.map((event) => {
-            const current = event.eventId === loaderData.currentEventId;
-            return (
-              <Form method="post" key={event.eventId} className="card pad">
-                <input type="hidden" name="eventId" value={event.eventId} />
-                <input
-                  type="hidden"
-                  name="returnTo"
-                  value={loaderData.returnTo}
-                />
-                <div className="card-title">
-                  <div>
-                    <strong>{event.eventName}</strong>
-                    <p className="subtle">
-                      {event.organisationName} ·{" "}
-                      {event.invitationPending
-                        ? `${event.role.replaceAll("_", " ")} invitation pending`
-                        : event.role.replaceAll("_", " ")}
-                      {!event.invitationPending && event.pendingInvitationRole
-                        ? ` · ${event.pendingInvitationRole.replaceAll("_", " ")} invitation pending`
-                        : ""}
-                    </p>
-                  </div>
-                  <CalendarDays aria-hidden size={20} />
-                </div>
-                <button
-                  className={`btn${current ? "" : " primary"}`}
-                  type="submit"
-                >
-                  {current ? <CheckCircle2 aria-hidden size={14} /> : null}
-                  {event.pendingInvitationRole
-                    ? `Accept ${event.pendingInvitationRole.replaceAll("_", " ")} invitation${current ? "" : " and use event"}`
-                    : current
-                      ? "Continue with current event"
-                      : "Use this event"}
-                </button>
-              </Form>
-            );
-          })}
-        </div>
+          <h1>Choose an event</h1>
+          <p>
+            Select the event that subsequent private pages and changes should
+            use.
+          </p>
+        </header>
+        {loaderData.events.length === 0 ? (
+          <div className="pc-event-select-empty" role="status">
+            <strong>No event access yet. </strong>
+            You do not currently have an accepted event role or a pending
+            invitation. Ask an event organiser to invite this account, then
+            return here to accept it.
+          </div>
+        ) : (
+          <ul className="pc-event-select-list">
+            {loaderData.events.map((event) => {
+              const current = event.eventId === loaderData.currentEventId;
+              return (
+                <li key={event.eventId}>
+                  <Form className="pc-event-select-row" method="post">
+                    <input type="hidden" name="eventId" value={event.eventId} />
+                    <input
+                      type="hidden"
+                      name="returnTo"
+                      value={loaderData.returnTo}
+                    />
+                    <div>
+                      <strong>{event.eventName}</strong>
+                      <p>
+                        {event.organisationName} ·{" "}
+                        {event.invitationPending
+                          ? `${event.role.replaceAll("_", " ")} invitation pending`
+                          : event.role.replaceAll("_", " ")}
+                        {!event.invitationPending && event.pendingInvitationRole
+                          ? ` · ${event.pendingInvitationRole.replaceAll("_", " ")} invitation pending`
+                          : ""}
+                      </p>
+                    </div>
+                    <button
+                      className={`btn${current ? "" : " primary"}`}
+                      type="submit"
+                    >
+                      {current ? <CheckCircle2 aria-hidden size={14} /> : null}
+                      {event.pendingInvitationRole
+                        ? `Accept ${event.pendingInvitationRole.replaceAll("_", " ")} invitation${current ? "" : " and use event"}`
+                        : current
+                          ? "Continue with current event"
+                          : "Use this event"}
+                    </button>
+                  </Form>
+                </li>
+              );
+            })}
+          </ul>
+        )}
       </section>
     </main>
   );

@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router";
 import { getCloudflareContext } from "~/platform/cloudflare-context";
+import "~/styles/workspace-remaining.css";
 import ApiReferenceClient from "../components/api-reference.client";
 import type { Route } from "./+types/api-docs";
 import { apiReferenceBackLink } from "./api-docs-navigation.server";
@@ -18,27 +19,26 @@ export function loader({ context }: Route.LoaderArgs) {
   return { backLink: apiReferenceBackLink(env) };
 }
 
-function ApiReferenceNavigation({
+function ApiReferenceChrome({
   backLink,
 }: {
   backLink: { label: string; to: string };
 }) {
   return (
-    <nav aria-label="API reference">
-      <Link className="api-reference-back" to={backLink.to}>
-        ← {backLink.label}
-      </Link>
-    </nav>
+    <header className="pc-api-chrome">
+      <h1 id="api-reference-title">Program Cue API reference</h1>
+      <nav aria-label="API reference">
+        <Link className="api-reference-back" to={backLink.to}>
+          ← {backLink.label}
+        </Link>
+      </nav>
+    </header>
   );
 }
 
 function ApiReferenceLoading() {
   return (
-    <section
-      aria-labelledby="api-reference-title"
-      style={{ maxWidth: "40rem", margin: "12vh auto", padding: "0 24px" }}
-    >
-      <h1 id="api-reference-title">Program Cue API reference</h1>
+    <section aria-labelledby="api-reference-title" className="pc-api-loading">
       <p role="status">Loading the interactive reference…</p>
       <p>
         You can also{" "}
@@ -55,19 +55,10 @@ export default function ApiDocs({ loaderData }: Route.ComponentProps) {
     setHydrated(true);
   }, []);
 
-  if (!hydrated) {
-    return (
-      <main id="main" className="api-reference-page" tabIndex={-1}>
-        <ApiReferenceNavigation backLink={loaderData.backLink} />
-        <ApiReferenceLoading />
-      </main>
-    );
-  }
-
   return (
-    <div id="main" className="api-reference-page" tabIndex={-1}>
-      <ApiReferenceNavigation backLink={loaderData.backLink} />
-      <ApiReferenceClient />
-    </div>
+    <main id="main" className="api-reference-page pc-api" tabIndex={-1}>
+      <ApiReferenceChrome backLink={loaderData.backLink} />
+      {hydrated ? <ApiReferenceClient /> : <ApiReferenceLoading />}
+    </main>
   );
 }

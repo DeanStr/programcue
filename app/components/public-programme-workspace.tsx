@@ -56,17 +56,24 @@ function PublicProgrammeViewNavigation({
 }) {
   const { surface, programme } = model;
   const speakerViews = ["speakers", "gallery"].includes(surface);
-  // The same condition the page uses to pick its main width.
-  const wideSurface = surface === "overview" || surface === "sessions";
+  // Home, list, and the speaker cast share the wide measure so a pair of
+  // portraits can own the row the way the homepage already does.
+  const wideSurface =
+    surface === "overview" ||
+    surface === "sessions" ||
+    surface === "speakers" ||
+    surface === "gallery";
   const views = speakerViews
     ? [
         {
           label: "Directory",
+          shortLabel: "List",
           href: publicProgrammeSurfacePath(programme.event.slug, "speakers"),
           active: surface === "speakers",
         },
         {
           label: "Gallery",
+          shortLabel: "Gallery",
           href: publicProgrammeSurfacePath(programme.event.slug, "gallery"),
           active: surface === "gallery",
         },
@@ -74,23 +81,28 @@ function PublicProgrammeViewNavigation({
     : [
         {
           label: "List",
+          shortLabel: "List",
           href: publicProgrammeSurfacePath(programme.event.slug, "sessions"),
           active: surface === "overview" || surface === "sessions",
         },
         {
           label: "Agenda",
+          shortLabel: "Agenda",
           href: publicProgrammeSurfacePath(programme.event.slug, "agenda"),
           active: surface === "agenda",
         },
         {
           label: "Schedule",
+          shortLabel: "Grid",
           href: publicProgrammeSurfacePath(programme.event.slug, "schedule"),
           active: surface === "schedule",
         },
       ];
   return (
     <nav
-      className={`public-view-navigation${wideSurface ? " is-wide" : ""}`}
+      className={`public-view-navigation${wideSurface ? " is-wide" : ""}${
+        surface === "agenda" ? " is-agenda" : ""
+      }`}
       aria-label={speakerViews ? "Speaker views" : "Programme views"}
     >
       <span>{speakerViews ? "Speakers" : "Programme"}</span>
@@ -101,7 +113,8 @@ function PublicProgrammeViewNavigation({
           aria-current={view.active ? "page" : undefined}
           to={view.href}
         >
-          {view.label}
+          <span className="public-view-full">{view.label}</span>
+          <span className="public-view-short">{view.shortLabel}</span>
         </Link>
       ))}
     </nav>
@@ -212,13 +225,26 @@ export function PublicSpeakerCard({
   return (
     <article
       id={`speaker-${speaker.id}`}
-      className="card pad public-speaker-card"
+      className="public-speaker-card"
       key={speaker.id}
     >
+      {model.showSpeakerDetails && model.showEmbedField("images") ? (
+        speaker.imageUrl ? (
+          <img
+            className="public-speaker-photo"
+            src={speaker.imageUrl}
+            alt=""
+            width={220}
+            height={275}
+            loading="lazy"
+          />
+        ) : (
+          <span className="public-speaker-photo placeholder" aria-hidden>
+            {initials(speaker.displayName)}
+          </span>
+        )
+      ) : null}
       <div className="public-speaker-card-identity">
-        {model.showSpeakerDetails && model.showEmbedField("images") ? (
-          <PublicSpeakerAvatar speaker={speaker} size={56} />
-        ) : null}
         <div>
           <h3>{speaker.displayName}</h3>
           {model.showSpeakerDetails &&
@@ -589,12 +615,22 @@ function ItineraryPanel({ model }: { model: PublicProgrammeModel }) {
   )}/calendar.ics?${loaderData.calendarExportQuery}`;
   return (
     <section
-      className="card itinerary"
+      className="card itinerary itinerary-rail"
       aria-busy={fetcher.state !== "idle" || undefined}
     >
-      <div className="card-title">
-        <h2>{shared ? "Shared itinerary" : "My itinerary"}</h2>
-        <span className="status info right">{saved.length}</span>
+      <div className="itinerary-head">
+        <div>
+          <p className="itinerary-kicker">
+            {shared ? "Shared with you" : "Personal schedule"}
+          </p>
+          <h2>{shared ? "Shared itinerary" : "My itinerary"}</h2>
+        </div>
+        <span className="itinerary-count">
+          <span aria-hidden="true">{saved.length}</span>
+          <span className="sr-only">
+            {saved.length === 1 ? "1 saved" : `${saved.length} saved`}
+          </span>
+        </span>
       </div>
       {itineraryConflicts.length ? (
         <div className="validation-item warn">
@@ -710,12 +746,13 @@ function ItineraryPanel({ model }: { model: PublicProgrammeModel }) {
           ) : null}
         </>
       ) : (
-        /* One line, inside the card. The icon-in-a-dashed-box zero state was
-           300px of the highest-value space on the page spent stating nought. */
-        <p className="itinerary-zero">
-          Nothing saved yet — choose Save on any session to build a personal
-          itinerary you can share.
-        </p>
+        <div className="itinerary-zero">
+          <p className="itinerary-zero-title">Nothing saved yet</p>
+          <p>
+            Choose Save on any session to build a personal itinerary you can
+            share.
+          </p>
+        </div>
       )}
     </section>
   );
@@ -1133,6 +1170,12 @@ export function PublicProgrammeWorkspace({
   const overviewSurface =
     loaderData.surface === "overview" || loaderData.surface === "sessions";
   const homeSurface = loaderData.surface === "overview";
+  const siblingSurface =
+    loaderData.surface === "agenda" ||
+    loaderData.surface === "schedule" ||
+    loaderData.surface === "speakers" ||
+    loaderData.surface === "gallery";
+  const showHero = embedded || !siblingSurface;
   const homeConfiguration =
     homeSurface && loaderData.site ? loaderData.site.configuration : null;
   /* The curated homepage states the venue on a rail of its own. Leaving the
@@ -1147,7 +1190,7 @@ export function PublicProgrammeWorkspace({
   );
   return (
     <div
-      className={`public-shell event-branded${embedded ? " embedded" : ""}${embedded && embedOptions.density === "compact" ? " embed-compact" : ""}`}
+      className={`public-shell event-branded${embedded ? " embedded" : ""}${embedded && embedOptions.density === "compact" ? " embed-compact" : ""}${siblingSurface ? " is-sibling" : ""}`}
       data-public-theme={
         embedded
           ? embedOptions.theme
@@ -1169,7 +1212,7 @@ export function PublicProgrammeWorkspace({
         id="main"
         className="public-page-main"
       >
-        <PublicProgrammeHero model={model} />
+        {showHero ? <PublicProgrammeHero model={model} /> : null}
         {!embedded ? <PublicProgrammeViewNavigation model={model} /> : null}
         {homeSurface && loaderData.site ? (
           <>
@@ -1182,7 +1225,12 @@ export function PublicProgrammeWorkspace({
           </>
         ) : null}
         <div
-          className={`public-main${!overviewSurface ? " public-surface-main" : ""}`}
+          className={`public-main${!overviewSurface ? " public-surface-main" : ""}${
+            loaderData.surface === "speakers" ||
+            loaderData.surface === "gallery"
+              ? " is-cast"
+              : ""
+          }${loaderData.surface === "agenda" ? " is-agenda" : ""}`}
         >
           {!overviewSurface ? (
             <div className="public-surface-content">
@@ -1218,7 +1266,7 @@ export function PublicProgrammeWorkspace({
               {/* The rail precedes the roster in source order, so on a phone —
                 where it stops being a rail — a tapped session's detail is the
                 next thing under the list rather than 2,400px below it. */}
-              <aside id="itinerary">
+              <aside className="public-rail" id="itinerary">
                 {!embedded ? <ItineraryPanel model={model} /> : null}
                 <SessionDetailPanel model={model} />
                 {!embedded && !homeStatesVenue ? (

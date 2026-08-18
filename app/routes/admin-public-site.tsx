@@ -261,35 +261,14 @@ export async function action({ request, context }: Route.ActionArgs) {
   }
 }
 
-function PublicationStatus({
-  label,
-  draft,
-  published,
-  publishedAt,
-  current,
-}: {
-  label: string;
-  draft?: number;
-  published: number | null;
-  publishedAt: number | null;
-  current: boolean;
-}) {
-  return (
-    <article className="public-site-publication-status">
-      <span className="pc-page-eyebrow">{label}</span>
-      <strong>
-        {publishedAt === null
-          ? "Not published"
-          : current
-            ? "Current"
-            : "Changes waiting"}
-      </strong>
-      <small>
-        {draft === undefined ? "" : `Draft ${draft} · `}
-        {published === null ? "No public revision" : `Published ${published}`}
-      </small>
-    </article>
-  );
+function publicationLabel(publishedAt: number | null, current: boolean) {
+  if (publishedAt === null) return "Not published";
+  return current ? "Published" : "Changes waiting";
+}
+
+function publicationDetail(publishedAt: number | null, current: boolean) {
+  if (publishedAt === null) return "not published";
+  return current ? "published" : "changes waiting";
 }
 
 export default function AdminPublicSite({ loaderData }: Route.ComponentProps) {
@@ -335,6 +314,12 @@ export default function AdminPublicSite({ loaderData }: Route.ComponentProps) {
   const secondaryActionsBlocked = unsaved || newerDraftAvailable;
   const busy = navigation.state !== "idle";
   const blocker = useUnsavedChanges(unsaved);
+  const [mobileSurface, setMobileSurface] = useState<"preview" | "edit">(
+    "preview",
+  );
+  const sitePublication = loaderData.publicationStatus.site;
+  const brandingPublication = loaderData.publicationStatus.branding;
+  const programmePublication = loaderData.publicationStatus.programme;
 
   function consequentialCommandId(key: string) {
     const id = loaderData.consequentialCommandIds[key];
@@ -498,12 +483,12 @@ export default function AdminPublicSite({ loaderData }: Route.ComponentProps) {
           onConfirm={() => blocker.proceed()}
         />
       ) : null}
-      <div className="page-head">
+      <div className="page-head pc-page-header">
         <div>
           <span className="pc-page-eyebrow">Published experience</span>
           <h1>Event website</h1>
           <p>
-            Compose a bounded event homepage and pages from approved event and
+            Compose a bounded homepage and pages from approved event and
             programme records.
           </p>
         </div>
@@ -518,21 +503,6 @@ export default function AdminPublicSite({ loaderData }: Route.ComponentProps) {
               Open event website <ExternalLink aria-hidden size={13} />
             </Link>
           ) : null}
-          <span
-            className={
-              loaderData.hasUnpublishedChanges
-                ? "status warning"
-                : loaderData.published
-                  ? "status ok"
-                  : "status info"
-            }
-          >
-            {loaderData.hasUnpublishedChanges
-              ? "Changes waiting"
-              : loaderData.published
-                ? "Published"
-                : "Not published"}
-          </span>
         </div>
       </div>
 
@@ -557,30 +527,49 @@ export default function AdminPublicSite({ loaderData }: Route.ComponentProps) {
         className="public-site-publication-grid mb"
         aria-label="Publication status"
       >
-        <PublicationStatus
-          label="Branding"
-          draft={loaderData.publicationStatus.branding.draftRevision}
-          published={loaderData.publicationStatus.branding.publishedRevision}
-          publishedAt={loaderData.publicationStatus.branding.publishedAt}
-          current={loaderData.publicationStatus.branding.current}
-        />
-        <PublicationStatus
-          label="Event website"
-          draft={loaderData.publicationStatus.site.draftRevision}
-          published={loaderData.publicationStatus.site.publishedRevision}
-          publishedAt={loaderData.publicationStatus.site.publishedAt}
-          current={loaderData.publicationStatus.site.current}
-        />
-        <PublicationStatus
-          label="Programme"
-          published={loaderData.publicationStatus.programme.version}
-          publishedAt={loaderData.publicationStatus.programme.publishedAt}
-          current={loaderData.publicationStatus.programme.publishedAt !== null}
-        />
+        <article className="public-site-publication-status">
+          <span className="pc-page-eyebrow">Event website</span>
+          <strong>
+            {publicationLabel(
+              sitePublication.publishedAt,
+              sitePublication.current,
+            )}
+          </strong>
+          <small>
+            {`Draft ${sitePublication.draftRevision} · `}
+            {sitePublication.publishedRevision === null
+              ? "No public revision"
+              : `Published ${sitePublication.publishedRevision}`}
+            {` · Branding ${publicationDetail(brandingPublication.publishedAt, brandingPublication.current)}`}
+            {` · Programme ${publicationDetail(programmePublication.publishedAt, programmePublication.publishedAt !== null)}`}
+          </small>
+        </article>
       </section>
 
+      <fieldset
+        className="public-site-mobile-surfaces branding-preview-devices pc-plain-fieldset"
+        aria-label="Editor surface"
+      >
+        <button
+          type="button"
+          className={mobileSurface === "preview" ? "is-active" : undefined}
+          aria-pressed={mobileSurface === "preview"}
+          onClick={() => setMobileSurface("preview")}
+        >
+          Preview
+        </button>
+        <button
+          type="button"
+          className={mobileSurface === "edit" ? "is-active" : undefined}
+          aria-pressed={mobileSurface === "edit"}
+          onClick={() => setMobileSurface("edit")}
+        >
+          Edit
+        </button>
+      </fieldset>
+
       <div
-        className="public-site-admin-workspace"
+        className={`public-site-admin-workspace is-${mobileSurface}`}
         onSubmitCapture={blockSecondaryMutation}
       >
         <div className="public-site-editor-stack">

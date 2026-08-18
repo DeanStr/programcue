@@ -6,7 +6,13 @@ import {
   Smartphone,
   UserRound,
 } from "lucide-react";
-import { type CSSProperties, useEffect, useMemo, useState } from "react";
+import {
+  type CSSProperties,
+  type ReactNode,
+  useEffect,
+  useMemo,
+  useState,
+} from "react";
 import {
   data,
   Form,
@@ -218,6 +224,9 @@ function BrandingPreview({
   bannerUrl,
   welcomeText,
   compact,
+  onViewportChange,
+  publicationStatus,
+  footer,
 }: {
   eventName: string;
   accent: string;
@@ -225,6 +234,9 @@ function BrandingPreview({
   bannerUrl: string | null;
   welcomeText: string;
   compact: boolean;
+  onViewportChange(mobile: boolean): void;
+  publicationStatus: "published" | "unpublished";
+  footer: ReactNode;
 }) {
   const [surface, setSurface] = useState<PreviewSurface>("programme");
   const palette = programmeAccentPalette(accent);
@@ -244,95 +256,140 @@ function BrandingPreview({
     <BrandMark />
   );
   return (
-    <section className="card pad branding-preview-card">
-      <div className="card-title">
-        <div>
-          <h2>Draft preview</h2>
-          <p className="help">Representative previews use only saved assets.</p>
-        </div>
-        <span className="status info">Not public</span>
-      </div>
-      <fieldset
-        className="branding-preview-tabs pc-plain-fieldset"
-        aria-label="Brand preview surface"
-      >
-        {surfaces.map((item) => (
-          <button
-            className={surface === item.id ? "btn small active" : "btn small"}
-            key={item.id}
-            type="button"
-            aria-pressed={surface === item.id}
-            onClick={() => setSurface(item.id)}
+    <section className="branding-preview">
+      <div className="branding-preview-chrome">
+        <div className="branding-preview-chrome-bar">
+          <div className="branding-preview-chrome-title">
+            <div>
+              <h2>Draft preview</h2>
+              <p className="help">Uses only saved assets.</p>
+            </div>
+            <span
+              className={
+                publicationStatus === "unpublished"
+                  ? "status warning"
+                  : "status ok"
+              }
+            >
+              {publicationStatus === "unpublished"
+                ? "Unpublished changes"
+                : "Published"}
+            </span>
+          </div>
+          <fieldset
+            className="branding-preview-devices pc-plain-fieldset"
+            aria-label="Preview viewport"
           >
-            <item.icon aria-hidden size={14} /> {item.label}
-          </button>
-        ))}
-      </fieldset>
-      <div
-        className={`branding-preview-frame${compact ? " is-mobile" : ""}`}
-        style={
-          {
-            "--event-accent": palette.accent,
-            "--accent-ink": palette.ink,
-            "--accent-on-solid": palette.onAccent,
-          } as CSSProperties
-        }
-      >
-        {surface === "email" ? (
-          <div className="branding-email-preview">
-            <div className="branding-email-card">
-              <div className="branding-preview-identity">
-                {brand}
-                <strong>{eventName}</strong>
-              </div>
-              <h3>Your event update</h3>
-              <p>Here is the latest information from {eventName}.</p>
-              <span className="branding-preview-action">View details</span>
-              <small>Sent with Program Cue</small>
-            </div>
-          </div>
-        ) : (
-          <div className={`branding-surface-preview is-${surface}`}>
-            <header>
-              <div className="branding-preview-identity">
-                {brand}
-                <strong>{eventName}</strong>
-              </div>
-              <span>
-                {surface === "participant" ? "Program Cue" : "Programme"}
-              </span>
-            </header>
-            {bannerUrl && surface === "programme" ? (
-              <img className="branding-preview-banner" src={bannerUrl} alt="" />
-            ) : null}
-            <div className="branding-preview-content">
-              <p className="branding-preview-kicker">
-                {surface === "application"
-                  ? "Call for speakers"
-                  : surface === "participant"
-                    ? "Participant workspace"
-                    : "Published programme"}
-              </p>
-              <h3>
-                {surface === "application"
-                  ? "Share your session"
-                  : surface === "participant"
-                    ? `Welcome to ${eventName}`
-                    : eventName}
-              </h3>
-              <p>
-                {welcomeText || "Event information and next steps appear here."}
-              </p>
-              <span className="branding-preview-action">
-                {surface === "application"
-                  ? "Start application"
-                  : "View details"}
-              </span>
-            </div>
-            <footer>Powered by Program Cue</footer>
-          </div>
-        )}
+            <button
+              className={!compact ? "is-active" : undefined}
+              type="button"
+              aria-pressed={!compact}
+              onClick={() => onViewportChange(false)}
+            >
+              <Monitor aria-hidden size={15} />
+              Desktop
+            </button>
+            <button
+              className={compact ? "is-active" : undefined}
+              type="button"
+              aria-pressed={compact}
+              onClick={() => onViewportChange(true)}
+            >
+              <Smartphone aria-hidden size={15} />
+              Mobile
+            </button>
+          </fieldset>
+        </div>
+        <fieldset
+          className="branding-preview-surfaces pc-plain-fieldset"
+          aria-label="Brand preview surface"
+        >
+          {surfaces.map((item) => (
+            <button
+              className={surface === item.id ? "is-active" : undefined}
+              key={item.id}
+              type="button"
+              aria-pressed={surface === item.id}
+              onClick={() => setSurface(item.id)}
+            >
+              <item.icon aria-hidden size={14} /> {item.label}
+            </button>
+          ))}
+        </fieldset>
       </div>
+      <div className="branding-preview-stage">
+        <div
+          className={`branding-preview-frame${compact ? " is-mobile" : ""}`}
+          style={
+            {
+              "--event-accent": palette.accent,
+              "--accent-ink": palette.ink,
+              "--accent-on-solid": palette.onAccent,
+            } as CSSProperties
+          }
+        >
+          {surface === "email" ? (
+            <div className="branding-email-preview">
+              <div className="branding-email-card">
+                <div className="branding-preview-identity">
+                  {brand}
+                  <strong>{eventName}</strong>
+                </div>
+                <h3>Your event update</h3>
+                <p>Here is the latest information from {eventName}.</p>
+                <span className="branding-preview-action">View details</span>
+                <small>Sent with Program Cue</small>
+              </div>
+            </div>
+          ) : (
+            <div className={`branding-surface-preview is-${surface}`}>
+              <header>
+                <div className="branding-preview-identity">
+                  {brand}
+                  <strong>{eventName}</strong>
+                </div>
+                <span>
+                  {surface === "participant" ? "Program Cue" : "Programme"}
+                </span>
+              </header>
+              {bannerUrl && surface === "programme" ? (
+                <img
+                  className="branding-preview-banner"
+                  src={bannerUrl}
+                  alt=""
+                />
+              ) : null}
+              <div className="branding-preview-content">
+                <p className="branding-preview-kicker">
+                  {surface === "application"
+                    ? "Call for speakers"
+                    : surface === "participant"
+                      ? "Participant workspace"
+                      : "Published programme"}
+                </p>
+                <h3>
+                  {surface === "application"
+                    ? "Share your session"
+                    : surface === "participant"
+                      ? `Welcome to ${eventName}`
+                      : eventName}
+                </h3>
+                <p>
+                  {welcomeText ||
+                    "Event information and next steps appear here."}
+                </p>
+                <span className="branding-preview-action">
+                  {surface === "application"
+                    ? "Start application"
+                    : "View details"}
+                </span>
+              </div>
+              <footer>Powered by Program Cue</footer>
+            </div>
+          )}
+        </div>
+      </div>
+      {footer}
     </section>
   );
 }
@@ -342,6 +399,8 @@ function AssetUpload({
   revision,
   asset,
   disabled,
+  onRemove,
+  removeDisabled,
 }: {
   kind: EventBrandAssetKind;
   revision: number;
@@ -353,57 +412,85 @@ function AssetUpload({
     url: string;
   } | null;
   disabled: boolean;
+  onRemove?: () => void;
+  removeDisabled?: boolean;
 }) {
   const title = kind === "logo" ? "Logo" : "Banner";
   const inputId = `branding-${kind}-upload`;
+  const [selectedName, setSelectedName] = useState<string | null>(null);
+  const prompt = selectedName
+    ? selectedName
+    : asset
+      ? `Replace ${kind}`
+      : `Add ${kind}`;
   return (
-    <div className="branding-asset-control">
-      <div className={`branding-asset-preview is-${kind}`}>
-        {asset ? (
-          <img src={asset.url} alt={`Current draft ${kind}`} />
-        ) : (
-          <span>No {kind}</span>
-        )}
-      </div>
-      <div>
-        <strong>{title}</strong>
+    <div className={`branding-asset is-${kind}`}>
+      <div className="branding-asset-heading">
+        <h3>{title}</h3>
         <p className="help">
           JPEG, PNG or WebP · up to{" "}
           {EVENT_BRAND_ASSET_MAXIMUM_BYTES[kind] / 1_048_576} MB · maximum{" "}
           {EVENT_BRAND_ASSET_DIMENSION_POLICY[kind].maximumWidth} ×{" "}
           {EVENT_BRAND_ASSET_DIMENSION_POLICY[kind].maximumHeight} px
         </p>
+      </div>
+      <Form
+        method="post"
+        encType="multipart/form-data"
+        className="branding-upload-form"
+      >
+        <input type="hidden" name="_intent" value="upload_asset" />
+        <input type="hidden" name="kind" value={kind} />
+        <input type="hidden" name="revision" value={revision} />
+        <div
+          className={`branding-dropzone is-${kind}${asset ? " has-asset" : ""}${selectedName ? " has-selection" : ""}`}
+        >
+          <div className="branding-dropzone-target">
+            <input
+              id={inputId}
+              className="branding-file-input"
+              type="file"
+              name="file"
+              accept="image/jpeg,image/png,image/webp"
+              required
+              disabled={disabled}
+              aria-label={`Choose ${kind} image`}
+              onChange={(event) =>
+                setSelectedName(event.currentTarget.files?.[0]?.name ?? null)
+              }
+            />
+            {selectedName ? null : asset ? (
+              <img src={asset.url} alt={`Current draft ${kind}`} />
+            ) : (
+              <span className="branding-dropzone-mark" aria-hidden="true" />
+            )}
+            <p className="branding-dropzone-prompt">{prompt}</p>
+          </div>
+          <button
+            className={selectedName ? "btn small" : "sr-only"}
+            type="submit"
+            disabled={disabled || !selectedName}
+          >
+            {asset ? `Replace ${kind}` : `Upload ${kind}`}
+          </button>
+          {asset && onRemove && !selectedName ? (
+            <button
+              className="btn small"
+              type="button"
+              onClick={onRemove}
+              disabled={removeDisabled}
+            >
+              Remove {kind} from draft
+            </button>
+          ) : null}
+        </div>
         {asset ? (
-          <p className="help">
+          <p className="branding-asset-current">
             {asset.filename} · {asset.width} × {asset.height} px ·{" "}
             {(asset.sizeBytes / 1_048_576).toFixed(1)} MB
           </p>
         ) : null}
-        <Form
-          method="post"
-          encType="multipart/form-data"
-          className="branding-upload-form"
-        >
-          <input type="hidden" name="_intent" value="upload_asset" />
-          <input type="hidden" name="kind" value={kind} />
-          <input type="hidden" name="revision" value={revision} />
-          <label className="label" htmlFor={inputId}>
-            Choose {kind} image
-          </label>
-          <input
-            id={inputId}
-            className="field"
-            type="file"
-            name="file"
-            accept="image/jpeg,image/png,image/webp"
-            required
-            disabled={disabled}
-          />
-          <button className="btn small" type="submit" disabled={disabled}>
-            {asset ? `Replace ${kind}` : `Upload ${kind}`}
-          </button>
-        </Form>
-      </div>
+      </Form>
     </div>
   );
 }
@@ -482,24 +569,13 @@ export default function AdminBranding({ loaderData }: Route.ComponentProps) {
   return (
     <>
       {dialog}
-      <div className="page-head">
+      <div className="page-head branding-page-head">
         <div>
           <h1>Branding</h1>
           <p>
             Preview one event identity, save it as a draft, then publish it to
             every participant-facing surface.
           </p>
-        </div>
-        <div className="page-actions">
-          <span
-            className={
-              loaderData.hasUnpublishedChanges ? "status warning" : "status ok"
-            }
-          >
-            {loaderData.hasUnpublishedChanges
-              ? "Unpublished changes"
-              : "Published"}
-          </span>
         </div>
       </div>
 
@@ -514,44 +590,58 @@ export default function AdminBranding({ loaderData }: Route.ComponentProps) {
 
       <div className="branding-workspace">
         <div className="branding-editor-stack">
-          <Form method="post" className="card pad branding-editor-card">
+          <Form method="post" className="card pad branding-identity">
             <input type="hidden" name="_intent" value="save_draft" />
             <input type="hidden" name="revision" value={draft.revision} />
             <input type="hidden" name="logoAssetId" value={logoAssetId} />
             <input type="hidden" name="bannerAssetId" value={bannerAssetId} />
-            <div className="card-title">
+            <header className="branding-editor-head">
               <div>
                 <h2>Identity draft</h2>
                 <p className="help">
                   Draft {draft.revision} · published {published.revision}
                 </p>
               </div>
-            </div>
-            <label className="label">
-              Brand accent
-              <span className="branding-accent-control">
-                <input
-                  type="color"
-                  aria-label="Brand accent colour picker"
-                  value={
-                    /^#[0-9a-f]{6}$/i.test(accent)
+            </header>
+            <div className="branding-accent-field">
+              <label className="label" htmlFor="branding-accent">
+                Brand accent
+              </label>
+              <div className="branding-accent-control">
+                <span
+                  className="branding-accent-swatch"
+                  style={{
+                    background: /^#[0-9a-f]{6}$/i.test(accent)
                       ? accent
-                      : DEFAULT_EVENT_BRAND_ACCENT
-                  }
-                  onChange={(event) => setAccent(event.target.value)}
-                />
+                      : DEFAULT_EVENT_BRAND_ACCENT,
+                  }}
+                >
+                  <input
+                    type="color"
+                    aria-label="Brand accent colour picker"
+                    value={
+                      /^#[0-9a-f]{6}$/i.test(accent)
+                        ? accent
+                        : DEFAULT_EVENT_BRAND_ACCENT
+                    }
+                    onChange={(event) => setAccent(event.target.value)}
+                  />
+                </span>
                 <input
-                  className="field"
+                  id="branding-accent"
+                  className="branding-accent-hex"
                   name="accent"
                   value={accent}
                   pattern="#[0-9a-fA-F]{6}"
                   maxLength={7}
+                  spellCheck={false}
+                  autoComplete="off"
                   required
                   onChange={(event) => setAccent(event.target.value)}
                 />
-              </span>
-            </label>
-            <label className="label mt">
+              </div>
+            </div>
+            <label className="label">
               Welcome message
               <textarea
                 className="textarea"
@@ -562,7 +652,7 @@ export default function AdminBranding({ loaderData }: Route.ComponentProps) {
                 placeholder="Welcome. Use this workspace to manage your application and event preparation."
               />
             </label>
-            <label className="label mt">
+            <label className="label">
               Support URL
               <input
                 className="field"
@@ -574,7 +664,12 @@ export default function AdminBranding({ loaderData }: Route.ComponentProps) {
                 onChange={(event) => setSupportUrl(event.target.value)}
               />
             </label>
-            <div className="page-actions mt">
+            <div className="branding-identity-actions">
+              <p className="help">
+                {unsaved
+                  ? "Unsaved draft changes"
+                  : "Draft matches the last save"}
+              </p>
               <button
                 className="btn primary"
                 type="submit"
@@ -587,8 +682,8 @@ export default function AdminBranding({ loaderData }: Route.ComponentProps) {
             </div>
           </Form>
 
-          <section className="card pad branding-editor-card">
-            <div className="card-title">
+          <section className="card pad branding-images">
+            <header className="branding-editor-head">
               <div>
                 <h2>Brand images</h2>
                 <p className="help">
@@ -596,7 +691,7 @@ export default function AdminBranding({ loaderData }: Route.ComponentProps) {
                   Only published selections are available publicly.
                 </p>
               </div>
-            </div>
+            </header>
             {unsaved ? (
               <p className="validation-item warning">
                 Save the text and colour draft before uploading an image.
@@ -607,58 +702,21 @@ export default function AdminBranding({ loaderData }: Route.ComponentProps) {
               revision={draft.revision}
               asset={draft.logo}
               disabled={unsaved || busy}
+              onRemove={draft.logo ? () => setLogoAssetId("") : undefined}
+              removeDisabled={busy}
             />
-            {draft.logo ? (
-              <button
-                className="btn small"
-                type="button"
-                onClick={() => setLogoAssetId("")}
-                disabled={busy}
-              >
-                Remove logo from draft
-              </button>
-            ) : null}
             <AssetUpload
               kind="banner"
               revision={draft.revision}
               asset={draft.banner}
               disabled={unsaved || busy}
+              onRemove={draft.banner ? () => setBannerAssetId("") : undefined}
+              removeDisabled={busy}
             />
-            {draft.banner ? (
-              <button
-                className="btn small"
-                type="button"
-                onClick={() => setBannerAssetId("")}
-                disabled={busy}
-              >
-                Remove banner from draft
-              </button>
-            ) : null}
           </section>
         </div>
 
         <div className="branding-preview-stack">
-          <fieldset
-            className="branding-preview-toolbar pc-plain-fieldset"
-            aria-label="Preview viewport"
-          >
-            <button
-              className={!mobilePreview ? "btn small active" : "btn small"}
-              type="button"
-              aria-pressed={!mobilePreview}
-              onClick={() => setMobilePreview(false)}
-            >
-              <Monitor aria-hidden size={14} /> Desktop
-            </button>
-            <button
-              className={mobilePreview ? "btn small active" : "btn small"}
-              type="button"
-              aria-pressed={mobilePreview}
-              onClick={() => setMobilePreview(true)}
-            >
-              <Smartphone aria-hidden size={14} /> Mobile
-            </button>
-          </fieldset>
           <BrandingPreview
             eventName={loaderData.event.name}
             accent={accent}
@@ -666,24 +724,26 @@ export default function AdminBranding({ loaderData }: Route.ComponentProps) {
             bannerUrl={bannerUrl}
             welcomeText={welcomeText}
             compact={mobilePreview}
+            onViewportChange={setMobilePreview}
+            publicationStatus={
+              loaderData.hasUnpublishedChanges ? "unpublished" : "published"
+            }
+            footer={
+              <div className="branding-preview-commit">
+                <p className="help">Publishing is explicit and audited.</p>
+                <button
+                  className="btn primary"
+                  type="button"
+                  disabled={
+                    unsaved || busy || !loaderData.hasUnpublishedChanges
+                  }
+                  onClick={publish}
+                >
+                  Publish branding
+                </button>
+              </div>
+            }
           />
-          <section className="card pad branding-publish-card">
-            <div>
-              <h2>Publish saved draft</h2>
-              <p className="help">
-                Publishing is explicit and audited. Program Cue attribution
-                remains visible.
-              </p>
-            </div>
-            <button
-              className="btn primary"
-              type="button"
-              disabled={unsaved || busy || !loaderData.hasUnpublishedChanges}
-              onClick={publish}
-            >
-              Publish branding
-            </button>
-          </section>
         </div>
       </div>
     </>

@@ -12,6 +12,7 @@ import {
 import { ZodError, type ZodType, z } from "zod";
 import { CommunicationDraftPreview } from "~/components/communication-draft-preview";
 import { useConfirm } from "~/components/ui/confirm-dialog";
+import { PageHeader } from "~/components/ui/page-header";
 import { EmptyState } from "~/components/ui/states";
 import {
   type AudienceType,
@@ -36,6 +37,7 @@ import { RecipientLimitError } from "~/modules/communications/recipient-query.se
 import { EventService } from "~/modules/events/event-service.server";
 import { requireCurrentEventRole } from "~/platform/auth/current-event.server";
 import { getCloudflareContext } from "~/platform/cloudflare-context";
+import "~/styles/workspace-remaining.css";
 import type { Route } from "./+types/communication-composer";
 
 export const meta = () => [{ title: "Compose Communication · Program Cue" }];
@@ -481,31 +483,28 @@ export default function CommunicationComposer({
   const confirmedPreviewReady = Boolean(preview && !configurationDirty);
 
   return (
-    <>
+    <div className="pc-compose">
       {dialog}
-      <div className="page-head">
-        <div>
-          <span className="pc-page-eyebrow">
-            Durable communication workflow
-          </span>
-          <h1>{draft ? "Compose communication" : "New communication"}</h1>
-          <p>
-            Configure a saved draft, recompute the exact audience, then confirm
-            the same record for delivery.
-          </p>
-        </div>
-        <div className="page-actions">
-          {draft ? (
-            <span className="status info">Draft revision {draft.revision}</span>
-          ) : null}
-          <Link className="btn" to="/admin/communications">
-            Communications Centre
-          </Link>
-        </div>
-      </div>
+      <PageHeader
+        eyebrow="Durable communication workflow"
+        title={draft ? "Compose communication" : "New communication"}
+        description="Configure a saved draft, recompute the exact audience, then confirm the same record for delivery."
+        actions={
+          <>
+            {draft ? (
+              <span className="status info">
+                Draft revision {draft.revision}
+              </span>
+            ) : null}
+            <Link className="btn" to="/admin/communications">
+              Communications Centre
+            </Link>
+          </>
+        }
+      />
 
-      <ol className="comms-compose-steps" aria-label="Communication workflow">
-        <li className={draft ? "is-complete" : "is-current"}>1. Save draft</li>
+      <ol className="pc-compose-steps" aria-label="Communication workflow">
+        <li className={draft ? "is-complete" : "is-current"}>Save draft</li>
         <li
           className={
             confirmedPreviewReady
@@ -515,10 +514,10 @@ export default function CommunicationComposer({
                 : undefined
           }
         >
-          2. Verify preview
+          Verify preview
         </li>
         <li className={confirmedPreviewReady ? "is-current" : undefined}>
-          3. Confirm delivery
+          Confirm delivery
         </li>
       </ol>
 
@@ -536,7 +535,7 @@ export default function CommunicationComposer({
       ) : null}
 
       {!draft ? (
-        <section className="card pad">
+        <section className="pc-compose-surface">
           <div className="card-title">
             <div>
               <h2>1. Create the durable draft</h2>
@@ -572,8 +571,8 @@ export default function CommunicationComposer({
           )}
         </section>
       ) : (
-        <div className="stack">
-          <section className="card pad">
+        <div className="pc-compose-surface">
+          <section>
             <div className="card-title">
               <div>
                 <h2>1. Saved draft configuration</h2>
@@ -607,7 +606,7 @@ export default function CommunicationComposer({
             </Form>
           </section>
 
-          <section className="card pad">
+          <section>
             <div className="card-title">
               <div>
                 <h2>2. Verify the authoritative preview</h2>
@@ -653,6 +652,7 @@ export default function CommunicationComposer({
           </section>
 
           <Form
+            className="pc-compose-discard"
             method="post"
             onSubmit={(event) => {
               event.preventDefault();
@@ -676,6 +676,6 @@ export default function CommunicationComposer({
           </Form>
         </div>
       )}
-    </>
+    </div>
   );
 }

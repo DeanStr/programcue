@@ -1,21 +1,11 @@
 /* Final review refinements */
 @media (min-width: 1351px) {
-  .review-score {
-    display: flex;
-    flex-direction: column;
-    max-height: calc(100dvh - 145px);
-    overflow: auto;
-    scroll-padding-bottom: 86px;
-  }
-  .review-score > .pad {
-    flex: 1 0 auto;
-  }
   .review-score .sticky-actions {
-    margin-top: auto;
+    margin-top: var(--space-3);
   }
   /* Reading width, not container width: past this point the queue is a rail and
      the extra column goes to the proposal, which is the one being read. */
   .reviewer-shell .review-layout {
-    grid-template-columns: 260px minmax(360px, 1.25fr) minmax(400px, 1fr);
+    grid-template-columns: 248px minmax(360px, 1.3fr) minmax(420px, 1fr);
   }
 }

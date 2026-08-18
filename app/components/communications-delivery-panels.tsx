@@ -75,19 +75,21 @@ export function DeliveryReadiness({
           Delivery settings
         </Link>
       </header>
-      <ul className="card comms-readiness-cells">
+      <p className="comms-readiness-line">
+        <span className="comms-readiness-state">
+          {blocked ? "Blocked" : "Ready"}
+        </span>
         {cells.map((cell) => (
-          <li
+          <span
             key={cell.label}
-            className="comms-readiness-cell"
+            className="comms-readiness-fact"
             data-ready={cell.ready}
           >
-            <strong>{cell.label}</strong>
-            <span className="comms-readiness-state">{cell.state}</span>
-            <small>{cell.detail}</small>
-          </li>
+            <strong>{cell.label}</strong> {cell.state}
+            {blocked && !cell.ready ? ` — ${cell.detail}` : ""}
+          </span>
         ))}
-      </ul>
+      </p>
     </section>
   );
 }

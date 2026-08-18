@@ -236,8 +236,12 @@ export function ReviewScorePanel() {
         <div className="pad review-score-body">
           <div className="card-title review-score-head">
             <h2 id="review-score-title">Score {submission.sourceType}</h2>
-            <span className="status info right">
-              {completedCriterionCount} / {requiredCriterionCount}
+            <span className="review-score-progress pc-num">
+              <span className="review-score-progress-count">
+                {completedCriterionCount}
+              </span>
+              <span aria-hidden="true">/</span>
+              {requiredCriterionCount}
               <span className="sr-only"> required criteria complete</span>
             </span>
             <button
@@ -255,46 +259,51 @@ export function ReviewScorePanel() {
               data-state={conflictChoice}
             >
               <legend className="review-conflict-legend">
-                <span className="review-step-index" aria-hidden="true">
-                  1
-                </span>
                 Conflict of interest
-                <span className="status warning">Required</span>
+                {conflictChoice === "unanswered" ? (
+                  <span className="review-conflict-required">Required</span>
+                ) : conflictChoice === "affirmed" ? (
+                  <span className="review-conflict-cleared">Cleared</span>
+                ) : (
+                  <span className="review-conflict-declared">Declared</span>
+                )}
               </legend>
               <p className="subtle review-conflict-question">
-                Do you have a personal, professional or financial interest in
-                this {submission.sourceType} or its speakers?
+                Personal, professional or financial interest in this{" "}
+                {submission.sourceType} or its speakers?
               </p>
-              <label className="review-conflict-option">
-                <input
-                  type="radio"
-                  name="conflictAffirmed"
-                  value="affirmed"
-                  defaultChecked={conflictChoice === "affirmed"}
-                />
-                <span>
-                  <strong>No conflict</strong>
-                  <small className="subtle">
-                    I can review and score this {submission.sourceType}{" "}
-                    impartially.
-                  </small>
-                </span>
-              </label>
-              <label className="review-conflict-option">
-                <input
-                  type="radio"
-                  name="conflictAffirmed"
-                  value="conflict"
-                  defaultChecked={conflictChoice === "conflict"}
-                />
-                <span>
-                  <strong>I have a conflict</strong>
-                  <small className="subtle">
-                    Scoring is disabled and this assignment returns to the
-                    committee for reassignment.
-                  </small>
-                </span>
-              </label>
+              <div className="review-conflict-choices">
+                <label
+                  className="review-conflict-option"
+                  data-choice="affirmed"
+                >
+                  <input
+                    type="radio"
+                    name="conflictAffirmed"
+                    value="affirmed"
+                    defaultChecked={conflictChoice === "affirmed"}
+                  />
+                  <span>
+                    <strong>No conflict</strong>
+                    <small>I can score this impartially</small>
+                  </span>
+                </label>
+                <label
+                  className="review-conflict-option"
+                  data-choice="conflict"
+                >
+                  <input
+                    type="radio"
+                    name="conflictAffirmed"
+                    value="conflict"
+                    defaultChecked={conflictChoice === "conflict"}
+                  />
+                  <span>
+                    <strong>I have a conflict</strong>
+                    <small>Return this assignment</small>
+                  </span>
+                </label>
+              </div>
               {conflictChoice === "conflict" ? (
                 <div className="review-conflict-action" role="alert">
                   <AlertTriangle aria-hidden size={16} />
@@ -317,8 +326,7 @@ export function ReviewScorePanel() {
                 </div>
               ) : conflictChoice === "unanswered" ? (
                 <p className="review-conflict-pending subtle">
-                  Answer this before submitting. You can score a draft first,
-                  but the review will not submit until the question is answered.
+                  Answer before submitting. Drafts can be scored first.
                 </p>
               ) : null}
             </fieldset>
@@ -402,49 +410,63 @@ export function ReviewScorePanel() {
                     ) : null}
                   </span>
                   {scale ? (
-                    <div
-                      className="review-scale"
-                      data-review-scale=""
-                      role="radiogroup"
-                      aria-labelledby={labelId}
-                      aria-describedby={`${descriptionId} ${weightId}`}
-                    >
-                      {/* An optional criterion has to be able to go back to
-                          unanswered; a dropdown could, and a row of segments
-                          only can if one of them says so. */}
-                      {!criterion.required ? (
-                        <label className="review-scale-option is-clear">
-                          <input
-                            className="review-scale-input"
-                            type="radio"
-                            name={`score:${criterion.id}`}
-                            value=""
-                            defaultChecked={storedValue === ""}
-                            disabled={scoringLocked}
-                          />
-                          <span>
-                            <span aria-hidden="true">—</span>
-                            <span className="sr-only">Not scored</span>
-                          </span>
-                        </label>
+                    <div className="review-scale-block">
+                      <div
+                        className="review-scale"
+                        data-review-scale=""
+                        data-size={String(scale.length)}
+                        role="radiogroup"
+                        aria-labelledby={labelId}
+                        aria-describedby={`${descriptionId} ${weightId}`}
+                      >
+                        {/* An optional criterion has to be able to go back to
+                            unanswered; a dropdown could, and a row of segments
+                            only can if one of them says so. */}
+                        {!criterion.required ? (
+                          <label
+                            className="review-scale-option is-clear"
+                            data-value=""
+                          >
+                            <input
+                              className="review-scale-input"
+                              type="radio"
+                              name={`score:${criterion.id}`}
+                              value=""
+                              defaultChecked={storedValue === ""}
+                              disabled={scoringLocked}
+                            />
+                            <span>
+                              <span aria-hidden="true">—</span>
+                              <span className="sr-only">Not scored</span>
+                            </span>
+                          </label>
+                        ) : null}
+                        {scale.map((option) => (
+                          <label
+                            className="review-scale-option"
+                            data-value={option.value}
+                            key={option.value}
+                          >
+                            <input
+                              className="review-scale-input"
+                              type="radio"
+                              name={`score:${criterion.id}`}
+                              value={option.value}
+                              defaultChecked={storedValue === option.value}
+                              required={criterion.required}
+                              disabled={scoringLocked}
+                            />
+                            <span className="pc-num">{option.label}</span>
+                          </label>
+                        ))}
+                      </div>
+                      {criterion.inputType === "scale_5" ||
+                      criterion.inputType === "scale_10" ? (
+                        <div className="review-scale-ends" aria-hidden="true">
+                          <span>Weak</span>
+                          <span>Strong</span>
+                        </div>
                       ) : null}
-                      {scale.map((option) => (
-                        <label
-                          className="review-scale-option"
-                          key={option.value}
-                        >
-                          <input
-                            className="review-scale-input"
-                            type="radio"
-                            name={`score:${criterion.id}`}
-                            value={option.value}
-                            defaultChecked={storedValue === option.value}
-                            required={criterion.required}
-                            disabled={scoringLocked}
-                          />
-                          <span className="pc-num">{option.label}</span>
-                        </label>
-                      ))}
                     </div>
                   ) : criterion.inputType === "free_text" ? (
                     <textarea
@@ -497,40 +519,76 @@ export function ReviewScorePanel() {
             </div>
           ) : null}
           <div className="review-overall-fields">
-            <label className="label">
-              Overall recommendation
-              <select
-                className="select"
-                name="recommendation"
-                defaultValue={workspace.review?.recommendation ?? ""}
-                required
-                disabled={readOnly}
+            <div className="review-choice-field">
+              <span
+                className="review-choice-label"
+                id="review-recommendation-label"
               >
-                <option value="">Choose…</option>
-                <option value="accept">Accept</option>
-                <option value="minor_changes">Minor changes</option>
-                <option value="conditional_accept">Conditional accept</option>
-                <option value="waitlist">Waitlist</option>
-                <option value="reject">Reject</option>
-              </select>
-            </label>
-            <label className="label">
-              Confidence
-              <select
-                className="select"
-                name="confidence"
-                defaultValue={workspace.review?.confidence ?? ""}
-                required
-                disabled={readOnly}
+                Recommendation
+              </span>
+              <div
+                className="review-choice-scale"
+                role="radiogroup"
+                aria-labelledby="review-recommendation-label"
               >
-                <option value="">Choose…</option>
-                {[1, 2, 3, 4, 5].map((score) => (
-                  <option key={score} value={score}>
-                    {score} / 5
-                  </option>
+                {(
+                  [
+                    ["accept", "Accept"],
+                    ["minor_changes", "Minor"],
+                    ["conditional_accept", "Conditional"],
+                    ["waitlist", "Waitlist"],
+                    ["reject", "Reject"],
+                  ] as const
+                ).map(([value, label]) => (
+                  <label className="review-choice-option" key={value}>
+                    <input
+                      className="review-scale-input"
+                      type="radio"
+                      name="recommendation"
+                      value={value}
+                      defaultChecked={
+                        workspace.review?.recommendation === value
+                      }
+                      required
+                      disabled={readOnly}
+                    />
+                    <span>{label}</span>
+                  </label>
                 ))}
-              </select>
-            </label>
+              </div>
+            </div>
+            <div className="review-choice-field">
+              <span
+                className="review-choice-label"
+                id="review-confidence-label"
+              >
+                Confidence
+              </span>
+              <div
+                className="review-choice-scale"
+                data-size="5"
+                role="radiogroup"
+                aria-labelledby="review-confidence-label"
+              >
+                {[1, 2, 3, 4, 5].map((score) => (
+                  <label className="review-choice-option" key={score}>
+                    <input
+                      className="review-scale-input"
+                      type="radio"
+                      name="confidence"
+                      value={score}
+                      defaultChecked={
+                        String(workspace.review?.confidence ?? "") ===
+                        String(score)
+                      }
+                      required
+                      disabled={readOnly}
+                    />
+                    <span className="pc-num">{score}</span>
+                  </label>
+                ))}
+              </div>
+            </div>
           </div>
           <div className="review-notes">
             <ReviewNoteField
@@ -562,7 +620,9 @@ export function ReviewScorePanel() {
             </span>
           ) : (
             <>
-              <span className="review-save-state">
+              <span
+                className={`review-save-state${saveFailed ? " is-failed" : dirty ? " is-dirty" : workspace.review ? " is-saved" : ""}`}
+              >
                 {fetcher.state !== "idle"
                   ? "Saving…"
                   : saveFailed
@@ -573,45 +633,47 @@ export function ReviewScorePanel() {
                         ? "Saved"
                         : "No draft yet"}
               </span>
-              <button
-                ref={saveDraftTriggerRef}
-                className="btn review-save-draft"
-                type="submit"
-                name="intent"
-                value="save"
-                formNoValidate
-                disabled={fetcher.state !== "idle"}
-              >
-                Save draft
-              </button>
-              <button
-                ref={submitReviewTriggerRef}
-                className="btn"
-                type="button"
-                disabled={fetcher.state !== "idle" || !submitAllowed}
-                title={submitBlockedReason}
-                onClick={() => {
-                  if (!formRef.current?.reportValidity()) return;
-                  clearAutosaveTimer();
-                  setSubmitMode("stay");
-                }}
-              >
-                Submit review
-              </button>
-              <button
-                ref={submitNextTriggerRef}
-                className="btn primary"
-                type="button"
-                disabled={fetcher.state !== "idle" || !submitAllowed}
-                title={submitBlockedReason}
-                onClick={() => {
-                  if (!formRef.current?.reportValidity()) return;
-                  clearAutosaveTimer();
-                  setSubmitMode("next");
-                }}
-              >
-                Submit and open next
-              </button>
+              <div className="review-action-group">
+                <button
+                  ref={saveDraftTriggerRef}
+                  className="btn review-save-draft"
+                  type="submit"
+                  name="intent"
+                  value="save"
+                  formNoValidate
+                  disabled={fetcher.state !== "idle"}
+                >
+                  Save draft
+                </button>
+                <button
+                  ref={submitReviewTriggerRef}
+                  className="btn review-submit-stay"
+                  type="button"
+                  disabled={fetcher.state !== "idle" || !submitAllowed}
+                  title={submitBlockedReason}
+                  onClick={() => {
+                    if (!formRef.current?.reportValidity()) return;
+                    clearAutosaveTimer();
+                    setSubmitMode("stay");
+                  }}
+                >
+                  Submit review
+                </button>
+                <button
+                  ref={submitNextTriggerRef}
+                  className="btn primary"
+                  type="button"
+                  disabled={fetcher.state !== "idle" || !submitAllowed}
+                  title={submitBlockedReason}
+                  onClick={() => {
+                    if (!formRef.current?.reportValidity()) return;
+                    clearAutosaveTimer();
+                    setSubmitMode("next");
+                  }}
+                >
+                  Submit and open next
+                </button>
+              </div>
               {submitBlockedReason ? (
                 <p className="review-submit-block subtle" role="status">
                   {submitBlockedReason}

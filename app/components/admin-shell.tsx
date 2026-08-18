@@ -789,9 +789,9 @@ function AdminPageFrame({
 }) {
   return (
     <main id="main" className="main" tabIndex={-1}>
-      <div className="pc-context-bar">
+      <div className="pc-context-bar admin-context-bar">
         <nav aria-label="Breadcrumb">
-          <ol className="pc-breadcrumbs">
+          <ol className="pc-breadcrumbs admin-breadcrumbs">
             <li>
               <Link to="/events/select" reloadDocument>
                 {currentEventOption.organisationName}

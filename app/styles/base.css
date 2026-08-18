@@ -51,18 +51,23 @@ a {
   border: 0;
 }
 .skip-link {
-  position: fixed;
-  left: 12px;
-  top: -50px;
+  /* Absolute, not fixed: a focused fixed skip-link is stamped onto every
+     full-page screenshot slice and lands on Overdue tasks / Status. */
+  position: absolute;
+  left: var(--space-3);
+  top: 0;
   z-index: 9999;
+  transform: translateY(-100%);
   background: var(--surface);
   color: var(--ink);
-  padding: var(--space-3) var(--space-4);
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--border);
   border-radius: var(--radius-sm);
-  box-shadow: var(--shadow);
+  box-shadow: var(--elev-3);
 }
-.skip-link:focus {
-  top: 12px;
+.skip-link:focus-visible {
+  top: var(--space-3);
+  transform: none;
 }
 :focus-visible {
   outline: var(--focus-width) solid var(--focus-ring);
@@ -184,16 +189,16 @@ a {
   border-left: 3px solid transparent;
   padding: var(--space-2) var(--space-4) var(--space-2)
     calc(var(--space-4) - 3px);
-  color: #d9e2f2;
-  font-weight: var(--weight-semibold);
+  color: var(--nav-text);
+  font-weight: var(--weight-medium);
   line-height: 1.2;
   transition:
     background-color var(--dur-fast) var(--ease-out),
     color var(--dur-fast) var(--ease-out);
 }
 .nav a:hover {
-  background: rgba(255, 255, 255, 0.06);
-  color: white;
+  background: rgba(247, 245, 241, 0.06);
+  color: #f4f4ef;
 }
 /* "Where I am" should not out-shout "what to click", so location is an edge
    marker and a brighter label — not a saturated bar the width of the rail.
@@ -201,9 +206,9 @@ a {
    load-bearing alone. */
 .nav a.active {
   border-left-color: var(--brand-500);
-  background: rgba(255, 255, 255, 0.07);
-  color: white;
-  font-weight: var(--weight-bold);
+  background: rgba(247, 245, 241, 0.08);
+  color: #f4f4ef;
+  font-weight: var(--weight-semibold);
 }
 .nav .nav-icon {
   display: grid;
@@ -243,7 +248,7 @@ a {
   background: var(--amber);
 }
 .sidebar-demo:hover {
-  color: white;
+  color: #f4f4ef;
 }
 .sidebar-collapse {
   display: flex;
@@ -258,8 +263,8 @@ a {
   font-size: var(--text-2xs);
 }
 .sidebar-collapse:hover {
-  background: rgba(255, 255, 255, 0.06);
-  color: white;
+  background: rgba(247, 245, 241, 0.06);
+  color: #f4f4ef;
 }
 .topbar {
   grid-area: topbar;
@@ -275,7 +280,7 @@ a {
   gap: var(--space-4);
   padding: var(--space-3) var(--space-5);
   z-index: 50;
-  box-shadow: 0 5px 18px rgba(19, 32, 31, 0.035);
+  box-shadow: 0 4px 16px rgba(19, 32, 31, 0.04);
 }
 .event-switcher {
   display: flex;
@@ -284,7 +289,7 @@ a {
   min-width: 285px;
   padding: var(--space-2) var(--space-3);
   border: 1px solid var(--line);
-  border-radius: var(--radius);
+  border-radius: var(--radius-sm);
   background: var(--surface);
   /* Buttons default to text-align:center, which was centring the event name
      over its own left-aligned date line. */
@@ -358,20 +363,21 @@ a {
   gap: var(--space-2);
   border: 1px solid var(--line);
   background: var(--soft);
-  border-radius: var(--radius);
-  padding: var(--space-3) var(--space-3);
+  border-radius: var(--radius-sm);
+  padding: var(--space-2) var(--space-3);
   color: var(--muted);
   text-align: left;
 }
 .command-trigger kbd {
   margin-left: auto;
-  background: var(--surface);
-  border: 1px solid var(--line);
-  border-bottom-width: 2px;
-  border-radius: var(--radius-xs);
-  padding: 1px var(--space-2);
+  flex: none;
+  background: transparent;
+  border: 0;
+  padding: 0;
   font-size: var(--text-2xs);
-  color: var(--text-secondary);
+  font-weight: var(--weight-medium);
+  color: var(--text-tertiary);
+  line-height: 20px;
 }
 .top-actions {
   margin-left: auto;
@@ -381,13 +387,13 @@ a {
 }
 .icon-btn,
 .btn {
-  border: 1px solid var(--line);
+  border: 1px solid var(--border-strong);
   background: var(--surface);
   color: var(--ink);
   border-radius: var(--radius-sm);
-  min-height: 38px;
+  min-height: var(--control-height);
   padding: var(--space-2) var(--space-3);
-  font-weight: var(--weight-semibold);
+  font-weight: var(--weight-medium);
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -397,45 +403,50 @@ a {
     background-color var(--dur-fast) var(--ease-out),
     border-color var(--dur-fast) var(--ease-out),
     box-shadow var(--dur-fast) var(--ease-out),
+    color var(--dur-fast) var(--ease-out),
     transform var(--dur-fast) var(--ease-out);
 }
 .icon-btn {
-  width: 40px;
+  width: var(--control-height);
   padding: 0;
 }
 .btn:hover,
 .icon-btn:hover {
-  border-color: var(--brand-200);
-  background: var(--brand-50);
+  border-color: var(--border-strong);
+  background: var(--surface-sunken);
 }
 /* Nothing in the product acknowledged pointer-down, which is the main reason
    a fast interface reads as unresponsive. */
 .btn:active,
 .icon-btn:active {
   transform: translateY(1px);
-  scale: 0.985;
 }
 /* biome-ignore lint/style/noDescendingSpecificity: Component and state variants intentionally precede shared primitives; their higher specificity preserves the intended override. */
 .btn.primary {
-  /* Flat, not a gradient: state is never encoded in a gradient, and opacity
-     on a gradient reads as lavender-primary rather than disabled. */
+  /* Flat. A floating primary was the kit-button tell: Linear and Stripe
+     paint emphasis with colour, not a drop shadow. */
   background: var(--brand-600);
   border-color: transparent;
   color: var(--text-inverse);
-  box-shadow: var(--elev-2);
+  box-shadow: none;
+  font-weight: var(--weight-semibold);
 }
 /* biome-ignore lint/style/noDescendingSpecificity: Component and state variants intentionally precede shared primitives; their higher specificity preserves the intended override. */
 .btn.primary:hover {
   background: var(--brand-700);
+  border-color: transparent;
+}
+.btn.primary:active {
+  background: var(--brand-900);
 }
 .btn.danger {
-  color: var(--red);
+  color: var(--state-bad-text);
   border-color: var(--state-bad-border);
   background: var(--surface);
 }
 .btn.danger:hover {
-  border-color: var(--red);
-  background: #fff5f5;
+  border-color: var(--state-bad-solid);
+  background: var(--state-bad-surface);
 }
 .btn.warning {
   color: var(--state-warn-text);
@@ -445,14 +456,44 @@ a {
 .btn.ghost {
   border-color: transparent;
   background: transparent;
+  color: var(--text-secondary);
 }
 .btn.ghost:hover {
   background: var(--surface-sunken);
+  border-color: transparent;
+  color: var(--text-primary);
 }
 .btn.small {
-  min-height: 32px;
-  padding: var(--space-2) var(--space-3);
+  min-height: var(--control-height-sm);
+  padding: var(--space-1) var(--space-3);
   font-size: var(--text-2xs);
+}
+/* Row actions are not page primaries. `.btn.small.primary` was painting a
+   copper sale down every Tasks / Review / Operations table. */
+.btn.small.primary,
+.data-table .btn.primary,
+.table-wrap .btn.primary,
+.row-actions .btn.primary {
+  background: var(--surface);
+  border-color: var(--border-strong);
+  color: var(--text-primary);
+  font-weight: var(--weight-medium);
+  box-shadow: none;
+}
+.btn.small.primary:hover,
+.data-table .btn.primary:hover,
+.table-wrap .btn.primary:hover,
+.row-actions .btn.primary:hover {
+  background: var(--surface-sunken);
+  border-color: var(--border-strong);
+  color: var(--text-primary);
+}
+.pc-state-action .btn.primary,
+.pc-state-action .btn.small.primary {
+  background: var(--brand-600);
+  border-color: transparent;
+  color: var(--text-inverse);
+  font-weight: var(--weight-semibold);
 }
 /* One disabled treatment for every variant, including primary. */
 .btn:disabled,
@@ -511,8 +552,8 @@ a {
   border: 2px solid #fff;
   border-radius: var(--radius-full);
   font-size: var(--text-2xs);
-  min-width: 17px;
-  height: 17px;
+  min-width: 16px;
+  height: 16px;
   display: grid;
   place-items: center;
 }
@@ -671,7 +712,9 @@ a {
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: var(--radius);
-  box-shadow: var(--elev-1);
+  /* Paper on paper. Shadow is for things that float — dialogs, menus,
+     overlays — not every tile on the canvas. */
+  box-shadow: none;
   transition:
     border-color var(--dur-fast) var(--ease-out),
     box-shadow var(--dur-fast) var(--ease-out);
@@ -680,13 +723,15 @@ a {
   padding: var(--space-5);
 }
 /* A panel nested inside a card recedes instead of competing: sunken tint,
-   no border, no shadow. Stops the three-deep white-on-white nesting on
-   resources-admin, programme-admin and communications. */
+   no border, no shadow, a tighter radius. The leftover 1px transparent
+   border still drew a seam and kept the parent radius, which is why nested
+   chrome stayed loud. */
 .card .card,
 .card .panel {
-  border-color: transparent;
+  border: 0;
   background: var(--surface-sunken);
   box-shadow: none;
+  border-radius: var(--radius-sm);
 }
 .card h2,
 .card h3 {
@@ -817,7 +862,7 @@ a {
   overflow-x: auto;
 }
 .empty {
-  padding: var(--space-8);
+  padding: var(--space-6) var(--space-4);
   text-align: center;
   color: var(--muted);
 }
@@ -892,39 +937,59 @@ a {
 .status {
   display: inline-flex;
   align-items: center;
-  gap: var(--space-1);
-  border-radius: var(--radius-full);
-  padding: var(--space-1) var(--space-2);
+  gap: 6px;
+  border: 0;
+  border-radius: 0;
+  padding: 0;
+  background: transparent;
   font-size: var(--text-2xs);
-  font-weight: var(--weight-bold);
+  font-weight: var(--weight-medium);
   white-space: nowrap;
-}
-.status.success {
-  background: var(--state-good-surface);
-  color: var(--state-good-text);
-}
-.status.warning {
-  background: var(--state-warn-surface);
-  color: var(--state-warn-text);
-}
-.status.danger {
-  background: var(--state-bad-surface);
-  color: var(--state-bad-text);
-}
-.status.info {
-  background: var(--brand-50);
-  color: var(--brand-700);
-}
-.status.ai {
-  background: var(--brand-100);
-  color: var(--brand-700);
-}
-.status.neutral {
-  background: #f1f5f9;
   color: var(--text-secondary);
 }
+.status::before {
+  content: "";
+  width: 6px;
+  height: 6px;
+  flex: none;
+  border-radius: var(--radius-full);
+  background: currentColor;
+}
+.status:has(svg)::before {
+  display: none;
+}
+.status.success {
+  background: transparent;
+  color: var(--state-good-text);
+  border: 0;
+}
+.status.warning {
+  background: transparent;
+  color: var(--state-warn-text);
+  border: 0;
+}
+.status.danger {
+  background: transparent;
+  color: var(--state-bad-text);
+  border: 0;
+}
+.status.info {
+  background: transparent;
+  color: var(--brand-700);
+  border: 0;
+}
+.status.ai {
+  background: transparent;
+  color: var(--brand-700);
+  border: 0;
+}
+.status.neutral {
+  background: transparent;
+  color: var(--text-secondary);
+  border: 0;
+}
 .progress {
-  height: 7px;
+  height: 4px;
   border-radius: var(--radius-full);
   background: var(--track);
   overflow: hidden;

@@ -42,7 +42,7 @@ export function ConfirmDialog({
   return (
     <Dialog
       title={title}
-      icon={<AlertTriangle aria-hidden size={17} />}
+      icon={<AlertTriangle aria-hidden size={16} />}
       tone={tone === "danger" ? "danger" : "info"}
       size="sm"
       onClose={onCancel}

@@ -1,4 +1,4 @@
-import { Database, Plus, ShieldCheck } from "lucide-react";
+import { Database, Plus } from "lucide-react";
 import { useState } from "react";
 import { data, Form, Link, useActionData, useNavigation } from "react-router";
 import { ZodError } from "zod";
@@ -7,6 +7,7 @@ import { DerivedSlugField } from "~/components/ui/derived-slug-field";
 import { ErrorSummary } from "~/components/ui/error-summary";
 import { EventDateRangeFields } from "~/components/ui/event-date-range-fields";
 import { Field } from "~/components/ui/field";
+import { PageHeader } from "~/components/ui/page-header";
 import { TimezoneField } from "~/components/ui/timezone-field";
 import { zodFieldErrors } from "~/lib/form-errors";
 import { shortReference } from "~/lib/short-reference";
@@ -20,6 +21,7 @@ import {
 import { EventRepositoryProvisioningError } from "~/modules/events/event-repository-provisioning.server";
 import { requireCurrentEventRole } from "~/platform/auth/current-event.server";
 import { getCloudflareContext } from "~/platform/cloudflare-context";
+import "~/styles/workspace-remaining.css";
 import type { Route } from "./+types/admin-event-new";
 
 type ActionResponse = {
@@ -195,21 +197,18 @@ export default function AdminEventNew({ loaderData }: Route.ComponentProps) {
         ? "Mailpit"
         : "email provider";
   return (
-    <>
+    <div className="pc-event-create">
       {dialog}
-      <div className="page-head pc-page-header">
-        <div>
-          <span className="pc-page-eyebrow">Blank event workspace</span>
-          <h1>New event</h1>
-          <p>
-            Start with Program Cue defaults and no rooms, tracks, forms,
-            submissions, schedules or reusable templates.
-          </p>
-        </div>
-        <Link className="btn" to="/admin/event">
-          Back to Event settings
-        </Link>
-      </div>
+      <PageHeader
+        eyebrow="Blank event workspace"
+        title="New event"
+        description="Start with Program Cue defaults and no rooms, tracks, forms, submissions, schedules or reusable templates."
+        actions={
+          <Link className="btn" to="/admin/event">
+            Back to Event settings
+          </Link>
+        }
+      />
       {actionData ? (
         <div
           className={`pc-status-notice ${actionData.ok ? "is-success" : actionData.inProgress ? "" : "is-danger"} mb`}
@@ -281,12 +280,14 @@ export default function AdminEventNew({ loaderData }: Route.ComponentProps) {
           </div>
         </div>
       ) : null}
-      <div className="grid grid-2">
-        <section className="card pad">
-          <div className="card-title">
-            <h2>Event identity</h2>
-            <Plus aria-hidden size={19} />
-          </div>
+      <div className="event-setup-create">
+        <section className="card pad event-setup-surface event-setup-create-form">
+          <header className="event-setup-surface-head">
+            <h3>Event identity</h3>
+            <p>
+              A blank event with Program Cue defaults and no imported records.
+            </p>
+          </header>
           <Form method="post" className="stack">
             <input type="hidden" name="intent" value="create" />
             <input
@@ -330,7 +331,7 @@ export default function AdminEventNew({ loaderData }: Route.ComponentProps) {
               initialEndDate={loaderData.endDate}
               error={fieldErrors.endDate?.[0] ?? fieldErrors.startDate?.[0]}
             />
-            <fieldset className="card pad">
+            <fieldset className="event-setup-create-choices pc-plain-fieldset">
               <legend className="label">Event-data repository</legend>
               <label className="pc-repository-choice">
                 <input
@@ -366,7 +367,7 @@ export default function AdminEventNew({ loaderData }: Route.ComponentProps) {
               </label>
             </fieldset>
             {repositoryProvider === "d1" ? (
-              <fieldset className="card pad stack">
+              <fieldset className="event-setup-create-choices pc-plain-fieldset stack">
                 <legend className="label">Email sender</legend>
                 <label className="label">
                   Reuse verified sender
@@ -404,7 +405,7 @@ export default function AdminEventNew({ loaderData }: Route.ComponentProps) {
               </fieldset>
             ) : null}
             {repositoryProvider === "airtable" ? (
-              <div className="card pad stack">
+              <div className="event-setup-create-choices stack">
                 <h3>Airtable connection</h3>
                 <label className="label">
                   Personal access token
@@ -467,11 +468,8 @@ export default function AdminEventNew({ loaderData }: Route.ComponentProps) {
             </button>
           </Form>
         </section>
-        <section className="card pad">
-          <div className="card-title">
-            <h2>Starting state</h2>
-            <ShieldCheck aria-hidden size={19} />
-          </div>
+        <aside className="event-setup-create-aside">
+          <h2>Starting state</h2>
           <h3>Included</h3>
           <p>
             Canonical session formats, private-file limits, schedule conflict
@@ -498,8 +496,8 @@ export default function AdminEventNew({ loaderData }: Route.ComponentProps) {
             To reuse configuration instead, return to the event menu and choose
             Clone current event.
           </p>
-        </section>
+        </aside>
       </div>
-    </>
+    </div>
   );
 }

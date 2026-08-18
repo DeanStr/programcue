@@ -218,226 +218,173 @@ export function OperationsListPanel({
     return `${location.pathname}?${search}`;
   };
   return (
-    <section className="card pad">
-      <div className="card-title">
+    <section className="ops-board">
+      <div className="ops-board-head">
         <h2>Background operations</h2>
-        <span className="help right">
-          Durable intent is recorded before provider work starts.
+        <span className="help">
+          {loaderData.failurePagination
+            ? `${loaderData.failurePagination.from}–${loaderData.failurePagination.to} of ${loaderData.failurePagination.total} failed`
+            : `${loaderData.operations.length} recent`}
         </span>
       </div>
       {loaderData.operations.length ? (
-        <section
-          className="table-wrap"
-          aria-label="Background operations"
-          // biome-ignore lint/a11y/noNoninteractiveTabindex: Scrollable data regions need keyboard focus so arrow keys can expose overflow content.
-          tabIndex={0}
-        >
-          <table className="data-table">
-            <thead>
-              <tr>
-                <th scope="col">Operation</th>
-                <th scope="col">Status</th>
-                <th scope="col">Progress</th>
-                <th scope="col">Initiator / scope</th>
-                <th scope="col">Started (UTC)</th>
-                <th scope="col">Result</th>
-                <th scope="col">Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              {loaderData.operations.map((operation) => {
-                const retryable = operation.retryable;
-                return (
-                  <tr key={operation.id}>
-                    <td>
-                      <Link
-                        to={`/admin/operations?operation=${encodeURIComponent(operation.id)}`}
-                      >
-                        <strong>
-                          {fieldLabel(operation.type.replaceAll(".", " "))}
-                        </strong>
-                      </Link>
-                      {/* The full identifier stays here: this is the one
-                          surface where an operator arrives holding one from a
-                          log or a link, so it has to be matchable in full. */}
-                      <small className="subtle" style={{ display: "block" }}>
-                        Reference <code>{operation.id}</code>
-                      </small>
-                    </td>
-                    <td>
-                      <DomainStatusBadge
-                        domain="operation"
-                        status={operation.status}
-                      />
-                    </td>
-                    <td>
-                      {operation.progressTotal
-                        ? `${operation.progressCurrent} / ${operation.progressTotal}`
-                        : "—"}
-                    </td>
-                    <td>
-                      <strong>{operation.requestedByName ?? "System"}</strong>
-                      <small className="subtle" style={{ display: "block" }}>
-                        {operation.scope ?? "Event-wide"}
-                      </small>
-                    </td>
-                    <td>
+        <ul className="ops-deploy-list" aria-label="Background operations">
+          {loaderData.operations.map((operation) => {
+            const retryable = operation.retryable;
+            return (
+              <li className="ops-deploy" key={operation.id}>
+                <Link
+                  className="ops-deploy-main"
+                  to={`/admin/operations?operation=${encodeURIComponent(operation.id)}`}
+                >
+                  <DomainStatusBadge
+                    domain="operation"
+                    status={operation.status}
+                  />
+                  <span className="ops-deploy-copy">
+                    <strong>
+                      {fieldLabel(operation.type.replaceAll(".", " "))}
+                    </strong>
+                    <small>
+                      {operation.requestedByName ?? "System"}
+                      {" · "}
                       <OperationDateTime
                         epoch={operation.startedAt ?? operation.createdAt}
                         timeZone={loaderData.eventTimezone}
                       />
-                    </td>
-                    <td>
-                      <div>
-                        {operation.lastError ??
-                          operation.warning ??
-                          (operation.completedAt ? (
-                            <OperationDateTime
-                              epoch={operation.completedAt}
-                              timeZone={loaderData.eventTimezone}
-                            />
-                          ) : (
-                            "Pending"
-                          ))}
-                      </div>
-                      {operation.alertAcknowledgedAt !== null ? (
-                        <small className="subtle" style={{ display: "block" }}>
-                          Alert archived by {operation.alertAcknowledgedByName}{" "}
-                          ·{" "}
-                          <OperationDateTime
-                            epoch={operation.alertAcknowledgedAt}
-                            timeZone={loaderData.eventTimezone}
-                          />
-                        </small>
-                      ) : null}
-                    </td>
-                    <td>
-                      {retryable ? (
-                        <Form
-                          method="post"
-                          onSubmit={(event) => {
-                            event.preventDefault();
-                            const form = event.currentTarget;
-                            confirm(
-                              {
-                                title: "Retry this operation?",
-                                description:
-                                  "This may repeat external provider work that did not previously complete.",
-                                records: [
-                                  `${operation.type} · ${operation.id}`,
-                                ],
-                                confirmLabel: "Retry operation",
-                                tone: "primary",
-                              },
-                              () => submit(form),
-                            );
-                          }}
+                      {operation.progressTotal
+                        ? ` · ${operation.progressCurrent}/${operation.progressTotal}`
+                        : ""}
+                    </small>
+                    <span className="sr-only">Reference {operation.id}</span>
+                    {operation.lastError || operation.warning ? (
+                      <small>{operation.lastError ?? operation.warning}</small>
+                    ) : null}
+                  </span>
+                </Link>
+                {retryable ||
+                operation.cancellable ||
+                operation.canAcknowledgeFailure ? (
+                  <div className="ops-deploy-tools">
+                    {retryable ? (
+                      <Form
+                        method="post"
+                        onSubmit={(event) => {
+                          event.preventDefault();
+                          const form = event.currentTarget;
+                          confirm(
+                            {
+                              title: "Retry this operation?",
+                              description:
+                                "This may repeat external provider work that did not previously complete.",
+                              records: [`${operation.type} · ${operation.id}`],
+                              confirmLabel: "Retry operation",
+                              tone: "primary",
+                            },
+                            () => submit(form),
+                          );
+                        }}
+                      >
+                        <input type="hidden" name="intent" value="retry" />
+                        <input
+                          type="hidden"
+                          name="operationId"
+                          value={operation.id}
+                        />
+                        <button
+                          type="submit"
+                          className="ops-text-action"
+                          disabled={navigation.state !== "idle"}
                         >
-                          <input type="hidden" name="intent" value="retry" />
-                          <input
-                            type="hidden"
-                            name="operationId"
-                            value={operation.id}
-                          />
-                          <button
-                            type="submit"
-                            className="btn small"
-                            disabled={navigation.state !== "idle"}
-                          >
-                            Retry
-                          </button>
-                        </Form>
-                      ) : null}
-                      {operation.cancellable &&
-                      [
-                        "queued",
-                        "queue_failed",
-                        "received",
-                        "retrying",
-                        "failed",
-                        "partially_failed",
-                      ].includes(operation.status) ? (
-                        <Form
-                          method="post"
-                          onSubmit={(event) => {
-                            event.preventDefault();
-                            const form = event.currentTarget;
-                            confirm(
-                              {
-                                title: "Cancel this operation?",
-                                description:
-                                  "Only work that has not reached an external provider can be cancelled. Anything already sent stays in place.",
-                                records: [
-                                  `${operation.type} · ${operation.id}`,
-                                ],
-                                confirmLabel: "Cancel operation",
-                              },
-                              () => submit(form),
-                            );
-                          }}
+                          Retry
+                        </button>
+                      </Form>
+                    ) : null}
+                    {operation.cancellable &&
+                    [
+                      "queued",
+                      "queue_failed",
+                      "received",
+                      "retrying",
+                      "failed",
+                      "partially_failed",
+                    ].includes(operation.status) ? (
+                      <Form
+                        method="post"
+                        onSubmit={(event) => {
+                          event.preventDefault();
+                          const form = event.currentTarget;
+                          confirm(
+                            {
+                              title: "Cancel this operation?",
+                              description:
+                                "Only work that has not reached an external provider can be cancelled. Anything already sent stays in place.",
+                              records: [`${operation.type} · ${operation.id}`],
+                              confirmLabel: "Cancel operation",
+                            },
+                            () => submit(form),
+                          );
+                        }}
+                      >
+                        <input type="hidden" name="intent" value="cancel" />
+                        <input
+                          type="hidden"
+                          name="operationId"
+                          value={operation.id}
+                        />
+                        <button
+                          type="submit"
+                          className="ops-text-action is-danger"
+                          disabled={navigation.state !== "idle"}
                         >
-                          <input type="hidden" name="intent" value="cancel" />
-                          <input
-                            type="hidden"
-                            name="operationId"
-                            value={operation.id}
-                          />
-                          <button
-                            type="submit"
-                            className="btn small danger"
-                            disabled={navigation.state !== "idle"}
-                          >
-                            Cancel
-                          </button>
-                        </Form>
-                      ) : null}
-                      {operation.canAcknowledgeFailure ? (
-                        <Form
-                          method="post"
-                          onSubmit={(event) => {
-                            event.preventDefault();
-                            const form = event.currentTarget;
-                            confirm(
-                              {
-                                title: "Archive this failure alert?",
-                                description:
-                                  "This removes the failure from active notifications and readiness blockers. The failed operation, recorded error and audit history remain available.",
-                                records: [
-                                  `${operation.type} · ${operation.id}`,
-                                ],
-                                confirmLabel: "Archive alert",
-                                tone: "primary",
-                              },
-                              () => submit(form),
-                            );
-                          }}
+                          Cancel
+                        </button>
+                      </Form>
+                    ) : null}
+                    {operation.canAcknowledgeFailure ? (
+                      <Form
+                        method="post"
+                        onSubmit={(event) => {
+                          event.preventDefault();
+                          const form = event.currentTarget;
+                          confirm(
+                            {
+                              title: "Archive this failure alert?",
+                              description:
+                                "This removes the failure from active notifications and readiness blockers. The failed operation, recorded error and audit history remain available.",
+                              records: [`${operation.type} · ${operation.id}`],
+                              confirmLabel: "Archive alert",
+                              tone: "primary",
+                            },
+                            () => submit(form),
+                          );
+                        }}
+                      >
+                        <input
+                          type="hidden"
+                          name="intent"
+                          value="acknowledge-failure"
+                        />
+                        <input
+                          type="hidden"
+                          name="operationId"
+                          value={operation.id}
+                        />
+                        <button
+                          type="submit"
+                          className="ops-text-action"
+                          disabled={navigation.state !== "idle"}
                         >
-                          <input
-                            type="hidden"
-                            name="intent"
-                            value="acknowledge-failure"
-                          />
-                          <input
-                            type="hidden"
-                            name="operationId"
-                            value={operation.id}
-                          />
-                          <button
-                            type="submit"
-                            className="btn small"
-                            disabled={navigation.state !== "idle"}
-                          >
-                            Archive alert
-                          </button>
-                        </Form>
-                      ) : null}
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </section>
+                          Archive alert
+                        </button>
+                      </Form>
+                    ) : null}
+                  </div>
+                ) : null}
+              </li>
+            );
+          })}
+        </ul>
       ) : (
         <EmptyState
           title="No background operations yet"

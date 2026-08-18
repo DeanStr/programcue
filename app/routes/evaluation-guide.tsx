@@ -44,6 +44,7 @@ import {
   AbuseRateLimitError,
   enforcePublicRateLimit,
 } from "~/platform/http/public-abuse-protection.server";
+import "~/styles/workspace-remaining.css";
 import type { Route } from "./+types/evaluation-guide";
 
 type ActionResult =
@@ -611,16 +612,18 @@ export default function EvaluationGuide({ loaderData }: Route.ComponentProps) {
   const navigation = useNavigation();
   const busy = navigation.state !== "idle";
   return (
-    <EvaluationAccessSurface
-      actionData={actionData}
-      busy={busy}
-      eventName={loaderData.eventName}
-      identities={loaderData.identities}
-      resetBusy={
-        busy && navigation.formData?.get("_intent") === "reset_fixture"
-      }
-      selected={loaderData.selected}
-      unlocked={loaderData.unlocked}
-    />
+    <div className="pc-eval-linear">
+      <EvaluationAccessSurface
+        actionData={actionData}
+        busy={busy}
+        eventName={loaderData.eventName}
+        identities={loaderData.identities}
+        resetBusy={
+          busy && navigation.formData?.get("_intent") === "reset_fixture"
+        }
+        selected={loaderData.selected}
+        unlocked={loaderData.unlocked}
+      />
+    </div>
   );
 }

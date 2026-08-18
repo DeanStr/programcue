@@ -173,8 +173,8 @@ export function ApplicantPreviewPanel({
         {paneSwitch ? <span className="right">{paneSwitch}</span> : null}
       </div>
       <div className="fb-pane-body">
-        <p className="help mb">
-          Isolated test mode exercises conditional fields and validation without
+        <p className="fb-preview-note">
+          Isolated test mode. Conditional fields and validation run here without
           creating applicant or submission records.
         </p>
         <div className="fb-preview-shell">

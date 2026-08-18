@@ -68,7 +68,7 @@ export function AdminAssignedTasksPanel({
     target?.scrollIntoView({ block: "center" });
   }, [data.focusedTaskId]);
   return (
-    <section className="card pad">
+    <section className="card pad tasks-assigned">
       <div className="card-title">
         <h2>Assigned work</h2>
         <span className="help right">
@@ -85,11 +85,8 @@ export function AdminAssignedTasksPanel({
           <thead>
             <tr>
               <th scope="col">Requirement</th>
-              <th scope="col">Speaker</th>
-              <th scope="col">Impact</th>
-              <th scope="col">Due ({data.eventTimezone})</th>
-              <th scope="col">Readiness</th>
-              <th scope="col">Status / evidence</th>
+              <th scope="col">Due</th>
+              <th scope="col">Status</th>
               <th scope="col">Administrator action</th>
             </tr>
           </thead>
@@ -104,18 +101,20 @@ export function AdminAssignedTasksPanel({
                   <div className="pc-record-stack">
                     <strong>{task.title}</strong>
                     <small className="subtle">
-                      Type: {task.taskType.replaceAll("_", " ")}
+                      {task.ownerName ?? task.targetId}
+                      {" · "}
+                      {task.taskType.replaceAll("_", " ")}
+                      {" · "}
+                      Revision {task.revision}
                     </small>
-                    <small className="subtle">Revision {task.revision}</small>
                   </div>
                 </td>
-                <td data-label="Speaker">{task.ownerName ?? task.targetId}</td>
-                <td data-label="Impact">
-                  <span className={`impact ${task.impact}`}>{task.impact}</span>
-                </td>
-                <td data-label={`Due (${data.eventTimezone})`}>
+                <td data-label="Due">
                   {task.dueAt ? (
                     <div className="pc-record-stack">
+                      <span className={`impact ${task.impact}`}>
+                        {task.impact}
+                      </span>
                       <EventDateTime
                         epochSeconds={task.dueAt}
                         timeZone={data.eventTimezone}
@@ -138,26 +137,29 @@ export function AdminAssignedTasksPanel({
                       })()}
                     </div>
                   ) : (
-                    "No due date"
+                    <div className="pc-record-stack">
+                      <span className={`impact ${task.impact}`}>
+                        {task.impact}
+                      </span>
+                      <span>No due date</span>
+                    </div>
                   )}
                 </td>
-                <td data-label="Readiness">
-                  <div className="pc-record-stack task-readiness-cell">
-                    <div
-                      className={`progress ${readinessTone(task.readinessPercent)}${task.readinessPercent === 0 ? " is-zero" : ""}`}
-                      aria-hidden
-                    >
-                      <span style={{ width: `${task.readinessPercent}%` }} />
-                    </div>
-                    <small className="pc-num">
-                      {task.readinessPercent}%
-                      <span className="sr-only"> ready</span>
-                    </small>
-                  </div>
-                </td>
-                <td data-label="Status / evidence">
+                <td data-label="Status">
                   <div className="pc-record-stack">
                     <DomainStatusBadge domain="task" status={task.status} />
+                    <div className="pc-record-stack task-readiness-cell">
+                      <div
+                        className={`progress ${readinessTone(task.readinessPercent)}${task.readinessPercent === 0 ? " is-zero" : ""}`}
+                        aria-hidden
+                      >
+                        <span style={{ width: `${task.readinessPercent}%` }} />
+                      </div>
+                      <small className="pc-num">
+                        {task.readinessPercent}%
+                        <span className="sr-only"> ready</span>
+                      </small>
+                    </div>
                     {task.evidence[0] ? (
                       <div className="pc-record-stack task-evidence-review">
                         <small className="subtle">
@@ -271,7 +273,7 @@ export function AdminAssignedTasksPanel({
                     {task.status === "submitted" ? (
                       <button
                         type="submit"
-                        className="btn small primary"
+                        className="task-ghost is-action"
                         name="intent"
                         value="approve"
                         formNoValidate
@@ -285,7 +287,7 @@ export function AdminAssignedTasksPanel({
                     ) ? (
                       <button
                         type="submit"
-                        className="btn small"
+                        className="task-ghost is-action"
                         name="intent"
                         value="complete"
                         formNoValidate
@@ -296,7 +298,7 @@ export function AdminAssignedTasksPanel({
                     ) : ["completed", "waived"].includes(task.status) ? (
                       <button
                         type="submit"
-                        className="btn small"
+                        className="task-ghost"
                         name="intent"
                         value="reopen"
                         formNoValidate
@@ -307,7 +309,7 @@ export function AdminAssignedTasksPanel({
                     ) : null}
                     {!["completed", "waived"].includes(task.status) ? (
                       <details>
-                        <summary className="btn small">Waive task</summary>
+                        <summary className="task-ghost">Waive task</summary>
                         <label className="label">
                           Reason
                           <input
@@ -332,8 +334,8 @@ export function AdminAssignedTasksPanel({
                   {task.targetType === "speaker" &&
                   task.dueAt !== null &&
                   !["completed", "waived"].includes(task.status) ? (
-                    <details className="mt">
-                      <summary className="btn small">Extend deadline</summary>
+                    <details>
+                      <summary className="task-ghost">Extend deadline</summary>
                       <Form method="post" className="stack mt">
                         <input
                           type="hidden"
@@ -375,8 +377,8 @@ export function AdminAssignedTasksPanel({
                       </Form>
                     </details>
                   ) : null}
-                  <details className="mt">
-                    <summary className="btn small">Add comment</summary>
+                  <details>
+                    <summary className="task-ghost">Add comment</summary>
                     <Form method="post" className="stack mt">
                       <input type="hidden" name="intent" value="comment" />
                       <input
@@ -412,7 +414,7 @@ export function AdminAssignedTasksPanel({
             ))}
             {!data.tasks.length ? (
               <tr className="pc-table-empty-row">
-                <td className="pc-table-empty-cell" colSpan={7}>
+                <td className="pc-table-empty-cell" colSpan={4}>
                   <div className="pc-empty-state">
                     <ListChecks aria-hidden className="pc-state-icon" />
                     <h3>No assigned work matches these filters</h3>

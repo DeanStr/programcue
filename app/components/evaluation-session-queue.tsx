@@ -12,7 +12,7 @@ export function EvaluationSessionQueue() {
     assignmentTargets,
   } = useEvaluationAdminModel();
   return (
-    <section className="card pad mt">
+    <section className="card pad mt pc-eval-queue">
       {/* The enclosing AdminPageSection already names this "Session queue"; a
           card heading repeating it word for word gave the page two headings
           with the same name and told a reader nothing twice. What the section
@@ -28,7 +28,7 @@ export function EvaluationSessionQueue() {
           // biome-ignore lint/a11y/noNoninteractiveTabindex: Scrollable data regions need keyboard focus so arrow keys can expose overflow content.
           tabIndex={0}
         >
-          <table className="data-table pc-responsive-table">
+          <table className="data-table pc-responsive-table pc-eval-table">
             <thead>
               <tr>
                 <th scope="col">Session</th>
@@ -110,7 +110,7 @@ export function EvaluationSessionQueue() {
                           value={session.id}
                         />
                         <select
-                          className="select"
+                          className="select pc-eval-control"
                           name="assignmentTarget"
                           aria-label={`Evaluator or team for ${session.title}`}
                         >
@@ -132,7 +132,7 @@ export function EvaluationSessionQueue() {
                             ) : null;
                           })}
                         </select>
-                        <button type="submit" className="btn small">
+                        <button type="submit" className="pc-eval-text-action">
                           Assign
                         </button>
                       </Form>

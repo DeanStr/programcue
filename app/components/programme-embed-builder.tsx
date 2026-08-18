@@ -76,14 +76,10 @@ function EmbedConfigurationWorkflow({
   return (
     <>
       <div className="card-title programme-embed-builder-title">
-        <div>
-          <span className="pc-page-eyebrow">Published programme</span>
-          <h2>Configure embed</h2>
-          <p className="help">
-            Choose the initial view, preview the exact published result and copy
-            installation code without editing HTML attributes by hand.
-          </p>
-        </div>
+        <p className="help">
+          Choose the initial view, preview the published result, then copy
+          installation code.
+        </p>
         <button className="btn small" type="button" onClick={reset}>
           <RotateCcw aria-hidden size={14} /> Reset
         </button>
@@ -93,9 +89,6 @@ function EmbedConfigurationWorkflow({
         <div className="programme-embed-configuration">
           <fieldset className="pc-plain-fieldset stack">
             <legend className="label">Widget type</legend>
-            <p className="help">
-              Each option renders its corresponding published public surface.
-            </p>
             <label className="label">
               Public surface
               <select
@@ -116,92 +109,86 @@ function EmbedConfigurationWorkflow({
 
           <fieldset className="pc-plain-fieldset stack">
             <legend className="label">Initial filters</legend>
-            <p className="help">
-              These values constrain the first rendered view. Only published
-              schedule values can be selected.
-            </p>
-            <label className="label">
-              Day
-              <select
-                className="select"
-                aria-label="Initial day"
-                value={configuration.day}
-                onChange={(event) => update("day", event.target.value)}
-              >
-                <option value="">All days</option>
-                {days.map((day) => (
-                  <option key={day} value={day}>
-                    {day}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label className="label">
-              Track
-              <select
-                className="select"
-                aria-label="Initial track"
-                value={configuration.track}
-                onChange={(event) => update("track", event.target.value)}
-              >
-                <option value="">All tracks</option>
-                {tracks.map((track) => (
-                  <option key={track} value={track}>
-                    {track}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label className="label">
-              Format
-              <select
-                className="select"
-                aria-label="Initial format"
-                value={configuration.format}
-                onChange={(event) => update("format", event.target.value)}
-              >
-                <option value="">All formats</option>
-                {formats.map((format) => (
-                  <option key={format} value={format}>
-                    {format}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label className="label">
-              Room
-              <select
-                className="select"
-                aria-label="Initial room"
-                value={configuration.room}
-                onChange={(event) => update("room", event.target.value)}
-              >
-                <option value="">All rooms</option>
-                {rooms.map((room) => (
-                  <option key={room} value={room}>
-                    {room}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label className="label">
-              Search text
-              <input
-                className="field"
-                value={configuration.query}
-                maxLength={100}
-                onChange={(event) => update("query", event.target.value)}
-                placeholder="Optional published-content search"
-              />
-            </label>
+            <div className="programme-embed-filter-grid">
+              <label className="label">
+                Day
+                <select
+                  className="select"
+                  aria-label="Initial day"
+                  value={configuration.day}
+                  onChange={(event) => update("day", event.target.value)}
+                >
+                  <option value="">All days</option>
+                  {days.map((day) => (
+                    <option key={day} value={day}>
+                      {day}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="label">
+                Track
+                <select
+                  className="select"
+                  aria-label="Initial track"
+                  value={configuration.track}
+                  onChange={(event) => update("track", event.target.value)}
+                >
+                  <option value="">All tracks</option>
+                  {tracks.map((track) => (
+                    <option key={track} value={track}>
+                      {track}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="label">
+                Format
+                <select
+                  className="select"
+                  aria-label="Initial format"
+                  value={configuration.format}
+                  onChange={(event) => update("format", event.target.value)}
+                >
+                  <option value="">All formats</option>
+                  {formats.map((format) => (
+                    <option key={format} value={format}>
+                      {format}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="label">
+                Room
+                <select
+                  className="select"
+                  aria-label="Initial room"
+                  value={configuration.room}
+                  onChange={(event) => update("room", event.target.value)}
+                >
+                  <option value="">All rooms</option>
+                  {rooms.map((room) => (
+                    <option key={room} value={room}>
+                      {room}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="label">
+                Search text
+                <input
+                  className="field"
+                  value={configuration.query}
+                  maxLength={100}
+                  onChange={(event) => update("query", event.target.value)}
+                  placeholder="Optional published-content search"
+                />
+              </label>
+            </div>
           </fieldset>
 
           <fieldset className="pc-plain-fieldset stack">
             <legend className="label">Visible visitor controls</legend>
-            <p className="help">
-              Hidden controls keep their configured initial value fixed in the
-              installed embed.
-            </p>
             <div className="programme-embed-control-grid">
               {PROGRAMME_EMBED_CONTROLS.map((control) => (
                 <label className="choice" key={control}>
@@ -309,10 +296,6 @@ function EmbedConfigurationWorkflow({
 
           <fieldset className="pc-plain-fieldset stack">
             <legend className="label">Visible fields</legend>
-            <p className="help">
-              Session titles and speaker names remain visible. Choose which
-              supporting published details appear where they apply.
-            </p>
             <div className="programme-embed-control-grid">
               {PROGRAMME_EMBED_FIELDS.map((field) => (
                 <label className="choice" key={field}>
@@ -506,9 +489,11 @@ function ManagedEmbedWorkflow({
     loadManagedEmbed,
   } = workflow;
   return (
-    <div className="mt stack" id="managed-programme-embeds">
+    <div
+      className="programme-managed-embeds stack"
+      id="managed-programme-embeds"
+    >
       <div>
-        <span className="pc-page-eyebrow">Durable installations</span>
         <h2>Managed embeds</h2>
         <p className="help">
           Save a named configuration behind a stable URL. Stateless snippets
@@ -526,7 +511,7 @@ function ManagedEmbedWorkflow({
         </p>
       ) : null}
 
-      <Form method="post" className="card pad stack">
+      <Form method="post" className="programme-managed-form stack">
         <input
           type="hidden"
           name="intent"
@@ -658,7 +643,7 @@ function ManagedEmbedWorkflow({
       </Form>
 
       {selectedEmbed && selectedManagedUrl ? (
-        <div className="card pad stack">
+        <div className="programme-managed-form stack">
           <h3>Stable installation</h3>
           <p className="help">
             This URL does not change when the configuration revision changes.
@@ -720,7 +705,7 @@ function ManagedEmbedWorkflow({
                     </td>
                     <td>{embed.revision}</td>
                     <td>{embed.installationNote ?? "—"}</td>
-                    <td>
+                    <td className="programme-managed-updated">
                       <EventDateTime
                         epochSeconds={embed.updatedAt}
                         timeZone={timezone}
@@ -877,13 +862,20 @@ export function ProgrammeEmbedBuilder({
     managedEmbeds,
   });
   return (
-    <section className="card pad mt programme-embed-builder">
-      <EmbedConfigurationWorkflow
-        workflow={configurationWorkflow}
-        eventAccent={eventAccent}
-      />
-
-      <ManagedEmbedWorkflow workflow={managedWorkflow} />
+    <section
+      className="programme-embed-builder"
+      aria-labelledby="programme-embed-title"
+    >
+      <details className="programme-embed-disclosure">
+        <summary className="programme-embed-disclosure-summary">
+          <h2 id="programme-embed-title">Configure embed</h2>
+        </summary>
+        <EmbedConfigurationWorkflow
+          workflow={configurationWorkflow}
+          eventAccent={eventAccent}
+        />
+        <ManagedEmbedWorkflow workflow={managedWorkflow} />
+      </details>
     </section>
   );
 }

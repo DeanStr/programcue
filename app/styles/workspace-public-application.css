@@ -133,11 +133,26 @@
   line-height: 1.05;
   letter-spacing: -0.04em;
 }
+.cfp-outline h2,
+.cfp-featured h2 {
+  font-size: clamp(24px, 3vw, 32px);
+}
 .cfp-editorial-section > p {
-  max-width: 70ch;
+  max-width: 36ch;
   font-size: var(--text-base);
   line-height: 1.7;
   color: var(--text-secondary);
+}
+.cfp-invitation > p:first-of-type {
+  max-width: 22ch;
+  color: var(--ink);
+  font-size: clamp(var(--text-lg), 2vw, var(--text-xl));
+  line-height: var(--leading-snug);
+  letter-spacing: var(--tracking-snug);
+}
+.cfp-invitation > p + p {
+  max-width: 46ch;
+  margin-top: var(--space-4);
 }
 .cfp-organizer {
   display: flex;
@@ -168,8 +183,14 @@
   border-top: 4px solid var(--event-accent);
   box-shadow: 0 16px 45px rgba(25, 32, 48, 0.1);
 }
+.cfp-access-kicker {
+  margin: 0 0 var(--space-2);
+  color: var(--muted-on-surface);
+  font-size: var(--text-xs);
+  font-weight: var(--weight-semibold);
+}
 .cfp-access-card h2 {
-  margin: var(--space-2) 0 var(--space-2);
+  margin: var(--space-1) 0 var(--space-2);
   font-size: var(--text-2xl);
 }
 .cfp-access-primary .btn {
@@ -181,8 +202,19 @@
   padding-top: var(--space-5);
   border-top: 1px solid var(--line);
 }
-.cfp-returning h3 {
-  margin: 0 0 var(--space-1);
+.cfp-returning > summary {
+  width: fit-content;
+  min-height: 44px;
+  color: var(--text-secondary);
+  font-size: var(--text-sm);
+  font-weight: var(--weight-semibold);
+}
+.cfp-returning > summary:hover,
+.cfp-returning > summary:focus-visible {
+  color: var(--ink);
+}
+.cfp-returning > .help {
+  margin: var(--space-2) 0 var(--space-3);
 }
 .cfp-returning .btn {
   width: 100%;
@@ -229,18 +261,19 @@
 }
 .cfp-question-outline li {
   position: relative;
-  padding: var(--space-5) var(--space-2) var(--space-5) var(--space-9);
+  padding: var(--space-5) 0 var(--space-5) var(--space-9);
   border-bottom: 1px solid var(--border-editorial);
   counter-increment: cfp-question;
 }
 .cfp-question-outline li::before {
   content: counter(cfp-question, decimal-leading-zero);
   position: absolute;
-  left: 7px;
-  top: 20px;
-  color: var(--text-tertiary);
+  left: 0;
+  top: 1.35em;
+  color: var(--muted-on-surface);
   font-size: var(--text-2xs);
-  font-weight: var(--weight-extrabold);
+  font-weight: var(--weight-semibold);
+  font-variant-numeric: tabular-nums;
 }
 .cfp-question-outline li > div {
   display: flex;
@@ -248,27 +281,34 @@
   justify-content: space-between;
   gap: var(--space-3);
 }
+.cfp-question-outline li > div strong {
+  font-size: var(--text-base);
+  letter-spacing: var(--tracking-snug);
+}
 .cfp-question-outline p {
   margin: var(--space-1) 0 0;
-  color: var(--text-tertiary);
+  color: var(--text-secondary);
   line-height: 1.5;
 }
+.cfp-question-outline .cfp-choices {
+  color: var(--text-tertiary);
+  font-size: var(--text-sm);
+}
 .cfp-question-outline .cfp-example {
-  color: var(--text-secondary);
+  color: var(--text-tertiary);
   font-style: italic;
 }
 .cfp-question-outline .cfp-condition {
   color: var(--text-secondary);
   font-size: var(--text-xs);
-  font-weight: var(--weight-bold);
 }
 /* biome-ignore lint/style/noDescendingSpecificity: These selectors target independent application content structures despite sharing element suffixes. */
 .cfp-example span,
 .cfp-required {
-  color: var(--accent-ink);
+  color: var(--muted-on-surface);
   font-size: var(--text-2xs);
   font-style: normal;
-  font-weight: var(--weight-bold);
+  font-weight: var(--weight-semibold);
 }
 .cfp-featured {
   margin-top: var(--space-11);
@@ -277,32 +317,57 @@
 }
 .cfp-featured-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
-  gap: var(--space-4);
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 220px), 1fr));
+  justify-content: start;
+  gap: clamp(var(--space-6), 3.2vw, var(--space-8))
+    clamp(var(--space-5), 3vw, var(--space-8));
+  align-items: start;
+}
+.cfp-featured-grid.is-pair {
+  width: 100%;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: clamp(var(--space-5), 2.8vw, var(--space-8));
+}
+.cfp-featured-grid:has(> :only-child) {
+  width: min(280px, 100%);
+  grid-template-columns: minmax(0, 1fr);
 }
 .cfp-speaker-card {
   min-width: 0;
 }
 .cfp-speaker-card img,
 .cfp-speaker-avatar {
-  width: 80px;
-  height: 80px;
+  width: 100%;
+  height: auto;
+  aspect-ratio: 4 / 5;
   display: grid;
   place-items: center;
-  border-radius: 50%;
+  border-radius: var(--radius);
   object-fit: cover;
-  background: color-mix(in srgb, var(--event-accent) 16%, white);
+  background: linear-gradient(
+    145deg,
+    color-mix(in srgb, var(--event-accent) 28%, white),
+    color-mix(in srgb, var(--event-accent) 10%, white)
+  );
   color: var(--accent-ink);
   font-weight: var(--weight-extrabold);
+  box-shadow:
+    0 0 0 1px color-mix(in srgb, var(--event-accent) 18%, transparent),
+    var(--elev-2);
 }
 .cfp-speaker-card h3 {
-  margin: var(--space-3) 0 3px;
-  font-size: var(--text-base);
+  margin: var(--space-4) 0 3px;
+  font-size: clamp(var(--text-lg), 1.8vw, var(--text-xl));
+  letter-spacing: var(--tracking-snug);
+  line-height: var(--leading-snug);
+}
+.cfp-featured-grid.is-pair .cfp-speaker-card h3 {
+  font-size: clamp(var(--text-xl), 2.1vw, var(--text-2xl));
 }
 .cfp-speaker-card p {
   margin: 0;
   color: var(--text-tertiary);
-  font-size: var(--text-xs);
+  font-size: var(--text-sm);
   line-height: 1.4;
 }
 .sessionize-import {
@@ -369,8 +434,17 @@
   .cfp-question-outline li > div {
     gap: var(--space-1);
   }
-  .cfp-featured-grid {
+  .cfp-featured-grid,
+  .cfp-featured-grid.is-pair {
+    width: 100%;
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .cfp-featured-grid:has(> :only-child) {
+    width: min(280px, 100%);
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .cfp-featured-grid.is-pair .cfp-speaker-card h3 {
+    font-size: var(--text-lg);
   }
   .sessionize-import .form-row {
     grid-template-columns: 1fr;
@@ -378,4 +452,66 @@
   .sessionize-import .btn {
     width: 100%;
   }
+}
+
+.auth-shell {
+  display: grid;
+  place-items: center;
+  min-height: 100dvh;
+  padding: var(--space-6);
+  background: var(--surface-editorial);
+}
+.auth-card {
+  width: min(440px, calc(100vw - 32px));
+  padding: var(--space-8) var(--space-7);
+  border: 1px solid var(--border-editorial);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+  box-shadow: var(--elev-3);
+}
+.auth-brand {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  margin-bottom: var(--space-5);
+  color: var(--ink);
+  font-weight: var(--weight-bold);
+}
+.auth-card h1 {
+  margin: 0 0 var(--space-2);
+  font-size: var(--text-3xl);
+  letter-spacing: var(--tracking-tight);
+}
+.auth-card > .subtle {
+  max-width: 38ch;
+  margin: 0 0 var(--space-5);
+}
+.auth-social,
+.auth-social-form {
+  display: grid;
+  gap: var(--space-2);
+}
+.auth-wide {
+  width: 100%;
+}
+.auth-note {
+  margin: var(--space-2) 0 0;
+  text-align: center;
+}
+.auth-or {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  align-items: center;
+  gap: var(--space-3);
+  margin: var(--space-4) 0;
+  text-align: center;
+}
+.auth-or::before,
+.auth-or::after {
+  content: "";
+  height: 1px;
+  background: var(--border-editorial);
+}
+.cfp-access-card {
+  box-shadow: var(--elev-3);
 }

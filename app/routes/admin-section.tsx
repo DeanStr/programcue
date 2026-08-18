@@ -156,49 +156,64 @@ export async function action({ request, params, context }: Route.ActionArgs) {
   }
 }
 
+function programmePulse(
+  summary: ReturnType<typeof summarizeProgramme>,
+  versionNumber: number | null,
+  speakerCount: number,
+) {
+  const parts = [
+    `${summary.total} ${summary.total === 1 ? "session" : "sessions"}`,
+    `${summary.scheduled} scheduled`,
+  ];
+  if (summary.unscheduled > 0) {
+    parts.push(`${summary.unscheduled} unscheduled`);
+  }
+  parts.push(`${summary.publishedPublic} public`);
+  parts.push(
+    versionNumber === null ? "not published" : `Version ${versionNumber}`,
+  );
+  parts.push(`${speakerCount} public speaker${speakerCount === 1 ? "" : "s"}`);
+  return parts.join(" · ");
+}
+
 export default function AdminSection({ loaderData }: Route.ComponentProps) {
   const summary = summarizeProgramme(loaderData.sessions);
   return (
-    <>
-      <div className="page-head">
+    <div className="programme-publishing">
+      <div className="page-head pc-page-header">
         <div>
-          <span className="pc-page-eyebrow">Publication overview</span>
           <h1>Programme publishing</h1>
           <p>
             Inspect the programme that is available to attendees and continue
             editing in the schedule planner.
           </p>
+          <nav className="programme-header-links" aria-label="Related">
+            <Link to="/admin/sessions/new?from=programme">
+              Create direct session
+            </Link>
+            <Link
+              to={`/public/programme/${loaderData.publicSlug}`}
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              Public programme <ExternalLink aria-hidden size={13} />
+              <span className="sr-only">(opens in a new tab)</span>
+            </Link>
+            <Link
+              to={`/public/programme/${loaderData.publicSlug}#speakers`}
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              Speaker gallery <ExternalLink aria-hidden size={13} />
+              <span className="sr-only">(opens in a new tab)</span>
+            </Link>
+            <Link to="/admin/content#content-review-title">Content review</Link>
+            <Link to="/admin/content#content-files-title">File library</Link>
+          </nav>
         </div>
         <div className="page-actions">
-          <Link className="btn" to="/admin/sessions/new?from=programme">
-            Create direct session
-          </Link>
-          <Link
-            className="btn"
-            to={`/public/programme/${loaderData.publicSlug}`}
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Public programme <ExternalLink aria-hidden size={13} />
-            <span className="sr-only">(opens in a new tab)</span>
-          </Link>
-          <Link
-            className="btn"
-            to={`/public/programme/${loaderData.publicSlug}#speakers`}
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Speaker gallery <ExternalLink aria-hidden size={13} />
-            <span className="sr-only">(opens in a new tab)</span>
-          </Link>
           <Link className="btn primary" to="/admin/schedule">
             Open schedule
-          </Link>
-          <Link className="btn" to="/admin/content#content-review-title">
-            Content review
-          </Link>
-          <Link className="btn" to="/admin/content#content-files-title">
-            File library
           </Link>
         </div>
       </div>
@@ -219,33 +234,14 @@ export default function AdminSection({ loaderData }: Route.ComponentProps) {
           </span>
         </div>
       ) : null}
-      <div className="grid grid-4 mb">
-        <section className="card metric">
-          <div className="label">Sessions</div>
-          <div className="value">{summary.total}</div>
-        </section>
-        <section className="card metric">
-          <div className="label">Scheduled</div>
-          <div className="value">{summary.scheduled}</div>
-          <div className="helper">{summary.unscheduled} unscheduled</div>
-        </section>
-        <section className="card metric">
-          <div className="label">Published public</div>
-          <div className="value">{summary.publishedPublic}</div>
-          <div className="helper">Scheduled and public</div>
-        </section>
-        <section className="card metric">
-          <div className="label">Published version</div>
-          <div className="value">
-            {loaderData.version?.versionNumber ?? "—"}
-          </div>
-          <div className="helper">
-            {loaderData.speakerCount} public speaker
-            {loaderData.speakerCount === 1 ? "" : "s"}
-          </div>
-        </section>
-      </div>
-      <section className="card pad programme-records">
+      <p className="programme-pulse">
+        {programmePulse(
+          summary,
+          loaderData.version?.versionNumber ?? null,
+          loaderData.speakerCount,
+        )}
+      </p>
+      <section className="programme-records">
         <div className="card-title">
           <h2>Current programme records</h2>
           <span className="help right">
@@ -259,14 +255,34 @@ export default function AdminSection({ loaderData }: Route.ComponentProps) {
         </div>
         {loaderData.sessions.length ? (
           <>
-            <p className="programme-scroll-hint">
-              <span aria-hidden>↔</span> Swipe horizontally to see all columns
-            </p>
+            <ul className="programme-record-list">
+              {loaderData.sessions.map((session) => (
+                <li className="programme-record-row" key={session.id}>
+                  <strong className="programme-record-title">
+                    {session.title}
+                  </strong>
+                  <span className="programme-record-time">
+                    {session.startsAt !== null ? (
+                      <EventDateTime
+                        epochSeconds={session.startsAt}
+                        timeZone={loaderData.timezone}
+                      >
+                        {formatProgrammeDateTime(
+                          session.startsAt,
+                          loaderData.timezone,
+                        )}
+                      </EventDateTime>
+                    ) : (
+                      "Unscheduled"
+                    )}
+                  </span>
+                  <DomainStatusBadge domain="session" status={session.status} />
+                </li>
+              ))}
+            </ul>
             <section
               className="table-wrap programme-table-wrap"
-              // biome-ignore lint/a11y/noNoninteractiveTabindex: Scrollable data regions need keyboard focus so arrow keys can expose overflow content.
-              tabIndex={0}
-              aria-label="Programme records. Scroll horizontally to see all columns."
+              aria-label="Programme records"
             >
               <table className="data-table">
                 <thead>
@@ -337,15 +353,14 @@ export default function AdminSection({ loaderData }: Route.ComponentProps) {
           managedEmbeds={loaderData.managedEmbeds}
         />
       ) : (
-        <section className="card pad mt">
-          <span className="pc-page-eyebrow">Published programme</span>
+        <section className="programme-embed-unavailable">
           <h2>Embed unavailable</h2>
-          <p className="help">
+          <p>
             Publish a schedule before configuring or installing its public
             programme embed.
           </p>
         </section>
       )}
-    </>
+    </div>
   );
 }

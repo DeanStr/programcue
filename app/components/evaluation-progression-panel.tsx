@@ -1,5 +1,9 @@
 import { Form } from "react-router";
 
+export function bindEvalDateTime(event: React.FormEvent<HTMLInputElement>) {
+  event.currentTarget.toggleAttribute("data-empty", !event.currentTarget.value);
+}
+
 import { useEvaluationAdminModel } from "~/components/evaluation-admin-model";
 import { encodeScorecardSelection } from "~/modules/evaluations/evaluation-scorecard-selection";
 
@@ -17,7 +21,7 @@ export function EvaluationProgressionPanel() {
   const plan = loaderData.plan;
   if (!plan) return null;
   return (
-    <section className="card pad mb">
+    <section className="card pad mb pc-eval-progression">
       <div className="card-title">
         <div>
           <h2>Round progression</h2>
@@ -81,17 +85,21 @@ export function EvaluationProgressionPanel() {
             <label className="label">
               Opens ({loaderData.eventTimezone})
               <input
-                className="input"
+                className="input pc-eval-datetime"
                 type="datetime-local"
                 name="roundOpensAt"
+                data-empty=""
+                onInput={bindEvalDateTime}
               />
             </label>
             <label className="label">
               Closes ({loaderData.eventTimezone})
               <input
-                className="input"
+                className="input pc-eval-datetime"
                 type="datetime-local"
                 name="roundClosesAt"
+                data-empty=""
+                onInput={bindEvalDateTime}
               />
             </label>
           </div>

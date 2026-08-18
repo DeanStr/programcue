@@ -1,10 +1,8 @@
-/* final layout refinements */
+/* Command Centre breakpoint refinements. */
 
-/* The per-workflow sentence is methodology, not data: it is the first thing to
-   go when the row runs out of width, and the figure is the point. */
 @media (max-width: 1200px) {
   .command-workflow-row {
-    grid-template-columns: minmax(160px, 1fr) 140px 46px 10px;
+    grid-template-columns: minmax(160px, 1fr) minmax(100px, 0.8fr) 3.25rem;
   }
   .command-workflow-detail {
     display: none;
@@ -14,24 +12,64 @@
 @media (max-width: 1024px) {
   .command-workflow-phases {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: var(--space-6);
   }
-  .command-readiness-row,
-  .command-assist,
+  .command-workflow-phase:nth-child(2n + 1) {
+    padding-left: 0;
+    border-left: 0;
+  }
+  .command-hero,
+  .command-support,
   .command-activity {
+    grid-template-columns: minmax(0, 1fr);
+    gap: var(--space-6);
+  }
+  .command-score-reading strong {
+    font-size: clamp(48px, 11vw, 72px);
+  }
+  .command-composer-form {
     grid-template-columns: minmax(0, 1fr);
   }
 }
 
 @media (max-width: 760px) {
+  .command-page-head {
+    align-items: flex-start;
+    margin-bottom: var(--space-5);
+  }
+  .command-page-head h1 {
+    font-size: var(--text-2xl);
+  }
+  .command-page-head .page-actions {
+    justify-content: flex-start;
+  }
+  .command-page-head .page-actions .btn {
+    flex: 0 0 auto;
+    width: auto;
+  }
+
+  .command-band,
+  .command-support,
+  .command-activity {
+    margin-top: var(--space-5);
+    padding-top: var(--space-4);
+  }
+
   .command-workflow-phases {
     grid-template-columns: 1fr;
+    gap: var(--space-5);
   }
-  /* Narrow enough that the bar cannot share a line with the label without
-     squeezing both, so it takes its own row under them. */
+  .command-workflow-phase + .command-workflow-phase {
+    padding-left: 0;
+    border-left: 0;
+    padding-top: var(--space-5);
+    border-top: 1px solid var(--border);
+  }
+
   .command-workflow-row {
     grid-template-columns: minmax(0, 1fr) auto;
     gap: var(--space-1) var(--space-3);
-    padding: var(--space-3) var(--space-2);
+    padding: var(--space-3) 0;
   }
   .command-workflow-row strong {
     grid-area: 1 / 1;
@@ -39,21 +77,15 @@
   .command-workflow-row b {
     grid-area: 1 / 2;
   }
-  .command-workflow-row .progress {
+  .command-workflow-row .command-meter {
     grid-area: 2 / 1 / 2 / -1;
   }
-  .command-workflow-row .chev,
-  .command-session-row .chev {
-    display: none;
-  }
+
   .command-blocker {
     grid-template-columns: auto minmax(0, 1fr) auto;
+    min-height: 48px;
   }
-  .command-blocker .chev {
-    display: none;
-  }
-  /* Compound so it outranks the generic .command-agenda-link collapse in
-     schedule-operations.css, which loads later. */
+
   .command-session-row.command-agenda-link {
     display: grid;
     grid-template-columns: 62px minmax(0, 1fr);
@@ -68,5 +100,30 @@
   .command-session-row > .status {
     grid-column: 2;
     justify-self: start;
+  }
+
+  .command-ops-row {
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: var(--space-2);
+  }
+  .command-ops-progress,
+  .command-ops-idle {
+    grid-column: 1 / -1;
+    justify-items: start;
+  }
+  .command-ops-progress .command-meter {
+    min-width: 0;
+  }
+}
+
+@media (max-width: 360px) {
+  .command-page-head h1 {
+    font-size: var(--text-xl);
+  }
+  .command-score-reading strong {
+    font-size: 48px;
+  }
+  .command-blocker {
+    gap: var(--space-2);
   }
 }

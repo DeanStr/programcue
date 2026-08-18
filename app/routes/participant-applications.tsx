@@ -166,36 +166,34 @@ function ApplicationDetail({
     <>
       {dialog}
       <section
-        className="card pad mt"
+        className="speaker-work speaker-application-detail mt"
         id="participant-application-detail"
         aria-labelledby="participant-application-detail-heading"
       >
-        <div className="card-title">
+        <div className="speaker-resource-head">
           <div>
-            <span className="pc-section-kicker">Application detail</span>
+            <p className="speaker-task-kicker">{application.formName}</p>
             <h2 id="participant-application-detail-heading">
               {application.title}
             </h2>
-            <p className="subtle">
-              {application.formName} · {application.publicReference}
-            </p>
+            <p className="speaker-task-meta">{application.publicReference}</p>
           </div>
           <DomainStatusBadge domain="submission" status={application.status} />
         </div>
         {actionResult?.applicationId === application.id ? (
           <div
-            className={`validation-item ${actionResult.ok ? "ok" : actionResult.partial ? "warn" : "error"} card pad mt`}
+            className={`validation-item ${actionResult.ok ? "ok" : actionResult.partial ? "warn" : "error"}`}
             role={actionResult.ok || actionResult.partial ? "status" : "alert"}
           >
             {actionResult.message}
           </div>
         ) : null}
         {answerRows.length ? (
-          <dl className="stack mt">
+          <dl className="speaker-application-answers">
             {answerRows.map((answer) => (
-              <div className="card inset pad" key={answer.id}>
-                <dt className="tiny subtle">{answer.label}</dt>
-                <dd style={{ margin: "4px 0 0" }}>
+              <div className="speaker-application-answer" key={answer.id}>
+                <dt>{answer.label}</dt>
+                <dd>
                   {Array.isArray(answer.value)
                     ? answer.value.join(", ")
                     : answer.value}
@@ -204,34 +202,32 @@ function ApplicationDetail({
             ))}
           </dl>
         ) : (
-          <p className="subtle mt">
+          <p className="speaker-task-note">
             No application answers have been saved yet.
           </p>
         )}
         {application.speakers.length ? (
-          <div className="mt">
+          <div className="speaker-application-people">
             <h3>Participants</h3>
-            <ul>
+            <ul className="speaker-work-list">
               {application.speakers.map((speaker) => (
-                <li key={speaker.id}>
-                  <strong>{speaker.name}</strong> ·{" "}
-                  {speaker.roleLabel ?? "Role not recorded"}
-                  <br />
-                  <span className="subtle">
-                    {speaker.email} ·{" "}
+                <li className="speaker-application-person" key={speaker.id}>
+                  <strong>{speaker.name}</strong>
+                  <small>
+                    {speaker.roleLabel ?? "Role not recorded"} · {speaker.email}{" "}
+                    ·{" "}
                     {speaker.invitationStatus === "sent"
                       ? "Claim invitation prepared"
                       : `Relationship status: ${speaker.invitationStatus}`}
-                  </span>
+                  </small>
                 </li>
               ))}
             </ul>
           </div>
         ) : null}
         {canInviteCoSpeaker ? (
-          <Form method="post" className="card inset pad stack mt">
+          <Form method="post" className="speaker-application-invite">
             <div>
-              <span className="pc-section-kicker">Accepted proposal</span>
               <h3>Add a co-speaker</h3>
               <p className="subtle">
                 This adds the relationship without changing the submitted
@@ -305,13 +301,13 @@ function ApplicationDetail({
         {application.primarySubmitter &&
         application.status === "accepted" &&
         !application.speakerListEditable ? (
-          <p className="help mt">
+          <p className="speaker-task-note">
             This participant list can change only while the accepted application
             has exactly one editable derived session. Contact an organiser if a
             speaker needs to change.
           </p>
         ) : null}
-        <div className="page-actions mt">
+        <div className="page-actions speaker-application-actions">
           {canOpenForm ? (
             <Link
               className="btn primary"
@@ -328,7 +324,7 @@ function ApplicationDetail({
           </Link>
         </div>
         {!canOpenForm && application.primarySubmitter ? (
-          <p className="help mt">
+          <p className="speaker-task-note">
             This form is no longer published. The saved application remains
             available here as a read-only record.
           </p>
@@ -348,37 +344,46 @@ export default function ParticipantApplications({
     <>
       <div className="page-head">
         <div>
-          <span className="pc-page-eyebrow">Participant workspace</span>
           <h1>Applications</h1>
           <p>
             Track proposals you submitted and applications that include you as a
             co-speaker.
           </p>
         </div>
+        <p className="speaker-work-count">
+          <b className="pc-num">{loaderData.applications.length}</b>
+          <span>
+            {loaderData.applications.length === 1
+              ? "application"
+              : "applications"}
+          </span>
+        </p>
       </div>
       {loaderData.availableForms.length ? (
-        <section
-          className="card pad mt"
+        <nav
+          className="speaker-application-forms"
           aria-labelledby="available-forms-heading"
         >
-          <div className="card-title">
-            <div>
-              <span className="pc-section-kicker">Start something new</span>
-              <h2 id="available-forms-heading">Open forms</h2>
-            </div>
-          </div>
-          <div className="page-actions">
+          <h2 id="available-forms-heading" className="speaker-work-caption">
+            Open forms
+          </h2>
+          <div className="speaker-work-list">
             {loaderData.availableForms.map((form) => (
               <Link
-                className="btn"
+                className="resource-link"
                 to={`/apply/${encodeURIComponent(form.publicSlug)}`}
                 key={form.id}
               >
-                {form.name} <ExternalLink aria-hidden size={14} />
+                <ClipboardList aria-hidden className="pc-index-icon" />
+                <span className="speaker-resource-link-copy">
+                  <strong>{form.name}</strong>
+                  <small>Start a new application</small>
+                </span>
+                <ExternalLink aria-hidden size={14} />
               </Link>
             ))}
           </div>
-        </section>
+        </nav>
       ) : null}
       {loaderData.selectedApplication ? (
         <ApplicationDetail
@@ -388,59 +393,67 @@ export default function ParticipantApplications({
         />
       ) : null}
       <section
-        className="mt"
+        className="mt speaker-work"
         aria-labelledby="participant-applications-heading"
       >
-        <div className="card-title">
-          <h2 id="participant-applications-heading">Your applications</h2>
-          <span className="pill right">{loaderData.applications.length}</span>
-        </div>
-        {loaderData.applications.length ? (
-          <div className="speaker-task-list">
-            {loaderData.applications.map((application) => (
-              <article className="card pad" key={application.id}>
-                <div className="card-title">
-                  <DomainStatusBadge
-                    domain="submission"
-                    status={application.status}
-                  />
-                  <span className="subtle tiny right">
-                    {application.publicReference}
-                  </span>
+        <h2 className="sr-only" id="participant-applications-heading">
+          Your applications
+        </h2>
+        <div className="speaker-work-list">
+          {loaderData.applications.length ? (
+            loaderData.applications.map((application) => (
+              <article
+                className="card speaker-application-row"
+                key={application.id}
+              >
+                <div className="speaker-session-row">
+                  <ClipboardList aria-hidden className="pc-index-icon" />
+                  <div className="speaker-session-copy">
+                    <div className="speaker-task-title-row">
+                      <h3>{application.title}</h3>
+                      <DomainStatusBadge
+                        domain="submission"
+                        status={application.status}
+                      />
+                    </div>
+                    <p className="speaker-task-meta">
+                      <span>{application.formName}</span>
+                      <span aria-hidden="true"> · </span>
+                      <span>
+                        {application.primarySubmitter
+                          ? application.status === "draft"
+                            ? "Started by you"
+                            : "Submitted by you"
+                          : "You are a co-speaker"}
+                      </span>
+                      <span aria-hidden="true"> · </span>
+                      <span>{application.publicReference}</span>
+                      <span aria-hidden="true"> · </span>
+                      <span>
+                        Updated{" "}
+                        {new Intl.DateTimeFormat("en", {
+                          dateStyle: "medium",
+                        }).format(new Date(application.updatedAt))}
+                      </span>
+                    </p>
+                  </div>
+                  <div className="speaker-session-measure">
+                    <Link
+                      className="btn small"
+                      to={`?${new URLSearchParams({ application: application.id })}#participant-application-detail`}
+                    >
+                      View application
+                    </Link>
+                  </div>
                 </div>
-                <h3>{application.title}</h3>
-                <p className="subtle">
-                  {application.formName} ·{" "}
-                  {application.primarySubmitter
-                    ? application.status === "draft"
-                      ? "Started by you"
-                      : "Submitted by you"
-                    : "You are a co-speaker"}
-                </p>
-                <p className="tiny subtle">
-                  Updated{" "}
-                  {new Intl.DateTimeFormat("en", {
-                    dateStyle: "medium",
-                  }).format(new Date(application.updatedAt))}
-                </p>
-                <Link
-                  className="btn small"
-                  to={`?${new URLSearchParams({ application: application.id })}#participant-application-detail`}
-                >
-                  View application
-                </Link>
               </article>
-            ))}
-          </div>
-        ) : (
-          <div className="pc-empty-state card pad">
-            <ClipboardList aria-hidden className="pc-state-icon" />
-            <h2>No applications yet</h2>
-            <p className="subtle">
+            ))
+          ) : (
+            <p className="speaker-library-empty">
               You have not started or joined an application for this event.
             </p>
-          </div>
-        )}
+          )}
+        </div>
       </section>
     </>
   );

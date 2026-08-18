@@ -11,8 +11,8 @@ export function RecordChevron() {
     <ChevronRight
       aria-hidden
       className="event-record-chevron"
-      size={16}
-      strokeWidth={2.5}
+      size={15}
+      strokeWidth={2.25}
     />
   );
 }

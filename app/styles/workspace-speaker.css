@@ -4,7 +4,7 @@
   background: var(--canvas);
 }
 .speaker-top {
-  height: 72px;
+  height: 68px;
   background: var(--surface);
   border-bottom: 1px solid var(--line);
   display: flex;
@@ -14,7 +14,7 @@
   position: sticky;
   top: 0;
   z-index: 30;
-  box-shadow: 0 5px 18px rgba(19, 32, 31, 0.035);
+  box-shadow: none;
 }
 .speaker-top .event-title {
   font-size: var(--text-lg);
@@ -114,10 +114,14 @@
   align-items: center;
 }
 .speaker-nav a.active {
-  background: var(--brand-50);
-  color: var(--brand-700);
+  background: color-mix(
+    in srgb,
+    var(--event-accent, var(--brand-600)) 10%,
+    var(--surface)
+  );
+  color: var(--event-accent, var(--brand-700));
   font-weight: var(--weight-bold);
-  box-shadow: inset 3px 0 0 var(--brand-600);
+  box-shadow: inset 3px 0 0 var(--event-accent, var(--brand-600));
 }
 .speaker-main {
   padding: var(--space-6);
@@ -126,13 +130,13 @@
    "this is the thing to do next" without a 135deg gradient pretending the
    card is lit from somewhere. */
 .next-action {
-  padding: var(--space-5);
+  padding: var(--space-6) var(--space-6);
   background: var(--surface);
   border-color: var(--border);
-  border-left: 3px solid var(--brand-600);
+  border-left: 3px solid var(--event-accent, var(--brand-600));
 }
 .next-action h2 {
-  margin: var(--space-2) 0 var(--space-1);
+  margin: var(--space-2) 0 var(--space-2);
   font-size: var(--text-xl);
   font-weight: var(--weight-bold);
   letter-spacing: var(--tracking-snug);
@@ -140,6 +144,35 @@
 .next-action p {
   max-width: 72ch;
   margin: 0 0 var(--space-4);
+}
+.speaker-next-hero {
+  display: block;
+  width: min(100%, 36rem);
+  padding: var(--space-6);
+  background: linear-gradient(
+    135deg,
+    color-mix(in srgb, var(--event-accent, var(--brand-600)) 8%, var(--surface))
+      0%,
+    var(--surface) 56%
+  );
+  box-shadow: none;
+}
+.speaker-next-hero h2 {
+  max-width: 22ch;
+  font-size: clamp(var(--text-2xl), 2.4vw, var(--text-3xl));
+  line-height: var(--leading-tight);
+  letter-spacing: var(--tracking-tight);
+  text-wrap: balance;
+}
+.speaker-next-hero p {
+  max-width: 46ch;
+  font-size: var(--text-base);
+}
+.speaker-next-facts {
+  margin: var(--space-4) 0 0;
+  color: var(--text-tertiary);
+  font-size: var(--text-xs);
+  font-variant-numeric: tabular-nums;
 }
 .upload-illustration {
   height: 145px;

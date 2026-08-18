@@ -73,14 +73,13 @@ export function OperationFiltersPanel({
 }) {
   return (
     <section
-      className="card pad mb"
+      className="ops-filters mb"
       aria-labelledby="operation-filters-heading"
     >
-      <div className="card-title">
-        <h2 id="operation-filters-heading">Filter operations</h2>
-        <span className="help right">Shareable URL filters</span>
-      </div>
-      <Form method="get" className="grid grid-3">
+      <h2 id="operation-filters-heading" className="sr-only">
+        Filter operations
+      </h2>
+      <Form method="get" className="ops-filters-form">
         <label className="label">
           Status
           <select
@@ -111,8 +110,8 @@ export function OperationFiltersPanel({
             ))}
           </select>
         </label>
-        <div className="page-actions" style={{ alignItems: "end" }}>
-          <button className="btn primary" type="submit">
+        <div className="page-actions">
+          <button className="btn" type="submit">
             Apply filters
           </button>
           {loaderData.filterActive ? (

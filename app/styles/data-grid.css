@@ -4,6 +4,11 @@
   border-radius: var(--radius);
   background: var(--surface);
 }
+.submissions-board .table-wrap {
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+}
 .table-wrap[tabindex="0"]:focus-visible {
   border-color: var(--brand-400);
 }
@@ -18,11 +23,12 @@
   position: sticky;
   top: 0;
   background: var(--soft);
-  color: var(--text-secondary);
+  color: var(--text-tertiary);
   text-align: left;
   font-size: var(--text-2xs);
-  letter-spacing: 0.02em;
-  padding: var(--space-3);
+  font-weight: var(--weight-semibold);
+  letter-spacing: 0;
+  padding: var(--space-2) var(--space-3);
   /* A border does not survive the sticky offset; an inset shadow does. */
   box-shadow: inset 0 -1px 0 var(--line);
   z-index: 1;
@@ -44,8 +50,12 @@
   border-bottom: 1px solid var(--line);
   vertical-align: middle;
 }
+.submissions-board .data-table td,
+.submissions-board .data-table tbody th[scope="row"] {
+  padding: var(--space-3) var(--space-3);
+}
 .data-table tr:hover td {
-  background: #fbfcff;
+  background: var(--soft);
 }
 .data-table tr.pc-focused-record td {
   background: var(--state-info-surface);
@@ -60,8 +70,10 @@
   display: flex;
   align-items: center;
   gap: var(--space-2);
-  min-height: 42px;
-  margin: var(--space-2) 0;
+  min-height: 36px;
+  margin: 0;
+  padding: var(--space-1) var(--space-4);
+  border-bottom: 1px solid var(--line);
 }
 .pc-data-grid-selection {
   display: flex;
@@ -70,15 +82,21 @@
   gap: var(--space-2);
   min-width: 0;
 }
+.pc-data-grid-hint {
+  color: var(--text-tertiary);
+  font-size: var(--text-2xs);
+}
 .pc-data-grid-density {
-  display: flex;
+  display: inline-flex;
   align-items: center;
   gap: var(--space-1);
+  color: var(--text-tertiary);
   white-space: nowrap;
 }
 .pc-data-grid-density .select {
   width: auto;
-  min-width: 132px;
+  min-width: 148px;
+  min-height: 32px;
 }
 .pc-data-grid-columns {
   position: relative;
@@ -164,4 +182,157 @@
   align-items: center;
   flex-wrap: wrap;
   margin-bottom: var(--space-2);
+}
+
+/* --- Applications workspace ----------------------------------------------
+   The table is the page. One pulse line, one toolbar, rows to the bottom. */
+.submissions-workspace {
+  display: flex;
+  flex-direction: column;
+  min-height: calc(100dvh - 148px);
+}
+.submissions-workspace > .page-head {
+  margin-bottom: var(--space-2);
+}
+.submissions-pulse-line {
+  margin: 0 0 var(--space-2);
+  color: var(--text-secondary);
+  font-size: var(--text-xs);
+  font-variant-numeric: tabular-nums;
+}
+.submissions-workspace .submissions-board {
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  box-shadow: var(--elev-1);
+}
+.submissions-workspace .pc-data-grid-wrap {
+  flex: 1 1 auto;
+  max-height: none;
+}
+.submissions-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: end;
+  gap: var(--space-2);
+  padding: var(--space-3) var(--space-4);
+  border-bottom: 1px solid var(--border);
+}
+.submissions-board .pc-data-grid-toolbar {
+  display: none;
+}
+.submissions-board .pc-data-grid-toolbar:has(.pc-data-grid-selection strong) {
+  display: flex;
+  min-height: 36px;
+  padding: var(--space-2) var(--space-4);
+  border-bottom: 1px solid var(--border);
+}
+.submissions-board .pc-data-grid-density {
+  display: none;
+}
+.submissions-filter {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+  flex: 1 1 8rem;
+}
+.submissions-filter-sort {
+  flex: 0 0 12.5rem;
+  min-width: 12.5rem;
+}
+.submissions-filter > span {
+  color: var(--text-tertiary);
+  font-size: var(--text-2xs);
+  font-weight: var(--weight-semibold);
+}
+.submissions-filter .field,
+.submissions-filter .select {
+  min-height: 34px;
+  min-width: 0;
+}
+.submissions-filter-sort .select {
+  min-width: 12.5rem;
+  width: 12.5rem;
+}
+.submissions-filter-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  padding-bottom: 1px;
+  flex: 0 0 auto;
+}
+.submissions-pager {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-3) var(--space-4);
+  border-top: 1px solid var(--border);
+}
+.pc-record-title {
+  color: var(--text-primary);
+  font-size: var(--text-sm);
+  font-weight: var(--weight-semibold);
+  text-decoration: none;
+}
+.pc-record-title:hover,
+.pc-record-title:focus-visible {
+  color: var(--brand-700);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.pc-record-person,
+.pc-record-route {
+  display: block;
+  font-size: var(--text-xs);
+  font-weight: var(--weight-semibold);
+}
+.pc-record-meta {
+  display: block;
+  color: var(--text-tertiary);
+  font-size: var(--text-2xs);
+}
+.pc-record-ref {
+  font-variant-numeric: tabular-nums;
+  font-weight: var(--weight-medium);
+}
+.pc-record-open {
+  color: var(--text-secondary);
+  font-size: var(--text-xs);
+  font-weight: var(--weight-semibold);
+  text-decoration: none;
+}
+.pc-record-open:hover,
+.pc-record-open:focus-visible {
+  color: var(--brand-700);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+@media (max-width: 1023px) {
+  .submissions-filter {
+    flex: 1 1 calc(50% - var(--space-2));
+  }
+  .submissions-filter-sort {
+    flex: 1 1 12.5rem;
+  }
+  .submissions-filter-actions {
+    width: 100%;
+    justify-content: flex-end;
+  }
+}
+
+@media (max-width: 639px) {
+  .submissions-filter,
+  .submissions-filter-sort {
+    flex: 1 1 100%;
+  }
+  .submissions-filter-sort .select {
+    width: 100%;
+    min-width: 12.5rem;
+  }
 }

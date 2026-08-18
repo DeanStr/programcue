@@ -1,20 +1,112 @@
+/* Format is categorical colour, independent of copper brand emphasis.
+   Fill/ink/line let a block read as an object; the legacy .format-*
+   badges keep the same hues for chips outside the planner. */
+:root {
+  --format-keynote-fill: #f1ebfe;
+  --format-keynote-ink: #4c1d95;
+  --format-keynote-line: #c4b5fd;
+  --format-presentation-fill: #e7f0fe;
+  --format-presentation-ink: #1e3a8a;
+  --format-presentation-line: #93c5fd;
+  --format-panel-fill: #fff0e4;
+  --format-panel-ink: #9a3412;
+  --format-panel-line: #fdba74;
+  --format-workshop-fill: #e7f7ed;
+  --format-workshop-ink: #166534;
+  --format-workshop-line: #86efac;
+  --format-breakout-fill: #e5f7fb;
+  --format-breakout-ink: #155e75;
+  --format-breakout-line: #67e8f9;
+  --format-break-fill: #eef0ea;
+  --format-break-ink: #3f4d48;
+  --format-break-line: #c9cdc4;
+}
+
 .format-keynote {
-  background: #ede9fe;
+  background: var(--format-keynote-fill);
   color: var(--format-keynote-accent);
 }
 .format-presentation {
-  background: #dbeafe;
-  color: #1e40af;
+  background: var(--format-presentation-fill);
+  color: var(--format-presentation-ink);
 }
 .format-panel {
-  background: #ffedd5;
-  color: #9a3412;
+  background: var(--format-panel-fill);
+  color: var(--format-panel-ink);
 }
 .format-workshop {
-  background: var(--state-good-surface);
-  color: var(--state-good-text);
+  background: var(--format-workshop-fill);
+  color: var(--format-workshop-ink);
 }
 .format-breakout {
-  background: #cffafe;
-  color: #155e75;
+  background: var(--format-breakout-fill);
+  color: var(--format-breakout-ink);
+}
+.format-break {
+  background: var(--format-break-fill);
+  color: var(--format-break-ink);
+}
+
+.session-card,
+.schedule-session-source,
+.schedule-fc-event,
+.schedule-format-key span {
+  --pc-format-fill: var(--surface);
+  --pc-format-ink: var(--ink);
+  --pc-format-line: var(--line);
+  --pc-format-rail: var(--muted-2);
+}
+.session-card.keynote,
+.schedule-session-source.keynote,
+.schedule-fc-event.keynote,
+.schedule-format-key .keynote {
+  --pc-format-fill: var(--format-keynote-fill);
+  --pc-format-ink: var(--format-keynote-ink);
+  --pc-format-line: var(--format-keynote-line);
+  --pc-format-rail: var(--format-keynote-accent);
+}
+.session-card.presentation,
+.schedule-session-source.presentation,
+.schedule-fc-event.presentation,
+.schedule-format-key .presentation {
+  --pc-format-fill: var(--format-presentation-fill);
+  --pc-format-ink: var(--format-presentation-ink);
+  --pc-format-line: var(--format-presentation-line);
+  --pc-format-rail: var(--blue);
+}
+.session-card.panel,
+.schedule-session-source.panel,
+.schedule-fc-event.panel,
+.schedule-format-key .panel {
+  --pc-format-fill: var(--format-panel-fill);
+  --pc-format-ink: var(--format-panel-ink);
+  --pc-format-line: var(--format-panel-line);
+  --pc-format-rail: var(--orange);
+}
+.session-card.workshop,
+.schedule-session-source.workshop,
+.schedule-fc-event.workshop,
+.schedule-format-key .workshop {
+  --pc-format-fill: var(--format-workshop-fill);
+  --pc-format-ink: var(--format-workshop-ink);
+  --pc-format-line: var(--format-workshop-line);
+  --pc-format-rail: var(--state-good-solid);
+}
+.session-card.breakout,
+.schedule-session-source.breakout,
+.schedule-fc-event.breakout,
+.schedule-format-key .breakout {
+  --pc-format-fill: var(--format-breakout-fill);
+  --pc-format-ink: var(--format-breakout-ink);
+  --pc-format-line: var(--format-breakout-line);
+  --pc-format-rail: var(--cyan);
+}
+.session-card.break,
+.schedule-session-source.break,
+.schedule-fc-event.break,
+.schedule-format-key .break {
+  --pc-format-fill: var(--format-break-fill);
+  --pc-format-ink: var(--format-break-ink);
+  --pc-format-line: var(--format-break-line);
+  --pc-format-rail: var(--muted-2);
 }

@@ -47,7 +47,7 @@ export function Button({
     >
       {pending ? (
         <>
-          <LoaderCircle className="pc-spin" aria-hidden size={15} />
+          <LoaderCircle className="pc-spin" aria-hidden size={16} />
           {pendingLabel ?? children}
         </>
       ) : (

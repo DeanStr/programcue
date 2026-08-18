@@ -18,6 +18,7 @@ import {
 } from "~/components/draft-recovery-feedback";
 import { useConfirm } from "~/components/ui/confirm-dialog";
 import { DerivedSlugField } from "~/components/ui/derived-slug-field";
+import { PageHeader } from "~/components/ui/page-header";
 import { requireValue } from "~/lib/required-value";
 import { maximumMegabytes } from "~/modules/files/file-policy";
 import { emptyResourceExternalEmbedDraft } from "~/modules/resources/resource-recovery";
@@ -412,7 +413,7 @@ function ResourceEditorPanel() {
     editorKey,
   } = useResourceAdminModel();
   return (
-    <section className="card resource-admin-editor">
+    <section className="pc-res-editor">
       <Form key={editorKey} method="post" className="resource-edit-form">
         <ResourceSaveIntent />
         <ResourceEditingIdentity />
@@ -612,35 +613,41 @@ function ResourceEditorPanel() {
 function ResourceLibraryPanel() {
   const { loaderData, selected, creating } = useResourceAdminModel();
   return (
-    <aside className="card pad resource-admin-index">
-      <div className="card-title">
+    <aside className="pc-res-library">
+      <div className="pc-res-library-head">
         <h2>Library</h2>
-        <span className="pill right">{loaderData.pages.length}</span>
+        <span>{loaderData.pages.length}</span>
       </div>
-      <div className="stack">
-        {loaderData.pages.map((page) => (
-          <Link
-            className={`resource-link${!creating && selected?.id === page.id ? " active" : ""}`}
-            to={`/admin/resources?resource=${page.id}`}
-            key={page.id}
-          >
-            <strong>{page.title}</strong>
-            <small>
-              {page.category ?? "General"} · version {page.versionNumber ?? "—"}
-            </small>
-            <span className={`status ${statusClass(page.status)}`}>
-              {page.status}
-            </span>
-          </Link>
-        ))}
-      </div>
+      {loaderData.pages.length ? (
+        <ul className="pc-res-list">
+          {loaderData.pages.map((page) => (
+            <li key={page.id}>
+              <Link
+                className={`pc-res-item${!creating && selected?.id === page.id ? " is-active" : ""}`}
+                to={`/admin/resources?resource=${page.id}`}
+              >
+                <strong>{page.title}</strong>
+                <small>
+                  {page.category ?? "General"} · version{" "}
+                  {page.versionNumber ?? "—"}
+                </small>
+                <span className={`status ${statusClass(page.status)}`}>
+                  {page.status}
+                </span>
+              </Link>
+            </li>
+          ))}
+        </ul>
+      ) : (
+        <p className="pc-res-empty">No resource pages yet.</p>
+      )}
     </aside>
   );
 }
 
 function ResourceAdministrationLayout() {
   return (
-    <div className="resource-admin-layout">
+    <div className="pc-res-layout">
       <ResourceLibraryPanel />
       <ResourceEditorPanel />
     </div>
@@ -661,46 +668,42 @@ function ResourceAdminHeader() {
     setDirty,
   } = useResourceAdminModel();
   return (
-    <div className="page-head pc-page-header">
-      <div>
-        <span className="pc-page-eyebrow">Speaker knowledge</span>
-        <h1>Resource pages</h1>
-        <p>
-          Author versioned guidance with a constrained editor, private
-          attachments, optional video or map blocks and audience-scoped
-          publication.
-        </p>
-      </div>
-      <div className="page-actions">
-        <Link
-          className="btn"
-          to="/participant/resources"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <ExternalLink aria-hidden size={15} /> Speaker view
-          <span className="sr-only"> (opens in a new tab)</span>
-        </Link>
-        <button
-          className="btn primary"
-          type="button"
-          onClick={() => {
-            setCreating(true);
-            setDocument(emptyDocument);
-            setExternalEmbedDraft(emptyResourceExternalEmbedDraft);
-            setAudienceScope("all_speakers");
-            setTitle("");
-            setSlug("");
-            setCategory("");
-            setAudiencePersonIds([]);
-            setAcknowledgementRequired(false);
-            setDirty(false);
-          }}
-        >
-          <Plus aria-hidden size={15} /> New resource
-        </button>
-      </div>
-    </div>
+    <PageHeader
+      eyebrow="Speaker knowledge"
+      title="Resource pages"
+      description="Author versioned guidance with a constrained editor, private attachments, optional video or map blocks and audience-scoped publication."
+      actions={
+        <>
+          <Link
+            className="btn"
+            to="/participant/resources"
+            target="_blank"
+            rel="noopener noreferrer"
+          >
+            <ExternalLink aria-hidden size={15} /> Speaker view
+            <span className="sr-only"> (opens in a new tab)</span>
+          </Link>
+          <button
+            className="btn primary"
+            type="button"
+            onClick={() => {
+              setCreating(true);
+              setDocument(emptyDocument);
+              setExternalEmbedDraft(emptyResourceExternalEmbedDraft);
+              setAudienceScope("all_speakers");
+              setTitle("");
+              setSlug("");
+              setCategory("");
+              setAudiencePersonIds([]);
+              setAcknowledgementRequired(false);
+              setDirty(false);
+            }}
+          >
+            <Plus aria-hidden size={15} /> New resource
+          </button>
+        </>
+      }
+    />
   );
 }
 
@@ -800,14 +803,14 @@ function ResourceDraftConflictNotice() {
 
 function ResourceAdministrationPage() {
   return (
-    <>
+    <div className="pc-res">
       <ResourceAdminHeader />
       <ResourceActionNotice />
       <ResourceLiveUpdateNotice />
       <ResourceDraftRecoveryNotice />
       <ResourceDraftConflictNotice />
       <ResourceAdministrationLayout />
-    </>
+    </div>
   );
 }
 

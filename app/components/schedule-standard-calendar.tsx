@@ -11,6 +11,7 @@ import "@fullcalendar/react/themes/breezy/theme.css";
 import "@fullcalendar/react/themes/breezy/palettes/indigo.css";
 
 import type { ScheduleWorkspace } from "~/modules/schedule/schedule-service.server";
+import { sessionFormatLabel } from "./schedule-planner-workspace-helpers";
 
 type StandardScheduleView = "list" | "day" | "week";
 
@@ -19,6 +20,9 @@ type StandardScheduleEventContent = {
   timeText: string;
   timeClass: string;
   titleClass: string;
+  formatLabel?: string;
+  speaker?: string;
+  roomName?: string;
 };
 
 export function ScheduleStandardEventContent({
@@ -26,23 +30,32 @@ export function ScheduleStandardEventContent({
   timeText,
   timeClass,
   titleClass,
+  formatLabel,
+  speaker,
+  roomName,
 }: StandardScheduleEventContent) {
   return (
     <div className="schedule-standard-event-content">
+      {formatLabel ? (
+        <span className="schedule-standard-event-format">{formatLabel}</span>
+      ) : null}
       {timeText ? (
-        <>
-          <span
-            className={`schedule-standard-event-time${timeClass ? ` ${timeClass}` : ""}`}
-          >
-            {timeText}
-          </span>{" "}
-        </>
+        <span
+          className={`schedule-standard-event-time${timeClass ? ` ${timeClass}` : ""}`}
+        >
+          {timeText}
+        </span>
       ) : null}
       <span
         className={`schedule-standard-event-title${titleClass ? ` ${titleClass}` : ""}`}
       >
         {event.title || "\u00a0"}
       </span>
+      {speaker || roomName ? (
+        <span className="schedule-standard-event-meta">
+          {[speaker, roomName].filter(Boolean).join(" · ")}
+        </span>
+      ) : null}
     </div>
   );
 }
@@ -103,12 +116,20 @@ export function ScheduleStandardCalendar({
     }
     return {
       id: entry.id,
-      title: `${session.title} · ${room.name}`,
+      title: session.title,
       start: new Date(entry.startsAt * 1_000).toISOString(),
       end: new Date(entry.endsAt * 1_000).toISOString(),
-      backgroundColor: workspace.event.brandAccent,
-      borderColor: workspace.event.brandAccent,
-      extendedProps: { sessionId: entry.sessionId },
+      classNames: ["schedule-fc-event", session.format],
+      extendedProps: {
+        sessionId: entry.sessionId,
+        format: session.format,
+        formatLabel: sessionFormatLabel(
+          workspace.sessionFormats,
+          session.format,
+        ),
+        speaker: session.speakerNames.join(", "),
+        roomName: room.name,
+      },
     };
   });
 
@@ -193,7 +214,17 @@ export function ScheduleStandardCalendar({
               right: "",
             }}
             eventTimeFormat={{ hour: "numeric", minute: "2-digit" }}
-            eventContent={ScheduleStandardEventContent}
+            eventContent={(arg) => (
+              <ScheduleStandardEventContent
+                event={arg.event}
+                timeText={arg.timeText}
+                timeClass=""
+                titleClass=""
+                formatLabel={String(arg.event.extendedProps.formatLabel ?? "")}
+                speaker={String(arg.event.extendedProps.speaker ?? "")}
+                roomName={String(arg.event.extendedProps.roomName ?? "")}
+              />
+            )}
             noEventsContent="No sessions are placed in this period."
             eventClick={(info) => {
               const sessionId = String(

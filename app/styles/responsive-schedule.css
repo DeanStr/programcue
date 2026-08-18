@@ -1,5 +1,7 @@
 /* Final review: allow the schedule work area to contain horizontal scrolling at laptop widths. */
-.schedule-layout > * {
+.schedule-layout > *,
+.schedule-workspace > *,
+.schedule-stage > * {
   min-width: 0;
 }
 .schedule-board {
@@ -50,6 +52,34 @@
   text-align: left;
   width: 100%;
 }
+@media (max-width: 1320px) and (min-width: 761px) {
+  .schedule-workspace {
+    grid-template-columns: 220px minmax(0, 1fr);
+  }
+  .schedule-canvas-toolbar {
+    padding: var(--space-2) var(--space-3);
+    gap: var(--space-2);
+  }
+  .schedule-canvas-meta,
+  .schedule-room-frame {
+    margin-left: var(--space-3);
+    margin-right: var(--space-3);
+  }
+  .schedule-canvas-meta {
+    padding-left: 0;
+    padding-right: 0;
+  }
+  .schedule-day-long {
+    display: none;
+  }
+  .schedule-day-short {
+    display: block;
+  }
+  .schedule-room-board {
+    --pc-slot-height: 40px;
+  }
+}
+
 @media (max-width: 1024px) {
   .week-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -59,11 +89,65 @@
   .week-grid {
     grid-template-columns: 1fr;
   }
+  .schedule-page {
+    height: auto;
+    min-height: 0;
+  }
+  .schedule-page-head,
+  .schedule-page-actions {
+    flex-wrap: wrap;
+  }
+  .schedule-workspace {
+    grid-template-columns: 1fr;
+    min-height: 0;
+  }
+  .schedule-source {
+    max-height: 280px;
+  }
   .schedule-view-tabs {
     width: 100%;
     margin-left: 0;
   }
   .schedule-view-tabs .btn {
     flex: 1;
+  }
+  .schedule-stage .schedule-canvas,
+  .schedule-stage .schedule-conflicts {
+    border-radius: var(--radius);
+  }
+  .schedule-stage .schedule-conflicts {
+    border-top: 1px solid var(--border);
+    margin-top: var(--space-3);
+  }
+  .schedule-canvas-toolbar {
+    padding: var(--space-3);
+  }
+  .schedule-canvas-meta,
+  .schedule-room-frame {
+    margin-left: var(--space-3);
+    margin-right: var(--space-3);
+  }
+  .schedule-canvas-meta {
+    padding-left: 0;
+    padding-right: 0;
+  }
+  .schedule-day-tabs {
+    width: 100%;
+  }
+  .schedule-day-long {
+    display: none;
+  }
+  .schedule-day-short {
+    display: block;
+  }
+  .schedule-agenda {
+    display: grid;
+  }
+  .schedule-room-board .session-card-speaker,
+  .schedule-room-board .session-card-resource {
+    display: none;
+  }
+  .schedule-scroll-hint {
+    display: block;
   }
 }

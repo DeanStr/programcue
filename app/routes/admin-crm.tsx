@@ -1,14 +1,5 @@
-import {
-  BarChart3,
-  FilterX,
-  ListFilter,
-  Mail,
-  Network,
-  Search,
-  Upload,
-  UserPlus,
-  UsersRound,
-} from "lucide-react";
+import { FilterX, Mail, Upload, UserPlus, UsersRound } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
 import {
   data,
   Form,
@@ -16,6 +7,7 @@ import {
   redirect,
   useActionData,
   useNavigation,
+  useSubmit,
 } from "react-router";
 import { ZodError } from "zod";
 import { EmptyState } from "~/components/ui/states";
@@ -182,84 +174,101 @@ function directoryPageQuery(
 export default function AdminCrm({ loaderData }: Route.ComponentProps) {
   const actionData = useActionData<ActionResult>();
   const navigation = useNavigation();
+  const submit = useSubmit();
+  const searchTimer = useRef<number | null>(null);
   const { directory, dashboard, segment } = loaderData;
+  const [searchQuery, setSearchQuery] = useState(directory.filters.query);
+  const [selectedCount, setSelectedCount] = useState(0);
   const filtersActive = Object.values(directory.filters).some(Boolean);
   const busy = navigation.state !== "idle";
+  useEffect(() => {
+    setSearchQuery(directory.filters.query);
+  }, [directory.filters.query]);
+  const selectionResetKey = [
+    directory.filters.query,
+    directory.filters.company,
+    directory.filters.jobTitle,
+    directory.filters.tag,
+    directory.page,
+    segment?.id ?? "",
+  ].join(":");
+  // biome-ignore lint/correctness/useExhaustiveDependencies: Reset bulk selection when the directory query changes; the key is the trigger, not a value the effect reads.
+  useEffect(() => {
+    setSelectedCount(0);
+  }, [selectionResetKey]);
+  useEffect(
+    () => () => {
+      if (searchTimer.current) window.clearTimeout(searchTimer.current);
+    },
+    [],
+  );
+  function submitDirectoryFilters(form: HTMLFormElement | null) {
+    if (!form) return;
+    submit(form, { method: "get", replace: true });
+  }
+  function scheduleDirectorySearch(form: HTMLFormElement | null) {
+    if (searchTimer.current) window.clearTimeout(searchTimer.current);
+    searchTimer.current = window.setTimeout(
+      () => submitDirectoryFilters(form),
+      250,
+    );
+  }
+  const pulseParts = [
+    `${dashboard.totalContacts} ${dashboard.totalContacts === 1 ? "contact" : "contacts"}`,
+    `${dashboard.eventCount} ${dashboard.eventCount === 1 ? "event" : "events"}`,
+    dashboard.returningSpeakers
+      ? `${dashboard.returningSpeakers} returning`
+      : null,
+  ].filter(Boolean);
   return (
-    <>
+    <div className="crm-workspace">
       <div className="page-head pc-page-header">
         <div>
           <span className="pc-page-eyebrow">
             Organization workspace · all events
           </span>
           <h1>Speaker Network</h1>
-          <p>
-            A cross-event speaker CRM for reusable profiles, private
-            relationship context and sourcing prospects into events without
-            re-entering data.
+          <p className="crm-caption">
+            Reusable profiles, private relationship context, and sourcing
+            prospects into events without re-entering data.
           </p>
         </div>
         <div className="page-actions">
           <Link className="btn" to="/admin/crm/pipeline">
-            <Network aria-hidden size={16} /> Sourcing pipeline
+            Sourcing pipeline
           </Link>
           <Link className="btn primary" to="/admin/crm/outreach">
-            <Mail aria-hidden size={16} /> Speaker invitations
+            Speaker invitations
           </Link>
         </div>
       </div>
 
-      <section className="grid grid-4 mb" aria-label="Speaker Network overview">
-        <section className="card metric">
-          <div className="label">Total contacts</div>
-          <div className="value">{dashboard.totalContacts}</div>
-        </section>
-        <section className="card metric">
-          <div className="label">Organization events</div>
-          <div className="value">{dashboard.eventCount}</div>
-        </section>
-        <section className="card metric">
-          <div className="label">Returning speakers</div>
-          <div className="value">{dashboard.returningSpeakers}</div>
-        </section>
-        <section className="card metric">
-          <div className="label">Top companies tracked</div>
-          <div className="value">{dashboard.companies.length}</div>
-        </section>
-      </section>
-
-      <section className="card pad mb" aria-labelledby="crm-companies-heading">
-        <div className="card-title">
-          <div>
-            <span className="pc-section-kicker">Organization analytics</span>
-            <h2 id="crm-companies-heading">Top companies</h2>
-          </div>
-          <BarChart3 aria-hidden className="subtle" />
-        </div>
+      <div className="crm-pulse">
+        {pulseParts.join(" · ")}
+        {" · "}
+        <h2 className="crm-pulse-heading">Top companies</h2>
         {dashboard.companies.length ? (
-          <div className="crm-chip-row mt">
-            {dashboard.companies.map((company) => (
-              <Link
-                className="crm-chip"
-                key={company.name}
-                to={`/admin/crm?${new URLSearchParams({ company: company.name })}`}
-              >
-                {company.name} · {company.contacts}
-              </Link>
+          <span className="crm-pulse-companies">
+            {": "}
+            {dashboard.companies.map((company, index) => (
+              <span key={company.name}>
+                {index ? ", " : ""}
+                <Link
+                  to={`/admin/crm?${new URLSearchParams({ company: company.name })}`}
+                >
+                  {company.name} · {company.contacts}
+                </Link>
+              </span>
             ))}
-          </div>
+          </span>
         ) : (
-          <EmptyState
-            icon={BarChart3}
-            title="No company analytics yet"
-            description="Companies are counted once contacts record an employer on their profile."
-          />
+          " not recorded yet"
         )}
-      </section>
+      </div>
 
       {actionData ? (
         <div
-          className={`validation-item ${actionData.ok ? "ok" : "error"} card pad mb`}
+          className={`validation-item ${actionData.ok ? "ok" : "error"} crm-notice`}
           role={actionData.ok ? "status" : "alert"}
         >
           <strong>{actionData.ok ? "✓" : "△"}</strong>
@@ -267,119 +276,338 @@ export default function AdminCrm({ loaderData }: Route.ComponentProps) {
         </div>
       ) : null}
 
-      <section className="card pad mb" aria-labelledby="crm-directory-heading">
-        <div className="card-title">
-          <div>
-            <span className="pc-section-kicker">Cross-event directory</span>
-            <h2 id="crm-directory-heading">
-              {segment ? `${segment.name} segment` : "Organization contacts"}
-            </h2>
-          </div>
-          <UsersRound aria-hidden className="subtle" />
+      <section className="crm-board" aria-labelledby="crm-directory-heading">
+        <div className="crm-board-head">
+          <h2 id="crm-directory-heading">
+            {segment ? `${segment.name} segment` : "Organization contacts"}
+          </h2>
+          <span className="crm-board-meta">
+            Showing {directory.contacts.length}{" "}
+            {directory.contacts.length === 1 ? "contact" : "contacts"}
+          </span>
         </div>
-        <Form method="get" className="stack mt">
-          <div className="form-row">
-            <label className="label">
-              Search contacts
-              <span className="crm-field-with-icon">
-                <Search aria-hidden size={15} />
-                <input
-                  className="field"
-                  name="query"
-                  defaultValue={directory.filters.query}
-                  placeholder="Name, email, company, or title"
-                />
-              </span>
-            </label>
-            <label className="label">
-              Company
-              <select
-                className="select"
-                name="company"
-                defaultValue={directory.filters.company}
-              >
-                <option value="">All companies</option>
-                {directory.facets.companies.map((company) => (
-                  <option key={company}>{company}</option>
-                ))}
-              </select>
-            </label>
-          </div>
-          <div className="form-row">
-            <label className="label">
-              Job title
-              <select
-                className="select"
-                name="jobTitle"
-                defaultValue={directory.filters.jobTitle}
-              >
-                <option value="">All job titles</option>
-                {directory.facets.jobTitles.map((title) => (
-                  <option key={title}>{title}</option>
-                ))}
-              </select>
-            </label>
-            <label className="label">
-              Tag
-              <select
-                className="select"
-                name="tag"
-                defaultValue={directory.filters.tag}
-              >
-                <option value="">All tags</option>
-                {directory.facets.tags.map((tag) => (
-                  <option key={tag}>{tag}</option>
-                ))}
-              </select>
-            </label>
-          </div>
-          <div className="row-actions">
-            <button className="btn primary" type="submit">
-              <ListFilter aria-hidden size={15} /> Apply filters
+        <Form
+          method="get"
+          className="crm-toolbar"
+          key={`${directory.filters.company}:${directory.filters.jobTitle}:${directory.filters.tag}`}
+        >
+          <label className="crm-filter crm-filter-search">
+            <span className="sr-only">Search contacts</span>
+            <input
+              className="field"
+              name="query"
+              value={searchQuery}
+              onChange={(event) => {
+                setSearchQuery(event.currentTarget.value);
+                scheduleDirectorySearch(event.currentTarget.form);
+              }}
+              placeholder="Name or email"
+            />
+          </label>
+          <label className="crm-filter">
+            <span className="sr-only">Company</span>
+            <select
+              className="select"
+              name="company"
+              defaultValue={directory.filters.company}
+              onChange={(event) =>
+                submitDirectoryFilters(event.currentTarget.form)
+              }
+            >
+              <option value="">All companies</option>
+              {directory.facets.companies.map((company) => (
+                <option key={company}>{company}</option>
+              ))}
+            </select>
+          </label>
+          <label className="crm-filter">
+            <span className="sr-only">Job title</span>
+            <select
+              className="select"
+              name="jobTitle"
+              defaultValue={directory.filters.jobTitle}
+              onChange={(event) =>
+                submitDirectoryFilters(event.currentTarget.form)
+              }
+            >
+              <option value="">All job titles</option>
+              {directory.facets.jobTitles.map((title) => (
+                <option key={title}>{title}</option>
+              ))}
+            </select>
+          </label>
+          <label className="crm-filter">
+            <span className="sr-only">Tag</span>
+            <select
+              className="select"
+              name="tag"
+              defaultValue={directory.filters.tag}
+              onChange={(event) =>
+                submitDirectoryFilters(event.currentTarget.form)
+              }
+            >
+              <option value="">All tags</option>
+              {directory.facets.tags.map((tag) => (
+                <option key={tag}>{tag}</option>
+              ))}
+            </select>
+          </label>
+          <div className="crm-filter-actions">
+            <button className="sr-only" type="submit">
+              Apply filters
             </button>
-            <Link className="btn" to="/admin/crm">
-              <FilterX aria-hidden size={15} /> Clear filters
-            </Link>
+            {filtersActive ? (
+              <Link className="crm-text-action" to="/admin/crm">
+                <FilterX aria-hidden size={15} /> Clear filters
+              </Link>
+            ) : null}
           </div>
         </Form>
         {filtersActive ? (
           <fieldset
-            className="crm-chip-row mt pc-plain-fieldset"
+            className="crm-aux pc-plain-fieldset"
             aria-label="Active directory filters"
           >
-            {Object.entries(directory.filters)
-              .filter(([, value]) => value)
-              .map(([key, value]) => (
-                <span className="crm-chip" key={key}>
-                  {key.replace(/([A-Z])/g, " $1")}: {value}
-                </span>
+            <div className="crm-chips">
+              {Object.entries(directory.filters)
+                .filter(([, value]) => value)
+                .map(([key, value]) => (
+                  <span className="crm-chip" key={key}>
+                    {key.replace(/([A-Z])/g, " $1")}: {value}
+                  </span>
+                ))}
+            </div>
+            <Form method="post" className="crm-segment-save">
+              <input type="hidden" name="_intent" value="save_segment" />
+              {Object.entries(directory.filters).map(([key, value]) => (
+                <input type="hidden" name={key} value={value} key={key} />
               ))}
+              <label className="label">
+                Segment name
+                <input
+                  className="field"
+                  name="name"
+                  placeholder="AI Experts"
+                  required
+                />
+              </label>
+              <button type="submit" className="btn" disabled={busy}>
+                Save dynamic segment
+              </button>
+            </Form>
           </fieldset>
         ) : null}
+        {directory.segments.length ? (
+          <div className="crm-aux">
+            <div className="crm-chips">
+              {directory.segments.map((saved) => (
+                <Link
+                  className="crm-chip"
+                  key={saved.id}
+                  to={`/admin/crm?segment=${encodeURIComponent(saved.id)}`}
+                >
+                  {saved.name}
+                </Link>
+              ))}
+            </div>
+          </div>
+        ) : null}
+        <div className="crm-aux">
+          <details className="crm-disclosure">
+            <summary>
+              <span>
+                <UserPlus aria-hidden size={14} /> Add speaker contact manually
+              </span>
+            </summary>
+            <div className="crm-disclosure-body">
+              <Form method="post" className="stack">
+                <input type="hidden" name="_intent" value="create_contact" />
+                <div className="form-row">
+                  <label className="label">
+                    Name
+                    <input className="field" name="name" required />
+                  </label>
+                  <label className="label">
+                    Email
+                    <input
+                      className="field"
+                      type="email"
+                      name="email"
+                      required
+                    />
+                  </label>
+                </div>
+                <div className="form-row">
+                  <label className="label">
+                    Job title
+                    <input className="field" name="jobTitle" />
+                  </label>
+                  <label className="label">
+                    Company
+                    <input className="field" name="organisationName" />
+                  </label>
+                </div>
+                <label className="label">
+                  Biography
+                  <textarea className="textarea" name="biography" />
+                </label>
+                <button type="submit" className="btn primary" disabled={busy}>
+                  Create speaker contact
+                </button>
+              </Form>
+            </div>
+          </details>
+          <details
+            className="crm-disclosure"
+            open={Boolean(actionData?.importPreview)}
+          >
+            <summary>
+              <span>
+                <Upload aria-hidden size={14} /> Import speaker contacts from
+                CSV
+              </span>
+            </summary>
+            <div className="crm-disclosure-body">
+              <Form
+                method="post"
+                encType="multipart/form-data"
+                className="stack"
+              >
+                <input type="hidden" name="_intent" value="preview_import" />
+                <label className="label">
+                  CSV file
+                  <input
+                    className="field"
+                    type="file"
+                    name="file"
+                    accept=".csv,text/csv"
+                    required
+                  />
+                </label>
+                <p className="help">
+                  Accepted columns: name, email, title, company and bio. Import
+                  is previewed before it writes.
+                </p>
+                <button type="submit" className="btn" disabled={busy}>
+                  Preview import
+                </button>
+              </Form>
+              {actionData?.importPreview ? (
+                <div className="stack mt">
+                  <h3>Column mapping</h3>
+                  <div className="crm-chip-row">
+                    {Object.entries(actionData.importPreview.mapping).map(
+                      ([field, column]) => (
+                        <span className="crm-chip" key={field}>
+                          {column ?? "not supplied"} → {field}
+                        </span>
+                      ),
+                    )}
+                  </div>
+                  <section
+                    className="table-wrap"
+                    aria-label="CRM import preview"
+                    // biome-ignore lint/a11y/noNoninteractiveTabindex: Scrollable data regions need keyboard focus so arrow keys can expose overflow content.
+                    tabIndex={0}
+                  >
+                    <table className="data-table">
+                      <thead>
+                        <tr>
+                          <th scope="col">Row</th>
+                          <th scope="col">Name</th>
+                          <th scope="col">Email</th>
+                          <th scope="col">Company</th>
+                          <th scope="col">Validation</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {actionData.importPreview.valid.map((row) => (
+                          <tr key={row.rowNumber}>
+                            <td>{row.rowNumber}</td>
+                            <td>{row.name}</td>
+                            <td>{row.email}</td>
+                            <td>{row.organisationName || "—"}</td>
+                            <td>
+                              <span className="status success">Valid</span>
+                            </td>
+                          </tr>
+                        ))}
+                        {actionData.importPreview.invalid.map((row) => (
+                          <tr key={row.rowNumber}>
+                            <td>{row.rowNumber}</td>
+                            <td colSpan={3}>Invalid row</td>
+                            <td>
+                              <span className="status danger">
+                                {row.errors.join("; ")}
+                              </span>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </section>
+                  {actionData.importPreview.valid.length &&
+                  !actionData.importPreview.invalid.length ? (
+                    <Form method="post">
+                      <input
+                        type="hidden"
+                        name="_intent"
+                        value="confirm_import"
+                      />
+                      <input
+                        type="hidden"
+                        name="csv"
+                        value={actionData.importPreview.csv}
+                      />
+                      <button
+                        type="submit"
+                        className="btn primary"
+                        disabled={busy}
+                      >
+                        Confirm import
+                      </button>
+                    </Form>
+                  ) : null}
+                </div>
+              ) : null}
+            </div>
+          </details>
+        </div>
 
-        <Form method="get" action="/admin/crm/outreach" className="mt">
+        <Form
+          method="get"
+          action="/admin/crm/outreach"
+          onChange={(event) => {
+            const form = event.currentTarget;
+            setSelectedCount(
+              form.querySelectorAll('input[name="person"]:checked').length,
+            );
+          }}
+        >
           <section
-            className="table-wrap"
+            className="crm-table-scroll"
             aria-label="Speaker contact directory"
             // biome-ignore lint/a11y/noNoninteractiveTabindex: Scrollable data regions need keyboard focus so arrow keys can expose overflow content.
             tabIndex={0}
           >
-            <table className="data-table">
+            <table className="crm-directory">
               <thead>
                 <tr>
-                  <th scope="col">
+                  <th scope="col" className="crm-select-cell">
                     <span className="sr-only">Select</span>
                   </th>
                   <th scope="col">Contact</th>
                   <th scope="col">Company and title</th>
-                  <th scope="col">Tags</th>
+                  <th scope="col" className="crm-col-optional">
+                    Tags
+                  </th>
                   <th scope="col">History</th>
                 </tr>
               </thead>
               <tbody>
                 {directory.contacts.map((contact) => (
                   <tr key={contact.personId}>
-                    <td>
+                    <td className="crm-select-cell">
                       <input
                         type="checkbox"
                         name="person"
@@ -388,32 +616,30 @@ export default function AdminCrm({ loaderData }: Route.ComponentProps) {
                       />
                     </td>
                     <td data-label="Contact">
-                      <Link
-                        to={`/admin/crm/contacts/${encodeURIComponent(contact.personId)}`}
-                      >
-                        <strong>{contact.name}</strong>
-                      </Link>
-                      <small className="subtle" style={{ display: "block" }}>
-                        {contact.email}
-                      </small>
-                      {contact.duplicateCount ? (
-                        <span className="status warning">
-                          Possible duplicate
-                        </span>
-                      ) : null}
+                      <div className="crm-person-copy">
+                        <Link
+                          to={`/admin/crm/contacts/${encodeURIComponent(contact.personId)}`}
+                        >
+                          {contact.name}
+                        </Link>
+                        <small>{contact.email}</small>
+                        {contact.duplicateCount ? (
+                          <span className="status warning">
+                            Possible duplicate
+                          </span>
+                        ) : null}
+                      </div>
                     </td>
                     <td data-label="Company and title">
-                      {contact.jobTitle ?? "Title not recorded"}
-                      <small className="subtle" style={{ display: "block" }}>
-                        {contact.organisationName ?? "Company not recorded"}
-                      </small>
+                      <div className="crm-state">
+                        <span>{contact.jobTitle ?? "Title not recorded"}</span>
+                        <small className="subtle">
+                          {contact.organisationName ?? "Company not recorded"}
+                        </small>
+                      </div>
                     </td>
-                    <td data-label="Tags">
-                      {contact.tags.length ? (
-                        contact.tags.join(" · ")
-                      ) : (
-                        <span className="subtle">No tags</span>
-                      )}
+                    <td className="crm-col-optional" data-label="Tags">
+                      {contact.tags.length ? contact.tags.join(" · ") : null}
                     </td>
                     <td data-label="History">
                       {contact.eventCount} event
@@ -427,15 +653,19 @@ export default function AdminCrm({ loaderData }: Route.ComponentProps) {
             </table>
           </section>
           {directory.contacts.length ? (
-            <button className="btn primary mt" type="submit">
-              <Mail aria-hidden size={15} /> Email selected contacts
-            </button>
+            selectedCount > 0 ? (
+              <div className="crm-board-foot">
+                <button className="btn" type="submit">
+                  <Mail aria-hidden size={15} /> Email selected contacts
+                </button>
+              </div>
+            ) : null
           ) : (
             <EmptyState
-              className="mt"
+              className="crm-empty"
               icon={UsersRound}
               title="No matching contacts"
-              description="Clear the filters or add a reusable speaker contact below."
+              description="Clear the filters or add a reusable speaker contact."
               action={
                 filtersActive ? (
                   <Link className="btn" to="/admin/crm">
@@ -446,13 +676,9 @@ export default function AdminCrm({ loaderData }: Route.ComponentProps) {
             />
           )}
         </Form>
-        <p className="help mt" role="status">
-          Showing {directory.contacts.length} organization contact
-          {directory.contacts.length === 1 ? "" : "s"}.
-        </p>
         {directory.page > 1 || directory.hasNext ? (
           <nav
-            className="row-actions mt"
+            className="crm-pager"
             aria-label="Speaker Network directory pages"
           >
             {directory.page > 1 ? (
@@ -482,197 +708,6 @@ export default function AdminCrm({ loaderData }: Route.ComponentProps) {
           </nav>
         ) : null}
       </section>
-
-      <div className="grid grid-2 mb">
-        <details className="card pad pc-disclosure">
-          <summary>
-            <strong>
-              <UserPlus aria-hidden size={16} /> Add speaker contact manually
-            </strong>
-          </summary>
-          <Form method="post" className="stack mt">
-            <input type="hidden" name="_intent" value="create_contact" />
-            <div className="form-row">
-              <label className="label">
-                Name
-                <input className="field" name="name" required />
-              </label>
-              <label className="label">
-                Email
-                <input className="field" type="email" name="email" required />
-              </label>
-            </div>
-            <div className="form-row">
-              <label className="label">
-                Job title
-                <input className="field" name="jobTitle" />
-              </label>
-              <label className="label">
-                Company
-                <input className="field" name="organisationName" />
-              </label>
-            </div>
-            <label className="label">
-              Biography
-              <textarea className="textarea" name="biography" />
-            </label>
-            <button type="submit" className="btn primary" disabled={busy}>
-              Create speaker contact
-            </button>
-          </Form>
-        </details>
-        <details
-          className="card pad pc-disclosure"
-          open={Boolean(actionData?.importPreview)}
-        >
-          <summary>
-            <strong>
-              <Upload aria-hidden size={16} /> Import speaker contacts from CSV
-            </strong>
-          </summary>
-          <Form
-            method="post"
-            encType="multipart/form-data"
-            className="stack mt"
-          >
-            <input type="hidden" name="_intent" value="preview_import" />
-            <label className="label">
-              CSV file
-              <input
-                className="field"
-                type="file"
-                name="file"
-                accept=".csv,text/csv"
-                required
-              />
-            </label>
-            <p className="help">
-              Accepted columns: name, email, title, company and bio. Import is
-              previewed before it writes.
-            </p>
-            <button type="submit" className="btn" disabled={busy}>
-              Preview import
-            </button>
-          </Form>
-          {actionData?.importPreview ? (
-            <div className="stack mt">
-              <h3>Column mapping</h3>
-              <div className="crm-chip-row">
-                {Object.entries(actionData.importPreview.mapping).map(
-                  ([field, column]) => (
-                    <span className="crm-chip" key={field}>
-                      {column ?? "not supplied"} → {field}
-                    </span>
-                  ),
-                )}
-              </div>
-              <section
-                className="table-wrap"
-                aria-label="CRM import preview"
-                // biome-ignore lint/a11y/noNoninteractiveTabindex: Scrollable data regions need keyboard focus so arrow keys can expose overflow content.
-                tabIndex={0}
-              >
-                <table className="data-table">
-                  <thead>
-                    <tr>
-                      <th scope="col">Row</th>
-                      <th scope="col">Name</th>
-                      <th scope="col">Email</th>
-                      <th scope="col">Company</th>
-                      <th scope="col">Validation</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {actionData.importPreview.valid.map((row) => (
-                      <tr key={row.rowNumber}>
-                        <td>{row.rowNumber}</td>
-                        <td>{row.name}</td>
-                        <td>{row.email}</td>
-                        <td>{row.organisationName || "—"}</td>
-                        <td>
-                          <span className="status success">Valid</span>
-                        </td>
-                      </tr>
-                    ))}
-                    {actionData.importPreview.invalid.map((row) => (
-                      <tr key={row.rowNumber}>
-                        <td>{row.rowNumber}</td>
-                        <td colSpan={3}>Invalid row</td>
-                        <td>
-                          <span className="status danger">
-                            {row.errors.join("; ")}
-                          </span>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </section>
-              {actionData.importPreview.valid.length &&
-              !actionData.importPreview.invalid.length ? (
-                <Form method="post">
-                  <input type="hidden" name="_intent" value="confirm_import" />
-                  <input
-                    type="hidden"
-                    name="csv"
-                    value={actionData.importPreview.csv}
-                  />
-                  <button type="submit" className="btn primary" disabled={busy}>
-                    Confirm import
-                  </button>
-                </Form>
-              ) : null}
-            </div>
-          ) : null}
-        </details>
-      </div>
-
-      <section className="card pad" aria-labelledby="crm-segments-heading">
-        <div className="card-title">
-          <div>
-            <span className="pc-section-kicker">Reusable lists</span>
-            <h2 id="crm-segments-heading">Dynamic segments</h2>
-          </div>
-          <ListFilter aria-hidden className="subtle" />
-        </div>
-        {filtersActive ? (
-          <Form method="post" className="form-row mt">
-            <input type="hidden" name="_intent" value="save_segment" />
-            {Object.entries(directory.filters).map(([key, value]) => (
-              <input type="hidden" name={key} value={value} key={key} />
-            ))}
-            <label className="label">
-              Segment name
-              <input
-                className="field"
-                name="name"
-                placeholder="AI Experts"
-                required
-              />
-            </label>
-            <button type="submit" className="btn primary" disabled={busy}>
-              Save dynamic segment
-            </button>
-          </Form>
-        ) : (
-          <p className="subtle">
-            Apply a directory filter to save it as a dynamic segment.
-          </p>
-        )}
-        {directory.segments.length ? (
-          <div className="crm-chip-row mt">
-            {directory.segments.map((saved) => (
-              <Link
-                className="crm-chip"
-                key={saved.id}
-                to={`/admin/crm?segment=${encodeURIComponent(saved.id)}`}
-              >
-                {saved.name}
-              </Link>
-            ))}
-          </div>
-        ) : null}
-      </section>
-    </>
+    </div>
   );
 }

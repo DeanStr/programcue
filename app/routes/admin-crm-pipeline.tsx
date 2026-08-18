@@ -95,12 +95,11 @@ export default function AdminCrmPipeline({ loaderData }: Route.ComponentProps) {
   const navigation = useNavigation();
   const busy = navigation.state !== "idle";
   return (
-    <>
+    <div className="crm-workspace">
       <div className="page-head pc-page-header">
         <div>
-          <span className="pc-page-eyebrow">Organization Speaker Network</span>
           <h1>Speaker sourcing pipeline</h1>
-          <p>
+          <p className="crm-caption">
             Move reusable contacts from identification through confirmed or
             declined outcomes. Every transition is timestamped.
           </p>
@@ -110,16 +109,16 @@ export default function AdminCrmPipeline({ loaderData }: Route.ComponentProps) {
         </Link>
       </div>
       {actionData ? (
-        <div className="validation-item error card pad mb" role="alert">
+        <div className="validation-item error crm-notice" role="alert">
           <strong>△</strong>
           <span>{actionData.message}</span>
         </div>
       ) : null}
-      <details className="card pad mb">
+      <details className="crm-disclosure">
         <summary>
-          <strong>
+          <span>
             <UserPlus aria-hidden size={16} /> Enroll a contact
-          </strong>
+          </span>
         </summary>
         {loaderData.availableContacts.length ? (
           <Form method="post" className="stack mt">
@@ -175,14 +174,14 @@ export default function AdminCrmPipeline({ loaderData }: Route.ComponentProps) {
         tabIndex={0}
       >
         {loaderData.columns.map((column) => (
-          <div className="card pad crm-pipeline-column" key={column.stage}>
+          <div className="crm-pipeline-column" key={column.stage}>
             <div className="card-title">
               <h2>{statusPresentation("crm", column.stage).label}</h2>
-              <span className="status info">{column.entries.length}</span>
+              <span className="subtle">{column.entries.length}</span>
             </div>
             <div className="stack mt">
               {column.entries.map((entry) => (
-                <article className="card pad" key={entry.id}>
+                <article className="crm-pipeline-entry" key={entry.id}>
                   <Link
                     to={`/admin/crm/contacts/${encodeURIComponent(entry.personId)}`}
                   >
@@ -219,7 +218,11 @@ export default function AdminCrmPipeline({ loaderData }: Route.ComponentProps) {
                         ))}
                       </select>
                     </label>
-                    <button type="submit" className="btn" disabled={busy}>
+                    <button
+                      type="submit"
+                      className="crm-text-action"
+                      disabled={busy}
+                    >
                       Move card
                     </button>
                   </Form>
@@ -235,6 +238,6 @@ export default function AdminCrmPipeline({ loaderData }: Route.ComponentProps) {
           </div>
         ))}
       </section>
-    </>
+    </div>
   );
 }

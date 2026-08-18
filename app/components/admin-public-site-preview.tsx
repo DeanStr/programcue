@@ -71,11 +71,11 @@ function PromotionTools({
   }
 
   return (
-    <section className="card pad public-site-promotion">
+    <section className="public-site-promotion">
       <div className="card-title">
         <div>
           <span className="pc-page-eyebrow">Promotion</span>
-          <h2>Announcement handoff</h2>
+          <h2 className="public-site-rail-title">Announcement handoff</h2>
         </div>
       </div>
       <label className="label">
@@ -201,103 +201,113 @@ export function AdminPublicSitePreview({
 
   return (
     <div className="public-site-preview-stack">
-      <div
-        className="branding-preview-toolbar"
-        role="toolbar"
-        aria-label="Event website preview controls"
-      >
-        <label className="public-site-preview-content-control">
-          <span>Preview</span>
-          <select
-            className="field"
-            aria-label="Preview content"
-            value={previewContent}
-            onChange={(event) =>
-              setPreviewContent(
-                event.target.value as "home" | PublicSitePageType,
-              )
-            }
-          >
-            <option value="home">Homepage</option>
-            {PUBLIC_SITE_PAGE_TYPES.map((page) => (
-              <option key={page} value={page}>
-                {publicSitePageLabels[page]} page
-                {configuration.pages[page].enabled ? "" : " (disabled)"}
-              </option>
-            ))}
-          </select>
-        </label>
-        <button
-          className={!mobilePreview ? "btn small active" : "btn small"}
-          type="button"
-          aria-pressed={!mobilePreview}
-          onClick={() => setMobilePreview(false)}
-        >
-          <Monitor aria-hidden size={14} /> Desktop
-        </button>
-        <button
-          className={mobilePreview ? "btn small active" : "btn small"}
-          type="button"
-          aria-pressed={mobilePreview}
-          onClick={() => setMobilePreview(true)}
-        >
-          <Smartphone aria-hidden size={14} /> Mobile
-        </button>
-      </div>
-      <section
-        className={`public-site-preview-frame${mobilePreview ? " is-mobile" : ""}`}
-        aria-label="Event website preview"
-        data-public-theme={configuration.theme}
-        // biome-ignore lint/a11y/noNoninteractiveTabindex: This scrollable preview must be keyboard-focusable so users can reach overflow content.
-        tabIndex={0}
-        style={programmeAccentCssVars(palette) as CSSProperties}
-      >
-        <header>
-          <strong>{event.name}</strong>
-          <small>
-            {previewContent === "home"
-              ? configuration.tagline
-              : configuration.pages[previewContent].enabled
-                ? `${publicSitePageLabels[previewContent]} page`
-                : `${publicSitePageLabels[previewContent]} page · Not enabled for publication`}
-          </small>
-        </header>
-        {previewContent === "home" ? (
-          <PublicSiteHome
-            event={event}
-            programme={programme}
-            site={draftPreview}
-            preview
-          />
-        ) : (
-          <div className="public-site-page public-site-page-preview">
-            <p className="pc-page-eyebrow">{event.name}</p>
-            <h1>{configuration.pages[previewContent].title}</h1>
-            <PublicSitePageContent
-              event={event}
-              configuration={draftPreview.configuration}
-              page={previewContent}
-              preview
-            />
+      <section className="branding-preview public-site-preview">
+        <div className="branding-preview-chrome">
+          <div className="branding-preview-chrome-bar">
+            <div className="branding-preview-chrome-title">
+              <div>
+                <h2>Draft preview</h2>
+                <p className="help">Unpublished edits stay on this page.</p>
+              </div>
+            </div>
+            <fieldset
+              className="branding-preview-devices pc-plain-fieldset"
+              aria-label="Event website preview controls"
+            >
+              <button
+                className={!mobilePreview ? "is-active" : undefined}
+                type="button"
+                aria-pressed={!mobilePreview}
+                onClick={() => setMobilePreview(false)}
+              >
+                <Monitor aria-hidden size={15} /> Desktop
+              </button>
+              <button
+                className={mobilePreview ? "is-active" : undefined}
+                type="button"
+                aria-pressed={mobilePreview}
+                onClick={() => setMobilePreview(true)}
+              >
+                <Smartphone aria-hidden size={15} /> Mobile
+              </button>
+            </fieldset>
           </div>
-        )}
-      </section>
-      <section className="card pad">
-        <div>
-          <h2>Publish saved website draft</h2>
+          <label className="public-site-preview-content-control">
+            <span>Preview</span>
+            <select
+              className="field"
+              aria-label="Preview content"
+              value={previewContent}
+              onChange={(event) =>
+                setPreviewContent(
+                  event.target.value as "home" | PublicSitePageType,
+                )
+              }
+            >
+              <option value="home">Homepage</option>
+              {PUBLIC_SITE_PAGE_TYPES.map((page) => (
+                <option key={page} value={page}>
+                  {publicSitePageLabels[page]} page
+                  {configuration.pages[page].enabled ? "" : " (disabled)"}
+                </option>
+              ))}
+            </select>
+          </label>
+        </div>
+        <div className="public-site-preview-stage">
+          <section
+            className={`public-site-preview-frame${mobilePreview ? " is-mobile" : ""}`}
+            aria-label="Event website preview"
+            data-public-theme={configuration.theme}
+            // biome-ignore lint/a11y/noNoninteractiveTabindex: This scrollable preview must be keyboard-focusable so users can reach overflow content.
+            tabIndex={0}
+            style={programmeAccentCssVars(palette) as CSSProperties}
+          >
+            <header>
+              <strong>{event.name}</strong>
+              <small>
+                {previewContent === "home"
+                  ? configuration.tagline
+                  : configuration.pages[previewContent].enabled
+                    ? `${publicSitePageLabels[previewContent]} page`
+                    : `${publicSitePageLabels[previewContent]} page · Not enabled for publication`}
+              </small>
+            </header>
+            {previewContent === "home" ? (
+              <PublicSiteHome
+                event={event}
+                programme={programme}
+                site={draftPreview}
+                preview
+              />
+            ) : (
+              <div className="public-site-page public-site-page-preview">
+                <p className="pc-page-eyebrow">{event.name}</p>
+                <h1>{configuration.pages[previewContent].title}</h1>
+                <PublicSitePageContent
+                  event={event}
+                  configuration={draftPreview.configuration}
+                  page={previewContent}
+                  preview
+                />
+              </div>
+            )}
+          </section>
+        </div>
+        <div className="branding-preview-commit">
           <p className="help">
             Publishing snapshots editorial configuration and sponsors. Programme
             data remains canonical.
           </p>
+          <button
+            className="btn primary"
+            type="button"
+            disabled={!canPublish}
+            onClick={onPublish}
+          >
+            Publish event website
+          </button>
         </div>
-        <button
-          className="btn primary mt"
-          type="button"
-          disabled={!canPublish}
-          onClick={onPublish}
-        >
-          Publish event website
-        </button>
       </section>
       {published ? (
         <PromotionTools

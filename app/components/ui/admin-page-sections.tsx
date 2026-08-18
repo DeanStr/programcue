@@ -7,6 +7,8 @@ import {
   useSyncExternalStore,
 } from "react";
 
+import { cn } from "~/lib/cn";
+
 const MOBILE_ADMIN_QUERY = "(max-width: 760px)";
 
 function subscribeToMobileViewport(onChange: () => void) {
@@ -31,12 +33,14 @@ export type AdminPageSectionLink = {
 export function AdminPageSectionNavigation({
   label,
   links,
+  className,
 }: {
   label: string;
   links: AdminPageSectionLink[];
+  className?: string;
 }) {
   return (
-    <nav className="pc-admin-section-nav" aria-label={label}>
+    <nav className={cn("pc-admin-section-nav", className)} aria-label={label}>
       <span>On this page</span>
       <ul>
         {links.map((link) => (
@@ -54,12 +58,14 @@ export function AdminPageSection({
   label,
   description,
   defaultExpandedOnMobile = false,
+  className,
   children,
 }: {
   id: string;
   label: string;
   description: string;
   defaultExpandedOnMobile?: boolean;
+  className?: string;
   children: ReactNode;
 }) {
   const mobile = useSyncExternalStore(
@@ -114,7 +120,7 @@ export function AdminPageSection({
   // navigation pointed at headings that were never painted.
   return (
     <section
-      className="pc-admin-page-section"
+      className={cn("pc-admin-page-section", className)}
       id={id}
       ref={sectionRef}
       aria-labelledby={headingId}

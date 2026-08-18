@@ -66,6 +66,14 @@ function initials(value: string) {
     .join("");
 }
 
+function isPublishedExample(value: string | null | undefined) {
+  const text = value?.trim() ?? "";
+  if (!text) return false;
+  if (/^https?:\/\/[.…]{0,8}$/iu.test(text)) return false;
+  if (/^[.…]{1,8}$/u.test(text)) return false;
+  return true;
+}
+
 function speakerLimit(form: LandingForm) {
   if (form.maxSpeakers === null) {
     return `At least ${form.minSpeakers} speaker${form.minSpeakers === 1 ? "" : "s"} per proposal.`;
@@ -233,15 +241,17 @@ export function PublicApplicationLanding({
           >
             <div className="cfp-section-heading">
               <div>
-                <h2 id="outline-heading">Preview the application</h2>
+                <h2 id="outline-heading">What you will be asked</h2>
                 <p>
                   {hasConditionalFields ? "Up to " : ""}
-                  {applicationFields.length} proposal question
+                  {applicationFields.length} question
                   {applicationFields.length === 1 ? "" : "s"} · about{" "}
                   {presentation.estimatedMinutes} minutes
+                  {applicationFields.some((field) => !field.required)
+                    ? " · optional questions marked"
+                    : ""}
                 </p>
               </div>
-              <span className="pill">Form v{form.version.versionNumber}</span>
             </div>
             <ol className="cfp-question-outline">
               {applicationFields.map((field) => {
@@ -250,17 +260,26 @@ export function PublicApplicationLanding({
                       (candidate) => candidate.id === field.condition?.fieldId,
                     )
                   : null;
+                const example = isPublishedExample(field.example)
+                  ? field.example.trim()
+                  : "";
+                const choices =
+                  (field.type === "select" || field.type === "multi_select") &&
+                  field.options.length
+                    ? field.options
+                    : [];
                 return (
                   <li key={field.id}>
                     <div>
                       <strong>{field.label}</strong>
-                      {field.required ? (
-                        <span className="cfp-required">Required</span>
-                      ) : (
+                      {field.required ? null : (
                         <span className="subtle">Optional</span>
                       )}
                     </div>
                     {field.help ? <p>{field.help}</p> : null}
+                    {choices.length ? (
+                      <p className="cfp-choices">{choices.join(" · ")}</p>
+                    ) : null}
                     {field.condition && dependency ? (
                       <p className="cfp-condition">
                         Shown when {dependency.label}{" "}
@@ -268,9 +287,9 @@ export function PublicApplicationLanding({
                         “{field.condition.equals}”.
                       </p>
                     ) : null}
-                    {field.example ? (
+                    {example ? (
                       <p className="cfp-example">
-                        <span>Example</span> {field.example}
+                        <span>Example</span> {example}
                       </p>
                     ) : null}
                   </li>
@@ -291,15 +310,17 @@ export function PublicApplicationLanding({
                 <Link to={programmeUrl}>See full programme →</Link>
               ) : null}
             </div>
-            <div className="cfp-featured-grid">
+            <div
+              className={`cfp-featured-grid${featuredSpeakers.length <= 2 ? " is-pair" : ""}`}
+            >
               {featuredSpeakers.map((speaker) => (
                 <article className="cfp-speaker-card" key={speaker.id}>
                   {speaker.imageUrl ? (
                     <img
                       src={speaker.imageUrl}
                       alt=""
-                      width={80}
-                      height={80}
+                      width={640}
+                      height={800}
                       loading="lazy"
                     />
                   ) : (

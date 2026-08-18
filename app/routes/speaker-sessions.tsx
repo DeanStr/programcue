@@ -1,8 +1,10 @@
-import { data, useActionData, useNavigation } from "react-router";
+import { Mic2 } from "lucide-react";
+import { data, Form, useActionData, useNavigation } from "react-router";
 import { ZodError } from "zod";
 import { SpeakerActionNotice } from "~/components/speaker-action-notice";
-import { SpeakerSessionsPanel } from "~/components/speaker-dashboard-overview";
 import { useSpeakerWorkspace } from "~/components/speaker-workspace-context";
+import { DomainStatusBadge } from "~/components/ui/domain-status-badge";
+import { EventDateTime } from "~/components/ui/event-date-time";
 import {
   SpeakerAdminStateError,
   SpeakerService,
@@ -81,20 +83,134 @@ export default function SpeakerSessions(_props: Route.ComponentProps) {
   const { portal } = useSpeakerWorkspace();
   const actionData = useActionData<typeof action>();
   const navigation = useNavigation();
+  const busy = navigation.state !== "idle";
+  const sessions = [...portal.sessions].sort((left, right) => {
+    const rank = (session: (typeof portal.sessions)[number]) =>
+      session.participationStatus === "pending" &&
+      session.status !== "cancelled"
+        ? 0
+        : 1;
+    return rank(left) - rank(right);
+  });
   return (
     <>
       <div className="page-head">
         <div>
-          <span className="pc-page-eyebrow">Programme</span>
           <h1>My sessions</h1>
           <p>Published schedule details and your role in each session.</p>
         </div>
+        <p className="speaker-work-count">
+          <b className="pc-num">{portal.sessions.length}</b>
+          <span>{portal.sessions.length === 1 ? "session" : "sessions"}</span>
+        </p>
       </div>
       <SpeakerActionNotice notice={actionData} />
-      <SpeakerSessionsPanel
-        portal={portal}
-        busy={navigation.state !== "idle"}
-      />
+      <section className="mt speaker-work" id="sessions">
+        <h2 className="sr-only">Session list</h2>
+        {sessions.length ? (
+          <div className="speaker-work-list">
+            {sessions.map((session) => {
+              const needsConfirm =
+                session.participationStatus === "pending" &&
+                session.status !== "cancelled";
+              return (
+                <article
+                  className="speaker-session-card"
+                  data-state={
+                    session.participationStatus === "confirmed"
+                      ? "confirmed"
+                      : session.status === "cancelled"
+                        ? "cancelled"
+                        : "pending"
+                  }
+                  key={session.id}
+                >
+                  <div className="speaker-session-row">
+                    <Mic2 aria-hidden className="pc-index-icon" />
+                    <div className="speaker-session-copy">
+                      <div className="speaker-task-title-row">
+                        <h3>{session.title}</h3>
+                        <DomainStatusBadge
+                          domain="session"
+                          status={session.status}
+                        />
+                      </div>
+                      <p className="speaker-task-meta">
+                        <span>{session.roleLabel ?? "Speaker"}</span>
+                        <span aria-hidden="true"> · </span>
+                        <span>
+                          {session.startsAt ? (
+                            <EventDateTime
+                              epochSeconds={session.startsAt}
+                              timeZone={portal.event.timezone}
+                              showTimeZone
+                            />
+                          ) : (
+                            "Scheduling pending"
+                          )}
+                        </span>
+                        <span aria-hidden="true"> · </span>
+                        <span>{session.roomName ?? "To be confirmed"}</span>
+                        <span aria-hidden="true"> · </span>
+                        <span className="pc-num">
+                          {session.durationMinutes} min
+                        </span>
+                      </p>
+                    </div>
+                    <div className="speaker-session-measure">
+                      <span
+                        className={`status ${session.participationStatus === "confirmed" ? "success" : session.status === "cancelled" ? "" : "warning"}`}
+                      >
+                        {session.participationStatus === "confirmed"
+                          ? "Confirmed"
+                          : session.status === "cancelled"
+                            ? "Not required"
+                            : "Confirmation needed"}
+                      </span>
+                      {needsConfirm ? (
+                        <Form method="post" className="speaker-session-confirm">
+                          <input
+                            type="hidden"
+                            name="intent"
+                            value="confirm-participation"
+                          />
+                          <input
+                            type="hidden"
+                            name="sessionId"
+                            value={session.id}
+                          />
+                          <input
+                            type="hidden"
+                            name="confirmation"
+                            value="confirmed"
+                          />
+                          <button
+                            className="btn primary"
+                            type="submit"
+                            disabled={busy}
+                            aria-label={`Confirm participation in ${session.title}`}
+                          >
+                            Confirm participation
+                          </button>
+                        </Form>
+                      ) : null}
+                    </div>
+                  </div>
+                </article>
+              );
+            })}
+          </div>
+        ) : (
+          <div className="pc-empty-state">
+            <Mic2 aria-hidden className="pc-state-icon" />
+            <h2>No linked sessions</h2>
+            <p className="subtle">
+              Ask the event team to connect your accepted session to this
+              speaker identity.
+            </p>
+          </div>
+        )}
+      </section>
     </>
   );
 }

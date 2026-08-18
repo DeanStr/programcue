@@ -1,3 +1,4 @@
+import { Lock } from "lucide-react";
 import { useFetcher } from "react-router";
 import { useEvaluationDiscussionHistory } from "~/components/evaluation-discussion-history";
 import { useReviewWorkbenchModel } from "~/components/review-workbench-model";
@@ -18,7 +19,10 @@ export function ReviewDiscussionPanel() {
   }>({ key: `review-discussion:${discussionKey}` });
   if (!discussion) return null;
   return (
-    <section className="card pad mt" aria-labelledby="review-discussion-title">
+    <section
+      className="card pad mt review-discussion"
+      aria-labelledby="review-discussion-title"
+    >
       <div className="card-title">
         <div>
           <h2 id="review-discussion-title">Committee discussion</h2>
@@ -27,7 +31,7 @@ export function ReviewDiscussionPanel() {
           </p>
         </div>
         {discussion.available ? (
-          <span className="status info right">
+          <span className="review-discussion-count pc-num">
             {history.messages.length}
             {history.hasEarlier ? "+" : ""} message
             {history.messages.length === 1 && !history.hasEarlier ? "" : "s"}
@@ -35,12 +39,15 @@ export function ReviewDiscussionPanel() {
         ) : null}
       </div>
       {!discussion.available ? (
-        <div className="validation-item warn">
-          <strong>Independent review first</strong>
-          <span>
-            Submit your review before reading or joining this target&rsquo;s
-            committee discussion.
-          </span>
+        <div className="review-discussion-locked">
+          <Lock aria-hidden size={16} />
+          <div>
+            <strong>Independent review first</strong>
+            <p>
+              Submit your review before reading or joining this target&rsquo;s
+              committee discussion.
+            </p>
+          </div>
         </div>
       ) : (
         <>
@@ -57,13 +64,13 @@ export function ReviewDiscussionPanel() {
             </div>
           ) : null}
           {history.messages.length ? (
-            <ol className="list-clean stack">
+            <ol className="list-clean review-discussion-thread">
               {history.messages.map((message) => (
-                <li className="card pad" key={message.id}>
-                  <div className="card-title">
+                <li className="review-discussion-message" key={message.id}>
+                  <div className="review-discussion-meta">
                     <strong>{message.authorName}</strong>
                     <EventDateTime
-                      className="subtle right"
+                      className="subtle"
                       epochSeconds={message.createdAt}
                       timeZone={eventTimezone}
                     />

@@ -7,6 +7,7 @@ import { DerivedSlugField } from "~/components/ui/derived-slug-field";
 import { ErrorSummary } from "~/components/ui/error-summary";
 import { EventDateRangeFields } from "~/components/ui/event-date-range-fields";
 import { Field } from "~/components/ui/field";
+import { PageHeader } from "~/components/ui/page-header";
 import { TimezoneField } from "~/components/ui/timezone-field";
 import { zodFieldErrors } from "~/lib/form-errors";
 import { shortReference } from "~/lib/short-reference";
@@ -20,6 +21,7 @@ import {
   EventCloneService,
   EventCloneSlugConflictError,
 } from "~/platform/operations/event-clone-service.server";
+import "~/styles/workspace-remaining.css";
 import type { Route } from "./+types/admin-event-clone";
 
 async function administrator(
@@ -160,22 +162,18 @@ export default function AdminEventClone({ loaderData }: Route.ComponentProps) {
       })),
   );
   return (
-    <>
+    <div className="pc-event-create">
       {dialog}
-      <div className="page-head pc-page-header">
-        <div>
-          <span className="pc-page-eyebrow">Reusable event template</span>
-          <h1>Clone {loaderData.source.name}</h1>
-          <p>
-            Create a clean event with the published branding settings, rooms,
-            tracks, policies and reusable form, evaluation, task and email
-            templates.
-          </p>
-        </div>
-        <Link className="btn" to="/admin/event">
-          Back to Event settings
-        </Link>
-      </div>
+      <PageHeader
+        eyebrow="Reusable event template"
+        title={`Clone ${loaderData.source.name}`}
+        description="Create a clean event with the published branding settings, rooms, tracks, policies and reusable form, evaluation, task and email templates."
+        actions={
+          <Link className="btn" to="/admin/event">
+            Back to Event settings
+          </Link>
+        }
+      />
       {actionData ? (
         <div
           className={`pc-status-notice ${actionData.ok ? "is-success" : "is-danger"} mb`}
@@ -227,12 +225,12 @@ export default function AdminEventClone({ loaderData }: Route.ComponentProps) {
           </div>
         </div>
       ) : null}
-      <div className="grid grid-2">
-        <section className="card pad">
-          <div className="card-title">
-            <h2>New event identity</h2>
-            <Copy aria-hidden size={19} />
-          </div>
+      <div className="event-setup-create">
+        <section className="card pad event-setup-surface event-setup-create-form">
+          <header className="event-setup-surface-head">
+            <h3>New event identity</h3>
+            <p>A clean event from the current published settings.</p>
+          </header>
           <Form method="post" className="stack">
             <input type="hidden" name="intent" value="clone" />
             <ErrorSummary errors={summaryErrors} />
@@ -275,7 +273,7 @@ export default function AdminEventClone({ loaderData }: Route.ComponentProps) {
               initialEndDate={loaderData.defaults.endDate}
               error={fieldErrors.endDate?.[0] ?? fieldErrors.startDate?.[0]}
             />
-            <fieldset className="card pad">
+            <fieldset className="event-setup-create-choices pc-plain-fieldset">
               <legend className="label">Event-data repository</legend>
               <label className="pc-repository-choice">
                 <input
@@ -308,7 +306,7 @@ export default function AdminEventClone({ loaderData }: Route.ComponentProps) {
               </label>
             </fieldset>
             {repositoryProvider === "airtable" ? (
-              <div className="card pad stack">
+              <div className="event-setup-create-choices stack">
                 <h3>Airtable connection</h3>
                 <label className="label">
                   Personal access token
@@ -371,11 +369,8 @@ export default function AdminEventClone({ loaderData }: Route.ComponentProps) {
             </button>
           </Form>
         </section>
-        <section className="card pad">
-          <div className="card-title">
-            <h2>Copy boundary</h2>
-            <ShieldCheck aria-hidden size={19} />
-          </div>
+        <aside className="event-setup-create-aside">
+          <h2>Copy boundary</h2>
           <h3>Copied as editable templates</h3>
           <p>
             Published branding text, colour and access defaults, schedule
@@ -391,13 +386,18 @@ export default function AdminEventClone({ loaderData }: Route.ComponentProps) {
             credentials, webhooks and publication state. Cloning is blocked
             while brand images or unpublished branding changes exist.
           </p>
-          <p className="help">
-            Fixed deadlines, form close dates and evaluation round windows are
-            cleared so historical dates cannot silently carry into the new
-            event.
-          </p>
-        </section>
+          <div className="pc-status-notice mt">
+            <ShieldCheck aria-hidden size={18} />
+            <div className="pc-status-notice-copy">
+              <strong>Historical dates stay behind</strong>
+              <div>
+                Fixed deadlines, form close dates and evaluation round windows
+                are cleared so they cannot silently carry into the new event.
+              </div>
+            </div>
+          </div>
+        </aside>
       </div>
-    </>
+    </div>
   );
 }

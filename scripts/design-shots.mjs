@@ -118,6 +118,9 @@ const SURFACES = [
   },
   { name: "public-application", path: "/apply/form", public: true },
   { name: "design-system", path: "/design/system", public: true },
+  { name: "demo", path: "/demo" },
+  { name: "assistant", path: "/admin/assistant" },
+  { name: "event-select", path: "/events/select" },
 ];
 
 const DEMO_EVENT = "evt-foe-2025";

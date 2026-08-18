@@ -296,36 +296,77 @@ function SessionCardDescription({
   );
 }
 
+const SPARSE_SPEAKER_SEARCH = 6;
+const SPARSE_AGENDA_DAYS = 3;
+
 /**
- * Heading, count and the surface's own control sit on one line. Keeping the
- * search beside the count stops a directory of a handful of speakers from
- * reading as an empty page with a stray badge in the corner. A surface is
- * named by its heading: the tracked-out caps line that used to sit above each
- * one restated it in the platform's colour on the customer's page.
+ * A published surface is named like a section in an event site, not like an
+ * admin index. Search and a count badge earn their place only when the
+ * fixture is long enough that a visitor would look for them.
  */
 function SurfaceHeading({
+  kicker,
   title,
   id,
   description,
   count,
   children,
+  sparse = false,
 }: {
+  kicker?: string;
   title: string;
   id: string;
-  description: string;
-  count: string;
+  description?: string;
+  count?: string;
   children?: ReactNode;
+  sparse?: boolean;
+}) {
+  const aside = sparse ? (
+    children
+  ) : count || children ? (
+    <>
+      {count ? <span className="status info">{count}</span> : null}
+      {children}
+    </>
+  ) : null;
+  return (
+    <div className={`public-surface-heading${sparse ? " is-sparse" : ""}`}>
+      <div className="public-surface-heading-copy">
+        {kicker ? <p className="public-surface-kicker">{kicker}</p> : null}
+        <h1 id={id}>{title}</h1>
+        {description ? <p className="subtle">{description}</p> : null}
+      </div>
+      {aside ? (
+        <div className="public-surface-heading-aside">{aside}</div>
+      ) : null}
+    </div>
+  );
+}
+
+function SpeakerSearchField({
+  id,
+  value,
+  onChange,
+  label,
+}: {
+  id: string;
+  value: string;
+  onChange: (value: string) => void;
+  label: string;
 }) {
   return (
-    <div className="public-surface-heading">
-      <div className="public-surface-heading-copy">
-        <h1 id={id}>{title}</h1>
-        <p className="subtle">{description}</p>
-      </div>
-      <div className="public-surface-heading-aside">
-        <span className="status info">{count}</span>
-        {children}
-      </div>
+    <div className="public-surface-search">
+      <label className="sr-only" htmlFor={id}>
+        {label}
+      </label>
+      <input
+        id={id}
+        className="field"
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+        placeholder="Search by name"
+        type="search"
+      />
     </div>
   );
 }
@@ -340,15 +381,15 @@ export function PublicAgendaSurface({
   const [detailsOpen, setDetailsOpen] = useState(true);
   const activeDay =
     model.day === "All days" ? (model.days[0] ?? "All days") : model.day;
-  const sessions =
-    model.embedded && model.day === "All days"
-      ? model.visible
-      : model.visible.filter(
-          (session) =>
-            formatDay(session.startsAt, model.programme.event.timezone) ===
-            activeDay,
-        );
-  const showDayHeadings = model.embedded && model.day === "All days";
+  const showEveryDay = model.embedded && model.day === "All days";
+  const sessions = showEveryDay
+    ? model.visible
+    : model.visible.filter(
+        (session) =>
+          formatDay(session.startsAt, model.programme.event.timezone) ===
+          activeDay,
+      );
+  const sparse = model.days.length <= SPARSE_AGENDA_DAYS;
   const agendaDays = groupSessionsByDay(
     sessions,
     model.programme.event.timezone,
@@ -378,16 +419,22 @@ export function PublicAgendaSurface({
     requestAnimationFrame(() => returnFocus?.focus());
   };
   return (
-    <section className="public-surface" aria-labelledby="public-agenda-title">
+    <section
+      className="public-surface public-agenda-surface"
+      aria-labelledby="public-agenda-title"
+    >
       <SurfaceHeading
         title="Agenda"
         id="public-agenda-title"
         description={
-          showDayHeadings
-            ? "Every published session, grouped by day."
-            : "Every published session for the selected day, side by side."
+          sparse
+            ? undefined
+            : showEveryDay
+              ? "Every published session, grouped by day."
+              : "Published sessions for the selected day."
         }
-        count={`${sessions.length} sessions`}
+        count={sparse ? undefined : `${sessions.length} sessions`}
+        sparse={sparse}
       />
       {!model.embedded && model.showControl("day") ? (
         <PublicDayTabs model={model} label="Agenda days" />
@@ -396,93 +443,94 @@ export function PublicAgendaSurface({
         <div className="public-agenda-days">
           {agendaDays.map((group) => (
             <section className="public-agenda-day" key={group.key}>
-              {showDayHeadings ? (
-                <ProgrammeDayHeading
-                  label={group.label}
-                  count={group.sessions.length}
-                />
-              ) : null}
-              <ul className="agenda-board" aria-label={`${group.label} agenda`}>
-                {group.sessions.map((session) => (
-                  <li
-                    className={`agenda-card${session.id === selectedSession?.id ? " active" : ""}`}
-                    key={session.id}
-                  >
-                    {model.showEmbedField("time") ? (
-                      <div className="agenda-card-time">
-                        <SessionTime
-                          session={session}
-                          timezone={model.programme.event.timezone}
-                        />
-                      </div>
-                    ) : null}
-                    <h2 className="agenda-card-title">
-                      <button
-                        id={`agenda-session-trigger-${session.id}`}
-                        type="button"
-                        className="agenda-card-trigger"
-                        aria-expanded={session.id === selectedSession?.id}
-                        aria-controls="public-session-detail"
-                        aria-label={`View details for ${session.title}`}
-                        onClick={(event) =>
-                          openSessionDetails(session.id, event.currentTarget)
-                        }
-                      >
-                        {session.title}
-                        <span className="agenda-card-action" aria-hidden="true">
-                          View details
-                        </span>
-                      </button>
-                    </h2>
-                    {model.showEmbedField("location") ||
-                    model.showEmbedField("track") ||
-                    model.showEmbedField("format") ? (
-                      <div className="agenda-card-meta">
-                        {model.showEmbedField("location") ? (
-                          <SessionPlace session={session} />
-                        ) : null}
-                        {model.showEmbedField("track") ||
-                        model.showEmbedField("format") ? (
-                          <SessionTags
+              <ProgrammeDayHeading
+                label={group.label}
+                count={group.sessions.length}
+              />
+              <ol className="agenda-board" aria-label={`${group.label} agenda`}>
+                {group.sessions.map((session) => {
+                  const open = session.id === selectedSession?.id;
+                  return (
+                    <li
+                      className={`agenda-card${open ? " active" : ""}`}
+                      key={session.id}
+                    >
+                      {model.showEmbedField("time") ? (
+                        <div className="agenda-card-time">
+                          <SessionTime
                             session={session}
-                            showTrack={model.showEmbedField("track")}
-                            showFormat={model.showEmbedField("format")}
+                            timezone={model.programme.event.timezone}
+                          />
+                        </div>
+                      ) : null}
+                      <div className="agenda-card-body">
+                        <h2 className="agenda-card-title">
+                          <button
+                            id={`agenda-session-trigger-${session.id}`}
+                            type="button"
+                            className="agenda-card-trigger"
+                            aria-expanded={open}
+                            aria-controls="public-session-detail"
+                            aria-label={`${open ? "Hide" : "View"} details for ${session.title}`}
+                            onClick={(event) =>
+                              open
+                                ? closeSessionDetails()
+                                : openSessionDetails(
+                                    session.id,
+                                    event.currentTarget,
+                                  )
+                            }
+                          >
+                            {session.title}
+                          </button>
+                        </h2>
+                        {model.showSpeakerDetails ? (
+                          <PublicSessionSpeakers
+                            session={session}
+                            model={model}
+                          />
+                        ) : (
+                          <PublicSessionSpeakerNames
+                            session={session}
+                            model={model}
+                          />
+                        )}
+                        {model.showEmbedField("location") ||
+                        model.showEmbedField("track") ||
+                        model.showEmbedField("format") ? (
+                          <div className="agenda-card-meta">
+                            {model.showEmbedField("location") ? (
+                              <SessionPlace session={session} />
+                            ) : null}
+                            {model.showEmbedField("track") ||
+                            model.showEmbedField("format") ? (
+                              <SessionTags
+                                session={session}
+                                showTrack={model.showEmbedField("track")}
+                                showFormat={model.showEmbedField("format")}
+                              />
+                            ) : null}
+                          </div>
+                        ) : null}
+                        {open ? (
+                          <PublicSessionDetails
+                            session={session}
+                            model={model}
+                            detailRef={detailRef}
+                            onClose={closeSessionDetails}
                           />
                         ) : null}
                       </div>
-                    ) : null}
-                    {model.showEmbedField("description") ? (
-                      <p className="public-surface-description agenda-card-description">
-                        {descriptionSnippet(
-                          normaliseDescription(session.description),
-                        ) || "Description not provided."}
-                      </p>
-                    ) : null}
-                    {model.showSpeakerDetails ? (
-                      <PublicSessionSpeakers session={session} model={model} />
-                    ) : (
-                      <PublicSessionSpeakerNames
-                        session={session}
-                        model={model}
-                      />
-                    )}
-                  </li>
-                ))}
-              </ul>
+                    </li>
+                  );
+                })}
+              </ol>
             </section>
           ))}
         </div>
       ) : (
         <p className="empty">No published sessions on this day.</p>
       )}
-      {selectedSession ? (
-        <PublicSessionDetails
-          session={selectedSession}
-          model={model}
-          detailRef={detailRef}
-          onClose={closeSessionDetails}
-        />
-      ) : null}
     </section>
   );
 }
@@ -600,52 +648,57 @@ function SpeakerDirectoryCard({
   speaker: PublishedSpeaker;
   model: PublicProgrammeModel;
 }) {
-  const identity = (
+  const content = (
     <>
       {model.showSpeakerDetails && model.showEmbedField("images") ? (
         <PublicSpeakerPhoto speaker={speaker} />
       ) : null}
-      <span>
+      <span className="public-speaker-directory-copy">
         <strong>{speaker.displayName}</strong>
         {model.showSpeakerDetails && model.showEmbedField("affiliations") ? (
           <PublicSpeakerMetadata speaker={speaker} />
         ) : null}
+        {model.showSpeakerDetails &&
+        model.showEmbedField("biography") &&
+        speaker.biography ? (
+          <span className="public-speaker-directory-bio">
+            {descriptionSnippet(speaker.biography)}
+          </span>
+        ) : null}
+        {model.showSpeakerDetails && model.showEmbedField("sessions") ? (
+          <span className="help">
+            {speaker.sessionIds.length} public session
+            {speaker.sessionIds.length === 1 ? "" : "s"}
+          </span>
+        ) : null}
+        {model.showSpeakerDetails ? (
+          <span className="public-speaker-profile-cue">View profile</span>
+        ) : null}
       </span>
     </>
   );
-  return (
-    <article className="card pad public-speaker-directory-card">
-      {model.showSpeakerDetails ? (
-        <button
-          type="button"
-          className="public-speaker-directory-trigger"
-          id={`public-speaker-card-${speaker.id}`}
-          aria-label={`Open speaker details for ${speaker.displayName}`}
-          onClick={(event) =>
-            model.openSpeakerProfile(speaker.id, event.currentTarget)
-          }
-        >
-          {identity}
-        </button>
-      ) : (
-        <div
-          className="public-speaker-directory-trigger is-static"
-          id={`public-speaker-card-${speaker.id}`}
-        >
-          {identity}
-        </div>
-      )}
-      {model.showSpeakerDetails &&
-      model.showEmbedField("biography") &&
-      speaker.biography ? (
-        <p>{descriptionSnippet(speaker.biography)}</p>
-      ) : null}
-      {model.showSpeakerDetails && model.showEmbedField("sessions") ? (
-        <span className="help">
-          {speaker.sessionIds.length} public session
-          {speaker.sessionIds.length === 1 ? "" : "s"}
-        </span>
-      ) : null}
+  return model.showSpeakerDetails ? (
+    <article className="public-speaker-directory-card">
+      <button
+        type="button"
+        className="public-speaker-directory-trigger"
+        id={`public-speaker-card-${speaker.id}`}
+        aria-label={`Open speaker details for ${speaker.displayName}`}
+        onClick={(event) =>
+          model.openSpeakerProfile(speaker.id, event.currentTarget)
+        }
+      >
+        {content}
+      </button>
+    </article>
+  ) : (
+    <article
+      className="public-speaker-directory-card"
+      id={`public-speaker-card-${speaker.id}`}
+    >
+      <div className="public-speaker-directory-trigger is-static">
+        {content}
+      </div>
     </article>
   );
 }
@@ -655,35 +708,42 @@ export function PublicSpeakersSurface({
 }: {
   model: PublicProgrammeModel;
 }) {
+  const publishedCount =
+    model.orderedSpeakers?.length ?? model.directorySpeakers.length;
+  const sparse = publishedCount <= SPARSE_SPEAKER_SEARCH;
+  const showSearch = !model.embedded && model.showControl("search");
+  const pair = model.directorySpeakers.length <= 2;
   return (
-    <section className="public-surface" aria-labelledby="public-speakers-title">
+    <section
+      className={`public-surface public-speakers-surface${pair ? " is-pair" : ""}`}
+      aria-labelledby="public-speakers-title"
+    >
       <SurfaceHeading
+        kicker="The people on stage"
         title="Speakers"
         id="public-speakers-title"
         description={
-          model.showSpeakerDetails
-            ? "Meet the people presenting this event. Open a card for biography and session details."
-            : "Meet the people presenting this event."
+          sparse
+            ? undefined
+            : model.showSpeakerDetails
+              ? "Meet the people presenting this event."
+              : "Meet the people presenting this event."
         }
-        count={`${model.directorySpeakers.length} speakers`}
+        count={
+          sparse ? undefined : `${model.directorySpeakers.length} speakers`
+        }
+        sparse={sparse}
       >
-        {!model.embedded && model.showControl("search") ? (
-          <div className="public-surface-search">
-            <label className="sr-only" htmlFor="public-speaker-search">
-              Search speakers by name
-            </label>
-            <input
-              id="public-speaker-search"
-              className="field"
-              value={model.directoryQuery}
-              onChange={(event) => model.setDirectoryQuery(event.target.value)}
-              placeholder="Search by name"
-              type="search"
-            />
-          </div>
+        {showSearch ? (
+          <SpeakerSearchField
+            id="public-speaker-search"
+            value={model.directoryQuery}
+            onChange={model.setDirectoryQuery}
+            label="Search speakers by name"
+          />
         ) : null}
       </SurfaceHeading>
-      <div className="grid public-speaker-directory-grid">
+      <div className={`public-speaker-directory-grid${pair ? " is-pair" : ""}`}>
         {model.directorySpeakers.length ? (
           model.directorySpeakers.map((speaker) => (
             <SpeakerDirectoryCard
@@ -725,6 +785,9 @@ function SpeakerGalleryCard({
             {speaker.sessionIds.length} session
             {speaker.sessionIds.length === 1 ? "" : "s"}
           </span>
+        ) : null}
+        {model.showSpeakerDetails ? (
+          <span className="public-speaker-profile-cue">View profile</span>
         ) : null}
       </span>
     </>
@@ -873,39 +936,41 @@ export function PublicSpeakerGallerySurface({
 }: {
   model: PublicProgrammeModel;
 }) {
+  const publishedCount =
+    model.orderedSpeakers?.length ?? model.gallerySpeakers.length;
+  const sparse = publishedCount <= SPARSE_SPEAKER_SEARCH;
+  const showSearch = !model.embedded && model.showControl("search");
+  const pair = model.gallerySpeakers.length <= 2;
   return (
     <section
-      className="public-surface speaker-gallery-surface"
+      className={`public-surface speaker-gallery-surface${pair ? " is-pair" : ""}`}
       aria-labelledby="speaker-gallery-title"
     >
       <SurfaceHeading
+        kicker="The people on stage"
         title="Speaker Gallery"
         id="speaker-gallery-title"
         description={
-          model.showSpeakerDetails
-            ? "Browse the published speaker community by name. Open a card for biography and session details."
-            : "Browse the published speaker community by name."
+          sparse
+            ? undefined
+            : model.showSpeakerDetails
+              ? "Published portraits from this event."
+              : "Published portraits from this event."
         }
-        count={`${model.gallerySpeakers.length} speakers`}
+        count={sparse ? undefined : `${model.gallerySpeakers.length} speakers`}
+        sparse={sparse}
       >
-        {!model.embedded && model.showControl("search") ? (
-          <div className="public-surface-search">
-            <label className="sr-only" htmlFor="speaker-gallery-search">
-              Search speaker gallery by name
-            </label>
-            <input
-              id="speaker-gallery-search"
-              className="field"
-              value={model.galleryQuery}
-              onChange={(event) => model.setGalleryQuery(event.target.value)}
-              placeholder="Search by name"
-              type="search"
-            />
-          </div>
+        {showSearch ? (
+          <SpeakerSearchField
+            id="speaker-gallery-search"
+            value={model.galleryQuery}
+            onChange={model.setGalleryQuery}
+            label="Search speaker gallery by name"
+          />
         ) : null}
       </SurfaceHeading>
       {model.gallerySpeakers.length ? (
-        <div className="speaker-gallery-grid">
+        <div className={`speaker-gallery-grid${pair ? " is-pair" : ""}`}>
           {model.gallerySpeakers.map((speaker) => (
             <SpeakerGalleryCard
               key={speaker.id}

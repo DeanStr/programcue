@@ -1,68 +1,13 @@
-/* D1-backed scheduling and evaluation workspaces. */
-.schedule-workspace {
-  display: grid;
-  grid-template-columns: minmax(220px, 280px) minmax(0, 1fr) minmax(
-      220px,
-      280px
-    );
-  gap: var(--space-4);
-  align-items: start;
-}
+/* D1-backed scheduling and evaluation workspaces.
+   Visual ownership for planner objects lives in workspace-schedule.css;
+   this sheet keeps placement geometry and the remaining product surfaces. */
 .schedule-summary {
   grid-template-columns: repeat(4, minmax(0, 1fr));
 }
-.schedule-source,
-.schedule-conflicts {
-  max-height: calc(100dvh - 235px);
-  overflow: auto;
-  position: sticky;
-  top: 86px;
-}
-.schedule-session-source {
-  display: flex;
-  flex-direction: column;
-  /* Without this the default stretch blockifies the inline-flex status pill
-     into a full-width bar, which reads as a filled row, not a status. */
-  align-items: flex-start;
-  gap: var(--space-1);
-  width: 100%;
-  padding: var(--space-3);
-  text-align: left;
-  border: 1px solid var(--line);
-  border-radius: var(--radius-sm);
-  background: var(--surface);
-  color: var(--ink);
-  cursor: grab;
-}
-.schedule-session-source:disabled {
-  cursor: default;
-  opacity: 0.7;
-}
-.schedule-session-source.dragging {
-  opacity: 0.45;
-  box-shadow: var(--shadow);
-  z-index: 10;
-}
-.schedule-scroll-hint {
-  margin: 0 0 var(--space-2);
-  color: var(--muted);
-  font-size: var(--text-2xs);
-  font-weight: var(--weight-semibold);
-}
-.schedule-scroll-hint span {
-  margin-right: var(--space-1);
-  color: var(--brand-600);
-  font-size: var(--text-base);
-}
-.schedule-room-scroll {
-  max-width: 100%;
-  overscroll-behavior-inline: contain;
-}
 /* One row per half hour, every row the same height, so vertical distance on
-   the board is elapsed time. The board's own border is dropped: .table-wrap
-   already draws one inside the card. */
+   the board is elapsed time. */
 .schedule-room-board {
-  --pc-slot-height: 44px;
+  --pc-slot-height: 52px;
   display: grid;
   grid-template-rows: auto;
   grid-auto-rows: var(--pc-slot-height);
@@ -71,23 +16,12 @@
 .schedule-room-board > .time,
 .schedule-room-board > .schedule-drop {
   min-width: 0;
-  border-right: 1px solid var(--line);
-  border-bottom: 1px solid var(--line);
   overflow-wrap: anywhere;
 }
 .schedule-room-board > .header {
   position: sticky;
   top: 0;
   z-index: 4;
-  padding: var(--space-2);
-  background: var(--soft);
-  font-weight: var(--weight-bold);
-  text-align: center;
-}
-.schedule-room-board > .header small {
-  display: block;
-  color: var(--muted);
-  font-weight: var(--weight-normal);
 }
 /* Four rooms already overflow the centre column, and a board scrolled
    sideways with the axis gone leaves every card at an unknown time. */
@@ -95,19 +29,12 @@
 .schedule-room-board > .header.corner {
   position: sticky;
   left: 0;
-  background: var(--soft);
 }
 .schedule-room-board > .header.corner {
   z-index: 5;
-  text-align: left;
 }
 .schedule-room-board > .time {
   z-index: 3;
-  padding: 2px var(--space-2);
-  color: var(--text-secondary);
-  font-size: var(--text-2xs);
-  font-weight: var(--weight-semibold);
-  font-variant-numeric: tabular-nums;
 }
 /* A border rather than a shadow: the axis has to stay separated from the
    first room in High Contrast Mode too, where box-shadow is not painted. */
@@ -120,10 +47,6 @@
   transition:
     background var(--dur-fast) var(--ease-out),
     box-shadow var(--dur-fast) var(--ease-out);
-}
-.schedule-room-board > .schedule-drop.is-over {
-  background: var(--brand-50);
-  box-shadow: inset 0 0 0 2px var(--brand-600);
 }
 /* The card is as tall as the session is long and starts where the session
    starts. Two entries in one row split the width, so a room double-booking
@@ -150,7 +73,7 @@
   gap: 1px;
   width: 100%;
   height: 100%;
-  padding: 3px var(--space-2);
+  padding: 5px 8px 4px;
   text-align: left;
   line-height: 1.25;
   overflow: hidden;
@@ -158,13 +81,13 @@
 .schedule-room-board .session-card strong {
   display: -webkit-box;
   -webkit-box-orient: vertical;
-  -webkit-line-clamp: 2;
-  line-clamp: 2;
+  -webkit-line-clamp: 3;
+  line-clamp: 3;
   overflow: hidden;
 }
 .schedule-room-board .session-card[data-compact="true"] strong {
-  -webkit-line-clamp: 1;
-  line-clamp: 1;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
 }
 .schedule-room-board .session-card small {
   display: block;
@@ -174,33 +97,6 @@
   font-size: var(--text-2xs);
   white-space: nowrap;
   text-overflow: ellipsis;
-}
-/* A jump from the validation rail has to land somewhere the eye can find. */
-.schedule-session-source.focused,
-.schedule-room-board .session-card.revealed,
-.schedule-room-board .session-card.focused {
-  outline: 3px solid var(--brand-600);
-  outline-offset: 1px;
-}
-.schedule-format-key {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--space-1) var(--space-3);
-  margin: 0 0 var(--space-2);
-  color: var(--text-tertiary);
-  font-size: var(--text-2xs);
-}
-.schedule-format-key span {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--space-1);
-}
-.schedule-format-key span::before {
-  content: "";
-  width: 3px;
-  height: 12px;
-  border-radius: 2px;
-  background: var(--pc-format-rail, var(--muted-2));
 }
 /* The conflict count is the number the operator acts on, so it is the one
    tinted cell and the one that goes somewhere. */
@@ -288,19 +184,6 @@
 .inline-form .select {
   min-width: 150px;
 }
-/* Three columns leave the board about 360px at laptop width, which is one
-   room and a horizontal scroll. The board is the work surface; the
-   validation rail drops beneath it long before it drops off. */
-@media (max-width: 1320px) {
-  .schedule-workspace {
-    grid-template-columns: 240px minmax(0, 1fr);
-  }
-  .schedule-conflicts {
-    grid-column: 1 / -1;
-    position: static;
-    max-height: none;
-  }
-}
 @media (max-width: 760px) {
   .schedule-workspace {
     grid-template-columns: 1fr;
@@ -313,9 +196,6 @@
   .schedule-canvas {
     min-width: 0;
   }
-  .schedule-canvas > .table-wrap {
-    overflow: auto;
-  }
   .schedule-summary {
     grid-template-columns: 1fr 1fr;
   }
@@ -323,31 +203,6 @@
     align-items: stretch;
     flex-direction: column;
   }
-}
-
-/* Full-range schedule day navigation and placement grid. */
-.schedule-day-tabs {
-  margin-bottom: var(--space-2);
-  overflow-x: auto;
-}
-.schedule-day-tabs .tab {
-  display: grid;
-  min-width: max-content;
-  gap: 2px;
-}
-/* Opacity over --muted composited to #8793a5, about 3:1 on white. Tone comes
-   from the colour token so it stays measurable. */
-.schedule-day-tabs .tab small {
-  font-size: var(--text-2xs);
-  font-weight: var(--weight-semibold);
-  color: var(--muted);
-}
-/* 07:00–22:00 at 44px a half hour is ~1,320px, so a working day is one or
-   two screens rather than the eight the 24-hour axis cost. */
-.schedule-room-scroll {
-  max-height: calc(100dvh - 320px);
-  min-height: 360px;
-  overscroll-behavior: contain;
 }
 /* The card's tint and rail are repainted away in High Contrast Mode, so the
    flagged and jumped-to states are re-asserted as outlines. The word on the
@@ -366,9 +221,11 @@
     outline: 2px dashed CanvasText;
     outline-offset: -3px;
   }
+  .schedule-session-source.focused,
   .schedule-room-board .session-card.revealed,
   .schedule-room-board .session-card.focused {
     outline: 3px solid Highlight;
+    box-shadow: none;
   }
   .schedule-format-key span::before {
     background: CanvasText;
@@ -377,6 +234,13 @@
 @media (max-width: 760px) {
   .schedule-room-board {
     --pc-slot-height: 40px;
+  }
+  .schedule-room-board .session-card small.session-card-speaker,
+  .schedule-room-board .session-card small.session-card-resource {
+    display: none;
+  }
+  .schedule-room-frame {
+    max-height: 360px;
   }
 }
 
@@ -936,14 +800,16 @@ body.dark-mode .program-cue-api-reference .scalar-api-reference {
   gap: 2px;
   padding: var(--space-3);
   width: 220px;
-  border: 1px solid var(--brand-400);
-  border-radius: var(--radius-sm);
-  background: var(--surface);
+  border: 1px solid var(--pc-format-line);
+  border-radius: 8px;
+  background: var(--pc-format-fill);
+  color: var(--pc-format-ink);
   box-shadow: var(--elev-4);
   cursor: grabbing;
   transform: rotate(-1.5deg) scale(1.02);
 }
 .session-card.is-dragging small {
-  color: var(--muted);
+  color: inherit;
   font-size: var(--text-2xs);
+  opacity: 0.78;
 }

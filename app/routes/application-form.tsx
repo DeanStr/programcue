@@ -184,13 +184,53 @@ function AccessPanel({
       </section>
     );
   }
+  const recoverForm = (
+    <Form method="post" className="stack">
+      <input type="hidden" name="_intent" value="request_code" />
+      <label className="label">
+        Email address
+        <input
+          className="field"
+          name="email"
+          type="email"
+          autoComplete="email"
+          required
+        />
+      </label>
+      {form.accessMode === "password_protected" ? (
+        <label className="label">
+          Form password
+          <input className="field" name="password" type="password" required />
+        </label>
+      ) : null}
+      <TurnstileWidget
+        siteKey={loaderData.turnstileSiteKey}
+        action="application_request_code"
+        appearance="interaction-only"
+        onStatusChange={setRequestSecurityStatus}
+      />
+      <button
+        className={`btn${form.allowAnonymousDrafts ? "" : " primary"}`}
+        type="submit"
+        disabled={pending || !requestSecurityReady}
+      >
+        {pending
+          ? "Requesting code…"
+          : !requestSecurityReady
+            ? requestSecurityStatus === "error"
+              ? "Security check unavailable"
+              : "Security check in progress…"
+            : "Send verification code"}
+      </button>
+    </Form>
+  );
   return (
     <section className="card cfp-access-card">
-      <span className={`status ${accepting ? "info" : "warning"}`}>
-        {accepting
-          ? "Private, recoverable drafts"
-          : "Not accepting new applications"}
-      </span>
+      {accepting ? (
+        <p className="cfp-access-kicker">Start a private draft</p>
+      ) : (
+        <span className="status warning">Not accepting new applications</span>
+      )}
       <h2>
         {!accepting
           ? "Already started?"
@@ -253,59 +293,22 @@ function AccessPanel({
           </button>
         </Form>
       ) : null}
-      <div className={form.allowAnonymousDrafts ? "cfp-returning" : "mt"}>
-        {form.allowAnonymousDrafts ? (
-          <>
-            <h3>Already started?</h3>
-            <p className="help">
-              Recover verified drafts on this or another device.
-            </p>
-          </>
-        ) : null}
-        <Form method="post" className="stack">
-          <input type="hidden" name="_intent" value="request_code" />
-          <label className="label">
-            Email address
-            <input
-              className="field"
-              name="email"
-              type="email"
-              autoComplete="email"
-              required
-            />
-          </label>
-          {form.accessMode === "password_protected" ? (
-            <label className="label">
-              Form password
-              <input
-                className="field"
-                name="password"
-                type="password"
-                required
-              />
-            </label>
-          ) : null}
-          <TurnstileWidget
-            siteKey={loaderData.turnstileSiteKey}
-            action="application_request_code"
-            appearance="interaction-only"
-            onStatusChange={setRequestSecurityStatus}
-          />
-          <button
-            className={`btn${form.allowAnonymousDrafts ? "" : " primary"}`}
-            type="submit"
-            disabled={pending || !requestSecurityReady}
-          >
-            {pending
-              ? "Requesting code…"
-              : !requestSecurityReady
-                ? requestSecurityStatus === "error"
-                  ? "Security check unavailable"
-                  : "Security check in progress…"
-                : "Send verification code"}
-          </button>
-        </Form>
-      </div>
+      {form.allowAnonymousDrafts && accepting ? (
+        <details
+          className="cfp-returning pc-disclosure"
+          open={actionData && !actionData.ok ? true : undefined}
+        >
+          <summary>Already started?</summary>
+          <p className="help">
+            Recover verified drafts on this or another device.
+          </p>
+          {recoverForm}
+        </details>
+      ) : (
+        <div className={form.allowAnonymousDrafts ? "cfp-returning" : "mt"}>
+          {recoverForm}
+        </div>
+      )}
     </section>
   );
 }

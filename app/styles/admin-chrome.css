@@ -25,14 +25,38 @@
   color: var(--nav-text-muted);
 }
 .app-admin .command-trigger kbd {
-  background: var(--nav);
+  background: transparent;
+  border: 0;
+  color: var(--nav-text-muted);
+}
+.app-admin .top-actions .btn.primary {
+  background: transparent;
   border-color: var(--nav-control-border);
-  color: var(--nav-text);
+  color: var(--soft);
+  font-weight: var(--weight-medium);
+  box-shadow: none;
+}
+.app-admin .top-actions .btn.primary:hover {
+  background: var(--nav-control);
+  border-color: var(--nav-control-border);
+  color: var(--nav-control-text);
+}
+.app-admin .top-actions .btn.primary:active {
+  background: var(--nav-2);
 }
 .app-admin .topbar .icon-btn {
   background: var(--nav-2);
   border-color: var(--nav-border);
   color: var(--soft);
+}
+.app-admin .topbar .icon-btn:hover {
+  background: var(--nav-control);
+  border-color: var(--nav-control-border);
+  color: var(--nav-control-text);
+}
+.app-admin .event-switcher:hover,
+.app-admin .command-trigger:hover {
+  border-color: var(--nav-control-border);
 }
 .app-admin .topbar .avatar {
   background: var(--nav-2);
@@ -143,6 +167,9 @@
     text-overflow: ellipsis;
     white-space: nowrap;
   }
+  .app-admin .command-trigger kbd {
+    display: none;
+  }
   .app-admin .top-actions {
     grid-area: actions;
     margin-left: 0;
@@ -151,6 +178,34 @@
      bar has two rows. */
   .app-admin .top-actions .btn span {
     display: inline;
+  }
+}
+
+/* 320: a search field that reads “Search or r…” is overflow, not chrome.
+   Collapse to the search icon; the control already has an accessible name. */
+@media (max-width: 360px) {
+  .app-admin {
+    --topbar: 56px;
+  }
+  .app-admin .topbar {
+    grid-template-columns: 36px minmax(0, 1fr) 36px auto;
+    grid-template-areas: "menu event search actions";
+    row-gap: 0;
+    align-content: center;
+  }
+  .app-admin .command-trigger {
+    grid-area: search;
+    flex: none;
+    width: 36px;
+    min-width: 36px;
+    max-width: 36px;
+    height: 36px;
+    padding: 0;
+    justify-content: center;
+  }
+  .app-admin .command-trigger span,
+  .app-admin .command-trigger kbd {
+    display: none;
   }
 }
 /* Primary navigation is a place, not a decision: it arrives from the edge it

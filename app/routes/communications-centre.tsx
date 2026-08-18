@@ -767,7 +767,7 @@ function CommunicationsWorkView({
         description="Confirmed sends and calendar operations for this event"
       >
         <CommunicationDeliveryHealth loaderData={loaderData} />
-        <div className="grid grid-2 comms-history">
+        <div className="comms-history comms-activity-grid">
           <RecentCommunications
             loaderData={loaderData}
             working={working}
@@ -885,25 +885,16 @@ export default function CommunicationsCentre({
         </div>
       </div>
 
-      <AdminPageSectionNavigation
-        label={
-          setup
-            ? "Delivery settings sections"
-            : "Communications Centre sections"
-        }
-        links={
-          setup
-            ? [
-                { id: "communications-delivery", label: "Delivery" },
-                { id: "communications-automation", label: "Automation" },
-                { id: "communications-calendars", label: "Calendars" },
-              ]
-            : [
-                { id: "communications-templates", label: "Templates" },
-                { id: "communications-history", label: "History" },
-              ]
-        }
-      />
+      {setup ? (
+        <AdminPageSectionNavigation
+          label="Delivery settings sections"
+          links={[
+            { id: "communications-delivery", label: "Delivery" },
+            { id: "communications-automation", label: "Automation" },
+            { id: "communications-calendars", label: "Calendars" },
+          ]}
+        />
+      ) : null}
 
       {loaderData.activeFilter === "failed" ? (
         <div className="validation-item error mb" role="status">

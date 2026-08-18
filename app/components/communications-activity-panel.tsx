@@ -7,6 +7,8 @@ import { requireValue } from "~/lib/required-value";
 import type { CommunicationsCentreLoaderData } from "~/routes/communications-centre";
 import {
   communicationCategoryLabel,
+  communicationListTitle,
+  formatCommunicationListDate,
   formatCommunicationDate as formatDate,
   type PendingIntent,
 } from "./communications-panel-shared";
@@ -32,118 +34,103 @@ export function RecentCommunications({
         </span>
       </div>
       {loaderData.communications.length ? (
-        <section
-          className="table-wrap"
-          aria-label="Recent communications"
-          // biome-ignore lint/a11y/noNoninteractiveTabindex: Scrollable data regions need keyboard focus so arrow keys can expose overflow content.
-          tabIndex={0}
-        >
-          <table className="data-table">
-            <thead>
-              <tr>
-                <th scope="col">Created ({loaderData.eventTimezone})</th>
-                <th scope="col">Status</th>
-                <th scope="col">Progress</th>
-                <th scope="col">Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              {loaderData.communications.map((item) => (
-                <tr key={item.id}>
-                  <td>
-                    {formatDate(item.createdAt, loaderData.eventTimezone)}
-                    {item.scheduledAt ? (
-                      <small>
-                        Scheduled{" "}
-                        {formatDate(item.scheduledAt, loaderData.eventTimezone)}
-                      </small>
-                    ) : null}
-                    <small>{item.id}</small>
-                  </td>
-                  <td>
-                    <DomainStatusBadge
-                      domain="communication"
-                      status={item.status}
-                    />
-                  </td>
-                  <td>
-                    {item.sentCount}/{item.recipientCount} sent
-                    {item.failedCount ? ` · ${item.failedCount} failed` : ""}
-                  </td>
-                  <td>
-                    {item.status === "draft" ? (
-                      <Link
+        <ul className="comms-activity-list" aria-label="Recent communications">
+          {loaderData.communications.map((item) => (
+            <li className="comms-activity-row" key={item.id}>
+              <div className="comms-activity-identity">
+                <strong>{communicationListTitle(item.id, item.kind)}</strong>
+                <small>
+                  {formatCommunicationListDate(
+                    item.createdAt,
+                    loaderData.eventTimezone,
+                  )}
+                  {item.scheduledAt
+                    ? ` · Scheduled ${formatCommunicationListDate(item.scheduledAt, loaderData.eventTimezone)}`
+                    : ""}
+                  {` · ${item.sentCount}/${item.recipientCount} sent`}
+                  {item.failedCount ? ` · ${item.failedCount} failed` : ""}
+                </small>
+              </div>
+              <div className="comms-activity-meta">
+                <DomainStatusBadge
+                  domain="communication"
+                  status={item.status}
+                />
+                <div>
+                  {item.sentCount}/{item.recipientCount} sent
+                  {item.failedCount ? ` · ${item.failedCount} failed` : ""}
+                </div>
+              </div>
+              <div className="comms-activity-actions">
+                {item.status === "draft" ? (
+                  <Link
+                    className="btn small primary"
+                    to={`/admin/communications/compose/${item.id}`}
+                  >
+                    Resume
+                  </Link>
+                ) : ["scheduled", "queued", "failed"].includes(item.status) ? (
+                  <>
+                    <Form
+                      method="post"
+                      onSubmit={(event) => {
+                        event.preventDefault();
+                        const form = event.currentTarget;
+                        confirm(
+                          {
+                            title: "Cancel this communication?",
+                            description: `${item.recipientCount - item.sentCount} of ${item.recipientCount} deliveries have not been sent and never will be. Deliveries already sent cannot be recalled.`,
+                            records: [item.id],
+                            confirmLabel: "Cancel communication",
+                            cancelLabel: "Keep communication",
+                          },
+                          () => submit(form),
+                        );
+                      }}
+                    >
+                      <input type="hidden" name="intent" value="cancel" />
+                      <input
+                        type="hidden"
+                        name="communicationId"
+                        value={item.id}
+                      />
+                      <button
+                        type="submit"
                         className="btn small"
-                        to={`/admin/communications/compose/${item.id}`}
+                        disabled={working}
                       >
-                        Resume
-                      </Link>
-                    ) : ["scheduled", "queued", "failed"].includes(
-                        item.status,
-                      ) ? (
-                      <div className="page-actions">
-                        <Form
-                          method="post"
-                          onSubmit={(event) => {
-                            event.preventDefault();
-                            const form = event.currentTarget;
-                            confirm(
-                              {
-                                title: "Cancel this communication?",
-                                description: `${item.recipientCount - item.sentCount} of ${item.recipientCount} deliveries have not been sent and never will be. Deliveries already sent cannot be recalled.`,
-                                records: [item.id],
-                                confirmLabel: "Cancel communication",
-                                cancelLabel: "Keep communication",
-                              },
-                              () => submit(form),
-                            );
-                          }}
-                        >
-                          <input type="hidden" name="intent" value="cancel" />
-                          <input
-                            type="hidden"
-                            name="communicationId"
-                            value={item.id}
-                          />
-                          <button
-                            type="submit"
-                            className="btn small"
-                            disabled={working}
-                          >
-                            {working && pendingIntent === "cancel"
-                              ? "Cancelling…"
-                              : "Cancel"}
-                          </button>
-                        </Form>
-                        {item.status === "failed" && item.operationId ? (
-                          <Link
-                            className="btn small"
-                            to={`/admin/operations?operation=${encodeURIComponent(item.operationId)}`}
-                          >
-                            Retry in Operations
-                          </Link>
-                        ) : null}
-                      </div>
-                    ) : item.operationId ? (
+                        {working && pendingIntent === "cancel"
+                          ? "Cancelling…"
+                          : "Cancel"}
+                      </button>
+                    </Form>
+                    {item.status === "failed" && item.operationId ? (
                       <Link
                         className="btn small"
                         to={`/admin/operations?operation=${encodeURIComponent(item.operationId)}`}
                       >
-                        Details
+                        Retry in Operations
                       </Link>
                     ) : null}
-                    <Link
-                      className="btn small"
-                      to={`/admin/communications?deliveryCommunication=${encodeURIComponent(item.id)}#communications-health`}
-                    >
-                      Deliveries
-                    </Link>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </section>
+                  </>
+                ) : item.operationId ? (
+                  <Link
+                    className="btn small"
+                    to={`/admin/operations?operation=${encodeURIComponent(item.operationId)}`}
+                  >
+                    Details
+                  </Link>
+                ) : null}
+                <Link
+                  className="comms-activity-link"
+                  to={`/admin/communications?deliveryCommunication=${encodeURIComponent(item.id)}#communications-health`}
+                >
+                  Deliveries
+                </Link>
+              </div>
+            </li>
+          ))}
+        </ul>
       ) : (
         <EmptyState
           className="comms-empty"
@@ -158,6 +145,41 @@ export function RecentCommunications({
         />
       )}
     </section>
+  );
+}
+
+function DeliveryHealthLedger({
+  summary,
+}: {
+  summary: CommunicationsCentreLoaderData["deliveryHealth"]["summary"];
+}) {
+  const live = (
+    [
+      ["pending", summary.pending],
+      ["sent", summary.sent],
+      ["delivered", summary.delivered],
+      ["problems", summary.problems],
+      ["cancelled", summary.cancelled],
+    ] as const
+  ).filter(([, value]) => value > 0);
+  if (summary.total === 0) {
+    return <p className="comms-health-empty">No deliveries in this period.</p>;
+  }
+  if (live.length <= 1) {
+    return (
+      <p className="comms-health-empty">
+        {live.length === 0
+          ? `${summary.total} ${summary.total === 1 ? "delivery" : "deliveries"} recorded.`
+          : `${live
+              .map(([label, value]) => `${value} ${label}`)
+              .join(" · ")}. Nothing else is pending, sent or in problem.`}
+      </p>
+    );
+  }
+  return (
+    <p className="comms-health-live">
+      {live.map(([label, value]) => `${value} ${label}`).join(" · ")}
+    </p>
   );
 }
 
@@ -252,25 +274,7 @@ export function CommunicationDeliveryHealth({
           )}
         </div>
       </div>
-      <div className="grid grid-5 is-equal">
-        {[
-          ["Pending", health.summary.pending],
-          ["Sent", health.summary.sent],
-          ["Delivered", health.summary.delivered],
-          ["Problems", health.summary.problems],
-          ["Cancelled", health.summary.cancelled],
-        ].map(([label, value]) => (
-          <div className="metric card" key={String(label)}>
-            <div className="label">{label}</div>
-            <div className="value">{value}</div>
-          </div>
-        ))}
-      </div>
-      <p className="help mt">
-        Each delivery is counted once from its current stored state. Opened and
-        clicked are included under Delivered; Sent means the provider accepted
-        the message but delivery has not been confirmed.
-      </p>
+      <DeliveryHealthLedger summary={health.summary} />
 
       {selected ? (
         <div className="mt">
@@ -354,88 +358,98 @@ export function CommunicationDeliveryHealth({
         </div>
       ) : null}
 
-      <div className="grid grid-2 mt">
-        <section>
-          <h3>Latest recorded problems</h3>
-          {health.recentProblems.length ? (
-            <ul className="list-clean stack">
-              {health.recentProblems.map((problem) => (
-                <li className="card pad" key={problem.id}>
-                  <div className="card-title">
-                    <strong>
-                      {problem.recipientName ?? problem.recipientAddress}
-                    </strong>
-                    <DomainStatusBadge
-                      className="right"
-                      domain="communication"
-                      status={problem.status}
+      {health.recentProblems.length ||
+      health.suppressions.recipient.length ||
+      health.suppressions.provider.length ? (
+        <div className="grid grid-2 mt">
+          <section>
+            <h3>Latest recorded problems</h3>
+            {health.recentProblems.length ? (
+              <ul className="list-clean stack">
+                {health.recentProblems.map((problem) => (
+                  <li className="card pad" key={problem.id}>
+                    <div className="card-title">
+                      <strong>
+                        {problem.recipientName ?? problem.recipientAddress}
+                      </strong>
+                      <DomainStatusBadge
+                        className="right"
+                        domain="communication"
+                        status={problem.status}
+                      />
+                    </div>
+                    {problem.recipientName ? (
+                      <p>{problem.recipientAddress}</p>
+                    ) : null}
+                    <DeliveryReason
+                      code={problem.failureCode}
+                      message={problem.failureMessage}
                     />
-                  </div>
-                  {problem.recipientName ? (
-                    <p>{problem.recipientAddress}</p>
-                  ) : null}
-                  <DeliveryReason
-                    code={problem.failureCode}
-                    message={problem.failureMessage}
-                  />
-                  {problem.operationId ? (
-                    <p>
-                      <Link
-                        to={`/admin/operations?operation=${encodeURIComponent(problem.operationId)}`}
-                      >
-                        Open exact operation
-                      </Link>
-                    </p>
-                  ) : null}
-                </li>
-              ))}
-            </ul>
-          ) : (
-            <p className="subtle">
-              No bounced, suppressed or failed deliveries in scope.
+                    {problem.operationId ? (
+                      <p>
+                        <Link
+                          to={`/admin/operations?operation=${encodeURIComponent(problem.operationId)}`}
+                        >
+                          Open exact operation
+                        </Link>
+                      </p>
+                    ) : null}
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <p className="comms-health-quiet">
+                No bounced, suppressed or failed deliveries in scope.
+              </p>
+            )}
+          </section>
+          <section>
+            <h3>Latest active exclusions</h3>
+            <p className="subtle">Current event · up to 30 in each category</p>
+            <h4>Latest recipient unsubscribes</h4>
+            {health.suppressions.recipient.length ? (
+              <ul className="list-clean">
+                {health.suppressions.recipient.map((entry) => (
+                  <li key={entry.id}>
+                    <strong>{entry.address}</strong>
+                    <small>
+                      {communicationCategoryLabel(entry.category)} · recipient
+                      unsubscribe
+                    </small>
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <p className="comms-health-quiet">
+                No active recipient unsubscribes.
+              </p>
+            )}
+            <h4>Latest provider suppressions and complaints</h4>
+            {health.suppressions.provider.length ? (
+              <ul className="list-clean">
+                {health.suppressions.provider.map((entry) => (
+                  <li key={entry.id}>
+                    <strong>{entry.address}</strong>
+                    <small>{entry.reason?.replace("email.", "")}</small>
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <p className="comms-health-quiet">
+                No active provider suppressions or complaints.
+              </p>
+            )}
+            <p className="help mt">
+              Bounces remain delivery outcomes above; they are not presented as
+              recipient unsubscribe choices.
             </p>
-          )}
-        </section>
-        <section>
-          <h3>Latest active exclusions</h3>
-          <p className="subtle">Current event · up to 30 in each category</p>
-          <h4>Latest recipient unsubscribes</h4>
-          {health.suppressions.recipient.length ? (
-            <ul className="list-clean">
-              {health.suppressions.recipient.map((entry) => (
-                <li key={entry.id}>
-                  <strong>{entry.address}</strong>
-                  <small>
-                    {communicationCategoryLabel(entry.category)} · recipient
-                    unsubscribe
-                  </small>
-                </li>
-              ))}
-            </ul>
-          ) : (
-            <p className="subtle">No active recipient unsubscribes.</p>
-          )}
-          <h4>Latest provider suppressions and complaints</h4>
-          {health.suppressions.provider.length ? (
-            <ul className="list-clean">
-              {health.suppressions.provider.map((entry) => (
-                <li key={entry.id}>
-                  <strong>{entry.address}</strong>
-                  <small>{entry.reason?.replace("email.", "")}</small>
-                </li>
-              ))}
-            </ul>
-          ) : (
-            <p className="subtle">
-              No active provider suppressions or complaints.
-            </p>
-          )}
-          <p className="help mt">
-            Bounces remain delivery outcomes above; they are not presented as
-            recipient unsubscribe choices.
-          </p>
-        </section>
-      </div>
+          </section>
+        </div>
+      ) : (
+        <p className="comms-health-quiet mt">
+          No bounces, suppressions or recipient unsubscribes in this period.
+        </p>
+      )}
     </section>
   );
 }

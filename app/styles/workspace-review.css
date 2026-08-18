@@ -27,13 +27,12 @@
   background: var(--surface-sunken);
   border-color: var(--border-strong);
 }
-/* The current item was a 2px ring at 8% alpha over a near-white tint — below
-   the threshold at which you can find your place while scanning. The rail
-   primitive already survives forced-colors, so the marker uses it. */
+/* Current item: ink tint + copper rail. A peach wash fought the brand
+   instead of composing with it, and read as a selected-row leftover. */
 .queue-card.active {
   --rail: var(--brand-600);
-  border-color: var(--brand-400);
-  background: var(--brand-50);
+  border-color: color-mix(in srgb, var(--ink) 14%, var(--border));
+  background: color-mix(in srgb, var(--ink) 3.5%, var(--surface));
 }
 .queue-card h3 {
   font-size: var(--text-sm);
@@ -55,11 +54,10 @@
   bottom: 0;
   background: var(--surface);
   border-top: 1px solid var(--line);
-  padding: var(--space-3) var(--space-5);
+  padding: var(--space-2) var(--space-3);
   display: flex;
   align-items: center;
   gap: var(--space-2);
-  box-shadow: 0 -8px 22px rgba(19, 32, 31, 0.06);
   z-index: 2;
 }
 .sticky-actions .spacer {
@@ -73,10 +71,10 @@
   grid-template-columns: minmax(0, 1fr) auto;
   align-items: center;
   gap: var(--space-3);
-  background: var(--surface-sunken);
-  border: 1px solid var(--line);
+  background: color-mix(in srgb, var(--ink) 3%, var(--surface));
+  border: 1px solid var(--border);
   padding: var(--space-3) var(--space-4);
-  border-radius: var(--radius);
+  border-radius: var(--radius-sm);
   margin-top: var(--space-4);
 }
 .score-summary > div {
@@ -144,11 +142,11 @@
 }
 .conflict-box {
   border: 1px solid var(--state-bad-border);
-  background: #fff7f7;
+  background: var(--state-bad-surface);
   border-radius: var(--radius-sm);
   padding: var(--space-3);
 }
 .conflict-box.info {
-  border-color: var(--brand-200);
-  background: var(--brand-50);
+  border-color: var(--border);
+  background: var(--surface-sunken);
 }

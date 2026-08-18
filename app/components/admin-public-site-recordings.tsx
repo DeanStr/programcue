@@ -86,10 +86,10 @@ export function AdminPublicSiteRecordings({
     return ids;
   }, [recordings]);
   return (
-    <section className="card pad">
+    <section className="public-site-rail-section">
       <div className="card-title">
         <div>
-          <h2>Session recordings</h2>
+          <h2 className="public-site-rail-title">Session recordings</h2>
           <p className="help">
             Only external HTTPS recordings are supported in this slice. Saving
             never implies upload or publication.

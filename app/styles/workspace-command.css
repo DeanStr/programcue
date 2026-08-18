@@ -1,21 +1,142 @@
-/* Command centre */
+/* Command Centre and administrator page frame.
+   Type does the hierarchy. Cards earn chrome. Comparable rows sit on canvas. */
 
-/* --- Programme setup ------------------------------------------------------
-   Four phase cards straight on canvas. They used to be nested inside a fifth
-   card whose only content was a heading that repeated the section name and a
-   3px brand rail — a rail carries state on this page, so spending one on
-   identity taught the eye to ignore the ones that mean something. */
+/* --- Shell frame ----------------------------------------------------------
+   Linear's breadcrumb is a location, not a link farm. Copper underlines and a
+   slash made this row the loudest thing above the title. */
+.app-admin .admin-context-bar {
+  min-height: 0;
+  margin: 0 0 var(--space-5);
+  color: var(--text-tertiary);
+  font-size: var(--text-xs);
+}
+.app-admin .admin-breadcrumbs {
+  gap: var(--space-2);
+}
+.app-admin .admin-breadcrumbs a {
+  color: var(--text-tertiary);
+  font-weight: var(--weight-medium);
+  text-decoration: none;
+}
+.app-admin .admin-breadcrumbs a:hover,
+.app-admin .admin-breadcrumbs a:focus-visible {
+  color: var(--text-primary);
+  text-decoration: none;
+}
+.app-admin .admin-breadcrumbs [aria-current="page"] {
+  color: var(--text-secondary);
+  font-weight: var(--weight-semibold);
+}
+.app-admin .admin-breadcrumbs li:not(:last-child)::after {
+  content: "›";
+  color: var(--text-tertiary);
+  font-weight: var(--weight-normal);
+}
+
+/* --- Page --------------------------------------------------------------- */
+.command-page {
+  min-width: 0;
+}
+
+.command-page-head {
+  align-items: flex-end;
+  margin-bottom: var(--space-5);
+}
+.command-page-head h1 {
+  font-size: var(--display-2);
+  font-weight: var(--weight-extrabold);
+  letter-spacing: var(--tracking-tight);
+  line-height: 0.95;
+}
+.command-page-head .pc-page-header-lede,
+.command-page-head p {
+  margin-top: var(--space-3);
+  max-width: 46ch;
+  color: var(--text-secondary);
+  font-size: var(--text-sm);
+  line-height: var(--leading-snug);
+}
+.command-page-head .page-actions {
+  align-items: center;
+  gap: var(--space-3);
+}
+.command-page-head .status {
+  background: transparent;
+  padding-inline: 0;
+  color: var(--text-tertiary);
+  font-weight: var(--weight-medium);
+}
+.command-page-head .status.warning {
+  color: var(--state-warn-text);
+}
+.command-page-head .status.danger {
+  color: var(--state-bad-text);
+}
+.command-page-head .status.info {
+  color: var(--text-tertiary);
+}
+
+/* Supporting bands recede. Readiness is the page; these are kickers. */
+.command-band {
+  margin-top: var(--space-5);
+}
+.command-band-head {
+  margin: 0;
+  color: var(--text-tertiary);
+  font-size: var(--text-xs);
+  font-weight: var(--weight-semibold);
+  letter-spacing: var(--tracking-snug);
+}
+
+.command-panel-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-3);
+  margin-bottom: var(--space-3);
+}
+.command-panel-head h2,
+.command-panel-head h3 {
+  margin: 0;
+}
+.command-panel-head p {
+  margin: 0;
+  color: var(--text-tertiary);
+  font-size: var(--text-xs);
+  font-weight: var(--weight-medium);
+}
+.command-qualifier,
+.command-text-link {
+  color: var(--text-tertiary);
+  font-size: var(--text-xs);
+  font-weight: var(--weight-semibold);
+  letter-spacing: var(--tracking-snug);
+  white-space: nowrap;
+}
+.command-text-link:hover,
+.command-text-link:focus-visible {
+  color: var(--brand-700);
+}
+.command-queue-head {
+  justify-content: flex-start;
+  gap: var(--space-3);
+}
+
+/* --- Programme setup ---------------------------------------------------- */
 .command-workflow-phases {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: var(--space-3);
+  gap: var(--space-6) var(--space-5);
 }
 .command-workflow-phase {
   align-content: start;
   display: grid;
   gap: var(--space-3);
   min-width: 0;
-  padding: var(--space-4);
+}
+.command-workflow-phase + .command-workflow-phase {
+  padding-left: var(--space-5);
+  border-left: 1px solid var(--border);
 }
 .command-workflow-phase-heading {
   align-items: center;
@@ -23,76 +144,171 @@
   gap: var(--space-2);
 }
 .command-workflow-phase h3 {
-  font-size: var(--text-base);
-  font-weight: var(--weight-bold);
+  font-size: var(--text-sm);
+  font-weight: var(--weight-semibold);
   letter-spacing: var(--tracking-snug);
   margin: 0;
 }
 .command-workflow-steps {
   display: grid;
-  gap: var(--space-1);
+  gap: 2px;
 }
 .command-workflow-step {
   align-items: center;
-  background: var(--surface-sunken);
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-xs);
   color: inherit;
   display: grid;
   font-size: var(--text-sm);
   gap: var(--space-2);
-  grid-template-columns: auto minmax(0, 1fr) auto;
+  grid-template-columns: auto minmax(0, 1fr);
+  margin-inline: calc(-1 * var(--space-2));
   padding: var(--space-2);
   text-decoration: none;
   transition: background var(--dur-fast) var(--ease-out);
 }
-.command-workflow-step:hover {
-  background: var(--state-info-surface);
-}
-.command-workflow-step .chev {
-  color: var(--text-tertiary);
+.command-workflow-step:hover,
+.command-workflow-step:focus-visible {
+  background: var(--surface-sunken);
 }
 
-/* --- Readiness ------------------------------------------------------------
-   The work first, the score second. Both panels size to their content: the
-   row used to be a five-track grid holding one to five items, so the page
-   changed silhouette with the data and reserved canvas for tiles that were
-   never emitted. */
-.command-readiness-row {
+/* --- Readiness ----------------------------------------------------------
+   The number is the page. Queue supports it. */
+.command-hero {
   align-items: start;
   display: grid;
-  gap: var(--space-3);
-  grid-template-columns: minmax(0, 1fr) minmax(280px, 0.42fr);
+  gap: var(--space-6);
+  grid-template-columns: minmax(240px, 0.58fr) minmax(0, 1fr);
 }
+.command-queue,
+.command-score {
+  min-width: 0;
+}
+
+.command-score {
+  --score-tone: var(--brand-700);
+  --score-fill: var(--brand-600);
+}
+.command-score[data-state="ready"] {
+  --score-tone: var(--state-good-text);
+  --score-fill: var(--state-good-solid);
+}
+.command-score[data-state="at_risk"] {
+  --score-tone: var(--state-warn-text);
+  --score-fill: var(--state-warn-solid);
+}
+.command-score-kicker {
+  margin: 0 0 var(--space-2);
+  color: var(--text-tertiary);
+  font-size: var(--text-xs);
+  font-weight: var(--weight-semibold);
+  letter-spacing: var(--tracking-snug);
+}
+.command-score-reading {
+  align-items: flex-end;
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+  margin: 0;
+}
+.command-score-reading strong {
+  color: var(--score-tone);
+  font-size: var(--display-1);
+  font-weight: var(--weight-extrabold);
+  letter-spacing: -0.045em;
+  line-height: 0.82;
+}
+.command-score-unit {
+  display: inline-block;
+  margin-left: 2px;
+  font-size: 0.38em;
+  font-weight: var(--weight-bold);
+  letter-spacing: var(--tracking-snug);
+  line-height: 1;
+  vertical-align: 0.72em;
+}
+.command-score-state {
+  color: var(--text-tertiary);
+  font-size: var(--text-sm);
+  font-weight: var(--weight-medium);
+  letter-spacing: var(--tracking-snug);
+  padding-bottom: 0.28em;
+}
+.command-score-track {
+  height: 6px;
+  max-width: 12rem;
+  margin: var(--space-5) 0 0;
+  background: color-mix(in srgb, var(--score-fill) 16%, var(--track));
+  overflow: hidden;
+}
+.command-score-track > span {
+  display: block;
+  height: 100%;
+  background: var(--score-fill);
+  transition: width var(--dur-slow) var(--ease-out);
+}
+.command-score-caption {
+  margin: var(--space-4) 0 0;
+  color: var(--text-tertiary);
+  font-size: var(--text-xs);
+  line-height: var(--leading-snug);
+}
+.command-score-method {
+  margin-top: var(--space-2);
+  max-width: 36ch;
+}
+.command-score-method summary {
+  width: fit-content;
+  color: var(--text-tertiary);
+  font-size: var(--text-2xs);
+  font-weight: var(--weight-medium);
+  cursor: pointer;
+}
+.command-score-method summary:hover,
+.command-score-method summary:focus-visible {
+  color: var(--text-secondary);
+}
+.command-score-method p {
+  margin: var(--space-2) 0 0;
+  color: var(--text-tertiary);
+  font-size: var(--text-2xs);
+  line-height: var(--leading-snug);
+}
+.command-score-method a {
+  color: var(--text-secondary);
+  text-decoration: underline;
+  text-decoration-color: var(--border-strong);
+  text-underline-offset: 2px;
+}
+
 .command-blockers {
   display: grid;
-  gap: var(--space-2);
 }
 .command-blocker {
   align-items: center;
-  background: var(--blocker-tint);
-  border-radius: var(--radius-sm);
   color: inherit;
   display: grid;
   gap: var(--space-3);
-  grid-template-columns: auto minmax(0, 1fr) auto 10px;
-  padding: var(--space-3);
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  min-height: 48px;
+  padding: var(--space-3) 0;
   text-decoration: none;
+  border-top: 1px solid var(--border);
   transition: background var(--dur-fast) var(--ease-out);
 }
-/* Severity is a closed pair, so each value states its own tokens rather than
-   one of them riding on a default. */
+.command-blocker:first-child {
+  border-top: 0;
+}
 .command-blocker.is-warning {
-  --rail: var(--state-warn-solid);
-  --blocker-tint: var(--state-warn-surface);
   --blocker-ink: var(--state-warn-text);
+  --blocker-mark: var(--state-warn-solid);
 }
 .command-blocker.is-danger {
-  --rail: var(--state-bad-solid);
-  --blocker-tint: var(--state-bad-surface);
   --blocker-ink: var(--state-bad-text);
+  --blocker-mark: var(--state-bad-solid);
 }
 .command-blocker > svg {
   color: var(--blocker-ink);
+  flex: none;
 }
 .command-blocker-copy {
   display: grid;
@@ -100,95 +316,77 @@
   min-width: 0;
 }
 .command-blocker-copy small {
-  /* --muted is tuned for white; on a state tint the secondary ramp is the one
-     that still clears AA. */
   color: var(--text-secondary);
   font-size: var(--text-xs);
 }
-.command-blocker b {
-  color: var(--blocker-ink);
-  font-size: var(--text-lg);
+.command-blocker-copy strong {
+  font-size: var(--text-sm);
+  font-weight: var(--weight-semibold);
   letter-spacing: var(--tracking-snug);
 }
-.command-blocker .chev {
-  color: var(--blocker-ink);
-}
-.command-blocker:hover {
-  background: color-mix(in srgb, var(--blocker-tint) 88%, var(--rail));
-}
-/* The tint is repainted to Canvas in High Contrast Mode, which would leave
-   the queue rows indistinguishable from the card behind them. */
-@media (forced-colors: active) {
-  .command-blocker {
-    border: 1px solid CanvasText;
-  }
-}
-.command-score {
-  --score-tone: var(--state-info-text);
-  align-content: start;
-}
-.command-score[data-state="ready"] {
-  --score-tone: var(--state-good-text);
-}
-.command-score[data-state="at_risk"] {
-  --score-tone: var(--state-warn-text);
-}
-.command-score-reading {
-  align-items: baseline;
-  display: flex;
-  gap: var(--space-2);
-  margin: 0 0 var(--space-3);
-}
-.command-score-reading strong {
-  color: var(--score-tone);
-  font-size: var(--text-3xl);
-  font-weight: var(--weight-extrabold);
-  letter-spacing: var(--tracking-tight);
+.command-blocker-count {
+  color: var(--text-tertiary);
+  font-size: var(--text-sm);
+  font-weight: var(--weight-semibold);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: var(--tracking-snug);
   line-height: 1;
 }
-/* The state word, not the colour, is what survives colour blindness, print
-   and forced colours. */
-.command-score-reading span {
-  color: var(--score-tone);
-  font-size: var(--text-sm);
-  font-weight: var(--weight-bold);
+.command-blocker.is-danger .command-blocker-count,
+.command-blocker.is-warning .command-blocker-count {
+  color: var(--blocker-ink);
 }
-.command-score-note {
-  color: var(--text-tertiary);
-  font-size: var(--text-2xs);
-  margin: var(--space-2) 0 0;
+.command-blocker:hover,
+.command-blocker:focus-visible {
+  background: color-mix(in srgb, var(--blocker-mark) 8%, transparent);
+  box-shadow:
+    -12px 0 0 color-mix(in srgb, var(--blocker-mark) 8%, transparent),
+    12px 0 0 color-mix(in srgb, var(--blocker-mark) 8%, transparent);
 }
-.command-score-caveat {
-  font-size: var(--text-2xs);
-  line-height: var(--leading-snug);
-  margin: var(--space-1) 0 0;
+@media (forced-colors: active) {
+  .command-blocker {
+    border-top: 1px solid CanvasText;
+  }
+  .command-score-track {
+    border: 1px solid CanvasText;
+  }
+  .command-score-track > span {
+    background: Highlight;
+  }
 }
 
-/* --- Readiness by workflow ------------------------------------------------
-   Six comparable numbers are a table. The label track is wide enough that
-   "Content & submissions" stays on one line, and the bar is sized to be read
-   rather than to fill the card. */
+/* --- Workflows ---------------------------------------------------------- */
 .command-workflow-list {
   display: grid;
 }
 .command-workflow-row {
   align-items: center;
-  border-radius: var(--radius-xs);
   color: inherit;
   display: grid;
   gap: var(--space-3);
-  grid-template-columns: minmax(180px, 0.8fr) minmax(0, 1.2fr) 160px 46px 10px;
-  min-height: 40px;
-  padding: var(--space-2);
+  grid-template-columns: minmax(180px, 0.75fr) minmax(0, 1.15fr) minmax(
+      120px,
+      0.9fr
+    ) 3.25rem;
+  min-height: 48px;
+  padding: var(--space-3) 0;
   text-decoration: none;
+  border-top: 1px solid var(--border);
   transition: background var(--dur-fast) var(--ease-out);
 }
-.command-workflow-row + .command-workflow-row {
-  border-top: 1px solid var(--border);
-  border-radius: 0;
+.command-workflow-row:first-child {
+  border-top: 0;
 }
-.command-workflow-row:hover {
-  background: var(--surface-sunken);
+.command-workflow-row:hover,
+.command-workflow-row:focus-visible {
+  background: color-mix(in srgb, var(--ink) 3.5%, transparent);
+  box-shadow:
+    -12px 0 0 color-mix(in srgb, var(--ink) 3.5%, transparent),
+    12px 0 0 color-mix(in srgb, var(--ink) 3.5%, transparent);
+}
+.command-workflow-row strong {
+  font-size: var(--text-sm);
+  font-weight: var(--weight-semibold);
 }
 .command-workflow-detail {
   color: var(--text-tertiary);
@@ -196,44 +394,107 @@
 }
 .command-workflow-row b {
   text-align: right;
-}
-.command-workflow-row .chev {
-  color: var(--text-tertiary);
+  font-size: var(--text-sm);
+  font-weight: var(--weight-semibold);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: var(--tracking-snug);
 }
 
-/* --- Assistants and delivery --------------------------------------------- */
-.command-assist {
+.command-meter {
+  height: 6px;
+  background: var(--track);
+  overflow: hidden;
+}
+.command-meter > span {
+  display: block;
+  height: 100%;
+  background: var(--brand-600);
+  transition: width var(--dur-slow) var(--ease-out);
+}
+.command-meter.quiet > span {
+  background: var(--border-strong);
+}
+.command-meter.amber > span {
+  background: var(--state-warn-solid);
+}
+.command-meter.red > span {
+  background: var(--state-bad-solid);
+}
+.command-meter.is-zero {
+  background: var(--state-bad-surface);
+  box-shadow: inset 0 0 0 1px var(--state-bad-border);
+}
+
+/* --- Draft and delivery -------------------------------------------------
+   No card. Two fields, one sparkle. Advisor is a command line. */
+.command-support {
   align-items: start;
   display: grid;
-  gap: var(--space-3);
-  grid-template-columns: minmax(0, 0.95fr) minmax(0, 1.05fr);
+  gap: var(--space-5);
+  grid-template-columns: minmax(0, 1.05fr) minmax(0, 0.95fr);
+  margin-top: var(--space-5);
+  padding-top: var(--space-5);
+  border-top: 1px solid var(--border);
 }
 .command-assist-side {
   align-content: start;
   display: grid;
-  gap: var(--space-3);
+  gap: var(--space-5);
 }
-.command-assist > *,
+.command-support > *,
 .command-assist-side > * {
   min-width: 0;
 }
-.command-assist .stack {
-  grid-template-columns: minmax(0, 1fr);
-  min-width: 0;
+.command-composer-form {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: var(--space-3);
 }
-.command-assist .label,
-.command-assist .input,
-.command-assist .select,
-.command-assist .textarea {
+.command-composer-form > .label,
+.command-composer-form .select,
+.command-composer-form .textarea {
   width: 100%;
   min-width: 0;
   max-width: 100%;
 }
-.command-assist .status {
-  min-width: 0;
-  max-width: 100%;
-  white-space: normal;
-  overflow-wrap: anywhere;
+.command-composer-more {
+  grid-column: 1 / -1;
+}
+.command-composer-more summary {
+  width: fit-content;
+  color: var(--text-tertiary);
+  font-size: var(--text-xs);
+  font-weight: var(--weight-medium);
+  cursor: pointer;
+}
+.command-composer-more summary:hover,
+.command-composer-more summary:focus-visible {
+  color: var(--text-secondary);
+}
+.command-composer-more[open] summary {
+  margin-bottom: var(--space-3);
+}
+.command-composer-more .label + .label {
+  margin-top: var(--space-3);
+}
+.command-composer-more .textarea {
+  min-height: 72px;
+}
+.command-composer-actions {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-3);
+}
+.command-composer-actions .btn:disabled,
+.command-composer-actions .btn.primary:disabled,
+.command-composer-actions .btn.ghost:disabled {
+  background: transparent;
+  border-color: transparent;
+  color: var(--text-tertiary);
+  opacity: 1;
+  box-shadow: none;
 }
 .command-template-select {
   inline-size: 100%;
@@ -242,13 +503,56 @@
   overflow: hidden;
   text-overflow: ellipsis;
 }
+.command-inline-note {
+  margin: 0;
+  color: var(--text-tertiary);
+  font-size: var(--text-xs);
+  line-height: var(--leading-snug);
+  max-width: 42ch;
+}
+.command-inline-note[role="alert"] {
+  color: var(--state-bad-text);
+}
 
-/* --- Schedule and operations --------------------------------------------- */
+.command-advisor-cmd {
+  display: inline-flex;
+  align-items: center;
+  min-height: 32px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--text-secondary);
+  font: inherit;
+  font-size: var(--text-sm);
+  font-weight: var(--weight-medium);
+  text-decoration: underline;
+  text-decoration-color: var(--border-strong);
+  text-underline-offset: 3px;
+}
+.command-advisor-cmd:hover,
+.command-advisor-cmd:focus-visible {
+  color: var(--brand-700);
+  text-decoration-color: currentColor;
+}
+.command-advisor-cmd:disabled {
+  color: var(--text-tertiary);
+  text-decoration: none;
+  cursor: wait;
+}
+.command-delivery {
+  padding-top: var(--space-4);
+  border-top: 1px solid var(--border);
+}
+
+/* --- Schedule and operations -------------------------------------------- */
 .command-activity {
   align-items: start;
   display: grid;
-  gap: var(--space-3);
-  grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr);
+  gap: var(--space-6);
+  grid-template-columns: minmax(0, 1.25fr) minmax(0, 0.85fr);
+  margin-top: var(--space-5);
+  padding-top: var(--space-5);
+  border-top: 1px solid var(--border);
 }
 .command-activity > * {
   min-width: 0;
@@ -256,40 +560,49 @@
 .command-session-list {
   display: grid;
 }
-/* One date per day beats the same date chip repeated on four consecutive
-   rows. */
 .command-session-day {
   align-items: baseline;
   border-bottom: 1px solid var(--border);
   color: var(--text-secondary);
   display: flex;
   font-size: var(--text-xs);
-  font-weight: var(--weight-bold);
+  font-weight: var(--weight-semibold);
   gap: var(--space-3);
   justify-content: space-between;
   margin: 0;
-  padding: var(--space-2) var(--space-2) var(--space-1);
+  padding: var(--space-4) 0 var(--space-2);
 }
 .command-session-zone {
   color: var(--text-tertiary);
   font-size: var(--text-2xs);
   font-weight: var(--weight-normal);
 }
-.command-session-day:not(:first-child) {
-  margin-top: var(--space-3);
+.command-session-day:first-child {
+  padding-top: var(--space-1);
 }
 .command-session-row {
   align-items: baseline;
   display: flex;
   gap: var(--space-3);
-  min-height: 36px;
-  padding: var(--space-2);
+  min-height: 40px;
+  padding: var(--space-2) 0;
+  text-decoration: none;
+  transition: background var(--dur-fast) var(--ease-out);
+}
+.command-session-row:hover,
+.command-session-row:focus-visible {
+  background: color-mix(in srgb, var(--ink) 3.5%, transparent);
+  box-shadow:
+    -12px 0 0 color-mix(in srgb, var(--ink) 3.5%, transparent),
+    12px 0 0 color-mix(in srgb, var(--ink) 3.5%, transparent);
 }
 .command-session-time {
   flex: none;
-  font-weight: var(--weight-bold);
+  font-weight: var(--weight-semibold);
   min-width: 66px;
   white-space: nowrap;
+  color: var(--text-secondary);
+  font-variant-numeric: tabular-nums;
 }
 .command-session-title {
   flex: 1 1 auto;
@@ -318,10 +631,52 @@
   font-size: var(--text-2xs);
   line-height: var(--leading-snug);
 }
-.command-session-row .chev {
-  color: var(--text-tertiary);
-  flex: none;
+
+.command-ops-list {
+  display: grid;
+  margin: 0;
+  padding: 0;
+  list-style: none;
 }
+.command-ops-row {
+  align-items: center;
+  color: inherit;
+  display: grid;
+  gap: var(--space-3);
+  grid-template-columns: minmax(0, 1fr) auto minmax(72px, 0.55fr);
+  min-height: 44px;
+  padding: var(--space-2) 0;
+  text-decoration: none;
+  border-top: 1px solid var(--border);
+  transition: background var(--dur-fast) var(--ease-out);
+}
+.command-ops-list > li:first-child .command-ops-row {
+  border-top: 0;
+}
+.command-ops-row:hover,
+.command-ops-row:focus-visible {
+  background: color-mix(in srgb, var(--ink) 3.5%, transparent);
+  box-shadow:
+    -12px 0 0 color-mix(in srgb, var(--ink) 3.5%, transparent),
+    12px 0 0 color-mix(in srgb, var(--ink) 3.5%, transparent);
+}
+.command-ops-type {
+  font-weight: var(--weight-semibold);
+}
+.command-ops-progress {
+  display: grid;
+  gap: 4px;
+  justify-items: end;
+}
+.command-ops-progress .command-meter {
+  width: 100%;
+  min-width: 64px;
+}
+.command-ops-idle {
+  color: var(--text-tertiary);
+  text-align: right;
+}
+
 .command-health-table th[scope="row"] {
   font-weight: var(--weight-medium);
 }
@@ -336,25 +691,21 @@
 .jobs th,
 .jobs td {
   text-align: left;
-  padding: var(--space-2);
+  padding: var(--space-2) 0;
   border-bottom: 1px solid var(--line);
   font-size: var(--text-2xs);
 }
 
-/* --- Shared to the surface ------------------------------------------------
-   A supporting panel does not shout as loudly as the work. Third tier under
-   the 23px section heading and the 16px card heading. */
-.card-title.command-subhead h2 {
-  color: var(--text-secondary);
-  font-size: var(--text-sm);
-  font-weight: var(--weight-semibold);
-}
-/* Two tiers of emptiness: an expected-empty panel gets a sentence, and the
-   illustrated state is kept for a flow that is genuinely blocked. */
 .command-quiet {
   color: var(--text-secondary);
-  font-size: var(--text-xs);
+  font-size: var(--text-sm);
+  line-height: var(--leading-snug);
   margin: 0;
+}
+.command-empty-copy {
+  max-width: 36ch;
+  color: var(--text-tertiary);
+  font-size: var(--text-xs);
 }
 
 ol.timeline {

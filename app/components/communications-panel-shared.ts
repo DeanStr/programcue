@@ -16,8 +16,41 @@ export function formatCommunicationDate(
     : "—";
 }
 
+export function formatCommunicationListDate(
+  epoch: number | null,
+  timezone: string,
+) {
+  return epoch
+    ? new Intl.DateTimeFormat("en", {
+        month: "short",
+        day: "numeric",
+        hour: "numeric",
+        minute: "2-digit",
+        timeZone: timezone,
+      }).format(new Date(epoch * 1_000))
+    : "—";
+}
+
 export function communicationCategoryLabel(category: string) {
   return category
     .replaceAll("_", " ")
     .replace(/^./, (value) => value.toUpperCase());
+}
+
+/** Human title from a durable communication id such as `decision-communication:…`. */
+export function communicationListTitle(id: string, kind: string) {
+  const [, rest] = id.split(":");
+  if (rest) {
+    const name = rest
+      .replace(/^demo-showcase-/u, "")
+      .replace(/-operation$/u, "")
+      .replaceAll("-", " ");
+    return name.replace(/^./u, (letter) => letter.toUpperCase());
+  }
+  return communicationCategoryLabel(kind || "communication");
+}
+
+export function communicationListReference(id: string) {
+  const separator = id.indexOf(":");
+  return separator >= 0 ? id.slice(separator + 1) : id;
 }

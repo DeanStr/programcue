@@ -68,6 +68,7 @@
     display: grid;
     grid-template-columns: minmax(0, 1fr) auto;
     align-items: end;
+    padding: var(--space-2) var(--space-3);
   }
   .pc-data-grid-selection {
     grid-column: 1 / -1;

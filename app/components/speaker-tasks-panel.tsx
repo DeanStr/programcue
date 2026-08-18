@@ -1,4 +1,4 @@
-import { CheckCircle2, Clock3, LockKeyhole } from "lucide-react";
+import { CheckCircle2, Circle, Clock3, LockKeyhole } from "lucide-react";
 import { useState } from "react";
 import { Form } from "react-router";
 
@@ -58,7 +58,7 @@ async function attachTaskEvidence(
 function AcknowledgementCompleteControls({ busy }: { busy: boolean }) {
   const [confirmed, setConfirmed] = useState(false);
   return (
-    <>
+    <div className="speaker-task-complete">
       <label className="speaker-confirm">
         <input
           type="checkbox"
@@ -74,9 +74,19 @@ function AcknowledgementCompleteControls({ busy }: { busy: boolean }) {
         className="btn primary"
         disabled={busy || !confirmed}
       >
-        <CheckCircle2 aria-hidden size={15} /> Complete task
+        Complete task
       </button>
-    </>
+    </div>
+  );
+}
+
+function isFinished(status: string) {
+  return status === "completed" || status === "waived";
+}
+
+function isBlocked(dependencies: SpeakerTask["dependencies"]) {
+  return dependencies.some(
+    (dependency) => !["completed", "waived"].includes(dependency.status),
   );
 }
 
@@ -126,143 +136,168 @@ export function SpeakerTasksPanel({
   busy: boolean;
   intentId: string;
 }) {
+  const ordered = [...tasks].sort((left, right) => {
+    const leftDone = isFinished(left.status) ? 1 : 0;
+    const rightDone = isFinished(right.status) ? 1 : 0;
+    return leftDone - rightDone;
+  });
   return (
-    <section className="mt" id="tasks">
-      <div className="card-title">
-        <h2 className="sr-only">Assigned tasks</h2>
-        <span className="pill right">
-          {finished} of {tasks.length} complete
-        </span>
-      </div>
-      <div className="speaker-task-list">
-        {tasks.length ? (
-          tasks.map((task) => {
-            const blocked = task.dependencies.some(
-              (dependency) =>
-                !["completed", "waived"].includes(dependency.status),
-            );
+    <section className="mt speaker-work" id="tasks">
+      <h2 className="sr-only">Assigned tasks</h2>
+      <p className="sr-only">
+        {finished} of {tasks.length} complete
+      </p>
+      <div className="speaker-work-list">
+        {ordered.length ? (
+          ordered.map((task) => {
+            const blocked = isBlocked(task.dependencies);
+            const done = isFinished(task.status);
+            const open =
+              !done && !blocked && task.taskType !== "administrator_only";
+            const canUpload = open && task.taskType === "file_upload";
+            const canComplete =
+              open &&
+              task.status !== "submitted" &&
+              task.taskType !== "file_upload";
             return (
               <article
-                className="card pad speaker-task"
+                className="speaker-task"
+                data-state={done ? "done" : blocked ? "blocked" : task.status}
                 id={`task-${task.id}`}
                 key={task.id}
               >
-                <div className="speaker-task-main">
-                  <div className="card-title">
-                    <DomainStatusBadge domain="task" status={task.status} />
-                    <span className={`impact ${task.impact} right`}>
-                      {task.impact} impact
-                    </span>
+                <div className="speaker-task-row">
+                  <span className="speaker-task-mark" aria-hidden>
+                    {done ? (
+                      <CheckCircle2 size={16} />
+                    ) : blocked ? (
+                      <LockKeyhole size={16} />
+                    ) : (
+                      <Circle size={16} />
+                    )}
+                  </span>
+                  <div className="speaker-task-copy">
+                    <div className="speaker-task-title-row">
+                      <h3>{task.title}</h3>
+                      {done ? null : (
+                        <DomainStatusBadge domain="task" status={task.status} />
+                      )}
+                    </div>
+                    {task.targetType === "session" && task.targetLabel ? (
+                      <p className="speaker-task-kicker">{task.targetLabel}</p>
+                    ) : null}
+                    {task.description ? (
+                      <p className="speaker-task-desc">{task.description}</p>
+                    ) : null}
+                    <p className="speaker-task-meta">
+                      <Clock3 aria-hidden size={12} />
+                      {task.dueAt ? (
+                        <EventDateTime
+                          epochSeconds={task.dueAt}
+                          timeZone={portal.event.timezone}
+                        >
+                          {speakerDueLabel(task.dueAt, portal.event.timezone)}
+                        </EventDateTime>
+                      ) : (
+                        "No due date"
+                      )}
+                    </p>
                   </div>
-                  <h3>{task.title}</h3>
-                  {task.targetType === "session" && task.targetLabel ? (
-                    <p className="tiny">
-                      <span className="status info">Session deliverable</span>{" "}
-                      <strong>{task.targetLabel}</strong>
+                  {done ? (
+                    <p className="speaker-task-done">
+                      {task.status === "waived"
+                        ? "Waived by the event team"
+                        : "Completed"}
                     </p>
                   ) : null}
-                  <p className="subtle">{task.description}</p>
-                  <p className="tiny subtle">
-                    <Clock3 aria-hidden size={13} />{" "}
-                    {task.dueAt ? (
-                      <EventDateTime
-                        epochSeconds={task.dueAt}
-                        timeZone={portal.event.timezone}
-                      >
-                        {speakerDueLabel(task.dueAt, portal.event.timezone)}
-                      </EventDateTime>
-                    ) : (
-                      "No due date"
-                    )}
-                  </p>
-                  {blocked ? (
-                    <div className="validation-item warn">
-                      <LockKeyhole aria-hidden size={16} />
-                      <span>
-                        Complete{" "}
-                        {task.dependencies
-                          .filter(
-                            (dependency) =>
-                              !["completed", "waived"].includes(
-                                dependency.status,
-                              ),
-                          )
-                          .map((dependency) => dependency.title)
-                          .join(", ")}{" "}
-                        first.
-                      </span>
-                    </div>
-                  ) : null}
-                  {task.comments.map((comment) => (
-                    <blockquote key={comment.id} className="task-comment">
-                      <footer>
-                        <strong>{comment.authorName}</strong> ·{" "}
-                        <EventDateTime
-                          epochSeconds={comment.createdAt}
-                          timeZone={portal.event.timezone}
-                        />
-                      </footer>
-                      <p>{comment.body}</p>
-                    </blockquote>
-                  ))}
-                  {task.fileVersions.length ? (
-                    <section
-                      className="stack mt"
-                      aria-label="Uploaded file versions"
-                    >
-                      <strong>Uploaded file versions</strong>
-                      <ol className="stack">
-                        {task.fileVersions.map((version) => {
-                          const state = taskEvidenceVersionStatus(version);
-                          return (
-                            <li
-                              className="file-version-row"
-                              key={version.versionId}
-                            >
-                              <span>
-                                <strong>
-                                  {version.filename} · v{version.versionNumber}
-                                </strong>
-                                <small className="subtle">
-                                  <EventDateTime
-                                    epochSeconds={version.createdAt}
-                                    timeZone={portal.event.timezone}
-                                  />
-                                </small>
-                              </span>
-                              <span className="row-actions">
-                                {version.latest ? (
-                                  <span className="status success">Latest</span>
-                                ) : null}
-                                {version.current ? (
-                                  <span className="status info">
-                                    Current released
-                                  </span>
-                                ) : null}
-                                {version.downloadAvailable ? (
-                                  <a
-                                    className="btn small"
-                                    href={`/participant/tasks/files/${encodeURIComponent(version.assetId)}/${encodeURIComponent(version.versionId)}`}
-                                  >
-                                    Download v{version.versionNumber}
-                                  </a>
-                                ) : (
-                                  <small className={`status ${state.tone}`}>
-                                    {state.label}
-                                  </small>
-                                )}
-                              </span>
-                            </li>
-                          );
-                        })}
-                      </ol>
-                    </section>
-                  ) : null}
                 </div>
-                <div className="speaker-task-action">
-                  {!["completed", "waived"].includes(task.status) &&
-                  !blocked &&
-                  task.taskType === "file_upload" ? (
+                {blocked ? (
+                  <p className="speaker-task-note">
+                    Complete{" "}
+                    {task.dependencies
+                      .filter(
+                        (dependency) =>
+                          !["completed", "waived"].includes(dependency.status),
+                      )
+                      .map((dependency) => dependency.title)
+                      .join(", ")}{" "}
+                    first.
+                  </p>
+                ) : null}
+                {task.status === "submitted" ? (
+                  <p className="speaker-task-note">
+                    {task.taskType === "file_upload"
+                      ? "Stored for administrator review. You can upload a newer version while review is pending."
+                      : "Submitted for administrator review."}
+                  </p>
+                ) : null}
+                {task.comments.map((comment) => (
+                  <blockquote key={comment.id} className="task-comment">
+                    <footer>
+                      <strong>{comment.authorName}</strong> ·{" "}
+                      <EventDateTime
+                        epochSeconds={comment.createdAt}
+                        timeZone={portal.event.timezone}
+                      />
+                    </footer>
+                    <p>{comment.body}</p>
+                  </blockquote>
+                ))}
+                {task.fileVersions.length ? (
+                  <section
+                    className="speaker-task-versions"
+                    aria-label="Uploaded file versions"
+                  >
+                    <strong>Uploaded file versions</strong>
+                    <ol>
+                      {task.fileVersions.map((version) => {
+                        const state = taskEvidenceVersionStatus(version);
+                        return (
+                          <li
+                            className="file-version-row"
+                            key={version.versionId}
+                          >
+                            <span>
+                              <strong>
+                                {version.filename} · v{version.versionNumber}
+                              </strong>
+                              <small className="subtle">
+                                <EventDateTime
+                                  epochSeconds={version.createdAt}
+                                  timeZone={portal.event.timezone}
+                                />
+                              </small>
+                            </span>
+                            <span className="row-actions">
+                              {version.latest ? (
+                                <span className="status success">Latest</span>
+                              ) : null}
+                              {version.current ? (
+                                <span className="status info">
+                                  Current released
+                                </span>
+                              ) : null}
+                              {version.downloadAvailable ? (
+                                <a
+                                  className="btn small"
+                                  href={`/participant/tasks/files/${encodeURIComponent(version.assetId)}/${encodeURIComponent(version.versionId)}`}
+                                >
+                                  Download v{version.versionNumber}
+                                </a>
+                              ) : (
+                                <small className={`status ${state.tone}`}>
+                                  {state.label}
+                                </small>
+                              )}
+                            </span>
+                          </li>
+                        );
+                      })}
+                    </ol>
+                  </section>
+                ) : null}
+                {canUpload ? (
+                  <div className="speaker-task-action">
                     <DirectMultipartUpload
                       target={{ targetType: "task", targetId: task.id }}
                       kinds={[
@@ -291,14 +326,11 @@ export function SpeakerTasksPanel({
                       }
                       disabled={busy}
                     />
-                  ) : null}
-                  {!["completed", "waived", "submitted"].includes(
-                    task.status,
-                  ) &&
-                  !blocked &&
-                  task.taskType !== "file_upload" &&
-                  task.taskType !== "administrator_only" ? (
-                    <Form method="post" className="stack">
+                  </div>
+                ) : null}
+                {canComplete ? (
+                  <div className="speaker-task-action">
+                    <Form method="post" className="speaker-task-form">
                       <input
                         type="hidden"
                         name="intent"
@@ -312,7 +344,7 @@ export function SpeakerTasksPanel({
                       />
                       {task.taskType === "short_form" &&
                       task.formFields.length ? (
-                        <fieldset className="stack">
+                        <fieldset className="speaker-task-fields">
                           <legend className="label">
                             Required information
                           </legend>
@@ -415,56 +447,38 @@ export function SpeakerTasksPanel({
                           className="btn primary"
                           disabled={busy}
                         >
-                          <CheckCircle2 aria-hidden size={15} /> Complete task
+                          Complete task
                         </button>
                       ) : null}
                     </Form>
-                  ) : null}
-                  {task.status === "submitted" ? (
-                    <div className="validation-item warn">
-                      <Clock3 aria-hidden size={16} />
-                      <span>
-                        {task.taskType === "file_upload"
-                          ? "Stored for administrator review. You can upload a newer version while review is pending."
-                          : "Submitted for administrator review."}
-                      </span>
-                    </div>
-                  ) : null}
-                  {["completed", "waived"].includes(task.status) ? (
-                    <div className="speaker-complete-mark">
-                      <CheckCircle2 aria-hidden />
-                      <strong>
-                        {task.status === "waived"
-                          ? "Waived by the event team"
-                          : "Completed"}
-                      </strong>
-                    </div>
-                  ) : null}
-                </div>
-                <details className="speaker-task-comment">
-                  <summary>Add a comment</summary>
-                  <Form method="post" className="form-row mt">
-                    <input type="hidden" name="intent" value="comment" />
-                    <input
-                      type="hidden"
-                      name="intentId"
-                      value={`${intentId}:${task.id}`}
-                    />
-                    <input type="hidden" name="taskId" value={task.id} />
-                    <label className="label">
-                      Message
+                  </div>
+                ) : null}
+                {open ? (
+                  <details className="speaker-task-comment">
+                    <summary>Add a comment</summary>
+                    <Form method="post" className="speaker-task-comment-form">
+                      <input type="hidden" name="intent" value="comment" />
                       <input
-                        className="field"
-                        name="body"
-                        required
-                        maxLength={2_000}
+                        type="hidden"
+                        name="intentId"
+                        value={`${intentId}:${task.id}`}
                       />
-                    </label>
-                    <button className="btn" type="submit" disabled={busy}>
-                      Send
-                    </button>
-                  </Form>
-                </details>
+                      <input type="hidden" name="taskId" value={task.id} />
+                      <label className="label">
+                        Message
+                        <input
+                          className="field"
+                          name="body"
+                          required
+                          maxLength={2_000}
+                        />
+                      </label>
+                      <button className="btn" type="submit" disabled={busy}>
+                        Send
+                      </button>
+                    </Form>
+                  </details>
+                ) : null}
               </article>
             );
           })

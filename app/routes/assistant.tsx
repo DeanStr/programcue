@@ -1,4 +1,4 @@
-import { Bot, CheckCircle2, ShieldCheck, Sparkles } from "lucide-react";
+import { CheckCircle2, ShieldCheck, Sparkles } from "lucide-react";
 import { type FormEvent, useState } from "react";
 import {
   type ActionFunctionArgs,
@@ -25,6 +25,7 @@ import { getProgramCueEventAgent } from "~/modules/ai/program-cue-agent-client.s
 import { correlationId } from "~/platform/api/api.server";
 import { requireCurrentEventRole } from "~/platform/auth/current-event.server";
 import { getCloudflareContext } from "~/platform/cloudflare-context";
+import "~/styles/workspace-remaining.css";
 
 export const meta: MetaFunction = () => [
   { title: "Event Assistant · Program Cue" },
@@ -396,7 +397,7 @@ function StreamingAssistantForm({
             name="prompt"
             minLength={2}
             maxLength={4_000}
-            rows={8}
+            rows={6}
             required
             defaultValue={defaultPrompt}
             placeholder="What is blocking event readiness, and what should I address first?"
@@ -416,12 +417,10 @@ function StreamingAssistantForm({
         </button>
       </form>
       {pending && partial ? (
-        <section className="card pad" aria-live="polite">
-          <div className="card-title">
-            <h3>Streaming answer</h3>
-            <span className="status info">Live</span>
-          </div>
-          <div style={{ whiteSpace: "pre-wrap" }}>{partial}</div>
+        <section aria-live="polite" className="pc-assist-stream">
+          <h3>Streaming answer</h3>
+          <span className="status info">Live</span>
+          <div>{partial}</div>
         </section>
       ) : null}
       {error ? (
@@ -448,7 +447,7 @@ export default function AssistantRoute() {
     (proposal) => !currentProposalIds.has(proposal.id),
   );
   return (
-    <>
+    <div className="pc-assist">
       <PageHeader
         eyebrow="Authorised event tools"
         title="Event Assistant"
@@ -461,10 +460,10 @@ export default function AssistantRoute() {
       />
 
       {!loaderData.provider.configured ? (
-        <StatusNotice title="AI provider is not configured" tone="danger">
+        <p className="help" role="status">
           {loaderData.provider.problem} The assistant will not simulate a
           response or fall back to static copy.
-        </StatusNotice>
+        </p>
       ) : (
         <StatusNotice
           title={`${loaderData.provider.providerLabel} ${loaderData.provider.model} is configured`}
@@ -475,14 +474,10 @@ export default function AssistantRoute() {
         </StatusNotice>
       )}
 
-      <section className="card pad">
-        <div className="card-title">
-          <div>
-            <span className="pc-page-eyebrow">Organisation AI provider</span>
-            <h2>Model routing</h2>
-          </div>
-          <ShieldCheck aria-hidden size={20} />
-        </div>
+      <details className="pc-assist-provider">
+        <summary>
+          <ShieldCheck aria-hidden size={14} /> Model routing
+        </summary>
         {loaderData.canConfigureProvider ? (
           <Form method="post" className="grid grid-3">
             <input type="hidden" name="intent" value="configure" />
@@ -544,7 +539,7 @@ export default function AssistantRoute() {
           never shown or entered here. Program Cue never switches to a different
           provider when the selected one is unavailable.
         </p>
-      </section>
+      </details>
 
       {actionData ? (
         <StatusNotice
@@ -564,54 +559,42 @@ export default function AssistantRoute() {
         />
       ) : null}
 
-      <div className="grid grid-2">
-        <section className="card pad">
-          <div className="card-title">
-            <div>
-              <span className="pc-page-eyebrow">Ask with event context</span>
-              <h2>What do you need to know or prepare?</h2>
-            </div>
-            <Bot aria-hidden size={22} />
-          </div>
+      <div className="pc-assist-workspace">
+        <section className="pc-assist-compose">
+          <h2>What do you need to know or prepare?</h2>
           <StreamingAssistantForm
             defaultPrompt={loaderData.prompt}
             disabled={busy || !loaderData.provider.configured}
           />
         </section>
 
-        <section className="card pad">
-          <div className="card-title">
-            <h2>Useful requests</h2>
-            <ShieldCheck aria-hidden size={20} />
-          </div>
-          <div className="stack">
-            {[
-              "What is blocking event readiness? Cite the exact records and rank the next three actions.",
-              "Find speakers with incomplete tasks and draft a reminder. Do not send it.",
-              `Propose one event task for ${loaderData.eventName} that addresses the highest readiness blocker. Save a preview only.`,
-              "Explain current schedule conflicts and distinguish recorded facts from your inference.",
-              "Inspect the current form configuration and propose a new application form draft. Do not publish it.",
-              "Inspect the draft evaluation round and propose an exact rubric update with valid weights. Do not activate or assign it.",
-              "Inspect the active evaluation round and propose reviewer assignments for currently unassigned targets. Preview every target and reviewer.",
-              "Prepare an editable email template draft for the next speaker briefing. Do not publish or send it.",
-              "Inspect the draft schedule and propose one conflict-free placement for an unscheduled session. Do not publish it.",
-              "Preview the exact Accelevents export plan as a dry run. Do not contact the provider until I approve.",
-            ].map((prompt) => (
-              <Form method="post" key={prompt}>
-                <input type="hidden" name="intent" value="ask" />
-                <input type="hidden" name="prompt" value={prompt} />
-                <button
-                  className="card pad"
-                  style={{ width: "100%", textAlign: "left" }}
-                  type="submit"
-                  disabled={busy || !loaderData.provider.configured}
-                >
-                  <strong>{prompt}</strong>
-                </button>
-              </Form>
-            ))}
-          </div>
-        </section>
+        <aside className="pc-assist-prompts">
+          <h2>Useful requests</h2>
+          {[
+            "What is blocking event readiness? Cite the exact records and rank the next three actions.",
+            "Find speakers with incomplete tasks and draft a reminder. Do not send it.",
+            `Propose one event task for ${loaderData.eventName} that addresses the highest readiness blocker. Save a preview only.`,
+            "Explain current schedule conflicts and distinguish recorded facts from your inference.",
+            "Inspect the current form configuration and propose a new application form draft. Do not publish it.",
+            "Inspect the draft evaluation round and propose an exact rubric update with valid weights. Do not activate or assign it.",
+            "Inspect the active evaluation round and propose reviewer assignments for currently unassigned targets. Preview every target and reviewer.",
+            "Prepare an editable email template draft for the next speaker briefing. Do not publish or send it.",
+            "Inspect the draft schedule and propose one conflict-free placement for an unscheduled session. Do not publish it.",
+            "Preview the exact Accelevents export plan as a dry run. Do not contact the provider until I approve.",
+          ].map((prompt) => (
+            <Form method="post" key={prompt}>
+              <input type="hidden" name="intent" value="ask" />
+              <input type="hidden" name="prompt" value={prompt} />
+              <button
+                className="pc-assist-prompt"
+                type="submit"
+                disabled={busy || !loaderData.provider.configured}
+              >
+                <strong>{prompt}</strong>
+              </button>
+            </Form>
+          ))}
+        </aside>
       </div>
 
       {actionData?.ok && actionData.result ? (
@@ -619,7 +602,7 @@ export default function AssistantRoute() {
       ) : null}
 
       {recentProposals.length ? (
-        <section className="stack">
+        <section className="pc-assist-recent">
           <div className="card-title">
             <h2>Recent write previews</h2>
             <span className="status warning">
@@ -649,8 +632,8 @@ export default function AssistantRoute() {
           ))}
         </section>
       ) : currentProposalIds.size === 0 ? (
-        <section className="card pad">
-          <CheckCircle2 aria-hidden size={20} />
+        <section className="pc-assist-empty">
+          <CheckCircle2 aria-hidden size={18} />
           <h2>No pending assistant writes</h2>
           <p className="subtle">
             Read and draft actions do not mutate event records. Any proposed
@@ -659,6 +642,6 @@ export default function AssistantRoute() {
           </p>
         </section>
       ) : null}
-    </>
+    </div>
   );
 }

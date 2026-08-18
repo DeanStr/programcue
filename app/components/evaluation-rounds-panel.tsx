@@ -24,7 +24,7 @@ export function EvaluationRoundsPanel() {
         {plan.rounds.map((round) => (
           <section
             id={`evaluation-round-${round.id}`}
-            className="card pad"
+            className="card pad pc-eval-round"
             key={round.id}
             tabIndex={round.id === loaderData.focusedRoundId ? -1 : undefined}
           >
@@ -135,7 +135,7 @@ export function EvaluationRoundsPanel() {
                     <label className="label">
                       Opens ({loaderData.eventTimezone})
                       <input
-                        className="input"
+                        className="input pc-eval-datetime"
                         type="datetime-local"
                         name="roundOpensAt"
                         defaultValue={communicationScheduledLocalValue(
@@ -147,7 +147,7 @@ export function EvaluationRoundsPanel() {
                     <label className="label">
                       Closes ({loaderData.eventTimezone})
                       <input
-                        className="input"
+                        className="input pc-eval-datetime"
                         type="datetime-local"
                         name="roundClosesAt"
                         defaultValue={communicationScheduledLocalValue(

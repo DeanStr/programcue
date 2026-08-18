@@ -53,12 +53,12 @@ export function RichResourceEditor({
   return (
     <div className="resource-editor">
       <div
-        className="resource-editor-toolbar"
+        className="pc-res-toolbar"
         role="toolbar"
         aria-label="Resource formatting"
       >
         <fieldset
-          className="resource-editor-toolbar-group pc-plain-fieldset"
+          className="pc-res-toolbar-group pc-plain-fieldset"
           aria-label="Text styles"
         >
           <button
@@ -92,7 +92,7 @@ export function RichResourceEditor({
           </button>
         </fieldset>
         <fieldset
-          className="resource-editor-toolbar-group pc-plain-fieldset"
+          className="pc-res-toolbar-group pc-plain-fieldset"
           aria-label="Block styles"
         >
           <button
@@ -115,7 +115,7 @@ export function RichResourceEditor({
           </button>
         </fieldset>
         <fieldset
-          className="resource-editor-toolbar-group pc-plain-fieldset"
+          className="pc-res-toolbar-group pc-plain-fieldset"
           aria-label="Edit history"
         >
           <button

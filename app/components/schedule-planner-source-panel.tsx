@@ -12,6 +12,7 @@ import type {
   SchedulePlannerWorkspaceData,
   StateSetter,
 } from "./schedule-planner-panel-types";
+import { sessionFormatLabel } from "./schedule-planner-workspace-helpers";
 
 function timeLabel(epoch: number, timezone: string) {
   return new Intl.DateTimeFormat("en", {
@@ -32,12 +33,14 @@ function dateLabel(epoch: number, timezone: string) {
 
 function DraggableSession({
   session,
+  formatLabel,
   scheduled,
   focused,
   placementAvailable,
   readOnlyMessage,
 }: {
   session: ScheduleSession;
+  formatLabel: string;
   scheduled: boolean;
   focused: boolean;
   placementAvailable: boolean;
@@ -54,30 +57,29 @@ function DraggableSession({
     <button
       ref={setNodeRef}
       type="button"
-      className={`schedule-session-source${isDragging ? " dragging" : ""}${focused ? " focused" : ""}`}
+      className={`schedule-session-source ${session.format}${isDragging ? " dragging" : ""}${focused ? " focused" : ""}${scheduled ? " is-placed" : ""}`}
       aria-current={focused ? "true" : undefined}
+      aria-label={
+        !scheduled && !placementAvailable
+          ? `${session.title}. ${readOnlyMessage}`
+          : undefined
+      }
       style={{ transform: CSS.Translate.toString(transform) }}
       disabled={disabled}
       {...listeners}
       {...attributes}
     >
+      <span className="schedule-session-source-format">{formatLabel}</span>
       <strong>{session.title}</strong>
       <small>
-        {session.durationMinutes} min ·{" "}
-        {session.speakerNames.join(", ") || "No speaker"}
+        {session.durationMinutes} min
+        {session.speakerNames.length
+          ? ` · ${session.speakerNames.join(", ")}`
+          : ""}
       </small>
       {session.requiredResources.length ? (
         <small>Resources · {session.requiredResources.join(", ")}</small>
       ) : null}
-      {scheduled ? (
-        <span className="status success">Scheduled</span>
-      ) : (
-        <span className="help">
-          {placementAvailable
-            ? "Drag or use keyboard placement"
-            : readOnlyMessage}
-        </span>
-      )}
     </button>
   );
 }
@@ -166,324 +168,368 @@ export function ScheduleSourcePanel({
     ? [selectedOutsideQuery, ...matchingWorkspaceSessions]
     : matchingWorkspaceSessions;
   const matchingVisibleSessions = visibleSessions.filter(matchesSessionQuery);
+  const unscheduledSessions = matchingVisibleSessions.filter(
+    (session) => !scheduledSessionIds.has(session.id),
+  );
+  const placedSessions = matchingVisibleSessions.filter((session) =>
+    scheduledSessionIds.has(session.id),
+  );
+  const unscheduledCount = workspace.sessions.filter(
+    (session) => !scheduledSessionIds.has(session.id),
+  ).length;
   return (
     <aside
       aria-labelledby="schedule-source-heading"
-      className="card pad schedule-source"
+      className="schedule-source"
     >
-      <div className="card-title">
+      <div className="schedule-inbox-head">
         <h2 id="schedule-source-heading" tabIndex={-1}>
           Sessions
         </h2>
+        <p className="schedule-inbox-count">{unscheduledCount} to place</p>
       </div>
-      {placementAvailable &&
-      workspace.sessions.length &&
-      workspace.rooms.length ? (
-        <details
-          className="mb pc-disclosure"
-          open={placementFormOpen}
-          onToggle={(event) => setPlacementFormOpen(event.currentTarget.open)}
-        >
-          <summary>
-            <strong>Place or move with form</strong>
-            <span className="help">
-              Keyboard alternative across every event day
-            </span>
-          </summary>
-          <fetcher.Form method="post" className="stack mt">
-            <input type="hidden" name="intent" value="place" />
-            <input
-              type="hidden"
-              name="scheduleVersionId"
-              value={
-                requireValue(
-                  workspace.version,
-                  "Required workspace.version is unavailable.",
-                ).id
-              }
-            />
-            <input
-              type="hidden"
-              name="scheduleRevision"
-              value={
-                requireValue(
-                  workspace.version,
-                  "Required workspace.version is unavailable.",
-                ).revision
-              }
-            />
-            {workspace.sessions.length > 15 || sessionQuery.trim() ? (
+      <div className="schedule-inbox-tools">
+        {placementAvailable &&
+        workspace.sessions.length &&
+        workspace.rooms.length ? (
+          <details
+            className="pc-disclosure"
+            open={placementFormOpen}
+            onToggle={(event) => setPlacementFormOpen(event.currentTarget.open)}
+          >
+            <summary>
+              <strong>Place or move with form</strong>
+              <span className="help">
+                Keyboard alternative across every event day
+              </span>
+            </summary>
+            <fetcher.Form method="post" className="stack mt">
+              <input type="hidden" name="intent" value="place" />
+              <input
+                type="hidden"
+                name="scheduleVersionId"
+                value={
+                  requireValue(
+                    workspace.version,
+                    "Required workspace.version is unavailable.",
+                  ).id
+                }
+              />
+              <input
+                type="hidden"
+                name="scheduleRevision"
+                value={
+                  requireValue(
+                    workspace.version,
+                    "Required workspace.version is unavailable.",
+                  ).revision
+                }
+              />
+              {workspace.sessions.length > 15 || sessionQuery.trim() ? (
+                <label className="label">
+                  Find session
+                  <input
+                    className="field"
+                    type="search"
+                    value={sessionQuery}
+                    onChange={(event) =>
+                      setSessionQuery(event.currentTarget.value)
+                    }
+                    placeholder="Title, speaker, track, format or status"
+                    autoComplete="off"
+                  />
+                  <span className="help" role="status">
+                    {matchingWorkspaceSessions.length} of{" "}
+                    {workspace.sessions.length} sessions match.
+                  </span>
+                </label>
+              ) : null}
+              <input
+                type="hidden"
+                name="endsAt"
+                value={
+                  quickSession ? quickStartsAt + quickDurationMinutes * 60 : ""
+                }
+              />
               <label className="label">
-                Find session
+                Session
+                <select
+                  className="select"
+                  name="sessionId"
+                  value={quickSessionId}
+                  onChange={(event) => selectQuickSession(event.target.value)}
+                >
+                  {sessionOptions.map((session) => (
+                    <option key={session.id} value={session.id}>
+                      {session.title} ·{" "}
+                      {session.speakerNames.join(", ") || "No speaker"} ·{" "}
+                      {session.trackName ?? "No track"}
+                      {scheduledSessionIds.has(session.id)
+                        ? " · scheduled"
+                        : ""}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="label">
+                Room
+                <select
+                  className="select"
+                  name="roomId"
+                  value={quickRoomId}
+                  onChange={(event) => setQuickRoomId(event.target.value)}
+                  required
+                >
+                  {workspace.rooms.map((room) => (
+                    <option key={room.id} value={room.id}>
+                      {room.name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="label">
+                Start · {workspace.event.timezone}
+                <select
+                  className="select"
+                  name="startsAt"
+                  value={quickStartsAt}
+                  onChange={(event) =>
+                    setQuickStartsAt(Number(event.target.value))
+                  }
+                  required
+                >
+                  {allPlacementSlots.map((slot) => (
+                    <option key={slot} value={slot}>
+                      {dateLabel(slot, workspace.event.timezone)} ·{" "}
+                      {timeLabel(slot, workspace.event.timezone)}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="label">
+                Duration (minutes)
                 <input
                   className="field"
-                  type="search"
-                  value={sessionQuery}
+                  type="number"
+                  min={5}
+                  max={480}
+                  step={5}
+                  value={quickDurationMinutes}
                   onChange={(event) =>
-                    setSessionQuery(event.currentTarget.value)
+                    setQuickDurationMinutes(Number(event.target.value))
                   }
-                  placeholder="Title, speaker, track, format or status"
-                  autoComplete="off"
+                  required
                 />
-                <span className="help" role="status">
-                  {matchingWorkspaceSessions.length} of{" "}
-                  {workspace.sessions.length} sessions match.
-                </span>
               </label>
-            ) : null}
-            <input
-              type="hidden"
-              name="endsAt"
-              value={
-                quickSession ? quickStartsAt + quickDurationMinutes * 60 : ""
-              }
-            />
-            <label className="label">
-              Session
-              <select
-                className="select"
-                name="sessionId"
-                value={quickSessionId}
-                onChange={(event) => selectQuickSession(event.target.value)}
-              >
-                {sessionOptions.map((session) => (
-                  <option key={session.id} value={session.id}>
-                    {session.title} ·{" "}
-                    {session.speakerNames.join(", ") || "No speaker"} ·{" "}
-                    {session.trackName ?? "No track"}
-                    {scheduledSessionIds.has(session.id) ? " · scheduled" : ""}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label className="label">
-              Room
-              <select
-                className="select"
-                name="roomId"
-                value={quickRoomId}
-                onChange={(event) => setQuickRoomId(event.target.value)}
-                required
-              >
-                {workspace.rooms.map((room) => (
-                  <option key={room.id} value={room.id}>
-                    {room.name}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label className="label">
-              Start · {workspace.event.timezone}
-              <select
-                className="select"
-                name="startsAt"
-                value={quickStartsAt}
-                onChange={(event) =>
-                  setQuickStartsAt(Number(event.target.value))
+              <button
+                className="btn primary"
+                type="submit"
+                disabled={
+                  !quickSession ||
+                  !quickRoomId ||
+                  !Number.isInteger(quickDurationMinutes) ||
+                  quickDurationMinutes < 5 ||
+                  fetcher.state !== "idle"
                 }
-                required
               >
-                {allPlacementSlots.map((slot) => (
-                  <option key={slot} value={slot}>
-                    {dateLabel(slot, workspace.event.timezone)} ·{" "}
-                    {timeLabel(slot, workspace.event.timezone)}
-                  </option>
-                ))}
-              </select>
+                {scheduledSessionIds.has(quickSessionId)
+                  ? "Move or resize session"
+                  : "Place session"}
+              </button>
+              {/* The board card used to carry its own slider and unassign
+                button. Both blew the cell open and gave the same operation a
+                third mental model; the form already names the session it is
+                acting on. */}
+              {quickEntry ? (
+                <button
+                  className="btn small"
+                  type="button"
+                  onClick={() => unassign(quickEntry)}
+                  disabled={fetcher.state !== "idle"}
+                >
+                  Unassign from the board
+                </button>
+              ) : null}
+            </fetcher.Form>
+          </details>
+        ) : null}
+        {quickSession ? (
+          <details className="pc-disclosure">
+            <summary>
+              <strong>Draft AI copy</strong>
+              <span className="help">Public description only</span>
+            </summary>
+            <SessionCopyAction
+              sessionId={quickSession.id}
+              key={`ai-copy-${quickSession.id}`}
+            />
+          </details>
+        ) : null}
+        {placementAvailable && quickSession ? (
+          <details
+            className="pc-disclosure"
+            key={`resources-${quickSession.id}`}
+          >
+            <summary>
+              <strong>Session required resources</strong>
+              <span className="help"> · {quickSession.title}</span>
+            </summary>
+            <fetcher.Form method="post" className="stack mt">
+              <input
+                type="hidden"
+                name="intent"
+                value="update-session-resources"
+              />
+              <input
+                type="hidden"
+                name="scheduleVersionId"
+                value={
+                  requireValue(
+                    workspace.version,
+                    "Required workspace.version is unavailable.",
+                  ).id
+                }
+              />
+              <input
+                type="hidden"
+                name="scheduleRevision"
+                value={
+                  requireValue(
+                    workspace.version,
+                    "Required workspace.version is unavailable.",
+                  ).revision
+                }
+              />
+              <input type="hidden" name="sessionId" value={quickSession.id} />
+              <input
+                type="hidden"
+                name="sessionRevision"
+                value={quickSession.revision}
+              />
+              {resourceInventory.length ? (
+                resourceInventory.map((resource) => (
+                  <label className="toggle" key={resource}>
+                    <input
+                      type="checkbox"
+                      name="requiredResource"
+                      value={resource}
+                      defaultChecked={quickSession.requiredResources.includes(
+                        resource,
+                      )}
+                    />{" "}
+                    {resource}
+                    <span className="help">
+                      {workspace.rooms
+                        .filter((room) => room.resources.includes(resource))
+                        .map((room) => room.name)
+                        .join(", ")}
+                    </span>
+                  </label>
+                ))
+              ) : (
+                <div className="validation-item warn">
+                  <span>
+                    Configure resource inventory on at least one room in Event
+                    settings before assigning session requirements.
+                  </span>
+                  <Link className="btn small" to="/admin/event">
+                    Open Event settings
+                  </Link>
+                </div>
+              )}
+              <button
+                className="btn"
+                type="submit"
+                disabled={fetcher.state !== "idle"}
+              >
+                Save required resources
+              </button>
+            </fetcher.Form>
+          </details>
+        ) : null}
+        <details className="pc-disclosure">
+          <summary>
+            <strong>Create break</strong>
+          </summary>
+          <fetcher.Form method="post" className="stack mt">
+            <input type="hidden" name="intent" value="create-break" />
+            <label className="label">
+              Label
+              <input
+                className="field"
+                name="title"
+                defaultValue="Refreshment break"
+                maxLength={160}
+                required
+              />
             </label>
             <label className="label">
               Duration (minutes)
               <input
                 className="field"
+                name="durationMinutes"
                 type="number"
                 min={5}
                 max={480}
-                step={5}
-                value={quickDurationMinutes}
-                onChange={(event) =>
-                  setQuickDurationMinutes(Number(event.target.value))
-                }
+                defaultValue={30}
                 required
               />
             </label>
-            <button
-              className="btn primary"
-              type="submit"
-              disabled={
-                !quickSession ||
-                !quickRoomId ||
-                !Number.isInteger(quickDurationMinutes) ||
-                quickDurationMinutes < 5 ||
-                fetcher.state !== "idle"
-              }
-            >
-              {scheduledSessionIds.has(quickSessionId)
-                ? "Move or resize session"
-                : "Place session"}
-            </button>
-            {/* The board card used to carry its own slider and unassign
-                button. Both blew the cell open and gave the same operation a
-                third mental model; the form already names the session it is
-                acting on. */}
-            {quickEntry ? (
-              <button
-                className="btn small"
-                type="button"
-                onClick={() => unassign(quickEntry)}
-                disabled={fetcher.state !== "idle"}
-              >
-                Unassign from the board
-              </button>
-            ) : null}
-          </fetcher.Form>
-        </details>
-      ) : null}
-      {quickSession ? (
-        <SessionCopyAction
-          sessionId={quickSession.id}
-          key={`ai-copy-${quickSession.id}`}
-        />
-      ) : null}
-      {placementAvailable && quickSession ? (
-        <details
-          className="mb pc-disclosure"
-          key={`resources-${quickSession.id}`}
-        >
-          <summary>
-            <strong>Session required resources</strong>
-            <span className="help"> · {quickSession.title}</span>
-          </summary>
-          <fetcher.Form method="post" className="stack mt">
-            <input
-              type="hidden"
-              name="intent"
-              value="update-session-resources"
-            />
-            <input
-              type="hidden"
-              name="scheduleVersionId"
-              value={
-                requireValue(
-                  workspace.version,
-                  "Required workspace.version is unavailable.",
-                ).id
-              }
-            />
-            <input
-              type="hidden"
-              name="scheduleRevision"
-              value={
-                requireValue(
-                  workspace.version,
-                  "Required workspace.version is unavailable.",
-                ).revision
-              }
-            />
-            <input type="hidden" name="sessionId" value={quickSession.id} />
-            <input
-              type="hidden"
-              name="sessionRevision"
-              value={quickSession.revision}
-            />
             {resourceInventory.length ? (
-              resourceInventory.map((resource) => (
-                <label className="toggle" key={resource}>
-                  <input
-                    type="checkbox"
-                    name="requiredResource"
-                    value={resource}
-                    defaultChecked={quickSession.requiredResources.includes(
-                      resource,
-                    )}
-                  />{" "}
-                  {resource}
-                  <span className="help">
-                    {workspace.rooms
-                      .filter((room) => room.resources.includes(resource))
-                      .map((room) => room.name)
-                      .join(", ")}
-                  </span>
-                </label>
-              ))
+              <fieldset className="stack pc-plain-fieldset">
+                <legend className="label">Exclusive resources</legend>
+                {resourceInventory.map((resource) => (
+                  <label className="toggle" key={resource}>
+                    <input
+                      type="checkbox"
+                      name="requiredResource"
+                      value={resource}
+                    />{" "}
+                    {resource}
+                  </label>
+                ))}
+              </fieldset>
             ) : (
-              <div className="validation-item warn">
-                <span>
-                  Configure resource inventory on at least one room in Event
-                  settings before assigning session requirements.
-                </span>
-                <Link className="btn small" to="/admin/event">
-                  Open Event settings
-                </Link>
-              </div>
+              <p className="help">
+                No room resources are configured; this break will not reserve
+                one.
+              </p>
             )}
-            <button
-              className="btn"
-              type="submit"
-              disabled={fetcher.state !== "idle"}
-            >
-              Save required resources
+            <button className="btn" type="submit">
+              Create unscheduled break
             </button>
           </fetcher.Form>
         </details>
-      ) : null}
-      <details className="mb pc-disclosure">
-        <summary>
-          <strong>Create break</strong>
-        </summary>
-        <fetcher.Form method="post" className="stack mt">
-          <input type="hidden" name="intent" value="create-break" />
-          <label className="label">
-            Label
-            <input
-              className="field"
-              name="title"
-              defaultValue="Refreshment break"
-              maxLength={160}
-              required
-            />
-          </label>
-          <label className="label">
-            Duration (minutes)
-            <input
-              className="field"
-              name="durationMinutes"
-              type="number"
-              min={5}
-              max={480}
-              defaultValue={30}
-              required
-            />
-          </label>
-          {resourceInventory.length ? (
-            <fieldset className="stack pc-plain-fieldset">
-              <legend className="label">Exclusive resources</legend>
-              {resourceInventory.map((resource) => (
-                <label className="toggle" key={resource}>
-                  <input
-                    type="checkbox"
-                    name="requiredResource"
-                    value={resource}
-                  />{" "}
-                  {resource}
-                </label>
-              ))}
-            </fieldset>
-          ) : (
-            <p className="help">
-              No room resources are configured; this break will not reserve one.
-            </p>
-          )}
-          <button className="btn" type="submit">
-            Create unscheduled break
-          </button>
-        </fetcher.Form>
-      </details>
-      <div className="stack">
-        {matchingVisibleSessions.map((session) => (
+      </div>
+      <div className="schedule-inbox-list">
+        {unscheduledSessions.map((session) => (
           <DraggableSession
             key={session.id}
             session={session}
-            scheduled={scheduledSessionIds.has(session.id)}
+            formatLabel={sessionFormatLabel(
+              workspace.sessionFormats,
+              session.format,
+            )}
+            scheduled={false}
+            focused={workspace.focusedSessionId === session.id}
+            placementAvailable={placementAvailable}
+            readOnlyMessage={readOnlyPlacementMessage}
+          />
+        ))}
+        {placedSessions.length ? (
+          <p className="schedule-inbox-group">
+            Placed · {placedSessions.length}
+          </p>
+        ) : null}
+        {placedSessions.map((session) => (
+          <DraggableSession
+            key={session.id}
+            session={session}
+            formatLabel={sessionFormatLabel(
+              workspace.sessionFormats,
+              session.format,
+            )}
+            scheduled
             focused={workspace.focusedSessionId === session.id}
             placementAvailable={placementAvailable}
             readOnlyMessage={readOnlyPlacementMessage}

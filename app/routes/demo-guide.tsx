@@ -54,6 +54,7 @@ import {
   resetDemoEvent,
 } from "~/platform/demo/demo-reset.server";
 import { EventRealtimeService } from "~/platform/realtime/event-realtime.server";
+import "~/styles/workspace-remaining.css";
 import type { Route } from "./+types/demo-guide";
 
 type DemoWalkthroughStep = {
@@ -461,7 +462,7 @@ export default function DemoGuide({ loaderData }: Route.ComponentProps) {
   const selectedIdentity = loaderData.viewer;
 
   return (
-    <main id="main" className="design-board pc-design-board">
+    <main id="main" className="design-board pc-design-board pc-demo">
       {dialog}
       <PageHeader
         eyebrow="Environment-gated evaluator mode"
@@ -490,7 +491,7 @@ export default function DemoGuide({ loaderData }: Route.ComponentProps) {
 
       {result ? (
         <div
-          className={`pc-status-notice ${result.ok ? "is-success" : "is-danger"} mb`}
+          className={`pc-status-notice ${result.ok ? "is-success" : "is-danger"}`}
           role={result.ok ? "status" : "alert"}
         >
           {result.ok ? (
@@ -511,12 +512,9 @@ export default function DemoGuide({ loaderData }: Route.ComponentProps) {
         </div>
       ) : null}
 
-      <section className="card design-section pc-design-wide mb">
-        <div className="pc-section-heading">
-          <div>
-            <span className="pc-section-kicker">Start here</span>
-            <h2>Choose a test identity</h2>
-          </div>
+      <section className="pc-demo-identities">
+        <div className="pc-demo-section-head">
+          <h2>Choose a test identity</h2>
           <p>
             Demo authentication uses an HttpOnly identity cookie. These people
             have no password and cannot authenticate against production. The
@@ -530,7 +528,7 @@ export default function DemoGuide({ loaderData }: Route.ComponentProps) {
           // biome-ignore lint/a11y/noNoninteractiveTabindex: Scrollable data regions need keyboard focus so arrow keys can expose overflow content.
           tabIndex={0}
         >
-          <table className="data-table pc-responsive-table">
+          <table className="data-table pc-responsive-table pc-demo-identity-table">
             <thead>
               <tr>
                 <th scope="col">Purpose</th>
@@ -590,95 +588,106 @@ export default function DemoGuide({ loaderData }: Route.ComponentProps) {
         </section>
       </section>
 
-      <div className="grid grid-2 mb">
+      <div className="pc-demo-layout">
         <section
           aria-labelledby="demo-walkthrough-heading"
-          className="card design-section"
+          className="pc-demo-walkthrough"
         >
-          <div className="pc-section-heading">
-            <div>
-              <span className="pc-section-kicker">Guided workflow</span>
-              <h2 id="demo-walkthrough-heading">Follow the programme story</h2>
-            </div>
+          <div className="pc-demo-section-head">
+            <h2 id="demo-walkthrough-heading">Follow the programme story</h2>
             <p>
               Complete the core path in order. The final phase also exposes
               optional technical evidence after the public result.
             </p>
           </div>
-          <div className="stack">
+          <ol className="pc-demo-path">
             {PROGRAMME_WORKFLOW_PHASES.map((phase, phaseIndex) => (
-              <section className="card pad" key={phase.key}>
-                <div className="card-title">
-                  <StatusBadge tone="info">{phaseIndex + 1}</StatusBadge>
+              <li className="pc-demo-phase" key={phase.key}>
+                <div className="pc-demo-phase-head">
+                  <span className="pc-demo-phase-index">{phaseIndex + 1}</span>
                   <div>
                     <h3>{phase.label}</h3>
-                    <p className="subtle">{phase.description}</p>
+                    <p>{phase.description}</p>
                   </div>
                 </div>
-                <ol className="stack mt">
+                <ol className="pc-demo-steps">
                   {walkthrough
                     .filter((step) => step.phase === phase.key)
                     .map((step) => (
-                      <li className="card pad" key={step.title}>
-                        <div className="card-title">
-                          <h4>{step.title}</h4>
-                          {step.evidence ? (
-                            <StatusBadge tone="neutral">
-                              Technical evidence
-                            </StatusBadge>
-                          ) : null}
+                      <li className="pc-demo-step" key={step.title}>
+                        <div className="pc-demo-step-copy">
+                          <div className="pc-demo-step-meta">
+                            <h4>{step.title}</h4>
+                            {step.evidence ? (
+                              <StatusBadge tone="neutral">
+                                Technical evidence
+                              </StatusBadge>
+                            ) : null}
+                          </div>
+                          <p>{step.copy}</p>
                         </div>
-                        <p className="subtle">{step.copy}</p>
-                        <div className="page-actions">
-                          <Form method="post" action="/demo/role">
-                            <input
-                              type="hidden"
-                              name="identity"
-                              value={step.identityKey}
-                            />
-                            <input
-                              type="hidden"
-                              name="returnTo"
-                              value={step.href}
-                            />
-                            <button className="btn small" type="submit">
-                              Open as {DEMO_IDENTITIES[step.identityKey].name}{" "}
-                              <ArrowRight aria-hidden size={13} />
-                            </button>
-                          </Form>
-                        </div>
+                        <Form method="post" action="/demo/role">
+                          <input
+                            type="hidden"
+                            name="identity"
+                            value={step.identityKey}
+                          />
+                          <input
+                            type="hidden"
+                            name="returnTo"
+                            value={step.href}
+                          />
+                          <button className="btn small" type="submit">
+                            Open as {DEMO_IDENTITIES[step.identityKey].name}{" "}
+                            <ArrowRight aria-hidden size={13} />
+                          </button>
+                        </Form>
                       </li>
                     ))}
                 </ol>
-              </section>
+              </li>
             ))}
-          </div>
+          </ol>
         </section>
 
-        <div className="stack">
-          <section className="card design-section">
-            <div className="pc-section-heading">
-              <div>
-                <span className="pc-section-kicker">Real seeded state</span>
-                <h2>Judged baseline</h2>
-              </div>
+        <aside className="pc-demo-rail">
+          <section className="pc-demo-rail-block">
+            <div className="pc-demo-rail-head">
+              <h2>Judged baseline</h2>
               <StatusBadge
                 tone={loaderData.baselineComplete ? "success" : "warning"}
               >
                 {loaderData.baselineComplete ? "Ready" : "Changed"}
               </StatusBadge>
             </div>
-            <div className="grid grid-3">
-              {Object.entries(loaderData.baseline).map(([label, count]) => (
-                <div className="metric card" key={label}>
-                  <div className="label">
-                    {label.replace(/([A-Z])/g, " $1")}
-                  </div>
-                  <div className="value">{count}</div>
-                </div>
+            <p className="pc-demo-pulse">
+              {(
+                [
+                  ["forms", "forms"],
+                  ["submissions", "submissions"],
+                  ["assignments", "assignments"],
+                  ["tasks", "tasks"],
+                  ["sessions", "sessions"],
+                  ["publishedSchedules", "published schedules"],
+                  ["publishedTemplates", "templates"],
+                ] as const
+              ).map(([key, label]) => (
+                <span key={key}>
+                  <strong>{loaderData.baseline[key]}</strong> {label}
+                </span>
               ))}
-            </div>
-            <p className="help mt">
+            </p>
+            <details className="pc-demo-baseline-more">
+              <summary>All baseline counts</summary>
+              <p className="pc-demo-pulse">
+                {Object.entries(loaderData.baseline).map(([label, count]) => (
+                  <span key={label}>
+                    <strong>{count}</strong> {label.replace(/([A-Z])/g, " $1")}
+                  </span>
+                ))}
+              </p>
+            </details>
+            <p className="help">
               Forms, assigned proposals, speaker tasks, a published reminder
               template, sessions and the published schedule are real
               event-scoped D1 records.{" "}
@@ -688,43 +697,31 @@ export default function DemoGuide({ loaderData }: Route.ComponentProps) {
             </p>
           </section>
 
-          <section className="card design-section">
-            <div className="pc-section-heading">
-              <div>
-                <span className="pc-section-kicker">Evidence boundary</span>
-                <h2>Provider truth</h2>
-              </div>
-              <ShieldCheck aria-hidden size={20} />
+          <section className="pc-demo-rail-block">
+            <div className="pc-demo-rail-head">
+              <h2>Provider truth</h2>
+              <ShieldCheck aria-hidden size={16} />
             </div>
-            <div className="stack">
+            <ul className="pc-demo-providers">
               {providers.map(([name, state]) => (
-                <div className="card pad" key={name}>
-                  <div className="card-title">
-                    <h3>{name}</h3>
-                    <span className="right">
-                      <StatusBadge tone={state.tone}>{state.label}</StatusBadge>
-                    </span>
-                  </div>
-                  <p className="subtle">{state.copy}</p>
-                </div>
+                <li key={name}>
+                  <strong>{name}</strong>
+                  <StatusBadge tone={state.tone}>{state.label}</StatusBadge>
+                  <p>{state.copy}</p>
+                </li>
               ))}
-            </div>
-            <p className="help mt">
+            </ul>
+            <p className="help">
               <ExternalLink aria-hidden size={13} /> Sandbox credentials and a
               separately provisioned Airtable-backed evaluator event remain
               deployment configuration, not repository-simulated evidence.
             </p>
           </section>
 
-          <section className="card design-section">
-            <div className="pc-section-heading">
-              <div>
-                <span className="pc-section-kicker">
-                  Destructive demo action
-                </span>
-                <h2>Reset the event</h2>
-              </div>
-              <RefreshCcw aria-hidden size={20} />
+          <section className="pc-demo-rail-block pc-demo-reset">
+            <div className="pc-demo-rail-head">
+              <h2>Reset the event</h2>
+              <RefreshCcw aria-hidden size={16} />
             </div>
             <p>
               This removes event-scoped D1 work, clears{" "}
@@ -739,7 +736,7 @@ export default function DemoGuide({ loaderData }: Route.ComponentProps) {
               </StatusBadge>
             </p>
             {activeTotal ? (
-              <ul className="help">
+              <ul className="pc-demo-work">
                 {Object.entries(loaderData.activeWork)
                   .filter(([, count]) => count > 0)
                   .map(([kind, count]) => (
@@ -794,7 +791,7 @@ export default function DemoGuide({ loaderData }: Route.ComponentProps) {
               </p>
             )}
           </section>
-        </div>
+        </aside>
       </div>
 
       <p className="help">

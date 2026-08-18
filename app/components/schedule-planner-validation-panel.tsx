@@ -26,9 +26,9 @@ export function ScheduleValidationPanel({
     <aside
       aria-labelledby="schedule-validation-heading"
       id="schedule-validation"
-      className="card pad schedule-conflicts"
+      className="schedule-conflicts"
     >
-      <div className="card-title">
+      <div className="schedule-conflicts-head">
         <h2 id="schedule-validation-heading">Validation</h2>
         <span
           className={`status ${workspace.conflicts.length || latestPlacementWasBlocked ? "danger" : "success"}`}

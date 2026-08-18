@@ -89,10 +89,10 @@ export function AdminPublicSiteSponsors({
     return ids;
   }, [sponsors]);
   return (
-    <section className="card pad">
+    <section className="public-site-rail-section">
       <div className="card-title">
         <div>
-          <h2>Sponsors</h2>
+          <h2 className="public-site-rail-title">Sponsors</h2>
           <p className="help">
             Structured records are snapshotted only when the site is published.
           </p>

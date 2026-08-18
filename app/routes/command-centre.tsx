@@ -4,24 +4,25 @@ import {
   CheckCircle2,
   Clock3,
   RefreshCw,
+  Sparkles,
 } from "lucide-react";
 import { Fragment, useEffect, useState } from "react";
-import { Link, useRevalidator } from "react-router";
-import {
-  AdminPageSection,
-  AdminPageSectionNavigation,
-} from "~/components/ui/admin-page-sections";
+import { Link, useFetcher, useRevalidator } from "react-router";
 import { DomainStatusBadge } from "~/components/ui/domain-status-badge";
 import { EventDateTime } from "~/components/ui/event-date-time";
 import { PageHeader } from "~/components/ui/page-header";
-import { ReadinessWeightingNote } from "~/components/ui/readiness-weighting";
 import { EmptyState } from "~/components/ui/states";
 import { StatusBadge } from "~/components/ui/status-badge";
 import { AiAssistantService } from "~/modules/ai/ai-assistant-service.server";
+import type {
+  AiProposalPreview,
+  ContextualAiResult,
+} from "~/modules/ai/ai-types";
 import {
-  ReadinessSummaryAction,
-  ReminderDraftAction,
-} from "~/modules/ai/contextual-ai-actions";
+  ContextualAiResultPanel,
+  ProposalApproval,
+} from "~/modules/ai/assistant-result-panel";
+import type { ReminderDeliveryOptions } from "~/modules/ai/contextual-ai-actions";
 import { ensureDemoEvaluationData } from "~/modules/evaluations/demo.server";
 import { groupProgrammeSetupSteps } from "~/modules/readiness/programme-workflow-phases";
 import {
@@ -53,6 +54,17 @@ export async function loader({ request, context }: Route.LoaderArgs) {
   ]);
   return { ...snapshot, reminderOptions };
 }
+
+type ContextActionResponse =
+  | {
+      ok: true;
+      result: ContextualAiResult;
+      proposal: AiProposalPreview | null;
+    }
+  | { ok: false; error: string };
+
+const DEFAULT_REMINDER_PURPOSE =
+  "Explain the outstanding task and give the speaker a clear next step without inventing a deadline.";
 
 function AutoRefresh({ eventId, cursor }: { eventId: string; cursor: number }) {
   const revalidator = useRevalidator();
@@ -104,11 +116,9 @@ function AutoRefresh({ eventId, cursor }: { eventId: string; cursor: number }) {
   );
 }
 
-/* A measured value carries its own reading. Without this the two 0% workflows
-   rendered as the faintest thing on the page and the three 100% ones got the
-   most saturated fill. */
+/* 100% is silence. Colour is reserved for the rows that still need work. */
 function progressTone(score: number) {
-  if (score >= 90) return "green";
+  if (score >= 100) return "quiet";
   if (score >= 50) return "";
   return score > 0 ? "amber" : "red";
 }
@@ -163,6 +173,132 @@ function groupUpcomingByDay(
   return days;
 }
 
+function CommandReminderComposer({
+  options,
+}: {
+  options: ReminderDeliveryOptions;
+}) {
+  const fetcher = useFetcher<ContextActionResponse>();
+  const pending = fetcher.state !== "idle";
+  const canDraft = options.configured && options.templates.length > 0;
+  return (
+    <div className="command-composer">
+      <div className="command-panel-head">
+        <h2 className="command-band-head">Targeted reminder</h2>
+        <span className="command-qualifier">Preview first</span>
+      </div>
+      <fetcher.Form
+        method="post"
+        action="/ai/context"
+        className="command-composer-form"
+      >
+        <input type="hidden" name="kind" value="reminder_send_preview" />
+        <label className="label">
+          Audience
+          <select className="select" name="cohort" required>
+            <option value="incomplete_speakers">
+              Speakers with incomplete tasks
+            </option>
+            <option value="overdue_speaker_tasks">
+              Speakers with overdue tasks
+            </option>
+          </select>
+        </label>
+        <label className="label">
+          Delivery
+          <select className="select" name="deliveryKind" required>
+            <option value="transactional">Transactional task reminder</option>
+            <option value="optional">Optional email</option>
+          </select>
+        </label>
+        <details className="command-composer-more">
+          <summary>Foundation and purpose</summary>
+          <label className="label">
+            Approved reminder foundation
+            <select
+              className="select command-template-select"
+              name="baseTemplateVersionId"
+              required
+              disabled={!options.templates.length}
+            >
+              {options.templates.map((template) => (
+                <option value={template.id} key={template.id}>
+                  {template.name} · v{template.versionNumber}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="label">
+            Message purpose
+            <textarea
+              className="textarea"
+              name="objective"
+              minLength={3}
+              maxLength={500}
+              rows={3}
+              required
+              defaultValue={DEFAULT_REMINDER_PURPOSE}
+            />
+          </label>
+        </details>
+        <div className="command-composer-actions">
+          <button
+            className={canDraft ? "btn primary" : "btn ghost"}
+            type="submit"
+            disabled={pending || !canDraft}
+          >
+            <Sparkles aria-hidden size={14} />
+            {pending ? "Drafting preview…" : "Draft preview"}
+          </button>
+          {canDraft ? null : (
+            <p className="command-inline-note">
+              Drafting is unavailable until an AI provider is configured.
+            </p>
+          )}
+        </div>
+      </fetcher.Form>
+      {fetcher.data?.ok ? (
+        <>
+          <ContextualAiResultPanel result={fetcher.data.result} />
+          {fetcher.data.proposal ? (
+            <ProposalApproval proposal={fetcher.data.proposal} />
+          ) : null}
+        </>
+      ) : fetcher.data ? (
+        <p className="command-inline-note" role="alert">
+          {fetcher.data.error}
+        </p>
+      ) : null}
+    </div>
+  );
+}
+
+function CommandReadinessCommand() {
+  const fetcher = useFetcher<ContextActionResponse>();
+  const pending = fetcher.state !== "idle";
+  return (
+    <div className="command-advisor">
+      <fetcher.Form method="post" action="/ai/context">
+        <input type="hidden" name="kind" value="readiness_summary" />
+        <button
+          className="command-advisor-cmd"
+          type="submit"
+          disabled={pending}
+        >
+          {pending ? "Inspecting readiness…" : "Summarise readiness blockers"}
+        </button>
+      </fetcher.Form>
+      {fetcher.data?.ok ? (
+        <ContextualAiResultPanel result={fetcher.data.result} />
+      ) : fetcher.data ? (
+        <p className="command-inline-note" role="alert">
+          {fetcher.data.error}
+        </p>
+      ) : null}
+    </div>
+  );
+}
+
 export default function CommandCentre({ loaderData }: Route.ComponentProps) {
   const completedSetupSteps = loaderData.setupGuide.filter(
     (step) => step.complete,
@@ -180,6 +316,7 @@ export default function CommandCentre({ loaderData }: Route.ComponentProps) {
       : loaderData.readiness.status === "on_track"
         ? "On track"
         : "At risk";
+  const blockerCount = loaderData.blockers.length;
   /* The panel exists to expose the workflows that are not ready. In domain
      order the two zeros landed in the middle of six rows and had to be hunted
      for. */
@@ -191,10 +328,10 @@ export default function CommandCentre({ loaderData }: Route.ComponentProps) {
   const deliveryChannels = loaderData.deliveryHealth;
 
   return (
-    <>
+    <div className="command-page">
       <PageHeader
+        className="command-page-head"
         title="Command Centre"
-        description="Live operational readiness calculated from the current event records."
         actions={
           <>
             <AutoRefresh
@@ -216,28 +353,19 @@ export default function CommandCentre({ loaderData }: Route.ComponentProps) {
         }
       />
 
-      <AdminPageSectionNavigation
-        label="Command Centre sections"
-        links={[
-          ...(completedSetupSteps < loaderData.setupGuide.length
-            ? [{ id: "command-setup", label: "Programme setup" }]
-            : []),
-          { id: "command-readiness", label: "Readiness" },
-          { id: "command-workflows", label: "Workflow actions" },
-          { id: "command-assistants", label: "Assistants" },
-          { id: "command-activity", label: "Schedule and operations" },
-        ]}
-      />
-
       {completedSetupSteps < loaderData.setupGuide.length ? (
-        <AdminPageSection
+        <section
+          className="command-band"
           id="command-setup"
-          label="Programme setup"
-          description={`${completedWorkflowPhases} of ${workflowPhases.length} phases ready. Every step reads the event's current records — there is no separate checklist.`}
+          aria-labelledby="command-setup-title"
         >
+          <h2 className="command-band-head" id="command-setup-title">
+            Programme setup · {completedWorkflowPhases} of{" "}
+            {workflowPhases.length} phases ready
+          </h2>
           <div className="command-workflow-phases">
             {workflowPhases.map((phase, index) => (
-              <section className="card command-workflow-phase" key={phase.key}>
+              <section className="command-workflow-phase" key={phase.key}>
                 <div className="command-workflow-phase-heading">
                   <StatusBadge tone={phase.complete ? "success" : "info"}>
                     <span aria-hidden>{index + 1}</span>
@@ -264,411 +392,307 @@ export default function CommandCentre({ loaderData }: Route.ComponentProps) {
                         <Clock3 aria-label="Not complete" size={16} />
                       )}
                       <span>{step.label}</span>
-                      <span className="chev" aria-hidden>
-                        ›
-                      </span>
                     </Link>
                   ))}
                 </div>
               </section>
             ))}
           </div>
-        </AdminPageSection>
+        </section>
       ) : null}
 
-      <AdminPageSection
-        id="command-readiness"
-        label="Readiness"
-        description="The overall score and the exact conditions holding it back"
-        defaultExpandedOnMobile
-      >
-        <div className="command-readiness-row">
-          {/* The queue is the only place a blocker is stated. It used to be
-              restated as a tile row, a count sentence and a badge, so two
-              conditions read as eight. */}
-          <section className="card pad" id="action-queue">
-            <div className="card-title">
-              <h2>Action queue</h2>
-              <StatusBadge
-                tone={loaderData.blockers.length ? "warning" : "success"}
-              >
-                {loaderData.blockers.length} declared
-                {loaderData.blockers.length === 1
-                  ? " condition"
-                  : " conditions"}
-              </StatusBadge>
+      <section className="command-hero" aria-label="Readiness">
+        <section
+          className="command-score"
+          data-state={loaderData.readiness.status}
+        >
+          <h2 className="command-score-kicker">Overall readiness</h2>
+          <p className="command-score-reading">
+            <strong className="pc-num">
+              {loaderData.readiness.percentage}
+              <span className="command-score-unit">%</span>
+            </strong>
+            <span className="command-score-state">{readinessLabel}</span>
+          </p>
+          <div className="command-score-track" aria-hidden>
+            <span style={{ width: `${loaderData.readiness.percentage}%` }} />
+          </div>
+          <p className="command-score-caption">
+            Equal weight across {loaderData.workflows.length} workflows.
+          </p>
+          <details className="command-score-method">
+            <summary>How this is scored</summary>
+            <p>{loaderData.readiness.explanation}</p>
+            <p>
+              Task readiness inside a workflow is{" "}
+              <a href="/admin/tasks#readiness-weighting">weighted by impact</a>.
+            </p>
+          </details>
+        </section>
+
+        <section className="command-queue" id="action-queue">
+          <div className="command-panel-head command-queue-head">
+            <h2 className="command-band-head">Action queue</h2>
+            <p>
+              {blockerCount}
+              {blockerCount === 1 ? " condition" : " conditions"}
+            </p>
+          </div>
+          {blockerCount ? (
+            <div className="command-blockers">
+              {loaderData.blockers.map((blocker) => (
+                <Link
+                  className={`command-blocker ${blocker.severity === "danger" ? "is-danger" : "is-warning"}`}
+                  to={blocker.href}
+                  key={blocker.key}
+                >
+                  {blocker.severity === "danger" ? (
+                    <AlertTriangle aria-label="Critical" size={18} />
+                  ) : (
+                    <AlertCircle aria-label="Needs attention" size={18} />
+                  )}
+                  <span className="command-blocker-copy">
+                    <strong>{blocker.label}</strong>
+                    <small>{blocker.action}</small>
+                  </span>
+                  <b className="pc-num command-blocker-count">
+                    {blocker.count}
+                  </b>
+                </Link>
+              ))}
             </div>
-            {loaderData.blockers.length ? (
-              <div className="command-blockers">
-                {loaderData.blockers.map((blocker) => (
-                  <Link
-                    className={`command-blocker rail-left ${blocker.severity === "danger" ? "is-danger" : "is-warning"}`}
-                    to={blocker.href}
-                    key={blocker.key}
-                  >
-                    {blocker.severity === "danger" ? (
-                      <AlertTriangle aria-label="Critical" size={17} />
-                    ) : (
-                      <AlertCircle aria-label="Needs attention" size={17} />
-                    )}
-                    <span className="command-blocker-copy">
-                      {/* Count and label are separated by rank, not by
-                          grammar: "1 critical tasks incomplete" was the old
-                          reading. */}
-                      <strong>{blocker.label}</strong>
-                      <small>{blocker.action}</small>
-                    </span>
-                    <b className="pc-num">{blocker.count}</b>
-                    <span className="chev" aria-hidden>
-                      ›
-                    </span>
-                  </Link>
-                ))}
+          ) : (
+            <p className="command-quiet">
+              No declared blockers in the current records.
+            </p>
+          )}
+        </section>
+      </section>
+
+      <section
+        className="command-band"
+        id="command-workflows"
+        aria-labelledby="command-workflows-title"
+      >
+        <h2 className="command-band-head" id="command-workflows-title">
+          Workflows
+        </h2>
+        <div className="command-workflow-list">
+          {workflows.map((workflow) => (
+            <Link
+              className="command-workflow-row"
+              to={workflow.href}
+              key={workflow.key}
+              aria-label={`${workflow.label}: ${workflow.score}% ready`}
+            >
+              <strong>{workflow.label}</strong>
+              <small className="command-workflow-detail">
+                {workflow.detail}
+              </small>
+              <div
+                className={`command-meter ${progressTone(workflow.score)}${workflow.score === 0 ? " is-zero" : ""}`}
+                aria-hidden
+              >
+                <span style={{ width: `${workflow.score}%` }} />
               </div>
+              <b className="pc-num">{workflow.score}%</b>
+            </Link>
+          ))}
+        </div>
+      </section>
+
+      <section
+        className="command-support"
+        id="command-assistants"
+        aria-label="Draft a reminder"
+      >
+        <CommandReminderComposer options={loaderData.reminderOptions} />
+        <div className="command-assist-side">
+          <CommandReadinessCommand />
+          <section className="command-delivery">
+            <div className="command-panel-head">
+              <h2 className="command-band-head">Delivery</h2>
+              <Link className="command-text-link" to="/admin/communications">
+                Logs
+              </Link>
+            </div>
+            {deliveryChannels.length ? (
+              <section
+                className="table-wrap"
+                aria-label="Delivery health by channel"
+                // biome-ignore lint/a11y/noNoninteractiveTabindex: Scrollable data regions need keyboard focus so arrow keys can expose overflow content.
+                tabIndex={0}
+              >
+                <table className="jobs command-health-table">
+                  <thead>
+                    <tr>
+                      <th scope="col">Channel</th>
+                      <th scope="col">Tracked</th>
+                      <th scope="col">Accepted or delivered rate</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {deliveryChannels.map((channel) => (
+                      <tr key={channel.channel}>
+                        <th scope="row">
+                          {deliveryChannelLabel(channel.channel)}
+                        </th>
+                        <td className="pc-num">
+                          {channel.total.toLocaleString()}
+                        </td>
+                        <td>
+                          <strong
+                            className={`pc-num ${
+                              channel.percentage === 100
+                                ? "tone-success"
+                                : "tone-warning"
+                            }`}
+                          >
+                            {channel.percentage}%
+                          </strong>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </section>
             ) : (
-              <p className="command-quiet">
-                No declared blockers in the current records.
+              <p className="command-quiet command-empty-copy">
+                Nothing has been sent for this event yet.
               </p>
             )}
           </section>
-
-          <section
-            className="card pad command-score"
-            data-state={loaderData.readiness.status}
-          >
-            <div className="card-title">
-              <h2>Overall readiness</h2>
-            </div>
-            {/* A scalar is a numeral, a state word and at most a flat bar. The
-                donut spent 150px encoding an angle nobody measures around the
-                number it already printed. */}
-            <p className="command-score-reading">
-              <strong className="pc-num">
-                {loaderData.readiness.percentage}%
-              </strong>
-              <span>{readinessLabel}</span>
-            </p>
-            <div
-              className={`progress ${loaderData.readiness.status === "ready" ? "green" : loaderData.readiness.status === "at_risk" ? "amber" : ""}`}
-              aria-hidden
-            >
-              <span style={{ width: `${loaderData.readiness.percentage}%` }} />
-            </div>
-            {/* The explanation used to be a title attribute, which keyboard
-                and touch users never receive. It is the only account of how
-                this number is produced, so it renders. */}
-            <ReadinessWeightingNote
-              workflowCount={loaderData.workflows.length}
-            />
-            <p className="command-score-caveat subtle">
-              {loaderData.readiness.explanation}
-            </p>
-          </section>
         </div>
-      </AdminPageSection>
+      </section>
 
-      <AdminPageSection
-        id="command-workflows"
-        label="Workflow actions"
-        description="Where the score comes from, least ready first"
-      >
-        <section className="card pad">
-          <div className="card-title">
-            <h2>Readiness by workflow</h2>
-          </div>
-          <div className="command-workflow-list">
-            {workflows.map((workflow) => (
-              <Link
-                className="command-workflow-row"
-                to={workflow.href}
-                key={workflow.key}
-                aria-label={`${workflow.label}: ${workflow.score}% ready`}
-              >
-                <strong>{workflow.label}</strong>
-                <small className="command-workflow-detail">
-                  {workflow.detail}
-                </small>
-                <div
-                  className={`progress ${progressTone(workflow.score)}${workflow.score === 0 ? " is-zero" : ""}`}
-                  aria-hidden
-                >
-                  <span style={{ width: `${workflow.score}%` }} />
-                </div>
-                <b className="pc-num">{workflow.score}%</b>
-                <span className="chev" aria-hidden>
-                  ›
-                </span>
-              </Link>
-            ))}
-          </div>
-        </section>
-      </AdminPageSection>
-
-      <AdminPageSection
-        id="command-assistants"
-        label="Assistants and delivery"
-        description="Advisory drafting and the outcome of what has been sent"
-      >
-        <div className="command-assist">
-          <section className="card pad">
-            <div className="card-title">
-              <h2>Targeted reminder assistant</h2>
-              <span className="status warning">Preview first</span>
-            </div>
-            <ReminderDraftAction options={loaderData.reminderOptions} />
-          </section>
-
-          {/* The advisor and delivery health are short panels; pairing them in
-              one column stops a 200px card being stretched to the height of
-              the reminder form beside it. */}
-          <div className="command-assist-side">
-            <section className="card pad">
-              <div className="card-title">
-                <h2>AI readiness advisor</h2>
-                <span className="status info">Advisory</span>
-              </div>
-              <ReadinessSummaryAction />
-            </section>
-
-            <section className="card pad">
-              <div className="card-title command-subhead">
-                <h2>Delivery health</h2>
-                <Link className="btn small right" to="/admin/communications">
-                  Delivery logs
-                </Link>
-              </div>
-              {deliveryChannels.length ? (
-                <section
-                  className="table-wrap"
-                  aria-label="Delivery health by channel"
-                  // biome-ignore lint/a11y/noNoninteractiveTabindex: Scrollable data regions need keyboard focus so arrow keys can expose overflow content.
-                  tabIndex={0}
-                >
-                  <table className="jobs command-health-table">
-                    <thead>
-                      <tr>
-                        <th scope="col">Channel</th>
-                        <th scope="col">Tracked</th>
-                        <th scope="col">Accepted or delivered rate</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {deliveryChannels.map((channel) => (
-                        <tr key={channel.channel}>
-                          <th scope="row">
-                            {deliveryChannelLabel(channel.channel)}
-                          </th>
-                          <td className="pc-num">
-                            {channel.total.toLocaleString()}
-                          </td>
-                          <td>
-                            <strong
-                              className={`pc-num ${
-                                channel.percentage === 100
-                                  ? "tone-success"
-                                  : "tone-warning"
-                              }`}
-                            >
-                              {channel.percentage}%
-                            </strong>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </section>
-              ) : (
-                <p className="command-quiet">
-                  No delivery records exist for this event yet.
-                </p>
-              )}
-            </section>
-          </div>
-        </div>
-      </AdminPageSection>
-
-      <AdminPageSection
+      <section
+        className="command-activity"
         id="command-activity"
-        label="Schedule and operations"
-        description="Upcoming sessions and background work"
+        aria-label="Schedule and operations"
       >
-        <div className="command-activity">
-          <section className="card pad">
-            <div className="card-title">
-              <h2>Upcoming published sessions</h2>
-              <Link className="btn small right" to="/admin/schedule">
-                Open schedule
-              </Link>
-            </div>
-            {upcomingDays.length ? (
-              <div className="command-session-list">
-                {upcomingDays.map((day, index) => (
-                  <Fragment key={day.key}>
-                    <p className="command-session-day">
-                      <span>{day.label}</span>
-                      {/* The zone qualifies the times below it, so it sits at
-                          the head of the column it applies to rather than
-                          competing with the card heading. */}
-                      {index === 0 ? (
-                        <span className="command-session-zone">
-                          Times in {loaderData.eventTimezone}
-                        </span>
-                      ) : null}
-                    </p>
-                    {day.sessions.map((session) => (
-                      <Link
-                        className="command-session-row command-agenda-link"
-                        to={`/admin/schedule?session=${encodeURIComponent(session.id)}`}
-                        key={session.id}
+        <section className="command-agenda">
+          <div className="command-panel-head">
+            <h2 className="command-band-head">Upcoming sessions</h2>
+            <Link className="command-text-link" to="/admin/schedule">
+              Open schedule
+            </Link>
+          </div>
+          {upcomingDays.length ? (
+            <div className="command-session-list">
+              {upcomingDays.map((day, index) => (
+                <Fragment key={day.key}>
+                  <p className="command-session-day">
+                    <span>{day.label}</span>
+                    {index === 0 ? (
+                      <span className="command-session-zone">
+                        Times in {loaderData.eventTimezone}
+                      </span>
+                    ) : null}
+                  </p>
+                  {day.sessions.map((session) => (
+                    <Link
+                      className="command-session-row command-agenda-link"
+                      to={`/admin/schedule?session=${encodeURIComponent(session.id)}`}
+                      key={session.id}
+                    >
+                      <EventDateTime
+                        epochSeconds={session.startsAt}
+                        timeZone={loaderData.eventTimezone}
+                        className="command-session-time"
+                        focusable={false}
                       >
-                        <EventDateTime
-                          epochSeconds={session.startsAt}
-                          timeZone={loaderData.eventTimezone}
-                          className="command-session-time"
-                          focusable={false}
-                        >
-                          <span className="pc-num">
-                            {new Intl.DateTimeFormat("en", {
-                              hour: "numeric",
-                              minute: "2-digit",
-                              timeZone: loaderData.eventTimezone,
-                            }).format(new Date(session.startsAt * 1_000))}
-                          </span>
-                        </EventDateTime>
-                        <span className="command-session-title">
-                          {session.title}
+                        <span className="pc-num">
+                          {new Intl.DateTimeFormat("en", {
+                            hour: "numeric",
+                            minute: "2-digit",
+                            timeZone: loaderData.eventTimezone,
+                          }).format(new Date(session.startsAt * 1_000))}
                         </span>
-                        {/* Published is not ready. The pill is the reason this
-                            panel is worth reading before the day rather than a
-                            restatement of the heading — it names the sessions
-                            that still need work while there is time to do it. */}
-                        <small className="command-session-room">
-                          {session.room}
-                        </small>
-                        {session.status === "attention_required" ? (
-                          <span className="command-session-readiness">
-                            <StatusBadge tone="warning">Attention</StatusBadge>
-                            <small>{session.riskReason}</small>
-                          </span>
-                        ) : (
-                          <StatusBadge tone="success">
-                            No blockers found
-                          </StatusBadge>
-                        )}
-                        <span className="chev" aria-hidden>
-                          ›
+                      </EventDateTime>
+                      <span className="command-session-title">
+                        {session.title}
+                      </span>
+                      <small className="command-session-room">
+                        {session.room}
+                      </small>
+                      {session.status === "attention_required" ? (
+                        <span className="command-session-readiness">
+                          <StatusBadge tone="warning">Attention</StatusBadge>
+                          <small>{session.riskReason}</small>
                         </span>
-                      </Link>
-                    ))}
-                  </Fragment>
-                ))}
-              </div>
-            ) : (
-              <EmptyState
-                title="No upcoming sessions"
-                description="No future sessions exist in the current published schedule."
-                icon={Clock3}
-              />
-            )}
-          </section>
-
-          <section className="card pad">
-            <div className="card-title command-subhead">
-              <h2>Background operations</h2>
-              <Link className="btn small right" to="/admin/operations">
-                View all
-              </Link>
+                      ) : (
+                        <span className="sr-only">No blockers found</span>
+                      )}
+                    </Link>
+                  ))}
+                </Fragment>
+              ))}
             </div>
-            {loaderData.operations.length ? (
-              <section
-                className="table-wrap"
-                aria-label="Background operations"
-                // biome-ignore lint/a11y/noNoninteractiveTabindex: Scrollable data regions need keyboard focus so arrow keys can expose overflow content.
-                tabIndex={0}
-              >
-                <table className="jobs">
-                  <thead>
-                    <tr>
-                      <th>Operation</th>
-                      <th>Status</th>
-                      <th>Progress</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {loaderData.operations.map((operation) => (
-                      <tr key={operation.id}>
-                        <td>
-                          <Link
-                            to={`/admin/operations?operation=${encodeURIComponent(operation.id)}`}
-                          >
-                            {operation.type.replaceAll("_", " ")}
-                          </Link>
-                        </td>
-                        <td>
-                          <DomainStatusBadge
-                            domain="operation"
-                            status={operation.status}
-                          />
-                        </td>
-                        <td>
-                          {operation.total > 0 ? (
-                            <>
-                              <div className="progress">
-                                <span
-                                  style={{
-                                    width: `${percentForOperation(operation.completed, operation.total)}%`,
-                                  }}
-                                />
-                              </div>
-                              <small className="subtle">
-                                {operation.completed} / {operation.total}
-                              </small>
-                            </>
-                          ) : (
-                            "—"
-                          )}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </section>
-            ) : (
-              /* Nothing running is this panel's healthy state, so it keeps the
-                 columns it will fill rather than replacing them with a
-                 sentence. The operator learns the shape of the report before
-                 the first job rather than during it. */
-              <section
-                className="table-wrap"
-                aria-label="Background operations"
-                // biome-ignore lint/a11y/noNoninteractiveTabindex: Scrollable data regions need keyboard focus so arrow keys can expose overflow content.
-                tabIndex={0}
-              >
-                <table className="jobs">
-                  <thead>
-                    <tr>
-                      <th scope="col">Operation</th>
-                      <th scope="col">Status</th>
-                      <th scope="col">Progress</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    <tr className="pc-table-empty-row">
-                      <td className="pc-table-empty-cell" colSpan={3}>
-                        <p className="command-quiet">
-                          Nothing running. Bulk sends, publications and provider
-                          work appear here while they are in progress.
-                        </p>
-                      </td>
-                    </tr>
-                  </tbody>
-                </table>
-              </section>
-            )}
-          </section>
-        </div>
-      </AdminPageSection>
-    </>
+          ) : (
+            <EmptyState
+              title="No upcoming sessions"
+              description="No future sessions exist in the current published schedule."
+              icon={Clock3}
+            />
+          )}
+        </section>
+
+        <section className="command-ops">
+          <div className="command-panel-head">
+            <h2 className="command-band-head">Operations</h2>
+            <Link className="command-text-link" to="/admin/operations">
+              View all
+            </Link>
+          </div>
+          {loaderData.operations.length ? (
+            <ul className="command-ops-list">
+              {loaderData.operations.map((operation) => (
+                <li key={operation.id}>
+                  <Link
+                    className="command-ops-row"
+                    to={`/admin/operations?operation=${encodeURIComponent(operation.id)}`}
+                  >
+                    <span className="command-ops-type">
+                      {operationTypeLabel(operation.type)}
+                    </span>
+                    <DomainStatusBadge
+                      domain="operation"
+                      status={operation.status}
+                    />
+                    {operation.total > 0 ? (
+                      <span className="command-ops-progress">
+                        {percentForOperation(
+                          operation.completed,
+                          operation.total,
+                        ) > 0 ? (
+                          <span className="command-meter" aria-hidden>
+                            <span
+                              style={{
+                                width: `${percentForOperation(operation.completed, operation.total)}%`,
+                              }}
+                            />
+                          </span>
+                        ) : null}
+                        <small className="subtle pc-num">
+                          {operation.completed} of {operation.total}
+                        </small>
+                      </span>
+                    ) : (
+                      <span className="command-ops-idle">—</span>
+                    )}
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p className="command-quiet command-empty-copy">
+              Nothing running. Bulk sends, publications and provider work appear
+              here while they are in progress.
+            </p>
+          )}
+        </section>
+      </section>
+    </div>
   );
 }
 
@@ -676,4 +700,9 @@ function percentForOperation(completed: number, total: number) {
   return total > 0
     ? Math.max(0, Math.min(100, Math.round((completed / total) * 100)))
     : 0;
+}
+
+function operationTypeLabel(type: string) {
+  const label = type.replaceAll(/[._]+/g, " ").trim();
+  return label ? label[0].toUpperCase() + label.slice(1) : type;
 }

@@ -90,16 +90,16 @@ export default function SpeakerResources({ loaderData }: Route.ComponentProps) {
     <>
       <div className="page-head">
         <div>
-          <span className="pc-page-eyebrow">Knowledge library</span>
-          <h1>Participant resources</h1>
+          <h1>Resources</h1>
           <p>
             Published guidance selected for your participant identity and
             sessions.
           </p>
         </div>
-        <Link className="btn" to="/participant/dashboard">
-          Back to dashboard
-        </Link>
+        <p className="speaker-work-count">
+          <b className="pc-num">{workspace.pages.length}</b>
+          <span>{workspace.pages.length === 1 ? "resource" : "resources"}</span>
+        </p>
       </div>
       {actionData ? (
         <div
@@ -114,41 +114,53 @@ export default function SpeakerResources({ loaderData }: Route.ComponentProps) {
         </div>
       ) : null}
       <div className="speaker-resource-layout mt">
-        <aside className="card pad resource-index">
-          <div className="card-title">
-            <h2>Resource library</h2>
-            <span className="pill right">{workspace.pages.length}</span>
-          </div>
-          {workspace.pages.map((page) => (
-            <Link
-              to={`/participant/resources?resource=${page.slug}`}
-              className={`resource-link${selected?.id === page.id ? " active" : ""}`}
-              key={page.id}
-            >
-              <strong>{page.title}</strong>
-              <small>
-                {page.category ?? "General"} · v{page.versionNumber}
-              </small>
-              {page.acknowledgementRequired ? (
-                <span
-                  className={`status ${page.acknowledged ? "success" : "warning"}`}
+        <aside className="resource-index">
+          <h2 className="speaker-work-caption">Library</h2>
+          {workspace.pages.length ? (
+            <nav className="speaker-work-list" aria-label="Resource library">
+              {workspace.pages.map((page) => (
+                <Link
+                  to={`/participant/resources?resource=${page.slug}`}
+                  className={`resource-link${selected?.id === page.id ? " active" : ""}`}
+                  key={page.id}
                 >
-                  {page.acknowledged
-                    ? "Acknowledged"
-                    : "Acknowledgement required"}
-                </span>
-              ) : null}
-            </Link>
-          ))}
+                  <FileText aria-hidden className="pc-index-icon" />
+                  <span className="speaker-resource-link-copy">
+                    <strong>{page.title}</strong>
+                    <small>
+                      {page.category ?? "General"} · v{page.versionNumber}
+                    </small>
+                  </span>
+                  {page.acknowledgementRequired ? (
+                    <span
+                      className={`status ${page.acknowledged ? "success" : "warning"}`}
+                    >
+                      {page.acknowledged
+                        ? "Acknowledged"
+                        : "Acknowledgement required"}
+                    </span>
+                  ) : null}
+                </Link>
+              ))}
+            </nav>
+          ) : null}
         </aside>
         {selected ? (
-          <article className="card pad speaker-resource-content">
-            <div className="card-title">
+          <article className="speaker-resource-content">
+            <div className="speaker-resource-head">
               <div>
-                <span className="status info">
+                <p className="speaker-task-kicker">
                   {selected.category ?? "General"}
-                </span>
+                </p>
                 <h2>{selected.title}</h2>
+                <p className="speaker-task-meta">
+                  Published{" "}
+                  {new Intl.DateTimeFormat("en", {
+                    dateStyle: "medium",
+                    timeZone: timezone,
+                  }).format(new Date(selected.publishedAt * 1_000))}{" "}
+                  ({timezone}) · version {selected.versionNumber}
+                </p>
               </div>
               {selected.acknowledgementRequired ? (
                 <span
@@ -158,51 +170,41 @@ export default function SpeakerResources({ loaderData }: Route.ComponentProps) {
                 </span>
               ) : null}
             </div>
-            <p className="subtle">
-              Published{" "}
-              {new Intl.DateTimeFormat("en", {
-                dateStyle: "medium",
-                timeZone: timezone,
-              }).format(new Date(selected.publishedAt * 1_000))}{" "}
-              ({timezone}) · version {selected.versionNumber}
-            </p>
             <ResourceDocument
               document={selected.document}
               configuration={workspace.embedConfiguration}
             />
             {selected.attachments.length ? (
-              <section className="card pad mt resource-attachments">
-                <strong>Attachments</strong>
-                {selected.attachments.map((attachment) => (
-                  <a
-                    className="file-version-row"
-                    href={`/participant/resources/files/${attachment.id}`}
-                    key={attachment.id}
-                  >
-                    <span className="file-kind-icon">
-                      <FileText aria-hidden size={17} />
-                    </span>
-                    <span>
-                      <strong>{attachment.filename}</strong>
-                      <small>
-                        {fileSize(attachment.sizeBytes)} · private expiring
-                        session access
-                      </small>
-                    </span>
-                    <Download aria-hidden className="right" size={16} />
-                  </a>
-                ))}
+              <section className="resource-attachments">
+                <h3>Attachments</h3>
+                <div className="speaker-work-list">
+                  {selected.attachments.map((attachment) => (
+                    <a
+                      className="file-version-row"
+                      href={`/participant/resources/files/${attachment.id}`}
+                      key={attachment.id}
+                    >
+                      <FileText aria-hidden className="pc-index-icon" />
+                      <span className="speaker-file-copy">
+                        <strong>{attachment.filename}</strong>
+                        <small>
+                          {fileSize(attachment.sizeBytes)} · private expiring
+                          session access
+                        </small>
+                      </span>
+                      <Download aria-hidden size={16} />
+                    </a>
+                  ))}
+                </div>
               </section>
             ) : (
-              <div className="validation-item ok mt">
-                <LockKeyhole aria-hidden size={16} />
-                <span>
-                  No downloadable attachments are released for this version.
-                </span>
-              </div>
+              <p className="speaker-task-note">
+                <LockKeyhole aria-hidden size={14} />
+                No downloadable attachments are released for this version.
+              </p>
             )}
             {selected.acknowledgementRequired && !selected.acknowledged ? (
-              <Form method="post" className="resource-acknowledge mt">
+              <Form method="post" className="resource-acknowledge">
                 <input type="hidden" name="pageId" value={selected.id} />
                 <input
                   type="hidden"
@@ -218,21 +220,20 @@ export default function SpeakerResources({ loaderData }: Route.ComponentProps) {
                   className="btn primary"
                   disabled={navigation.state !== "idle"}
                 >
-                  <BookOpenCheck aria-hidden size={16} />{" "}
                   {navigation.state === "submitting"
                     ? "Recording…"
                     : "Acknowledge version"}
                 </button>
               </Form>
             ) : selected.acknowledged ? (
-              <div className="validation-item ok mt">
-                <CheckCircle2 aria-hidden size={16} />
-                <span>You acknowledged this exact published version.</span>
-              </div>
+              <p className="speaker-task-note is-ok">
+                <CheckCircle2 aria-hidden size={14} />
+                You acknowledged this exact published version.
+              </p>
             ) : null}
           </article>
         ) : (
-          <section className="pc-empty-state card">
+          <section className="pc-empty-state">
             <BookOpenCheck aria-hidden className="pc-state-icon" />
             <h2>No resources published</h2>
             <p className="subtle">

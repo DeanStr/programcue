@@ -22,7 +22,9 @@ export function PageHeader({
       <div className="pc-page-header-copy">
         {eyebrow ? <div className="pc-page-eyebrow">{eyebrow}</div> : null}
         <h1>{title}</h1>
-        {description ? <p>{description}</p> : null}
+        {description ? (
+          <p className="pc-page-header-lede">{description}</p>
+        ) : null}
       </div>
       {actions ? (
         <fieldset

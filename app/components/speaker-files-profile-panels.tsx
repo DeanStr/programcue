@@ -1,10 +1,4 @@
-import {
-  Download,
-  FileCheck2,
-  LockKeyhole,
-  Trash2,
-  UserRound,
-} from "lucide-react";
+import { Download, FileCheck2, LockKeyhole, Trash2 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Form, Link, useSubmit } from "react-router";
 import { DirectMultipartUpload } from "~/components/direct-multipart-upload";
@@ -20,6 +14,25 @@ import {
   formatSpeakerXHandleInput,
   normalizeSpeakerLinkedinUrl,
 } from "~/modules/speakers/speaker-schema";
+
+function isPlaceholderLinkedin(value: string | null | undefined) {
+  if (!value?.trim()) return true;
+  return /linkedin\.com\/in\/your-name\/?$/iu.test(value.trim());
+}
+
+function isPlaceholderXHandle(value: string | null | undefined) {
+  if (!value?.trim()) return true;
+  return value.replace(/^@/u, "").trim().toLowerCase() === "your_handle";
+}
+
+function visibleLinkedinUrl(value: string | null | undefined) {
+  return isPlaceholderLinkedin(value) ? "" : (value ?? "");
+}
+
+function visibleXHandle(value: string | null | undefined) {
+  if (isPlaceholderXHandle(value)) return "";
+  return value ? `@${value.replace(/^@/u, "")}` : "";
+}
 
 function formatUploadTimestamp(epoch: number, timezone: string) {
   return new Intl.DateTimeFormat("en", {
@@ -39,20 +52,13 @@ export function SpeakerFilesPanel({
   const submit = useSubmit();
   const { confirm, dialog } = useConfirm();
   return (
-    <section className="card pad mt" id="files">
+    <section
+      className="speaker-work speaker-files"
+      id="files"
+      aria-label="Private files"
+    >
       {dialog}
-      <div className="card-title">
-        <div>
-          <span className="pc-section-kicker">Your private files</span>
-          <h2>Files and versions</h2>
-        </div>
-        <FileCheck2 aria-hidden className="subtle" />
-      </div>
-      <p className="subtle">
-        Every upload is checked and held privately. Downloads become available
-        once the malware scan reports a clean result.
-      </p>
-      <div id="headshot-upload">
+      <div className="speaker-files-toolbar" id="headshot-upload">
         <DirectMultipartUpload
           target={{ targetType: "person", targetId: portal.profile.id }}
           kinds={[
@@ -84,93 +90,105 @@ export function SpeakerFilesPanel({
               maximumBytes: portal.event.filePolicy.videoMaximumBytes,
             },
           ]}
+          heading="Upload a file"
+          description="Every upload is checked and held privately. Downloads become available once the malware scan reports a clean result."
         />
       </div>
-      <div className="stack mt">
-        {portal.files.map((file) => (
-          <div className="file-version-row" key={file.id}>
-            <span className="file-kind-icon">
-              <FileCheck2 aria-hidden size={17} />
-            </span>
-            <span>
-              <strong>{file.kind.replaceAll("_", " ")}</strong>
-              <small>
-                {file.filename} · version {file.versionNumber ?? "—"}
-              </small>
-              {file.downloadFilename && file.downloadUploadedAt ? (
+      <div className="speaker-work-list">
+        {portal.files.length ? (
+          portal.files.map((file) => (
+            <div className="file-version-row" key={file.id}>
+              <FileCheck2 aria-hidden className="pc-index-icon" size={16} />
+              <span className="speaker-file-copy">
+                <strong className="pc-index-label">
+                  {file.kind.replaceAll("_", " ")}
+                </strong>
                 <small>
-                  Current released file: {file.downloadFilename} · uploaded by{" "}
-                  {file.downloadUploaderName} ·{" "}
-                  {formatUploadTimestamp(
-                    file.downloadUploadedAt,
-                    portal.event.timezone,
-                  )}
+                  {file.filename} · version {file.versionNumber ?? "—"}
                 </small>
-              ) : null}
-            </span>
-            <DomainStatusBadge
-              domain="file"
-              status={file.scanStatus ?? file.status}
-            />
-            {file.currentVersionId && file.downloadReleasedAt ? (
-              <a
-                className="icon-btn"
-                href={`/participant/files/${file.id}`}
-                aria-label={`Download ${file.downloadFilename}`}
-              >
-                <Download aria-hidden size={15} />
-              </a>
-            ) : (
-              <LockKeyhole
-                aria-label="Download locked pending scan"
-                size={15}
-                className="subtle"
-              />
-            )}
-            <Form
-              method="post"
-              onSubmit={(event) => {
-                event.preventDefault();
-                const form = event.currentTarget;
-                confirm(
-                  {
-                    title: `Permanently erase ${file.filename}?`,
-                    description: `Every stored version of this ${file.kind.replaceAll("_", " ")} is erased from private storage. This cannot be undone.`,
-                    records: file.versions.map(
-                      (version) =>
-                        `v${version.versionNumber} · ${version.filename}`,
-                    ),
-                    confirmLabel: "Erase all versions",
-                  },
-                  () => submit(form),
-                );
-              }}
-            >
-              <input type="hidden" name="intent" value="delete-file" />
-              <input type="hidden" name="assetId" value={file.id} />
-              <input type="hidden" name="confirm" value="erase-all-versions" />
-              <button
-                className="icon-btn danger"
-                type="submit"
-                disabled={busy}
-                aria-label={`Permanently delete ${file.filename} and all versions`}
-              >
-                <Trash2 aria-hidden size={15} />
-              </button>
-            </Form>
-            {file.versions.length > 1 ? (
-              <details className="file-history pc-disclosure">
-                <summary>{file.versions.length} versions</summary>
-                {file.versions.map((version) => (
-                  <small key={version.id}>
-                    v{version.versionNumber} · {version.filename} · scan{" "}
-                    {version.scanStatus}
+                {file.downloadFilename && file.downloadUploadedAt ? (
+                  <small>
+                    Current released file: {file.downloadFilename} · uploaded by{" "}
+                    {file.downloadUploaderName} ·{" "}
+                    {formatUploadTimestamp(
+                      file.downloadUploadedAt,
+                      portal.event.timezone,
+                    )}
                   </small>
-                ))}
-              </details>
-            ) : null}
-          </div>
-        ))}
+                ) : null}
+              </span>
+              <DomainStatusBadge
+                domain="file"
+                status={file.scanStatus ?? file.status}
+              />
+              <span className="speaker-file-actions">
+                {file.currentVersionId && file.downloadReleasedAt ? (
+                  <a
+                    className="icon-btn"
+                    href={`/participant/files/${file.id}`}
+                    aria-label={`Download ${file.downloadFilename}`}
+                  >
+                    <Download aria-hidden size={15} />
+                  </a>
+                ) : (
+                  <LockKeyhole
+                    aria-label="Download locked pending scan"
+                    size={15}
+                    className="subtle"
+                  />
+                )}
+                <Form
+                  method="post"
+                  onSubmit={(event) => {
+                    event.preventDefault();
+                    const form = event.currentTarget;
+                    confirm(
+                      {
+                        title: `Permanently erase ${file.filename}?`,
+                        description: `Every stored version of this ${file.kind.replaceAll("_", " ")} is erased from private storage. This cannot be undone.`,
+                        records: file.versions.map(
+                          (version) =>
+                            `v${version.versionNumber} · ${version.filename}`,
+                        ),
+                        confirmLabel: "Erase all versions",
+                      },
+                      () => submit(form),
+                    );
+                  }}
+                >
+                  <input type="hidden" name="intent" value="delete-file" />
+                  <input type="hidden" name="assetId" value={file.id} />
+                  <input
+                    type="hidden"
+                    name="confirm"
+                    value="erase-all-versions"
+                  />
+                  <button
+                    className="icon-btn danger"
+                    type="submit"
+                    disabled={busy}
+                    aria-label={`Permanently delete ${file.filename} and all versions`}
+                  >
+                    <Trash2 aria-hidden size={15} />
+                  </button>
+                </Form>
+              </span>
+              {file.versions.length > 1 ? (
+                <details className="file-history pc-disclosure">
+                  <summary>{file.versions.length} versions</summary>
+                  {file.versions.map((version) => (
+                    <small key={version.id}>
+                      v{version.versionNumber} · {version.filename} · scan{" "}
+                      {version.scanStatus}
+                    </small>
+                  ))}
+                </details>
+              ) : null}
+            </div>
+          ))
+        ) : (
+          <p className="speaker-library-empty">No private files yet.</p>
+        )}
       </div>
     </section>
   );
@@ -185,10 +203,10 @@ export function SpeakerProfilePanel({
 }) {
   const [dirty, setDirty] = useState(false);
   const [linkedinUrl, setLinkedinUrl] = useState(
-    portal.profile.linkedinUrl ?? "",
+    visibleLinkedinUrl(portal.profile.linkedinUrl),
   );
   const [xHandle, setXHandle] = useState(
-    portal.profile.xHandle ? `@${portal.profile.xHandle}` : "",
+    visibleXHandle(portal.profile.xHandle),
   );
   const [biography, setBiography] = useState(portal.profile.biography ?? "");
   const [travelPreferences, setTravelPreferences] = useState(
@@ -197,8 +215,8 @@ export function SpeakerProfilePanel({
   const blocker = useUnsavedChanges(dirty);
   // biome-ignore lint/correctness/useExhaustiveDependencies: The persisted revision is the authoritative reset boundary even when a save normalizes to the same visible profile values.
   useEffect(() => {
-    setLinkedinUrl(portal.profile.linkedinUrl ?? "");
-    setXHandle(portal.profile.xHandle ? `@${portal.profile.xHandle}` : "");
+    setLinkedinUrl(visibleLinkedinUrl(portal.profile.linkedinUrl));
+    setXHandle(visibleXHandle(portal.profile.xHandle));
     setBiography(portal.profile.biography ?? "");
     setTravelPreferences(portal.profile.travelPreferences ?? "");
     setDirty(false);
@@ -221,7 +239,7 @@ export function SpeakerProfilePanel({
       file.downloadUploaderName,
   );
   return (
-    <section className="card pad mt" id="profile">
+    <section className="mt speaker-work speaker-profile" id="profile">
       {blocker.state === "blocked" ? (
         <ConfirmDialog
           title="Leave without saving your profile?"
@@ -232,14 +250,7 @@ export function SpeakerProfilePanel({
           onConfirm={() => blocker.proceed()}
         />
       ) : null}
-      <div className="card-title">
-        <div>
-          <span className="pc-section-kicker">Public identity</span>
-          <h2>Profile</h2>
-        </div>
-        <UserRound aria-hidden className="subtle" />
-      </div>
-      <div className="speaker-headshot-card mb">
+      <div className="speaker-headshot-card">
         {headshot ? (
           <img
             className="speaker-headshot-image"
@@ -248,7 +259,7 @@ export function SpeakerProfilePanel({
           />
         ) : (
           <span className="speaker-headshot-placeholder">
-            <UserRound aria-hidden size={38} />
+            <span>No portrait yet</span>
           </span>
         )}
         <div className="stack">
@@ -269,7 +280,7 @@ export function SpeakerProfilePanel({
       </div>
       <Form
         method="post"
-        className="stack"
+        className="speaker-profile-form"
         key={portal.profile.revision}
         onChange={() => setDirty(true)}
       >
@@ -326,7 +337,6 @@ export function SpeakerProfilePanel({
               name="linkedinUrl"
               type="url"
               inputMode="url"
-              placeholder="https://www.linkedin.com/in/your-name"
               value={linkedinUrl}
               onChange={(event) => setLinkedinUrl(event.currentTarget.value)}
               onBlur={() =>
@@ -340,7 +350,6 @@ export function SpeakerProfilePanel({
             <input
               className="field"
               name="xHandle"
-              placeholder="@your_handle"
               value={xHandle}
               onChange={(event) => setXHandle(event.currentTarget.value)}
               onBlur={() => setXHandle(formatSpeakerXHandleInput(xHandle))}
@@ -378,7 +387,6 @@ export function SpeakerProfilePanel({
             }
             maxLength={2_000}
             rows={4}
-            placeholder="Arrival timing, accessibility, ground transport, dietary or other event logistics preferences"
           />
           <CharacterCount value={travelPreferences} maximum={2_000} />
           <span className="help">
@@ -386,20 +394,22 @@ export function SpeakerProfilePanel({
             programme.
           </span>
         </label>
-        <label className="speaker-confirm">
-          <input
-            type="checkbox"
-            name="publish"
-            defaultChecked={portal.profile.profileStatus === "published"}
-          />{" "}
-          Publish this profile when saved
-        </label>
-        <button type="submit" className="btn primary" disabled={busy}>
-          Save profile
-        </button>
-        <span className={`status ${dirty ? "warning" : "success"}`}>
-          {dirty ? "Unsaved changes" : "Saved"}
-        </span>
+        <div className="speaker-profile-commit">
+          <label className="speaker-confirm">
+            <input
+              type="checkbox"
+              name="publish"
+              defaultChecked={portal.profile.profileStatus === "published"}
+            />{" "}
+            Publish this profile when saved
+          </label>
+          <button type="submit" className="btn primary" disabled={busy}>
+            Save profile
+          </button>
+          <span className={`status ${dirty ? "warning" : "success"}`}>
+            {dirty ? "Unsaved changes" : "Saved"}
+          </span>
+        </div>
       </Form>
       <SpeakerProfileHistory
         revisions={portal.profileHistory}

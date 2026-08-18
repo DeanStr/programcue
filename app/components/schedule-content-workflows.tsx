@@ -177,7 +177,7 @@ function ScheduleNotesEditor({
   });
   return (
     <section
-      className="card pad mt"
+      className="schedule-inspector-panel"
       aria-labelledby="schedule-notes-title"
       data-testid="schedule-notes-editor"
     >

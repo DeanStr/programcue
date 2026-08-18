@@ -1,4 +1,4 @@
-import { CalendarClock, CalendarPlus, Link2 } from "lucide-react";
+import { CalendarPlus, Link2 } from "lucide-react";
 import { Form, Link, useSubmit } from "react-router";
 import { useConfirm } from "~/components/ui/confirm-dialog";
 import { DomainStatusBadge } from "~/components/ui/domain-status-badge";
@@ -398,65 +398,42 @@ export function CalendarLifecycleTable({
         </span>
       </div>
       {loaderData.invitations.length ? (
-        <section
-          className="table-wrap"
+        <ul
+          className="comms-activity-list"
           aria-label="Calendar invitation activity"
-          // biome-ignore lint/a11y/noNoninteractiveTabindex: Scrollable data regions need keyboard focus so arrow keys can expose overflow content.
-          tabIndex={0}
         >
-          <table className="data-table">
-            <thead>
-              <tr>
-                <th scope="col">Session</th>
-                <th scope="col">Speaker</th>
-                <th scope="col">Provider</th>
-                <th scope="col">Lifecycle</th>
-              </tr>
-            </thead>
-            <tbody>
-              {loaderData.invitations.map((invitation) => (
-                <tr key={invitation.id}>
-                  <td className="pc-record-primary-cell" data-label="Session">
-                    {invitation.sessionTitle}
-                    <small>
-                      Calendar reference {shortReference(invitation.icalUid)}
-                    </small>
-                  </td>
-                  <td data-label="Speaker">
-                    <CommunicationRecipientIdentity
-                      name={invitation.personName}
-                      email={invitation.email}
-                    />
-                  </td>
-                  <td data-label="Provider">
-                    {providerLabel(invitation.provider, "Not sent yet")}
-                  </td>
-                  <td data-label="Lifecycle">
-                    <DomainStatusBadge
-                      domain="calendarInvitation"
-                      status={invitation.status}
-                    />
-                    <small className="subtle" style={{ display: "block" }}>
-                      {invitation.method === "CANCEL"
-                        ? "Cancellation"
-                        : "Invitation"}
-                      {invitation.sequenceNumber > 0
-                        ? ` · update ${invitation.sequenceNumber}`
-                        : ""}
-                    </small>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </section>
+          {loaderData.invitations.map((invitation) => (
+            <li className="comms-activity-row" key={invitation.id}>
+              <div className="comms-activity-identity">
+                <strong>{invitation.sessionTitle}</strong>
+                <small>
+                  {invitation.personName} · {invitation.email} ·{" "}
+                  {providerLabel(invitation.provider, "Not sent yet")} ·{" "}
+                  Calendar reference {shortReference(invitation.icalUid)}
+                </small>
+              </div>
+              <div className="comms-activity-meta">
+                <DomainStatusBadge
+                  domain="calendarInvitation"
+                  status={invitation.status}
+                />
+                <div>
+                  {invitation.method === "CANCEL"
+                    ? "Cancellation"
+                    : "Invitation"}
+                  {invitation.sequenceNumber > 0
+                    ? ` · update ${invitation.sequenceNumber}`
+                    : ""}
+                </div>
+              </div>
+            </li>
+          ))}
+        </ul>
       ) : (
-        <EmptyState
-          className="comms-empty"
-          icon={CalendarClock}
-          title="No calendar operations yet"
-          description="Published schedule updates will create stable-UID calendar operations here."
-        />
+        <p className="comms-activity-empty">
+          No calendar operations yet. Published schedule updates will create
+          stable-UID calendar operations here.
+        </p>
       )}
     </section>
   );

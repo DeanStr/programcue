@@ -13,8 +13,16 @@ import {
   useSensors,
 } from "@dnd-kit/core";
 import { CSS } from "@dnd-kit/utilities";
-import { GripVertical } from "lucide-react";
-import { type CSSProperties, Fragment, useState } from "react";
+import {
+  AlignLeft,
+  ChevronsUpDown,
+  GripVertical,
+  Link2,
+  ListChecks,
+  Type,
+  Video,
+} from "lucide-react";
+import { type CSSProperties, Fragment, type ReactNode, useState } from "react";
 import { requireValue } from "~/lib/required-value";
 
 import {
@@ -37,6 +45,26 @@ import { formSectionsForAuthoring } from "~/modules/submissions/submission-schem
 type DraggedItem =
   | { kind: "new-field"; fieldType: FormField["type"]; label: string }
   | { kind: "field"; fieldId: string; label: string };
+
+const FIELD_TYPE_ICONS = {
+  short_text: Type,
+  long_text: AlignLeft,
+  select: ChevronsUpDown,
+  multi_select: ListChecks,
+  url: Link2,
+  video: Video,
+} as const;
+
+function FieldTypeIcon({
+  type,
+  size = 15,
+}: {
+  type: FormField["type"];
+  size?: number;
+}) {
+  const Icon = FIELD_TYPE_ICONS[type];
+  return <Icon size={size} aria-hidden="true" />;
+}
 
 function fieldsInSectionOrder(input: SaveFormInput) {
   return formSectionsForAuthoring(input.schema).flatMap(
@@ -90,8 +118,10 @@ function PaletteField({
       aria-label={`Add ${label}`}
       {...listeners}
     >
-      <GripVertical size={14} aria-hidden="true" />
-      {label}
+      <span className="fb-canvas-palette-icon">
+        <FieldTypeIcon type={type} />
+      </span>
+      <span>{label}</span>
     </button>
   );
 }
@@ -193,11 +223,14 @@ function CanvasField({
           aria-current={selected ? "true" : undefined}
           onClick={select}
         >
-          <span>
+          <span className="fb-canvas-field-label">
             {field.label}
-            {field.required ? " *" : ""}
+            {field.required ? "\u00a0*" : ""}
           </span>
-          <small>{formFieldTypeLabel(field.type)}</small>
+          <small className="fb-canvas-field-type">
+            <FieldTypeIcon type={field.type} size={13} />
+            {formFieldTypeLabel(field.type)}
+          </small>
         </button>
       </div>
       {field.help ? <p>{field.help}</p> : null}
@@ -252,11 +285,13 @@ function CanvasPage({
   selectedId,
   onSelect,
   onOpenSettings,
+  insert,
 }: {
   input: SaveFormInput;
   selectedId: string | undefined;
   onSelect(fieldId: string): void;
   onOpenSettings(): void;
+  insert?: ReactNode;
 }) {
   const canvas = useDroppable({
     id: "form-canvas-boundary",
@@ -267,50 +302,64 @@ function CanvasPage({
 
   return (
     <div ref={canvas.setNodeRef} className="fb-canvas-page">
-      <div className="fb-canvas-introduction">
-        <strong>Introduction</strong>
-        <p>
-          {input.schema.introduction || "Add an introduction to your form."}
-        </p>
+      <div className="fb-canvas-sheet">
+        <header className="fb-canvas-masthead">
+          <strong>{input.name || "Untitled form"}</strong>
+          <span>
+            {input.kind === "direct_session"
+              ? "Direct session intake"
+              : "Application for review"}
+            {" · "}
+            {input.schema.fields.length}{" "}
+            {input.schema.fields.length === 1 ? "question" : "questions"}
+          </span>
+        </header>
+        <div className="fb-canvas-introduction">
+          <span className="fb-kicker">Introduction</span>
+          <p>
+            {input.schema.introduction || "Add an introduction to your form."}
+          </p>
+        </div>
+        <ol className="fb-canvas-fields">
+          {sections.map((section) => (
+            <Fragment key={section.id}>
+              <li className="fb-canvas-section">
+                <strong>{section.title}</strong>
+                {section.description ? <p>{section.description}</p> : null}
+              </li>
+              <CanvasInsertionTarget
+                target={{ sectionId: section.id, index: 0 }}
+                empty={section.fields.length === 0}
+              />
+              {section.fields.map((field, index) => (
+                <Fragment key={field.id}>
+                  <CanvasField
+                    field={field}
+                    selected={field.id === selectedId}
+                    select={() => onSelect(field.id)}
+                    openSettings={onOpenSettings}
+                    conditionSourceLabel={
+                      field.condition
+                        ? formConditionSourceLabel(
+                            orderedFields,
+                            field.condition.fieldId,
+                          )
+                        : null
+                    }
+                  />
+                  <CanvasInsertionTarget
+                    target={{ sectionId: section.id, index: index + 1 }}
+                  />
+                </Fragment>
+              ))}
+            </Fragment>
+          ))}
+        </ol>
+        {!input.schema.fields.length ? (
+          <p className="fb-canvas-empty">Drag a field here to begin.</p>
+        ) : null}
+        {insert}
       </div>
-      <ol className="fb-canvas-fields">
-        {sections.map((section) => (
-          <Fragment key={section.id}>
-            <li className="fb-canvas-section">
-              <strong>{section.title}</strong>
-              {section.description ? <p>{section.description}</p> : null}
-            </li>
-            <CanvasInsertionTarget
-              target={{ sectionId: section.id, index: 0 }}
-              empty={section.fields.length === 0}
-            />
-            {section.fields.map((field, index) => (
-              <Fragment key={field.id}>
-                <CanvasField
-                  field={field}
-                  selected={field.id === selectedId}
-                  select={() => onSelect(field.id)}
-                  openSettings={onOpenSettings}
-                  conditionSourceLabel={
-                    field.condition
-                      ? formConditionSourceLabel(
-                          orderedFields,
-                          field.condition.fieldId,
-                        )
-                      : null
-                  }
-                />
-                <CanvasInsertionTarget
-                  target={{ sectionId: section.id, index: index + 1 }}
-                />
-              </Fragment>
-            ))}
-          </Fragment>
-        ))}
-      </ol>
-      {!input.schema.fields.length ? (
-        <p className="fb-canvas-empty">Drag a field here to begin.</p>
-      ) : null}
     </div>
   );
 }
@@ -418,37 +467,39 @@ export function FormBuilderVisualCanvas({
         className="program-cue-form-canvas"
         aria-label="Visual call-for-speakers form editor"
       >
-        <fieldset
-          className="fb-canvas-palette pc-plain-fieldset"
-          aria-label="Field palette"
-        >
-          <strong>Add a field</strong>
-          <span>Drag into the form or select to append.</span>
-          <div className="fb-canvas-palette-fields">
-            {FORM_FIELD_TYPES.map(({ value, label }) => (
-              <PaletteField
-                key={value}
-                type={value}
-                label={label}
-                add={() => addField(value)}
-              />
-            ))}
-          </div>
-          {operationMessage ? (
-            <div
-              className="validation-item error fb-canvas-operation-message"
-              role="alert"
-            >
-              <strong>Canvas action blocked</strong>
-              <span>{operationMessage}</span>
-            </div>
-          ) : null}
-        </fieldset>
         <CanvasPage
           input={input}
           selectedId={selectedId}
           onSelect={onSelect}
           onOpenSettings={onOpenSettings}
+          insert={
+            <fieldset
+              className="fb-canvas-palette pc-plain-fieldset"
+              aria-label="Field palette"
+            >
+              <strong>Add a field</strong>
+              <span>Drag onto the page, or select to append.</span>
+              <div className="fb-canvas-palette-fields">
+                {FORM_FIELD_TYPES.map(({ value, label }) => (
+                  <PaletteField
+                    key={value}
+                    type={value}
+                    label={label}
+                    add={() => addField(value)}
+                  />
+                ))}
+              </div>
+              {operationMessage ? (
+                <div
+                  className="validation-item error fb-canvas-operation-message"
+                  role="alert"
+                >
+                  <strong>Canvas action blocked</strong>
+                  <span>{operationMessage}</span>
+                </div>
+              ) : null}
+            </fieldset>
+          }
         />
       </section>
       <DragOverlay dropAnimation={null}>

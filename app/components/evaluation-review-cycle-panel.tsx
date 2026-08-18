@@ -1,6 +1,6 @@
 import { Form } from "react-router";
-
 import { useEvaluationAdminModel } from "~/components/evaluation-admin-model";
+import { bindEvalDateTime } from "~/components/evaluation-progression-panel";
 import { RubricFields } from "~/components/evaluation-rubric-fields";
 import { useConfirm } from "~/components/ui/confirm-dialog";
 
@@ -23,7 +23,7 @@ export function EvaluationReviewCyclePanel() {
   return (
     <>
       {dialog}
-      <details className="card pad mb pc-disclosure">
+      <details className="card pad mb pc-disclosure pc-eval-cycle">
         <summary>Start a new review cycle</summary>
         <div className="stack mt">
           <p className="subtle">
@@ -93,17 +93,21 @@ export function EvaluationReviewCyclePanel() {
               <label className="label">
                 Opens ({loaderData.eventTimezone})
                 <input
-                  className="input"
+                  className="input pc-eval-datetime"
                   type="datetime-local"
                   name="roundOpensAt"
+                  data-empty=""
+                  onInput={bindEvalDateTime}
                 />
               </label>
               <label className="label">
                 Closes ({loaderData.eventTimezone})
                 <input
-                  className="input"
+                  className="input pc-eval-datetime"
                   type="datetime-local"
                   name="roundClosesAt"
+                  data-empty=""
+                  onInput={bindEvalDateTime}
                 />
               </label>
             </div>

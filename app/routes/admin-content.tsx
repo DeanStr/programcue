@@ -1,4 +1,4 @@
-import { ArchiveRestore, Download, Files, ShieldCheck } from "lucide-react";
+import { ArchiveRestore, Download, ShieldCheck } from "lucide-react";
 import { useEffect } from "react";
 import {
   data,
@@ -126,6 +126,34 @@ function formatBytes(bytes: number) {
   if (bytes < 1024) return `${bytes} B`;
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+function contentPulse(input: {
+  sessionCount: number;
+  statusCounts: Record<string, number>;
+  version: { versionNumber: number; status: string } | null;
+}) {
+  const parts = [
+    `${input.sessionCount} ${input.sessionCount === 1 ? "session" : "sessions"}`,
+  ];
+  for (const status of [
+    "approved",
+    "in_review",
+    "changes_requested",
+    "draft",
+  ] as const) {
+    const count = input.statusCounts[status] ?? 0;
+    if (count === 0) continue;
+    parts.push(
+      `${count} ${statusPresentation("content", status).label.toLowerCase()}`,
+    );
+  }
+  if (input.version) {
+    parts.push(
+      `Version ${input.version.versionNumber} ${statusPresentation("version", input.version.status).label.toLowerCase()}`,
+    );
+  }
+  return parts.join(" · ");
 }
 
 type ZipOperationStatus = {
@@ -356,22 +384,21 @@ export default function AdminContent({ loaderData }: Route.ComponentProps) {
     ]),
   );
   return (
-    <>
+    <div className="content-library">
       <div className="page-head pc-page-header">
         <div>
-          <span className="pc-page-eyebrow">Review · approve · deliver</span>
           <h1>Session content &amp; files</h1>
           <p>
             Review session copy, restore attributed revisions and collect
-            released speaker deliverables without duplicating private storage.
+            released speaker files.
           </p>
         </div>
         <div className="page-actions">
-          <Link className="btn" to="/admin/schedule">
-            Schedule editor
-          </Link>
-          <Link className="btn" to="/admin/tasks">
+          <Link className="content-text-action" to="/admin/tasks">
             Deliverable tasks
+          </Link>
+          <Link className="btn primary" to="/admin/schedule">
+            Open schedule
           </Link>
         </div>
       </div>
@@ -383,257 +410,246 @@ export default function AdminContent({ loaderData }: Route.ComponentProps) {
         </div>
       ) : null}
 
-      <section className="card pad mb" aria-labelledby="content-review-title">
-        <div className="card-title">
-          <div>
-            <span className="pc-section-kicker">Current schedule version</span>
-            <h2 id="content-review-title">Session content review</h2>
-          </div>
-          {loaderData.version ? (
-            <span className="pill">
-              Version {loaderData.version.versionNumber} ·{" "}
-              {statusPresentation("version", loaderData.version.status).label}
-            </span>
-          ) : null}
-        </div>
-        <div className="summary-grid mb">
-          <article className="metric-card">
-            <strong>{statusCounts.approved}</strong>
-            <span>Approved</span>
-          </article>
-          <article className="metric-card">
-            <strong>{statusCounts.in_review}</strong>
-            <span>In review</span>
-          </article>
-          <article className="metric-card">
-            <strong>{statusCounts.changes_requested}</strong>
-            <span>Changes requested</span>
-          </article>
-          <article className="metric-card">
-            <strong>{statusCounts.draft}</strong>
-            <span>Draft</span>
-          </article>
+      <p className="content-pulse">
+        {contentPulse({
+          sessionCount: loaderData.sessions.length,
+          statusCounts,
+          version: loaderData.version,
+        })}
+      </p>
+
+      <section
+        className="content-review"
+        aria-labelledby="content-review-title"
+      >
+        <div className="content-section-head">
+          <h2 id="content-review-title">Session content review</h2>
         </div>
         {loaderData.sessions.length ? (
-          <div className="stack">
-            {loaderData.sessions.map((session) => (
-              <article className="list-row" key={session.sessionId}>
-                <div>
-                  <strong>{session.title}</strong>
-                  <small className="subtle">
-                    {session.speakerNames.join(", ") || "No linked speaker"} ·{" "}
-                    {session.scheduled ? "Scheduled" : "Unscheduled"} · revision{" "}
-                    {session.contentRevision}
-                  </small>
-                </div>
-                <span className="row-actions right">
+          <ul className="content-review-list">
+            {loaderData.sessions.map((session) => {
+              const needsReview = session.contentStatus !== "approved";
+              const sessionHref = `/admin/content/sessions/${encodeURIComponent(session.sessionId)}`;
+              return (
+                <li
+                  className={
+                    needsReview
+                      ? "content-review-row"
+                      : "content-review-row is-settled"
+                  }
+                  key={session.sessionId}
+                >
+                  <div className="content-review-identity">
+                    <Link className="content-review-title" to={sessionHref}>
+                      {session.title}
+                    </Link>
+                    <span className="content-review-speaker">
+                      {session.speakerNames.filter(Boolean).join(", ") ||
+                        "No linked speaker"}
+                    </span>
+                  </div>
                   <DomainStatusBadge
                     domain="content"
                     status={session.contentStatus}
                   />
-                  <Link
-                    className="btn small"
-                    to={`/admin/content/sessions/${encodeURIComponent(session.sessionId)}`}
-                  >
-                    Review history
-                  </Link>
-                </span>
-              </article>
-            ))}
-          </div>
+                  {needsReview ? (
+                    <Link className="content-text-action" to={sessionHref}>
+                      Review
+                    </Link>
+                  ) : null}
+                </li>
+              );
+            })}
+          </ul>
         ) : (
           <div className="pc-empty-state">
             <ShieldCheck aria-hidden className="pc-state-icon" />
-            <h3>No session content yet</h3>
-            <p className="subtle">
+            <h3 className="pc-empty-state-title">No session content yet</h3>
+            <p>
               Create sessions and a schedule version before reviewing content.
             </p>
           </div>
         )}
       </section>
 
-      <section className="card pad" aria-labelledby="content-files-title">
-        <div className="card-title">
-          <div>
-            <span className="pc-section-kicker">Private file storage</span>
-            <h2 id="content-files-title">Central files library</h2>
-          </div>
-          <span className="pill">
-            {loaderData.filesPagination.total} assets
+      <section className="content-files" aria-labelledby="content-files-title">
+        <div className="content-section-head">
+          <h2 id="content-files-title">Central files library</h2>
+          <span className="content-files-count">
+            {loaderData.filesPagination.total}{" "}
+            {loaderData.filesPagination.total === 1 ? "asset" : "assets"}
           </span>
         </div>
-        <p className="help mb">
-          Quarantined and historical metadata remains visible. Library and ZIP
-          export actions use only current released, signature-valid and clean
-          versions; retained clean and released versions remain individually
-          downloadable from version history.
-        </p>
         {loaderData.files.length ? (
-          <Form method="post" className="stack">
-            <input type="hidden" name="intent" value="preview-zip" />
-            <section
-              className="table-wrap"
-              aria-label="Private file inventory"
-              // biome-ignore lint/a11y/noNoninteractiveTabindex: Scrollable data regions need keyboard focus so arrow keys can expose overflow content.
-              tabIndex={0}
-            >
-              <table>
-                <thead>
-                  <tr>
-                    <th scope="col">Select</th>
-                    <th scope="col">File</th>
-                    <th scope="col">Session / speaker</th>
-                    <th scope="col">Versions</th>
-                    <th scope="col">State</th>
-                    <th scope="col">Download</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {loaderData.files.map((asset) => {
-                    const current = asset.versions.find(
-                      (version) => version.current,
-                    );
-                    const eligible =
-                      asset.status === "active" &&
-                      current?.uploadStatus === "uploaded" &&
-                      current.signatureStatus === "valid" &&
-                      current.scanStatus === "clean" &&
-                      current.releasedAt !== null;
-                    return (
-                      <tr key={asset.id}>
-                        <td>
-                          <input
-                            type="checkbox"
-                            name="assetId"
-                            value={asset.id}
-                            disabled={!eligible}
-                            aria-label={`Select ${current?.filename ?? asset.assetKind}`}
-                          />
-                        </td>
-                        <td>
-                          <strong>
-                            {current?.filename ?? asset.assetKind}
-                          </strong>
-                          <small className="subtle">
-                            {asset.assetKind.replaceAll("_", " ")}
-                            {current
-                              ? ` · ${formatBytes(current.sizeBytes)}`
-                              : ""}
-                          </small>
-                          {current ? (
-                            <small className="subtle">
-                              {current.uploadedAt === null ? (
-                                "Upload incomplete"
-                              ) : (
-                                <>
-                                  Uploaded{" "}
-                                  <EventDateTime
-                                    epochSeconds={current.uploadedAt}
-                                    timeZone={loaderData.eventTimezone}
-                                  />
-                                </>
-                              )}
-                            </small>
-                          ) : null}
-                        </td>
-                        <td>
-                          {asset.sessionName}
-                          <small className="subtle">{asset.speakerName}</small>
-                          {asset.targetType === "task" ? (
-                            <Link
-                              className="btn small"
-                              to={`/admin/tasks?task=${encodeURIComponent(asset.targetId)}`}
-                            >
-                              Open task thread
-                            </Link>
-                          ) : null}
-                        </td>
-                        <td>
-                          <FileVersionHistory
-                            assetId={asset.id}
-                            versionCount={asset.versionCount}
-                            timeZone={loaderData.eventTimezone}
-                          />
-                        </td>
-                        <td>
-                          <DomainStatusBadge
-                            domain="file"
-                            status={current?.scanStatus ?? asset.status}
-                          />
-                        </td>
-                        <td>
-                          {eligible ? (
-                            <Link
-                              className="btn small"
-                              to={`/admin/content/files/${encodeURIComponent(asset.id)}`}
-                              reloadDocument
-                            >
-                              <Download aria-hidden size={14} /> Current
-                            </Link>
-                          ) : (
-                            <span className="help">Unavailable</span>
-                          )}
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </section>
-            <div className="page-actions">
-              <label className="label">
-                ZIP grouping
-                <select
-                  className="select"
-                  name="groupBy"
-                  defaultValue="session"
-                >
-                  <option value="session">Group by session</option>
-                  <option value="speaker">Group by speaker</option>
-                </select>
-              </label>
-              <button
-                type="submit"
-                className="btn primary"
-                disabled={navigation.state !== "idle"}
-              >
-                <ArchiveRestore aria-hidden size={15} /> Preview ZIP export
-              </button>
-            </div>
-            {loaderData.filesPagination.hasPrevious ||
-            loaderData.filesPagination.hasNext ? (
-              <nav className="page-actions" aria-label="Files pages">
-                {loaderData.filesPagination.hasPrevious ? (
-                  <Link
-                    className="btn"
-                    to={`?filesPage=${loaderData.filesPagination.page - 1}#content-files-title`}
-                  >
-                    Previous files
-                  </Link>
-                ) : null}
-                <span className="help">
-                  Page {loaderData.filesPagination.page} · up to{" "}
-                  {loaderData.filesPagination.pageSize} assets per page
-                </span>
-                {loaderData.filesPagination.hasNext ? (
-                  <Link
-                    className="btn"
-                    to={`?filesPage=${loaderData.filesPagination.page + 1}#content-files-title`}
-                  >
-                    Next files
-                  </Link>
-                ) : null}
-              </nav>
-            ) : null}
-          </Form>
-        ) : (
-          <div className="pc-empty-state">
-            <Files aria-hidden className="pc-state-icon" />
-            <h3>No uploaded files</h3>
-            <p className="subtle">
-              Speaker uploads will appear here with every retained version.
+          <>
+            <p className="content-files-note">
+              Quarantined and historical metadata remains visible. Library and
+              ZIP export actions use only current released, signature-valid and
+              clean versions; retained clean and released versions remain
+              individually downloadable from version history.
             </p>
-          </div>
+            <Form method="post" className="stack">
+              <input type="hidden" name="intent" value="preview-zip" />
+              <section
+                className="table-wrap"
+                aria-label="Private file inventory"
+                // biome-ignore lint/a11y/noNoninteractiveTabindex: Scrollable data regions need keyboard focus so arrow keys can expose overflow content.
+                tabIndex={0}
+              >
+                <table>
+                  <thead>
+                    <tr>
+                      <th scope="col">Select</th>
+                      <th scope="col">File</th>
+                      <th scope="col">Session / speaker</th>
+                      <th scope="col">Versions</th>
+                      <th scope="col">State</th>
+                      <th scope="col">Download</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {loaderData.files.map((asset) => {
+                      const current = asset.versions.find(
+                        (version) => version.current,
+                      );
+                      const eligible =
+                        asset.status === "active" &&
+                        current?.uploadStatus === "uploaded" &&
+                        current.signatureStatus === "valid" &&
+                        current.scanStatus === "clean" &&
+                        current.releasedAt !== null;
+                      return (
+                        <tr key={asset.id}>
+                          <td>
+                            <input
+                              type="checkbox"
+                              name="assetId"
+                              value={asset.id}
+                              disabled={!eligible}
+                              aria-label={`Select ${current?.filename ?? asset.assetKind}`}
+                            />
+                          </td>
+                          <td>
+                            <strong>
+                              {current?.filename ?? asset.assetKind}
+                            </strong>
+                            <small className="subtle">
+                              {asset.assetKind.replaceAll("_", " ")}
+                              {current
+                                ? ` · ${formatBytes(current.sizeBytes)}`
+                                : ""}
+                            </small>
+                            {current ? (
+                              <small className="subtle">
+                                {current.uploadedAt === null ? (
+                                  "Upload incomplete"
+                                ) : (
+                                  <>
+                                    Uploaded{" "}
+                                    <EventDateTime
+                                      epochSeconds={current.uploadedAt}
+                                      timeZone={loaderData.eventTimezone}
+                                    />
+                                  </>
+                                )}
+                              </small>
+                            ) : null}
+                          </td>
+                          <td>
+                            {asset.sessionName}
+                            <small className="subtle">
+                              {asset.speakerName}
+                            </small>
+                            {asset.targetType === "task" ? (
+                              <Link
+                                className="btn small"
+                                to={`/admin/tasks?task=${encodeURIComponent(asset.targetId)}`}
+                              >
+                                Open task thread
+                              </Link>
+                            ) : null}
+                          </td>
+                          <td>
+                            <FileVersionHistory
+                              assetId={asset.id}
+                              versionCount={asset.versionCount}
+                              timeZone={loaderData.eventTimezone}
+                            />
+                          </td>
+                          <td>
+                            <DomainStatusBadge
+                              domain="file"
+                              status={current?.scanStatus ?? asset.status}
+                            />
+                          </td>
+                          <td>
+                            {eligible ? (
+                              <Link
+                                className="btn small"
+                                to={`/admin/content/files/${encodeURIComponent(asset.id)}`}
+                                reloadDocument
+                              >
+                                <Download aria-hidden size={14} /> Current
+                              </Link>
+                            ) : (
+                              <span className="help">Unavailable</span>
+                            )}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </section>
+              <div className="page-actions">
+                <label className="label">
+                  ZIP grouping
+                  <select
+                    className="select"
+                    name="groupBy"
+                    defaultValue="session"
+                  >
+                    <option value="session">Group by session</option>
+                    <option value="speaker">Group by speaker</option>
+                  </select>
+                </label>
+                <button
+                  type="submit"
+                  className="btn primary"
+                  disabled={navigation.state !== "idle"}
+                >
+                  <ArchiveRestore aria-hidden size={15} /> Preview ZIP export
+                </button>
+              </div>
+              {loaderData.filesPagination.hasPrevious ||
+              loaderData.filesPagination.hasNext ? (
+                <nav className="page-actions" aria-label="Files pages">
+                  {loaderData.filesPagination.hasPrevious ? (
+                    <Link
+                      className="btn"
+                      to={`?filesPage=${loaderData.filesPagination.page - 1}#content-files-title`}
+                    >
+                      Previous files
+                    </Link>
+                  ) : null}
+                  <span className="help">
+                    Page {loaderData.filesPagination.page} · up to{" "}
+                    {loaderData.filesPagination.pageSize} assets per page
+                  </span>
+                  {loaderData.filesPagination.hasNext ? (
+                    <Link
+                      className="btn"
+                      to={`?filesPage=${loaderData.filesPagination.page + 1}#content-files-title`}
+                    >
+                      Next files
+                    </Link>
+                  ) : null}
+                </nav>
+              ) : null}
+            </Form>
+          </>
+        ) : (
+          <p className="content-files-empty">No uploaded files.</p>
         )}
       </section>
 
@@ -705,6 +721,6 @@ export default function AdminContent({ loaderData }: Route.ComponentProps) {
           <ZipExportProgress operationId={zipOperationId} />
         </section>
       ) : null}
-    </>
+    </div>
   );
 }

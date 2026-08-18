@@ -34,7 +34,7 @@ export function EvaluationSubmissionQueue() {
     return selectedResultsRound.name;
   };
   return (
-    <section className="card pad">
+    <section className="card pad pc-eval-queue">
       {dialog}
       <div className="card-title">
         <div>
@@ -75,7 +75,7 @@ export function EvaluationSubmissionQueue() {
           // biome-ignore lint/a11y/noNoninteractiveTabindex: Scrollable data regions need keyboard focus so arrow keys can expose overflow content.
           tabIndex={0}
         >
-          <table className="data-table pc-responsive-table">
+          <table className="data-table pc-responsive-table pc-eval-table">
             <thead>
               <tr>
                 <th scope="col">Submission</th>
@@ -599,7 +599,7 @@ export function EvaluationSubmissionQueue() {
                             value={submission.id}
                           />
                           <select
-                            className="select"
+                            className="select pc-eval-control"
                             name="assignmentTarget"
                             aria-label={`Evaluator or team for ${submission.title}`}
                           >
@@ -621,7 +621,7 @@ export function EvaluationSubmissionQueue() {
                               ) : null;
                             })}
                           </select>
-                          <button type="submit" className="btn small">
+                          <button type="submit" className="pc-eval-text-action">
                             Assign
                           </button>
                         </Form>
@@ -642,7 +642,7 @@ export function EvaluationSubmissionQueue() {
                         </span>
                       ) : (
                         <button
-                          className="btn small primary"
+                          className="pc-eval-text-action is-primary"
                           type="button"
                           onClick={() => {
                             setNoReviewOverrideConfirmed(false);

@@ -485,16 +485,9 @@ export default function SignIn({ loaderData }: Route.ComponentProps) {
     );
   }
   return (
-    <main
-      className="design-board"
-      id="main"
-      style={{ minHeight: "100vh", display: "grid", placeItems: "center" }}
-    >
-      <section
-        className="card pad"
-        style={{ width: "min(460px, calc(100vw - 32px))" }}
-      >
-        <div className="brand" style={{ color: "var(--ink)", padding: 0 }}>
+    <main className="auth-shell" id="main">
+      <section className="auth-card">
+        <div className="auth-brand">
           <BrandMark />
           <span>Program Cue</span>
         </div>
@@ -522,8 +515,8 @@ export default function SignIn({ loaderData }: Route.ComponentProps) {
           </p>
         ) : null}
         {hasSocialProvider ? (
-          <div style={{ display: "grid", gap: 10 }}>
-            <Form method="post" style={{ display: "grid", gap: 10 }}>
+          <div className="auth-social">
+            <Form method="post" className="auth-social-form">
               <input type="hidden" name="_intent" value="social_sign_in" />
               <input
                 type="hidden"
@@ -532,12 +525,11 @@ export default function SignIn({ loaderData }: Route.ComponentProps) {
               />
               {loaderData.socialProviders.google ? (
                 <button
-                  className="btn"
+                  className="btn auth-wide"
                   name="provider"
                   value="google"
                   type="submit"
                   disabled={submitting}
-                  style={{ width: "100%" }}
                 >
                   {submitting && submittingProvider === "google"
                     ? "Opening Google…"
@@ -546,12 +538,11 @@ export default function SignIn({ loaderData }: Route.ComponentProps) {
               ) : null}
               {loaderData.socialProviders.microsoft ? (
                 <button
-                  className="btn"
+                  className="btn auth-wide"
                   name="provider"
                   value="microsoft"
                   type="submit"
                   disabled={submitting}
-                  style={{ width: "100%" }}
                 >
                   {submitting && submittingProvider === "microsoft"
                     ? "Opening Microsoft…"
@@ -564,18 +555,11 @@ export default function SignIn({ loaderData }: Route.ComponentProps) {
                 appearance="interaction-only"
               />
             </Form>
-            <p
-              className="subtle"
-              style={{ margin: "2px 0 0", textAlign: "center" }}
-            >
+            <p className="subtle auth-note">
               Signing in creates an identity only. Private workspace access is
               granted separately.
             </p>
-            <p
-              className="subtle"
-              aria-hidden="true"
-              style={{ margin: 0, textAlign: "center" }}
-            >
+            <p className="subtle auth-or" aria-hidden="true">
               or
             </p>
           </div>
@@ -593,12 +577,11 @@ export default function SignIn({ loaderData }: Route.ComponentProps) {
           <label className="label">
             Email address
             <input
-              className="field"
+              className="field auth-wide"
               name="email"
               type="email"
               autoComplete="email"
               required
-              style={{ width: "100%" }}
             />
           </label>
           <TurnstileWidget
@@ -607,10 +590,9 @@ export default function SignIn({ loaderData }: Route.ComponentProps) {
             appearance="interaction-only"
           />
           <button
-            className="btn primary mt"
+            className="btn primary mt auth-wide"
             type="submit"
             disabled={submitting}
-            style={{ width: "100%" }}
           >
             {submitting && submittingIntent === "email_magic_link"
               ? "Sending…"

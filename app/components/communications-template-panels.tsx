@@ -52,15 +52,18 @@ export function TemplateVersionList({
               className={`template-item${selected?.id === template.id ? " active" : ""}`}
               aria-current={selected?.id === template.id ? "true" : undefined}
             >
-              <strong>{template.name}</strong>
+              <strong title={template.name}>{template.name}</strong>
               <small>
                 {categoryLabel(template.category)} ·{" "}
                 <span className="pc-num">v{template.versionNumber}</span>
               </small>
               <span
-                className={`status ${template.versionStatus === "published" ? "success" : template.versionStatus === "draft" ? "warning" : "info"}`}
+                className="template-item-state"
+                data-state={template.versionStatus}
               >
-                {template.versionStatus}
+                {template.versionStatus === "published"
+                  ? "Live"
+                  : template.versionStatus}
               </span>
             </Link>
           ))
@@ -155,59 +158,27 @@ export function TemplateEditor({
       <Form
         key={selected?.id ?? "new-template"}
         method="post"
-        className="stack"
+        className="stack comms-canvas"
       >
         {selected ? (
           <input type="hidden" name="templateId" value={selected.templateId} />
         ) : null}
-        <div className="form-row">
-          <label className="label">
-            Template name
-            <input
-              className="field"
-              name="name"
-              value={draft.name}
-              onChange={(event) =>
-                onChange({ ...draft, name: event.target.value })
-              }
-              required
-            />
-          </label>
-          <label className="label">
-            Type
-            <select
-              className="select"
-              name="category"
-              value={draft.category}
-              onChange={(event) =>
-                onChange({ ...draft, category: event.target.value })
-              }
-            >
-              <option value="submission_confirmation">
-                Submission confirmation
-              </option>
-              <option value="decision">Decision</option>
-              <option value="task_reminder">Task reminder</option>
-              <option value="schedule">Schedule update</option>
-              <option value="calendar">Calendar</option>
-              <option value="ad_hoc">Ad hoc</option>
-            </select>
-          </label>
-        </div>
-        <label className="label">
-          Subject
-          <input
-            className="field"
+        <label className="comms-canvas-field">
+          <span className="sr-only">Subject</span>
+          <textarea
+            className="textarea comms-subject"
             name="subject"
+            rows={1}
             value={draft.subject}
             onChange={(event) =>
               onChange({ ...draft, subject: event.target.value })
             }
+            placeholder="Subject"
             required
           />
         </label>
-        <label className="label">
-          Message
+        <label className="comms-canvas-field comms-canvas-body">
+          <span className="sr-only">Message</span>
           <textarea
             ref={bodyRef}
             className="textarea comms-body"
@@ -216,6 +187,7 @@ export function TemplateEditor({
             onChange={(event) =>
               onChange({ ...draft, body: event.target.value })
             }
+            placeholder="Write the message"
             required
           />
         </label>
@@ -234,44 +206,84 @@ export function TemplateEditor({
             ))}
           </div>
         </details>
-        <label className="label">
-          Physical address
-          <input
-            className="field"
-            name="physicalAddress"
-            value={draft.physicalAddress}
-            onChange={(event) =>
-              onChange({ ...draft, physicalAddress: event.target.value })
-            }
-            required
-          />
-          <span className="help">Required in the rendered footer.</span>
-        </label>
-        <div className="form-row">
-          <label className="label">
-            Optional button text
-            <input
-              className="field"
-              name="buttonText"
-              value={draft.buttonText}
-              onChange={(event) =>
-                onChange({ ...draft, buttonText: event.target.value })
-              }
-            />
-          </label>
-          <label className="label">
-            Optional button URL
-            <input
-              className="field"
-              name="buttonUrl"
-              type="url"
-              value={draft.buttonUrl}
-              onChange={(event) =>
-                onChange({ ...draft, buttonUrl: event.target.value })
-              }
-            />
-          </label>
-        </div>
+        <details className="pc-disclosure comms-merge-fields">
+          <summary>Template name, type and footer</summary>
+          <div className="stack mt">
+            <div className="form-row">
+              <label className="label">
+                Template name
+                <input
+                  className="field"
+                  name="name"
+                  value={draft.name}
+                  onChange={(event) =>
+                    onChange({ ...draft, name: event.target.value })
+                  }
+                  required
+                />
+              </label>
+              <label className="label">
+                Type
+                <select
+                  className="select"
+                  name="category"
+                  value={draft.category}
+                  onChange={(event) =>
+                    onChange({ ...draft, category: event.target.value })
+                  }
+                >
+                  <option value="submission_confirmation">
+                    Submission confirmation
+                  </option>
+                  <option value="decision">Decision</option>
+                  <option value="task_reminder">Task reminder</option>
+                  <option value="schedule">Schedule update</option>
+                  <option value="calendar">Calendar</option>
+                  <option value="ad_hoc">Ad hoc</option>
+                </select>
+              </label>
+            </div>
+            <label className="label">
+              Physical address
+              <textarea
+                className="textarea"
+                name="physicalAddress"
+                rows={2}
+                value={draft.physicalAddress}
+                onChange={(event) =>
+                  onChange({ ...draft, physicalAddress: event.target.value })
+                }
+                required
+              />
+              <span className="help">Required in the rendered footer.</span>
+            </label>
+            <div className="form-row">
+              <label className="label">
+                Optional button text
+                <input
+                  className="field"
+                  name="buttonText"
+                  value={draft.buttonText}
+                  onChange={(event) =>
+                    onChange({ ...draft, buttonText: event.target.value })
+                  }
+                />
+              </label>
+              <label className="label">
+                Optional button URL
+                <input
+                  className="field"
+                  name="buttonUrl"
+                  type="url"
+                  value={draft.buttonUrl}
+                  onChange={(event) =>
+                    onChange({ ...draft, buttonUrl: event.target.value })
+                  }
+                />
+              </label>
+            </div>
+          </div>
+        </details>
         <div className="row-actions">
           <DraftRecoveryStatus state={recoveryState} />
           <button
@@ -327,17 +339,8 @@ export function TemplatePreview({ draft }: { draft: TemplateDraftFields }) {
     [draft],
   );
   return (
-    <aside
-      className="card pad comms-message-preview"
-      aria-label="Message preview"
-    >
-      <div className="card-title">
-        <h2>Message preview</h2>
-      </div>
-      <p className="help">
-        Merge fields hold the representative values a real test send uses. The
-        Program Cue frame and footer are added when the email is sent.
-      </p>
+    <aside className="comms-message-preview" aria-label="Message preview">
+      <h2 className="sr-only">Message preview</h2>
       {preview.unresolvable.length ? (
         <div className="validation-item warn" role="status">
           <strong>△</strong>
@@ -350,8 +353,19 @@ export function TemplatePreview({ draft }: { draft: TemplateDraftFields }) {
           </span>
         </div>
       ) : null}
-      <div className="comms-message-frame">
-        <p className="comms-message-subject">{preview.subject}</p>
+      <header className="comms-message-chrome">
+        <div className="comms-message-chrome-row">
+          <p className="comms-message-chrome-label">To</p>
+          <p className="comms-message-paragraph">
+            {String(representativeMergeValues["recipient.name"])}
+          </p>
+        </div>
+        <div className="comms-message-chrome-row">
+          <p className="comms-message-chrome-label">Subject</p>
+          <p className="comms-message-subject">{preview.subject}</p>
+        </div>
+      </header>
+      <div className="comms-message-body">
         {preview.paragraphs.map((paragraph, index) => (
           // biome-ignore lint/suspicious/noArrayIndexKey: Preview paragraphs are stateless derived text and duplicate paragraph content is valid.
           <p key={index} className="comms-message-paragraph">
@@ -364,8 +378,13 @@ export function TemplatePreview({ draft }: { draft: TemplateDraftFields }) {
             <small>{draft.buttonUrl}</small>
           </p>
         ) : null}
-        <p className="comms-message-footer">{draft.physicalAddress}</p>
       </div>
+      <p className="comms-message-footer">
+        {draft.physicalAddress}
+        <small>
+          Representative merge values. The Program Cue frame is added on send.
+        </small>
+      </p>
     </aside>
   );
 }

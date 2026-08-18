@@ -40,7 +40,7 @@ export function StatusNotice({
       role={tone === "danger" ? "alert" : "status"}
       aria-live={tone === "danger" ? "assertive" : "polite"}
     >
-      <Icon aria-hidden size={19} />
+      <Icon aria-hidden size={16} />
       <div className="pc-status-notice-copy">
         <strong>{title}</strong>
         {children ? <div>{children}</div> : null}
