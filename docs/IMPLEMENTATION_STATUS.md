@@ -739,7 +739,9 @@ Schedule publication now presents the material delta against the current live
 version—added, removed, moved/resized and visibility-changed sessions—alongside
 all currently known conflict, content-approval, speaker-confirmation and public
 event-website/recording blockers. Description diffs compare the stored text
-before applying the empty placeholder. Confirmation remains disabled while any blocker is
+before applying the empty placeholder, and track diffs use the public track
+label attendees will see. Private or hidden sessions are omitted from the
+public-content list. Confirmation remains disabled while any blocker is
 visible, and the authoritative mutation rechecks the exact schedule revision
 and every invariant rather than trusting the preview. A leftover failed
 publish result is not shown when the dialog reopens until this instance
@@ -1071,7 +1073,8 @@ revoked and deleted during file erasure.
   shared-itinerary token, while duplicate, mixed, embedded or
   unavailable selections still fail explicitly. Session details reuse the
   speaker copy/share actions and offer Open session page only when the
-  current URL is not already that session. Later website publication
+  current URL is not already that session, keeping the incoming query
+  including a shared-itinerary token. Later website publication
   summaries do not repeat theme, order, featured-record or enablement
   changes in the generic editorial line. Featured-record pickers cap the available list
   at 20. The homepage's glance panel is a dark event surface in the masthead's

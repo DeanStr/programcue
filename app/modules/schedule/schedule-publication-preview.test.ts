@@ -310,6 +310,144 @@ describe("schedule publication preview", () => {
     ]);
   });
 
+  it("treats a private track as absent from the public programme", async () => {
+    const service = new ScheduleService(scheduleTestEnv);
+    const publishedId = await service.createDraft(viewer);
+    let workspace = await service.getWorkspace(viewer);
+    const startsAt = eventLocalTimeEpoch(
+      workspace.event.startsAt,
+      workspace.event.timezone,
+      9,
+    );
+    await service.place(viewer, {
+      scheduleVersionId: publishedId,
+      scheduleRevision: workspace.version!.revision,
+      sessionId: "schedule-test-one",
+      roomId: "main",
+      startsAt,
+      endsAt: startsAt + 3_600,
+    });
+    await approveScheduledTestContent(publishedId);
+    workspace = await service.getWorkspace(viewer);
+    await service.publish(viewer, {
+      scheduleVersionId: publishedId,
+      scheduleRevision: workspace.version!.revision,
+    });
+
+    const draftId = await service.createDraft(viewer);
+    workspace = await service.getWorkspace(viewer);
+    await env.DB.prepare(
+      `INSERT OR IGNORE INTO tracks (id, event_id, name, slug, position, is_public)
+       VALUES ('schedule-test-private-track', ?, 'Internal Track', 'internal-track', 30, 0)`,
+    )
+      .bind(viewer.eventId)
+      .run();
+    const session = workspace.sessions.find(
+      (candidate) => candidate.id === "schedule-test-one",
+    );
+    expect(session).toBeDefined();
+    await service.updateSessionContent(
+      viewer,
+      {
+        scheduleVersionId: draftId,
+        scheduleRevision: workspace.version!.revision,
+        sessionId: session!.id,
+        sessionRevision: session!.revision,
+        idempotencyKey: crypto.randomUUID(),
+        title: session!.title,
+        description: session!.description,
+        format: session!.format,
+        durationMinutes: session!.durationMinutes,
+        trackId: "schedule-test-private-track",
+        visibility: session!.visibility,
+        requiredResources: session!.requiredResources,
+      },
+      "admin_ui",
+    );
+    workspace = await service.getWorkspace(viewer);
+
+    const preview = await buildSchedulePublicationPreview(
+      scheduleTestEnv,
+      viewer,
+      workspace,
+    );
+    expect(
+      preview?.changes.content[0]?.fields.find(
+        (field) => field.field === "track",
+      ),
+    ).toEqual({
+      field: "track",
+      before: "Operations",
+      after: "No track",
+    });
+  });
+
+  it("does not list private session edits as public content", async () => {
+    const service = new ScheduleService(scheduleTestEnv);
+    const publishedId = await service.createDraft(viewer);
+    let workspace = await service.getWorkspace(viewer);
+    const startsAt = eventLocalTimeEpoch(
+      workspace.event.startsAt,
+      workspace.event.timezone,
+      9,
+    );
+    await service.place(viewer, {
+      scheduleVersionId: publishedId,
+      scheduleRevision: workspace.version!.revision,
+      sessionId: "schedule-test-one",
+      roomId: "main",
+      startsAt,
+      endsAt: startsAt + 3_600,
+    });
+    await approveScheduledTestContent(publishedId);
+    workspace = await service.getWorkspace(viewer);
+    await service.publish(viewer, {
+      scheduleVersionId: publishedId,
+      scheduleRevision: workspace.version!.revision,
+    });
+
+    const draftId = await service.createDraft(viewer);
+    workspace = await service.getWorkspace(viewer);
+    const session = workspace.sessions.find(
+      (candidate) => candidate.id === "schedule-test-one",
+    );
+    expect(session).toBeDefined();
+    await service.updateSessionContent(
+      viewer,
+      {
+        scheduleVersionId: draftId,
+        scheduleRevision: workspace.version!.revision,
+        sessionId: session!.id,
+        sessionRevision: session!.revision,
+        idempotencyKey: crypto.randomUUID(),
+        title: "Internal only title",
+        description: session!.description,
+        format: session!.format,
+        durationMinutes: session!.durationMinutes,
+        trackId: session!.trackId,
+        visibility: "private",
+        requiredResources: session!.requiredResources,
+      },
+      "admin_ui",
+    );
+    workspace = await service.getWorkspace(viewer);
+
+    const preview = await buildSchedulePublicationPreview(
+      scheduleTestEnv,
+      viewer,
+      workspace,
+    );
+    expect(preview?.changes.content).toEqual([]);
+    expect(preview?.changes.visibility).toEqual([
+      {
+        sessionId: "schedule-test-one",
+        title: "Internal only title",
+        from: "public",
+        to: "private",
+      },
+    ]);
+  });
+
   it("excerpts long public description changes", async () => {
     const service = new ScheduleService(scheduleTestEnv);
     const publishedId = await service.createDraft(viewer);

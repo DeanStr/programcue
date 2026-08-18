@@ -135,6 +135,7 @@ describe("Event Setup administrator scope route", () => {
         id: track.id,
         name: track.name,
         exclusive: false,
+        isPublic: true,
       });
     } finally {
       await workerEnv.DB.prepare(

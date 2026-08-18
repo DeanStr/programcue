@@ -204,6 +204,17 @@ export function publicSessionDetailPath(eventSlug: string, sessionId: string) {
   )}`;
 }
 
+export function publicSessionPagePath(
+  eventSlug: string,
+  sessionId: string,
+  search: string,
+) {
+  const params = new URLSearchParams(search);
+  params.delete("speaker");
+  params.set("session", sessionId);
+  return `${publicProgrammeSurfacePath(eventSlug, "sessions")}?${params}`;
+}
+
 const SPEAKER_HONORIFICS = new Set([
   "dr",
   "dr.",

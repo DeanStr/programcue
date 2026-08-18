@@ -41,6 +41,7 @@ import {
   programmeAccentPalette,
   publicProgrammeSurfacePath,
   publicSessionDetailPath,
+  publicSessionPagePath,
   publicSpeakerProfilePath,
 } from "~/modules/programme/programme-presentation";
 
@@ -741,9 +742,14 @@ function SessionDetailPanel({ model }: { model: PublicProgrammeModel }) {
     sessionDetailRef,
   } = model;
   if (!selected) return null;
-  const sessionPagePath = publicSessionDetailPath(
+  const canonicalSessionPath = publicSessionDetailPath(
     programme.event.slug,
     selected.id,
+  );
+  const sessionPagePath = publicSessionPagePath(
+    programme.event.slug,
+    selected.id,
+    location.search,
   );
   const onSessionPage =
     location.pathname ===
@@ -896,7 +902,7 @@ function SessionDetailPanel({ model }: { model: PublicProgrammeModel }) {
       <div className="public-profile-actions">
         <PublicShareActions
           url={new URL(
-            sessionPagePath,
+            canonicalSessionPath,
             model.loaderData.canonicalUrl,
           ).toString()}
           title={`${selected.title} · ${programme.event.name}`}

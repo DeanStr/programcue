@@ -112,7 +112,12 @@ export type ScheduleWorkspace = {
     capacity: number;
     resources: string[];
   }>;
-  tracks: Array<{ id: string; name: string; exclusive: boolean }>;
+  tracks: Array<{
+    id: string;
+    name: string;
+    exclusive: boolean;
+    isPublic: boolean;
+  }>;
   sessionFormats: Array<{
     key: string;
     label: string;

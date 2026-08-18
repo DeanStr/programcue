@@ -138,10 +138,15 @@ export async function loadScheduleWorkspaceD1(
         resourcesJson: string;
       }>(),
     env.DB.prepare(
-      "SELECT id, name, exclusive FROM tracks WHERE event_id = ? ORDER BY position, name",
+      "SELECT id, name, exclusive, is_public AS isPublic FROM tracks WHERE event_id = ? ORDER BY position, name",
     )
       .bind(viewer.eventId)
-      .all<{ id: string; name: string; exclusive: number }>(),
+      .all<{
+        id: string;
+        name: string;
+        exclusive: number;
+        isPublic: number;
+      }>(),
     env.DB.prepare(
       `
         SELECT s.id,
@@ -387,6 +392,7 @@ export async function loadScheduleWorkspaceD1(
     tracks: tracks.results.map((track) => ({
       ...track,
       exclusive: Boolean(track.exclusive),
+      isPublic: Boolean(track.isPublic),
     })),
     sessionFormats: parsedFormats,
     sessions: configuredSessions,

@@ -9,6 +9,7 @@ import {
   programmeAccentPalette,
   programmeContrastRatio,
   publicSessionDetailPath,
+  publicSessionPagePath,
   publicSpeakerProfilePath,
   sortPublishedSpeakers,
   speakerSurname,
@@ -40,6 +41,18 @@ describe("programme presentation rules", () => {
   it("builds a server-resolvable public session detail path", () => {
     expect(publicSessionDetailPath("future/events", "session ? one")).toBe(
       "/public/programme/future%2Fevents/sessions?session=session+%3F+one",
+    );
+  });
+
+  it("keeps shared-itinerary context when opening a session page", () => {
+    expect(
+      publicSessionPagePath(
+        "future-of-events-2027",
+        "session-1",
+        "?share=itinerary-token&day=2027-06-12&speaker=speaker-1",
+      ),
+    ).toBe(
+      "/public/programme/future-of-events-2027/sessions?share=itinerary-token&day=2027-06-12&session=session-1",
     );
   });
 

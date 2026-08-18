@@ -639,6 +639,46 @@ export class PublicRecordingService {
     return this.getPublishedForEvent(eventId, organisationId, now);
   }
 
+  async hasRenderableForEvent(
+    eventId: string,
+    organisationId: string,
+    eventEndsAt: number,
+    eventTimezone: string,
+    now: number,
+  ): Promise<boolean> {
+    if (now < eventLocalExclusiveEndEpoch(eventEndsAt, eventTimezone)) {
+      return false;
+    }
+    const row = await this.env.DB.prepare(
+      `SELECT recording.id
+         FROM event_session_recordings recording
+         JOIN schedule_versions version
+           ON version.event_id = recording.event_id AND version.status = 'published'
+         JOIN schedule_entries entry
+           ON entry.event_id = recording.event_id
+          AND entry.schedule_version_id = version.id
+          AND entry.session_id = recording.session_id
+         JOIN sessions session
+           ON session.id = entry.session_id
+          AND session.event_id = entry.event_id
+         JOIN schedule_session_contents content
+           ON content.event_id = entry.event_id
+          AND content.schedule_version_id = entry.schedule_version_id
+          AND content.session_id = entry.session_id
+        WHERE recording.event_id = ? AND recording.organisation_id = ?
+          AND recording.published_at IS NOT NULL
+          AND entry.ends_at <= ?
+          AND session.status = 'published'
+          AND session.visibility = 'public'
+          AND content.visibility = 'public'
+          AND content.content_status = 'approved'
+        LIMIT 1`,
+    )
+      .bind(eventId, organisationId, now)
+      .first<{ id: string }>();
+    return row !== null;
+  }
+
   async getPublishedForEvent(
     eventId: string,
     organisationId: string,

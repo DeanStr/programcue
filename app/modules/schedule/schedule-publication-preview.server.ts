@@ -100,6 +100,15 @@ function durationLabel(minutes: number) {
   return `${minutes} min`;
 }
 
+function publicTrackLabel(
+  trackId: string | null,
+  tracks: ScheduleWorkspace["tracks"],
+) {
+  if (!trackId) return "No track";
+  const track = tracks.find((item) => item.id === trackId);
+  return track?.isPublic ? track.name : "No track";
+}
+
 function excerptDescription(value: string) {
   if (value.length <= SCHEDULE_PUBLICATION_DESCRIPTION_EXCERPT_LENGTH) {
     return { text: value, excerpted: false };
@@ -249,6 +258,11 @@ export async function buildSchedulePublicationPreview(
       });
     }
     const fields: SchedulePublicationContentChange["fields"] = [];
+    const publiclyRenderable =
+      session.sourceVisibility === "public" && session.visibility === "public";
+    if (!publiclyRenderable) {
+      continue;
+    }
     if (previous.title !== session.title) {
       fields.push({
         field: "title",
@@ -269,11 +283,13 @@ export async function buildSchedulePublicationPreview(
         ...(before.excerpted || after.excerpted ? { excerpted: true } : {}),
       });
     }
-    if ((previous.trackId ?? null) !== session.trackId) {
+    const previousTrack = publicTrackLabel(previous.trackId, workspace.tracks);
+    const nextTrack = publicTrackLabel(session.trackId, workspace.tracks);
+    if (previousTrack !== nextTrack) {
       fields.push({
         field: "track",
-        before: previous.trackName ?? "No track",
-        after: session.trackName ?? "No track",
+        before: previousTrack,
+        after: nextTrack,
       });
     }
     if (previous.format !== session.format) {

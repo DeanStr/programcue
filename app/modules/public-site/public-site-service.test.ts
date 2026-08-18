@@ -1960,6 +1960,24 @@ describe("public event site publication", () => {
         recordingUrl: "https://video.example.test/watch",
       }),
     ]);
+    expect(
+      await recordings.hasRenderableForEvent(
+        viewer.eventId,
+        viewer.organisationId,
+        event!.endsAt,
+        event!.timezone,
+        eventLocalExclusiveEnd - 1,
+      ),
+    ).toBe(false);
+    expect(
+      await recordings.hasRenderableForEvent(
+        viewer.eventId,
+        viewer.organisationId,
+        event!.endsAt,
+        event!.timezone,
+        eventLocalExclusiveEnd,
+      ),
+    ).toBe(true);
 
     configuration.postEvent.enabled = true;
     const postEventDraft = await service.saveDraft(viewer, {

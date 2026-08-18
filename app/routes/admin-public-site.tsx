@@ -70,16 +70,15 @@ export async function loader({ request, context }: Route.LoaderArgs) {
   ]);
   const workspace = await new PublicSiteService(env).getWorkspace(viewer);
   const now = Math.floor(Date.now() / 1_000);
-  const hasRenderableRecordings =
-    (
-      await new PublicRecordingService(env).getRenderableForEvent(
-        workspace.event.id,
-        viewer.organisationId,
-        workspace.event.endsAt,
-        workspace.event.timezone,
-        now,
-      )
-    ).length > 0;
+  const hasRenderableRecordings = await new PublicRecordingService(
+    env,
+  ).hasRenderableForEvent(
+    workspace.event.id,
+    viewer.organisationId,
+    workspace.event.endsAt,
+    workspace.event.timezone,
+    now,
+  );
   const commandKeys = [
     sitePublishCommandKey(
       workspace.draft.revision,
