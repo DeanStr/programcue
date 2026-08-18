@@ -564,6 +564,7 @@ export function EvaluationSubmissionQueue() {
                               resultsRound: loaderData.resultsRoundId,
                               submission: submission.id,
                               sort: loaderData.resultSort,
+                              view: "results",
                               ...(loaderData.reviewFilter
                                 ? { filter: loaderData.reviewFilter }
                                 : {}),

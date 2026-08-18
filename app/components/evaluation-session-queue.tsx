@@ -76,6 +76,7 @@ export function EvaluationSessionQueue() {
                             resultsRound: loaderData.resultsRoundId,
                             session: session.id,
                             sort: loaderData.resultSort,
+                            view: "results",
                             ...(loaderData.reviewFilter
                               ? { filter: loaderData.reviewFilter }
                               : {}),

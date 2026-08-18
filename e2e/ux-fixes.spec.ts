@@ -152,6 +152,19 @@ test("mobile administration sections reveal linked content without overflow", as
   await expect(evaluationAccess.getByLabel("Name")).toBeHidden();
   await page.getByText("Manage evaluation access", { exact: true }).click();
   await expect(evaluationAccess.getByLabel("Name")).toBeVisible();
+  await page
+    .getByRole("navigation", { name: "Evaluation views" })
+    .getByRole("link", { name: "Assignments" })
+    .click();
+  await expect(
+    page.getByRole("button", { name: "Assign" }).first(),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: "Decide" }).first(),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("combobox", { name: /Evaluator or team for / }).first(),
+  ).toBeVisible();
   await expectNoHorizontalPageOverflow(page);
 });
 

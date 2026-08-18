@@ -199,19 +199,6 @@ export function EvaluationUnifiedResults() {
                           {result.reference} · {result.targetType} ·{" "}
                           {humanise(result.state)}
                         </small>
-                        <small className="pc-eval-list-line">
-                          {result.completedReviewCount}/{result.assignmentCount}
-                          {result.averageScore === null
-                            ? ""
-                            : ` · ${Number(result.averageScore).toFixed(2)}`}
-                          {result.assignmentCount === 0
-                            ? " · Unassigned"
-                            : result.incomplete
-                              ? " · Incomplete"
-                              : result.decisionReady
-                                ? " · Decision-ready"
-                                : ""}
-                        </small>
                       </div>
                     </td>
                     <td data-label="Coverage">

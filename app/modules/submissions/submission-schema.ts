@@ -68,6 +68,12 @@ export type FormField = z.infer<typeof formFieldSchema>;
 export type LegacyFormField = z.infer<typeof legacyFormFieldSchema>;
 export type StoredFormField = LegacyFormField | FormField;
 
+export function isPlaceholderOnlyFieldExample(value: string) {
+  const text = value.trim();
+  if (!text) return false;
+  return /^https?:\/\/[.…]{0,8}$/iu.test(text) || /^[.…]{1,8}$/u.test(text);
+}
+
 const optionalHttpsUrl = z
   .string()
   .trim()
@@ -395,6 +401,14 @@ export const saveFormSchema = z
         message: "Maximum speakers cannot be below the minimum",
       });
     }
+    input.schema.fields.forEach((field, index) => {
+      if (!isPlaceholderOnlyFieldExample(field.example)) return;
+      context.addIssue({
+        code: "custom",
+        path: ["schema", "fields", index, "example"],
+        message: "Give a complete example or leave the example empty",
+      });
+    });
     if (
       input.accessMode === "password_protected" &&
       !input.accessPassword &&
@@ -851,7 +865,7 @@ export const DEFAULT_FORM_SCHEMA: SubmissionFormSchema = {
       type: "video",
       required: false,
       help: "Upload an MP4/WebM file or link to a private or unlisted HTTPS video.",
-      example: "https://…",
+      example: "",
       options: [],
       reviewVisibility: "reviewers",
       blindReviewVisibility: "content",

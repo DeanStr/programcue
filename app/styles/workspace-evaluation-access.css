@@ -908,9 +908,6 @@
   font-weight: var(--weight-semibold);
   cursor: pointer;
 }
-.pc-eval-admin .pc-responsive-table .pc-record-stack > .pc-eval-list-line {
-  display: none;
-}
 .pc-eval-inline-export {
   display: inline;
 }
@@ -1046,40 +1043,8 @@
 }
 
 @media (max-width: 760px) {
-  .pc-eval-admin .pc-eval-table thead {
-    display: none;
-  }
-  .pc-eval-admin .pc-eval-table,
-  .pc-eval-admin .pc-eval-table tbody,
-  .pc-eval-admin .pc-eval-table tr,
-  .pc-eval-admin .pc-eval-table td {
-    display: block;
-    width: 100%;
-    min-width: 0;
-  }
-  .pc-eval-admin .pc-eval-table tr {
-    padding: var(--space-3) 0;
-    border-bottom: 1px solid var(--border);
-  }
-  .pc-eval-admin .pc-eval-table td {
-    padding: 0;
-    border: 0;
-  }
-  .pc-eval-admin .pc-eval-table td::before {
-    content: none;
-  }
-  .pc-eval-admin
-    .pc-eval-table
-    td:not(.pc-record-primary-cell):not(.pc-eval-overflow-cell) {
-    display: none;
-  }
   .pc-eval-admin .pc-eval-table .pc-eval-overflow-cell {
-    margin-top: var(--space-1);
-  }
-  .pc-eval-admin .pc-responsive-table .pc-record-stack > .pc-eval-list-line {
-    display: block;
-    color: var(--text-secondary);
-    font-size: var(--text-2xs);
+    white-space: normal;
   }
 }
 @media (max-width: 900px) {

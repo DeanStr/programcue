@@ -66,14 +66,6 @@ function initials(value: string) {
     .join("");
 }
 
-function isPublishedExample(value: string | null | undefined) {
-  const text = value?.trim() ?? "";
-  if (!text) return false;
-  if (/^https?:\/\/[.…]{0,8}$/iu.test(text)) return false;
-  if (/^[.…]{1,8}$/u.test(text)) return false;
-  return true;
-}
-
 function speakerLimit(form: LandingForm) {
   if (form.maxSpeakers === null) {
     return `At least ${form.minSpeakers} speaker${form.minSpeakers === 1 ? "" : "s"} per proposal.`;
@@ -260,9 +252,7 @@ export function PublicApplicationLanding({
                       (candidate) => candidate.id === field.condition?.fieldId,
                     )
                   : null;
-                const example = isPublishedExample(field.example)
-                  ? field.example.trim()
-                  : "";
+                const example = field.example.trim();
                 const choices =
                   (field.type === "select" || field.type === "multi_select") &&
                   field.options.length

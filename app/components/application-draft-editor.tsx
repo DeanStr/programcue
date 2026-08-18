@@ -180,23 +180,17 @@ function ApplicationAnswers({
           {section.fields.map((field) => {
             const error = errors?.[field.id]?.[0];
             const helpId = field.help ? `answer-${field.id}-help` : undefined;
-            const publishedExample = (() => {
-              const text = field.example?.trim() ?? "";
-              if (!text) return "";
-              if (/^https?:\/\/[.…]{0,8}$/iu.test(text)) return "";
-              if (/^[.…]{1,8}$/u.test(text)) return "";
-              return text;
-            })();
-            const exampleId = publishedExample
+            const example = field.example.trim();
+            const exampleId = example
               ? `answer-${field.id}-example`
               : undefined;
             const errorId = error ? `answer-${field.id}-error` : undefined;
             const describedBy =
               [helpId, exampleId, errorId].filter(Boolean).join(" ") ||
               undefined;
-            const exampleHelp = publishedExample ? (
+            const exampleHelp = example ? (
               <span className="help" id={exampleId}>
-                Example: {publishedExample}
+                Example: {example}
               </span>
             ) : null;
             const update = (value: string | string[]) => {

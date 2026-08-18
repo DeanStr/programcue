@@ -172,6 +172,17 @@
   outline-offset: var(--focus-halo-width);
   box-shadow: 0 0 0 var(--focus-halo-width) var(--focus-halo);
 }
+.toggle input[type="checkbox"]:disabled {
+  cursor: not-allowed;
+  background: var(--border);
+  box-shadow: none;
+}
+.toggle input[type="checkbox"]:disabled:checked {
+  background: var(--text-tertiary);
+}
+.toggle input[type="checkbox"]:disabled::after {
+  box-shadow: none;
+}
 /* High Contrast Mode repaints background, and background is the whole of the
    checked state here. The track keeps a border so the knob has an enclosure to
    travel inside, and both are painted in system colours that survive. */
@@ -189,6 +200,21 @@
   }
   .toggle input[type="checkbox"]:checked::after {
     background: HighlightText;
+  }
+  .toggle input[type="checkbox"]:disabled {
+    cursor: not-allowed;
+    border-color: GrayText;
+    background: Canvas;
+  }
+  .toggle input[type="checkbox"]:disabled::after {
+    background: GrayText;
+  }
+  .toggle input[type="checkbox"]:disabled:checked {
+    background: GrayText;
+    border-color: GrayText;
+  }
+  .toggle input[type="checkbox"]:disabled:checked::after {
+    background: Canvas;
   }
 }
 .tabs {
@@ -308,8 +334,8 @@ input[type="checkbox"]:not(:where(.toggle input)) {
 input[type="radio"] {
   border-radius: var(--radius-full);
 }
-input[type="checkbox"]:not(:where(.toggle input)):hover,
-input[type="radio"]:hover {
+input[type="checkbox"]:not(:where(.toggle input)):hover:not(:disabled),
+input[type="radio"]:hover:not(:disabled) {
   border-color: var(--brand-400);
 }
 input[type="checkbox"]:not(:where(.toggle input)):checked {
@@ -328,6 +354,22 @@ input[type="radio"]:checked {
     var(--surface) 0 3px,
     transparent 3.5px
   );
+}
+/* appearance:none drops the UA disabled glyph, so unavailable has to be
+   painted here or every custom box still looks live. */
+input[type="checkbox"]:not(:where(.toggle input)):disabled,
+input[type="radio"]:disabled {
+  cursor: not-allowed;
+  background: var(--surface-sunken);
+  border-color: var(--border);
+}
+input[type="checkbox"]:not(:where(.toggle input)):disabled:checked {
+  background-color: var(--text-tertiary);
+  border-color: var(--text-tertiary);
+}
+input[type="radio"]:disabled:checked {
+  background-color: var(--text-tertiary);
+  border-color: var(--text-tertiary);
 }
 input[type="checkbox"]:not(:where(.toggle input)):focus-visible,
 input[type="radio"]:focus-visible {
@@ -424,6 +466,23 @@ input[type="month"]::-webkit-calendar-picker-indicator {
     appearance: auto;
     background: Canvas;
     border: 1px solid CanvasText;
+  }
+  input[type="checkbox"]:not(:where(.toggle input)):disabled,
+  input[type="radio"]:disabled {
+    cursor: not-allowed;
+    color: GrayText;
+    accent-color: GrayText;
+    forced-color-adjust: none;
+    background: Canvas;
+    border: 1px solid GrayText;
+  }
+  input[type="checkbox"]:not(:where(.toggle input)):disabled:checked,
+  input[type="radio"]:disabled:checked {
+    cursor: not-allowed;
+    color: Canvas;
+    accent-color: GrayText;
+    background: GrayText;
+    border-color: GrayText;
   }
 }
 /* .label is a grid; its items default to min-width:auto and so refuse to

@@ -385,7 +385,7 @@
   cursor: pointer;
 }
 .reviewer-shell .review-scale-input:disabled {
-  cursor: default;
+  cursor: not-allowed;
 }
 .reviewer-shell .review-scale-option.is-clear {
   flex: 0 0 auto;
@@ -418,7 +418,7 @@
     color var(--dur-fast) var(--ease-out),
     box-shadow var(--dur-fast) var(--ease-out);
 }
-.reviewer-shell .review-scale-option:hover > span {
+.reviewer-shell .review-scale-option:hover:not(:has(input:disabled)) > span {
   border-color: var(--border-strong);
   background: var(--surface);
   color: var(--text-primary);
@@ -447,8 +447,8 @@
 }
 .reviewer-shell .review-scale-option input:disabled + span {
   background: var(--surface-sunken);
-  color: var(--muted-2);
-  cursor: default;
+  color: var(--text-tertiary);
+  cursor: not-allowed;
 }
 .reviewer-shell .review-scale-option input:disabled:checked + span {
   border-color: var(--border-strong);
@@ -552,7 +552,7 @@
     box-shadow var(--dur-fast) var(--ease-out),
     color var(--dur-fast) var(--ease-out);
 }
-.reviewer-shell .review-conflict-option:hover {
+.reviewer-shell .review-conflict-option:hover:not(:has(input:disabled)) {
   background: color-mix(in srgb, var(--surface) 70%, transparent);
 }
 .reviewer-shell .review-conflict-option:has(input:checked) {
@@ -572,6 +572,12 @@
   margin: 0;
   opacity: 0;
   cursor: pointer;
+}
+.reviewer-shell .review-conflict-option:has(input:disabled) {
+  cursor: not-allowed;
+}
+.reviewer-shell .review-conflict-option input:disabled {
+  cursor: not-allowed;
 }
 /* biome-ignore lint/style/noDescendingSpecificity: Base, modifier, and forced-colour rules share element suffixes intentionally; state specificity preserves their distinct behavior. */
 .reviewer-shell .review-conflict-option > span {
@@ -680,6 +686,14 @@
   background: var(--ink);
   color: var(--text-inverse);
   font-weight: var(--weight-bold);
+}
+.reviewer-shell .review-choice-option input:disabled + span {
+  color: var(--text-tertiary);
+  cursor: not-allowed;
+}
+.reviewer-shell .review-choice-option input:disabled:checked + span {
+  background: var(--text-tertiary);
+  color: var(--surface);
 }
 .reviewer-shell .review-choice-option input:focus-visible + span {
   outline: var(--focus-width) solid var(--focus-ring);

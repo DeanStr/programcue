@@ -305,5 +305,21 @@ describe("submission form rules", () => {
     expect(saveFormSchema.safeParse(conditionalDirectFormat).success).toBe(
       false,
     );
+
+    const placeholderExample = structuredClone(input);
+    placeholderExample.schema.fields.find(
+      (field) => field.id === "video",
+    )!.example = "https://…";
+    const rejected = saveFormSchema.safeParse(placeholderExample);
+    expect(rejected.success).toBe(false);
+    if (!rejected.success) {
+      expect(
+        rejected.error.issues.some((issue) => issue.path.includes("example")),
+      ).toBe(true);
+    }
+    expect(
+      storedFormSchemaSchema.safeParse(placeholderExample.schema).success,
+    ).toBe(true);
+    expect(saveFormSchema.safeParse(input).success).toBe(true);
   });
 });

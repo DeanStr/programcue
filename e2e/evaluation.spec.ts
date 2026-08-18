@@ -190,13 +190,11 @@ test("review submission confirmation preserves context", async ({ page }) => {
   await page.getByRole("radio", { name: /I have a conflict/ }).check();
   await expect(page.locator(".review-rubric")).not.toHaveAttribute("inert");
   await expect(scoreGroups.first()).toBeVisible();
+  const disabledScore = scoreGroups.first().getByRole("radio").first();
   expect(
-    await scoreGroups
-      .first()
-      .getByRole("radio")
-      .first()
-      .evaluate((input: HTMLInputElement) => input.disabled),
+    await disabledScore.evaluate((input: HTMLInputElement) => input.disabled),
   ).toBe(true);
+  await expect(disabledScore).toHaveCSS("cursor", "not-allowed");
   await expect(
     page.getByRole("button", { name: "Submit and open next" }),
   ).toBeDisabled();
