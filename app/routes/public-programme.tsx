@@ -24,7 +24,7 @@ import {
 import {
   PUBLIC_PROGRAMME_SURFACES,
   type PublicProgrammeSurface,
-  publicSessionDetailPath,
+  publicProgrammeSurfacePath,
 } from "~/modules/programme/programme-presentation";
 import {
   itineraryCookie,
@@ -402,9 +402,13 @@ export async function loader({ request, params, context }: Route.LoaderArgs) {
         { status: 400 },
       );
     }
-    throw redirect(
-      publicSessionDetailPath(programme.event.slug, featuredSession.id),
+    const destination = new URL(request.url);
+    destination.pathname = publicProgrammeSurfacePath(
+      programme.event.slug,
+      "sessions",
     );
+    destination.searchParams.set("session", featuredSession.id);
+    throw redirect(`${destination.pathname}${destination.search}`);
   }
   const canonicalUrl = new URL(
     managedEmbed

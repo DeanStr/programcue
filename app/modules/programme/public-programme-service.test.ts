@@ -455,6 +455,18 @@ describe("published programme and itinerary", () => {
       "/public/programme/future-of-events-2027/sessions?session=demo-session-1",
     );
 
+    const shared = await publicProgrammePageLoader({
+      request: new Request(
+        "https://programcue.test/public/programme/future-of-events-2027?share=itinerary-token&session=demo-session-1&day=2027-06-12",
+      ),
+      params: { slug: "future-of-events-2027" },
+      context,
+    } as never).catch((error: unknown) => error);
+    expect(shared).toMatchObject({ status: 302 });
+    expect((shared as Response).headers.get("Location")).toBe(
+      "/public/programme/future-of-events-2027/sessions?share=itinerary-token&session=demo-session-1&day=2027-06-12",
+    );
+
     const unknown = await publicProgrammePageLoader({
       request: new Request(
         "https://programcue.test/public/programme/future-of-events-2027?session=not-published",

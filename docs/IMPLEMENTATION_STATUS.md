@@ -738,7 +738,8 @@ this AIA-08 production slice.
 Schedule publication now presents the material delta against the current live
 version—added, removed, moved/resized and visibility-changed sessions—alongside
 all currently known conflict, content-approval, speaker-confirmation and public
-event-website/recording blockers. Confirmation remains disabled while any blocker is
+event-website/recording blockers. Description diffs compare the stored text
+before applying the empty placeholder. Confirmation remains disabled while any blocker is
 visible, and the authoritative mutation rechecks the exact schedule revision
 and every invariant rather than trusting the preview. A leftover failed
 publish result is not shown when the dialog reopens until this instance
@@ -1065,7 +1066,8 @@ revoked and deleted during file erasure.
   keeps primary destinations visible, groups programme variants and editorial
   pages inside Browse, and collapses fully at tablet width. Direct session-detail
   URLs are server-validated: a known session on the wrong public surface
-  canonicalises to the sessions view, while duplicate, mixed, embedded or
+  canonicalises to the sessions view and keeps the incoming query, including a
+  shared-itinerary token, while duplicate, mixed, embedded or
   unavailable selections still fail explicitly. Session details reuse the
   speaker copy/share actions. Featured-record pickers cap the available list
   at 20. The homepage's glance panel is a dark event surface in the masthead's

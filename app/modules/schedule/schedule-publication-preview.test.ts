@@ -292,7 +292,7 @@ describe("schedule publication preview", () => {
           },
           {
             field: "description",
-            before: "None",
+            before: "—",
             after: "A public abstract that will become live.",
           },
           {
@@ -370,7 +370,7 @@ describe("schedule publication preview", () => {
       (field) => field.field === "description",
     );
     expect(descriptionChange).toMatchObject({
-      before: "None",
+      before: "—",
       excerpted: true,
     });
     expect(descriptionChange?.after.endsWith("…")).toBe(true);
@@ -378,6 +378,72 @@ describe("schedule publication preview", () => {
       longDescription.length,
     );
     expect(descriptionChange?.after).not.toContain("End.");
+  });
+
+  it("does not treat a literal None description as empty", async () => {
+    const service = new ScheduleService(scheduleTestEnv);
+    const publishedId = await service.createDraft(viewer);
+    let workspace = await service.getWorkspace(viewer);
+    const startsAt = eventLocalTimeEpoch(
+      workspace.event.startsAt,
+      workspace.event.timezone,
+      9,
+    );
+    await service.place(viewer, {
+      scheduleVersionId: publishedId,
+      scheduleRevision: workspace.version!.revision,
+      sessionId: "schedule-test-one",
+      roomId: "main",
+      startsAt,
+      endsAt: startsAt + 3_600,
+    });
+    await approveScheduledTestContent(publishedId);
+    workspace = await service.getWorkspace(viewer);
+    await service.publish(viewer, {
+      scheduleVersionId: publishedId,
+      scheduleRevision: workspace.version!.revision,
+    });
+
+    const draftId = await service.createDraft(viewer);
+    workspace = await service.getWorkspace(viewer);
+    const session = workspace.sessions.find(
+      (candidate) => candidate.id === "schedule-test-one",
+    );
+    expect(session).toBeDefined();
+    await service.updateSessionContent(
+      viewer,
+      {
+        scheduleVersionId: draftId,
+        scheduleRevision: workspace.version!.revision,
+        sessionId: session!.id,
+        sessionRevision: session!.revision,
+        idempotencyKey: crypto.randomUUID(),
+        title: session!.title,
+        description: "No description",
+        format: session!.format,
+        durationMinutes: session!.durationMinutes,
+        trackId: session!.trackId,
+        visibility: session!.visibility,
+        requiredResources: session!.requiredResources,
+      },
+      "admin_ui",
+    );
+    workspace = await service.getWorkspace(viewer);
+
+    const preview = await buildSchedulePublicationPreview(
+      scheduleTestEnv,
+      viewer,
+      workspace,
+    );
+    expect(
+      preview?.changes.content[0]?.fields.find(
+        (field) => field.field === "description",
+      ),
+    ).toEqual({
+      field: "description",
+      before: "—",
+      after: "No description",
+    });
   });
 
   it("lists every incompatible event-website reference", async () => {

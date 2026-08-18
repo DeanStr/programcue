@@ -88,9 +88,12 @@ function compareLabels(
   );
 }
 
+function normalizedDescription(value: string | null | undefined) {
+  return value?.trim() ?? "";
+}
+
 function displayText(value: string | null | undefined) {
-  const trimmed = value?.trim() ?? "";
-  return trimmed || "None";
+  return normalizedDescription(value) || "—";
 }
 
 function durationLabel(minutes: number) {
@@ -254,7 +257,8 @@ export async function buildSchedulePublicationPreview(
       });
     }
     if (
-      displayText(previous.description) !== displayText(session.description)
+      normalizedDescription(previous.description) !==
+      normalizedDescription(session.description)
     ) {
       const before = excerptDescription(displayText(previous.description));
       const after = excerptDescription(displayText(session.description));
