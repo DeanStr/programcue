@@ -39,9 +39,7 @@ function cookieValue(request: Request, name: string) {
     if (key !== name) continue;
     try {
       return decodeURIComponent(value.join("="));
-    } catch {
-      return "";
-    }
+    } catch {}
   }
   return null;
 }

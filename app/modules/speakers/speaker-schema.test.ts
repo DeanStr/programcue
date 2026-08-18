@@ -44,5 +44,14 @@ describe("speaker social profile normalization", () => {
     expect(() => speakerXHandleSchema.parse("invalid handle")).toThrow(
       "Enter an X handle or a complete x.com or twitter.com profile URL.",
     );
+    expect(() => speakerXHandleSchema.parse("https://x.com/home")).toThrow(
+      "Enter an X handle or a complete x.com or twitter.com profile URL.",
+    );
+    expect(() => speakerXHandleSchema.parse("https://x.com/intent")).toThrow(
+      "Enter an X handle or a complete x.com or twitter.com profile URL.",
+    );
+    expect(() => speakerXHandleSchema.parse("@settings")).toThrow(
+      "Enter an X handle or a complete x.com or twitter.com profile URL.",
+    );
   });
 });

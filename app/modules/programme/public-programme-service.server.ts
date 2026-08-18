@@ -856,13 +856,10 @@ export class PublicProgrammeService {
 export function readCookie(request: Request, name: string) {
   for (const part of (request.headers.get("cookie") ?? "").split(";")) {
     const [key, ...value] = part.trim().split("=");
-    if (key === name) {
-      try {
-        return decodeURIComponent(value.join("="));
-      } catch {
-        return null;
-      }
-    }
+    if (key !== name) continue;
+    try {
+      return decodeURIComponent(value.join("="));
+    } catch {}
   }
   return null;
 }

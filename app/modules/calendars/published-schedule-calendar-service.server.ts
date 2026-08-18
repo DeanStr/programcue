@@ -128,10 +128,17 @@ export class PublishedScheduleCalendarService {
           ON content.schedule_version_id = se.schedule_version_id
          AND content.event_id = se.event_id
          AND content.session_id = se.session_id
+        JOIN sessions session
+          ON session.id = se.session_id AND session.event_id = se.event_id
         JOIN session_speakers ss ON ss.session_id = se.session_id AND ss.event_id = se.event_id
         LEFT JOIN calendar_invitations ci
           ON ci.event_id = se.event_id AND ci.session_id = se.session_id AND ci.person_id = ss.person_id
        WHERE se.event_id = ? AND sv.id = ? AND sv.status = 'published'
+         AND session.status = 'published'
+         AND session.visibility = 'public'
+         AND content.visibility = 'public'
+         AND ss.participation_status = 'confirmed'
+         AND ss.visibility = 'public'
        ORDER BY se.starts_at, se.session_id, ss.position
     `,
         )
@@ -182,9 +189,16 @@ export class PublishedScheduleCalendarService {
                ON content.schedule_version_id = se.schedule_version_id
               AND content.event_id = se.event_id
               AND content.session_id = se.session_id
+             JOIN sessions session
+               ON session.id = se.session_id AND session.event_id = se.event_id
              JOIN session_speakers ss ON ss.session_id = se.session_id AND ss.event_id = se.event_id
             WHERE sv.id = ? AND sv.status = 'published'
               AND se.session_id = ci.session_id AND ss.person_id = ci.person_id
+              AND session.status = 'published'
+              AND session.visibility = 'public'
+              AND content.visibility = 'public'
+              AND ss.participation_status = 'confirmed'
+              AND ss.visibility = 'public'
          )
        ORDER BY ci.updated_at
     `,

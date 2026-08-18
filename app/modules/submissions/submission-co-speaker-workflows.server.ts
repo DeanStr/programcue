@@ -330,6 +330,7 @@ export class SubmissionCoSpeakerWorkflows extends SubmissionServiceFoundation {
           ? { ...claimedApplicant, claimOnly: true }
           : claimedApplicant,
       cookie: preparedSession.cookie,
+      setCookies: preparedSession.setCookies,
     };
   }
 

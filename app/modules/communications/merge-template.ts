@@ -22,7 +22,7 @@ export function mergeTemplateVariables(template: string) {
 export function renderMergeTemplate(template: string, values: MergeValues) {
   const unknown = new Set<string>();
   const rendered = template.replace(VARIABLE_PATTERN, (_match, key: string) => {
-    if (!(key in values)) {
+    if (!Object.hasOwn(values, key)) {
       unknown.add(key);
       return "";
     }

@@ -190,13 +190,13 @@ export class EvaluationAssignmentWorkflows extends EvaluationServiceFoundation {
       AND NOT EXISTS (
         SELECT 1 FROM evaluator_assignments blocked_assignment
          WHERE blocked_assignment.event_id = ?
-           AND blocked_assignment.round_id = ?
            AND blocked_assignment.${targetColumn} IN (${targetPlaceholders})
            AND blocked_assignment.evaluator_person_id IN (${evaluatorPlaceholders})
            AND (
              blocked_assignment.status = 'recused'
              OR (
-               blocked_assignment.status = 'cancelled'
+               blocked_assignment.round_id = ?
+               AND blocked_assignment.status = 'cancelled'
                AND (
                  blocked_assignment.cancellation_reason IS NULL
                  OR blocked_assignment.cancellation_reason <> 'reviewer_removed'
@@ -204,6 +204,28 @@ export class EvaluationAssignmentWorkflows extends EvaluationServiceFoundation {
              )
            )
       )
+      ${
+        parsed.targetType === "submission"
+          ? `AND NOT EXISTS (
+        SELECT 1 FROM submissions own_submission
+         WHERE own_submission.event_id = ?
+           AND own_submission.id IN (${targetPlaceholders})
+           AND own_submission.submitter_person_id IN (${evaluatorPlaceholders})
+      )
+      AND NOT EXISTS (
+        SELECT 1 FROM submission_speakers own_speaker
+         WHERE own_speaker.event_id = ?
+           AND own_speaker.submission_id IN (${targetPlaceholders})
+           AND own_speaker.person_id IN (${evaluatorPlaceholders})
+           AND own_speaker.invitation_status = 'claimed'
+      )`
+          : `AND NOT EXISTS (
+        SELECT 1 FROM session_speakers own_session_speaker
+         WHERE own_session_speaker.event_id = ?
+           AND own_session_speaker.session_id IN (${targetPlaceholders})
+           AND own_session_speaker.person_id IN (${evaluatorPlaceholders})
+      )`
+      }
       ${commandGuard.sql}
     `;
     const eligibilityBindings = [
@@ -235,9 +257,19 @@ export class EvaluationAssignmentWorkflows extends EvaluationServiceFoundation {
           ]
         : []),
       viewer.eventId,
-      parsed.roundId,
       ...parsed.targetIds,
       ...evaluatorPersonIds,
+      parsed.roundId,
+      ...(parsed.targetType === "submission"
+        ? [
+            viewer.eventId,
+            ...parsed.targetIds,
+            ...evaluatorPersonIds,
+            viewer.eventId,
+            ...parsed.targetIds,
+            ...evaluatorPersonIds,
+          ]
+        : [viewer.eventId, ...parsed.targetIds, ...evaluatorPersonIds]),
       ...commandGuard.bindings,
     ];
     const coverageSql = `
@@ -597,6 +629,11 @@ export class EvaluationAssignmentWorkflows extends EvaluationServiceFoundation {
         `
         DELETE FROM evaluator_assignments
          WHERE event_id = ? AND last_operation_id = ?
+           AND NOT EXISTS (
+             SELECT 1 FROM reviews review
+              WHERE review.event_id = evaluator_assignments.event_id
+                AND review.assignment_id = evaluator_assignments.id
+           )
            AND EXISTS (
              SELECT 1 FROM audit_events original
               WHERE original.id = ?

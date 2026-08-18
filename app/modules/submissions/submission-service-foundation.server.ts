@@ -194,7 +194,8 @@ export class SubmissionServiceFoundation {
   protected async publicScope(eventId: string) {
     const event = await this.env.DB.prepare(
       `SELECT organisation_id AS organisationId
-         FROM events WHERE id = ?`,
+         FROM events
+        WHERE id = ? AND activation_status = 'active'`,
     )
       .bind(eventId)
       .first<{ organisationId: string }>();

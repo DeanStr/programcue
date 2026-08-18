@@ -160,12 +160,18 @@ export class EventCloneService {
       .first<EventClonePreparation["source"]>();
     if (!source)
       throw new Response("This event could not be found.", { status: 404 });
+    const existingSlugs = await this.env.DB.prepare(
+      `SELECT slug FROM events`,
+    ).all<{ slug: string }>();
 
     return {
       source,
       defaults: {
         name: cloneNameDefault(source.name),
-        slug: cloneSlugDefault(source.slug),
+        slug: cloneSlugDefault(
+          source.slug,
+          existingSlugs.results.map((row) => row.slug),
+        ),
         timezone: source.timezone,
         startDate: nextYearDate(cloneDate(source.startsAt)),
         endDate: nextYearDate(cloneDate(source.endsAt)),

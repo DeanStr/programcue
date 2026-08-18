@@ -43,11 +43,27 @@ export function cloneNameDefault(sourceName: string) {
   return `${sourceName.slice(0, EVENT_NAME_MAX_LENGTH - CLONE_NAME_SUFFIX.length)}${CLONE_NAME_SUFFIX}`;
 }
 
-export function cloneSlugDefault(sourceSlug: string) {
-  const stem = sourceSlug
+export function cloneSlugDefault(
+  sourceSlug: string,
+  takenSlugs: ReadonlyArray<string> = [],
+) {
+  const reserved = new Set(takenSlugs);
+  const firstStem = sourceSlug
     .slice(0, EVENT_SLUG_MAX_LENGTH - CLONE_SLUG_SUFFIX.length)
     .replace(/-+$/u, "");
-  return `${stem}${CLONE_SLUG_SUFFIX}`;
+  const first = `${firstStem}${CLONE_SLUG_SUFFIX}`;
+  if (!reserved.has(first)) return first;
+  for (let index = 2; index < 1000; index += 1) {
+    const numberedSuffix = `${CLONE_SLUG_SUFFIX}-${index}`;
+    const stem = sourceSlug
+      .slice(0, EVENT_SLUG_MAX_LENGTH - numberedSuffix.length)
+      .replace(/-+$/u, "");
+    const candidate = `${stem}${numberedSuffix}`;
+    if (!reserved.has(candidate)) return candidate;
+  }
+  throw new EventCloneConfigurationError(
+    "Could not allocate a unique slug for the cloned event.",
+  );
 }
 
 function jsonObject(value: string, context: string) {

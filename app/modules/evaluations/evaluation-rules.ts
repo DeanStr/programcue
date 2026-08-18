@@ -4,7 +4,7 @@ export type WeightedCriterion = {
   inputType?: "scale_5" | "scale_10";
 };
 
-export function calculateWeightedScore(
+function weightedFivePointScore(
   criteria: ReadonlyArray<WeightedCriterion>,
   scores: Readonly<Record<string, number>>,
 ) {
@@ -15,6 +15,27 @@ export function calculateWeightedScore(
   if (criteria.length === 0 || totalWeight !== 100) {
     throw new Error("Evaluation criteria must exist and total 100%.");
   }
+  const invalid = criteria.filter((criterion) => {
+    const score = scores[criterion.id];
+    return !Number.isFinite(score) || score < 0.5 || score > 5;
+  });
+  if (invalid.length) {
+    throw new Error(
+      `Every criterion needs a five-point contribution from 0.5 to 5. Missing: ${invalid.map((item) => item.id).join(", ")}.`,
+    );
+  }
+  const score = criteria.reduce(
+    (sum, criterion) =>
+      sum + (scores[criterion.id] * criterion.weightPercent) / 100,
+    0,
+  );
+  return Number(score.toFixed(2));
+}
+
+export function calculateWeightedScore(
+  criteria: ReadonlyArray<WeightedCriterion>,
+  scores: Readonly<Record<string, number>>,
+) {
   const missing = criteria.filter(
     (criterion) =>
       !Number.isInteger(scores[criterion.id]) ||
@@ -26,12 +47,7 @@ export function calculateWeightedScore(
       `Every criterion needs a whole-number score from 1 to 5. Missing: ${missing.map((item) => item.id).join(", ")}.`,
     );
   }
-  const score = criteria.reduce(
-    (sum, criterion) =>
-      sum + (scores[criterion.id] * criterion.weightPercent) / 100,
-    0,
-  );
-  return Number(score.toFixed(2));
+  return weightedFivePointScore(criteria, scores);
 }
 
 export function calculateRubricWeightedScore(
@@ -56,5 +72,5 @@ export function calculateRubricWeightedScore(
       return [criterion.id, maximum === 10 ? numeric / 2 : numeric];
     }),
   );
-  return calculateWeightedScore(criteria, normalisedScores);
+  return weightedFivePointScore(criteria, normalisedScores);
 }

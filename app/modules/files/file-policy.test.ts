@@ -52,6 +52,31 @@ describe("event file policy", () => {
     ).toThrow(FilePolicyError);
   });
 
+  it("rejects upload names that can spoof a different extension", () => {
+    expect(() =>
+      validateDirectFileDeclaration(
+        "slides",
+        {
+          name: "malware.exe\u0000.pdf",
+          type: "application/pdf",
+          size: FILE_SIZE_MIB,
+        },
+        CANONICAL_EVENT_FILE_POLICY,
+      ),
+    ).toThrow(/unsupported characters/);
+    expect(() =>
+      validateDirectFileDeclaration(
+        "slides",
+        {
+          name: "innocent\u202epdf.exe",
+          type: "application/pdf",
+          size: FILE_SIZE_MIB,
+        },
+        CANONICAL_EVENT_FILE_POLICY,
+      ),
+    ).toThrow(/unsupported characters/);
+  });
+
   it("enforces the resolved event limit for a declared upload", () => {
     const policy = {
       ...CANONICAL_EVENT_FILE_POLICY,

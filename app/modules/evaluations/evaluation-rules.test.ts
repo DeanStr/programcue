@@ -71,6 +71,24 @@ describe("evaluation rules", () => {
     ).toBe(4.4);
   });
 
+  it("accepts odd 1-10 scores that become half-points on the five-point scale", () => {
+    expect(
+      calculateRubricWeightedScore(
+        [
+          { id: "fit", inputType: "scale_10", weightPercent: 50 },
+          { id: "quality", inputType: "scale_5", weightPercent: 50 },
+        ],
+        { fit: 7, quality: 4 },
+      ),
+    ).toBe(3.75);
+    expect(
+      calculateRubricWeightedScore(
+        [{ id: "fit", inputType: "scale_10", weightPercent: 100 }],
+        { fit: 1 },
+      ),
+    ).toBe(0.5);
+  });
+
   it("accepts unweighted yes/no and free-text criteria beside a weighted scale", () => {
     expect(() =>
       evaluationPlanSchema.parse({

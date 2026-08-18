@@ -116,6 +116,17 @@ describe("Communications D1 vertical slice", () => {
            ) VALUES (?, ?, 'Different owner', 1, 'draft', unixepoch(), unixepoch())`,
         ).bind(ownerId, ownerAddress),
         testEnv.DB.prepare(
+          `INSERT INTO event_speaker_workflows (
+             event_id, person_id, status, source, last_operation_id,
+             updated_by_person_id, created_at, updated_at
+           ) VALUES (?, ?, 'confirmed', 'manual', ?, ?, unixepoch(), unixepoch())`,
+        ).bind(
+          viewer.eventId,
+          targetId,
+          `reminder-workflow-${token}`,
+          viewer.personId,
+        ),
+        testEnv.DB.prepare(
           `INSERT INTO task_instances (
              id, event_id, target_type, target_id, owner_person_id, title,
              task_type, impact, status, readiness_state, created_at, updated_at
@@ -142,6 +153,61 @@ describe("Communications D1 vertical slice", () => {
           (recipient) => recipient.address === ownerAddress,
         ),
       ).toBe(false);
+    });
+
+    it("excludes declined and withdrawn speaker workflows from task reminders", async () => {
+      const { testEnv } = await communicationEnvironment();
+      const token = crypto.randomUUID();
+      const activeId = `reminder-active-${token}`;
+      const declinedId = `reminder-declined-${token}`;
+      const withdrawnId = `reminder-withdrawn-${token}`;
+      await testEnv.DB.batch(
+        [activeId, declinedId, withdrawnId].flatMap((personId, index) => [
+          testEnv.DB.prepare(
+            `INSERT INTO people (
+               id, email, display_name, email_verified, profile_status,
+               created_at, updated_at
+             ) VALUES (?, ?, ?, 1, 'draft', unixepoch(), unixepoch())`,
+          ).bind(
+            personId,
+            `${personId}@example.com`,
+            `Reminder ${index} speaker`,
+          ),
+          testEnv.DB.prepare(
+            `INSERT INTO event_speaker_workflows (
+               event_id, person_id, status, source, last_operation_id,
+               updated_by_person_id, created_at, updated_at
+             ) VALUES (?, ?, ?, 'manual', ?, ?, unixepoch(), unixepoch())`,
+          ).bind(
+            viewer.eventId,
+            personId,
+            index === 0 ? "confirmed" : index === 1 ? "declined" : "withdrawn",
+            `reminder-status-workflow-${personId}`,
+            viewer.personId,
+          ),
+          testEnv.DB.prepare(
+            `INSERT INTO task_instances (
+               id, event_id, target_type, target_id, title, task_type,
+               impact, status, readiness_state, created_at, updated_at
+             ) VALUES (?, ?, 'speaker', ?, 'Outstanding speaker task',
+                       'checklist', 'medium', 'not_started', 'on_track',
+                       unixepoch(), unixepoch())`,
+          ).bind(`reminder-status-task-${personId}`, viewer.eventId, personId),
+        ]),
+      );
+
+      const preview = await new RecipientQuery(testEnv).preview(viewer, {
+        audienceType: "incomplete_speakers",
+        manualRecipients: "",
+        category: "task_reminder",
+        kind: "transactional",
+      });
+      const addresses = preview.deliverable.map(
+        (recipient) => recipient.address,
+      );
+      expect(addresses).toContain(`${activeId}@example.com`);
+      expect(addresses).not.toContain(`${declinedId}@example.com`);
+      expect(addresses).not.toContain(`${withdrawnId}@example.com`);
     });
   });
 

@@ -1117,6 +1117,104 @@ describe("evaluation vertical slice", () => {
       });
     });
 
+    it("fails closed when a recused reviewer is still in the advance pool", async () => {
+      await resetEvaluationFixture();
+      const service = new EvaluationService(
+        env as unknown as CloudflareEnvironment,
+      );
+      const planId = await service.savePlan(admin, {
+        revision: 0,
+        name: "Recusal-guarded advance plan",
+        status: "active",
+        rounds: [
+          {
+            id: "eval-advance-recusal-one",
+            name: "Initial review",
+            anonymous: false,
+            criteria,
+          },
+        ],
+      });
+      const nextRoundId = await service.addNextRound(admin, {
+        planId,
+        planRevision: 1,
+        name: "Final review",
+        opensAt: null,
+        closesAt: null,
+        dueAt: null,
+        cloneRoundId: "eval-advance-recusal-one",
+      });
+      await addRoundReviewer("eval-advance-recusal-one");
+      await addRoundReviewer(nextRoundId);
+      await service.assign(admin, {
+        roundId: "eval-advance-recusal-one",
+        targetType: "submission",
+        targetIds: ["eval-test-submission"],
+        evaluatorPersonIds: [evaluator.personId],
+      });
+      const workspace = await service.getReviewerWorkspace(evaluator);
+      await service.saveReview(
+        evaluator,
+        {
+          assignmentId: workspace.selected!.id,
+          revision: 0,
+          scores: Object.fromEntries(
+            workspace.criteria.map((criterion) => [criterion.id, 5]),
+          ),
+          recommendation: "accept",
+          confidence: 5,
+          submitterFeedback: "Advance this proposal.",
+          privateNotes: "No remaining conflict after the first round.",
+          conflictAffirmed: true,
+          intent: "submit",
+        },
+        "participant_ui",
+      );
+      await env.DB.prepare(
+        `INSERT INTO evaluator_assignments (
+           id, event_id, round_id, submission_id, evaluator_person_id,
+           status, revision, assigned_at
+         ) VALUES (
+           'eval-advance-recused-pair', ?, ?, 'eval-test-submission', ?,
+           'recused', 1, unixepoch()
+         )`,
+      )
+        .bind(admin.eventId, nextRoundId, evaluator.personId)
+        .run();
+
+      await expect(
+        service.advanceRound(admin, {
+          fromRoundId: "eval-advance-recusal-one",
+          fromRoundRevision: 1,
+          toRoundId: nextRoundId,
+          toRoundRevision: 1,
+          submissionIds: ["eval-test-submission"],
+          evaluatorPersonIds: [evaluator.personId],
+          teamId: null,
+          confirmed: true,
+        }),
+      ).rejects.toBeInstanceOf(EvaluationRevisionConflictError);
+      expect(
+        await env.DB.prepare(
+          `
+          SELECT
+            (SELECT status FROM evaluation_rounds
+              WHERE id = 'eval-advance-recusal-one') AS firstStatus,
+            (SELECT status FROM evaluation_rounds WHERE id = ?) AS secondStatus,
+            (SELECT COUNT(*) FROM evaluator_assignments
+              WHERE round_id = ? AND submission_id = 'eval-test-submission'
+                AND status = 'assigned') AS nextAssignedCount
+        `,
+        )
+          .bind(nextRoundId, nextRoundId)
+          .first(),
+      ).toEqual({
+        firstStatus: "active",
+        secondStatus: "draft",
+        nextAssignedCount: 0,
+      });
+    });
+
     it("supports mixed rubric inputs, confirmed moderation and explicit review reopening", async () => {
       await resetEvaluationFixture();
       const service = new EvaluationService(

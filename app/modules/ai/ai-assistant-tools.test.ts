@@ -141,6 +141,28 @@ async function reminderEnvironment() {
                 unixepoch(), unixepoch())`,
     ).bind(suppressedPersonId, suppressedAddress),
     env.DB.prepare(
+      `INSERT INTO event_speaker_workflows (
+         event_id, person_id, status, source, last_operation_id,
+         updated_by_person_id, created_at, updated_at
+       ) VALUES (?, ?, 'confirmed', 'manual', ?, ?, unixepoch(), unixepoch())`,
+    ).bind(
+      admin.eventId,
+      deliverablePersonId,
+      `ai-reminder-workflow-deliverable-${suffix}`,
+      admin.personId,
+    ),
+    env.DB.prepare(
+      `INSERT INTO event_speaker_workflows (
+         event_id, person_id, status, source, last_operation_id,
+         updated_by_person_id, created_at, updated_at
+       ) VALUES (?, ?, 'confirmed', 'manual', ?, ?, unixepoch(), unixepoch())`,
+    ).bind(
+      admin.eventId,
+      suppressedPersonId,
+      `ai-reminder-workflow-suppressed-${suffix}`,
+      admin.personId,
+    ),
+    env.DB.prepare(
       `INSERT INTO task_instances (
         id, event_id, target_type, target_id, owner_person_id, title,
         task_type, impact, status, readiness_state, created_at, updated_at

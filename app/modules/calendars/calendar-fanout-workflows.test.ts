@@ -21,6 +21,43 @@ import {
 import { generateInvitationIcs, stableCalendarUid } from "./ics.server";
 
 describe("calendar fan-out workflows", () => {
+  it("does not request invites for hidden sessions and cancels leftover invitations", async () => {
+    const { testEnv, sessionId, scheduleVersionId } =
+      await scheduledSpeakerEnvironment();
+    await testEnv.DB.prepare(
+      `UPDATE sessions SET visibility = 'hidden' WHERE id = ? AND event_id = ?`,
+    )
+      .bind(sessionId, viewer.eventId)
+      .run();
+    const hiddenDispatch = await new CalendarService(
+      testEnv,
+    ).queuePublishedSchedule(viewer, scheduleVersionId);
+    expect(hiddenDispatch).toMatchObject({
+      targetCount: 0,
+      queuedCount: 0,
+    });
+
+    await testEnv.DB.prepare(
+      `INSERT INTO calendar_invitations (
+         id, event_id, session_id, person_id, ical_uid, sequence_number,
+         method, status, created_at, updated_at
+       ) VALUES (?, ?, ?, 'person-demo-speaker', ?, 0, 'REQUEST', 'sent',
+                 unixepoch(), unixepoch())`,
+    )
+      .bind(
+        `calendar-hidden-invitation-${crypto.randomUUID()}`,
+        viewer.eventId,
+        sessionId,
+        `calendar-hidden-${crypto.randomUUID()}@programcue`,
+      )
+      .run();
+    const cancelDispatch = await new CalendarService(
+      testEnv,
+    ).queuePublishedSchedule(viewer, scheduleVersionId);
+    expect(cancelDispatch.targetCount).toBe(1);
+    expect(cancelDispatch.failures).toEqual([]);
+  });
+
   it("heartbeats before every published-schedule fan-out target", async () => {
     const { testEnv, scheduleVersionId } = await scheduledSpeakerEnvironment();
     let heartbeatCount = 0;

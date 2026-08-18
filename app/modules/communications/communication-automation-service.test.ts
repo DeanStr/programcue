@@ -306,6 +306,40 @@ describe("communication scheduling and reminder automation", () => {
     });
   });
 
+  it("marks a no-recipient reminder day complete instead of retrying all day", async () => {
+    const { testEnv } = await environment();
+    const service = new CommunicationService(testEnv);
+    const automation = new CommunicationAutomationService(testEnv);
+    const now = Math.floor(Date.parse("2027-05-20T12:00:00Z") / 1_000);
+    const template = await publishedTemplate(service, "task_reminder");
+    const trigger = await service.saveTrigger(viewer, {
+      templateId: template.templateId,
+      triggerType: "task_due",
+      audienceType: "due_speakers",
+      kind: "transactional",
+      sendHourUtc: 9,
+      enabled: true,
+    });
+
+    const first = await automation.run(now);
+    const second = await automation.run(now + 60);
+    expect(first.reminders).toMatchObject({ queued: 0, noRecipients: 1 });
+    expect(second.reminders).toMatchObject({ queued: 0, noRecipients: 0 });
+    await expect(
+      testEnv.DB.prepare(
+        `SELECT json_extract(configuration_json, '$.lastRunBucket') AS lastRunBucket
+           FROM communication_triggers WHERE id = ? AND event_id = ?`,
+      )
+        .bind(trigger.id, viewer.eventId)
+        .first(),
+    ).resolves.toEqual({ lastRunBucket: "2027-05-20" });
+    await testEnv.DB.prepare(
+      "UPDATE communication_triggers SET enabled = 0 WHERE id = ? AND event_id = ?",
+    )
+      .bind(trigger.id, viewer.eventId)
+      .run();
+  });
+
   it("isolates an invalid trigger and continues with later event reminders", async () => {
     const { testEnv, queued } = await environment();
     const service = new CommunicationService(testEnv);

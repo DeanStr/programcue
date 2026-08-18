@@ -211,6 +211,7 @@ export class RecipientQuery {
                     JOIN submissions s ON s.id = ss.submission_id AND s.event_id = ss.event_id
                     JOIN events e ON e.id = ss.event_id AND e.organisation_id = ?
                    WHERE ss.event_id = ? AND s.status = 'accepted'
+                     AND (ss.is_primary = 1 OR ss.invitation_status = 'claimed')
                   UNION ALL
                   SELECT p.id AS personId, p.email AS address,
                          p.display_name AS name, sp.session_id AS sourceId,
@@ -220,6 +221,7 @@ export class RecipientQuery {
                     JOIN sessions s ON s.id = sp.session_id AND s.event_id = sp.event_id
                     JOIN events e ON e.id = sp.event_id AND e.organisation_id = ?
                    WHERE sp.event_id = ? AND s.status IN ('unscheduled','scheduled','published')
+                     AND sp.participation_status = 'confirmed'
                 ) candidates
             ) recipients
            WHERE recipientRank = 1 AND trim(address) <> ''
@@ -281,9 +283,13 @@ export class RecipientQuery {
                 FROM task_instances t
                 JOIN people p ON p.id = t.target_id
                 JOIN events e ON e.id = t.event_id AND e.organisation_id = ?
+                JOIN event_speaker_workflows workflow
+                  ON workflow.event_id = t.event_id AND workflow.person_id = p.id
+                 AND workflow.status IN ('prospect','invited','confirmed')
                WHERE t.event_id = ?
                  AND t.target_type = 'speaker'
                  AND t.status NOT IN ('completed','waived')
+                 AND trim(p.email) <> ''
             ) recipients
            WHERE recipientRank = 1
            ORDER BY urgencyRank, dueAt, sourceId
@@ -307,10 +313,14 @@ export class RecipientQuery {
                 FROM task_instances t
                 JOIN people p ON p.id = t.target_id
                 JOIN events e ON e.id = t.event_id AND e.organisation_id = ?
+                JOIN event_speaker_workflows workflow
+                  ON workflow.event_id = t.event_id AND workflow.person_id = p.id
+                 AND workflow.status IN ('prospect','invited','confirmed')
                WHERE t.event_id = ? AND t.target_type = 'speaker'
                  AND t.status NOT IN ('submitted','completed','waived','overdue')
                  AND t.due_at >= unixepoch()
                  AND t.due_at < unixepoch() + 86400
+                 AND trim(p.email) <> ''
             ) recipients
            WHERE recipientRank = 1
            ORDER BY sourceId
@@ -334,9 +344,13 @@ export class RecipientQuery {
                 FROM task_instances t
                 JOIN people p ON p.id = t.target_id
                 JOIN events e ON e.id = t.event_id AND e.organisation_id = ?
+                JOIN event_speaker_workflows workflow
+                  ON workflow.event_id = t.event_id AND workflow.person_id = p.id
+                 AND workflow.status IN ('prospect','invited','confirmed')
                WHERE t.event_id = ? AND t.target_type = 'speaker'
                  AND t.status NOT IN ('submitted','completed','waived')
                  AND t.due_at < unixepoch()
+                 AND trim(p.email) <> ''
             ) recipients
            WHERE recipientRank = 1
            ORDER BY sourceId

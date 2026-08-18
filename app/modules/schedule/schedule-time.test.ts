@@ -42,6 +42,27 @@ describe("event-local schedule time", () => {
     ).toBe("2025-03-30T08:00:00.000Z");
   });
 
+  it("reuses the exclusive end of a timezone date instead of searching again", () => {
+    const boundary = Date.parse("2025-05-20T00:00:00Z") / 1_000;
+    const first = eventLocalExclusiveEndEpoch(boundary, "America/Toronto");
+    expect(eventLocalExclusiveEndEpoch(boundary, "America/Toronto")).toBe(
+      first,
+    );
+    expect(
+      eventLocalExclusiveEndEpoch(boundary + 12 * 60 * 60, "America/Toronto"),
+    ).toBe(first);
+  });
+
+  it("still resolves exclusive ends after the date cache is evicted", () => {
+    const timezone = "UTC";
+    const firstBoundary = Date.parse("2020-01-01T00:00:00Z") / 1_000;
+    const first = eventLocalExclusiveEndEpoch(firstBoundary, timezone);
+    for (let offset = 1; offset <= 520; offset += 1) {
+      eventLocalExclusiveEndEpoch(firstBoundary + offset * 86_400, timezone);
+    }
+    expect(eventLocalExclusiveEndEpoch(firstBoundary, timezone)).toBe(first);
+  });
+
   it("resolves the end of an event calendar date in the event timezone", () => {
     const boundary = Date.parse("2025-05-20T00:00:00Z") / 1_000;
 
@@ -113,6 +134,22 @@ describe("event-local schedule time", () => {
     expect(
       eventDayUsableScheduleSlots(days[1]!, "America/Toronto"),
     ).not.toContain(eventLocalTimeEpoch(days[1]!, "America/Toronto", 0));
+  });
+
+  it("still builds placement slots when local midnight is skipped", () => {
+    const santiagoSkippedMidnight = Date.parse("2026-09-06T00:00:00Z") / 1_000;
+
+    expect(() =>
+      eventLocalTimeEpoch(santiagoSkippedMidnight, "America/Santiago", 0),
+    ).toThrow(/does not exist/);
+    expect(
+      eventDayScheduleSlots(santiagoSkippedMidnight, "America/Santiago"),
+    ).toHaveLength(46);
+    expect(
+      eventDayUsableScheduleSlots(santiagoSkippedMidnight, "America/Santiago"),
+    ).toContain(
+      eventLocalTimeEpoch(santiagoSkippedMidnight, "America/Santiago", 7),
+    );
   });
 
   it("uses the actual length of a daylight-saving event day", () => {

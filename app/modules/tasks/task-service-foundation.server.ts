@@ -4,7 +4,7 @@ import {
   airtableCommandKey,
   airtableIntentCommand,
 } from "~/modules/airtable/airtable-provider-boundary.server";
-import { eventLocalTimeEpoch } from "~/modules/schedule/schedule-time";
+import { eventLocalExclusiveEndEpoch } from "~/modules/schedule/schedule-time";
 import type { Viewer } from "~/platform/auth/authorize.server";
 import {
   WebhookQueueConfigurationError,
@@ -283,7 +283,7 @@ export function parseTaskEvidenceDetails(taskId: string, value: string) {
 export function fixedDateEndEpoch(value: string | null, timezone: string) {
   if (!value) return null;
   const endMarker = Math.floor(Date.parse(`${value}T23:59:59Z`) / 1_000);
-  return eventLocalTimeEpoch(endMarker + 1, timezone, 0) - 1;
+  return eventLocalExclusiveEndEpoch(endMarker, timezone) - 1;
 }
 
 export function statusProgress(status: TaskRow["status"]) {

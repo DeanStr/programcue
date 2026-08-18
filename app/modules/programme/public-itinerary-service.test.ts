@@ -284,6 +284,63 @@ describe("published programme and itinerary", () => {
     ).resolves.toEqual({ total: (before?.total ?? 0) + 1 });
   });
 
+  it("does not add a hidden published session to an anonymous visitor itinerary", async () => {
+    const service = new PublicProgrammeService({
+      ...(env as unknown as CloudflareEnvironment),
+      DEMO_MODE: "false",
+    } as CloudflareEnvironment);
+    const programme = await service.getPublished("future-of-events-2027");
+    expect(programme).not.toBeNull();
+    const activeProgramme = {
+      ...programme!,
+      event: { ...programme!.event, endDate: "2099-05-22" },
+    };
+    const sessionId = activeProgramme.sessions[0]!.id;
+    await env.DB.prepare(
+      `UPDATE sessions SET visibility = 'hidden' WHERE id = ? AND event_id = ?`,
+    )
+      .bind(sessionId, activeProgramme.event.id)
+      .run();
+    try {
+      const { token } = await service.updateItinerary(
+        activeProgramme,
+        { personId: null, visitorToken: null },
+        sessionId,
+        "add",
+      );
+      expect(token).toEqual(expect.any(String));
+      const visitorHash = await eventVisitorKeyHash(
+        env as unknown as CloudflareEnvironment,
+        token as string,
+        activeProgramme.event.id,
+      );
+      await expect(
+        service.itinerary(activeProgramme, {
+          personId: null,
+          visitorToken: token,
+        }),
+      ).resolves.toEqual([]);
+      expect(
+        await env.DB.prepare(
+          `SELECT COUNT(*) AS total
+             FROM public_itinerary_items item
+             JOIN public_itineraries itinerary ON itinerary.id = item.itinerary_id
+            WHERE itinerary.event_id = ?
+              AND itinerary.visitor_key_hash = ?
+              AND item.session_id = ?`,
+        )
+          .bind(activeProgramme.event.id, visitorHash, sessionId)
+          .first(),
+      ).toEqual({ total: 0 });
+    } finally {
+      await env.DB.prepare(
+        `UPDATE sessions SET visibility = 'public' WHERE id = ? AND event_id = ?`,
+      )
+        .bind(sessionId, activeProgramme.event.id)
+        .run();
+    }
+  });
+
   it("rejects an unsigned visitor cookie instead of accepting a fixed bearer token", async () => {
     const attackerSelectedToken = `fixed-${crypto.randomUUID()}`;
     await expect(

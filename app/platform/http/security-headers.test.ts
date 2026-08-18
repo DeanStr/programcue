@@ -96,6 +96,12 @@ describe("Worker security headers", () => {
       "/review.data",
       "/review/workbench",
       "/review/workbench.data",
+      "/participant",
+      "/participant.data",
+      "/participant/dashboard",
+      "/participant/files/asset-1",
+      "/events/select",
+      "/events/select.data",
       "/ai/context",
       "/ai/context.data",
     ]) {

@@ -16,6 +16,7 @@ import { TaskService } from "~/modules/tasks/task-service.server";
 import type { Viewer } from "~/platform/auth/authorize.server";
 import { requireEventRole } from "~/platform/auth/authorize.server";
 import { ensureDemoData } from "~/platform/demo/seed.server";
+import { cloneSlugDefault } from "~/platform/operations/event-clone-plan.server";
 import {
   EventCloneConfigurationError,
   EventCloneService,
@@ -56,6 +57,15 @@ function preparedConnection(): PreparedAirtableRepositoryConnection {
 }
 
 describe("event cloning", () => {
+  it("allocates a unique default slug when -copy is already taken", () => {
+    expect(cloneSlugDefault("future-of-events-2027")).toBe(
+      "future-of-events-2027-copy",
+    );
+    expect(
+      cloneSlugDefault("future-of-events-2027", ["future-of-events-2027-copy"]),
+    ).toBe("future-of-events-2027-copy-2");
+  });
+
   beforeEach(async () => {
     await ensureDemoData(env as unknown as CloudflareEnvironment);
     await env.DB.batch([

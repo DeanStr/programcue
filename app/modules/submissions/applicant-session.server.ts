@@ -16,6 +16,7 @@ import type {
 } from "./submission-repository.server";
 
 const COOKIE_PREFIX = "pc_applicant";
+const PRODUCTION_COOKIE_PREFIX = "__Host-pc_applicant";
 const DEMO_CODE = "424242";
 
 export class ApplicantInputError extends Error {
@@ -79,27 +80,91 @@ function requireEmailDelivery(env: CloudflareEnvironment) {
   }
 }
 
-async function cookieName(formId: string) {
-  return `${COOKIE_PREFIX}_${(await hashApplicantToken(formId)).slice(0, 16)}`;
+async function cookieName(formId: string, production: boolean) {
+  const prefix = production ? PRODUCTION_COOKIE_PREFIX : COOKIE_PREFIX;
+  return `${prefix}_${(await hashApplicantToken(formId)).slice(0, 16)}`;
+}
+
+async function formCookieName(env: CloudflareEnvironment, formId: string) {
+  return cookieName(formId, requiresProductionSecurity(env.APP_ENV));
 }
 
 function cookieValue(request: Request, expectedName: string) {
   const cookies = request.headers.get("cookie") ?? "";
   for (const part of cookies.split(";")) {
     const [name, ...value] = part.trim().split("=");
-    if (name === expectedName) {
-      try {
-        return decodeURIComponent(value.join("="));
-      } catch {
-        return null;
-      }
-    }
+    if (name !== expectedName) continue;
+    try {
+      return decodeURIComponent(value.join("="));
+    } catch {}
   }
   return null;
 }
 
-function sessionCookie(name: string, value: string, production: boolean) {
-  return `${name}=${encodeURIComponent(value)}; Path=/apply; HttpOnly; SameSite=Lax; Max-Age=1209600${production ? "; Secure" : ""}`;
+function cookieSecureFlag(name: string, production: boolean) {
+  return production || name.startsWith("__Host-") ? "; Secure" : "";
+}
+
+function expireApplicantCookie(
+  name: string,
+  path: "/" | "/apply",
+  production: boolean,
+) {
+  return `${name}=; Path=${path}; HttpOnly; SameSite=Lax; Max-Age=0${cookieSecureFlag(name, production)}`;
+}
+
+function leftoverApplicantCookieExpiries(
+  currentName: string,
+  production: boolean,
+) {
+  if (currentName.startsWith("__Host-")) {
+    const legacyName = currentName.slice("__Host-".length);
+    return [
+      expireApplicantCookie(legacyName, "/", true),
+      expireApplicantCookie(legacyName, "/", false),
+      expireApplicantCookie(legacyName, "/apply", true),
+      expireApplicantCookie(legacyName, "/apply", false),
+    ];
+  }
+  return [expireApplicantCookie(currentName, "/apply", production)];
+}
+
+function applicantSetCookies(name: string, value: string, production: boolean) {
+  return [
+    `${name}=${encodeURIComponent(value)}; Path=/; HttpOnly; SameSite=Lax; Max-Age=1209600${cookieSecureFlag(name, production)}`,
+    ...leftoverApplicantCookieExpiries(name, production),
+  ];
+}
+
+async function issueApplicantCookies(
+  env: CloudflareEnvironment,
+  formId: string,
+  value: string,
+) {
+  const production = requiresProductionSecurity(env.APP_ENV);
+  const setCookies = applicantSetCookies(
+    await formCookieName(env, formId),
+    value,
+    production,
+  );
+  const cookie = setCookies[0];
+  if (!cookie) {
+    throw new Error("Applicant session cookies must include a live cookie.");
+  }
+  return { cookie, setCookies };
+}
+
+async function readApplicantToken(
+  request: Request,
+  env: CloudflareEnvironment,
+  formId: string,
+) {
+  const production = requiresProductionSecurity(env.APP_ENV);
+  const currentName = await cookieName(formId, production);
+  const current = cookieValue(request, currentName);
+  if (current) return current;
+  if (production) return cookieValue(request, await cookieName(formId, false));
+  return null;
 }
 
 export type PublicForm = FormSummary & { version: FormVersion };
@@ -107,6 +172,7 @@ export type PublicForm = FormSummary & { version: FormVersion };
 export type PreparedApplicantSession = {
   applicant: Applicant;
   cookie: string;
+  setCookies: string[];
   persistence: {
     sessionId: string;
     identifier: string;
@@ -204,7 +270,7 @@ export class ApplicantSessionService {
       }
     }
 
-    const rawToken = cookieValue(request, await cookieName(form.id));
+    const rawToken = await readApplicantToken(request, this.env, form.id);
     if (!rawToken) return null;
     const tokenHash = await hashApplicantToken(rawToken);
     const token = await this.env.DB.prepare(
@@ -334,11 +400,7 @@ export class ApplicantSessionService {
     return {
       applicant: anonymousApplicant(draftId),
       tokenId,
-      cookie: sessionCookie(
-        await cookieName(form.id),
-        rawSession,
-        requiresProductionSecurity(this.env.APP_ENV),
-      ),
+      ...(await issueApplicantCookies(this.env, form.id, rawSession)),
     };
   }
 
@@ -375,11 +437,7 @@ export class ApplicantSessionService {
         verified: true as const,
         anonymousDraftId: null,
       },
-      cookie: sessionCookie(
-        await cookieName(form.id),
-        rawSession,
-        requiresProductionSecurity(this.env.APP_ENV),
-      ),
+      ...(await issueApplicantCookies(this.env, form.id, rawSession)),
       persistence: { sessionId, identifier, sessionHash, personId },
     };
   }
@@ -556,7 +614,7 @@ export class ApplicantSessionService {
       await this.assertAnonymousPrimaryEmail(form, anonymousDraftId, email);
     }
     const rawAnonymousToken = request
-      ? cookieValue(request, await cookieName(form.id))
+      ? await readApplicantToken(request, this.env, form.id)
       : null;
     const rawSession = crypto.randomUUID() + crypto.randomUUID();
     const sessionHash = await hashApplicantToken(rawSession);
@@ -756,17 +814,14 @@ export class ApplicantSessionService {
         verified: true as const,
         anonymousDraftId: null,
       },
-      cookie: sessionCookie(
-        await cookieName(form.id),
-        rawSession,
-        requiresProductionSecurity(this.env.APP_ENV),
-      ),
+      ...(await issueApplicantCookies(this.env, form.id, rawSession)),
     };
   }
 
   async signOut(request: Request, form: PublicForm) {
-    const name = await cookieName(form.id);
-    const rawToken = cookieValue(request, name);
+    const production = requiresProductionSecurity(this.env.APP_ENV);
+    const name = await formCookieName(this.env, form.id);
+    const rawToken = await readApplicantToken(request, this.env, form.id);
     if (rawToken) {
       await this.env.DB.prepare(
         "DELETE FROM verification_tokens WHERE value = ?",
@@ -774,7 +829,10 @@ export class ApplicantSessionService {
         .bind(await hashApplicantToken(rawToken))
         .run();
     }
-    return `${name}=; Path=/apply; HttpOnly; SameSite=Lax; Max-Age=0`;
+    return [
+      expireApplicantCookie(name, "/", production),
+      ...leftoverApplicantCookieExpiries(name, production),
+    ];
   }
 
   static hashPassword(value: string, pepper: string) {

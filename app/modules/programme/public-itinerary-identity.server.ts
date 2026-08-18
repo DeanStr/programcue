@@ -13,6 +13,14 @@ import {
 import { readCookie } from "./public-programme-service.server";
 
 export const PUBLIC_ITINERARY_COOKIE = "program_cue_itinerary";
+export const PRODUCTION_PUBLIC_ITINERARY_COOKIE =
+  "__Host-program_cue_itinerary";
+
+export function publicItineraryCookieName(production: boolean) {
+  return production
+    ? PRODUCTION_PUBLIC_ITINERARY_COOKIE
+    : PUBLIC_ITINERARY_COOKIE;
+}
 
 export async function itineraryCookie(
   env: CloudflareEnvironment,
@@ -20,16 +28,23 @@ export async function itineraryCookie(
   requestUrl: string,
   now = Math.floor(Date.now() / 1_000),
 ) {
-  const secure = new URL(requestUrl).protocol === "https:" ? "; Secure" : "";
+  const production = new URL(requestUrl).protocol === "https:";
+  const secure = production ? "; Secure" : "";
   const signed = await signItineraryBrowserCookie(env, token, now);
   const lifetime = `; Expires=${new Date(signed.expiresAt * 1_000).toUTCString()}; Max-Age=${signed.expiresAt - now}`;
-  return `${PUBLIC_ITINERARY_COOKIE}=${encodeURIComponent(signed.value)}; Path=/; HttpOnly; SameSite=Lax${lifetime}${secure}`;
+  return `${publicItineraryCookieName(production)}=${encodeURIComponent(signed.value)}; Path=/; HttpOnly; SameSite=Lax${lifetime}${secure}`;
 }
 
 async function readItineraryBrowserId(
   request: Request,
   env: CloudflareEnvironment,
 ) {
+  const production = new URL(request.url).protocol === "https:";
+  const preferred = await verifyItineraryBrowserCookie(
+    env,
+    readCookie(request, publicItineraryCookieName(production)),
+  );
+  if (preferred) return preferred;
   return verifyItineraryBrowserCookie(
     env,
     readCookie(request, PUBLIC_ITINERARY_COOKIE),

@@ -2,7 +2,7 @@ import {
   type EventFilePolicy,
   parseEventFilePolicy,
 } from "~/modules/files/file-policy";
-import { eventLocalTimeEpoch } from "~/modules/schedule/schedule-time";
+import { eventLocalExclusiveEndEpoch } from "~/modules/schedule/schedule-time";
 import {
   type FormRouting,
   routingSchema,
@@ -225,7 +225,7 @@ export function closeDateFromEpoch(value: number | null, timezone: string) {
 export function closeDateToEpoch(value: string | null, timezone: string) {
   if (value === null) return null;
   const endMarker = Math.floor(Date.parse(`${value}T23:59:59Z`) / 1_000);
-  return eventLocalTimeEpoch(endMarker + 1, timezone, 0) - 1;
+  return eventLocalExclusiveEndEpoch(endMarker, timezone) - 1;
 }
 
 export function settingsSnapshot(input: SaveFormInput, timezone: string) {

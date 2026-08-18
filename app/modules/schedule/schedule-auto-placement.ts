@@ -344,6 +344,12 @@ export function revalidateSelectedAutoPlacements(
   for (const placement of placements) {
     const session = sessionById.get(placement.sessionId);
     if (!session || !roomIds.has(placement.roomId)) return null;
+    if (typeof session.hasUnpublishedSpeaker !== "boolean") {
+      throw new ScheduleConfigurationError(
+        `Session ${session.id} is missing speaker publication visibility metadata.`,
+      );
+    }
+    if (session.hasUnpublishedSpeaker) return null;
     const conflicts = detectScheduleConflicts({
       candidate: {
         sessionId: session.id,

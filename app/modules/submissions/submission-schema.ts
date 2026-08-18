@@ -1,5 +1,7 @@
 import { z } from "zod";
 
+import { isCredentialFreeHttpsUrl } from "~/modules/events/https-url";
+
 export const fieldTypeSchema = z.enum([
   "short_text",
   "long_text",
@@ -754,10 +756,7 @@ export function validateFinalAnswers(
       }
     }
     if (!missing && (field.type === "url" || field.type === "video")) {
-      try {
-        const url = new URL(String(answer));
-        if (url.protocol !== "https:") throw new Error("unsupported protocol");
-      } catch {
+      if (!isCredentialFreeHttpsUrl(String(answer))) {
         errors[field.id] = ["Enter a valid URL beginning with https://"];
       }
     }
@@ -773,9 +772,23 @@ export function validateFinalAnswers(
   );
   if (speakers.length > effectiveMaximum)
     errors.speakers = [`This form allows at most ${effectiveMaximum} speakers`];
-  const emails = speakers.map((speaker) => speaker.email.toLowerCase());
-  if (new Set(emails).size !== emails.length)
-    errors.speakers = ["Each speaker must use a different email address"];
+  if (
+    speakers.some((speaker) => !speaker.name.trim() || !speaker.email.trim())
+  ) {
+    errors.speakers = ["Every speaker needs a name and email address"];
+  } else if (
+    speakers.some(
+      (speaker) => !z.email().safeParse(speaker.email.trim()).success,
+    )
+  ) {
+    errors.speakers = ["Every speaker needs a valid email address"];
+  } else {
+    const emails = speakers.map((speaker) =>
+      speaker.email.trim().toLowerCase(),
+    );
+    if (new Set(emails).size !== emails.length)
+      errors.speakers = ["Each speaker must use a different email address"];
+  }
   return errors;
 }
 

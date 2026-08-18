@@ -616,6 +616,17 @@ describe("Communications D1 vertical slice", () => {
            ) VALUES (?, ?, 'Urgent reminder recipient', 1, 'draft', unixepoch(), unixepoch())`,
         ).bind(personId, address),
         testEnv.DB.prepare(
+          `INSERT INTO event_speaker_workflows (
+             event_id, person_id, status, source, last_operation_id,
+             updated_by_person_id, created_at, updated_at
+           ) VALUES (?, ?, 'confirmed', 'manual', ?, ?, unixepoch(), unixepoch())`,
+        ).bind(
+          viewer.eventId,
+          personId,
+          `urgent-reminder-workflow-${token}`,
+          viewer.personId,
+        ),
+        testEnv.DB.prepare(
           `INSERT INTO task_instances (
              id, event_id, target_type, target_id, owner_person_id, title,
              task_type, impact, status, readiness_state, due_at, created_at, updated_at
@@ -790,6 +801,17 @@ describe("Communications D1 vertical slice", () => {
           "INSERT INTO people (id, email, display_name) VALUES (?, ?, 'Previewed recipient')",
         ).bind(firstPersonId, `${firstPersonId}@example.com`),
         env.DB.prepare(
+          `INSERT INTO event_speaker_workflows (
+             event_id, person_id, status, source, last_operation_id,
+             updated_by_person_id, created_at, updated_at
+           ) VALUES (?, ?, 'confirmed', 'manual', ?, ?, unixepoch(), unixepoch())`,
+        ).bind(
+          viewer.eventId,
+          firstPersonId,
+          `preview-workflow-${firstPersonId}`,
+          viewer.personId,
+        ),
+        env.DB.prepare(
           `
           INSERT INTO task_instances (
             id, event_id, target_type, target_id, owner_person_id, title,
@@ -817,6 +839,17 @@ describe("Communications D1 vertical slice", () => {
         env.DB.prepare(
           "INSERT INTO people (id, email, display_name) VALUES (?, ?, 'Late recipient')",
         ).bind(secondPersonId, `${secondPersonId}@example.com`),
+        env.DB.prepare(
+          `INSERT INTO event_speaker_workflows (
+             event_id, person_id, status, source, last_operation_id,
+             updated_by_person_id, created_at, updated_at
+           ) VALUES (?, ?, 'confirmed', 'manual', ?, ?, unixepoch(), unixepoch())`,
+        ).bind(
+          viewer.eventId,
+          secondPersonId,
+          `preview-workflow-${secondPersonId}`,
+          viewer.personId,
+        ),
         env.DB.prepare(
           `
           INSERT INTO task_instances (

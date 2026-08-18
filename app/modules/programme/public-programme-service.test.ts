@@ -23,9 +23,86 @@ import {
   assertPublishedSpeakerGraphIntegrity,
   PublicProgrammeService,
   PublishedProgrammeSpeakerInvariantError,
+  parsePublishedSpeakerArray,
 } from "./public-programme-service.server";
 
 describe("published programme and itinerary", () => {
+  it("fails closed when a published speaker array is missing", () => {
+    expect(() =>
+      parsePublishedSpeakerArray("version-1", "break-1", "speaker IDs", null),
+    ).toThrow(/did not return speaker IDs/);
+    expect(
+      parsePublishedSpeakerArray("version-1", "break-1", "speaker names", "[]"),
+    ).toEqual([]);
+  });
+
+  it("returns an empty speaker list for a published session with no speakers", async () => {
+    const testEnv = env as unknown as CloudflareEnvironment;
+    await ensureDemoData(testEnv);
+    const sessionId = `break-no-speakers-${crypto.randomUUID()}`;
+    const slug = `break-no-speakers-${sessionId.slice(-8)}`;
+    await testEnv.DB.prepare(
+      `INSERT INTO sessions (
+         id, event_id, title, slug, description, format, duration_minutes,
+         status, visibility, revision, created_at, updated_at
+       ) VALUES (?, 'evt-foe-2025', 'Open space', ?, '', 'presentation', 15,
+                 'published', 'public', 1, unixepoch(), unixepoch())`,
+    )
+      .bind(sessionId, slug)
+      .run();
+    const row = await testEnv.DB.prepare(
+      `
+      SELECT
+        (
+          SELECT json_group_array(ordered.personId)
+            FROM (
+              SELECT ss.person_id AS personId
+                FROM session_speakers ss
+                JOIN people p ON p.id = ss.person_id AND p.profile_status = 'published'
+               WHERE ss.session_id = s.id AND ss.event_id = s.event_id
+                 AND ss.visibility = 'public'
+                 AND ss.participation_status = 'confirmed'
+               ORDER BY ss.position, ss.person_id
+            ) ordered
+        ) AS speakerIds,
+        (
+          SELECT json_group_array(ordered.displayName)
+            FROM (
+              SELECT p.display_name AS displayName
+                FROM session_speakers ss
+                JOIN people p ON p.id = ss.person_id AND p.profile_status = 'published'
+               WHERE ss.session_id = s.id AND ss.event_id = s.event_id
+                 AND ss.visibility = 'public'
+                 AND ss.participation_status = 'confirmed'
+               ORDER BY ss.position, ss.person_id
+            ) ordered
+        ) AS speakerNames
+        FROM sessions s
+       WHERE s.id = ? AND s.event_id = 'evt-foe-2025'
+    `,
+    )
+      .bind(sessionId)
+      .first<{ speakerIds: string | null; speakerNames: string | null }>();
+    expect(row).toEqual({ speakerIds: "[]", speakerNames: "[]" });
+    if (!row) throw new Error("Speaker-less session query returned no row.");
+    expect(
+      parsePublishedSpeakerArray(
+        "demo-schedule-published",
+        sessionId,
+        "speaker IDs",
+        row.speakerIds,
+      ),
+    ).toEqual([]);
+    expect(
+      parsePublishedSpeakerArray(
+        "demo-schedule-published",
+        sessionId,
+        "speaker names",
+        row.speakerNames,
+      ),
+    ).toEqual([]);
+  });
+
   afterEach(() => {
     vi.restoreAllMocks();
     vi.unstubAllGlobals();

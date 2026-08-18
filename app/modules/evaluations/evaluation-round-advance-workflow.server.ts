@@ -151,6 +151,26 @@ export class EvaluationRoundAdvanceWorkflow extends EvaluationServiceFoundation 
            AND pool.round_id = ?
            AND pool.person_id IN (${evaluatorPlaceholders})
       ) = ?
+      AND NOT EXISTS (
+        SELECT 1 FROM evaluator_assignments recused
+         WHERE recused.event_id = ?
+           AND recused.submission_id IN (${submissionPlaceholders})
+           AND recused.evaluator_person_id IN (${evaluatorPlaceholders})
+           AND recused.status = 'recused'
+      )
+      AND NOT EXISTS (
+        SELECT 1 FROM submissions own_submission
+         WHERE own_submission.event_id = ?
+           AND own_submission.id IN (${submissionPlaceholders})
+           AND own_submission.submitter_person_id IN (${evaluatorPlaceholders})
+      )
+      AND NOT EXISTS (
+        SELECT 1 FROM submission_speakers own_speaker
+         WHERE own_speaker.event_id = ?
+           AND own_speaker.submission_id IN (${submissionPlaceholders})
+           AND own_speaker.person_id IN (${evaluatorPlaceholders})
+           AND own_speaker.invitation_status = 'claimed'
+      )
       ${
         parsed.teamId
           ? `AND (
@@ -211,6 +231,15 @@ export class EvaluationRoundAdvanceWorkflow extends EvaluationServiceFoundation 
       parsed.toRoundId,
       ...evaluatorPersonIds,
       evaluatorPersonIds.length,
+      viewer.eventId,
+      ...parsed.submissionIds,
+      ...evaluatorPersonIds,
+      viewer.eventId,
+      ...parsed.submissionIds,
+      ...evaluatorPersonIds,
+      viewer.eventId,
+      ...parsed.submissionIds,
+      ...evaluatorPersonIds,
       ...(parsed.teamId
         ? [
             viewer.eventId,
@@ -338,6 +367,26 @@ export class EvaluationRoundAdvanceWorkflow extends EvaluationServiceFoundation 
                SELECT 1 FROM events
                 WHERE id = ? AND organisation_id = ? AND last_operation_id = ?
              )
+             AND NOT EXISTS (
+               SELECT 1 FROM evaluator_assignments recused
+                WHERE recused.event_id = ?
+                  AND recused.submission_id = ?
+                  AND recused.evaluator_person_id = ?
+                  AND recused.status = 'recused'
+             )
+             AND NOT EXISTS (
+               SELECT 1 FROM submissions own_submission
+                WHERE own_submission.event_id = ?
+                  AND own_submission.id = ?
+                  AND own_submission.submitter_person_id = ?
+             )
+             AND NOT EXISTS (
+               SELECT 1 FROM submission_speakers own_speaker
+                WHERE own_speaker.event_id = ?
+                  AND own_speaker.submission_id = ?
+                  AND own_speaker.person_id = ?
+                  AND own_speaker.invitation_status = 'claimed'
+             )
           `,
           ).bind(
             crypto.randomUUID(),
@@ -350,6 +399,15 @@ export class EvaluationRoundAdvanceWorkflow extends EvaluationServiceFoundation 
             viewer.eventId,
             viewer.organisationId,
             operationId,
+            viewer.eventId,
+            submissionId,
+            evaluatorPersonId,
+            viewer.eventId,
+            submissionId,
+            evaluatorPersonId,
+            viewer.eventId,
+            submissionId,
+            evaluatorPersonId,
           ),
         );
       }
@@ -474,7 +532,12 @@ export class EvaluationRoundAdvanceWorkflow extends EvaluationServiceFoundation 
     statements.push(...preparedWebhook.statements);
     const results = await this.env.DB.batch(statements);
     const claimed = results[domainStatementIndex];
-    if ((claimed.meta.changes ?? 0) !== 1) {
+    const insertCount = parsed.submissionIds.length * evaluatorPersonIds.length;
+    const auditIndex = domainStatementIndex + insertCount + 6;
+    if (
+      (claimed.meta.changes ?? 0) !== 1 ||
+      (results[auditIndex]?.meta.changes ?? 0) !== 1
+    ) {
       const replay = await this.recoverApiCommand(commandState.prepared);
       if (replay) return replay;
       throw new EvaluationRevisionConflictError(

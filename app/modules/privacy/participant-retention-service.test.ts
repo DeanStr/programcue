@@ -34,6 +34,19 @@ describe("participant retention", () => {
       externalProviderErasureRequired: true,
     });
 
+    const webhookId = id("privacy-webhook");
+    await seeded.testEnv.DB.prepare(
+      `INSERT INTO webhook_endpoints (
+         id, organisation_id, event_id, name, url, secret_ciphertext,
+         event_types_json, status
+       ) VALUES (?, ?, ?, 'Retention wipe webhook',
+                 'https://operations.invalid/retention-hook',
+                 'reusable-encrypted-secret', '["retention.follow_up"]',
+                 'active')`,
+    )
+      .bind(webhookId, organisationId, seeded.eventId)
+      .run();
+
     const result = await service.anonymiseExpiredParticipants(seeded.owner, {
       confirmation: "Expired privacy event",
       acknowledged: true,
@@ -54,6 +67,17 @@ describe("participant retention", () => {
         .bind(seeded.eventId)
         .first(),
     ).toMatchObject({ completedAt: expect.any(Number) });
+    expect(
+      await seeded.testEnv.DB.prepare(
+        `SELECT status, secret_ciphertext AS secretCiphertext
+           FROM webhook_endpoints WHERE id = ?`,
+      )
+        .bind(webhookId)
+        .first(),
+    ).toEqual({
+      status: "disabled",
+      secretCiphertext: `retained-${webhookId}`,
+    });
 
     const submissions = await seeded.testEnv.DB.prepare(
       `SELECT id, submitter_person_id AS personId, submitter_email AS email,

@@ -446,6 +446,29 @@ describe("public application mutations", () => {
     });
   });
 
+  describe("inactive events", () => {
+    it("does not serve or mutate a CFP after the event is deactivated", async () => {
+      await env.DB.prepare(
+        `UPDATE events SET activation_status = 'discarded'
+          WHERE id = 'evt-foe-2025'`,
+      ).run();
+      try {
+        await expect(
+          loader({
+            request: new Request("http://localhost/apply/form"),
+            params: { slug: "form" },
+            context: context(),
+          } as never),
+        ).rejects.toMatchObject({ status: 404 });
+      } finally {
+        await env.DB.prepare(
+          `UPDATE events SET activation_status = 'active'
+            WHERE id = 'evt-foe-2025'`,
+        ).run();
+      }
+    });
+  });
+
   describe("published navigation", () => {
     it("keeps published programme navigation independent of the speaker showcase", async () => {
       const publishedVersion = await env.DB.prepare(

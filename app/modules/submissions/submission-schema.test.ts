@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 
+import { closeDateToEpoch } from "./submission-repository-shared";
 import {
   DEFAULT_FORM_PRESENTATION,
   DEFAULT_FORM_SCHEMA,
@@ -12,6 +13,7 @@ import {
   saveFormSchema,
   storedFormSchemaSchema,
   upgradeStoredFormSchema,
+  validateFinalAnswers,
   visibleFields,
 } from "./submission-schema";
 
@@ -191,6 +193,64 @@ describe("submission form rules", () => {
       visibleFields(chainedSchema, answers).map((field) => field.id),
     ).toEqual(["title", "category"]);
     expect(reviewerVisibleAnswers(chainedSchema, answers)).toEqual({});
+  });
+
+  it("rejects credentialed applicant URLs instead of storing them", () => {
+    expect(
+      validateFinalAnswers(
+        DEFAULT_FORM_SCHEMA,
+        {
+          title: "A useful session title",
+          description: "A useful session description with enough detail.",
+          category: ["AI & Innovation"],
+          format: "Presentation",
+          video: "https://user:secret@example.test/video",
+        },
+        [],
+        0,
+        null,
+      ).video,
+    ).toEqual(["Enter a valid URL beginning with https://"]);
+  });
+
+  it("rejects speakers with a missing or invalid email", () => {
+    expect(
+      validateFinalAnswers(
+        DEFAULT_FORM_SCHEMA,
+        {
+          title: "A useful session title",
+          description: "A useful session description with enough detail.",
+          category: ["AI & Innovation"],
+          format: "Presentation",
+        },
+        [{ name: "Alex Morgan", email: "" }],
+        1,
+        null,
+      ).speakers,
+    ).toEqual(["Every speaker needs a name and email address"]);
+    expect(
+      validateFinalAnswers(
+        DEFAULT_FORM_SCHEMA,
+        {
+          title: "A useful session title",
+          description: "A useful session description with enough detail.",
+          category: ["AI & Innovation"],
+          format: "Presentation",
+        },
+        [{ name: "Alex Morgan", email: "not-an-email" }],
+        1,
+        null,
+      ).speakers,
+    ).toEqual(["Every speaker needs a valid email address"]);
+  });
+
+  it("resolves form close times when the following local midnight is skipped", () => {
+    expect(() =>
+      closeDateToEpoch("2026-09-05", "America/Santiago"),
+    ).not.toThrow();
+    expect(closeDateToEpoch("2026-09-05", "America/Santiago")).toBe(
+      Date.parse("2026-09-06T03:59:59.000Z") / 1_000,
+    );
   });
 
   it("rejects ambiguous options and invalid conditional values", () => {

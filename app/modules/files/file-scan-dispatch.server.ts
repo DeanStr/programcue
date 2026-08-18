@@ -250,8 +250,13 @@ export async function enqueueFileScan(
     const now = Math.floor(Date.now() / 1_000);
     if (existing.status === "completed" && existing.scanStatus !== "pending")
       return { operationId, duplicate: true, status: existing.status };
-    if (["queued", "received"].includes(existing.status))
+    if (existing.status === "received")
       return { operationId, duplicate: true, status: existing.status };
+    if (existing.status === "queued" && existing.scanStatus === "pending") {
+      shouldSend = true;
+    } else if (existing.status === "queued") {
+      return { operationId, duplicate: true, status: existing.status };
+    }
     if (
       existing.status === "running" &&
       existing.claimExpiresAt !== null &&
@@ -263,35 +268,37 @@ export async function enqueueFileScan(
         "The pending file-scan operation is missing its callback lease.",
       );
     }
-    const reset = await env.DB.prepare(
-      `UPDATE operation_jobs
-          SET status = 'queued', last_error = NULL, claim_token = NULL,
-              claim_expires_at = NULL, completed_at = NULL, updated_at = unixepoch()
-        WHERE id = ? AND event_id = ? AND organisation_id = ?
-          AND (
-            status IN ('queue_failed','failed','partially_failed')
-            OR (status = 'running' AND claim_expires_at <= unixepoch())
-            OR (
-              status = 'completed'
-              AND EXISTS (
-                SELECT 1 FROM file_versions version
-                 WHERE version.id = ? AND version.event_id = operation_jobs.event_id
-                   AND version.asset_id = ? AND version.scan_status = 'pending'
+    if (!shouldSend) {
+      const reset = await env.DB.prepare(
+        `UPDATE operation_jobs
+            SET status = 'queued', last_error = NULL, claim_token = NULL,
+                claim_expires_at = NULL, completed_at = NULL, updated_at = unixepoch()
+          WHERE id = ? AND event_id = ? AND organisation_id = ?
+            AND (
+              status IN ('queue_failed','failed','partially_failed')
+              OR (status = 'running' AND claim_expires_at <= unixepoch())
+              OR (
+                status = 'completed'
+                AND EXISTS (
+                  SELECT 1 FROM file_versions version
+                   WHERE version.id = ? AND version.event_id = operation_jobs.event_id
+                     AND version.asset_id = ? AND version.scan_status = 'pending'
+                )
               )
-            )
-          )`,
-    )
-      .bind(
-        operationId,
-        viewer.eventId,
-        viewer.organisationId,
-        file.versionId,
-        file.assetId,
+            )`,
       )
-      .run();
-    shouldSend = (reset.meta.changes ?? 0) === 1;
-    if (!shouldSend)
-      return { operationId, duplicate: true, status: existing.status };
+        .bind(
+          operationId,
+          viewer.eventId,
+          viewer.organisationId,
+          file.versionId,
+          file.assetId,
+        )
+        .run();
+      shouldSend = (reset.meta.changes ?? 0) === 1;
+      if (!shouldSend)
+        return { operationId, duplicate: true, status: existing.status };
+    }
   }
   try {
     await env.OPERATIONS_QUEUE.send(message);

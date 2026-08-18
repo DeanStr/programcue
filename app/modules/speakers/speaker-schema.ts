@@ -25,10 +25,44 @@ export function normalizeSpeakerLinkedinUrl(value: string) {
   }
 }
 
+const RESERVED_X_HANDLES = new Set([
+  "about",
+  "account",
+  "api",
+  "compose",
+  "download",
+  "embed",
+  "explore",
+  "hashtag",
+  "help",
+  "home",
+  "i",
+  "intent",
+  "jobs",
+  "login",
+  "logout",
+  "messages",
+  "notifications",
+  "oauth",
+  "privacy",
+  "search",
+  "settings",
+  "share",
+  "signup",
+  "tos",
+]);
+
+function isSpeakerXHandle(value: string) {
+  return (
+    /^[A-Za-z0-9_]{1,15}$/u.test(value) &&
+    !RESERVED_X_HANDLES.has(value.toLowerCase())
+  );
+}
+
 export function normalizeSpeakerXHandle(value: string) {
   const trimmed = value.trim();
   const directHandle = trimmed.replace(/^@/u, "");
-  if (/^[A-Za-z0-9_]{1,15}$/u.test(directHandle)) return directHandle;
+  if (isSpeakerXHandle(directHandle)) return directHandle;
   try {
     const url = new URL(trimmed);
     if (
@@ -45,7 +79,7 @@ export function normalizeSpeakerXHandle(value: string) {
     const pathParts = url.pathname.split("/").filter(Boolean);
     if (pathParts.length !== 1) return trimmed;
     const handle = pathParts[0] ?? "";
-    return /^[A-Za-z0-9_]{1,15}$/u.test(handle) ? handle : trimmed;
+    return isSpeakerXHandle(handle) ? handle : trimmed;
   } catch {
     return trimmed;
   }
@@ -53,9 +87,7 @@ export function normalizeSpeakerXHandle(value: string) {
 
 export function formatSpeakerXHandleInput(value: string) {
   const normalized = normalizeSpeakerXHandle(value);
-  return /^[A-Za-z0-9_]{1,15}$/u.test(normalized)
-    ? `@${normalized}`
-    : normalized;
+  return isSpeakerXHandle(normalized) ? `@${normalized}` : normalized;
 }
 
 export const speakerLinkedinUrlSchema = z
@@ -83,7 +115,7 @@ export const speakerXHandleSchema = z
   .max(500, "X profile input must be 500 characters or fewer.")
   .transform(normalizeSpeakerXHandle)
   .refine(
-    (value) => value === "" || /^[A-Za-z0-9_]{1,15}$/u.test(value),
+    (value) => value === "" || isSpeakerXHandle(value),
     "Enter an X handle or a complete x.com or twitter.com profile URL.",
   );
 

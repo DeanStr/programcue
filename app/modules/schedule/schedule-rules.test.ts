@@ -168,6 +168,96 @@ describe("authoritative schedule rules", () => {
     ).not.toContainEqual(expect.objectContaining({ type: "event_boundary" }));
   });
 
+  it("does not throw when an event date skips local midnight", () => {
+    const lastDayMarker = Date.parse("2026-09-05T23:59:59Z") / 1_000;
+    const start = eventLocalTimeEpoch(
+      Date.parse("2026-09-05T00:00:00Z") / 1_000,
+      "America/Santiago",
+      9,
+    );
+    expect(() =>
+      detectScheduleConflicts({
+        candidate: {
+          sessionId: "new",
+          title: "Santiago session",
+          roomId: "main",
+          startsAt: start,
+          endsAt: start + 3_600,
+          trackId: null,
+          trackExclusive: false,
+          speakerIds: [],
+          speakerNames: [],
+          requiredResources: [],
+          expectedAttendance: null,
+        },
+        existing: [],
+        rooms: [{ id: "main", capacity: 100, resources: [] }],
+        eventStartsAt: Date.parse("2026-09-04T00:00:00Z") / 1_000,
+        eventEndsAt: lastDayMarker,
+        eventTimezone: "America/Santiago",
+        policies: {
+          room: "ignore",
+          speaker: "ignore",
+          resource: "ignore",
+          track: "ignore",
+          boundary: "block",
+          capacity: "ignore",
+          minimumTurnaroundMinutes: 0,
+        },
+      }),
+    ).not.toThrow();
+  });
+
+  it("blocks an overlap when the existing session already owns the exclusive track", () => {
+    const conflicts = detectScheduleConflicts({
+      candidate: {
+        sessionId: "new",
+        title: "New session",
+        roomId: "second",
+        startsAt: 150,
+        endsAt: 250,
+        trackId: "track-a",
+        trackExclusive: false,
+        speakerIds: [],
+        speakerNames: [],
+        requiredResources: [],
+        expectedAttendance: null,
+      },
+      existing: [
+        {
+          entryId: "entry-existing",
+          sessionId: "existing",
+          roomId: "main",
+          startsAt: 100,
+          endsAt: 200,
+          trackId: "track-a",
+          trackExclusive: true,
+          speakerIds: [],
+          speakerNames: [],
+          requiredResources: [],
+          expectedAttendance: null,
+          title: "Existing exclusive session",
+        },
+      ],
+      rooms: [
+        { id: "main", capacity: 100, resources: [] },
+        { id: "second", capacity: 100, resources: [] },
+      ],
+      eventStartsAt: 0,
+      eventEndsAt: 86_399,
+      eventTimezone: "UTC",
+      policies: { ...policies, track: "block" },
+    });
+
+    expect(conflicts).toContainEqual(
+      expect.objectContaining({
+        type: "track",
+        severity: "blocking",
+        message: "Track overlaps “Existing exclusive session”.",
+      }),
+    );
+  });
+
   it("allows overlapping sessions on a non-exclusive track", () => {
     const conflicts = detectScheduleConflicts({
       candidate: {

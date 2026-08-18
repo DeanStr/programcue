@@ -264,7 +264,7 @@ export class EvaluationReviewerWorkspaceWorkflows extends EvaluationServiceFound
             : `Session · ${sessionReference}`,
           title: blindedReviewing ? "Blinded session" : snapshot.title,
           category: blindedReviewing ? null : snapshot.trackName,
-          format: snapshot.format,
+          format: blindedReviewing ? null : snapshot.format,
           blindedReviewing,
         };
       },
@@ -521,37 +521,37 @@ export class EvaluationReviewerWorkspaceWorkflows extends EvaluationServiceFound
           selected.id,
           source.sessionSnapshotJson,
         );
-        const sessionAnswers = {
-          description: selected.blindedReviewing
-            ? ""
-            : (snapshot.description ?? ""),
-          format: snapshot.format,
-          durationMinutes: snapshot.durationMinutes,
-          track: selected.blindedReviewing
-            ? "Unassigned"
-            : (snapshot.trackName ?? "Unassigned"),
-        };
+        const sessionAnswers = selected.blindedReviewing
+          ? {}
+          : {
+              description: snapshot.description ?? "",
+              format: snapshot.format,
+              durationMinutes: snapshot.durationMinutes,
+              track: snapshot.trackName ?? "Unassigned",
+            };
         return {
           sourceType: "session" as const,
           id: source.sessionId,
           title: selected.blindedReviewing ? "Blinded session" : snapshot.title,
           category: selected.blindedReviewing ? null : snapshot.trackName,
-          format: snapshot.format,
+          format: selected.blindedReviewing ? null : snapshot.format,
           answers: sessionAnswers,
-          answerFields: [
-            {
-              id: "description",
-              label: "Description",
-              value: sessionAnswers.description,
-            },
-            { id: "format", label: "Format", value: sessionAnswers.format },
-            {
-              id: "durationMinutes",
-              label: "Duration",
-              value: `${sessionAnswers.durationMinutes} minutes`,
-            },
-            { id: "track", label: "Track", value: sessionAnswers.track },
-          ],
+          answerFields: selected.blindedReviewing
+            ? []
+            : [
+                {
+                  id: "description",
+                  label: "Description",
+                  value: sessionAnswers.description,
+                },
+                { id: "format", label: "Format", value: sessionAnswers.format },
+                {
+                  id: "durationMinutes",
+                  label: "Duration",
+                  value: `${sessionAnswers.durationMinutes} minutes`,
+                },
+                { id: "track", label: "Track", value: sessionAnswers.track },
+              ],
           blindedReviewing: Boolean(selected.blindedReviewing),
           submitterEmail: null,
           speakerNames: selected.blindedReviewing

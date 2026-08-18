@@ -172,6 +172,19 @@ and condition the domain mutation on that audit identity; focused Worker fault
 injection verifies that suppressing any required audit leaves the embed absent
 or unchanged.
 
+A later isolated high-signal test pass found and fixed production defects in
+weighted 1–10 scoring, DST midnight schedule/close/due-date helpers, CFP
+activation, recusal and self-review assignment, hidden conditional review
+attachments, private cache policy, applicant/itinerary host cookies, file-scan
+queued retry, and accepted-speaker/task reminder audience filters. Follow-up
+review of those uncommitted fixes kept Airtable repository connections connected
+through retention recovery, bounded cached event-local exclusive-end bounds, restored
+fail-closed published speaker-array parsing, required active speaker workflows
+before task reminders, and kept no-recipient reminder days marked complete.
+Applicant cookies now return an explicit Set-Cookie list rather than a newline
+joined header. Evidence is the focused unit and Worker files on this branch; no
+new deployment is claimed.
+
 ### Production evaluation release-candidate evidence
 
 A follow-up QA pass on the production `/evaluate` fixture tightened

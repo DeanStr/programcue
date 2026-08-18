@@ -595,6 +595,29 @@ export class EvaluationConfigurationWorkflows extends EvaluationServiceFoundatio
               viewer.organisationId,
               ...commandGuard.bindings,
             ),
+            this.env.DB.prepare(
+              `
+            UPDATE submissions
+               SET status = 'submitted', revision = revision + 1,
+                   last_operation_id = ?, updated_at = unixepoch()
+             WHERE event_id = ? AND status IN ('assigned','in_review')
+               AND NOT EXISTS (
+                 SELECT 1 FROM evaluator_assignments remaining
+                  WHERE remaining.event_id = submissions.event_id
+                    AND remaining.submission_id = submissions.id
+                    AND remaining.status NOT IN ('recused','cancelled')
+               )
+               AND EXISTS (
+                 SELECT 1 FROM evaluator_assignments cancelled
+                  WHERE cancelled.event_id = submissions.event_id
+                    AND cancelled.submission_id = submissions.id
+                    AND cancelled.evaluator_person_id = ?
+                    AND cancelled.last_operation_id = ?
+                    AND cancelled.status = 'cancelled'
+                    AND cancelled.cancellation_reason = 'reviewer_removed'
+               )
+          `,
+            ).bind(operationId, viewer.eventId, parsed.personId, operationId),
           ];
     const audit = this.env.DB.prepare(
       `

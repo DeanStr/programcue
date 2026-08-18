@@ -1,4 +1,5 @@
 import { requireValue } from "~/lib/required-value";
+import { isCredentialFreeHttpsUrl } from "~/modules/events/https-url";
 import {
   type AudienceType,
   type CommunicationCategory,
@@ -41,17 +42,39 @@ export function eventEmailLogoUrl(
   event: Pick<EventMergeRow, "logoUrl">,
 ) {
   if (!event.logoUrl) return undefined;
-  if (event.logoUrl.startsWith("https://")) return event.logoUrl;
-  if (!event.logoUrl.startsWith("/"))
+  const logoUrl = event.logoUrl.trim();
+  if (isCredentialFreeHttpsUrl(logoUrl)) return logoUrl;
+  if (
+    !logoUrl.startsWith("/") ||
+    logoUrl.startsWith("//") ||
+    // biome-ignore lint/suspicious/noControlCharactersInRegex: Logo paths reject ASCII controls.
+    /[\u0000-\u001f\u007f\\]/u.test(logoUrl)
+  ) {
     throw new CommunicationStateError(
       "The published event logo URL is invalid.",
     );
+  }
   const base = env.BETTER_AUTH_URL?.trim();
   if (!base)
     throw new CommunicationStateError(
       "BETTER_AUTH_URL is required to render a published event logo in email.",
     );
-  return new URL(event.logoUrl, base).toString();
+  let resolved: URL;
+  let configured: URL;
+  try {
+    configured = new URL(base);
+    resolved = new URL(logoUrl, configured);
+  } catch {
+    throw new CommunicationStateError(
+      "BETTER_AUTH_URL must be an absolute HTTP(S) URL.",
+    );
+  }
+  if (resolved.origin !== configured.origin) {
+    throw new CommunicationStateError(
+      "The published event logo URL is invalid.",
+    );
+  }
+  return resolved.toString();
 }
 
 export type SenderRow = {

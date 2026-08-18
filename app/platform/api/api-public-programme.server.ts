@@ -235,6 +235,9 @@ async function d1PublishedSessionPage(
   if (input.speakerId) {
     predicates.push(`EXISTS (
       SELECT 1 FROM session_speakers filter_relation
+        JOIN people filter_person
+          ON filter_person.id = filter_relation.person_id
+         AND filter_person.profile_status = 'published'
        WHERE filter_relation.session_id = s.id
          AND filter_relation.event_id = s.event_id
          AND filter_relation.person_id = ?
@@ -281,7 +284,7 @@ async function d1PublishedSessionPage(
              content.format, se.starts_at AS startsAt, se.ends_at AS endsAt,
              r.name AS room, r.building, r.level, r.position AS roomPosition,
              t.name AS track,
-             (
+             COALESCE((
                SELECT json_group_array(ordered.personId)
                  FROM (
                    SELECT relation.person_id AS personId
@@ -295,8 +298,8 @@ async function d1PublishedSessionPage(
                       AND relation.participation_status = 'confirmed'
                     ORDER BY relation.position, relation.person_id
                  ) ordered
-             ) AS speakerIds,
-             (
+             ), '[]') AS speakerIds,
+             COALESCE((
                SELECT json_group_array(ordered.displayName)
                  FROM (
                    SELECT person.display_name AS displayName
@@ -310,7 +313,7 @@ async function d1PublishedSessionPage(
                       AND relation.participation_status = 'confirmed'
                     ORDER BY relation.position, relation.person_id
                  ) ordered
-             ) AS speakerNames
+             ), '[]') AS speakerNames
         FROM schedule_entries se
         JOIN schedule_versions current_version
           ON current_version.id = se.schedule_version_id
@@ -452,7 +455,7 @@ async function d1PublishedSpeakerPage(
       SELECT p.id, p.display_name AS displayName, p.biography,
              p.pronunciation, p.organisation_name AS organisationName,
              p.job_title AS jobTitle,
-             (
+             COALESCE((
                SELECT json_group_array(ordered.sessionId)
                  FROM (
                    SELECT linked_session.id AS sessionId
@@ -477,7 +480,7 @@ async function d1PublishedSpeakerPage(
                       AND linked_relation.participation_status = 'confirmed'
                     ORDER BY linked_entry.starts_at, linked_session.id
                  ) ordered
-             ) AS sessionIds
+             ), '[]') AS sessionIds
         FROM people p
         JOIN session_speakers relation ON relation.person_id = p.id
         JOIN sessions session

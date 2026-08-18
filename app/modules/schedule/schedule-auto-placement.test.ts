@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   computeAutoPlacements,
   getAutoPlacementReadiness,
+  revalidateSelectedAutoPlacements,
 } from "./schedule-auto-placement";
 import { autoPlacementD1StatementCount } from "./schedule-auto-placement-workflow.server";
 import type { ScheduleWorkspace } from "./schedule-service.server";
@@ -358,6 +359,27 @@ describe("deterministic auto-placement", () => {
         reason: expect.stringContaining("positive whole number"),
       }),
     ]);
+  });
+
+  it("rejects a previewed placement whose speaker became unpublished", () => {
+    const start = eventLocalTimeEpoch(eventStartsAt, "UTC", 7);
+    const input = workspace([
+      session("session", "Session", {
+        hasUnpublishedSpeaker: true,
+      }),
+    ]);
+
+    expect(
+      revalidateSelectedAutoPlacements(input, [
+        {
+          sessionId: "session",
+          roomId: "main",
+          startsAt: start,
+          endsAt: start + 3_600,
+          warnings: [],
+        },
+      ]),
+    ).toBeNull();
   });
 
   it("fails rather than treating missing speaker visibility metadata as public", () => {

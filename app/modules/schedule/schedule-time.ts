@@ -1,5 +1,30 @@
-const datePartsFormatter = (timezone: string) =>
-  new Intl.DateTimeFormat("en-CA", {
+const MAX_CACHED_FORMATTERS = 32;
+const MAX_CACHED_EXCLUSIVE_ENDS = 512;
+const datePartFormatters = new Map<string, Intl.DateTimeFormat>();
+const exclusiveEndCache = new Map<string, number>();
+
+function recalled<K, V>(cache: Map<K, V>, key: K) {
+  const value = cache.get(key);
+  if (value === undefined) return undefined;
+  cache.delete(key);
+  cache.set(key, value);
+  return value;
+}
+
+function remember<K, V>(cache: Map<K, V>, key: K, value: V, limit: number) {
+  if (cache.has(key)) cache.delete(key);
+  cache.set(key, value);
+  while (cache.size > limit) {
+    const oldest = cache.keys().next().value;
+    if (oldest === undefined) break;
+    cache.delete(oldest);
+  }
+}
+
+function datePartsFormatter(timezone: string) {
+  const existing = recalled(datePartFormatters, timezone);
+  if (existing) return existing;
+  const formatter = new Intl.DateTimeFormat("en-CA", {
     timeZone: timezone,
     calendar: "iso8601",
     numberingSystem: "latn",
@@ -11,6 +36,9 @@ const datePartsFormatter = (timezone: string) =>
     second: "2-digit",
     hourCycle: "h23",
   });
+  remember(datePartFormatters, timezone, formatter, MAX_CACHED_FORMATTERS);
+  return formatter;
+}
 
 function localParts(epochMilliseconds: number, timezone: string) {
   const values = Object.fromEntries(
@@ -120,6 +148,9 @@ export function eventLocalExclusiveEndEpoch(
   timezone: string,
 ) {
   const eventDate = eventBoundaryCalendarDate(boundaryEpoch);
+  const cacheKey = `${timezone}\0${eventDate}`;
+  const cached = recalled(exclusiveEndCache, cacheKey);
+  if (cached !== undefined) return cached;
   const nominalNextDay =
     Date.parse(`${eventDate}T00:00:00Z`) / 1_000 + 24 * 60 * 60;
   let before = nominalNextDay - 36 * 60 * 60;
@@ -145,6 +176,7 @@ export function eventLocalExclusiveEndEpoch(
       before = candidate;
     }
   }
+  remember(exclusiveEndCache, cacheKey, after, MAX_CACHED_EXCLUSIVE_ENDS);
   return after;
 }
 
@@ -168,9 +200,10 @@ export function eventDayScheduleSlots(
   existingStarts: ReadonlyArray<number> = [],
 ) {
   const day = eventBoundaryCalendarDate(boundaryEpoch);
-  const nextBoundary = boundaryEpoch + 24 * 60 * 60;
-  const start = eventLocalTimeEpoch(boundaryEpoch, timezone, 0);
-  const end = eventLocalTimeEpoch(nextBoundary, timezone, 0);
+  const previousDayMarker =
+    Date.parse(`${day}T00:00:00Z`) / 1_000 - 24 * 60 * 60;
+  const start = eventLocalExclusiveEndEpoch(previousDayMarker, timezone);
+  const end = eventLocalExclusiveEndEpoch(boundaryEpoch, timezone);
   const slots = new Set<number>();
   for (let epoch = start; epoch < end; epoch += 30 * 60) slots.add(epoch);
   for (const epoch of existingStarts) {

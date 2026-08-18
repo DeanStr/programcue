@@ -3,7 +3,10 @@ import {
   type EventFilePolicy,
   eventFilePolicySchema,
 } from "~/modules/files/file-policy";
-import { optionalCredentialFreeHttpsUrlSchema } from "./https-url";
+import {
+  isCredentialFreeHttpsUrl,
+  optionalCredentialFreeHttpsUrlSchema,
+} from "./https-url";
 
 export function isSupportedIanaTimezone(value: string) {
   try {
@@ -135,28 +138,27 @@ export const eventSetupInputSchema = z
     endDate: z.iso.date(),
     venue: z.string().trim().max(200),
     venueAddress: z.string().trim().max(300),
-    venueMapUrl: z
-      .union([
-        z.literal(""),
-        z.url("Enter a valid venue map URL.").startsWith("https://", {
-          message: "Venue map URLs must use HTTPS.",
-        }),
-      ])
-      .refine((value) => value.length <= 2_048, "Venue map URL is too long."),
+    venueMapUrl: z.union([
+      z.literal(""),
+      z
+        .url("Enter a valid venue map URL.")
+        .max(2_048, "Venue map URL is too long.")
+        .refine(
+          isCredentialFreeHttpsUrl,
+          "Venue map URLs must use HTTPS without a username or password.",
+        ),
+    ]),
     city: z.string().trim().max(120),
-    programmeHeroImageUrl: z
-      .union([
-        z.literal(""),
-        z
-          .url("Enter a valid programme hero image URL.")
-          .startsWith("https://", {
-            message: "Programme hero image URLs must use HTTPS.",
-          }),
-      ])
-      .refine(
-        (value) => value.length <= 2_048,
-        "Programme hero image URL is too long.",
-      ),
+    programmeHeroImageUrl: z.union([
+      z.literal(""),
+      z
+        .url("Enter a valid programme hero image URL.")
+        .max(2_048, "Programme hero image URL is too long.")
+        .refine(
+          isCredentialFreeHttpsUrl,
+          "Programme hero image URLs must use HTTPS without a username or password.",
+        ),
+    ]),
     publicSlug: z
       .string()
       .trim()
@@ -169,17 +171,16 @@ export const eventSetupInputSchema = z
     brandAccent: z
       .string()
       .regex(/^#[0-9a-fA-F]{6}$/, "Choose a valid brand colour."),
-    participantLogoUrl: z
-      .union([
-        z.literal(""),
-        z.url("Enter a valid participant logo URL.").startsWith("https://", {
-          message: "Participant logo URLs must use HTTPS.",
-        }),
-      ])
-      .refine(
-        (value) => value.length <= 2_048,
-        "Participant logo URL is too long.",
-      ),
+    participantLogoUrl: z.union([
+      z.literal(""),
+      z
+        .url("Enter a valid participant logo URL.")
+        .max(2_048, "Participant logo URL is too long.")
+        .refine(
+          isCredentialFreeHttpsUrl,
+          "Participant logo URLs must use HTTPS without a username or password.",
+        ),
+    ]),
     participantWelcomeText: z.string().trim().max(500),
     participantSupportUrl: optionalCredentialFreeHttpsUrlSchema({
       invalidMessage: "Enter a valid participant support URL.",

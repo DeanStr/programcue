@@ -1,5 +1,19 @@
 import { z } from "zod";
 
+export function isCredentialFreeHttpsUrl(value: string) {
+  try {
+    const url = new URL(value);
+    return (
+      url.protocol === "https:" &&
+      url.hostname.length > 0 &&
+      url.username === "" &&
+      url.password === ""
+    );
+  } catch {
+    return false;
+  }
+}
+
 export function optionalCredentialFreeHttpsUrlSchema({
   invalidMessage,
   httpsMessage,

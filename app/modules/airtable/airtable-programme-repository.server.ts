@@ -3,6 +3,9 @@ import type {
   PublishedSpeaker,
 } from "~/modules/programme/public-programme-service.server";
 import type { Viewer } from "~/platform/auth/authorize.server";
+
+const PROGRAMME_LIST_DELIMITER = "\u001f";
+
 import { AirtableClient, type AirtableRecord } from "./airtable-client.server";
 import {
   type AirtableProgrammePlanItem,
@@ -244,7 +247,7 @@ export class AirtableProgrammeRepository {
                 COALESCE(content.description, '') AS description,
                 content.format, track.name AS track,
                 (
-                  SELECT GROUP_CONCAT(ordered.personId, '||') FROM (
+                  SELECT GROUP_CONCAT(ordered.personId, x'1f') FROM (
                     SELECT relation.person_id AS personId
                       FROM session_speakers relation
                       JOIN people person ON person.id = relation.person_id
@@ -257,7 +260,7 @@ export class AirtableProgrammeRepository {
                   ) ordered
                 ) AS speakerIds,
                 (
-                  SELECT GROUP_CONCAT(ordered.displayName, '||') FROM (
+                  SELECT GROUP_CONCAT(ordered.displayName, x'1f') FROM (
                     SELECT person.display_name AS displayName
                       FROM session_speakers relation
                       JOIN people person ON person.id = relation.person_id
@@ -307,7 +310,7 @@ export class AirtableProgrammeRepository {
                 person.pronunciation,
                 person.organisation_name AS organisationName,
                 person.job_title AS jobTitle,
-                GROUP_CONCAT(relation.session_id, '||') AS sessionIds
+                GROUP_CONCAT(relation.session_id, x'1f') AS sessionIds
            FROM people person
            JOIN session_speakers relation ON relation.person_id = person.id
            JOIN schedule_entries entry
@@ -349,12 +352,18 @@ export class AirtableProgrammeRepository {
         description: row.description,
         format: row.format,
         track: row.track,
-        speakerIds: row.speakerIds?.split("||") ?? [],
-        speakerNames: row.speakerNames?.split("||") ?? [],
+        speakerIds: row.speakerIds
+          ? row.speakerIds.split(PROGRAMME_LIST_DELIMITER)
+          : [],
+        speakerNames: row.speakerNames
+          ? row.speakerNames.split(PROGRAMME_LIST_DELIMITER)
+          : [],
       })),
       speakers: speakerRows.results.map((row) => ({
         ...row,
-        sessionIds: row.sessionIds.split("||"),
+        sessionIds: row.sessionIds
+          ? row.sessionIds.split(PROGRAMME_LIST_DELIMITER)
+          : [],
       })),
     };
   }

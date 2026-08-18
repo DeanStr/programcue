@@ -198,9 +198,7 @@ function cookieValue(request: Request) {
     if (key !== EVALUATION_SESSION_COOKIE) continue;
     try {
       return decodeURIComponent(value.join("="));
-    } catch {
-      return null;
-    }
+    } catch {}
   }
   return null;
 }

@@ -60,6 +60,22 @@ function slugFrom(params: Route.LoaderArgs["params"]) {
   return slug;
 }
 
+function appendApplicantCookies(headers: Headers, cookies: readonly string[]) {
+  for (const cookie of cookies) {
+    if (cookie) headers.append("set-cookie", cookie);
+  }
+}
+
+function redirectWithApplicantCookies(
+  location: string,
+  cookies: readonly string[],
+  init: { status?: number; headers?: HeadersInit } = {},
+) {
+  const headers = new Headers(init.headers);
+  appendApplicantCookies(headers, cookies);
+  return redirect(location, { ...init, headers });
+}
+
 function applicationNoticeMatchesPortal(
   notice: ApplicationNotice | null,
   selected: { id: string; status: string } | null | undefined,
@@ -345,9 +361,10 @@ async function handleClaimedSpeakerIntent(input: {
       webhookWarning: false,
     });
     query.set("claimedSpeaker", speakerId);
-    return redirect(`/apply/${encodeURIComponent(slug)}?${query}`, {
-      headers: { "set-cookie": result.cookie },
-    });
+    return redirectWithApplicantCookies(
+      `/apply/${encodeURIComponent(slug)}?${query}`,
+      result.setCookies,
+    );
   }
   if (intent === "update_profile" && claimedSpeakerId) {
     await service.updateClaimedCoSpeakerProfile(
@@ -567,9 +584,10 @@ async function handlePublicApplicationIntent({
       String(formData.get("code") ?? ""),
       request,
     );
-    return redirect(`/apply/${encodeURIComponent(slug)}`, {
-      headers: { "set-cookie": result.cookie },
-    });
+    return redirectWithApplicantCookies(
+      `/apply/${encodeURIComponent(slug)}`,
+      result.setCookies,
+    );
   }
   if (intent === "sign_out") {
     if (form.accessMode === "account_required") {
@@ -580,19 +598,15 @@ async function handlePublicApplicationIntent({
         ? `/apply/${encodeURIComponent(slug)}?${new URLSearchParams({ claimedSpeaker: requireValue(claimedSpeakerId, "Required claimedSpeakerId is unavailable.") })}`
         : `/apply/${encodeURIComponent(slug)}`;
       const headers = new Headers(result.headers);
-      headers.append("set-cookie", applicantCookie);
+      appendApplicantCookies(headers, applicantCookie);
       return redirect(`/sign-in?${new URLSearchParams({ returnTo })}`, {
         status: 303,
         headers,
       });
     }
-    return redirect(
+    return redirectWithApplicantCookies(
       claimedSignOutContext ? "/" : `/apply/${encodeURIComponent(slug)}`,
-      {
-        headers: {
-          "set-cookie": await service.applicants.signOut(request, form),
-        },
-      },
+      await service.applicants.signOut(request, form),
     );
   }
   if (intent === "start_anonymous") {
@@ -622,9 +636,10 @@ async function handlePublicApplicationIntent({
       submissionId: result.draftId,
       webhookWarning: Boolean(webhookWarning),
     });
-    return redirect(`/apply/${encodeURIComponent(slug)}?${query}`, {
-      headers: { "set-cookie": result.cookie },
-    });
+    return redirectWithApplicantCookies(
+      `/apply/${encodeURIComponent(slug)}?${query}`,
+      result.setCookies,
+    );
   }
   return null;
 }

@@ -6,6 +6,7 @@ import {
 import {
   reviewerVisibleAnswers,
   submittedSnapshotSchema,
+  visibleFields,
 } from "~/modules/submissions/submission-schema";
 import type { Viewer } from "~/platform/auth/authorize.server";
 import type { WebhookEventResult } from "~/platform/operations/webhook-service.server";
@@ -288,12 +289,16 @@ export function reviewerCanSeeSubmissionAttachment(
   assetId: string,
   versionId: string,
 ) {
+  const visibleIds = new Set(
+    visibleFields(snapshot.schema, snapshot.answers).map((field) => field.id),
+  );
   const uploadFields = Object.entries(snapshot.uploads).filter(
     ([, upload]) => upload.assetId === assetId,
   );
   return uploadFields.some(
     ([fieldId, upload]) =>
       upload.versionId === versionId &&
+      visibleIds.has(fieldId) &&
       snapshot.schema.fields.some(
         (field) =>
           field.id === fieldId && field.reviewVisibility === "reviewers",

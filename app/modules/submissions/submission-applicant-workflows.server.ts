@@ -403,7 +403,12 @@ export class SubmissionApplicantWorkflows extends SubmissionServiceFoundation {
       password,
       { requireExistingDraft: Boolean(replay) },
     );
-    if (replay) return { draftId, cookie: session.cookie };
+    if (replay)
+      return {
+        draftId,
+        cookie: session.cookie,
+        setCookies: session.setCookies,
+      };
     try {
       const events = new SubmissionApplicantEventService(this.env);
       const prepared = await events.prepareDraftCreated(
@@ -424,7 +429,7 @@ export class SubmissionApplicantWorkflows extends SubmissionServiceFoundation {
         .run();
       throw error;
     }
-    return { draftId, cookie: session.cookie };
+    return { draftId, cookie: session.cookie, setCookies: session.setCookies };
   }
 
   async saveDraft(

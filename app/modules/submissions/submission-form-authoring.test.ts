@@ -773,6 +773,66 @@ describe("Submissions D1 vertical slice", () => {
       expect((unavailable as Response).status).toBe(503);
     });
 
+    it("expires leftover Path=/apply applicant cookies when writing or signing out", async () => {
+      const { service, slug } = await publishedForm();
+      const form = await service.getPublicForm(slug);
+      const email = `apply-path-cookie-${crypto.randomUUID()}@example.com`;
+      await service.applicants.requestCode(form, email, "");
+      const verified = await service.applicants.verifyCode(
+        form,
+        email,
+        "424242",
+      );
+      expect(verified.cookie).toContain("Path=/;");
+      expect(verified.cookie).toMatch(/Max-Age=1209600(?:;|$)/);
+      expect(verified.cookie).not.toContain("\n");
+      expect(verified.setCookies[0]).toBe(verified.cookie);
+      expect(verified.setCookies).toEqual(
+        expect.arrayContaining([
+          expect.stringMatching(/Path=\/apply;.*Max-Age=0(?:;|$)/s),
+        ]),
+      );
+
+      const signedOut = await service.applicants.signOut(
+        new Request(`https://example.com/apply/${slug}`, {
+          headers: { cookie: verified.cookie.split(";")[0] },
+        }),
+        form,
+      );
+      expect(signedOut).toEqual(
+        expect.arrayContaining([
+          expect.stringMatching(/Path=\/;.*Max-Age=0(?:;|$)/s),
+          expect.stringMatching(/Path=\/apply;.*Max-Age=0(?:;|$)/s),
+        ]),
+      );
+    });
+
+    it("emits Secure leftover expiries so production Path=/apply cookies can clear", async () => {
+      const { slug, testEnv } = await publishedForm();
+      const productionService = new SubmissionService({
+        ...testEnv,
+        APP_ENV: "production",
+      } as CloudflareEnvironment);
+      const form = await productionService.getPublicForm(slug);
+      const signedOut = await productionService.applicants.signOut(
+        new Request(`https://example.com/apply/${slug}`),
+        form,
+      );
+      expect(signedOut.some((cookie) => cookie.startsWith("__Host-"))).toBe(
+        true,
+      );
+      expect(signedOut).toEqual(
+        expect.arrayContaining([
+          expect.stringMatching(
+            /^pc_applicant_[^=]+=; Path=\/apply;.*Max-Age=0(?:;|$).*Secure/s,
+          ),
+          expect.stringMatching(
+            /^pc_applicant_[^=]+=; Path=\/;.*Max-Age=0(?:;|$).*Secure/s,
+          ),
+        ]),
+      );
+    });
+
     it("treats a malformed applicant cookie as an absent session", async () => {
       const { service, slug } = await publishedForm();
       const form = await service.getPublicForm(slug);

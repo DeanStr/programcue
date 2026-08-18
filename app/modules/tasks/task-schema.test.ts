@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
 
-import { normalizeTaskTemplateDraft } from "./task-schema";
+import {
+  normalizeTaskTemplateDraft,
+  taskEvidenceUrlSchema,
+} from "./task-schema";
 
 describe("task template form values", () => {
   it("normalizes absent draft fields to controlled form values", () => {
@@ -69,5 +72,17 @@ describe("task template form values", () => {
       evidenceMode: "checkbox",
       dueAnchor: "none",
     });
+  });
+
+  it("accepts HTTP or HTTPS evidence links", () => {
+    expect(taskEvidenceUrlSchema.parse("http://intranet.test/evidence")).toBe(
+      "http://intranet.test/evidence",
+    );
+    expect(taskEvidenceUrlSchema.parse("https://example.test/evidence")).toBe(
+      "https://example.test/evidence",
+    );
+    expect(() =>
+      taskEvidenceUrlSchema.parse("ftp://example.test/evidence"),
+    ).toThrow(/HTTP or HTTPS/);
   });
 });

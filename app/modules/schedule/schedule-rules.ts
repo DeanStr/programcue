@@ -1,4 +1,7 @@
-import { eventLocalTimeEpoch } from "./schedule-time";
+import {
+  eventBoundaryCalendarDate,
+  eventLocalExclusiveEndEpoch,
+} from "./schedule-time";
 
 export type ConflictPolicy = "ignore" | "warn" | "block";
 
@@ -103,15 +106,16 @@ export function detectScheduleConflicts({
   // Event Setup stores inclusive calendar-date markers in UTC. Scheduling uses
   // real instants, so compare against those dates in the event timezone rather
   // than treating the UTC markers as instants in the event timezone.
-  const eventLocalStartsAt = eventLocalTimeEpoch(
-    eventStartsAt,
+  const eventStartDate = eventBoundaryCalendarDate(eventStartsAt);
+  const previousStartMarker =
+    Date.parse(`${eventStartDate}T00:00:00Z`) / 1_000 - 24 * 60 * 60;
+  const eventLocalStartsAt = eventLocalExclusiveEndEpoch(
+    previousStartMarker,
     eventTimezone,
-    0,
   );
-  const eventLocalEndsAtExclusive = eventLocalTimeEpoch(
-    eventEndsAt + 1,
+  const eventLocalEndsAtExclusive = eventLocalExclusiveEndEpoch(
+    eventEndsAt,
     eventTimezone,
-    0,
   );
   if (
     candidate.startsAt < eventLocalStartsAt ||
@@ -248,9 +252,9 @@ export function detectScheduleConflicts({
         });
     }
     if (
-      candidate.trackExclusive &&
       candidate.trackId &&
-      item.trackId === candidate.trackId
+      item.trackId === candidate.trackId &&
+      (candidate.trackExclusive || item.trackExclusive)
     ) {
       const level = severity(policies.track);
       if (level)

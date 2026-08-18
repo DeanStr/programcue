@@ -358,8 +358,8 @@ export function buildParticipantRetentionFinalisationStatements(
     ),
     guarded(
       `UPDATE integration_connections
-          SET status = 'disconnected', last_operation_id = NULL,
-              updated_at = unixepoch()
+          SET status = 'disconnected', encrypted_credentials = NULL,
+              last_operation_id = NULL, updated_at = unixepoch()
         WHERE event_id = ? AND provider <> 'airtable_repository'`,
       viewer.eventId,
     ),
@@ -438,7 +438,8 @@ export function buildParticipantRetentionFinalisationStatements(
     ),
     guarded(
       `UPDATE webhook_endpoints
-          SET status = 'disabled', disabled_at = COALESCE(disabled_at, unixepoch()),
+          SET status = 'disabled', secret_ciphertext = 'retained-' || id,
+              disabled_at = COALESCE(disabled_at, unixepoch()),
               updated_at = unixepoch()
         WHERE event_id = ?`,
       viewer.eventId,

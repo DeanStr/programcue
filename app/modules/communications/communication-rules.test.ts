@@ -8,7 +8,12 @@ import {
   saveCommunicationTriggerSchema,
 } from "./communication-schema";
 import { eventEmailLogoUrl } from "./communication-service-shared";
-import { formatEventDateMarkers, formatTaskDueDate } from "./merge-template";
+import {
+  formatEventDateMarkers,
+  formatTaskDueDate,
+  renderMergeTemplate,
+  UnknownMergeVariableError,
+} from "./merge-template";
 
 describe("communication and readiness rules", () => {
   it("calculates deliverable recipients", () => {
@@ -97,5 +102,34 @@ describe("communication and readiness rules", () => {
         logoUrl: "/public/brand/event/logo",
       }),
     ).toThrow(/BETTER_AUTH_URL/);
+  });
+
+  it("does not treat Object.prototype keys as merge values", () => {
+    expect(() =>
+      renderMergeTemplate("Hello {{toString}}", {
+        "recipient.name": "Alex Morgan",
+      }),
+    ).toThrow(UnknownMergeVariableError);
+    expect(() =>
+      renderMergeTemplate("Hello {{constructor}}", {
+        "recipient.name": "Alex Morgan",
+      }),
+    ).toThrow(/constructor/);
+  });
+
+  it("rejects protocol-relative and credentialed event logos", () => {
+    expect(() =>
+      eventEmailLogoUrl(
+        {
+          BETTER_AUTH_URL: "https://events.example.test",
+        } as unknown as CloudflareEnvironment,
+        { logoUrl: "//cdn.attacker.test/logo.png" },
+      ),
+    ).toThrow(/invalid/);
+    expect(() =>
+      eventEmailLogoUrl({} as CloudflareEnvironment, {
+        logoUrl: "https://user:secret@cdn.example.test/logo.png",
+      }),
+    ).toThrow(/invalid/);
   });
 });

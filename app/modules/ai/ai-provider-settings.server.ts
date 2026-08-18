@@ -1,5 +1,6 @@
 import { z } from "zod";
 
+import { isCredentialFreeHttpsUrl } from "~/modules/events/https-url";
 import type { Viewer } from "~/platform/auth/authorize.server";
 import { WORKERS_AI_MODEL } from "./workers-ai-provider.server";
 
@@ -29,8 +30,8 @@ const settingsInputSchema = z
     }
   });
 
-const endpointSchema = z.url().refine((value) => value.startsWith("https://"), {
-  message: "Provider endpoints must use HTTPS.",
+const endpointSchema = z.url().refine(isCredentialFreeHttpsUrl, {
+  message: "Provider endpoints must use HTTPS without a username or password.",
 });
 
 export type AiProviderSelection = {

@@ -213,8 +213,25 @@ export class FilePolicyError extends Error {
 
 type FileDeclaration = Pick<File, "name" | "size" | "type">;
 
+const UNSAFE_FILENAME_CHARACTERS =
+  // biome-ignore lint/suspicious/noControlCharactersInRegex: Upload names reject ASCII controls and Unicode bidi overrides.
+  /[\u0000-\u001f\u007f\u202a-\u202e\u2066-\u2069<>:"/\\|?*]/u;
+
 function extension(filename: string) {
   return filename.toLowerCase().split(".").at(-1) ?? "";
+}
+
+function assertSafeUploadFilename(filename: string) {
+  if (
+    !filename.trim() ||
+    filename !== filename.trim() ||
+    UNSAFE_FILENAME_CHARACTERS.test(filename) ||
+    filename.includes("\0") ||
+    filename === "." ||
+    filename === ".."
+  ) {
+    throw new FilePolicyError("The file name contains unsupported characters.");
+  }
 }
 
 function validateDeclaredFile(
@@ -225,6 +242,7 @@ function validateDeclaredFile(
   const policy = policies[kind];
   if (!file.name || file.size <= 0)
     throw new FilePolicyError("Choose a non-empty file.");
+  assertSafeUploadFilename(file.name);
   if (!policy.extensions.has(extension(file.name)))
     throw new FilePolicyError(
       `The file extension is not allowed for ${kind.replaceAll("_", " ")}.`,
@@ -521,5 +539,11 @@ export function validateFileSignature(
 }
 
 export function safeDownloadName(filename: string) {
-  return filename.replace(/[\r\n"\\/]/g, "_").slice(0, 180) || "download";
+  return (
+    filename
+      // biome-ignore lint/suspicious/noControlCharactersInRegex: Download names neutralize ASCII controls and Unicode bidi overrides.
+      .replace(/[\u0000-\u001f\u007f\u202a-\u202e\u2066-\u2069"\\/]/gu, "_")
+      .slice(0, 180)
+      .trim() || "download"
+  );
 }

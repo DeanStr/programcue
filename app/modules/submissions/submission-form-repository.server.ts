@@ -810,7 +810,7 @@ export class SubmissionFormRepository {
              v.routing_json AS routingJson, v.settings_snapshot_json AS settingsSnapshotJson,
              v.status AS versionStatus, v.published_at AS publishedAt
         FROM form_definitions f
-        JOIN events e ON e.id = f.event_id
+        JOIN events e ON e.id = f.event_id AND e.activation_status = 'active'
         JOIN form_versions v ON v.form_id = f.id AND v.status = 'published'
        WHERE f.public_slug = ? AND f.status = 'published'
        LIMIT 1
@@ -894,7 +894,7 @@ export class SubmissionFormRepository {
           AND version.event_id = submission.event_id
          JOIN form_definitions f
            ON f.id = version.form_id AND f.event_id = version.event_id
-         JOIN events e ON e.id = f.event_id
+         JOIN events e ON e.id = f.event_id AND e.activation_status = 'active'
         WHERE speaker.id = ? AND f.public_slug = ?
           AND speaker.invitation_status IN ('pending','sent','expired','claimed')
         LIMIT 1`,
