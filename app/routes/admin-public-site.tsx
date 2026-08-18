@@ -18,10 +18,7 @@ import { requireValue } from "~/lib/required-value";
 import type { PublicRecordingWorkspaceItem } from "~/modules/public-site/public-recording-service.server";
 import { PublicRecordingService } from "~/modules/public-site/public-recording-service.server";
 import { publicSiteCommandIdForIntent } from "~/modules/public-site/public-site-command.server";
-import {
-  publicationChangeSummary,
-  recordingsArePubliclyRenderable,
-} from "~/modules/public-site/public-site-publication-summary";
+import { publicationChangeSummary } from "~/modules/public-site/public-site-publication-summary";
 import {
   PublicSiteCommandConflictError,
   PublicSiteIntegrityError,
@@ -72,6 +69,17 @@ export async function loader({ request, context }: Route.LoaderArgs) {
     "administrator",
   ]);
   const workspace = await new PublicSiteService(env).getWorkspace(viewer);
+  const now = Math.floor(Date.now() / 1_000);
+  const hasRenderableRecordings =
+    (
+      await new PublicRecordingService(env).getRenderableForEvent(
+        workspace.event.id,
+        viewer.organisationId,
+        workspace.event.endsAt,
+        workspace.event.timezone,
+        now,
+      )
+    ).length > 0;
   const commandKeys = [
     sitePublishCommandKey(
       workspace.draft.revision,
@@ -87,6 +95,7 @@ export async function loader({ request, context }: Route.LoaderArgs) {
   ];
   return {
     ...workspace,
+    hasRenderableRecordings,
     publicOrigin: new URL(request.url).origin,
     consequentialCommandIds: Object.fromEntries(
       await Promise.all(
@@ -366,14 +375,7 @@ export default function AdminPublicSite({ loaderData }: Route.ComponentProps) {
           session.title,
         ]) ?? [],
       ),
-      hasRenderableRecordings: recordingsArePubliclyRenderable({
-        hasPublishedRecording: loaderData.recordings.some(
-          (recording) => recording.publishedRevision !== null,
-        ),
-        eventEndsAt: loaderData.event.endsAt,
-        eventTimezone: loaderData.event.timezone,
-        now: Math.floor(Date.now() / 1_000),
-      }),
+      hasRenderableRecordings: loaderData.hasRenderableRecordings,
     });
     confirm(
       {
@@ -381,7 +383,7 @@ export default function AdminPublicSite({ loaderData }: Route.ComponentProps) {
         description:
           "The saved homepage, navigation, pages and sponsor snapshot will replace the current event website.",
         records,
-        countNoun: "change",
+        hideCount: true,
         confirmLabel: "Publish event website",
         tone: "primary",
       },

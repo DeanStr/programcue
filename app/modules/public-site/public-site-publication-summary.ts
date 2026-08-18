@@ -1,5 +1,4 @@
 import { publicSiteSectionLabels } from "~/components/admin-public-site-constants";
-import { eventLocalExclusiveEndEpoch } from "~/modules/schedule/schedule-time";
 import {
   defaultPublicSiteDraft,
   PUBLIC_SITE_PAGE_TYPES,
@@ -65,19 +64,6 @@ function unpublishedComparisonSnapshot(
 
 function faqIsPublic(draft: PublicSiteDraft) {
   return draft.sectionVisibility.faq || draft.pages.faq.enabled;
-}
-
-export function recordingsArePubliclyRenderable(input: {
-  hasPublishedRecording: boolean;
-  eventEndsAt: number;
-  eventTimezone: string;
-  now: number;
-}) {
-  return (
-    input.hasPublishedRecording &&
-    input.now >=
-      eventLocalExclusiveEndEpoch(input.eventEndsAt, input.eventTimezone)
-  );
 }
 
 function hasPublishableEditorial(

@@ -2,10 +2,7 @@ import { z } from "zod";
 import { publicEventBrandAssetPath } from "~/modules/events/event-branding";
 import { PublicProgrammeService } from "~/modules/programme/public-programme-service.server";
 import type { PublishedProgramme } from "~/modules/programme/public-programme-types";
-import {
-  eventBoundaryCalendarDate,
-  eventLocalExclusiveEndEpoch,
-} from "~/modules/schedule/schedule-time";
+import { eventBoundaryCalendarDate } from "~/modules/schedule/schedule-time";
 import { parsePublicApplicationProjection } from "~/modules/submissions/submission-availability";
 import type { Viewer } from "~/platform/auth/authorize.server";
 import {
@@ -1283,18 +1280,15 @@ export class PublicSiteService {
       );
     }
     const event = this.publicEvent(row, now);
-    let recordings: PublishedPublicRecording[] = [];
-    if (configuration.postEvent.enabled) {
-      const eventLocalExclusiveEnd = eventLocalExclusiveEndEpoch(
-        row.endsAt,
-        row.timezone,
-      );
-      if (now >= eventLocalExclusiveEnd) {
-        recordings = await new PublicRecordingService(
-          this.env,
-        ).getPublishedForEvent(row.id, row.organisationId, now);
-      }
-    }
+    const recordings = configuration.postEvent.enabled
+      ? await new PublicRecordingService(this.env).getRenderableForEvent(
+          row.id,
+          row.organisationId,
+          row.endsAt,
+          row.timezone,
+          now,
+        )
+      : [];
     return {
       event,
       contentRevision: await publicSiteContentRevision(event),

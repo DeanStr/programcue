@@ -740,7 +740,9 @@ version—added, removed, moved/resized and visibility-changed sessions—alongs
 all currently known conflict, content-approval, speaker-confirmation and public
 event-website/recording blockers. Confirmation remains disabled while any blocker is
 visible, and the authoritative mutation rechecks the exact schedule revision
-and every invariant rather than trusting the preview.
+and every invariant rather than trusting the preview. A leftover failed
+publish result is not shown when the dialog reopens until this instance
+submits again.
 
 Auto-placement readiness uses the same deterministic planner as preview and
 confirmation. Eligible sessions enable the action, while unavailable sessions
@@ -1052,7 +1054,9 @@ revoked and deleted during file erasure.
   `e2e/public-site.spec.ts` asserts the reset-restored published showcase,
   replacement publication from that published state, and first-publish on a
   blank event. First publication now uses the same empty-baseline comparison as
-  later publications.
+  later publications. First-publish post-event editorial uses the same
+  server recording projection as public pages. Website publication
+  confirmation lists grouped changes without a record/change count.
   Coverage still includes discard confirmation, Event
   home/programme navigation,
   homepage/fixed-page desktop/mobile preview selection, ordered featured

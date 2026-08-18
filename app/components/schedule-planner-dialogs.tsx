@@ -321,6 +321,13 @@ function publicationActionError(result: unknown) {
   };
 }
 
+export function visibleSchedulePublicationError(
+  result: unknown,
+  attempted: boolean,
+) {
+  return attempted ? publicationActionError(result) : null;
+}
+
 export function SchedulePublicationDialog({
   workspace,
   fetcher,
@@ -344,7 +351,10 @@ export function SchedulePublicationDialog({
   const publishing =
     fetcher.state !== "idle" &&
     (fetcher.formData?.get("intent") === "publish" || publishAttempted);
-  const actionError = publicationActionError(fetcher.data);
+  const actionError = visibleSchedulePublicationError(
+    fetcher.data,
+    publishAttempted,
+  );
   const blockerCount =
     Number(preview.blockers.emptySchedule) +
     preview.blockers.conflicts.length +

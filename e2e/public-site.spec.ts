@@ -864,7 +864,7 @@ test("organisers first-publish a bounded site on a blank event", async ({
   const confirmation = page.getByRole("dialog", {
     name: "Publish the event website?",
   });
-  await expect(confirmation).toContainText("changes affected");
+  await expect(confirmation.locator(".pc-confirm-count")).toHaveCount(0);
   await expect(confirmation).toContainText("Pages added: About, Sponsors");
   await expect(confirmation).toContainText("Sponsors added: Civic Partner");
   await expect(confirmation).toContainText("Theme: Follow visitor system");

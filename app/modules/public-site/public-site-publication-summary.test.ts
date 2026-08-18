@@ -1,10 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { defaultPublicSiteDraft } from "./public-site";
-import {
-  publicationChangeSummary,
-  recordingsArePubliclyRenderable,
-} from "./public-site-publication-summary";
+import { publicationChangeSummary } from "./public-site-publication-summary";
 
 function sponsor(name: string, id = name) {
   return {
@@ -142,14 +139,6 @@ describe("public-site publication change summary", () => {
     draft.postEvent.body = "Watch the talks on demand.";
 
     expect(
-      recordingsArePubliclyRenderable({
-        hasPublishedRecording: true,
-        eventEndsAt: 1_900_000_000,
-        eventTimezone: "UTC",
-        now: 1_800_000_000,
-      }),
-    ).toBe(false);
-    expect(
       publicationChangeSummary({
         draft,
         sponsors: [],
@@ -159,5 +148,22 @@ describe("public-site publication change summary", () => {
         hasRenderableRecordings: false,
       }),
     ).not.toContain("Editorial homepage content will be published.");
+  });
+
+  it("includes first-publish post-event copy only when recordings are publicly renderable", () => {
+    const draft = defaultPublicSiteDraft();
+    draft.postEvent.enabled = true;
+    draft.postEvent.body = "Watch the talks on demand.";
+
+    expect(
+      publicationChangeSummary({
+        draft,
+        sponsors: [],
+        published: null,
+        speakerNames: new Map(),
+        sessionNames: new Map(),
+        hasRenderableRecordings: true,
+      }),
+    ).toContain("Editorial homepage content will be published.");
   });
 });

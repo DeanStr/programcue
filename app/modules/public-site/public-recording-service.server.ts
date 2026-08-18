@@ -1,5 +1,6 @@
 import { z } from "zod";
 
+import { eventLocalExclusiveEndEpoch } from "~/modules/schedule/schedule-time";
 import type { Viewer } from "~/platform/auth/authorize.server";
 import { recordingDraftInputSchema, revisionInputSchema } from "./public-site";
 import {
@@ -623,6 +624,19 @@ export class PublicRecordingService {
       throw new PublicSiteRevisionConflictError();
     }
     return { changeSequence: publicSiteChangeSequence(results[5]) };
+  }
+
+  async getRenderableForEvent(
+    eventId: string,
+    organisationId: string,
+    eventEndsAt: number,
+    eventTimezone: string,
+    now: number,
+  ): Promise<PublishedPublicRecording[]> {
+    if (now < eventLocalExclusiveEndEpoch(eventEndsAt, eventTimezone)) {
+      return [];
+    }
+    return this.getPublishedForEvent(eventId, organisationId, now);
   }
 
   async getPublishedForEvent(

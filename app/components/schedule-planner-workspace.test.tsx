@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 
+import { visibleSchedulePublicationError } from "./schedule-planner-dialogs";
 import {
   parseScheduleActionNotices,
   SCHEDULE_ACTION_INVALID_RESPONSE_MESSAGE,
@@ -60,6 +61,25 @@ describe("schedule action response notices", () => {
       conflicts: [],
       warnings: [],
       error: SCHEDULE_ACTION_INVALID_RESPONSE_MESSAGE,
+    });
+  });
+});
+
+describe("schedule publication dialog leftover errors", () => {
+  const leftoverFailure = {
+    intent: "publish",
+    error: "The schedule draft changed while you were reviewing publication.",
+    conflict: true,
+  };
+
+  it("hides a leftover failed publish result until this dialog instance submits", () => {
+    expect(visibleSchedulePublicationError(leftoverFailure, false)).toBeNull();
+  });
+
+  it("shows a failed publish result after this dialog instance submits", () => {
+    expect(visibleSchedulePublicationError(leftoverFailure, true)).toEqual({
+      message: leftoverFailure.error,
+      conflict: true,
     });
   });
 });
