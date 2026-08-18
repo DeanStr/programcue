@@ -1,5 +1,6 @@
 import { expect, test } from "@playwright/test";
 import { e2eOrigin } from "./support/e2e-origin";
+import { openEvaluationView } from "./support/evaluation-admin";
 import { resetDemoEvent } from "./support/reset-demo-event";
 
 test.beforeEach(async ({ request }) => {
@@ -154,16 +155,22 @@ test("review submission confirmation preserves context", async ({ page }) => {
     await chosen(index).check();
     await expect(chosen(index)).toBeChecked();
   }
-  await page.locator('select[name="recommendation"]').selectOption("accept");
-  await page.locator('select[name="confidence"]').selectOption("4");
+  await page
+    .getByRole("radiogroup", { name: "Recommendation" })
+    .getByRole("radio", { name: "Accept" })
+    .check();
+  await page
+    .getByRole("radiogroup", { name: "Confidence" })
+    .getByRole("radio", { name: "4", exact: true })
+    .check();
   for (let index = 0; index < scoreGroupCount; index += 1) {
     await expect(chosen(index)).toBeChecked();
   }
   await expect(
     page
       .getByRole("region", { name: "Score submission" })
-      .locator(".review-score-head .status"),
-  ).toContainText("4 / 4");
+      .locator(".review-score-progress"),
+  ).toContainText("4/4");
   await page.getByRole("button", { name: "Submit and open next" }).click();
   const confirmation = page.getByRole("dialog", {
     name: "Submit and open the next review?",
@@ -247,6 +254,7 @@ test("evaluation administration exposes onboarding and consequential previews", 
   expect(response?.ok()).toBeTruthy();
   await page.locator("body[data-hydrated='true']").waitFor();
 
+  await openEvaluationView(page, "Setup");
   await page.getByText("Manage evaluation access", { exact: true }).click();
   const invitation = page.locator("details").filter({
     hasText: "Manage evaluation access",
@@ -263,15 +271,14 @@ test("evaluation administration exposes onboarding and consequential previews", 
       .getByRole("button", { name: /Promote to chair|Revoke chair/ })
       .first(),
   ).toBeVisible();
+  await openEvaluationView(page, "Assignments");
   await expect(
     page.getByRole("heading", { name: "Session queue" }),
   ).toBeVisible();
+  await openEvaluationView(page, "Results");
   const unifiedResults = page.getByRole("region", {
     name: "Unified evaluation results",
   });
-  await expect(
-    page.getByRole("heading", { name: "Chair results workbench" }),
-  ).toBeVisible();
   await expect(unifiedResults).toBeVisible();
   await expect(
     unifiedResults.getByRole("columnheader", { name: "Recommendations" }),
@@ -280,6 +287,7 @@ test("evaluation administration exposes onboarding and consequential previews", 
   await expect(page.getByLabel("Coverage filter")).toContainText(
     "Incomplete reviews",
   );
+  await openEvaluationView(page, "Assignments");
   await page.getByRole("link", { name: "Open discussion" }).first().click();
   await expect(
     page.getByRole("heading", { name: "Committee discussion" }),
@@ -331,6 +339,7 @@ test("evaluation administration exposes onboarding and consequential previews", 
   await page.getByRole("button", { name: "Load earlier messages" }).click();
   await expect(page.getByText("Browser committee note")).toBeVisible();
 
+  await openEvaluationView(page, "Assignments");
   const bulkAssignButton = page.getByRole("button", { name: "Bulk assign" });
   await bulkAssignButton.click();
   const bulkAssignment = page.getByRole("dialog", {
@@ -359,7 +368,7 @@ test("evaluation administration exposes onboarding and consequential previews", 
   await expect(bulkAssignButton).toBeFocused();
 
   const undecidedProposal = page
-    .getByRole("region", { name: "Proposal queue" })
+    .getByRole("region", { name: "Evaluation proposal queue" })
     .getByRole("row", { name: /Designing inclusive attendee journeys/u });
   await undecidedProposal.getByRole("button", { name: "Decide" }).click();
   const decision = page.getByRole("dialog", { name: /Decision ·/ });
@@ -408,8 +417,9 @@ test("a committee chair can save and resume an accepted decision draft", async (
   expect(response?.ok()).toBeTruthy();
   await page.locator("body[data-hydrated='true']").waitFor();
 
+  await openEvaluationView(page, "Assignments");
   const undecidedProposal = page
-    .getByRole("region", { name: "Proposal queue" })
+    .getByRole("region", { name: "Evaluation proposal queue" })
     .getByRole("row", { name: /Designing inclusive attendee journeys/u });
   await undecidedProposal.getByRole("button", { name: "Decide" }).click();
   let decision = page.getByRole("dialog", { name: /Decision ·/ });
@@ -473,8 +483,9 @@ test("a released decision keeps inspectable recipient delivery evidence after re
   await page.goto("/admin/review");
   await page.locator("body[data-hydrated='true']").waitFor();
 
+  await openEvaluationView(page, "Assignments");
   const proposal = page
-    .getByRole("region", { name: "Proposal queue" })
+    .getByRole("region", { name: "Evaluation proposal queue" })
     .getByRole("row", { name: /Designing inclusive attendee journeys/u });
   await proposal.getByRole("button", { name: "Decide" }).click();
   const decision = page.getByRole("dialog", { name: /Decision ·/ });
@@ -492,6 +503,7 @@ test("a released decision keeps inspectable recipient delivery evidence after re
   ).toBeVisible();
 
   async function expectDeliveryEvidence() {
+    await openEvaluationView(page, "Results");
     const result = page
       .getByRole("region", { name: "Unified evaluation results" })
       .getByRole("row", { name: /Designing inclusive attendee journeys/u });
@@ -637,6 +649,7 @@ test("the exact SBEK reviewer invitation hands off to Sam without claiming email
   ]);
   await page.goto("/admin/review");
   await page.locator("body[data-hydrated='true']").waitFor();
+  await openEvaluationView(page, "Setup");
   await page.getByText("Manage evaluation access", { exact: true }).click();
   const invitation = page.locator("details").filter({
     hasText: "Manage evaluation access",

@@ -141,7 +141,11 @@ export function EvaluationUnifiedResults() {
                 name="idempotencyKey"
                 defaultValue={loaderData.resultsExportIntent}
               />
-              <button type="submit" className="pc-eval-text-action">
+              <button
+                type="submit"
+                className="pc-eval-text-action"
+                aria-label="Download proposal results CSV"
+              >
                 Export CSV
               </button>
             </Form>
@@ -315,8 +319,10 @@ export function EvaluationUnifiedResults() {
                               Moderate
                             </button>
                           ) : null}
-                          <details className="pc-eval-row-detail">
-                            <summary>Detail</summary>
+                        </div>
+                      </details>
+                      <details className="pc-eval-row-detail">
+                        <summary>Review and decision detail</summary>
                             <div className="stack mt">
                               <article className="card pad">
                                 <strong>
@@ -1013,9 +1019,6 @@ export function EvaluationUnifiedResults() {
                               </div>
                             </div>
                           </details>
-
-                        </div>
-                      </details>
                     </td>
                   </tr>
                 );

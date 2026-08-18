@@ -894,7 +894,15 @@ export default function CommunicationsCentre({
             { id: "communications-calendars", label: "Calendars" },
           ]}
         />
-      ) : null}
+      ) : (
+        <AdminPageSectionNavigation
+          label="Communications Centre sections"
+          links={[
+            { id: "communications-templates", label: "Templates" },
+            { id: "communications-history", label: "History" },
+          ]}
+        />
+      )}
 
       {loaderData.activeFilter === "failed" ? (
         <div className="validation-item error mb" role="status">

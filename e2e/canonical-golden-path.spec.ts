@@ -2,6 +2,7 @@ import AxeBuilder from "@axe-core/playwright";
 import { expect, type Locator, type Page, test } from "@playwright/test";
 
 import { e2eOrigin } from "./support/e2e-origin";
+import { openEvaluationView } from "./support/evaluation-admin";
 import { resetDemoEvent } from "./support/reset-demo-event";
 
 const TEAM_NAME = "Golden path review team";
@@ -88,8 +89,14 @@ async function completeSelectedReview(page: Page) {
       .getByRole("radio", { name: "5", exact: true })
       .check();
   }
-  await form.getByLabel("Recommendation").selectOption("accept");
-  await form.getByLabel("Confidence").selectOption("5");
+  await form
+    .getByRole("radiogroup", { name: "Recommendation" })
+    .getByRole("radio", { name: "Accept" })
+    .check();
+  await form
+    .getByRole("radiogroup", { name: "Confidence" })
+    .getByRole("radio", { name: "5", exact: true })
+    .check();
   await form
     .getByLabel("Applicant feedback")
     .fill("Clear, practical and ready for the programme.");
@@ -133,6 +140,7 @@ test.describe
       test.setTimeout(45_000);
       await switchDemoRole(page, "administrator");
       await waitForInterface(page, "/admin/review");
+      await openEvaluationView(page, "Setup");
       await page.getByText("Create evaluation team", { exact: true }).click();
       const teamForm = page.locator("details").filter({
         has: page.getByText("Create evaluation team", { exact: true }),
@@ -253,8 +261,9 @@ test.describe
 
       await switchDemoRole(page, "administrator");
       await waitForInterface(page, "/admin/review");
+      await openEvaluationView(page, "Assignments");
       const row = page
-        .getByRole("region", { name: "Proposal queue" })
+        .getByRole("region", { name: "Evaluation proposal queue" })
         .getByRole("row", { name: new RegExp(SUBMISSION_TITLE) });
       await expect(row).toContainText(`Routed to ${TEAM_NAME}`);
       await expect(row).toContainText("submitted");
@@ -291,6 +300,7 @@ test.describe
 
       await switchDemoRole(page, "administrator");
       await waitForInterface(page, "/admin/review");
+      await openEvaluationView(page, "Setup");
       await page.getByLabel("Next round name").fill("Final programme review");
       await page.getByRole("button", { name: "Add next round" }).click();
       await expectStatus(page, "Next round created from the rubric");
@@ -339,8 +349,9 @@ test.describe
 
       await switchDemoRole(page, "administrator");
       await waitForInterface(page, "/admin/review");
+      await openEvaluationView(page, "Assignments");
       const decisionRow = page
-        .getByRole("region", { name: "Proposal queue" })
+        .getByRole("region", { name: "Evaluation proposal queue" })
         .getByRole("row", { name: new RegExp(SUBMISSION_TITLE) });
       await decisionRow.getByRole("button", { name: "Decide" }).click();
       const decision = page.getByRole("dialog", {

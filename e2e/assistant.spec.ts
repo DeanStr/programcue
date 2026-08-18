@@ -1,6 +1,7 @@
 import { expect, test } from "@playwright/test";
 import { acceptConfirm, confirmDialog } from "./support/confirm-dialog";
 import { e2eOrigin } from "./support/e2e-origin";
+import { openEvaluationView } from "./support/evaluation-admin";
 import { resetDemoEvent } from "./support/reset-demo-event";
 
 const FIXTURE_CONFIRMATION = "seed-assistant-approval-browser-fixture";
@@ -240,6 +241,7 @@ test("reviewer AI is event-opt-in, follows an initial draft, and fails fast with
   try {
     await page.goto("/admin/review");
     await page.locator("body[data-hydrated='true']").waitFor();
+    await openEvaluationView(page, "Setup");
     const setting = page.locator("section.card").filter({
       has: page.getByRole("heading", { name: "Reviewer AI suggestions" }),
     });

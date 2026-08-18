@@ -12,15 +12,16 @@ export function EvaluationSessionQueue() {
     assignmentTargets,
   } = useEvaluationAdminModel();
   return (
-    <section className="card pad mt pc-eval-queue">
-      {/* The enclosing AdminPageSection already names this "Session queue"; a
-          card heading repeating it word for word gave the page two headings
-          with the same name and told a reader nothing twice. What the section
-          header cannot carry is the consequence of assigning, so that stays. */}
-      <p className="subtle mb">
-        Assign existing sessions directly. Reviewers receive a frozen copy of
-        the session details and speakers at assignment time.
-      </p>
+    <section className="card pad mt pc-eval-queue" id="evaluation-sessions">
+      <div className="card-title">
+        <div>
+          <h2>Session queue</h2>
+          <p className="subtle">
+            Assign existing sessions directly. Reviewers receive a frozen copy
+            of the session details and speakers at assignment time.
+          </p>
+        </div>
+      </div>
       {loaderData.sessions.length ? (
         <section
           className="table-wrap pc-responsive-table-wrap"

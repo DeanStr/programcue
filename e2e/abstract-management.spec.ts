@@ -1,6 +1,7 @@
 import { expect, type Page, test } from "@playwright/test";
 
 import { e2eOrigin } from "./support/e2e-origin";
+import { openEvaluationView } from "./support/evaluation-admin";
 import { resetDemoEvent } from "./support/reset-demo-event";
 import { resetDemoSubmissions } from "./support/reset-demo-submissions";
 
@@ -66,6 +67,7 @@ test.describe
       await switchDemoRole(page, "administrator", "/admin/review");
       await resetDemoSubmissions(page.request, { verifiedLocalSender: true });
       await waitForInterface(page, "/admin/review");
+      await openEvaluationView(page, "Setup");
       const cyclePanel = page.locator("details").filter({
         hasText: "Start a new review cycle",
       });
@@ -281,6 +283,7 @@ test.describe
 
       await switchDemoRole(page, "administrator", "/admin/review");
       await waitForInterface(page, "/admin/review");
+      await openEvaluationView(page, "Assignments");
       const submissionRow = page
         .getByRole("region", { name: "Evaluation proposal queue" })
         .locator("tr")
@@ -309,6 +312,7 @@ test.describe
       await expect(
         page.locator(".validation-item.ok[role='status']"),
       ).toContainText(/assignment/i);
+      await openEvaluationView(page, "Setup");
       await expect(initialCard).toContainText("1 assigned · 0 complete · 0%");
       await initialCard.getByLabel("Include Sam Whitfield in reminder").check();
       await initialCard
@@ -323,6 +327,7 @@ test.describe
       ).toHaveValue(SAM_EMAIL);
 
       await waitForInterface(page, "/admin/review");
+      await openEvaluationView(page, "Results");
       await page.getByLabel("Sort results").selectOption("title_asc");
       await page.getByRole("button", { name: "Apply" }).click();
       await expect(page).toHaveURL(/sort=title_asc/u);
@@ -380,6 +385,7 @@ test.describe
       await expect(page.locator("body")).toContainText(PRIYA_EMAIL);
 
       await waitForInterface(page, "/admin/review");
+      await openEvaluationView(page, "Assignments");
       const decisionRow = page
         .getByRole("region", { name: "Evaluation proposal queue" })
         .locator("tr")

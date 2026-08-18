@@ -58,6 +58,7 @@ test("authenticated application stays within the mobile viewport", async ({
 
   await waitForInterface(page, "/apply/form");
   await expect(page.getByText(/April 30, 2027/).first()).toBeVisible();
+  await page.getByText("Already started?", { exact: true }).click();
   await page.getByLabel("Email address").fill(email);
   await page.getByRole("button", { name: "Send verification code" }).click();
   await page.getByLabel("Six-digit code").fill("424242");
@@ -75,28 +76,14 @@ test("mobile administration sections reveal linked content without overflow", as
   page,
 }) => {
   await waitForInterface(page, "/admin/command");
-  const navigation = page.getByRole("navigation", {
-    name: "Command Centre sections",
-  });
-  const workflows = page.getByRole("button", { name: /Workflow actions/ });
-  await expect(workflows).toHaveAttribute("aria-expanded", "false");
-  await navigation.getByRole("link", { name: "Workflow actions" }).click();
-  await expect(workflows).toHaveAttribute("aria-expanded", "true");
   await expect(
-    page.getByRole("heading", { name: "Readiness by workflow" }),
+    page.getByRole("heading", { name: "Command Centre" }),
   ).toBeVisible();
-  await workflows.click();
-  await expect(workflows).toHaveAttribute("aria-expanded", "false");
-  await navigation.getByRole("link", { name: "Workflow actions" }).click();
-  await expect(workflows).toHaveAttribute("aria-expanded", "true");
-
-  const assistants = page.getByRole("button", {
-    name: /Assistants and delivery/,
-  });
-  await navigation.getByRole("link", { name: "Assistants" }).click();
-  await expect(assistants).toHaveAttribute("aria-expanded", "true");
-  await expect(page.getByLabel("Operational focus")).toHaveClass(/field/);
-
+  await expect(
+    page.getByRole("heading", { name: "Overall readiness" }),
+  ).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Workflows" })).toBeVisible();
+  await page.getByText("Foundation and purpose", { exact: true }).click();
   const reminderSelector = page.getByLabel("Approved reminder foundation");
   await expect(reminderSelector).toBeVisible();
   const selectorBox = await reminderSelector.boundingBox();
@@ -152,15 +139,19 @@ test("mobile administration sections reveal linked content without overflow", as
   await expectNoContrastViolations(page, "Communications Centre");
 
   await waitForInterface(page, "/admin/review");
-  const evaluationAccess = page.getByRole("button", {
-    name: /Evaluation access/,
-  });
-  await expect(evaluationAccess).toHaveAttribute("aria-expanded", "false");
   await page
-    .getByRole("navigation", { name: "Evaluation administration sections" })
-    .getByRole("link", { name: "Access" })
+    .getByRole("navigation", { name: "Evaluation views" })
+    .getByRole("link", { name: "Setup" })
     .click();
-  await expect(evaluationAccess).toHaveAttribute("aria-expanded", "true");
+  const evaluationAccess = page.locator("details").filter({
+    hasText: "Manage evaluation access",
+  });
+  await expect(
+    page.getByText("Manage evaluation access", { exact: true }),
+  ).toBeVisible();
+  await expect(evaluationAccess.getByLabel("Name")).toBeHidden();
+  await page.getByText("Manage evaluation access", { exact: true }).click();
+  await expect(evaluationAccess.getByLabel("Name")).toBeVisible();
   await expectNoHorizontalPageOverflow(page);
 });
 

@@ -276,7 +276,7 @@ export default function AdminSpeakers({ loaderData }: Route.ComponentProps) {
               </select>
             </label>
             <div className="crm-filter-actions">
-              <button className="sr-only" type="submit">
+              <button className="crm-text-action" type="submit">
                 Apply filters
               </button>
               {filtersActive ? (

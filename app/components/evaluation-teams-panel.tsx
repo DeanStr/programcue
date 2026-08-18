@@ -21,7 +21,7 @@ export function EvaluationTeamsPanel() {
         </div>
         <span className="status info right">{loaderData.teams.length}</span>
       </div>
-      <details className="card pad mb pc-disclosure">
+      <details id="evaluation-access" className="card pad mb pc-disclosure">
         <summary>Manage evaluation access</summary>
         <div className="stack mt">
           <p className="help">

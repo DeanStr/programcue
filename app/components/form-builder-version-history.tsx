@@ -17,7 +17,7 @@ export function FormVersionHistory({
   eventTimezone: string;
 }) {
   return (
-    <details className="fb-history" aria-label="Form version history">
+    <details className="fb-history" open>
       <summary>
         <strong>Version history</strong>
         <span>
@@ -26,19 +26,25 @@ export function FormVersionHistory({
           {eventTimezone}
         </span>
       </summary>
-      <ol className="fb-history-list">
-        {workspace.versions.map((version) => (
-          <li className="fb-history-item" key={version.id}>
-            <strong>v{version.versionNumber}</strong>
-            <DomainStatusBadge domain="version" status={version.status} />
-            <span className="fb-history-when">
-              {version.publishedAt
-                ? publishedLabel(version.publishedAt, eventTimezone)
-                : "Not published"}
-            </span>
-          </li>
-        ))}
-      </ol>
+      <section
+        aria-label="Form version history"
+        // biome-ignore lint/a11y/noNoninteractiveTabindex: Scrollable version history needs keyboard focus so arrow keys can expose overflow.
+        tabIndex={0}
+      >
+        <ol className="fb-history-list">
+          {workspace.versions.map((version) => (
+            <li className="fb-history-item" key={version.id}>
+              <strong>v{version.versionNumber}</strong>
+              <DomainStatusBadge domain="version" status={version.status} />
+              <span className="fb-history-when">
+                {version.publishedAt
+                  ? publishedLabel(version.publishedAt, eventTimezone)
+                  : "Not published"}
+              </span>
+            </li>
+          ))}
+        </ol>
+      </section>
     </details>
   );
 }

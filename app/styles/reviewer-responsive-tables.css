@@ -326,6 +326,9 @@
 }
 /* Discrete rating chips in a quiet track — Attio/Linear estimate, not a
    row of form buttons. Selected is ink fill + extra weight + a mark. */
+.reviewer-shell [data-review-scale] {
+  scroll-margin-top: 96px;
+}
 .reviewer-shell .review-scale-block {
   grid-column: 1 / -1;
   width: max-content;
@@ -407,6 +410,7 @@
   color: var(--ink);
   font-size: var(--text-sm);
   font-weight: var(--weight-extrabold);
+  pointer-events: none;
   cursor: pointer;
   transition:
     background-color var(--dur-fast) var(--ease-out),
@@ -669,6 +673,7 @@
   color: var(--text-primary);
   font-size: var(--text-2xs);
   font-weight: var(--weight-semibold);
+  pointer-events: none;
   cursor: pointer;
 }
 .reviewer-shell .review-choice-option input:checked + span {
@@ -883,9 +888,6 @@
 /* The three-column case is the only one where the panel owns its own scroll
    container and the bar already sits at the bottom of it. Everywhere else the
    page scrolls, and a static bar puts Submit 2,600px below the fold. */
-.reviewer-shell .review-save-state {
-  display: none;
-}
 @media (min-width: 1181px) {
   .reviewer-shell .review-actions {
     position: static;

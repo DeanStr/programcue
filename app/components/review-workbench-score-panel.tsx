@@ -622,6 +622,7 @@ export function ReviewScorePanel() {
             <>
               <span
                 className={`review-save-state${saveFailed ? " is-failed" : dirty ? " is-dirty" : workspace.review ? " is-saved" : ""}`}
+                role="status"
               >
                 {fetcher.state !== "idle"
                   ? "Saving…"

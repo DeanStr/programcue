@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Form } from "react-router";
+import { Form, Link, useLocation } from "react-router";
 
 import { useEvaluationAdminModel } from "~/components/evaluation-admin-model";
 import {
@@ -212,6 +212,14 @@ export function EvaluationPlanState() {
 
 type EvaluationAdminView = "results" | "assignments" | "setup";
 
+const EVALUATION_VIEW_STORAGE_KEY = "pc-eval-admin-view";
+
+function isEvaluationAdminView(
+  value: string | null,
+): value is EvaluationAdminView {
+  return value === "results" || value === "assignments" || value === "setup";
+}
+
 function viewFromHash(hash: string): EvaluationAdminView {
   const id = hash.replace(/^#/, "");
   if (
@@ -233,45 +241,57 @@ function viewFromHash(hash: string): EvaluationAdminView {
 }
 
 function EvaluationAdminViews() {
-  const [view, setView] = useState<EvaluationAdminView>("results");
+  const location = useLocation();
+  const [storedView, setStoredView] = useState<EvaluationAdminView>("results");
+  const [discussionOpen, setDiscussionOpen] = useState(false);
+
   useEffect(() => {
-    const apply = () => setView(viewFromHash(window.location.hash));
-    apply();
-    window.addEventListener("hashchange", apply);
-    return () => window.removeEventListener("hashchange", apply);
-  }, []);
+    const params = new URLSearchParams(location.search);
+    const discussionTargeted =
+      location.hash === "#evaluation-discussion" ||
+      params.has("submission") ||
+      params.has("session");
+    setDiscussionOpen(discussionTargeted);
+    if (location.hash) {
+      const next = viewFromHash(location.hash);
+      setStoredView(next);
+      sessionStorage.setItem(EVALUATION_VIEW_STORAGE_KEY, next);
+      return;
+    }
+    const stored = sessionStorage.getItem(EVALUATION_VIEW_STORAGE_KEY);
+    if (isEvaluationAdminView(stored)) setStoredView(stored);
+  }, [location.hash, location.search]);
+
+  const view = location.hash ? viewFromHash(location.hash) : storedView;
+
   return (
     <>
       <EvaluationMetrics />
       <nav className="pc-eval-switcher" aria-label="Evaluation views">
         {(
           [
-            ["results", "Results", "#evaluation-results"],
-            ["assignments", "Assignments", "#evaluation-assignments"],
-            ["setup", "Setup", "#evaluation-setup"],
+            ["results", "Results", "evaluation-results"],
+            ["assignments", "Assignments", "evaluation-assignments"],
+            ["setup", "Setup", "evaluation-setup"],
           ] as const
-        ).map(([key, label, href]) => (
-          <a
+        ).map(([key, label, hash]) => (
+          <Link
             key={key}
-            href={href}
+            to={{ hash }}
             className={view === key ? "is-current" : undefined}
             aria-current={view === key ? "page" : undefined}
-            onClick={(event) => {
-              event.preventDefault();
-              setView(key);
-              window.history.replaceState(null, "", href);
-            }}
           >
             {label}
-          </a>
+          </Link>
         ))}
       </nav>
       {view === "results" ? (
         <div id="evaluation-results" className="pc-eval-view">
           <EvaluationUnifiedResults />
           <details
-            id="evaluation-discussion"
             className="pc-eval-discussion-disclosure"
+            open={discussionOpen}
+            onToggle={(event) => setDiscussionOpen(event.currentTarget.open)}
           >
             <summary>Committee discussion</summary>
             <EvaluationDiscussionPanel />

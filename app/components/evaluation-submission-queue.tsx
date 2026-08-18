@@ -34,7 +34,7 @@ export function EvaluationSubmissionQueue() {
     return selectedResultsRound.name;
   };
   return (
-    <section className="card pad pc-eval-queue">
+    <section className="card pad pc-eval-queue" id="evaluation-proposals">
       {dialog}
       <div className="card-title">
         <div>
