@@ -310,12 +310,6 @@ test.describe
         `/admin/integrations?connection=${encodeURIComponent(integration.connectionId)}`,
       );
       await expect(
-        page.getByText(
-          "Demonstration only · no credentials or provider validation",
-          { exact: true },
-        ),
-      ).toBeVisible();
-      await expect(
         page.getByText("Demonstration only", { exact: true }),
       ).toBeVisible();
       await expect(
@@ -331,15 +325,16 @@ test.describe
       ).toBeDisabled();
       const preview = page.locator('[aria-label="Accelevents export preview"]');
       await expect(preview).toContainText("AI in Event Operations");
-      expect(await preview.getByRole("row").count()).toBeGreaterThan(1);
+      expect(await preview.getByRole("listitem").count()).toBeGreaterThan(1);
 
       await page.getByRole("button", { name: "Record this preview" }).click();
       await expect(page.locator(".pc-status-notice")).toContainText(
         "Preview recorded. Nothing was written to Accelevents.",
       );
-      const dryRun = page.getByRole("row", {
-        name: /accelevents.*Preview only/i,
-      });
+      const dryRun = page
+        .locator('[aria-label="Recent integration runs"]')
+        .getByRole("listitem")
+        .filter({ hasText: /accelevents.*Preview only/i });
       await expect(dryRun).toContainText("Succeeded");
 
       await waitForInterface(

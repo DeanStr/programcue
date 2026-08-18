@@ -191,7 +191,11 @@ test("an Event Setup commit invalidates another authenticated browser page over 
       if ((await venue.inputValue()) !== originalVenue) {
         await venue.fill(originalVenue);
         await editor.getByRole("button", { name: "Save event" }).click();
-        await editor.waitForLoadState("networkidle");
+        await expect(
+          editor.locator(".validation-item.ok[role='status']").filter({
+            has: editor.getByText("Event settings saved.", { exact: true }),
+          }),
+        ).toBeVisible();
         await editor.reload();
         await expect(
           editor.getByLabel("Venue", { exact: true }),

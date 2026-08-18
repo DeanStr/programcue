@@ -491,13 +491,10 @@ test("organisers preview unpublished edits and publish a replacement", async ({
   await expect(
     page.getByRole("heading", { name: "Event website" }),
   ).toBeVisible();
-  await expect(page.getByLabel("Tagline")).toHaveValue(
-    "One destination for the whole event.",
-  );
+  const tagline = page.locator(".public-site-rail-form").getByLabel("Tagline");
+  await expect(tagline).toHaveValue("One destination for the whole event.");
 
-  await page
-    .getByLabel("Tagline")
-    .fill("One destination for the event and every attendee.");
+  await tagline.fill("One destination for the event and every attendee.");
   await page.getByLabel("Theme").selectOption("dark");
   const firstSection = page.locator(".public-site-section-order > li").first();
   await firstSection.getByRole("button", { name: "Move down" }).focus();
@@ -584,9 +581,9 @@ test("organisers preview unpublished edits and publish a replacement", async ({
   await unsavedDialog.getByRole("button", { name: "Keep editing" }).click();
   await expect(unsavedDialog).toBeHidden();
   await expect(page).toHaveURL(/\/admin\/site$/u);
-  await expect(
-    page.locator(".public-site-rail-form").getByLabel("Tagline"),
-  ).toHaveValue("One destination for the event and every attendee.");
+  await expect(tagline).toHaveValue(
+    "One destination for the event and every attendee.",
+  );
 
   await expect(
     page.getByLabel("Preview content").locator("option"),

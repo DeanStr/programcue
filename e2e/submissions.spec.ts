@@ -806,10 +806,9 @@ test.describe
         .selectOption(`audience_level_${unique}`);
       await page.getByLabel("Equals").selectOption("Advanced");
 
-      const audienceSection = page
-        .getByRole("group", { name: "Sections" })
-        .locator(".card")
-        .nth(1);
+      const audienceSection = page.locator(".fb-section-item").filter({
+        has: page.locator('input[value="Audience and outcomes"]'),
+      });
       await audienceSection.getByRole("button", { name: "Remove" }).click();
       await expect(page.getByRole("alert")).toContainText(
         "Move 3 assigned fields to another section",

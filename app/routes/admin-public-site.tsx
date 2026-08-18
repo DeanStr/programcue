@@ -17,6 +17,7 @@ import { useUnsavedChanges } from "~/components/ui/use-unsaved-changes";
 import { requireValue } from "~/lib/required-value";
 import type { PublicRecordingWorkspaceItem } from "~/modules/public-site/public-recording-service.server";
 import { PublicRecordingService } from "~/modules/public-site/public-recording-service.server";
+import type { PublicSiteDraft } from "~/modules/public-site/public-site";
 import { publicSiteCommandIdForIntent } from "~/modules/public-site/public-site-command.server";
 import { publicationChangeSummary } from "~/modules/public-site/public-site-publication-summary";
 import {
@@ -271,21 +272,70 @@ function publicationDetail(publishedAt: number | null, current: boolean) {
   return current ? "published" : "changes waiting";
 }
 
+type PublicSiteEditorCache = {
+  eventId: string;
+  revision: number;
+  configuration: PublicSiteDraft;
+};
+
+// Browser-only: a blocked navigation can remount this route. The Worker
+// isolate must not retain another request's draft.
+let publicSiteEditorCache: PublicSiteEditorCache | null = null;
+
+function readPublicSiteEditorCache(eventId: string, revision: number) {
+  if (typeof document === "undefined") return null;
+  if (
+    publicSiteEditorCache?.eventId === eventId &&
+    publicSiteEditorCache.revision === revision
+  ) {
+    return publicSiteEditorCache.configuration;
+  }
+  return null;
+}
+
+function writePublicSiteEditorCache(
+  eventId: string,
+  revision: number,
+  configuration: PublicSiteDraft,
+) {
+  if (typeof document === "undefined") return;
+  publicSiteEditorCache = { eventId, revision, configuration };
+}
+
+function clearPublicSiteEditorCache() {
+  publicSiteEditorCache = null;
+}
+
 export default function AdminPublicSite({ loaderData }: Route.ComponentProps) {
   const actionData = useActionData<typeof action>();
   const navigation = useNavigation();
   const submit = useSubmit();
   const { confirm, dialog } = useConfirm();
   const [configuration, setConfiguration] = useState(
-    loaderData.draft.configuration,
+    () =>
+      readPublicSiteEditorCache(
+        loaderData.event.id,
+        loaderData.draft.revision,
+      ) ?? loaderData.draft.configuration,
   );
   const [draftBase, setDraftBase] = useState(loaderData.draft);
   const configurationRef = useRef(configuration);
   configurationRef.current = configuration;
   const draftBaseRef = useRef(draftBase);
   draftBaseRef.current = draftBase;
+  const eventId = loaderData.event.id;
+  const configurationEventIdRef = useRef(eventId);
   const incomingDraft = loaderData.draft;
   useEffect(() => {
+    if (configurationEventIdRef.current !== eventId) {
+      configurationEventIdRef.current = eventId;
+      setDraftBase(incomingDraft);
+      setConfiguration(
+        readPublicSiteEditorCache(eventId, incomingDraft.revision) ??
+          incomingDraft.configuration,
+      );
+      return;
+    }
     const incoming = JSON.stringify(incomingDraft.configuration);
     const current = JSON.stringify(configurationRef.current);
     const base = JSON.stringify(draftBaseRef.current.configuration);
@@ -293,7 +343,11 @@ export default function AdminPublicSite({ loaderData }: Route.ComponentProps) {
       setDraftBase(incomingDraft);
       setConfiguration(incomingDraft.configuration);
     }
-  }, [incomingDraft]);
+  }, [incomingDraft, eventId]);
+  useEffect(() => {
+    if (configurationEventIdRef.current !== eventId) return;
+    writePublicSiteEditorCache(eventId, draftBase.revision, configuration);
+  }, [configuration, draftBase.revision, eventId]);
   useEffect(() => {
     if (!actionData?.ok || actionData.draftRevision === undefined) return;
     setDraftBase({
@@ -480,7 +534,10 @@ export default function AdminPublicSite({ loaderData }: Route.ComponentProps) {
           confirmLabel="Leave and discard"
           cancelLabel="Keep editing"
           onCancel={() => blocker.reset()}
-          onConfirm={() => blocker.proceed()}
+          onConfirm={() => {
+            clearPublicSiteEditorCache();
+            blocker.proceed();
+          }}
         />
       ) : null}
       <div className="page-head pc-page-header">
