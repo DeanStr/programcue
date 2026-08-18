@@ -387,6 +387,7 @@ describe("event cloning", () => {
       taskTemplates: 2,
       communicationTemplates: 1,
       communicationTemplateVersions: 1,
+      senders: 0,
     });
     const clonedEvent = await env.DB.prepare(
       `SELECT repository_provider AS provider,
@@ -1058,11 +1059,24 @@ describe("event cloning", () => {
     )
       .bind(cloned.eventId, cloned.eventId, cloned.operationId, cloned.eventId)
       .first();
+    expect(cloned.copied.senders).toBe(1);
     expect(evidence).toEqual({
       senders: 1,
       reuseAudits: 1,
       selectedSenderId: sourceSenderId,
       clonedAuditSenderId: sourceSenderId,
+    });
+    expect(
+      await env.DB.prepare(
+        `SELECT progress_total AS progressTotal,
+                json_extract(result_json, '$.copied.senders') AS copiedSenders
+           FROM operation_jobs WHERE id = ?`,
+      )
+        .bind(cloned.operationId)
+        .first(),
+    ).toEqual({
+      progressTotal: expect.any(Number),
+      copiedSenders: 1,
     });
   });
 

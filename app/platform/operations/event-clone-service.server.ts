@@ -96,6 +96,7 @@ export type EventCloneSummary = {
     taskTemplates: number;
     communicationTemplates: number;
     communicationTemplateVersions: number;
+    senders: number;
   };
 };
 

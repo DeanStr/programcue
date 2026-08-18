@@ -293,6 +293,7 @@ export function buildEventClonePlan(
       clonedTaskTemplateIds.has(row.dependsOnTemplateId),
   );
 
+  const reusedSenderCount = input.reusedSender ? 1 : 0;
   const recordCount =
     rooms.results.length +
     tracks.results.length +
@@ -305,7 +306,8 @@ export function buildEventClonePlan(
     clonedTaskDependencies.length +
     communicationTemplates.results.length +
     communicationVersions.results.length +
-    communicationTriggers.results.length;
+    communicationTriggers.results.length +
+    reusedSenderCount;
   if (recordCount > 500) {
     throw new Error(
       "This event template contains more than 500 configuration records and cannot be cloned in one request.",
@@ -648,6 +650,7 @@ export function buildEventClonePlan(
     taskTemplates: clonedTaskTemplates.length,
     communicationTemplates: communicationTemplates.results.length,
     communicationTemplateVersions: communicationVersions.results.length,
+    senders: reusedSenderCount,
   };
   statements.push(
     env.DB.prepare(

@@ -72,4 +72,87 @@ describe("speaker portal file integrity", () => {
       ),
     );
   });
+
+  it("suppresses the bundled programme portrait once any real headshot asset exists", async () => {
+    const testEnv = {
+      ...(env as unknown as CloudflareEnvironment),
+      DEMO_MODE: "true",
+    } as unknown as CloudflareEnvironment;
+    await ensureDemoSpeakerData(testEnv);
+    await testEnv.DB.batch([
+      testEnv.DB.prepare(
+        `DELETE FROM file_versions
+          WHERE event_id = ? AND asset_id IN (
+            SELECT id FROM file_assets
+             WHERE event_id = ? AND owner_person_id = ?
+          )`,
+      ).bind(speaker.eventId, speaker.eventId, speaker.personId),
+      testEnv.DB.prepare(
+        `DELETE FROM file_assets
+          WHERE event_id = ? AND owner_person_id = ?`,
+      ).bind(speaker.eventId, speaker.personId),
+    ]);
+    const service = new SpeakerService(testEnv);
+    await expect(service.getPortal(speaker)).resolves.toMatchObject({
+      profile: {
+        programmePortraitUrl: "/images/demo-speakers/priya-shah.webp",
+      },
+    });
+
+    const pendingAssetId = crypto.randomUUID();
+    await testEnv.DB.prepare(
+      `INSERT INTO file_assets (
+         id, event_id, owner_person_id, target_type, target_id, asset_kind,
+         status
+       ) VALUES (?, ?, ?, 'person', ?, 'headshot', 'active')`,
+    )
+      .bind(pendingAssetId, speaker.eventId, speaker.personId, speaker.personId)
+      .run();
+    await expect(service.getPortal(speaker)).resolves.toMatchObject({
+      profile: { programmePortraitUrl: null },
+    });
+
+    const releasedVersionId = crypto.randomUUID();
+    const pendingVersionId = crypto.randomUUID();
+    await testEnv.DB.batch([
+      testEnv.DB.prepare(
+        `INSERT INTO file_versions (
+           id, event_id, asset_id, version_number, object_key,
+           original_filename, declared_content_type, detected_content_type,
+           size_bytes, object_etag, upload_status, signature_status,
+           scan_status, created_by_person_id, uploaded_at, released_at
+         ) VALUES (?, ?, ?, 1, ?, 'headshot.png', 'image/png', 'image/png',
+                   128, 'released-etag', 'uploaded', 'valid', 'clean', ?,
+                   unixepoch() - 20, unixepoch() - 10)`,
+      ).bind(
+        releasedVersionId,
+        speaker.eventId,
+        pendingAssetId,
+        `tests/${releasedVersionId}`,
+        speaker.personId,
+      ),
+      testEnv.DB.prepare(
+        `INSERT INTO file_versions (
+           id, event_id, asset_id, version_number, object_key,
+           original_filename, declared_content_type, detected_content_type,
+           size_bytes, object_etag, upload_status, signature_status,
+           scan_status, created_by_person_id, uploaded_at
+         ) VALUES (?, ?, ?, 2, ?, 'replacement.png', 'image/png', 'image/png',
+                   128, 'pending-etag', 'uploaded', 'valid', 'pending', ?,
+                   unixepoch())`,
+      ).bind(
+        pendingVersionId,
+        speaker.eventId,
+        pendingAssetId,
+        `tests/${pendingVersionId}`,
+        speaker.personId,
+      ),
+      testEnv.DB.prepare(
+        "UPDATE file_assets SET current_version_id = ? WHERE id = ? AND event_id = ?",
+      ).bind(releasedVersionId, pendingAssetId, speaker.eventId),
+    ]);
+    await expect(service.getPortal(speaker)).resolves.toMatchObject({
+      profile: { programmePortraitUrl: null },
+    });
+  });
 });

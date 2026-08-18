@@ -76,7 +76,7 @@ export async function action({ request, context }: Route.ActionArgs) {
     });
     return data({
       ok: true as const,
-      message: `Event created from the current settings. ${result.repositoryProvider === "airtable" ? "Airtable" : "Program Cue"} holds its event data. People, submissions, schedules, credentials and published programmes were not copied.`,
+      message: `Event created from the current settings. ${result.repositoryProvider === "airtable" ? "Airtable" : "Program Cue"} holds its event data.${result.copied.senders ? " The selected verified sender was copied; provider credentials were not." : ""} People, submissions, schedules, credentials and published programmes were not copied.`,
       result,
     });
   } catch (error) {
@@ -378,10 +378,24 @@ export default function AdminEventClone({ loaderData }: Route.ComponentProps) {
               onClick={(event) => {
                 const form = event.currentTarget.form;
                 if (!form?.reportValidity()) return;
+                const senderField = form.elements.namedItem(
+                  "reusedSenderProfileId",
+                );
+                const selectedSenderId =
+                  senderField instanceof HTMLSelectElement
+                    ? senderField.value
+                    : "";
+                const selectedSender =
+                  loaderData.reusableSenderProfiles.find(
+                    (profile) => profile.id === selectedSenderId,
+                  ) ?? null;
+                const senderCopy = selectedSender
+                  ? ` The verified sender ${selectedSender.fromName} <${selectedSender.fromEmail}> is copied into the new event. Provider credentials are not copied.`
+                  : "";
                 confirm(
                   {
                     title: "Create this clean clone?",
-                    description: `A new event is created from ${loaderData.source.name}, with ${repositoryProvider === "airtable" ? "Airtable" : "Program Cue"} holding its event data. Published branding settings, rooms, tracks, policies and reusable templates are copied; brand images, people, submissions, schedules, credentials and published programmes are not. Events with brand images are blocked until those images are removed.`,
+                    description: `A new event is created from ${loaderData.source.name}, with ${repositoryProvider === "airtable" ? "Airtable" : "Program Cue"} holding its event data.${senderCopy} Published branding settings, rooms, tracks, policies and reusable templates are copied; brand images, people, submissions, schedules, credentials and published programmes are not. Events with brand images are blocked until those images are removed.`,
                     confirmLabel: "Create clean clone",
                     tone: "primary",
                   },

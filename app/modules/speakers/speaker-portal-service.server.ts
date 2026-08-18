@@ -246,10 +246,14 @@ export class SpeakerPortalService {
           }>()
       : { results: [] };
     const { filePolicyJson, slug: _eventSlug, ...eventSummary } = event;
-    const hasReleasedHeadshot = files.results.some(
-      (file) => file.kind === "headshot" && file.releasedAt,
+    const hasRealHeadshotAsset = files.results.some(
+      (file) =>
+        file.kind === "headshot" &&
+        file.targetType === "person" &&
+        file.targetId === profile.id &&
+        file.status !== "deleted",
     );
-    const programmePortraitUrl = hasReleasedHeadshot
+    const programmePortraitUrl = hasRealHeadshotAsset
       ? null
       : new PublishedHeadshotService(this.env).bundledFixtureHeadshot(
           { id: viewer.eventId },
