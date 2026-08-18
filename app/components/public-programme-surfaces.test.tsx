@@ -177,6 +177,9 @@ describe("public programme speaker surfaces", () => {
     );
     expect(markup).not.toContain('aria-label="Speakers"');
     expect(markup).not.toContain('class="public-session-speakers"');
+    expect(markup).not.toMatch(
+      /public-surface-detail[\s\S]*public-session-speaker-names/u,
+    );
   });
 
   it("keeps contextual speaker avatars decorative", () => {

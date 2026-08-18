@@ -876,6 +876,10 @@
   border-radius: var(--radius);
   background: var(--surface);
 }
+.schedule-inspector[open] {
+  max-height: min(42vh, 520px);
+  overflow: auto;
+}
 /* biome-ignore lint/style/noDescendingSpecificity: Inspector summary is a different component from inbox tool summaries. */
 .schedule-inspector > summary {
   display: flex;

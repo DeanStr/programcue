@@ -54,6 +54,9 @@ test("speaker profile, sessions and D1 task state render through the production 
   const sessionCard = page
     .locator(".speaker-session-card")
     .filter({ hasText: "Designing inclusive event technology" });
+  await expect(sessionCard).toContainText(
+    "Practical patterns for accessible, calm and effective attendee experiences.",
+  );
   await expect(sessionCard).toContainText("Confirmation needed");
   await sessionCard
     .getByRole("button", { name: "Confirm participation" })

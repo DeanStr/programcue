@@ -209,10 +209,7 @@ export function PublicSessionDetails({
           </button>
         </div>
       </div>
-      {/* Prose and speakers on the left, the two facts on the right. The
-          speaker block used to sit in the facts panel, which made the right
-          column the taller of the two and left a third of the card empty
-          beside a short abstract. */}
+      {/* Speakers already appear on the agenda card. */}
       <div className="public-surface-detail-body">
         <div>
           {model.showEmbedField("description") ? (
@@ -221,15 +218,6 @@ export function PublicSessionDetails({
                 "Description not provided."}
             </p>
           ) : null}
-
-          <h3 className="public-surface-detail-subhead">
-            {session.speakerIds.length === 1 ? "Speaker" : "Speakers"}
-          </h3>
-          {model.showSpeakerDetails ? (
-            <PublicSessionSpeakers session={session} model={model} />
-          ) : (
-            <PublicSessionSpeakerNames session={session} model={model} />
-          )}
         </div>
         <aside className="public-surface-detail-facts">
           <dl className="public-detail-list">

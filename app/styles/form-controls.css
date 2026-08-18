@@ -265,7 +265,7 @@
 .pill.format {
   background: color-mix(in srgb, var(--teal) 6%, var(--surface));
   border: 0;
-  color: #0f5f56;
+  color: var(--format-ink);
 }
 .pill.ai {
   background: color-mix(in srgb, var(--brand-600) 6%, var(--surface));

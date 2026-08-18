@@ -447,7 +447,7 @@ test.describe("mutable schedule authoring", () => {
       name: "day schedule calendar",
     });
     const event = calendar.getByRole("button", {
-      name: /The Future of Attendee Engagement · Main Stage/,
+      name: /The Future of Attendee Engagement.*Main Stage/,
     });
     await event.hover();
     const eventBox = await event.locator("..").boundingBox();

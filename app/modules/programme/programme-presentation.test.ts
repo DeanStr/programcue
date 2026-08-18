@@ -120,6 +120,9 @@ describe("programme presentation rules", () => {
       expect(programmeContrastRatio(ink, "#ffffff")).toBeGreaterThanOrEqual(
         4.75,
       );
+      expect(programmeContrastRatio(ink, "#f7f5f1")).toBeGreaterThanOrEqual(
+        4.75,
+      );
       expect(
         programmeContrastRatio(ink, lightAccentSoft),
       ).toBeGreaterThanOrEqual(4.75);
@@ -146,7 +149,7 @@ describe("programme presentation rules", () => {
     expect(programmeAccentPalette("#000000").onDark).not.toBe("#000000");
     expect(programmeAccentPalette("#9d4a31").onDark).not.toBe("#d7e4e1");
     expect(programmeAccentPalette("#78969b").onDark).not.toBe("#78969b");
-    expect(programmeAccentPalette("#90eefb").ink).toBe("#487686");
+    expect(programmeAccentPalette("#90eefb").ink).toBe("#467384");
   });
 
   it("checks solid-accent contrast after converting the colour to hex", () => {

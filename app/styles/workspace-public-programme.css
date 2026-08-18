@@ -1264,11 +1264,6 @@
 .agenda-card .public-session-speakers {
   margin-top: 0;
 }
-.agenda-card .public-surface-detail-subhead,
-.agenda-card .public-surface-detail .public-session-speakers,
-.agenda-card .public-surface-detail .public-session-speaker-names {
-  display: none;
-}
 .agenda-card-description {
   font-size: var(--text-xs);
   line-height: var(--leading-normal);
@@ -1498,11 +1493,6 @@
   padding: var(--space-4);
   border-radius: var(--radius);
   background: var(--surface-sunken);
-}
-.public-surface-detail-subhead {
-  margin: var(--space-5) 0 var(--space-2);
-  font-size: var(--text-sm);
-  font-weight: var(--weight-bold);
 }
 .public-surface-detail-facts .public-detail-list dd {
   font-size: var(--text-xs);

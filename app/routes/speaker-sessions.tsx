@@ -135,6 +135,11 @@ export default function SpeakerSessions(_props: Route.ComponentProps) {
                           status={session.status}
                         />
                       </div>
+                      {session.description ? (
+                        <p className="speaker-task-desc">
+                          {session.description}
+                        </p>
+                      ) : null}
                       <p className="speaker-task-meta">
                         <span>{session.roleLabel ?? "Speaker"}</span>
                         <span aria-hidden="true"> · </span>

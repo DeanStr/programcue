@@ -5,7 +5,7 @@ import {
   tableFeatures,
   useTable,
 } from "@tanstack/react-table";
-import { Check, ClipboardCopy, Columns3, Rows3, X } from "lucide-react";
+import { Check, ClipboardCopy, Columns3, X } from "lucide-react";
 import {
   type InputHTMLAttributes,
   useEffect,
@@ -282,21 +282,6 @@ export function SubmissionDataGrid({
             </>
           ) : null}
         </div>
-        <label className="pc-data-grid-density">
-          <span className="sr-only">Density</span>
-          <Rows3 aria-hidden size={14} />
-          <select
-            className="select"
-            aria-label="Density"
-            value={density}
-            onChange={(event) =>
-              setViewParameter("density", event.target.value, "comfortable")
-            }
-          >
-            <option value="comfortable">Comfortable</option>
-            <option value="compact">Compact</option>
-          </select>
-        </label>
         <details className="pc-data-grid-columns">
           <summary className="btn small">
             <Columns3 aria-hidden size={14} /> Columns

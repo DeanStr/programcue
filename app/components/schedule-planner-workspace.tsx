@@ -1,5 +1,5 @@
 import { DndContext, DragOverlay, type DragStartEvent } from "@dnd-kit/core";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Form, Link } from "react-router";
 import { ScheduleContentWorkflows } from "~/components/schedule-content-workflows";
 import { statusPresentation } from "~/components/ui/domain-status-badge";
@@ -30,11 +30,13 @@ export function SchedulePlannerWorkspace({
   workspace: SchedulePlannerWorkspaceData;
 }) {
   const [draftOpen, setDraftOpen] = useState(false);
-  const [inspectorOpen, setInspectorOpen] = useState(
-    () =>
-      workspace.version?.status === "draft" ||
-      Boolean(workspace.createdSessionId),
-  );
+  const inspectorShouldOpen =
+    workspace.version?.status === "draft" ||
+    Boolean(workspace.createdSessionId);
+  const [inspectorOpen, setInspectorOpen] = useState(inspectorShouldOpen);
+  useEffect(() => {
+    if (inspectorShouldOpen) setInspectorOpen(true);
+  }, [inspectorShouldOpen]);
   const {
     actionNotices,
     actionResult,

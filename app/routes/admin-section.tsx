@@ -283,6 +283,7 @@ export default function AdminSection({ loaderData }: Route.ComponentProps) {
             <section
               className="table-wrap programme-table-wrap"
               aria-label="Programme records"
+              tabIndex={0}
             >
               <table className="data-table">
                 <thead>

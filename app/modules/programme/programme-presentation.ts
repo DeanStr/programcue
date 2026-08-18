@@ -20,6 +20,9 @@ type RgbColour = readonly [red: number, green: number, blue: number];
 
 const PROGRAMME_SURFACE_INK: RgbColour = [15, 23, 42];
 const PROGRAMME_SURFACE_WHITE: RgbColour = [255, 255, 255];
+/* Same hex as `--surface-editorial`. Public rows are transparent over this
+   paper, so accent ink has to clear AA here, not only on white. */
+const PROGRAMME_SURFACE_EDITORIAL: RgbColour = [247, 245, 241];
 const PROGRAMME_SURFACE_BLACK: RgbColour = [0, 0, 0];
 /* Same hex as `--public-dark-surface`. Dark-theme `--accent-soft` is a 15%
    accent tint of this ground, and that pair is what track pills and the
@@ -138,9 +141,9 @@ function inkOnDark(accent: RgbColour): RgbColour {
 /**
  * Event branding accepts any six-digit colour, including colours that cannot
  * carry readable text. Keep the customer's exact accent for decoration, but
- * derive separate text colours for pale light surfaces, the dark
- * `--accent-soft` fill, and solid accent fills. Small text on a decorative
- * wash is not this ink's job.
+ * derive separate text colours for pale light surfaces, editorial paper, the
+ * dark `--accent-soft` fill, and solid accent fills. Small text on a
+ * decorative wash is not this ink's job.
  */
 export function programmeAccentPalette(value: string) {
   const accent = parseHexColour(value);
@@ -152,6 +155,8 @@ export function programmeAccentPalette(value: string) {
     );
     if (
       contrastRatio(candidate, PROGRAMME_SURFACE_WHITE) >=
+        SOFT_SURFACE_CONTRAST &&
+      contrastRatio(candidate, PROGRAMME_SURFACE_EDITORIAL) >=
         SOFT_SURFACE_CONTRAST &&
       contrastRatio(candidate, softSurface) >= SOFT_SURFACE_CONTRAST
     ) {
