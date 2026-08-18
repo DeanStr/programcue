@@ -211,18 +211,20 @@ export function EvaluationUnifiedResults() {
                       ) : null}
                     </td>
                     <td data-label="Scores">
-                      <strong>
-                        {result.averageScore === null
-                          ? "—"
-                          : Number(result.averageScore).toFixed(2)}
-                      </strong>
-                      {result.minimumScore !== null &&
-                      result.maximumScore !== null ? (
-                        <small className="subtle">
-                          Range {Number(result.minimumScore).toFixed(2)}–
-                          {Number(result.maximumScore).toFixed(2)}
-                        </small>
-                      ) : null}
+                      <div className="pc-record-stack">
+                        <strong>
+                          {result.averageScore === null
+                            ? "—"
+                            : Number(result.averageScore).toFixed(2)}
+                        </strong>
+                        {result.minimumScore !== null &&
+                        result.maximumScore !== null ? (
+                          <small className="subtle">
+                            Range {Number(result.minimumScore).toFixed(2)}–
+                            {Number(result.maximumScore).toFixed(2)}
+                          </small>
+                        ) : null}
+                      </div>
                     </td>
                     <td data-label="Recommendations">
                       {recommendationEntries.length

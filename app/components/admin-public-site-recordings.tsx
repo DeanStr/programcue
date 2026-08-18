@@ -1,6 +1,7 @@
 import { useMemo } from "react";
 import { Form } from "react-router";
 
+import { SiteRailDisclosure } from "~/components/admin-public-site-disclosure";
 import type { PublishedProgramme } from "~/modules/programme/public-programme-types";
 import type { PublicRecordingWorkspaceItem } from "~/modules/public-site/public-recording-service.server";
 
@@ -86,16 +87,22 @@ export function AdminPublicSiteRecordings({
     return ids;
   }, [recordings]);
   return (
-    <section className="public-site-rail-section">
-      <div className="card-title">
-        <div>
-          <h2 className="public-site-rail-title">Session recordings</h2>
-          <p className="help">
-            Only external HTTPS recordings are supported in this slice. Saving
-            never implies upload or publication.
-          </p>
-        </div>
-      </div>
+    <SiteRailDisclosure
+      title="Session recordings"
+      preview={
+        !programmeFeaturesAvailable
+          ? "Unavailable for this programme source"
+          : recordings.length
+            ? `${recordings.length} recording${
+                recordings.length === 1 ? "" : "s"
+              } · ${recordings
+                .slice(0, 2)
+                .map((recording) => recording.sessionTitle)
+                .join(" · ")}`
+            : "None yet"
+      }
+      help="Only external HTTPS recordings are supported in this slice. Saving never implies upload or publication."
+    >
       {!programmeFeaturesAvailable ? (
         <p className="validation-item warn" role="status">
           Recording drafts and publication are unavailable for this event's
@@ -200,6 +207,6 @@ export function AdminPublicSiteRecordings({
           Publish a programme before creating recording drafts.
         </p>
       ) : null}
-    </section>
+    </SiteRailDisclosure>
   );
 }

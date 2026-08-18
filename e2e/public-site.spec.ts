@@ -1,4 +1,4 @@
-import { expect, type Locator, test } from "@playwright/test";
+import { expect, type Locator, type Page, test } from "@playwright/test";
 
 import { acceptConfirm } from "./support/confirm-dialog";
 import { cssColourContrastRatio } from "./support/css-contrast";
@@ -13,6 +13,28 @@ import { resetDemoEvent } from "./support/reset-demo-event";
    customer data and the homepage paints text on mixed fills, so the guarantee
    is measured where the text lands. Chromium serialises those mixes as
    `color(srgb …)`; the shared parser is what stops that looking near-black. */
+
+async function openSiteCollection(page: Page, title: string) {
+  const disclosure = page.locator("details").filter({
+    has: page
+      .locator(":scope > summary")
+      .locator("h2, strong")
+      .filter({ hasText: new RegExp(`^${title}$`) }),
+  });
+  if (!(await disclosure.evaluate((el) => el.hasAttribute("open")))) {
+    await disclosure.locator(":scope > summary").click();
+  }
+  await expect
+    .poll(async () => disclosure.evaluate((el) => el.hasAttribute("open")))
+    .toBe(true);
+}
+
+async function ensurePageContentOpen(editor: Locator) {
+  const markdown = editor.getByLabel("Restricted Markdown");
+  if (await markdown.isVisible()) return;
+  await editor.locator(":scope > details > summary").click();
+  await expect(markdown).toBeVisible();
+}
 
 async function paintedColours(locator: Locator) {
   return locator.evaluate((element) => {
@@ -104,6 +126,13 @@ test("reset restores a published public event site", async ({ page }) => {
       has: page.locator("legend", { hasText: "Featured sessions" }),
     }),
   ).toContainText("Featured · 2 of 12");
+  await expect(
+    page
+      .locator("details.public-site-rail-disclosure")
+      .filter({ has: page.getByRole("heading", { name: "Sponsors" }) })
+      .locator(":scope > summary"),
+  ).toContainText("Northstar Events");
+  await openSiteCollection(page, "Sponsors");
   await expect(page.getByLabel("New sponsor name")).toBeVisible();
   await expect(
     page.locator('input[name="name"][value="Northstar Events"]'),
@@ -265,7 +294,6 @@ test("reset restores a published public event site", async ({ page }) => {
           return (
             !section?.classList.contains("public-site-introduction") &&
             !section?.classList.contains("public-site-statistics-section") &&
-            !section?.classList.contains("is-interview") &&
             !section?.classList.contains("is-credits")
           );
         })
@@ -503,6 +531,10 @@ test("organisers preview unpublished edits and publish a replacement", async ({
   );
   await expect(featuredSessions).toContainText("Featured · 3 of 12");
 
+  await expect(
+    page.locator(".public-site-faq-editor > fieldset").first(),
+  ).toBeHidden();
+  await openSiteCollection(page, "FAQ");
   await page.getByRole("button", { name: "Add question" }).click();
   const faqQuestions = page.locator(".public-site-faq-editor > fieldset");
   await faqQuestions.nth(2).getByLabel("Question").fill("Priority question");
@@ -513,10 +545,12 @@ test("organisers preview unpublished edits and publish a replacement", async ({
     "Priority question",
   );
 
+  await openSiteCollection(page, "Event pages");
   const aboutPage = page
     .locator(".public-site-page-editor fieldset")
     .filter({ has: page.locator("legend", { hasText: "About" }) });
   await aboutPage.getByLabel("Publish this page with the site").check();
+  await ensurePageContentOpen(aboutPage);
   const longAboutNavigationLabel = "A".repeat(40);
   await aboutPage.getByLabel("Navigation label").fill(longAboutNavigationLabel);
   await aboutPage
@@ -526,6 +560,7 @@ test("organisers preview unpublished edits and publish a replacement", async ({
     .locator(".public-site-page-editor fieldset")
     .filter({ has: page.locator("legend", { hasText: "Sponsors" }) });
   await sponsorsPage.getByLabel("Publish this page with the site").check();
+  await ensurePageContentOpen(sponsorsPage);
   const longSponsorsNavigationLabel = "S".repeat(40);
   await sponsorsPage
     .getByLabel("Navigation label")
@@ -543,10 +578,11 @@ test("organisers preview unpublished edits and publish a replacement", async ({
   });
   await expect(unsavedDialog).toBeVisible();
   await unsavedDialog.getByRole("button", { name: "Keep editing" }).click();
+  await expect(unsavedDialog).toBeHidden();
   await expect(page).toHaveURL(/\/admin\/site$/u);
-  await expect(page.getByLabel("Tagline")).toHaveValue(
-    "One destination for the event and every attendee.",
-  );
+  await expect(
+    page.locator(".public-site-rail-form").getByLabel("Tagline"),
+  ).toHaveValue("One destination for the event and every attendee.");
 
   await expect(
     page.getByLabel("Preview content").locator("option"),
@@ -611,6 +647,7 @@ test("organisers preview unpublished edits and publish a replacement", async ({
     getComputedStyle(element).getPropertyValue("--event-accent").trim(),
   );
   expect(previewAccent).toMatch(/^#[0-9a-f]{6}$/iu);
+  await openSiteCollection(page, "Sponsors");
   await expect(
     page.getByRole("button", { name: "Add sponsor" }),
   ).toBeDisabled();
@@ -627,6 +664,7 @@ test("organisers preview unpublished edits and publish a replacement", async ({
     "One destination for the event and every attendee.",
   );
 
+  await openSiteCollection(page, "Sponsors");
   await page.getByLabel("New sponsor name").fill("Example Partner");
   const newSponsor = page
     .locator("form.public-site-record-editor")
@@ -760,6 +798,7 @@ test("organisers preview unpublished edits and publish a replacement", async ({
   await expect(page.getByText("Example Partner")).toBeVisible();
 
   await page.goto("/admin/site");
+  await openSiteCollection(page, "Event pages");
   await page
     .locator(".public-site-page-editor fieldset")
     .filter({ has: page.locator("legend", { hasText: "About" }) })
@@ -771,6 +810,7 @@ test("organisers preview unpublished edits and publish a replacement", async ({
     .getByLabel("Publish this page with the site")
     .uncheck();
   await page.getByRole("button", { name: "Save website draft" }).click();
+  await openSiteCollection(page, "Sponsors");
   const sponsorEditor = page.locator("form.public-site-record-editor").filter({
     has: page.locator('input[name="name"][value="Example Partner"]'),
   });
@@ -848,14 +888,17 @@ test("organisers first-publish a bounded site on a blank event", async ({
     .filter({ hasText: "Frequently asked questions" })
     .getByRole("checkbox")
     .check();
+  await openSiteCollection(page, "FAQ");
   await page.getByRole("button", { name: "Add question" }).click();
   const faq = page.locator(".public-site-faq-editor > fieldset").first();
   await faq.getByLabel("Question").fill("When does registration open?");
   await faq.getByLabel("Answer").fill("The organiser will publish dates here.");
+  await openSiteCollection(page, "Event pages");
   const aboutPage = page
     .locator(".public-site-page-editor fieldset")
     .filter({ has: page.locator("legend", { hasText: "About" }) });
   await aboutPage.getByLabel("Publish this page with the site").check();
+  await ensurePageContentOpen(aboutPage);
   await aboutPage
     .getByLabel("Restricted Markdown")
     .fill("This site was published before a programme existed.");
@@ -868,6 +911,7 @@ test("organisers first-publish a bounded site on a blank event", async ({
     page.getByText("Website draft saved. Public pages are unchanged."),
   ).toBeVisible();
 
+  await openSiteCollection(page, "Sponsors");
   await page.getByLabel("New sponsor name").fill("Civic Partner");
   const newSponsor = page
     .locator("form.public-site-record-editor")

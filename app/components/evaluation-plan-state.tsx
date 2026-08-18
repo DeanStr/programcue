@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Form, Link, useLocation } from "react-router";
+import { Form, Link, useLocation, useNavigate } from "react-router";
 
 import { useEvaluationAdminModel } from "~/components/evaluation-admin-model";
 import {
@@ -212,15 +212,13 @@ export function EvaluationPlanState() {
 
 type EvaluationAdminView = "results" | "assignments" | "setup";
 
-const EVALUATION_VIEW_STORAGE_KEY = "pc-eval-admin-view";
-
 function isEvaluationAdminView(
   value: string | null,
 ): value is EvaluationAdminView {
   return value === "results" || value === "assignments" || value === "setup";
 }
 
-function viewFromHash(hash: string): EvaluationAdminView {
+function viewFromRecognizedHash(hash: string): EvaluationAdminView | null {
   const id = hash.replace(/^#/, "");
   if (
     id === "evaluation-assignments" ||
@@ -238,7 +236,7 @@ function viewFromHash(hash: string): EvaluationAdminView {
   ) {
     return "setup";
   }
-  return "results";
+  return null;
 }
 
 function viewFromSearch(search: string): EvaluationAdminView | null {
@@ -256,11 +254,11 @@ function withViewParam(search: string, view: EvaluationAdminView): string {
 
 function EvaluationAdminViews() {
   const location = useLocation();
+  const navigate = useNavigate();
   const searchView = viewFromSearch(location.search);
-  const [storedView, setStoredView] = useState<EvaluationAdminView>("results");
   const [discussionOpen, setDiscussionOpen] = useState(false);
 
-  const view = searchView ?? storedView;
+  const view = searchView ?? "results";
 
   useEffect(() => {
     const params = new URLSearchParams(location.search);
@@ -269,13 +267,17 @@ function EvaluationAdminViews() {
       params.has("submission") ||
       params.has("session");
     setDiscussionOpen(discussionTargeted);
-    const fromHash = location.hash ? viewFromHash(location.hash) : null;
-    const stored = sessionStorage.getItem(EVALUATION_VIEW_STORAGE_KEY);
-    const next = searchView ?? fromHash ?? stored;
-    if (!isEvaluationAdminView(next)) return;
-    setStoredView(next);
-    sessionStorage.setItem(EVALUATION_VIEW_STORAGE_KEY, next);
-  }, [location.hash, location.search, searchView]);
+    if (searchView) return;
+    const fromHash = viewFromRecognizedHash(location.hash);
+    if (!fromHash) return;
+    navigate(
+      {
+        search: withViewParam(location.search, fromHash),
+        hash: location.hash,
+      },
+      { replace: true },
+    );
+  }, [location.hash, location.search, navigate, searchView]);
 
   useEffect(() => {
     const id = location.hash.replace(/^#/, "");

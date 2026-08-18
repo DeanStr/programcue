@@ -66,6 +66,43 @@
 .public-site-rail-help {
   margin: var(--space-1) 0 0;
 }
+.public-site-rail-disclosure > summary {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  cursor: pointer;
+  list-style: none;
+}
+.public-site-rail-disclosure > summary::-webkit-details-marker {
+  display: none;
+}
+.public-site-rail-disclosure > summary::before {
+  content: "";
+  width: 6px;
+  height: 6px;
+  flex: none;
+  border-right: 1.5px solid var(--muted);
+  border-bottom: 1.5px solid var(--muted);
+  transform: rotate(-45deg);
+  transition: transform var(--dur-fast) var(--ease-out);
+}
+.public-site-rail-disclosure[open] > summary::before {
+  transform: rotate(45deg);
+}
+.public-site-rail-disclosure[open] > summary {
+  padding-bottom: var(--space-4);
+  border-bottom: 1px solid var(--line);
+}
+.public-site-form-disclosure {
+  padding-top: var(--space-4);
+  border-top: 1px solid var(--line);
+}
+.public-site-form-disclosure > summary {
+  justify-content: space-between;
+}
+.public-site-form-disclosure[open] > summary {
+  margin-bottom: var(--space-3);
+}
 .public-site-preview-stage {
   padding: 0 var(--space-4) var(--space-3);
 }
@@ -858,31 +895,9 @@ a.public-site-feature-card:focus-visible .public-site-speaker-profile-cue {
 .public-site-faq-section .public-site-section-kicker {
   max-width: 28ch;
 }
-.public-site-faq-section.is-interview .public-site-section-heading h2 {
-  font-size: var(--text-lg);
-  font-weight: var(--weight-semibold);
-  letter-spacing: var(--tracking-snug);
-  color: var(--accent-ink);
-}
-.public-site-faq-section.is-interview .public-site-section-heading::after {
-  display: none;
-}
 .public-site-faq {
   display: grid;
-  max-width: 720px;
-}
-.public-site-faq-section.is-interview .public-site-faq {
-  max-width: 52rem;
-}
-.public-site-faq-section.is-interview summary {
-  font-size: var(--text-xl);
-  padding-block: var(--space-6);
-}
-.public-site-faq-section.is-interview details[open] > :not(summary) {
-  max-width: 58ch;
-  margin-bottom: var(--space-5);
-  font-size: var(--text-base);
-  line-height: var(--leading-relaxed);
+  max-width: 920px;
 }
 .public-site-faq details {
   border-top: 1px solid var(--entry-rule);
@@ -898,13 +913,10 @@ a.public-site-feature-card:focus-visible .public-site-speaker-profile-cue {
   align-items: center;
   justify-content: space-between;
   gap: var(--space-4);
-  padding: var(--space-5) 0;
+  padding: var(--space-4) 0;
   cursor: pointer;
   list-style: none;
-  font-size: var(--text-lg);
   font-weight: var(--weight-semibold);
-  letter-spacing: var(--tracking-snug);
-  line-height: var(--leading-snug);
 }
 .public-site-faq summary::-webkit-details-marker {
   display: none;
@@ -1081,9 +1093,6 @@ a.public-site-feature-card:focus-visible .public-site-speaker-profile-cue {
     font-size: var(--text-xs);
   }
   .public-site-speakers .public-site-feature-card strong {
-    font-size: var(--text-base);
-  }
-  .public-site-faq-section.is-interview .public-site-section-heading h2 {
     font-size: var(--text-base);
   }
   .public-site-venue .public-site-map-link {

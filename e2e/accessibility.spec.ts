@@ -36,6 +36,7 @@ test("skip navigation and command palette preserve keyboard focus", async ({
   await page.keyboard.press("Tab");
   const skipLink = page.getByRole("link", { name: "Skip to main content" });
   await expect(skipLink).toBeFocused();
+  await expect(skipLink).toHaveCSS("position", "fixed");
   await page.keyboard.press("Enter");
   await expect(page.locator("#main")).toBeFocused();
 

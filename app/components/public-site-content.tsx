@@ -342,20 +342,11 @@ export function PublicSiteHome({
       <HomeSection
         title="Frequently asked questions"
         kicker="Before you arrive"
-        className={`public-site-faq-section${
-          configuration.faqItems.length <= 3 ? " is-interview" : ""
-        }`}
+        className="public-site-faq-section"
       >
         <div className="public-site-faq">
-          {configuration.faqItems.map((item, index) => (
-            <details
-              key={item.id}
-              open={
-                configuration.faqItems.length <= 3 && index === 1
-                  ? true
-                  : undefined
-              }
-            >
+          {configuration.faqItems.map((item) => (
+            <details key={item.id}>
               <summary>{item.question}</summary>
               <RestrictedMarkdown>{item.answer}</RestrictedMarkdown>
             </details>

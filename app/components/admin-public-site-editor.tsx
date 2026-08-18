@@ -1,11 +1,5 @@
 import { ChevronDown, ChevronUp, Plus, Search, Trash2, X } from "lucide-react";
-import {
-  type Dispatch,
-  type SetStateAction,
-  useEffect,
-  useMemo,
-  useState,
-} from "react";
+import { type Dispatch, type SetStateAction, useMemo, useState } from "react";
 import { Form, Link } from "react-router";
 import type { PublishedProgramme } from "~/modules/programme/public-programme-types";
 import {
@@ -210,10 +204,7 @@ function SitePageEditor({
   value: PublicSiteDraft["pages"][PublicSitePageType];
   setConfiguration: Dispatch<SetStateAction<PublicSiteDraft>>;
 }) {
-  const [open, setOpen] = useState(value.enabled);
-  useEffect(() => {
-    if (value.enabled) setOpen(true);
-  }, [value.enabled]);
+  const [open, setOpen] = useState(false);
   function update(
     change: Partial<PublicSiteDraft["pages"][PublicSitePageType]>,
   ) {
@@ -438,6 +429,9 @@ export function AdminPublicSiteEditor({
         : null,
     [programme],
   );
+  const enabledPages = PUBLIC_SITE_PAGE_TYPES.filter(
+    (page) => configuration.pages[page].enabled,
+  );
   return (
     <Form method="post" className="public-site-rail-form">
       <input type="hidden" name="intent" value="save-site" />
@@ -580,211 +574,242 @@ export function AdminPublicSiteEditor({
         )}
       </fieldset>
 
-      <div className="card-title mt">
-        <div>
-          <h2 className="public-site-rail-title">FAQ</h2>
-          <p className="help">
-            Answers support paragraphs, headings, lists, bold and HTTPS links.
-          </p>
+      <details className="pc-disclosure public-site-form-disclosure mt">
+        <summary>
+          <strong>FAQ</strong>
+          <span className="help">
+            {configuration.faqItems.length
+              ? `${configuration.faqItems.length} question${
+                  configuration.faqItems.length === 1 ? "" : "s"
+                } · ${configuration.faqItems
+                  .slice(0, 2)
+                  .map((item) => item.question.trim() || "Untitled")
+                  .join(" · ")}`
+              : "No questions"}
+          </span>
+        </summary>
+        <p className="help">
+          Answers support paragraphs, headings, lists, bold and HTTPS links.
+        </p>
+        <div className="card-title">
+          <button
+            className="btn small"
+            type="button"
+            disabled={configuration.faqItems.length >= 12}
+            onClick={() =>
+              setConfiguration((current) => ({
+                ...current,
+                faqItems: [
+                  ...current.faqItems,
+                  { id: crypto.randomUUID(), question: "", answer: "" },
+                ],
+              }))
+            }
+          >
+            <Plus aria-hidden size={14} /> Add question
+          </button>
         </div>
-        <button
-          className="btn small"
-          type="button"
-          disabled={configuration.faqItems.length >= 12}
-          onClick={() =>
-            setConfiguration((current) => ({
-              ...current,
-              faqItems: [
-                ...current.faqItems,
-                { id: crypto.randomUUID(), question: "", answer: "" },
-              ],
-            }))
-          }
-        >
-          <Plus aria-hidden size={14} /> Add question
-        </button>
-      </div>
-      <div className="public-site-faq-editor">
-        {configuration.faqItems.map((item, index) => (
-          <fieldset key={item.id}>
-            <legend>Question {index + 1}</legend>
-            <label className="label">
-              Question
-              <input
-                className="field"
-                maxLength={180}
-                value={item.question}
-                onChange={(event) =>
+        <div className="public-site-faq-editor">
+          {configuration.faqItems.map((item, index) => (
+            <fieldset key={item.id}>
+              <legend>Question {index + 1}</legend>
+              <label className="label">
+                Question
+                <input
+                  className="field"
+                  maxLength={180}
+                  value={item.question}
+                  onChange={(event) =>
+                    setConfiguration((current) => ({
+                      ...current,
+                      faqItems: current.faqItems.map((candidate) =>
+                        candidate.id === item.id
+                          ? { ...candidate, question: event.target.value }
+                          : candidate,
+                      ),
+                    }))
+                  }
+                />
+              </label>
+              <label className="label mt">
+                Answer
+                <textarea
+                  className="textarea"
+                  maxLength={2000}
+                  rows={4}
+                  value={item.answer}
+                  onChange={(event) =>
+                    setConfiguration((current) => ({
+                      ...current,
+                      faqItems: current.faqItems.map((candidate) =>
+                        candidate.id === item.id
+                          ? { ...candidate, answer: event.target.value }
+                          : candidate,
+                      ),
+                    }))
+                  }
+                />
+              </label>
+              <button
+                className="btn small mt"
+                type="button"
+                aria-label={`Remove FAQ item ${index + 1}`}
+                onClick={() =>
                   setConfiguration((current) => ({
                     ...current,
-                    faqItems: current.faqItems.map((candidate) =>
-                      candidate.id === item.id
-                        ? { ...candidate, question: event.target.value }
-                        : candidate,
+                    faqItems: current.faqItems.filter(
+                      (candidate) => candidate.id !== item.id,
                     ),
                   }))
                 }
-              />
-            </label>
-            <label className="label mt">
-              Answer
-              <textarea
-                className="textarea"
-                maxLength={2000}
-                rows={4}
-                value={item.answer}
-                onChange={(event) =>
-                  setConfiguration((current) => ({
-                    ...current,
-                    faqItems: current.faqItems.map((candidate) =>
-                      candidate.id === item.id
-                        ? { ...candidate, answer: event.target.value }
-                        : candidate,
-                    ),
-                  }))
-                }
-              />
-            </label>
-            <button
-              className="btn small mt"
-              type="button"
-              aria-label={`Remove FAQ item ${index + 1}`}
-              onClick={() =>
+              >
+                <Trash2 aria-hidden size={14} /> Remove
+              </button>
+              <div className="public-site-order-actions mt">
+                <button
+                  className="icon-btn"
+                  type="button"
+                  disabled={index === 0}
+                  aria-label={`Move up FAQ item ${index + 1}`}
+                  onClick={() =>
+                    setConfiguration((current) => {
+                      const faqItems = [...current.faqItems];
+                      [faqItems[index - 1], faqItems[index]] = [
+                        faqItems[index],
+                        faqItems[index - 1],
+                      ];
+                      return { ...current, faqItems };
+                    })
+                  }
+                >
+                  <ChevronUp aria-hidden size={14} />
+                </button>
+                <button
+                  className="icon-btn"
+                  type="button"
+                  disabled={index === configuration.faqItems.length - 1}
+                  aria-label={`Move down FAQ item ${index + 1}`}
+                  onClick={() =>
+                    setConfiguration((current) => {
+                      const faqItems = [...current.faqItems];
+                      [faqItems[index], faqItems[index + 1]] = [
+                        faqItems[index + 1],
+                        faqItems[index],
+                      ];
+                      return { ...current, faqItems };
+                    })
+                  }
+                >
+                  <ChevronDown aria-hidden size={14} />
+                </button>
+              </div>
+            </fieldset>
+          ))}
+        </div>
+      </details>
+
+      <details className="pc-disclosure public-site-form-disclosure mt">
+        <summary>
+          <strong>Event pages</strong>
+          <span className="help">
+            {enabledPages.length} of {PUBLIC_SITE_PAGE_TYPES.length} published
+            {enabledPages.length
+              ? ` · ${enabledPages
+                  .slice(0, 3)
+                  .map((page) => configuration.pages[page].navigationLabel)
+                  .join(" · ")}`
+              : ""}
+          </span>
+        </summary>
+        <p className="help">
+          Five fixed pages, no nesting or arbitrary routes.
+        </p>
+        <div className="public-site-page-editor">
+          {PUBLIC_SITE_PAGE_TYPES.map((page) => (
+            <SitePageEditor
+              key={page}
+              page={page}
+              value={configuration.pages[page]}
+              setConfiguration={setConfiguration}
+            />
+          ))}
+        </div>
+      </details>
+
+      <details className="pc-disclosure public-site-form-disclosure mt">
+        <summary>
+          <strong>Post-event mode</strong>
+          <span className="help">
+            {configuration.postEvent.enabled
+              ? "Recordings shown after the event"
+              : "Off"}
+          </span>
+        </summary>
+        <fieldset className="public-site-post-event">
+          <legend>Post-event recordings</legend>
+          <label>
+            <input
+              type="checkbox"
+              checked={configuration.postEvent.enabled}
+              disabled={
+                (!programme || !programmeReferencesAvailable) &&
+                !configuration.postEvent.enabled
+              }
+              onChange={(event) =>
                 setConfiguration((current) => ({
                   ...current,
-                  faqItems: current.faqItems.filter(
-                    (candidate) => candidate.id !== item.id,
-                  ),
+                  postEvent: {
+                    ...current.postEvent,
+                    enabled: event.target.checked,
+                  },
                 }))
               }
-            >
-              <Trash2 aria-hidden size={14} /> Remove
-            </button>
-            <div className="public-site-order-actions mt">
-              <button
-                className="icon-btn"
-                type="button"
-                disabled={index === 0}
-                aria-label={`Move up FAQ item ${index + 1}`}
-                onClick={() =>
-                  setConfiguration((current) => {
-                    const faqItems = [...current.faqItems];
-                    [faqItems[index - 1], faqItems[index]] = [
-                      faqItems[index],
-                      faqItems[index - 1],
-                    ];
-                    return { ...current, faqItems };
-                  })
-                }
-              >
-                <ChevronUp aria-hidden size={14} />
-              </button>
-              <button
-                className="icon-btn"
-                type="button"
-                disabled={index === configuration.faqItems.length - 1}
-                aria-label={`Move down FAQ item ${index + 1}`}
-                onClick={() =>
-                  setConfiguration((current) => {
-                    const faqItems = [...current.faqItems];
-                    [faqItems[index], faqItems[index + 1]] = [
-                      faqItems[index + 1],
-                      faqItems[index],
-                    ];
-                    return { ...current, faqItems };
-                  })
-                }
-              >
-                <ChevronDown aria-hidden size={14} />
-              </button>
-            </div>
-          </fieldset>
-        ))}
-      </div>
-
-      <div className="card-title mt">
-        <div>
-          <h2 className="public-site-rail-title">Event pages</h2>
-          <p className="help">
-            Five fixed pages, no nesting or arbitrary routes.
-          </p>
-        </div>
-      </div>
-      <div className="public-site-page-editor">
-        {PUBLIC_SITE_PAGE_TYPES.map((page) => (
-          <SitePageEditor
-            key={page}
-            page={page}
-            value={configuration.pages[page]}
-            setConfiguration={setConfiguration}
-          />
-        ))}
-      </div>
-
-      <fieldset className="public-site-post-event mt">
-        <legend>Post-event mode</legend>
-        <label>
-          <input
-            type="checkbox"
-            checked={configuration.postEvent.enabled}
-            disabled={
-              (!programme || !programmeReferencesAvailable) &&
-              !configuration.postEvent.enabled
-            }
-            onChange={(event) =>
-              setConfiguration((current) => ({
-                ...current,
-                postEvent: {
-                  ...current.postEvent,
-                  enabled: event.target.checked,
-                },
-              }))
-            }
-          />{" "}
-          Show published recordings after the event ends
-        </label>
-        {!programmeReferencesAvailable ? (
-          <p className="help">
-            Post-event recordings are unavailable for this event's programme
-            source.
-          </p>
-        ) : null}
-        <label className="label mt">
-          Heading
-          <input
-            className="field"
-            maxLength={120}
-            value={configuration.postEvent.heading}
-            onChange={(event) =>
-              setConfiguration((current) => ({
-                ...current,
-                postEvent: {
-                  ...current.postEvent,
-                  heading: event.target.value,
-                },
-              }))
-            }
-          />
-        </label>
-        <label className="label mt">
-          Introduction
-          <textarea
-            className="textarea"
-            maxLength={2000}
-            rows={3}
-            value={configuration.postEvent.body}
-            onChange={(event) =>
-              setConfiguration((current) => ({
-                ...current,
-                postEvent: {
-                  ...current.postEvent,
-                  body: event.target.value,
-                },
-              }))
-            }
-          />
-        </label>
-      </fieldset>
+            />{" "}
+            Show published recordings after the event ends
+          </label>
+          {!programmeReferencesAvailable ? (
+            <p className="help">
+              Post-event recordings are unavailable for this event's programme
+              source.
+            </p>
+          ) : null}
+          <label className="label mt">
+            Heading
+            <input
+              className="field"
+              maxLength={120}
+              value={configuration.postEvent.heading}
+              onChange={(event) =>
+                setConfiguration((current) => ({
+                  ...current,
+                  postEvent: {
+                    ...current.postEvent,
+                    heading: event.target.value,
+                  },
+                }))
+              }
+            />
+          </label>
+          <label className="label mt">
+            Introduction
+            <textarea
+              className="textarea"
+              maxLength={2000}
+              rows={3}
+              value={configuration.postEvent.body}
+              onChange={(event) =>
+                setConfiguration((current) => ({
+                  ...current,
+                  postEvent: {
+                    ...current.postEvent,
+                    body: event.target.value,
+                  },
+                }))
+              }
+            />
+          </label>
+        </fieldset>
+      </details>
 
       <div className="page-actions mt">
         <button

@@ -51,9 +51,7 @@ a {
   border: 0;
 }
 .skip-link {
-  /* Absolute, not fixed: a focused fixed skip-link is stamped onto every
-     full-page screenshot slice and lands on Overdue tasks / Status. */
-  position: absolute;
+  position: fixed;
   left: var(--space-3);
   top: 0;
   z-index: 9999;

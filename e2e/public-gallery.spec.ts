@@ -56,7 +56,9 @@ test("anonymous visitors can use all programme surfaces and the gallery detail",
     "Sponsors",
   ]);
   await expect(
-    page.getByRole("navigation", { name: "Programme views" }).getByRole("link"),
+    page
+      .getByRole("navigation", { name: "Programme views" })
+      .locator(".public-view-full"),
   ).toHaveText(["List", "Agenda", "Schedule"]);
   await expect(page.locator(".programme-row")).toHaveCount(5);
   await page
@@ -92,13 +94,16 @@ test("anonymous visitors can use all programme surfaces and the gallery detail",
 
   await openAnonymous(page, "/public/programme/future-of-events-2027/speakers");
   await expect(
-    page.getByRole("navigation", { name: "Speaker views" }).getByRole("link"),
+    page
+      .getByRole("navigation", { name: "Speaker views" })
+      .locator(".public-view-full"),
   ).toHaveText(["Directory", "Gallery"]);
   await expect(
     page.getByRole("heading", { name: "Speakers", exact: true }),
   ).toBeVisible();
   await expect(page.getByText("Alex Morgan", { exact: true })).toBeVisible();
   await expect(page.getByText("Priya Shah", { exact: true })).toBeVisible();
+  await expect(page.getByLabel("Search speakers by name")).toHaveCount(0);
 
   await openAnonymous(page, "/public/programme/future-of-events-2027/agenda");
   await expect(
@@ -152,16 +157,24 @@ test("anonymous visitors can use all programme surfaces and the gallery detail",
   await expect(
     page.getByRole("heading", { name: "Speaker Gallery", exact: true }),
   ).toBeVisible();
+  await expect(page.getByLabel("Search speaker gallery by name")).toHaveCount(
+    0,
+  );
   await expect(
     page.getByRole("link", { name: /My itinerary/ }),
   ).toHaveAttribute(
     "href",
     "/public/programme/future-of-events-2027#itinerary",
   );
+  await openAnonymous(
+    page,
+    "/public/programme/future-of-events-2027/gallery?galleryQuery=Priya+Shah",
+  );
   const search = page.getByRole("searchbox", {
     name: "Search speaker gallery by name",
   });
-  await search.fill("Priya Shah");
+  await expect(search).toBeVisible();
+  await expect(search).toHaveValue("Priya Shah");
   const priyaCard = page.getByRole("button", {
     name: "Open speaker details for Priya Shah",
   });

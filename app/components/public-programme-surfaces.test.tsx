@@ -21,6 +21,7 @@ import {
 import {
   PublicAgendaSurface,
   PublicSpeakerGallerySurface,
+  PublicSpeakersSurface,
 } from "./public-programme-surfaces";
 
 const speaker: PublishedSpeaker = {
@@ -291,13 +292,49 @@ describe("public programme speaker surfaces", () => {
     );
 
     expect(markup).toContain("Speaker Gallery");
-    expect(markup).toContain('type="search"');
-    expect(markup).toContain("Search speaker gallery by name");
+    expect(markup).not.toContain('type="search"');
+    expect(markup).not.toContain("Search speaker gallery by name");
     expect(markup).toContain("Open speaker details for Priya Shah");
     expect(markup).toContain("Director of Experience Design");
     expect(markup).toContain("EventLab");
     expect(markup).toContain("/images/demo-speakers/priya-shah.webp");
     expect(markup).toContain('loading="lazy"');
+  });
+
+  it("hides speaker search until the published roster is large enough", () => {
+    const sparseGallery = renderToStaticMarkup(
+      <PublicSpeakerGallerySurface model={model()} />,
+    );
+    expect(sparseGallery).not.toContain('type="search"');
+
+    const queriedGallery = renderToStaticMarkup(
+      <PublicSpeakerGallerySurface model={model({ galleryQuery: "Priya" })} />,
+    );
+    expect(queriedGallery).toContain('type="search"');
+    expect(queriedGallery).toContain("Search speaker gallery by name");
+
+    const crowdedSpeakers = Array.from({ length: 7 }, (_, index) => ({
+      ...speaker,
+      id: `${speaker.id}-${index}`,
+      displayName: `${speaker.displayName} ${index + 1}`,
+    }));
+    const crowdedGallery = renderToStaticMarkup(
+      <PublicSpeakerGallerySurface
+        model={model({ gallerySpeakers: crowdedSpeakers })}
+      />,
+    );
+    expect(crowdedGallery).toContain("Search speaker gallery by name");
+
+    const sparseDirectory = renderToStaticMarkup(
+      <PublicSpeakersSurface
+        model={model({
+          directorySpeakers: [speaker],
+          directoryQuery: "",
+          setDirectoryQuery: vi.fn(),
+        })}
+      />,
+    );
+    expect(sparseDirectory).not.toContain("Search speakers by name");
   });
 
   it("renders speaker surfaces as non-expanding cards when details are hidden", () => {

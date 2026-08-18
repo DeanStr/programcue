@@ -8,7 +8,7 @@ async function waitForInterface(
   path: string,
 ) {
   const response = await page.goto(path);
-  expect(response?.ok()).toBeTruthy();
+  if (response) expect(response.ok()).toBeTruthy();
   await page.locator("body[data-hydrated='true']").waitFor();
 }
 
@@ -180,6 +180,21 @@ test("mobile administration sections reveal linked content without overflow", as
   const evaluatorBox = await evaluator.boundingBox();
   expect(evaluatorBox).not.toBeNull();
   expect(evaluatorBox!.height).toBeLessThan(48);
+  await waitForInterface(page, "/admin/review");
+  await expect(
+    page
+      .getByRole("navigation", { name: "Evaluation views" })
+      .getByRole("link", { name: "Results" }),
+  ).toHaveAttribute("aria-current", "page");
+  await expect(
+    page.getByRole("heading", { name: "Proposal assignments and decisions" }),
+  ).toHaveCount(0);
+  await waitForInterface(page, "/admin/event");
+  await waitForInterface(page, "/admin/review#evaluation-setup");
+  await expect(page).toHaveURL(/[?&]view=setup(?:&|#|$)/);
+  await expect(
+    page.getByText("Manage evaluation access", { exact: true }),
+  ).toBeVisible();
   await expectNoHorizontalPageOverflow(page);
 });
 

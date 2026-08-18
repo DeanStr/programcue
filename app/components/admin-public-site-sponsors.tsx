@@ -1,6 +1,7 @@
 import { useMemo } from "react";
 import { Form } from "react-router";
 
+import { SiteRailDisclosure } from "~/components/admin-public-site-disclosure";
 import type { PublicSiteSponsor } from "~/modules/public-site/public-site";
 
 function SponsorFields({ sponsor }: { sponsor?: PublicSiteSponsor }) {
@@ -89,15 +90,18 @@ export function AdminPublicSiteSponsors({
     return ids;
   }, [sponsors]);
   return (
-    <section className="public-site-rail-section">
-      <div className="card-title">
-        <div>
-          <h2 className="public-site-rail-title">Sponsors</h2>
-          <p className="help">
-            Structured records are snapshotted only when the site is published.
-          </p>
-        </div>
-      </div>
+    <SiteRailDisclosure
+      title="Sponsors"
+      preview={
+        sponsors.length
+          ? `${sponsors.length} sponsor${sponsors.length === 1 ? "" : "s"} · ${sponsors
+              .slice(0, 2)
+              .map((sponsor) => sponsor.name)
+              .join(" · ")}`
+          : "None yet"
+      }
+      help="Structured records are snapshotted only when the site is published."
+    >
       {sponsors.map((sponsor) => (
         <Form
           method="post"
@@ -146,6 +150,6 @@ export function AdminPublicSiteSponsors({
           Add sponsor
         </button>
       </Form>
-    </section>
+    </SiteRailDisclosure>
   );
 }

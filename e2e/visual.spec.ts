@@ -189,9 +189,12 @@ async function waitForSurfaceReady(page: Page, name: string) {
     await expect(page.locator(".programme-embed-builder")).toBeVisible();
   } else if (name === "public-speaker-gallery") {
     await expect(
-      page.getByRole("searchbox", { name: "Search speaker gallery by name" }),
+      page.getByRole("heading", { name: "Speaker Gallery", exact: true }),
     ).toBeVisible();
     await expect(page.locator(".speaker-gallery-grid")).toBeVisible();
+    await expect(
+      page.getByRole("searchbox", { name: "Search speaker gallery by name" }),
+    ).toHaveCount(0);
   } else if (name === "speaker-profile") {
     await expect(page.locator("#profile")).toBeVisible();
     await expect(

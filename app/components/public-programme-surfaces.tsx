@@ -699,7 +699,10 @@ export function PublicSpeakersSurface({
   const publishedCount =
     model.orderedSpeakers?.length ?? model.directorySpeakers.length;
   const sparse = publishedCount <= SPARSE_SPEAKER_SEARCH;
-  const showSearch = !model.embedded && model.showControl("search");
+  const showSearch =
+    !model.embedded &&
+    model.showControl("search") &&
+    (!sparse || model.directoryQuery.trim() !== "");
   const pair = model.directorySpeakers.length <= 2;
   return (
     <section
@@ -711,11 +714,7 @@ export function PublicSpeakersSurface({
         title="Speakers"
         id="public-speakers-title"
         description={
-          sparse
-            ? undefined
-            : model.showSpeakerDetails
-              ? "Meet the people presenting this event."
-              : "Meet the people presenting this event."
+          sparse ? undefined : "Meet the people presenting this event."
         }
         count={
           sparse ? undefined : `${model.directorySpeakers.length} speakers`
@@ -927,7 +926,10 @@ export function PublicSpeakerGallerySurface({
   const publishedCount =
     model.orderedSpeakers?.length ?? model.gallerySpeakers.length;
   const sparse = publishedCount <= SPARSE_SPEAKER_SEARCH;
-  const showSearch = !model.embedded && model.showControl("search");
+  const showSearch =
+    !model.embedded &&
+    model.showControl("search") &&
+    (!sparse || model.galleryQuery.trim() !== "");
   const pair = model.gallerySpeakers.length <= 2;
   return (
     <section
@@ -939,11 +941,7 @@ export function PublicSpeakerGallerySurface({
         title="Speaker Gallery"
         id="speaker-gallery-title"
         description={
-          sparse
-            ? undefined
-            : model.showSpeakerDetails
-              ? "Published portraits from this event."
-              : "Published portraits from this event."
+          sparse ? undefined : "Published portraits from this event."
         }
         count={sparse ? undefined : `${model.gallerySpeakers.length} speakers`}
         sparse={sparse}
