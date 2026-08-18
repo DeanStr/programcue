@@ -51,6 +51,9 @@ export function useSchedulePlannerController(
   );
 
   const [publishOpen, setPublishOpen] = useState(false);
+  useEffect(() => {
+    if (!workspace.publicationPreview) setPublishOpen(false);
+  }, [workspace.publicationPreview]);
 
   const [draggingSessionId, setDraggingSessionId] = useState<string | null>(
     null,

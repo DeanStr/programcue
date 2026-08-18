@@ -441,7 +441,7 @@ export function SchedulePublicationDialog({
             : "No session placement, visibility or public content changes were found."}
         </p>
         {preview.changes.added.length ? (
-          <div className="validation-item info">
+          <div className="validation-item info schedule-publication-change">
             <strong>Added · {preview.changes.added.length}</strong>
             <ul>
               {preview.changes.added.map((item) => (
@@ -451,7 +451,7 @@ export function SchedulePublicationDialog({
           </div>
         ) : null}
         {preview.changes.removed.length ? (
-          <div className="validation-item warn">
+          <div className="validation-item warn schedule-publication-change">
             <strong>Removed · {preview.changes.removed.length}</strong>
             <ul>
               {preview.changes.removed.map((item) => (
@@ -461,7 +461,7 @@ export function SchedulePublicationDialog({
           </div>
         ) : null}
         {preview.changes.moved.length ? (
-          <div className="validation-item info">
+          <div className="validation-item info schedule-publication-change">
             <strong>Moved or resized · {preview.changes.moved.length}</strong>
             <ul>
               {preview.changes.moved.map((item) => (
@@ -492,7 +492,7 @@ export function SchedulePublicationDialog({
           </div>
         ) : null}
         {preview.changes.visibility.length ? (
-          <div className="validation-item warn">
+          <div className="validation-item warn schedule-publication-change">
             <strong>
               Visibility changed · {preview.changes.visibility.length}
             </strong>
@@ -506,7 +506,7 @@ export function SchedulePublicationDialog({
           </div>
         ) : null}
         {preview.changes.content.length ? (
-          <div className="validation-item info">
+          <div className="validation-item info schedule-publication-change">
             <strong>Public content · {preview.changes.content.length}</strong>
             <ul>
               {preview.changes.content.map((item) => (
@@ -515,8 +515,19 @@ export function SchedulePublicationDialog({
                   <ul>
                     {item.fields.map((field) => (
                       <li key={field.field}>
-                        {CONTENT_FIELD_LABELS[field.field]} · {field.before} →{" "}
-                        {field.after}
+                        {field.field === "description" && field.excerpted ? (
+                          <details>
+                            <summary>Description changed</summary>
+                            <span>
+                              {field.before} → {field.after}
+                            </span>
+                          </details>
+                        ) : (
+                          <>
+                            {CONTENT_FIELD_LABELS[field.field]} · {field.before}{" "}
+                            → {field.after}
+                          </>
+                        )}
                       </li>
                     ))}
                   </ul>

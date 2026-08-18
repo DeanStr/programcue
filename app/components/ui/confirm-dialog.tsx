@@ -15,6 +15,7 @@ export function ConfirmDialog({
   title,
   description,
   records,
+  countNoun = "record",
   confirmLabel = "Confirm",
   cancelLabel = "Cancel",
   tone = "danger",
@@ -26,6 +27,8 @@ export function ConfirmDialog({
   description: ReactNode;
   /** What this action will actually affect. Omit only when there is nothing to enumerate. */
   records?: string[];
+  /** Website publication summaries are changes, not database records. */
+  countNoun?: "record" | "change";
   confirmLabel?: string;
   cancelLabel?: string;
   tone?: "danger" | "primary";
@@ -76,8 +79,8 @@ export function ConfirmDialog({
         {records && records.length > 0 ? (
           <div>
             <p className="pc-confirm-count">
-              {records.length} {records.length === 1 ? "record" : "records"}{" "}
-              affected
+              {records.length}{" "}
+              {records.length === 1 ? countNoun : `${countNoun}s`} affected
             </p>
             <ul className="pc-confirm-records">
               {shown.map((record) => (

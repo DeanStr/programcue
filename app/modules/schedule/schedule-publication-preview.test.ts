@@ -310,6 +310,76 @@ describe("schedule publication preview", () => {
     ]);
   });
 
+  it("excerpts long public description changes", async () => {
+    const service = new ScheduleService(scheduleTestEnv);
+    const publishedId = await service.createDraft(viewer);
+    let workspace = await service.getWorkspace(viewer);
+    const startsAt = eventLocalTimeEpoch(
+      workspace.event.startsAt,
+      workspace.event.timezone,
+      9,
+    );
+    await service.place(viewer, {
+      scheduleVersionId: publishedId,
+      scheduleRevision: workspace.version!.revision,
+      sessionId: "schedule-test-one",
+      roomId: "main",
+      startsAt,
+      endsAt: startsAt + 3_600,
+    });
+    await approveScheduledTestContent(publishedId);
+    workspace = await service.getWorkspace(viewer);
+    await service.publish(viewer, {
+      scheduleVersionId: publishedId,
+      scheduleRevision: workspace.version!.revision,
+    });
+
+    const draftId = await service.createDraft(viewer);
+    workspace = await service.getWorkspace(viewer);
+    const session = workspace.sessions.find(
+      (candidate) => candidate.id === "schedule-test-one",
+    );
+    expect(session).toBeDefined();
+    const longDescription = `${"A detailed public abstract. ".repeat(80)}End.`;
+    await service.updateSessionContent(
+      viewer,
+      {
+        scheduleVersionId: draftId,
+        scheduleRevision: workspace.version!.revision,
+        sessionId: session!.id,
+        sessionRevision: session!.revision,
+        idempotencyKey: crypto.randomUUID(),
+        title: session!.title,
+        description: longDescription,
+        format: session!.format,
+        durationMinutes: session!.durationMinutes,
+        trackId: session!.trackId,
+        visibility: session!.visibility,
+        requiredResources: session!.requiredResources,
+      },
+      "admin_ui",
+    );
+    workspace = await service.getWorkspace(viewer);
+
+    const preview = await buildSchedulePublicationPreview(
+      scheduleTestEnv,
+      viewer,
+      workspace,
+    );
+    const descriptionChange = preview?.changes.content[0]?.fields.find(
+      (field) => field.field === "description",
+    );
+    expect(descriptionChange).toMatchObject({
+      before: "None",
+      excerpted: true,
+    });
+    expect(descriptionChange?.after.endsWith("…")).toBe(true);
+    expect(descriptionChange?.after.length).toBeLessThan(
+      longDescription.length,
+    );
+    expect(descriptionChange?.after).not.toContain("End.");
+  });
+
   it("lists every incompatible event-website reference", async () => {
     const service = new ScheduleService(scheduleTestEnv);
     await service.createDraft(viewer);

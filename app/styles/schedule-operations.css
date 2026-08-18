@@ -226,6 +226,19 @@
   gap: var(--space-1);
   text-align: left;
 }
+/* Publication change groups: heading above the list so a long description
+   disclosure cannot squeeze the label into a one-word-per-line column. */
+.schedule-publication-change {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  align-items: start;
+  gap: var(--space-1);
+}
+.schedule-publication-change ul,
+.schedule-publication-change details {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
 /* Below 1320px the rail spans the page. A tinted bar the width of the
    viewport announcing that nothing is wrong is louder than the fact. */
 .schedule-conflicts .validation-item.ok {

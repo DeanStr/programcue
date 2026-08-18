@@ -36,8 +36,11 @@ export type SchedulePublicationContentChange = SchedulePublicationChange & {
     field: SchedulePublicationContentField;
     before: string;
     after: string;
+    excerpted?: boolean;
   }>;
 };
+
+export const SCHEDULE_PUBLICATION_DESCRIPTION_EXCERPT_LENGTH = 280;
 
 export type SchedulePublicationPreview = {
   publishedVersionNumber: number | null;
@@ -92,6 +95,18 @@ function displayText(value: string | null | undefined) {
 
 function durationLabel(minutes: number) {
   return `${minutes} min`;
+}
+
+function excerptDescription(value: string) {
+  if (value.length <= SCHEDULE_PUBLICATION_DESCRIPTION_EXCERPT_LENGTH) {
+    return { text: value, excerpted: false };
+  }
+  return {
+    text: `${value
+      .slice(0, SCHEDULE_PUBLICATION_DESCRIPTION_EXCERPT_LENGTH)
+      .trimEnd()}…`,
+    excerpted: true,
+  };
 }
 
 export async function buildSchedulePublicationPreview(
@@ -241,10 +256,13 @@ export async function buildSchedulePublicationPreview(
     if (
       displayText(previous.description) !== displayText(session.description)
     ) {
+      const before = excerptDescription(displayText(previous.description));
+      const after = excerptDescription(displayText(session.description));
       fields.push({
         field: "description",
-        before: displayText(previous.description),
-        after: displayText(session.description),
+        before: before.text,
+        after: after.text,
+        ...(before.excerpted || after.excerpted ? { excerpted: true } : {}),
       });
     }
     if ((previous.trackId ?? null) !== session.trackId) {

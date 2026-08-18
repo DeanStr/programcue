@@ -381,6 +381,7 @@ export default function AdminPublicSite({ loaderData }: Route.ComponentProps) {
         description:
           "The saved homepage, navigation, pages and sponsor snapshot will replace the current event website.",
         records,
+        countNoun: "change",
         confirmLabel: "Publish event website",
         tone: "primary",
       },
