@@ -14,10 +14,10 @@ export function SiteRailDisclosure({
   return (
     <details className="public-site-rail-section public-site-rail-disclosure">
       <summary>
-        <div>
-          <h2 className="public-site-rail-title">{title}</h2>
-          <p className="help public-site-rail-help">{preview}</p>
-        </div>
+        <h2 className="public-site-rail-title">
+          <span>{title}</span>
+          <span className="help public-site-rail-help">{preview}</span>
+        </h2>
       </summary>
       {help ? <p className="help">{help}</p> : null}
       {children}

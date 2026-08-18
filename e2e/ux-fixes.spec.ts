@@ -8,7 +8,8 @@ async function waitForInterface(
   path: string,
 ) {
   const response = await page.goto(path);
-  if (response) expect(response.ok()).toBeTruthy();
+  expect(response).not.toBeNull();
+  expect(response!.ok()).toBeTruthy();
   await page.locator("body[data-hydrated='true']").waitFor();
 }
 

@@ -65,6 +65,14 @@
 }
 .public-site-rail-help {
   margin: var(--space-1) 0 0;
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+.public-site-rail-disclosure > summary > h2 {
+  display: grid;
+  min-width: 0;
 }
 .public-site-rail-disclosure > summary {
   display: flex;
@@ -99,6 +107,13 @@
 }
 .public-site-form-disclosure > summary {
   justify-content: space-between;
+}
+.public-site-form-disclosure > summary .help {
+  min-width: 0;
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
 }
 .public-site-form-disclosure[open] > summary {
   margin-bottom: var(--space-3);

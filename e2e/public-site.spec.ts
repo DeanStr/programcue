@@ -18,7 +18,7 @@ async function openSiteCollection(page: Page, title: string) {
   const disclosure = page.locator("details").filter({
     has: page
       .locator(":scope > summary")
-      .locator("h2, strong")
+      .locator(":scope > strong, :scope > h2 > span:first-child")
       .filter({ hasText: new RegExp(`^${title}$`) }),
   });
   if (!(await disclosure.evaluate((el) => el.hasAttribute("open")))) {
@@ -129,7 +129,11 @@ test("reset restores a published public event site", async ({ page }) => {
   await expect(
     page
       .locator("details.public-site-rail-disclosure")
-      .filter({ has: page.getByRole("heading", { name: "Sponsors" }) })
+      .filter({
+        has: page.locator("summary h2 > span:first-child", {
+          hasText: /^Sponsors$/,
+        }),
+      })
       .locator(":scope > summary"),
   ).toContainText("Northstar Events");
   await openSiteCollection(page, "Sponsors");
