@@ -1007,9 +1007,6 @@
   padding: 0;
   color: var(--text-tertiary);
 }
-.pc-eval-results > .card-title > div:first-child {
-  display: none;
-}
 .pc-eval-results > .card-title {
   margin-bottom: var(--space-2);
 }

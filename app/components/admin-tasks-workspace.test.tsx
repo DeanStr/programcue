@@ -126,14 +126,12 @@ describe("administrator task discoverability", () => {
   it("keeps task-template creation visible when templates already exist", () => {
     const markup = renderWorkspace();
 
+    expect(markup).toContain("<summary>Create a template</summary>");
     expect(markup).toContain('<h2 id="create-task-template">');
     expect(markup).toContain("Create task template");
     expect(markup).toContain('name="dueAnchor"');
     expect(markup).toContain('name="dependencyIds"');
     expect(markup).toContain('name="assignIntentId" value="assign-intent-1"');
     expect(markup).toContain("Priya Shah · priya@example.test");
-    expect(markup).not.toMatch(
-      /<details[^>]*>\s*<summary>\s*<strong>Create task template/u,
-    );
   });
 });

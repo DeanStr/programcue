@@ -49,6 +49,11 @@ export function EvaluationUnifiedResults() {
 
   return (
     <section className="card pad pc-eval-results">
+      <div className="card-title">
+        <div>
+          <h2>Unified evaluation results</h2>
+        </div>
+      </div>
       <details
         className="pc-eval-filter-disclosure"
         open={desktopFilters ? true : undefined}

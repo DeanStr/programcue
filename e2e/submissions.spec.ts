@@ -585,7 +585,7 @@ test.describe
       await page.goto("/admin/submissions");
       const filters = page.getByRole("search");
       await filters.getByLabel("Search", { exact: true }).fill(title);
-      await filters.getByRole("button", { name: "Apply filters" }).click();
+      await filters.getByRole("button", { name: "Apply" }).click();
       await expect(page.getByRole("link", { name: title })).toBeVisible();
       await page.getByRole("link", { name: title }).click();
       await expect(page.getByRole("heading", { name: title })).toBeVisible();
@@ -635,11 +635,9 @@ test.describe
         .click();
       const routingFilters = page.getByRole("search");
       await routingFilters
-        .getByLabel("Routing attention")
+        .getByLabel("Routing")
         .selectOption("missing_automatic");
-      await routingFilters
-        .getByRole("button", { name: "Apply filters" })
-        .click();
+      await routingFilters.getByRole("button", { name: "Apply" }).click();
       const filteredSubmissionRow = page.getByRole("row").filter({
         has: page.getByRole("link", { name: title }),
       });

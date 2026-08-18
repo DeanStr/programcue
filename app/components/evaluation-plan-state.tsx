@@ -225,7 +225,8 @@ function viewFromHash(hash: string): EvaluationAdminView {
   if (
     id === "evaluation-assignments" ||
     id === "evaluation-proposals" ||
-    id === "evaluation-sessions"
+    id === "evaluation-sessions" ||
+    id.startsWith("review-submission-")
   ) {
     return "assignments";
   }
@@ -264,6 +265,12 @@ function EvaluationAdminViews() {
 
   const view = location.hash ? viewFromHash(location.hash) : storedView;
 
+  useEffect(() => {
+    const id = location.hash.replace(/^#/, "");
+    if (!id.startsWith("review-submission-")) return;
+    document.getElementById(id)?.scrollIntoView({ block: "center" });
+  }, [location.hash]);
+
   return (
     <>
       <EvaluationMetrics />
@@ -277,7 +284,7 @@ function EvaluationAdminViews() {
         ).map(([key, label, hash]) => (
           <Link
             key={key}
-            to={{ hash }}
+            to={{ search: location.search, hash }}
             className={view === key ? "is-current" : undefined}
             aria-current={view === key ? "page" : undefined}
           >

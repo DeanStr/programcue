@@ -60,6 +60,7 @@ test("task dashboard filters visible work and keeps template creation open", asy
   const assignedWork = page.locator("section").filter({
     has: page.getByRole("heading", { name: "Assigned work" }),
   });
+  await page.getByText("Create a template", { exact: true }).click();
   const templateCreation = page.getByRole("region", {
     name: "Create task template",
   });

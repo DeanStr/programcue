@@ -390,9 +390,9 @@ test.describe
       await expect(speakerRow.locator('td[data-label="Sessions"]')).toHaveText(
         "1",
       );
-      await expect(speakerRow.locator('td[data-label="Tasks"]')).toContainText(
-        "5 outstanding",
-      );
+      await expect(
+        speakerRow.locator('td[data-label="Speaker"]'),
+      ).toContainText("5 outstanding");
 
       await waitForInterface(page, "/admin/tasks");
       for (const taskTitle of [
@@ -516,9 +516,10 @@ test.describe
       await expectStatus(page, "Session placed");
 
       await waitForInterface(page, "/admin/content");
-      const contentRow = page.locator("article.list-row", {
+      const contentRow = page.locator("li.content-review-row", {
         hasText: SUBMISSION_TITLE,
       });
+      await expect(contentRow).toBeVisible();
       await expect(contentRow.getByLabel("Draft status")).toBeVisible();
 
       await waitForInterface(page, "/admin/schedule");
