@@ -39,6 +39,8 @@ test("the submissions grid keeps server filters authoritative while managing the
     .toMatch(/^Reference\tApplication\n/);
 
   await page.getByLabel("Density").selectOption("compact");
+  await page.getByRole("button", { name: "Apply" }).click();
+  await expect(page).toHaveURL(/density=compact/u);
   await expect(table).toHaveClass(/is-compact/);
   await page.getByText("Columns", { exact: true }).click();
   const visibleColumns = page.getByRole("group", {

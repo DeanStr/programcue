@@ -252,7 +252,7 @@ test.describe
         hasText: "Read the speaker handbook",
       });
       await expect(
-        handbookTask.getByText("Complete", { exact: true }),
+        handbookTask.getByText("Completed", { exact: true }),
       ).toBeVisible();
 
       await switchDemoRole(page, "administrator");

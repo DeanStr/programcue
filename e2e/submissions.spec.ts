@@ -476,10 +476,8 @@ test.describe
       await expect(
         page.getByRole("heading", { name: "Future of Events 2027" }),
       ).toBeVisible();
-      await expect(page.getByText("Preview the application")).toBeVisible();
-      await expect(
-        page.getByText(/Up to \d+ proposal questions/),
-      ).toBeVisible();
+      await expect(page.getByText("What you will be asked")).toBeVisible();
+      await expect(page.getByText(/Up to \d+ questions/)).toBeVisible();
       await expect(page.getByText("about 12 minutes")).toBeVisible();
       const applicationEntry = page.getByRole("link", {
         name: "Continue to application",
@@ -726,11 +724,14 @@ test.describe
       page,
     }) => {
       await page.goto("/admin/submissions");
-      await expect(page.getByText(/matching applications/)).toBeVisible();
+      await expect(
+        page.getByRole("heading", { name: "Applications", level: 1 }),
+      ).toBeVisible();
 
       await page.getByLabel("Sort").selectOption("title-asc");
-      await expect(page).toHaveURL(/sort=title-asc/u);
       await page.getByLabel("Density").selectOption("compact");
+      await page.getByRole("button", { name: "Apply" }).click();
+      await expect(page).toHaveURL(/sort=title-asc/u);
       await expect(page).toHaveURL(/density=compact/u);
       const columns = page.locator(".pc-data-grid-columns");
       await columns.locator("summary").click();

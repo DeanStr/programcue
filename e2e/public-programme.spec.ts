@@ -271,22 +271,16 @@ test("public programme exposes speaker affiliations and a closable profile panel
   await expect(profileLink).toBeFocused();
 });
 
-test("programme contains its wide table and explains mobile scrolling", async ({
+test("programme replaces its wide table with readable mobile records", async ({
   page,
 }) => {
   await page.setViewportSize({ width: 412, height: 915 });
   await waitForInterface(page, "/admin/programme");
 
-  await expect(
-    page.getByText("Swipe horizontally to see all columns"),
-  ).toBeVisible();
-  const tableWidth = await page
-    .locator(".programme-table-wrap")
-    .evaluate((element) => ({
-      client: element.clientWidth,
-      scroll: element.scrollWidth,
-    }));
-  expect(tableWidth.scroll).toBeGreaterThan(tableWidth.client);
+  const mobileRecords = page.locator(".programme-record-list");
+  await expect(mobileRecords).toBeVisible();
+  await expect(mobileRecords.getByRole("listitem")).not.toHaveCount(0);
+  await expect(page.locator(".programme-table-wrap")).toBeHidden();
   const documentOverflow = await page.evaluate(
     () =>
       document.documentElement.scrollWidth -

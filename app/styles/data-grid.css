@@ -224,9 +224,6 @@
   border-bottom: 1px solid var(--border);
 }
 .submissions-board .pc-data-grid-toolbar {
-  display: none;
-}
-.submissions-board .pc-data-grid-toolbar:has(.pc-data-grid-selection strong) {
   display: flex;
   min-height: 36px;
   padding: var(--space-2) var(--space-4);

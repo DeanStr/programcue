@@ -55,7 +55,7 @@ test("the evaluator guide exposes honest identities, a walkthrough and a complet
     page.getByText("No success is simulated.").first(),
   ).toBeVisible();
 
-  const formBuilder = page.locator("li").filter({
+  const formBuilder = page.locator("li.pc-demo-step").filter({
     has: page.getByRole("heading", { name: "Form builder" }),
   });
   await formBuilder
