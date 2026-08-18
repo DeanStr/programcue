@@ -57,6 +57,16 @@ const cloneEventSchema = z
         path: ["endDate"],
         message: "End date cannot be before the start date.",
       });
+    if (
+      value.repositoryProvider !== "d1" &&
+      value.reusedSenderProfileId !== undefined
+    )
+      context.addIssue({
+        code: "custom",
+        path: ["reusedSenderProfileId"],
+        message:
+          "An existing sender can only be reused when Program Cue holds the new event's data.",
+      });
     if (value.repositoryProvider !== "airtable") return;
     const connection = airtableConnectionInputSchema.safeParse({
       personalAccessToken: value.personalAccessToken,

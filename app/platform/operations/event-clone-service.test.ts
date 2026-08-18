@@ -1080,6 +1080,32 @@ describe("event cloning", () => {
     });
   });
 
+  it("rejects sender reuse when Airtable authority is selected", async () => {
+    const sourceSenderId = await insertSenderProfile();
+    const slug = `airtable-sender-clone-${crypto.randomUUID().slice(0, 8)}`;
+
+    await expect(
+      new EventCloneService(env as unknown as CloudflareEnvironment).clone(
+        viewer,
+        {
+          name: "Airtable sender clone",
+          slug,
+          timezone: "America/Toronto",
+          startDate: "2028-05-20",
+          endDate: "2028-05-22",
+          repositoryProvider: "airtable",
+          personalAccessToken: "pat-test-token-at-least-twenty",
+          baseId: "app12345678901234",
+          tableName: "Program Cue Rooms",
+          reusedSenderProfileId: sourceSenderId,
+        },
+      ),
+    ).rejects.toThrow(/reused when Program Cue holds the new event's data/i);
+    await expect(
+      env.DB.prepare("SELECT 1 FROM events WHERE slug = ?").bind(slug).first(),
+    ).resolves.toBeNull();
+  });
+
   it("rejects sender reuse when the selected profile is no longer verified", async () => {
     const sourceSenderId = await insertSenderProfile({ status: "disabled" });
     const slug = `stale-sender-clone-${crypto.randomUUID().slice(0, 8)}`;
