@@ -58,6 +58,7 @@ for (const name of [
   "--rail",
   "--grid-min",
   "--hero-image",
+  "--eval-banner-offset",
   "--pc-entry-offset",
   "--pc-entry-minutes",
   "--pc-entry-column",
