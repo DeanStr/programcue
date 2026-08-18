@@ -1019,14 +1019,16 @@ generation remain outside this slice. Recording draft/publication persistence
 lives in a focused service inside the same modular monolith; it is not a media
 subsystem or separate runtime.
 
-Generated event and speaker social cards require Cloudflare Images to render a
-server-generated SVG as WebP. Missing or failed rendering returns an explicit
-non-cacheable 503. Card URLs include the complete programme content identity and
-site publication revision when a programme exists, or the canonical
-event-content identity and site revision before programme publication, so
-branding, programme and editorial changes cannot reuse the wrong cached
-unfurl. Promotion tools reuse the existing speaker share URL instead of
-introducing a second speaker-landing concept.
+Generated event and speaker social cards author a 1200×630 SVG, rasterize it
+in-process with resvg (the Workers Images binding cannot decode SVG), then
+require Cloudflare Images to encode that PNG as WebP. Missing Images, failed
+rasterization or failed encoding returns an explicit non-cacheable 503. Card
+URLs include the complete programme content identity and site publication
+revision when a programme exists, or the canonical event-content identity and
+site revision before programme publication, so branding, programme and
+editorial changes cannot reuse the wrong cached unfurl. Promotion tools reuse
+the existing speaker share URL instead of introducing a second speaker-landing
+concept.
 
 Fixed editorial pages are public-cacheable. Their conditional response identity
 combines the request resource, complete programme/branding content revision and

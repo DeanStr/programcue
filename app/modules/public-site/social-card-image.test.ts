@@ -1,0 +1,38 @@
+import { describe, expect, it } from "vitest";
+import { PublishedPublicSiteInvariantError } from "./public-site-errors";
+import {
+  publishedSocialCardAccent,
+  socialCardSvg,
+  wrapSocialCardText,
+} from "./social-card-image";
+
+describe("social card markup", () => {
+  it("wraps words onto at most three lines", () => {
+    expect(wrapSocialCardText("Future of Events 2027", 10)).toEqual([
+      "Future of",
+      "Events",
+      "2027",
+    ]);
+  });
+
+  it("rejects an invalid published accent", () => {
+    expect(() => publishedSocialCardAccent("copper")).toThrow(
+      PublishedPublicSiteInvariantError,
+    );
+  });
+
+  it("escapes event copy in the authored SVG", () => {
+    const svg = socialCardSvg({
+      title: `Talks & "ideas" <here>`,
+      subtitle: "Venue > Hall",
+      eyebrow: "Future & Co",
+      footer: "PUBLIC EVENT",
+      accent: "#4f46e5",
+    });
+    expect(svg).toContain("Talks &amp; &quot;ideas&quot; &lt;here&gt;");
+    expect(svg).toContain("Venue &gt; Hall");
+    expect(svg).toContain("Future &amp; Co");
+    expect(svg).toContain('fill="#4f46e5"');
+    expect(svg).not.toContain("<here>");
+  });
+});

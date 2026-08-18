@@ -14,3 +14,8 @@ They are checked in rather than resolved through the bundler so the `@font-face`
 in `app/styles/tokens.css` can reference a stable path that `app/root.tsx` also
 preloads. To update, reinstall the package, copy the two files and refresh
 `OFL.txt` from the same version.
+
+Generated public social cards load Inter Regular and ExtraBold TTF from the
+Inter 4.1 release at `app/modules/public-site/fonts/` so resvg can paint the
+card. Cloudflare Images cannot decode SVG, so the Worker rasterizes first.
+Those TTFs are the same Inter family and licence as these WOFF2 files.

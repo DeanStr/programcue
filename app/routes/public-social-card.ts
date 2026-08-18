@@ -5,42 +5,16 @@ import {
   publishedPublicSiteInvariantResponse,
   publishedSocialCardRevision,
 } from "~/modules/public-site/public-site-presentation";
+import {
+  publishedSocialCardAccent,
+  socialCardSvg,
+} from "~/modules/public-site/social-card-image";
+import { rasterizeSocialCardSvg } from "~/modules/public-site/social-card-rasterizer.server";
 import { getValidatedPublishedPublicSite } from "~/modules/public-site/validated-public-site.server";
 import { getCloudflareContext } from "~/platform/cloudflare-context";
 import type { Route } from "./+types/public-social-card";
 
-function xml(value: string) {
-  return value
-    .replaceAll("&", "&amp;")
-    .replaceAll("<", "&lt;")
-    .replaceAll(">", "&gt;")
-    .replaceAll('"', "&quot;")
-    .replaceAll("'", "&apos;");
-}
-
-function wrap(value: string, maximum = 34) {
-  const words = value.trim().split(/\s+/u);
-  const lines: string[] = [];
-  let line = "";
-  for (const word of words) {
-    if (line && `${line} ${word}`.length > maximum) {
-      lines.push(line);
-      line = word;
-    } else {
-      line = line ? `${line} ${word}` : word;
-    }
-  }
-  if (line) lines.push(line);
-  return lines.slice(0, 3);
-}
-
-export function publishedSocialCardAccent(value: string) {
-  if (!/^#[0-9a-f]{6}$/iu.test(value))
-    throw new PublishedPublicSiteInvariantError(
-      "The published event brand accent is invalid.",
-    );
-  return value;
-}
+export { publishedSocialCardAccent };
 
 export async function loader({ request, params, context }: Route.LoaderArgs) {
   const { env } = getCloudflareContext(context);
@@ -108,28 +82,24 @@ export async function loader({ request, params, context }: Route.LoaderArgs) {
   ]
     .filter(Boolean)
     .join(" · ");
-  const titleLines = wrap(title, 30);
-  const subtitleLines = wrap(subtitle, 58);
-  let accent: string;
+  let svg: string;
   try {
-    accent = publishedSocialCardAccent(site.event.brandAccent);
+    svg = socialCardSvg({
+      title,
+      subtitle,
+      eyebrow: speaker ? site.event.name : eventContext,
+      footer: speaker ? "PUBLIC EVENT PROGRAMME" : "PUBLIC EVENT",
+      accent: site.event.brandAccent,
+    });
   } catch (error) {
     if (error instanceof PublishedPublicSiteInvariantError)
       throw publishedPublicSiteInvariantResponse();
     throw error;
   }
-  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" viewBox="0 0 1200 630">
-    <rect width="1200" height="630" fill="#111c1b"/>
-    <circle cx="1080" cy="-20" r="320" fill="${xml(accent)}" opacity="0.28"/>
-    <rect x="72" y="68" width="14" height="494" rx="7" fill="${xml(accent)}"/>
-    <text x="122" y="126" fill="#c9d4d2" font-family="Inter,Arial,sans-serif" font-size="30" font-weight="650">${xml(speaker ? site.event.name : eventContext)}</text>
-    ${titleLines.map((line, index) => `<text x="122" y="${235 + index * 76}" fill="#ffffff" font-family="Inter,Arial,sans-serif" font-size="64" font-weight="800">${xml(line)}</text>`).join("")}
-    ${subtitleLines.map((line, index) => `<text x="122" y="${445 + index * 42}" fill="#c9d4d2" font-family="Inter,Arial,sans-serif" font-size="30">${xml(line)}</text>`).join("")}
-    <text x="122" y="570" fill="${xml(accent)}" font-family="Inter,Arial,sans-serif" font-size="24" font-weight="700">${speaker ? "PUBLIC EVENT PROGRAMME" : "PUBLIC EVENT"}</text>
-  </svg>`;
   try {
+    const rasterized = await rasterizeSocialCardSvg(svg);
     const rendered = await env.IMAGES.input(
-      new Blob([svg], { type: "image/svg+xml" }).stream(),
+      new Blob([rasterized.png], { type: "image/png" }).stream(),
     ).output({ format: "image/webp", quality: 90, anim: false });
     if (rendered.contentType() !== "image/webp")
       throw new Error("Image rendering returned an unexpected content type.");

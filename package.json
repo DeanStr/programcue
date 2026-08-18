@@ -72,6 +72,7 @@
   },
   "dependencies": {
     "@babel/core": "8.0.1",
+    "@cf-wasm/resvg": "^0.4.0",
     "@dnd-kit/core": "^6.3.1",
     "@dnd-kit/utilities": "^3.2.2",
     "@fullcalendar/react": "^7.0.2",

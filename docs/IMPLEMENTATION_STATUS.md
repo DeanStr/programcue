@@ -1,6 +1,6 @@
 # Verified implementation status
 
-Last verified: 2026-08-17.
+Last verified: 2026-08-18.
 
 This is the canonical implementation audit and requirements traceability record. The product specification remains authoritative for intended scope; this file records observed code, focused tests and local evidence only.
 
@@ -1031,8 +1031,11 @@ revoked and deleted during file erasure.
 - **Promotion and post-event tools:** The organizer can copy the public URL,
   suggested announcement, escaped programme iframe and existing speaker share
   links, and can inspect the actual unfurl. Event and speaker social cards are
-  rendered as WebP by the required Images binding; the route returns an explicit
-  503 without it. Generic event cards use site revisioned URLs and do not read
+  rasterized from the authored SVG with resvg, then encoded as WebP by the
+  required Images binding; the route returns an explicit 503 without Images or
+  when rasterization or encoding fails. The local Images mock accepts SVG, so
+  coverage also asserts that the binding receives PNG. Generic event cards use
+  site revisioned URLs and do not read
   the programme snapshot; speaker cards still use programme/site revisioned
   URLs. External HTTPS
   recording drafts have a separate confirmed publication boundary, require a

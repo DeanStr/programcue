@@ -21,6 +21,7 @@
       "!public/openapi.json",
       "!!**/.react-router",
       "!!**/.wrangler",
+      "!!app/modules/public-site/social-card-fonts.ts",
       "!!**/.artifacts",
       "!!**/build",
       "!!**/coverage",

@@ -71,7 +71,50 @@ describe("generated public social cards", () => {
     expect(response.status).toBe(200);
     expect(response.headers.get("content-type")).toBe("image/webp");
     expect(response.headers.get("x-content-type-options")).toBe("nosniff");
-    expect((await response.arrayBuffer()).byteLength).toBeGreaterThan(0);
+    const body = await response.arrayBuffer();
+    expect(body.byteLength).toBeGreaterThan(0);
+    await expect(
+      testEnv.IMAGES.info(new Blob([body]).stream()),
+    ).resolves.toMatchObject({
+      format: "image/webp",
+      width: 1200,
+      height: 630,
+    });
+  });
+
+  it("gives Images a PNG, not the authored SVG", async () => {
+    let inputPrefix: Uint8Array | undefined;
+    const environment = new Proxy(testEnv, {
+      get(target, property, receiver) {
+        if (property === "IMAGES") {
+          return {
+            input(stream: ReadableStream<Uint8Array>) {
+              const [probe, rest] = stream.tee();
+              const transformer = target.IMAGES.input(rest);
+              const originalOutput = transformer.output.bind(transformer);
+              transformer.output = async (options) => {
+                inputPrefix = new Uint8Array(
+                  await new Response(probe).arrayBuffer(),
+                ).slice(0, 8);
+                return originalOutput(options);
+              };
+              return transformer;
+            },
+          };
+        }
+        return Reflect.get(target, property, receiver);
+      },
+    });
+    const response = await responseFor(environment);
+    expect(response.status).toBe(200);
+    expect(inputPrefix?.[0]).toBe(0x89);
+    expect(
+      String.fromCharCode(
+        inputPrefix?.[1] ?? 0,
+        inputPrefix?.[2] ?? 0,
+        inputPrefix?.[3] ?? 0,
+      ),
+    ).toBe("PNG");
   });
 
   it("fails explicitly when image rendering is not configured", async () => {

@@ -22,6 +22,11 @@ export default defineProject({
         d1Databases: ["DB"],
         r2Buckets: ["FILES", "BACKUPS"],
         images: { binding: "IMAGES" },
+        // resvg's workerd build imports a .wasm module; without this rule the
+        // test pool treats it as JS and fails to resolve its `wbg` imports.
+        modulesRules: [
+          { type: "CompiledWasm", include: ["**/*.wasm"], fallthrough: true },
+        ],
         bindings: {
           APP_ENV: "test",
           DEMO_MODE: "true",
