@@ -1,5 +1,5 @@
 import { env } from "cloudflare:test";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import type { AirtableProviderBoundary } from "~/modules/airtable/airtable-provider-boundary.server";
 import type { Viewer } from "~/platform/auth/authorize.server";
 import { ensureDemoData } from "~/platform/demo/seed.server";
@@ -9,6 +9,7 @@ import {
 } from "~/platform/evaluation/evaluation-session.server";
 import {
   ApplicantSessionService,
+  evaluationApplicantSessionContext,
   hashApplicantToken,
 } from "./applicant-session.server";
 import {
@@ -800,34 +801,59 @@ describe("Submissions D1 vertical slice", () => {
         headers: { cookie: `${evaluationCookie}; ${applicantCookie}` },
       });
       const email = `evaluation-public-${crypto.randomUUID()}@example.com`;
-      const code = "424242";
-      const personId = crypto.randomUUID();
-      const codeHash = await hashApplicantToken(
-        `application-code:${EVALUATION_AUTH_SECRET}:${form.id}:${email}:${code}`,
+      let code = "";
+      const sendEmail = vi.fn(
+        async (_input: RequestInfo | URL, init?: RequestInit) => {
+          const payload = JSON.parse(String(init?.body)) as { text?: unknown };
+          code = String(payload.text ?? "").match(/\b\d{6}\b/u)?.[0] ?? "";
+          return Response.json({ id: "evaluation-verification-message" });
+        },
       );
-      await environment.DB.batch([
+      vi.stubGlobal("fetch", sendEmail);
+      try {
+        await service.applicants.requestCode(form, email, "", request);
+      } finally {
+        vi.unstubAllGlobals();
+      }
+      expect(code).toMatch(/^\d{6}$/u);
+      expect(sendEmail).toHaveBeenCalledOnce();
+      const person = await environment.DB.prepare(
+        `SELECT id, email_verified AS emailVerified
+           FROM people WHERE email = ? COLLATE NOCASE`,
+      )
+        .bind(email)
+        .first<{ id: string; emailVerified: number }>();
+      expect(person).toMatchObject({ emailVerified: 0 });
+      await expect(
         environment.DB.prepare(
-          `INSERT INTO people (
-             id, email, display_name, email_verified, profile_status,
-             created_at, updated_at
-           ) VALUES (?, ?, 'Evaluation public applicant', 0, 'draft',
-                     unixepoch(), unixepoch())`,
-        ).bind(personId, email),
-        environment.DB.prepare(
-          `INSERT INTO submission_email_verifications (
-             id, event_id, form_id, submission_id, email, token_hash, status,
-             attempt_count, expires_at, created_at
-           ) VALUES (?, ?, ?, ?, ?, ?, 'pending', 0,
-                     unixepoch() + 600, unixepoch())`,
-        ).bind(
-          crypto.randomUUID(),
-          form.eventId,
-          form.id,
-          started.draftId,
+          `SELECT evaluation_generation_hash AS evaluationGenerationHash
+             FROM submission_email_verifications
+            WHERE event_id = ? AND form_id = ? AND email = ? COLLATE NOCASE
+              AND status = 'pending'`,
+        )
+          .bind(form.eventId, form.id, email)
+          .first(),
+      ).resolves.toMatchObject({
+        evaluationGenerationHash: expect.stringMatching(/^[0-9a-f]{64}$/u),
+      });
+
+      await expect(
+        service.applicants.verifyCode(
+          form,
           email,
-          codeHash,
+          code,
+          new Request(`https://example.com/apply/${slug}`, {
+            headers: { cookie: applicantCookie },
+          }),
         ),
-      ]);
+      ).rejects.toThrow(/re-enter evaluation access/i);
+      await expect(
+        environment.DB.prepare(
+          "SELECT email_verified AS emailVerified FROM people WHERE id = ?",
+        )
+          .bind(person?.id)
+          .first(),
+      ).resolves.toMatchObject({ emailVerified: 0 });
 
       const verifiedSession = await service.applicants.verifyCode(
         form,
@@ -845,7 +871,7 @@ describe("Submissions D1 vertical slice", () => {
           form,
         ),
       ).resolves.toMatchObject({
-        personId,
+        personId: person?.id,
         email,
         verified: true,
       });
@@ -964,6 +990,11 @@ describe("Submissions D1 vertical slice", () => {
         headers: { cookie: cookie.split(";", 1)[0]! },
       });
 
+      await expect(
+        evaluationApplicantSessionContext(evaluationEnvironment, request, {
+          eventId: "another-tenant-event",
+        }),
+      ).resolves.toMatchObject({ fixtureForm: false });
       await expect(
         new ApplicantSessionService(evaluationEnvironment).get(request, {
           ...form,
@@ -1099,6 +1130,13 @@ describe("Submissions D1 vertical slice", () => {
       const protectedEmail = `evaluation-password-${crypto.randomUUID()}@example.com`;
       const protectedPersonId = crypto.randomUUID();
       const protectedCode = "424242";
+      const protectedEvaluationContext =
+        await evaluationApplicantSessionContext(
+          evaluationEnvironment,
+          request,
+          protectedForm,
+        );
+      expect(protectedEvaluationContext).not.toBeNull();
       await evaluationEnvironment.DB.batch([
         evaluationEnvironment.DB.prepare(
           `INSERT INTO people (
@@ -1109,9 +1147,10 @@ describe("Submissions D1 vertical slice", () => {
         ).bind(protectedPersonId, protectedEmail),
         evaluationEnvironment.DB.prepare(
           `INSERT INTO submission_email_verifications (
-             id, event_id, form_id, submission_id, email, token_hash, status,
-             attempt_count, expires_at, created_at
-           ) VALUES (?, ?, ?, ?, ?, ?, 'pending', 0,
+             id, event_id, form_id, submission_id, email, token_hash,
+             evaluation_generation_hash, status, attempt_count, expires_at,
+             created_at
+           ) VALUES (?, ?, ?, ?, ?, ?, ?, 'pending', 0,
                      unixepoch() + 600, unixepoch())`,
         ).bind(
           crypto.randomUUID(),
@@ -1121,6 +1160,9 @@ describe("Submissions D1 vertical slice", () => {
           protectedEmail,
           await hashApplicantToken(
             `application-code:${evaluationEnvironment.BETTER_AUTH_SECRET}:${protectedForm.id}:${protectedEmail}:${protectedCode}`,
+          ),
+          await hashApplicantToken(
+            protectedEvaluationContext!.session.fixtureGeneration,
           ),
         ),
       ]);

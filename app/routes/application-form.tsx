@@ -76,11 +76,29 @@ export function acceptedParticipantManagementHref(
   return `/events/select?${new URLSearchParams({ eventId, returnTo })}`;
 }
 
+type EvaluationApplicantContext = {
+  identityLabel: string | null;
+  verificationRequiresEvaluationLock: boolean;
+};
+
+export function evaluationApplicantContextMessage(
+  context: EvaluationApplicantContext,
+  accessMode: "email_verified" | "password_protected" | "account_required",
+) {
+  if (accessMode === "account_required") {
+    return "This form requires an ordinary Program Cue account, which evaluation access deliberately does not inherit. Lock evaluation before signing in.";
+  }
+  if (context.verificationRequiresEvaluationLock) {
+    return "This application can be saved anonymously. Before verifying your email, lock evaluation access; your anonymous draft will remain available.";
+  }
+  return "This public application uses a separate applicant session. Drafts can start anonymously; email verification is required before submission.";
+}
+
 function EvaluationApplicantContextNotice({
   context,
   accessMode,
 }: {
-  context: { identityLabel: string | null } | null;
+  context: EvaluationApplicantContext | null;
   accessMode: "email_verified" | "password_protected" | "account_required";
 }) {
   if (!context) return null;
@@ -89,9 +107,7 @@ function EvaluationApplicantContextNotice({
     : "Evaluation access is active without a selected persona.";
   return (
     <StatusNotice className="mb" title={title}>
-      {accessMode === "account_required"
-        ? "This form requires an ordinary Program Cue account, which evaluation access deliberately does not inherit. Lock evaluation before signing in."
-        : "This public application uses a separate applicant session. Drafts can start anonymously; email verification is required before submission."}
+      {evaluationApplicantContextMessage(context, accessMode)}
     </StatusNotice>
   );
 }

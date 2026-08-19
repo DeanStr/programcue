@@ -7,6 +7,9 @@ from .forward_decision_draft_preview_contract import (
 from .forward_decision_draft_session_format import (
     validate_decision_draft_session_format_forward_migration,
 )
+from .forward_evaluation_verification_generation import (
+    validate_evaluation_verification_generation_forward_migration,
+)
 from .forward_contextual_revision_evidence import (
     validate_contextual_revision_evidence_forward_migration,
 )
@@ -58,3 +61,4 @@ def validate_forward_migrations(root: Path) -> None:
     validate_review_and_notification_evidence_forward_migration(root)
     validate_snapshot_visibility_publication_boundary_forward_migration(root)
     validate_resource_confirmed_speaker_audience_forward_migration(root)
+    validate_evaluation_verification_generation_forward_migration(root)

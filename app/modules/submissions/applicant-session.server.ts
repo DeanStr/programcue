@@ -305,7 +305,7 @@ async function resolveVerifiedApplicantSession(
 
 async function isEvaluationFixtureForm(
   env: CloudflareEnvironment,
-  form: PublicForm,
+  form: Pick<PublicForm, "eventId">,
 ) {
   const fixtureEvent = await env.DB.prepare(
     `SELECT 1 FROM events
@@ -317,19 +317,36 @@ async function isEvaluationFixtureForm(
   return Boolean(fixtureEvent);
 }
 
+export async function evaluationApplicantSessionContext(
+  env: CloudflareEnvironment,
+  request: Request,
+  form: Pick<PublicForm, "eventId">,
+) {
+  if (!requireRuntimeMode(env).evaluation) return null;
+  const session = await readEvaluationSession(request, env);
+  if (!session) return null;
+  return {
+    session,
+    fixtureForm: await isEvaluationFixtureForm(env, form),
+  };
+}
+
 export class ApplicantSessionService {
   constructor(private readonly env: CloudflareEnvironment) {}
 
   async get(request: Request, form: PublicForm): Promise<Applicant | null> {
-    const evaluationSession = requireRuntimeMode(this.env).evaluation
-      ? await readEvaluationSession(request, this.env)
-      : null;
-    if (evaluationSession) {
+    const evaluationContext = await evaluationApplicantSessionContext(
+      this.env,
+      request,
+      form,
+    );
+    if (evaluationContext) {
+      const { session: evaluationSession } = evaluationContext;
       if (
         form.accessMode !== "password_protected" &&
         isEvaluationApplicantSession(evaluationSession)
       ) {
-        if (await isEvaluationFixtureForm(this.env, form)) {
+        if (evaluationContext.fixtureForm) {
           const evaluationPerson = await evaluationPersonForSession(
             this.env,
             evaluationSession,
@@ -359,7 +376,7 @@ export class ApplicantSessionService {
         token.identifier,
       );
       if (anonymous) return anonymous;
-      if (!(await isEvaluationFixtureForm(this.env, form))) return null;
+      if (!evaluationContext.fixtureForm) return null;
       return resolveVerifiedApplicantSession(
         this.env,
         form,
@@ -562,14 +579,18 @@ export class ApplicantSessionService {
     request: Request | undefined,
     form: PublicForm,
   ) {
-    if (!request || !requireRuntimeMode(this.env).evaluation) return null;
-    const evaluationSession = await readEvaluationSession(request, this.env);
-    if (evaluationSession && !(await isEvaluationFixtureForm(this.env, form))) {
+    if (!request) return null;
+    const evaluationContext = await evaluationApplicantSessionContext(
+      this.env,
+      request,
+      form,
+    );
+    if (evaluationContext && !evaluationContext.fixtureForm) {
       throw new ApplicantInputError(
         "Lock evaluation access before verifying an application outside the evaluation fixture.",
       );
     }
-    return evaluationSession;
+    return evaluationContext?.session ?? null;
   }
 
   async requestCode(
@@ -587,7 +608,13 @@ export class ApplicantSessionService {
     if (!/^\S+@\S+\.\S+$/.test(email) || email.length > 254)
       throw new ApplicantInputError("Enter a valid email address");
 
-    await this.evaluationSessionForVerification(request, form);
+    const evaluationBound = await this.evaluationSessionForVerification(
+      request,
+      form,
+    );
+    const evaluationGenerationHash = evaluationBound
+      ? await hashApplicantToken(evaluationBound.fixtureGeneration)
+      : null;
     const current = request ? await this.get(request, form) : null;
     const anonymousDraftId =
       current && !current.verified ? current.anonymousDraftId : null;
@@ -628,18 +655,30 @@ export class ApplicantSessionService {
       this.env.DB.prepare(
         `
         INSERT INTO submission_email_verifications (
-          id, event_id, form_id, submission_id, email, token_hash, status,
-          attempt_count, expires_at, created_at
-        ) VALUES (?, ?, ?, ?, ?, ?, 'pending', 0, unixepoch() + 600, unixepoch())
+          id, event_id, form_id, submission_id, email, token_hash,
+          evaluation_generation_hash, status, attempt_count, expires_at,
+          created_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, 'pending', 0,
+                  unixepoch() + 600, unixepoch())
         ON CONFLICT(token_hash) DO UPDATE SET
-          submission_id = excluded.submission_id, status = 'pending', attempt_count = 0,
+          submission_id = excluded.submission_id,
+          evaluation_generation_hash = excluded.evaluation_generation_hash,
+          status = 'pending', attempt_count = 0,
           expires_at = unixepoch() + 600,
           verified_at = NULL, consumed_at = NULL, created_at = unixepoch()
         WHERE submission_email_verifications.event_id = excluded.event_id
           AND submission_email_verifications.form_id = excluded.form_id
           AND submission_email_verifications.email = excluded.email COLLATE NOCASE
       `,
-      ).bind(tokenId, form.eventId, form.id, anonymousDraftId, email, codeHash),
+      ).bind(
+        tokenId,
+        form.eventId,
+        form.id,
+        anonymousDraftId,
+        email,
+        codeHash,
+        evaluationGenerationHash,
+      ),
     ]);
 
     if (!delivery) {
@@ -677,6 +716,29 @@ export class ApplicantSessionService {
     const codeHash = await hashApplicantToken(
       `application-code:${requireApplicantPepper(this.env)}:${form.id}:${email}:${codeInput.trim()}`,
     );
+    const evaluationGenerationHash = evaluationBound
+      ? await hashApplicantToken(evaluationBound.fixtureGeneration)
+      : null;
+    const pendingVerification = await this.env.DB.prepare(
+      `SELECT evaluation_generation_hash AS evaluationGenerationHash
+         FROM submission_email_verifications
+        WHERE event_id = ? AND form_id = ? AND email = ? COLLATE NOCASE
+          AND token_hash = ? AND status = 'pending'
+          AND attempt_count < 5 AND expires_at > unixepoch()
+        LIMIT 1`,
+    )
+      .bind(form.eventId, form.id, email, codeHash)
+      .first<{ evaluationGenerationHash: string | null }>();
+    if (
+      pendingVerification &&
+      pendingVerification.evaluationGenerationHash !== evaluationGenerationHash
+    ) {
+      throw new ApplicantInputError(
+        pendingVerification.evaluationGenerationHash
+          ? "Re-enter evaluation access before verifying this evaluation application."
+          : "Lock evaluation access before verifying an application started outside evaluation.",
+      );
+    }
     const person = await this.env.DB.prepare(
       `
       SELECT id AS personId, email, display_name AS name,
@@ -729,6 +791,10 @@ export class ApplicantSessionService {
                 (? IS NULL AND submission_id IS NULL)
                 OR submission_id = ?
               )
+              AND (
+                (? IS NULL AND evaluation_generation_hash IS NULL)
+                OR evaluation_generation_hash = ?
+              )
          )
       `,
       ).bind(
@@ -741,6 +807,8 @@ export class ApplicantSessionService {
         codeHash,
         anonymousDraftId,
         anonymousDraftId,
+        evaluationGenerationHash,
+        evaluationGenerationHash,
       ),
       this.env.DB.prepare(
         `

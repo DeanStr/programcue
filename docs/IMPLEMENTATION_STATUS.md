@@ -218,7 +218,12 @@ The isolated evaluation-public-application correction keeps that separate
 authentication realm while allowing gate-only and non-applicant evaluator
 sessions to reopen a valid form-scoped anonymous draft. Email proof upgrades
 that draft to an applicant token bound to the current fixture-reset generation;
-the token does not resolve without the evaluator session or after a reset.
+both the pending verification challenge and resulting token require that same
+evaluation generation. Locking evaluation between requesting and redeeming a
+code cannot convert the challenge into an ordinary applicant session, and
+migration `0046_evaluation_verification_generation.sql` revokes the
+unclassifiable pending challenges present at upgrade. The token does not
+resolve without the evaluator session or after a reset.
 Fixed applicant personas still take precedence on eligible forms, and selected
 organiser/reviewer identities cannot leak Better Auth or ordinary applicant
 state into the public application. Password-protected forms still require their
@@ -228,8 +233,13 @@ session. Focused service tests cover anonymous reopen, fixed-person precedence,
 ordinary-token suppression, form/expiry/reset boundaries and password
 admission. Non-fixture verification fails before creating an applicant or
 delivering a code. Worker route coverage exercises the exact start-cookie,
-redirect and reopen path for gate-only and organiser sessions. This is local
-worktree evidence only: no deployment, production reset or fresh
+redirect and reopen path for gate-only and organiser sessions. A dedicated
+local production-shaped Chromium profile additionally unlocks `/evaluate`
+without choosing a persona, follows the public application link, starts an
+anonymous draft and lets the browser carry the issued cookies through the
+redirect before asserting that the editor reopened. Its Siteverify fixture is
+explicit and loopback-only; it does not claim external-provider success. This
+is local worktree evidence only: no deployment, production reset or fresh
 production-browser acceptance is claimed.
 
 Exactly four documented SBEK aliases resolve to the corresponding seeded

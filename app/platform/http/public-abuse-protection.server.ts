@@ -10,8 +10,10 @@ const RATE_LIMIT_RETENTION_SECONDS = 3_600;
 const RATE_LIMIT_CLEANUP_BATCH_SIZE = 100;
 
 type AbuseEnvironment = CloudflareEnvironment & {
+  PROGRAM_CUE_E2E_FIXTURES?: string;
   TURNSTILE_SECRET_KEY?: string;
   TURNSTILE_SITE_KEY?: string;
+  TURNSTILE_SITEVERIFY_URL?: string;
 };
 
 type RatePolicy = {
@@ -143,6 +145,7 @@ function productionConfiguration(env: AbuseEnvironment) {
       env.TURNSTILE_SECRET_KEY,
       "TURNSTILE_SECRET_KEY",
     ),
+    siteverifyUrl: siteverifyUrl(env),
     rateLimitPepper,
   };
 }
@@ -294,12 +297,38 @@ const siteverifyResponseSchema = z.object({
   "error-codes": z.array(z.string()).optional(),
 });
 
+function siteverifyUrl(env: AbuseEnvironment) {
+  const configured = env.TURNSTILE_SITEVERIFY_URL?.trim();
+  if (!configured) return SITEVERIFY_URL;
+  let parsed: URL;
+  try {
+    parsed = new URL(configured);
+  } catch {
+    throw new AbuseProtectionConfigurationError(
+      "TURNSTILE_SITEVERIFY_URL must be a valid URL.",
+    );
+  }
+  if (
+    env.PROGRAM_CUE_E2E_FIXTURES !== "true" ||
+    parsed.protocol !== "http:" ||
+    (parsed.hostname !== "127.0.0.1" && parsed.hostname !== "localhost") ||
+    parsed.username ||
+    parsed.password
+  ) {
+    throw new AbuseProtectionConfigurationError(
+      "TURNSTILE_SITEVERIFY_URL is restricted to the loopback E2E fixture.",
+    );
+  }
+  return parsed.href;
+}
+
 async function verifyTurnstile(input: {
   request: Request;
   token: string;
   action: PublicAbuseAction;
   ip: string;
   secretKey: string;
+  siteverifyUrl: string;
 }) {
   const token = input.token.trim();
   if (!token || token.length > 2_048) throw new TurnstileRejectedError();
@@ -310,13 +339,19 @@ async function verifyTurnstile(input: {
   body.set("remoteip", input.ip);
   let response: Response;
   try {
-    response = await fetch(SITEVERIFY_URL, {
+    response = await fetch(input.siteverifyUrl, {
       method: "POST",
       body,
+      redirect: "manual",
       signal: AbortSignal.timeout(5_000),
     });
   } catch (error) {
     throw new TurnstileUnavailableError({ cause: error });
+  }
+  if (response.status >= 300 && response.status < 400) {
+    throw new TurnstileUnavailableError({
+      cause: new Error("Turnstile Siteverify returned a redirect."),
+    });
   }
   if (!response.ok) {
     throw new TurnstileUnavailableError({
@@ -416,6 +451,7 @@ export async function enforcePublicAbuseProtection(input: {
     action: input.action,
     ip,
     secretKey: configuration.secretKey,
+    siteverifyUrl: configuration.siteverifyUrl,
   });
   for (const policy of actionPolicies.filter(
     (candidate) => candidate.dimension !== "ip",

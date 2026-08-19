@@ -75,7 +75,7 @@ def validate_baseline(connection: sqlite3.Connection, schema_source: str) -> Non
         "submission_routing_teams": {"submission_id", "event_id", "team_id"},
         "submission_decisions": {"notification_feedback_json", "effect_preview_json"},
         "submission_revisions": {"answers_json", "speaker_snapshot_json", "save_kind", "idempotency_key"},
-        "submission_email_verifications": {"form_id", "token_hash", "status", "attempt_count", "verified_at", "consumed_at"},
+        "submission_email_verifications": {"form_id", "token_hash", "evaluation_generation_hash", "status", "attempt_count", "verified_at", "consumed_at"},
         "submission_speakers": {"person_id", "email", "invitation_status", "claim_token_hash", "claimed_at"},
         "evaluation_rounds": {"plan_id", "round_number", "advancement_rule_json", "revision", "last_operation_id", "opens_at", "closes_at", "blinded_reviewing", "scorecard_id", "scorecard_version"},
         "evaluation_criteria": {"round_id", "input_type", "options_json", "weight_percent", "required"},

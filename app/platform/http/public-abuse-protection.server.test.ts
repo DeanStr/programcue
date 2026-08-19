@@ -13,8 +13,10 @@ import {
 } from "./public-abuse-protection.server";
 
 type AbuseTestEnvironment = CloudflareEnvironment & {
+  PROGRAM_CUE_E2E_FIXTURES?: string;
   TURNSTILE_SECRET_KEY?: string;
   TURNSTILE_SITE_KEY?: string;
+  TURNSTILE_SITEVERIFY_URL?: string;
 };
 
 function productionEnvironment(
@@ -123,6 +125,62 @@ describe("public abuse protection", () => {
         turnstileToken: "valid-token",
       }),
     ).rejects.toBeInstanceOf(AbuseProtectionConfigurationError);
+  });
+
+  it("allows a loopback Siteverify endpoint only for the explicit E2E fixture", async () => {
+    const tokenValidation = successfulSiteverify();
+    vi.stubGlobal("fetch", tokenValidation);
+    const unique = crypto.randomUUID();
+    const call = (overrides: Partial<AbuseTestEnvironment>) =>
+      enforcePublicAbuseProtection({
+        env: productionEnvironment({
+          TURNSTILE_SITEVERIFY_URL: "http://127.0.0.1:8788/siteverify",
+          ...overrides,
+        }),
+        request: protectedRequest(`203.0.113.${unique.charCodeAt(0)}`),
+        action: "sign_in",
+        tenantId: `siteverify-${unique}`,
+        email: `siteverify-${unique}@example.com`,
+        turnstileToken: "valid-token",
+      });
+
+    await expect(call({})).rejects.toBeInstanceOf(
+      AbuseProtectionConfigurationError,
+    );
+    await expect(call({ PROGRAM_CUE_E2E_FIXTURES: "true" })).resolves.toEqual({
+      mode: "protected",
+    });
+    expect(tokenValidation).toHaveBeenCalledWith(
+      "http://127.0.0.1:8788/siteverify",
+      expect.objectContaining({ method: "POST", redirect: "manual" }),
+    );
+  });
+
+  it("does not follow Siteverify redirects", async () => {
+    const tokenValidation = vi.fn().mockResolvedValue(
+      new Response(null, {
+        status: 307,
+        headers: { location: "https://attacker.example/siteverify" },
+      }),
+    );
+    vi.stubGlobal("fetch", tokenValidation);
+    const unique = crypto.randomUUID();
+
+    await expect(
+      enforcePublicAbuseProtection({
+        env: productionEnvironment(),
+        request: protectedRequest("203.0.113.43"),
+        action: "sign_in",
+        tenantId: `siteverify-redirect-${unique}`,
+        email: `siteverify-redirect-${unique}@example.com`,
+        turnstileToken: "valid-token",
+      }),
+    ).rejects.toBeInstanceOf(TurnstileUnavailableError);
+    expect(tokenValidation).toHaveBeenCalledTimes(1);
+    expect(tokenValidation).toHaveBeenCalledWith(
+      "https://challenges.cloudflare.com/turnstile/v0/siteverify",
+      expect.objectContaining({ redirect: "manual" }),
+    );
   });
 
   it("applies tenant/IP/email-scoped D1 limits and stores no raw identifier", async () => {

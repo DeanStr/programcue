@@ -117,12 +117,16 @@ npm run test:related -- app/modules/example/example.server.ts
 npm run test:config
 npm run build
 npm run test:e2e
+npm run test:e2e:evaluation
 npm run performance:local
 ```
 
 `check:focused` uses the existing generated types and runs tests affected by
 changes since the local `main` branch, including staged and unstaged changes.
 It also enforces the repository's Biome formatting and enabled lint rules.
+`test:e2e:evaluation` runs the isolated production-shaped `/evaluate` browser
+regression with ephemeral credentials, fixture data and a loopback Siteverify
+endpoint; it does not contact or claim success from production providers.
 `quality` checks formatting and lint without changing files; `quality:fix`
 applies safe fixes, while `format` and `lint` run those tools separately.
 Use `typecheck` instead when route types, Worker bindings or generated types

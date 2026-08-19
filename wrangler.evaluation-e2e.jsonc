@@ -1,0 +1,77 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "program-cue-evaluation-e2e",
+  "main": "workers/index.ts",
+  "compatibility_date": "2026-08-08",
+  "compatibility_flags": ["nodejs_compat"],
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "program-cue-db",
+      "database_id": "REPLACE_WITH_D1_DATABASE_ID",
+      "migrations_dir": "migrations",
+    },
+  ],
+  "r2_buckets": [
+    { "binding": "FILES", "bucket_name": "program-cue-files" },
+    { "binding": "BACKUPS", "bucket_name": "program-cue-e2e-backups" },
+  ],
+  "images": { "binding": "IMAGES" },
+  "workflows": [
+    {
+      "name": "program-cue-evaluation-e2e-backup",
+      "binding": "D1_BACKUP_WORKFLOW",
+      "class_name": "D1BackupWorkflow",
+    },
+  ],
+  "durable_objects": {
+    "bindings": [
+      { "name": "EVENT_CHANNEL", "class_name": "EventChannel" },
+      { "name": "PROGRAM_CUE_AGENT", "class_name": "ProgramCueEventAgent" },
+    ],
+  },
+  "migrations": [
+    { "tag": "v1", "new_sqlite_classes": ["EventChannel"] },
+    { "tag": "v2", "new_sqlite_classes": ["ProgramCueEventAgent"] },
+  ],
+  "queues": {
+    "producers": [
+      {
+        "binding": "OPERATIONS_QUEUE",
+        "queue": "program-cue-operations-evaluation-e2e",
+      },
+    ],
+    "consumers": [
+      {
+        "queue": "program-cue-operations-evaluation-e2e",
+        "max_batch_size": 20,
+        "max_batch_timeout": 5,
+        "max_retries": 3,
+        "dead_letter_queue": "program-cue-operations-evaluation-e2e-dlq",
+      },
+    ],
+  },
+  "triggers": { "crons": ["* * * * *"] },
+  "vars": {
+    "APP_ENV": "production",
+    "AI": "evaluation-e2e-unused-binding",
+    "DEMO_MODE": "false",
+    "EVALUATION_MODE": "true",
+    "MAINTENANCE_MODE": "false",
+    "PROGRAM_CUE_E2E_FIXTURES": "true",
+    "SOURCE_REVISION": "0000000",
+    "BETTER_AUTH_URL": "http://127.0.0.1:5273",
+    "AUTH_EMAIL_FROM": "Program Cue E2E <auth@programcue.test>",
+    "EMAIL_PROVIDER": "resend",
+    "TURNSTILE_SITE_KEY": "1x00000000000000000000AA",
+    "CLOUDFLARE_ACCOUNT_ID": "evaluation-e2e-account",
+    "D1_DATABASE_ID": "evaluation-e2e-database",
+    "R2_ACCOUNT_ID": "evaluation-e2e-account",
+    "R2_BUCKET_NAME": "program-cue-files",
+    "FILE_SCANNER_API_URL": "https://scanner.programcue.test/v1/scans",
+    "CORS_ALLOWED_ORIGINS": "http://127.0.0.1:5273",
+    "EMBED_FRAME_ANCESTORS": "*",
+    "RESOURCE_EMBED_PROVIDERS": "youtube,vimeo",
+  },
+  "observability": { "enabled": false },
+}

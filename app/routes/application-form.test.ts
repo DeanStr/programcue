@@ -12,6 +12,7 @@ import {
   action,
   applicationDraftHref,
   claimApplicantVideoUploadOperation,
+  evaluationApplicantContextMessage,
   loader,
 } from "./application-form";
 
@@ -530,9 +531,23 @@ describe("public application mutations", () => {
         if (result instanceof Response || "data" in result) {
           throw new Error("Expected the evaluation public form payload.");
         }
-        expect(result.evaluationApplicantContext).toEqual({ identityLabel });
+        expect(result.evaluationApplicantContext).toEqual({
+          identityLabel,
+          verificationRequiresEvaluationLock: false,
+        });
         expect(result.applicant).toBeNull();
       }
+      expect(
+        evaluationApplicantContextMessage(
+          {
+            identityLabel: "Event organiser",
+            verificationRequiresEvaluationLock: true,
+          },
+          "email_verified",
+        ),
+      ).toBe(
+        "This application can be saved anonymously. Before verifying your email, lock evaluation access; your anonymous draft will remain available.",
+      );
     });
 
     it.each([

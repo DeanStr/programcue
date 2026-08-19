@@ -226,6 +226,7 @@ export const submissionEmailVerifications = sqliteTable(
     }),
     email: text("email").notNull(),
     tokenHash: text("token_hash").notNull(),
+    evaluationGenerationHash: text("evaluation_generation_hash"),
     status: text("status")
       .notNull()
       .default("pending")
@@ -237,6 +238,10 @@ export const submissionEmailVerifications = sqliteTable(
     createdAt: integer("created_at").notNull().default(epochNow),
   },
   (table) => [
+    check(
+      "submission_verification_evaluation_generation_hash_valid",
+      sql`${table.evaluationGenerationHash} IS NULL OR length(${table.evaluationGenerationHash}) = 64`,
+    ),
     uniqueIndex("submission_verification_token_unique").on(table.tokenHash),
     index("idx_submission_verifications_form_email").on(
       table.eventId,

@@ -6,6 +6,7 @@ import {
   ApplicantConfigurationError,
   ApplicantDeliveryError,
   ApplicantInputError,
+  evaluationApplicantSessionContext,
 } from "~/modules/submissions/applicant-session.server";
 import {
   type ApplicationNotice,
@@ -25,10 +26,7 @@ import {
 } from "~/modules/submissions/submission-service.server";
 import { signOutSession } from "~/platform/auth/auth.server";
 import { getCloudflareContext } from "~/platform/cloudflare-context";
-import {
-  EVALUATION_IDENTITIES,
-  readEvaluationSession,
-} from "~/platform/evaluation/evaluation-session.server";
+import { EVALUATION_IDENTITIES } from "~/platform/evaluation/evaluation-session.server";
 import { rejectCrossOriginBrowserMutation } from "~/platform/http/mutation-origin.server";
 import {
   AbuseProtectionConfigurationError,
@@ -43,7 +41,6 @@ import {
   webhookActorForAudit,
 } from "~/platform/operations/webhook-service.server";
 import { recordRouteChange } from "~/platform/realtime/route-realtime.server";
-import { requireRuntimeMode } from "~/platform/runtime-environment.server";
 import type { Route } from "./+types/application-form";
 
 export type ActionResult = {
@@ -127,18 +124,22 @@ export async function loader({ request, context, params }: Route.LoaderArgs) {
           ? { speakerId: claimedSpeakerId }
           : undefined,
     );
-    const evaluationSession = requireRuntimeMode(env).evaluation
-      ? await readEvaluationSession(request, env)
-      : null;
+    const evaluationContext = await evaluationApplicantSessionContext(
+      env,
+      request,
+      portal.form,
+    );
     const isFixedEvaluationApplicant =
       portal.applicant?.verified === true &&
       portal.applicant.evaluation === true;
     const evaluationApplicantContext =
-      evaluationSession && !isFixedEvaluationApplicant
+      evaluationContext && !isFixedEvaluationApplicant
         ? {
-            identityLabel: evaluationSession.identityKey
-              ? EVALUATION_IDENTITIES[evaluationSession.identityKey].label
+            identityLabel: evaluationContext.session.identityKey
+              ? EVALUATION_IDENTITIES[evaluationContext.session.identityKey]
+                  .label
               : null,
+            verificationRequiresEvaluationLock: !evaluationContext.fixtureForm,
           }
         : null;
     const showLanding = !portal.applicant && !claimToken && !claimSpeakerId;
