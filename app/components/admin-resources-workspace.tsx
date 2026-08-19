@@ -177,6 +177,7 @@ function ResourceSettingsPanel() {
             if (
               value === "all_speakers" ||
               value === "accepted_speakers" ||
+              value === "confirmed_speakers" ||
               value === "custom"
             ) {
               setAudienceScope(value);
@@ -187,6 +188,9 @@ function ResourceSettingsPanel() {
           <option value="all_speakers">All speakers</option>
           <option value="accepted_speakers">
             Speakers with accepted sessions
+          </option>
+          <option value="confirmed_speakers">
+            Speakers with confirmed sessions
           </option>
           <option value="custom">Selected speakers</option>
         </select>

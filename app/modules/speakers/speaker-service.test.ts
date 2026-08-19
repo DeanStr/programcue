@@ -1,5 +1,6 @@
 import { env } from "cloudflare:test";
 import { describe, expect, it } from "vitest";
+import { ResourceService } from "~/modules/resources/resource-service.server";
 import {
   getPublicSessionPage,
   getPublicSpeakerPage,
@@ -252,6 +253,51 @@ describe("speaker profile service", () => {
     );
   });
 
+  it("materialises confirmed-speaker acknowledgement tasks on confirmation", async () => {
+    const testEnv = env as unknown as CloudflareEnvironment;
+    await ensureDemoSpeakerData(testEnv);
+    const sessionId = "session-demo-speaker";
+    await testEnv.DB.prepare(
+      `UPDATE session_speakers
+          SET participation_status = 'pending', participation_confirmed_at = NULL
+        WHERE event_id = ? AND session_id = ? AND person_id = ?`,
+    )
+      .bind(speaker.eventId, sessionId, speaker.personId)
+      .run();
+    const resources = new ResourceService(testEnv);
+    const pageId = await resources.save(admin, {
+      title: "Confirmation briefing",
+      slug: `confirm-ack-${crypto.randomUUID().slice(0, 8)}`,
+      category: "Preparation",
+      audienceScope: "confirmed_speakers",
+      acknowledgementRequired: true,
+      document: {
+        type: "doc",
+        content: [
+          { type: "paragraph", content: [{ type: "text", text: "Read me." }] },
+        ],
+      },
+    });
+    const draft = (await resources.getAdminWorkspace(admin, pageId)).selected!;
+    await resources.publish(admin, pageId, draft.revision);
+    const taskId = `resource-ack:${pageId}:${speaker.personId}`;
+    await expect(
+      testEnv.DB.prepare("SELECT id FROM task_instances WHERE id = ?")
+        .bind(taskId)
+        .first(),
+    ).resolves.toBeNull();
+
+    await new SpeakerService(testEnv).confirmOwnParticipation(speaker, {
+      sessionId,
+      confirmation: "confirmed",
+    });
+    await expect(
+      testEnv.DB.prepare("SELECT status FROM task_instances WHERE id = ?")
+        .bind(taskId)
+        .first(),
+    ).resolves.toEqual({ status: "not_started" });
+  });
+
   it("invalidates public session and speaker cursors when confirmation joins the published programme", async () => {
     const testEnv = env as unknown as CloudflareEnvironment;
     await ensureDemoProgramme(testEnv);
@@ -345,6 +391,10 @@ describe("speaker profile service", () => {
     } finally {
       await testEnv.DB.batch([
         testEnv.DB.prepare(
+          `DELETE FROM task_instances
+            WHERE event_id = ? AND (target_id = ? OR owner_person_id = ?)`,
+        ).bind(speaker.eventId, personId, personId),
+        testEnv.DB.prepare(
           `DELETE FROM session_speakers
             WHERE event_id = ? AND person_id = ?`,
         ).bind(speaker.eventId, personId),
@@ -396,6 +446,10 @@ describe("speaker profile service", () => {
         ).resolves.toEqual(before);
       } finally {
         await testEnv.DB.batch([
+          testEnv.DB.prepare(
+            `DELETE FROM task_instances
+              WHERE event_id = ? AND (target_id = ? OR owner_person_id = ?)`,
+          ).bind(speaker.eventId, personId, personId),
           testEnv.DB.prepare(
             `DELETE FROM session_speakers
               WHERE event_id = ? AND person_id = ?`,

@@ -1,9 +1,11 @@
 import { z } from "zod";
 
+import { requireValue } from "~/lib/required-value";
 import {
   type AirtableProviderBoundary,
   airtableCommandKey,
 } from "~/modules/airtable/airtable-provider-boundary.server";
+import { materializePublishedResourceAcknowledgementsForSession } from "~/modules/resources/resource-service-shared";
 import type { Viewer } from "~/platform/auth/authorize.server";
 import {
   atomicBatchGuardStatement,
@@ -182,9 +184,17 @@ export class SpeakerParticipationService {
     const operationId = crypto.randomUUID();
     const origin =
       source === "administrator_external" ? "admin_ui" : "participant_ui";
-    const [audited, updated, changed] = await this.env.DB.batch([
-      this.env.DB.prepare(
-        `INSERT INTO audit_events (
+    const acknowledgementStatements =
+      materializePublishedResourceAcknowledgementsForSession(
+        this.env,
+        viewer.eventId,
+        sessionId,
+      );
+    let results: D1Result[];
+    try {
+      results = await this.env.DB.batch([
+        this.env.DB.prepare(
+          `INSERT INTO audit_events (
            id, actor_kind, origin, metadata_version, organisation_id, event_id, actor_person_id, action,
            entity_type, entity_id, correlation_id, metadata_json, created_at
          )
@@ -199,22 +209,22 @@ export class SpeakerParticipationService {
             AND relationship.person_id = ? AND event.organisation_id = ?
             AND relationship.participation_status = 'pending'
             AND session.status NOT IN ('cancelled','archived')`,
-      ).bind(
-        auditEventId,
-        origin,
-        viewer.organisationId,
-        viewer.eventId,
-        viewer.personId,
-        `${sessionId}:${personId}`,
-        operationId,
-        JSON.stringify({ sessionId, personId, source }),
-        viewer.eventId,
-        sessionId,
-        personId,
-        viewer.organisationId,
-      ),
-      this.env.DB.prepare(
-        `UPDATE session_speakers
+        ).bind(
+          auditEventId,
+          origin,
+          viewer.organisationId,
+          viewer.eventId,
+          viewer.personId,
+          `${sessionId}:${personId}`,
+          operationId,
+          JSON.stringify({ sessionId, personId, source }),
+          viewer.eventId,
+          sessionId,
+          personId,
+          viewer.organisationId,
+        ),
+        this.env.DB.prepare(
+          `UPDATE session_speakers
             SET participation_status = 'confirmed',
                 participation_confirmed_at = unixepoch()
           WHERE event_id = ? AND session_id = ? AND person_id = ?
@@ -231,15 +241,16 @@ export class SpeakerParticipationService {
                  AND session.status NOT IN ('cancelled','archived')
             )
           RETURNING session_id AS sessionId`,
-      ).bind(
-        viewer.eventId,
-        sessionId,
-        personId,
-        auditEventId,
-        viewer.organisationId,
-      ),
-      this.env.DB.prepare(
-        `INSERT INTO event_changes (
+        ).bind(
+          viewer.eventId,
+          sessionId,
+          personId,
+          auditEventId,
+          viewer.organisationId,
+        ),
+        ...acknowledgementStatements,
+        this.env.DB.prepare(
+          `INSERT INTO event_changes (
            event_id, entity_type, entity_id, change_type, correlation_id,
            created_at
          )
@@ -249,18 +260,18 @@ export class SpeakerParticipationService {
           )
           AND EXISTS (${publicConfirmedSpeakerMembershipSql})
          RETURNING sequence`,
-      ).bind(
-        viewer.eventId,
-        personId,
-        operationId,
-        auditEventId,
-        viewer.eventId,
-        sessionId,
-        personId,
-      ),
-      atomicBatchGuardStatement(
-        this.env,
-        `EXISTS (
+        ).bind(
+          viewer.eventId,
+          personId,
+          operationId,
+          auditEventId,
+          viewer.eventId,
+          sessionId,
+          personId,
+        ),
+        atomicBatchGuardStatement(
+          this.env,
+          `EXISTS (
             SELECT 1 FROM audit_events audit WHERE audit.id = ?
           ) AND NOT (
             EXISTS (
@@ -284,34 +295,47 @@ export class SpeakerParticipationService {
               ) OR NOT EXISTS (${publicConfirmedSpeakerMembershipSql})
             )
           )`,
-        [
-          auditEventId,
-          auditEventId,
-          viewer.organisationId,
-          viewer.eventId,
-          viewer.personId,
-          origin,
-          `${sessionId}:${personId}`,
-          operationId,
-          viewer.eventId,
-          sessionId,
-          personId,
-          viewer.eventId,
-          personId,
-          operationId,
-          viewer.eventId,
-          sessionId,
-          personId,
-        ],
-      ),
-    ]).catch((error: unknown) => {
+          [
+            auditEventId,
+            auditEventId,
+            viewer.organisationId,
+            viewer.eventId,
+            viewer.personId,
+            origin,
+            `${sessionId}:${personId}`,
+            operationId,
+            viewer.eventId,
+            sessionId,
+            personId,
+            viewer.eventId,
+            personId,
+            operationId,
+            viewer.eventId,
+            sessionId,
+            personId,
+          ],
+        ),
+      ]);
+    } catch (error: unknown) {
       if (isAtomicBatchGuardError(error)) {
         throw new SpeakerAdminIntegrityError(
           "Participation confirmation was not accompanied by its audit record and public change.",
         );
       }
       throw error;
-    });
+    }
+    const audited = requireValue(
+      results[0],
+      "Participation confirmation is missing its audit result.",
+    );
+    const updated = requireValue(
+      results[1],
+      "Participation confirmation is missing its relationship result.",
+    );
+    const changed = requireValue(
+      results[results.length - 2],
+      "Participation confirmation is missing its change-cursor result.",
+    );
     // D1's mutation metadata includes writes performed by SQLite triggers.
     // RETURNING identifies the row changed by this statement itself.
     const updatedCount = updated.results.length;

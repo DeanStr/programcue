@@ -210,6 +210,7 @@ export class SubmissionCoSpeakerRepository {
        WHERE ss.email = ? COLLATE NOCASE
          AND ss.person_id IS NULL
          AND ss.invitation_status IN ('pending', 'sent')
+         AND (ss.invitation_expires_at IS NULL OR ss.invitation_expires_at > unixepoch())
        ORDER BY s.updated_at DESC
     `,
     )
@@ -272,7 +273,9 @@ export class SubmissionCoSpeakerRepository {
                  AND decision.status = 'published'
                  AND decision.decision = 'accepted'
                ORDER BY decision.published_at DESC, decision.id DESC LIMIT 1
-             ) AS acceptanceDecisionId
+             ) AS acceptanceDecisionId,
+             speaker.invitation_status AS invitationStatus,
+             speaker.invitation_expires_at AS invitationExpiresAt
         FROM submission_speakers speaker
         JOIN submissions submission
           ON submission.id = speaker.submission_id
@@ -300,11 +303,27 @@ export class SubmissionCoSpeakerRepository {
         sessionStatus: string | null;
         acceptanceDecisionCount: number;
         acceptanceDecisionId: string | null;
+        invitationStatus: string;
+        invitationExpiresAt: number | null;
       }>();
     if (!invitation) {
       throw new SubmissionStateError(
         "This co-speaker invitation is no longer available.",
       );
+    }
+    if (
+      invitation.invitationStatus !== "pending" &&
+      invitation.invitationStatus !== "sent"
+    ) {
+      throw new SubmissionStateError(
+        "This co-speaker invitation is no longer available.",
+      );
+    }
+    if (
+      invitation.invitationExpiresAt !== null &&
+      invitation.invitationExpiresAt <= Math.floor(Date.now() / 1_000)
+    ) {
+      throw new SubmissionStateError("This co-speaker invitation has expired.");
     }
     const acceptedClaim = invitation.submissionStatus === "accepted";
     if (acceptedClaim && invitation.derivedSessionCount !== 1) {
@@ -351,6 +370,8 @@ export class SubmissionCoSpeakerRepository {
             WHERE speaker.id = ? AND speaker.event_id = events.id
               AND speaker.email = ? COLLATE NOCASE
               AND speaker.invitation_status IN ('pending', 'sent')
+              AND (speaker.invitation_expires_at IS NULL
+                   OR speaker.invitation_expires_at > unixepoch())
               AND (? IS NULL OR speaker.claim_token_hash = ?)
               AND version.form_id = ?
          )
@@ -433,6 +454,7 @@ export class SubmissionCoSpeakerRepository {
            SET person_id = ?, invitation_status = 'claimed', claim_token_hash = NULL,
                invitation_expires_at = NULL, claimed_at = unixepoch(), updated_at = unixepoch()
          WHERE id = ? AND email = ? COLLATE NOCASE AND invitation_status IN ('pending', 'sent')
+           AND (invitation_expires_at IS NULL OR invitation_expires_at > unixepoch())
            AND (? IS NULL OR claim_token_hash = ?)
            AND EXISTS (
              SELECT 1 FROM submissions s JOIN form_versions fv ON fv.id = s.form_version_id

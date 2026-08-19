@@ -6,7 +6,13 @@ function timezoneNames() {
       supportedValuesOf?: (key: "timeZone") => string[];
     }
   ).supportedValuesOf;
-  return ["UTC", ...(supportedValuesOf ? supportedValuesOf("timeZone") : [])];
+  return [
+    "UTC",
+    ...(supportedValuesOf ? supportedValuesOf("timeZone") : []).filter(
+      (timezone) =>
+        timezone.includes("/") && !/^Etc\/GMT[+-]\d+$/iu.test(timezone),
+    ),
+  ];
 }
 
 export function timezoneLabel(timezone: string) {

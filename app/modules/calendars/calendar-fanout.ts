@@ -48,6 +48,15 @@ export const SCHEDULE_CALENDAR_FANOUT_SNAPSHOT_KEY =
   "schedule-calendar-targets";
 export const SCHEDULE_CALENDAR_FANOUT_TARGET_TYPE = "schedule_calendar_target";
 
+/** Live and snapshot fan-out must select the same public confirmed speakers. */
+export const PUBLIC_CONFIRMED_SCHEDULE_CALENDAR_TARGET_SQL = `
+  session.status = 'published'
+  AND session.visibility = 'public'
+  AND content.visibility = 'public'
+  AND ss.participation_status = 'confirmed'
+  AND ss.visibility = 'public'
+`;
+
 export type PublishedScheduleCalendarTarget = {
   key: string;
   sessionId: string;
@@ -112,12 +121,15 @@ export function scheduleCalendarFanoutSnapshotStatements(
             ON content.schedule_version_id = se.schedule_version_id
            AND content.event_id = se.event_id
            AND content.session_id = se.session_id
+          JOIN sessions session
+            ON session.id = se.session_id AND session.event_id = se.event_id
           JOIN session_speakers ss
             ON ss.session_id = se.session_id AND ss.event_id = se.event_id
           LEFT JOIN calendar_invitations ci
             ON ci.event_id = se.event_id AND ci.session_id = se.session_id
            AND ci.person_id = ss.person_id
          WHERE se.event_id = ? AND sv.id = ? AND sv.status = 'published'
+           AND ${PUBLIC_CONFIRMED_SCHEDULE_CALENDAR_TARGET_SQL}
       )
       INSERT INTO operation_items (
         id, operation_id, item_key, entity_type, entity_id, status, result_json, updated_at
@@ -180,10 +192,13 @@ export function scheduleCalendarFanoutSnapshotStatements(
                  ON content.schedule_version_id = se.schedule_version_id
                 AND content.event_id = se.event_id
                 AND content.session_id = se.session_id
+               JOIN sessions session
+                 ON session.id = se.session_id AND session.event_id = se.event_id
                JOIN session_speakers ss
                  ON ss.session_id = se.session_id AND ss.event_id = se.event_id
               WHERE sv.id = ? AND sv.status = 'published'
                 AND se.session_id = ci.session_id AND ss.person_id = ci.person_id
+                AND ${PUBLIC_CONFIRMED_SCHEDULE_CALENDAR_TARGET_SQL}
            )
       )
       INSERT INTO operation_items (

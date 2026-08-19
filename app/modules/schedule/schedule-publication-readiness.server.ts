@@ -61,19 +61,13 @@ export class SchedulePublicationReadiness {
       `SELECT content.title, content.visibility,
               content.content_status AS contentStatus
          FROM schedule_entries entry
-         JOIN sessions session
-           ON session.id = entry.session_id
-          AND session.event_id = entry.event_id
-          AND session.visibility = 'public'
          JOIN schedule_session_contents content
            ON content.schedule_version_id = entry.schedule_version_id
           AND content.event_id = entry.event_id
           AND content.session_id = entry.session_id
         WHERE entry.schedule_version_id = ? AND entry.event_id = ?
-          AND (
-            content.visibility <> 'public'
-            OR content.content_status <> 'approved'
-          )
+          AND content.visibility = 'public'
+          AND content.content_status <> 'approved'
         ORDER BY content.title COLLATE NOCASE, content.session_id
         LIMIT 1`,
     )
@@ -91,8 +85,8 @@ export class SchedulePublicationReadiness {
     contentStatus: ScheduleContentStatus;
   }) {
     if (content.visibility !== "public") {
-      return `Every public session requires a public content snapshot before publishing. “${content.title}” is ${content.visibility}.`;
+      return `Every public snapshot requires public visibility before publishing. “${content.title}” is ${content.visibility}.`;
     }
-    return `Every public session requires an Approved content snapshot before publishing. “${content.title}” is ${content.contentStatus.replaceAll("_", " ")}.`;
+    return `Every public snapshot requires an Approved content snapshot before publishing. “${content.title}” is ${content.contentStatus.replaceAll("_", " ")}.`;
   }
 }

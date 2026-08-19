@@ -258,8 +258,7 @@ export async function buildSchedulePublicationPreview(
       });
     }
     const fields: SchedulePublicationContentChange["fields"] = [];
-    const publiclyRenderable =
-      session.sourceVisibility === "public" && session.visibility === "public";
+    const publiclyRenderable = session.visibility === "public";
     if (!publiclyRenderable) {
       continue;
     }
@@ -326,19 +325,11 @@ export async function buildSchedulePublicationPreview(
     }
     return session;
   });
-  const contentVisibility = scheduledSessions
-    .filter(
-      (session) =>
-        session.sourceVisibility === "public" &&
-        session.visibility !== "public",
-    )
-    .map((session) => ({ sessionId: session.id, title: session.title }))
-    .sort(compareLabels);
+  const contentVisibility: SchedulePublicationChange[] = [];
   const contentApproval = scheduledSessions
     .filter(
       (session) =>
-        session.sourceVisibility === "public" &&
-        session.contentStatus !== "approved",
+        session.visibility === "public" && session.contentStatus !== "approved",
     )
     .map((session) => ({ sessionId: session.id, title: session.title }))
     .sort(compareLabels);

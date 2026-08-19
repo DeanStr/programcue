@@ -535,6 +535,30 @@ describe("Submissions D1 vertical slice", () => {
         .bind(created.sessionId)
         .first<{ action: string }>();
       expect(audit?.action).toBe("session.direct.created");
+      const speakerPerson = await env.DB.prepare(
+        `SELECT person.id
+           FROM people person
+           JOIN session_speakers relationship
+             ON relationship.person_id = person.id
+            AND relationship.event_id = ?
+            AND relationship.session_id = ?
+          WHERE person.email = ? COLLATE NOCASE`,
+      )
+        .bind(viewer.eventId, created.sessionId, "morgan-sponsor@example.com")
+        .first<{ id: string }>();
+      expect(speakerPerson?.id).toBeTruthy();
+      await expect(
+        env.DB.prepare(
+          `
+        SELECT task.status
+          FROM task_instances task
+          JOIN people person ON person.id = task.target_id
+         WHERE task.template_id = ? AND person.email = ? COLLATE NOCASE
+      `,
+        )
+          .bind(`resource-ack:${resourceId}`, "morgan-sponsor@example.com")
+          .first(),
+      ).resolves.toEqual({ status: "not_started" });
       const acknowledgementTask = await env.DB.prepare(
         `
         SELECT task.status

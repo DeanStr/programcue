@@ -11,6 +11,8 @@ describe("slugify", () => {
 
   it("transliterates decomposable accented characters", () => {
     expect(slugify("Café Montréal")).toBe("cafe-montreal");
+    expect(slugify("Straße München")).toBe("strasse-munchen");
+    expect(slugify("Søren")).toBe("soren");
   });
 
   it("trims at a complete slug boundary", () => {

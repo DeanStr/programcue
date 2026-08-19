@@ -17,7 +17,11 @@ export type ResourceRecoveryPayload = {
   title: string;
   slug: string;
   category: string;
-  audienceScope: "all_speakers" | "accepted_speakers" | "custom";
+  audienceScope:
+    | "all_speakers"
+    | "accepted_speakers"
+    | "confirmed_speakers"
+    | "custom";
   audiencePersonIds: string[];
   acknowledgementRequired: boolean;
   document: TiptapNode;
@@ -36,7 +40,12 @@ const recoveryPayloadSchema = z
     title: z.string(),
     slug: z.string(),
     category: z.string(),
-    audienceScope: z.enum(["all_speakers", "accepted_speakers", "custom"]),
+    audienceScope: z.enum([
+      "all_speakers",
+      "accepted_speakers",
+      "confirmed_speakers",
+      "custom",
+    ]),
     audiencePersonIds: z.array(z.string()),
     acknowledgementRequired: z.boolean(),
     document: z.unknown(),

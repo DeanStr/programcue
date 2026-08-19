@@ -43,7 +43,6 @@ async function publishedSiteReferenceProblemsForSchedule(
                WHERE entry.event_id = reference.event_id
                  AND entry.schedule_version_id = ?
                  AND entry.session_id = reference.record_id
-                 AND session.visibility = 'public'
                  AND content.visibility = 'public'
                  AND content.content_status = 'approved'
             )
@@ -68,7 +67,6 @@ async function publishedSiteReferenceProblemsForSchedule(
                WHERE entry.event_id = reference.event_id
                  AND entry.schedule_version_id = ?
                  AND relation.person_id = reference.record_id
-                 AND session.visibility = 'public'
                  AND content.visibility = 'public'
                  AND content.content_status = 'approved'
                  AND relation.visibility = 'public'
@@ -117,7 +115,6 @@ async function publishedSiteReferenceProblemsForSchedule(
            WHERE entry.event_id = recording.event_id
              AND entry.schedule_version_id = ?
              AND entry.session_id = recording.session_id
-             AND session.visibility = 'public'
              AND content.visibility = 'public'
              AND content.content_status = 'approved'
         )
@@ -174,7 +171,6 @@ export const PUBLIC_SITE_SCHEDULE_ATOMIC_GUARD = `
               WHERE site_entry.event_id = reference.event_id
                 AND site_entry.schedule_version_id = ?
                 AND site_entry.session_id = reference.record_id
-                AND site_session.visibility = 'public'
                 AND site_content.visibility = 'public'
                 AND site_content.content_status = 'approved'
            )
@@ -198,7 +194,6 @@ export const PUBLIC_SITE_SCHEDULE_ATOMIC_GUARD = `
               WHERE site_entry.event_id = reference.event_id
                 AND site_entry.schedule_version_id = ?
                 AND site_relation.person_id = reference.record_id
-                AND site_session.visibility = 'public'
                 AND site_content.visibility = 'public'
                 AND site_content.content_status = 'approved'
                 AND site_relation.visibility = 'public'
@@ -227,7 +222,6 @@ export const PUBLIC_SITE_SCHEDULE_ATOMIC_GUARD = `
           WHERE site_recording_entry.event_id = site_recording.event_id
             AND site_recording_entry.schedule_version_id = ?
             AND site_recording_entry.session_id = site_recording.session_id
-            AND site_recording_session.visibility = 'public'
             AND site_recording_content.visibility = 'public'
             AND site_recording_content.content_status = 'approved'
        )

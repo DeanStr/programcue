@@ -14,7 +14,11 @@ import {
   type EvaluatorEmailRouting,
   resolveEvaluatorEmailAlias,
 } from "~/platform/evaluation/evaluator-email-alias.server";
-import { CsvParseError, parseCsv } from "~/platform/operations/csv";
+import {
+  CsvParseError,
+  matchingCsvHeader,
+  parseCsv,
+} from "~/platform/operations/csv";
 
 const IMPORT_BYTES_LIMIT = 512_000;
 const PROFILE_LOOKUP_SIZE = 80;
@@ -188,8 +192,7 @@ export class SpeakerRosterImportService {
     const mapping = Object.fromEntries(
       Object.entries(aliases).map(([field, candidates]) => [
         field,
-        candidates.find((candidate) => parsed.headers.includes(candidate)) ??
-          null,
+        matchingCsvHeader(parsed.headers, candidates),
       ]),
     ) as Record<keyof typeof aliases, string | null>;
     if (!mapping.name || !mapping.email) {

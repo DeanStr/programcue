@@ -370,7 +370,7 @@ describe("expanded public API contract", () => {
           WHERE schedule_version_id = 'demo-schedule-published'
             AND event_id = 'evt-foe-2025' AND session_id = 'demo-session-1'`,
       ).run(),
-    ).rejects.toThrow(/cannot lose approval/i);
+    ).rejects.toThrow(/approval and visibility are immutable/i);
     const response = await publicSessionsLoader({
       request: new Request(
         "https://programcue.test/api/v1/public/events/future-of-events-2027/sessions",

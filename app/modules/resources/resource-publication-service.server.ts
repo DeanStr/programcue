@@ -30,6 +30,15 @@ const publicationCandidateAudienceSql = `(
     )
   )
   OR (
+    publish_version.audience_scope = 'confirmed_speakers'
+    AND EXISTS (
+      SELECT 1 FROM session_speakers confirmed_relationship
+       WHERE confirmed_relationship.event_id = resource_pages.event_id
+         AND confirmed_relationship.person_id = candidate.id
+         AND confirmed_relationship.participation_status = 'confirmed'
+    )
+  )
+  OR (
     publish_version.audience_scope = 'custom'
     AND EXISTS (
       SELECT 1 FROM resource_audiences audience

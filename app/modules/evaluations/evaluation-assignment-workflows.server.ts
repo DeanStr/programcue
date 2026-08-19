@@ -239,6 +239,40 @@ export class EvaluationAssignmentWorkflows extends EvaluationServiceFoundation {
          WHERE own_session_speaker.event_id = ?
            AND own_session_speaker.session_id IN (${targetPlaceholders})
            AND own_session_speaker.person_id IN (${evaluatorPlaceholders})
+      )
+      AND NOT EXISTS (
+        SELECT 1 FROM sessions own_session
+         JOIN submissions own_source
+           ON own_source.id = own_session.source_submission_id
+          AND own_source.event_id = own_session.event_id
+        WHERE own_session.event_id = ?
+          AND own_session.id IN (${targetPlaceholders})
+          AND (
+            own_source.submitter_person_id IN (${evaluatorPlaceholders})
+            OR EXISTS (
+              SELECT 1 FROM people evaluator
+               WHERE evaluator.id IN (${evaluatorPlaceholders})
+                 AND trim(evaluator.email) <> ''
+                 AND evaluator.email = own_source.submitter_email COLLATE NOCASE
+            )
+          )
+      )
+      AND NOT EXISTS (
+        SELECT 1 FROM sessions own_session
+         JOIN submission_speakers own_source_speaker
+           ON own_source_speaker.submission_id = own_session.source_submission_id
+          AND own_source_speaker.event_id = own_session.event_id
+        WHERE own_session.event_id = ?
+          AND own_session.id IN (${targetPlaceholders})
+          AND (
+            own_source_speaker.person_id IN (${evaluatorPlaceholders})
+            OR EXISTS (
+              SELECT 1 FROM people evaluator
+               WHERE evaluator.id IN (${evaluatorPlaceholders})
+                 AND trim(evaluator.email) <> ''
+                 AND evaluator.email = own_source_speaker.email COLLATE NOCASE
+            )
+          )
       )`
       }
       ${commandGuard.sql}
@@ -286,7 +320,19 @@ export class EvaluationAssignmentWorkflows extends EvaluationServiceFoundation {
             ...evaluatorPersonIds,
             ...evaluatorPersonIds,
           ]
-        : [viewer.eventId, ...parsed.targetIds, ...evaluatorPersonIds]),
+        : [
+            viewer.eventId,
+            ...parsed.targetIds,
+            ...evaluatorPersonIds,
+            viewer.eventId,
+            ...parsed.targetIds,
+            ...evaluatorPersonIds,
+            ...evaluatorPersonIds,
+            viewer.eventId,
+            ...parsed.targetIds,
+            ...evaluatorPersonIds,
+            ...evaluatorPersonIds,
+          ]),
       ...commandGuard.bindings,
     ];
     const coverageSql = `

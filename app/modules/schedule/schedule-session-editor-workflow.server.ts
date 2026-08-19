@@ -112,6 +112,7 @@ export abstract class ScheduleSessionEditorWorkflow extends ScheduleSessionResou
     const scheduledEntry = workspace.entries.find(
       (entry) => entry.sessionId === session.id,
     );
+    const durationChanged = parsed.durationMinutes !== session.durationMinutes;
     const prospectiveSession: ScheduleSession = {
       ...session,
       title: parsed.title,
@@ -130,7 +131,7 @@ export abstract class ScheduleSessionEditorWorkflow extends ScheduleSessionResou
         candidate.id === session.id ? prospectiveSession : candidate,
       ),
       entries: workspace.entries.map((entry) =>
-        entry.sessionId === session.id
+        entry.sessionId === session.id && durationChanged
           ? {
               ...entry,
               endsAt: entry.startsAt + parsed.durationMinutes * 60,
@@ -282,7 +283,7 @@ export abstract class ScheduleSessionEditorWorkflow extends ScheduleSessionResou
         `UPDATE sessions
             SET title = ?, description = ?, track_id = ?, format = ?,
                 duration_minutes = ?, required_resources_json = ?,
-                visibility = ?, revision = revision + 1,
+                revision = revision + 1,
                 updated_at = unixepoch()
           WHERE id = ? AND event_id = ? AND revision = ?
             AND EXISTS (
@@ -297,7 +298,6 @@ export abstract class ScheduleSessionEditorWorkflow extends ScheduleSessionResou
         parsed.format,
         parsed.durationMinutes,
         JSON.stringify(parsed.requiredResources),
-        parsed.visibility,
         session.id,
         viewer.eventId,
         parsed.sessionRevision,
@@ -366,7 +366,7 @@ export abstract class ScheduleSessionEditorWorkflow extends ScheduleSessionResou
         commandId,
         nextContentRevision,
       ),
-      ...(scheduledEntry
+      ...(scheduledEntry && durationChanged
         ? [
             this.env.DB.prepare(
               `UPDATE schedule_entries

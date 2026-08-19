@@ -3,9 +3,16 @@ export function sanitizeSlugInput(
   options: { maximumLength?: number | null } = {},
 ) {
   const sanitized = value
+    .toLocaleLowerCase("en")
+    .replaceAll("ß", "ss")
+    .replaceAll("æ", "ae")
+    .replaceAll("œ", "oe")
+    .replaceAll("ø", "o")
+    .replaceAll("ł", "l")
+    .replaceAll("đ", "d")
+    .replaceAll("þ", "th")
     .normalize("NFKD")
     .replace(/[\u0300-\u036f]/gu, "")
-    .toLocaleLowerCase("en")
     .replace(/[^a-z0-9]+/gu, "-")
     .replace(/-+/gu, "-")
     .replace(/^-/gu, "");

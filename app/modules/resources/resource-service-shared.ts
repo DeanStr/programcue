@@ -14,7 +14,12 @@ export const resourceInputSchema = z
       )
       .max(100),
     category: z.string().trim().max(100),
-    audienceScope: z.enum(["all_speakers", "accepted_speakers", "custom"]),
+    audienceScope: z.enum([
+      "all_speakers",
+      "accepted_speakers",
+      "confirmed_speakers",
+      "custom",
+    ]),
     audiencePersonIds: z.array(z.string().trim().min(1)).max(1_000).default([]),
     acknowledgementRequired: z
       .union([z.literal("true"), z.literal("false"), z.boolean()])
@@ -93,7 +98,11 @@ export type PageRow = {
   slug: string;
   category: string | null;
   status: "draft" | "published" | "archived";
-  audienceScope: "all_speakers" | "accepted_speakers" | "custom";
+  audienceScope:
+    | "all_speakers"
+    | "accepted_speakers"
+    | "confirmed_speakers"
+    | "custom";
   acknowledgementRequired: number;
   revision: number;
   updatedAt: number;
@@ -110,7 +119,11 @@ export type ResourcePublishPage = {
   title: string;
   slug: string;
   category: string | null;
-  audienceScope: "all_speakers" | "accepted_speakers" | "custom";
+  audienceScope:
+    | "all_speakers"
+    | "accepted_speakers"
+    | "confirmed_speakers"
+    | "custom";
   revision: number;
   acknowledgementRequired: number;
   versionId: string;
@@ -139,7 +152,13 @@ export function participantAudienceSql(
     AND (
     ${versionAlias}.audience_scope = 'all_speakers'
     OR (${versionAlias}.audience_scope = 'accepted_speakers' AND EXISTS (
-      SELECT 1 FROM session_speakers ss WHERE ss.event_id = rp.event_id AND ss.person_id = ${personIdSql}
+      SELECT 1 FROM session_speakers ss
+       WHERE ss.event_id = rp.event_id AND ss.person_id = ${personIdSql}
+    ))
+    OR (${versionAlias}.audience_scope = 'confirmed_speakers' AND EXISTS (
+      SELECT 1 FROM session_speakers ss
+       WHERE ss.event_id = rp.event_id AND ss.person_id = ${personIdSql}
+         AND ss.participation_status = 'confirmed'
     ))
     OR (${versionAlias}.audience_scope = 'custom' AND EXISTS (
       SELECT 1 FROM resource_audiences ra
@@ -149,7 +168,8 @@ export function participantAudienceSql(
            OR (ra.target_type = 'role' AND ra.target_id = 'speaker')
            OR (ra.target_type = 'session' AND EXISTS (
              SELECT 1 FROM session_speakers ss
-              WHERE ss.event_id = rp.event_id AND ss.session_id = ra.target_id AND ss.person_id = ${personIdSql}
+              WHERE ss.event_id = rp.event_id AND ss.session_id = ra.target_id
+                AND ss.person_id = ${personIdSql}
            ))
          )
     ))
@@ -167,6 +187,7 @@ export function participantSpeakerAccessSql(
       SELECT 1 FROM session_speakers entitled_speaker
        WHERE entitled_speaker.event_id = rp.event_id
          AND entitled_speaker.person_id = ${personIdSql}
+         AND entitled_speaker.participation_status IN ('pending','confirmed')
     )
   )`;
 }

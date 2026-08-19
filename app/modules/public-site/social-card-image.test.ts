@@ -13,6 +13,15 @@ describe("social card markup", () => {
       "Events",
       "2027",
     ]);
+    expect(
+      wrapSocialCardText("x".repeat(80), 30).every((line) => line.length <= 30),
+    ).toBe(true);
+    expect(
+      wrapSocialCardText("未来のイベント国際会議2027", 4).join(""),
+    ).toContain("…");
+    const emojiLines = wrapSocialCardText("👨‍👩‍👧‍👦".repeat(8), 2);
+    expect(emojiLines.every((line) => !line.includes("\uFFFD"))).toBe(true);
+    expect(emojiLines.join("")).toContain("…");
   });
 
   it("rejects an invalid published accent", () => {

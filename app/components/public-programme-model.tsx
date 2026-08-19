@@ -103,14 +103,30 @@ export function eventHeroImagePath(event: PublishedProgramme["event"]) {
   }
 }
 
+function firstGrapheme(value: string) {
+  if (typeof Intl !== "undefined" && "Segmenter" in Intl) {
+    const segment = new Intl.Segmenter("en", {
+      granularity: "grapheme",
+    }).segment(value);
+    return [...segment][0]?.segment ?? "";
+  }
+  return [...value][0] ?? "";
+}
+
+function isEmojiGrapheme(value: string) {
+  return /\p{Extended_Pictographic}|\p{Regional_Indicator}/u.test(value);
+}
+
 export function initials(name: string) {
+  const letters = name
+    .split(/\s+/u)
+    .map((part) => firstGrapheme(part))
+    .filter((part) => part && !isEmojiGrapheme(part));
+  const fallback = firstGrapheme(name.trim());
   return (
-    name
-      .split(/\s+/u)
-      .map((part) => part[0])
-      .filter(Boolean)
-      .join("")
-      .slice(0, 2) || "PC"
+    letters.slice(0, 2).join("") ||
+    (fallback && !isEmojiGrapheme(fallback) ? fallback : "") ||
+    "PC"
   );
 }
 

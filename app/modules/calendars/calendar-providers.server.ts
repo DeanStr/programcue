@@ -138,47 +138,13 @@ async function parseProviderResponse(
   return { providerEventId: parsed.data.id };
 }
 
-function microsoftLocalDateTime(instant: string, timeZone: string) {
+export function microsoftUtcDateTime(instant: string) {
   const date = new Date(instant);
   if (!Number.isFinite(date.getTime()))
     throw new CalendarProviderConfigurationError(
       "Microsoft 365 calendar dates must be valid instants.",
     );
-  let parts: Intl.DateTimeFormatPart[];
-  try {
-    parts = new Intl.DateTimeFormat("en-CA", {
-      timeZone,
-      calendar: "gregory",
-      numberingSystem: "latn",
-      year: "numeric",
-      month: "2-digit",
-      day: "2-digit",
-      hour: "2-digit",
-      minute: "2-digit",
-      second: "2-digit",
-      hourCycle: "h23",
-    }).formatToParts(date);
-  } catch {
-    throw new CalendarProviderConfigurationError(
-      `Microsoft 365 calendar timezone ${timeZone} is invalid.`,
-    );
-  }
-  const value = (type: Intl.DateTimeFormatPartTypes) =>
-    parts.find((part) => part.type === type)?.value;
-  const [year, month, day, hour, minute, second] = [
-    value("year"),
-    value("month"),
-    value("day"),
-    value("hour"),
-    value("minute"),
-    value("second"),
-  ];
-  if (!year || !month || !day || !hour || !minute || !second) {
-    throw new CalendarProviderConfigurationError(
-      "Microsoft 365 calendar dates could not be represented in the event timezone.",
-    );
-  }
-  return `${year}-${month}-${day}T${hour}:${minute}:${second}`;
+  return date.toISOString().replace(/\.\d{3}Z$/u, "");
 }
 
 export class GoogleCalendarProvider implements DirectCalendarProvider {
@@ -393,12 +359,12 @@ export class MicrosoftCalendarProvider implements DirectCalendarProvider {
       body: { contentType: "text", content: input.description },
       location: { displayName: input.location },
       start: {
-        dateTime: microsoftLocalDateTime(input.startsAtIso, input.timezone),
-        timeZone: input.timezone,
+        dateTime: microsoftUtcDateTime(input.startsAtIso),
+        timeZone: "UTC",
       },
       end: {
-        dateTime: microsoftLocalDateTime(input.endsAtIso, input.timezone),
-        timeZone: input.timezone,
+        dateTime: microsoftUtcDateTime(input.endsAtIso),
+        timeZone: "UTC",
       },
       attendees: [
         {

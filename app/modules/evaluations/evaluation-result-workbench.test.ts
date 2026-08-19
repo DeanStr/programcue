@@ -35,6 +35,27 @@ describe("evaluation result workbench rules", () => {
     ).toMatchObject({ decisionReady: false });
     expect(
       evaluationResultFlags({
+        assignmentCount: 0,
+        completedReviewCount: 0,
+        recusedCount: 3,
+        recommendationCounts: {},
+        moderationStatus: null,
+      }),
+    ).toMatchObject({
+      decisionReady: false,
+      incomplete: false,
+    });
+    expect(
+      matchesEvaluationResultPreset("coverage", {
+        assignmentCount: 0,
+        completedReviewCount: 0,
+        recusedCount: 3,
+        recommendationCounts: {},
+        moderationStatus: null,
+      }),
+    ).toBe(true);
+    expect(
+      evaluationResultFlags({
         ...complete,
         recommendationCounts: { accept: 1, reject: 1 },
       }),

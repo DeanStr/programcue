@@ -667,4 +667,204 @@ describe("schedule content and draft workflows", () => {
     });
     expect((await service.getWorkspace(viewer)).conflicts).toEqual([]);
   });
+
+  it("does not rewrite a resized entry when only session content changes", async () => {
+    const service = new ScheduleService(scheduleTestEnv);
+    const versionId = await service.createDraft(viewer);
+    let workspace = await service.getWorkspace(viewer);
+    const startsAt = eventLocalTimeEpoch(
+      workspace.event.startsAt,
+      workspace.event.timezone,
+      9,
+    );
+    await service.place(viewer, {
+      scheduleVersionId: versionId,
+      scheduleRevision: workspace.version!.revision,
+      sessionId: "schedule-test-one",
+      roomId: "main",
+      startsAt,
+      endsAt: startsAt + 3_600,
+    });
+    workspace = await service.getWorkspace(viewer);
+    const entry = workspace.entries[0]!;
+    await env.DB.prepare(
+      `UPDATE schedule_entries
+          SET ends_at = ?, revision = revision + 1
+        WHERE id = ? AND event_id = ?`,
+    )
+      .bind(startsAt + 5_400, entry.id, viewer.eventId)
+      .run();
+    const session = workspace.sessions.find(
+      (candidate) => candidate.id === "schedule-test-one",
+    )!;
+    expect(session.durationMinutes).toBe(60);
+    workspace = await service.getWorkspace(viewer);
+    await service.updateSessionContent(
+      viewer,
+      {
+        scheduleVersionId: versionId,
+        scheduleRevision: workspace.version!.revision,
+        sessionId: session.id,
+        sessionRevision: workspace.sessions.find(
+          (candidate) => candidate.id === session.id,
+        )!.revision,
+        idempotencyKey: crypto.randomUUID(),
+        title: "Retitled after a calendar resize",
+        description: session.description ?? "",
+        format: session.format,
+        durationMinutes: 60,
+        trackId: session.trackId,
+        visibility: session.visibility,
+        requiredResources: session.requiredResources,
+      },
+      "admin_ui",
+    );
+    const after = await env.DB.prepare(
+      `SELECT ends_at AS endsAt, title
+         FROM schedule_entries entry
+         JOIN sessions session
+           ON session.id = entry.session_id AND session.event_id = entry.event_id
+        WHERE entry.id = ? AND entry.event_id = ?`,
+    )
+      .bind(entry.id, viewer.eventId)
+      .first<{ endsAt: number; title: string }>();
+    expect(after).toEqual({
+      endsAt: startsAt + 5_400,
+      title: "Retitled after a calendar resize",
+    });
+  });
+
+  it("keeps the live session visibility while a draft snapshot is hidden", async () => {
+    const service = new ScheduleService(scheduleTestEnv);
+    const versionId = await service.createDraft(viewer);
+    let workspace = await service.getWorkspace(viewer);
+    const startsAt = eventLocalTimeEpoch(
+      workspace.event.startsAt,
+      workspace.event.timezone,
+      9,
+    );
+    await service.place(viewer, {
+      scheduleVersionId: versionId,
+      scheduleRevision: workspace.version!.revision,
+      sessionId: "schedule-test-one",
+      roomId: "main",
+      startsAt,
+      endsAt: startsAt + 3_600,
+    });
+    workspace = await service.getWorkspace(viewer);
+    const session = workspace.sessions.find(
+      (candidate) => candidate.id === "schedule-test-one",
+    )!;
+    await service.updateSessionContent(
+      viewer,
+      {
+        scheduleVersionId: versionId,
+        scheduleRevision: workspace.version!.revision,
+        sessionId: session.id,
+        sessionRevision: session.revision,
+        idempotencyKey: crypto.randomUUID(),
+        title: session.title,
+        description: session.description ?? "",
+        format: session.format,
+        durationMinutes: session.durationMinutes,
+        trackId: session.trackId,
+        visibility: "private",
+        requiredResources: session.requiredResources,
+      },
+      "admin_ui",
+    );
+    const [live, snapshot] = await Promise.all([
+      env.DB.prepare(
+        "SELECT visibility FROM sessions WHERE id = ? AND event_id = ?",
+      )
+        .bind(session.id, viewer.eventId)
+        .first<{ visibility: string }>(),
+      env.DB.prepare(
+        `SELECT visibility
+           FROM schedule_session_contents
+          WHERE schedule_version_id = ? AND event_id = ? AND session_id = ?`,
+      )
+        .bind(versionId, viewer.eventId, session.id)
+        .first<{ visibility: string }>(),
+    ]);
+    expect(live).toEqual({ visibility: "public" });
+    expect(snapshot).toEqual({ visibility: "private" });
+    expect(
+      (await service.getWorkspace(viewer)).sessions.find(
+        (candidate) => candidate.id === session.id,
+      )?.visibility,
+    ).toBe("private");
+
+    workspace = await service.getWorkspace(viewer);
+    await service.publish(viewer, {
+      scheduleVersionId: versionId,
+      scheduleRevision: workspace.version!.revision,
+    });
+    expect(
+      await env.DB.prepare(
+        "SELECT status, visibility FROM sessions WHERE id = ? AND event_id = ?",
+      )
+        .bind(session.id, viewer.eventId)
+        .first(),
+    ).toEqual({ status: "published", visibility: "private" });
+  });
+
+  it("publishes a public snapshot even when the live session is still hidden", async () => {
+    const service = new ScheduleService(scheduleTestEnv);
+    const versionId = await service.createDraft(viewer);
+    let workspace = await service.getWorkspace(viewer);
+    const startsAt = eventLocalTimeEpoch(
+      workspace.event.startsAt,
+      workspace.event.timezone,
+      9,
+    );
+    await service.place(viewer, {
+      scheduleVersionId: versionId,
+      scheduleRevision: workspace.version!.revision,
+      sessionId: "schedule-test-one",
+      roomId: "main",
+      startsAt,
+      endsAt: startsAt + 3_600,
+    });
+    await env.DB.prepare(
+      `UPDATE sessions SET visibility = 'hidden' WHERE id = ? AND event_id = ?`,
+    )
+      .bind("schedule-test-one", viewer.eventId)
+      .run();
+    workspace = await service.getWorkspace(viewer);
+    const session = workspace.sessions.find(
+      (candidate) => candidate.id === "schedule-test-one",
+    )!;
+    await service.updateSessionContent(
+      viewer,
+      {
+        scheduleVersionId: versionId,
+        scheduleRevision: workspace.version!.revision,
+        sessionId: session.id,
+        sessionRevision: session.revision,
+        idempotencyKey: crypto.randomUUID(),
+        title: session.title,
+        description: session.description ?? "",
+        format: session.format,
+        durationMinutes: session.durationMinutes,
+        trackId: session.trackId,
+        visibility: "public",
+        requiredResources: session.requiredResources,
+      },
+      "admin_ui",
+    );
+    await approveScheduledTestContent(versionId);
+    workspace = await service.getWorkspace(viewer);
+    await service.publish(viewer, {
+      scheduleVersionId: versionId,
+      scheduleRevision: workspace.version!.revision,
+    });
+    expect(
+      await env.DB.prepare(
+        "SELECT status, visibility FROM sessions WHERE id = ? AND event_id = ?",
+      )
+        .bind(session.id, viewer.eventId)
+        .first(),
+    ).toEqual({ status: "published", visibility: "public" });
+  });
 });

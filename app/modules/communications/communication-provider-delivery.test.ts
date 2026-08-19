@@ -1585,7 +1585,7 @@ describe("Communications D1 vertical slice", () => {
         /^programcue:communication-delivery:v1:[0-9a-f]{64}$/,
       );
       expect(requests[1]).toMatchObject({
-        from: `${intent.senderFromName} <${intent.senderFromEmail}>`,
+        from: `"${intent.senderFromName}" <${intent.senderFromEmail}>`,
         to: ["alex.submitter@example.com"],
         subject: "Your proposal was accepted",
       });

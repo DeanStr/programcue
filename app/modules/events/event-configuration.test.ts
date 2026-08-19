@@ -45,6 +45,20 @@ function setupInput(
 }
 
 describe("event configuration", () => {
+  it("accepts any timezone supported by the runtime", () => {
+    expect(
+      eventSetupInputSchema.safeParse(setupInput({ timezone: "EST" })).success,
+    ).toBe(true);
+    expect(
+      eventSetupInputSchema.safeParse(setupInput({ timezone: "Etc/GMT+4" }))
+        .success,
+    ).toBe(true);
+    expect(
+      eventSetupInputSchema.safeParse(
+        setupInput({ timezone: "America/Toronto" }),
+      ).success,
+    ).toBe(true);
+  });
   it("strictly parses and deterministically orders session formats", () => {
     expect(
       parseSessionFormatsConfiguration(

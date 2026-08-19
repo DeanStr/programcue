@@ -7,6 +7,7 @@ import {
 } from "~/modules/files/direct-upload.test-helper";
 import { FileService } from "~/modules/files/file-service.server";
 import { ensureDemoSpeakerData } from "~/modules/speakers/demo.server";
+import { SpeakerService } from "~/modules/speakers/speaker-service.server";
 import { TaskService } from "~/modules/tasks/task-service.server";
 import type { Viewer } from "~/platform/auth/authorize.server";
 import { ResourceAuthoringService } from "./resource-authoring-service.server";
@@ -1531,6 +1532,86 @@ describe("speaker resource service", () => {
     await expect(
       files.participantResourceDownload(speaker, second.assetId),
     ).rejects.toThrow("unavailable");
+  });
+
+  it("distinguishes accepted and confirmed speaker resource audiences", async () => {
+    const testEnv = env as unknown as CloudflareEnvironment;
+    await ensureDemoSpeakerData(testEnv);
+    await testEnv.DB.prepare(
+      `UPDATE session_speakers
+          SET participation_status = 'pending', participation_confirmed_at = NULL
+        WHERE event_id = ? AND session_id = 'session-demo-speaker'
+          AND person_id = ?`,
+    )
+      .bind(admin.eventId, speaker.personId)
+      .run();
+
+    const resources = new ResourceService(testEnv);
+    const savePage = (
+      audienceScope: "accepted_speakers" | "confirmed_speakers",
+    ) =>
+      resources.save(admin, {
+        title:
+          audienceScope === "accepted_speakers"
+            ? "Accepted session briefing"
+            : "Confirmed session briefing",
+        slug: `${audienceScope.replaceAll("_", "-")}-${crypto.randomUUID().slice(0, 8)}`,
+        category: "Preparation",
+        audienceScope,
+        acknowledgementRequired: true,
+        document: {
+          type: "doc",
+          content: [
+            {
+              type: "paragraph",
+              content: [{ type: "text", text: "Audience-specific briefing." }],
+            },
+          ],
+        },
+      });
+    const acceptedPageId = await savePage("accepted_speakers");
+    const confirmedPageId = await savePage("confirmed_speakers");
+    const acceptedDraft = (
+      await resources.getAdminWorkspace(admin, acceptedPageId)
+    ).selected!;
+    const confirmedDraft = (
+      await resources.getAdminWorkspace(admin, confirmedPageId)
+    ).selected!;
+    await resources.publish(admin, acceptedPageId, acceptedDraft.revision);
+    await resources.publish(admin, confirmedPageId, confirmedDraft.revision);
+
+    const acceptedTaskId = `resource-ack:${acceptedPageId}:${speaker.personId}`;
+    const confirmedTaskId = `resource-ack:${confirmedPageId}:${speaker.personId}`;
+    await expect(
+      testEnv.DB.prepare("SELECT status FROM task_instances WHERE id = ?")
+        .bind(acceptedTaskId)
+        .first(),
+    ).resolves.toEqual({ status: "not_started" });
+    await expect(
+      testEnv.DB.prepare("SELECT status FROM task_instances WHERE id = ?")
+        .bind(confirmedTaskId)
+        .first(),
+    ).resolves.toBeNull();
+
+    await expect(
+      resources.getParticipantWorkspace(speaker, acceptedDraft.slug),
+    ).resolves.toHaveProperty("selected.id", acceptedPageId);
+    await expect(
+      resources.getParticipantWorkspace(speaker, confirmedDraft.slug),
+    ).rejects.toMatchObject({ status: 404 });
+
+    await new SpeakerService(testEnv).confirmOwnParticipation(speaker, {
+      sessionId: "session-demo-speaker",
+      confirmation: "confirmed",
+    });
+    await expect(
+      testEnv.DB.prepare("SELECT status FROM task_instances WHERE id = ?")
+        .bind(confirmedTaskId)
+        .first(),
+    ).resolves.toEqual({ status: "not_started" });
+    await expect(
+      resources.getParticipantWorkspace(speaker, confirmedDraft.slug),
+    ).resolves.toHaveProperty("selected.id", confirmedPageId);
   });
 
   it("escapes text and rejects malformed or disabled provider blocks", () => {

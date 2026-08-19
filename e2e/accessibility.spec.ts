@@ -371,6 +371,11 @@ test("resource authoring exposes typed click-to-load video and map blocks", asyn
   page,
 }) => {
   await waitForInterface(page, "/admin/resources");
+  await expect(
+    page.getByLabel("Audience").getByRole("option", {
+      name: "Speakers with confirmed sessions",
+    }),
+  ).toBeAttached();
   const editor = page.getByRole("textbox", { name: "Page content" });
   await expect(editor).toBeVisible();
   await expect(editor).toHaveAttribute("contenteditable", "true");

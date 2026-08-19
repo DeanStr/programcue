@@ -381,5 +381,12 @@ describe("submission form rules", () => {
       storedFormSchemaSchema.safeParse(placeholderExample.schema).success,
     ).toBe(true);
     expect(saveFormSchema.safeParse(input).success).toBe(true);
+    expect(
+      saveFormSchema.safeParse({ ...input, closeDate: "2027-02-30" }).success,
+    ).toBe(false);
+    expect(
+      saveFormSchema.safeParse({ ...input, publicSlug: "a".repeat(161) })
+        .success,
+    ).toBe(false);
   });
 });

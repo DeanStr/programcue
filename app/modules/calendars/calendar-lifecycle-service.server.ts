@@ -742,10 +742,20 @@ export class CalendarLifecycleService {
          AND content.session_id = s.id
         JOIN rooms r ON r.id = se.room_id AND r.event_id = s.event_id
        WHERE s.id = ? AND s.event_id = ?
+         AND (
+           ? = 'CANCEL'
+           OR (
+             s.status = 'published'
+             AND s.visibility = 'public'
+             AND content.visibility = 'public'
+             AND ss.participation_status = 'confirmed'
+             AND ss.visibility = 'public'
+           )
+         )
        LIMIT 1
     `,
     )
-      .bind(viewer.organisationId, personId, sessionId, viewer.eventId)
+      .bind(viewer.organisationId, personId, sessionId, viewer.eventId, method)
       .first<SessionCalendarRow>();
     if (current || method === "REQUEST") return current;
     return this.env.DB.prepare(

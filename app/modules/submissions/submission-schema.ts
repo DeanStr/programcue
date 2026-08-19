@@ -363,14 +363,12 @@ export const saveFormSchema = z
     publicSlug: z
       .string()
       .trim()
+      .max(160)
       .regex(
         /^[a-z0-9]+(?:-[a-z0-9]+)*$/,
         "Use lowercase letters, numbers and hyphens",
       ),
-    closeDate: z
-      .string()
-      .regex(/^\d{4}-\d{2}-\d{2}$/)
-      .nullable(),
+    closeDate: z.iso.date().nullable(),
     submissionLimit: nullablePositiveInteger,
     minSpeakers: z.coerce.number().int().min(1).max(MAX_SUBMISSION_SPEAKERS),
     maxSpeakers: nullablePositiveInteger.pipe(

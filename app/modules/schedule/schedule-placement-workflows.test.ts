@@ -701,4 +701,195 @@ describe("schedule placement workflows", () => {
       requiredResources: [],
     });
   });
+
+  it("stores the placed span as the session duration", async () => {
+    const service = new ScheduleService(
+      env as unknown as CloudflareEnvironment,
+    );
+    const versionId = await service.createDraft(viewer);
+    let workspace = await service.getWorkspace(viewer);
+    const startsAt = eventLocalTimeEpoch(
+      workspace.event.startsAt,
+      workspace.event.timezone,
+      9,
+    );
+    const placement = await service.place(viewer, {
+      scheduleVersionId: versionId,
+      scheduleRevision: workspace.version!.revision,
+      sessionId: "schedule-test-one",
+      roomId: "main",
+      startsAt,
+      endsAt: startsAt + 5_400,
+    });
+    await expect(
+      env.DB.prepare(
+        `SELECT duration_minutes AS durationMinutes
+           FROM sessions WHERE id = ? AND event_id = ?`,
+      )
+        .bind("schedule-test-one", viewer.eventId)
+        .first(),
+    ).resolves.toEqual({ durationMinutes: 90 });
+    expect(
+      (await service.getWorkspace(viewer)).sessions.find(
+        (session) => session.id === "schedule-test-one",
+      )?.durationMinutes,
+    ).toBe(90);
+
+    workspace = await service.getWorkspace(viewer);
+    await service.undo(viewer, {
+      scheduleVersionId: versionId,
+      scheduleRevision: workspace.version!.revision,
+      undoToken: placement.undo.token,
+    });
+    expect(
+      (await service.getWorkspace(viewer)).sessions.find(
+        (session) => session.id === "schedule-test-one",
+      )?.durationMinutes,
+    ).toBe(60);
+    await expect(
+      env.DB.prepare(
+        `SELECT duration_minutes AS durationMinutes
+           FROM sessions WHERE id = ? AND event_id = ?`,
+      )
+        .bind("schedule-test-one", viewer.eventId)
+        .first(),
+    ).resolves.toEqual({ durationMinutes: 60 });
+  });
+
+  it("returns approved content to draft when a placement changes duration", async () => {
+    const service = new ScheduleService(
+      env as unknown as CloudflareEnvironment,
+    );
+    const versionId = await service.createDraft(viewer);
+    let workspace = await service.getWorkspace(viewer);
+    const startsAt = eventLocalTimeEpoch(
+      workspace.event.startsAt,
+      workspace.event.timezone,
+      9,
+    );
+    await service.place(viewer, {
+      scheduleVersionId: versionId,
+      scheduleRevision: workspace.version!.revision,
+      sessionId: "schedule-test-one",
+      roomId: "main",
+      startsAt,
+      endsAt: startsAt + 3_600,
+    });
+    await approveScheduledTestContent(versionId);
+    workspace = await service.getWorkspace(viewer);
+    const resized = await service.place(viewer, {
+      scheduleVersionId: versionId,
+      scheduleRevision: workspace.version!.revision,
+      sessionId: "schedule-test-one",
+      roomId: "main",
+      startsAt,
+      endsAt: startsAt + 5_400,
+    });
+    expect(
+      await env.DB.prepare(
+        `SELECT content_status AS contentStatus,
+                content_revision AS contentRevision,
+                duration_minutes AS durationMinutes
+           FROM schedule_session_contents
+          WHERE schedule_version_id = ? AND event_id = ? AND session_id = ?`,
+      )
+        .bind(versionId, viewer.eventId, "schedule-test-one")
+        .first(),
+    ).toMatchObject({
+      contentStatus: "draft",
+      contentRevision: 2,
+      durationMinutes: 90,
+    });
+    expect(
+      await env.DB.prepare(
+        `SELECT change_kind AS changeKind, duration_minutes AS durationMinutes
+           FROM session_content_revisions
+          WHERE schedule_version_id = ? AND event_id = ? AND session_id = ?
+          ORDER BY revision_number DESC LIMIT 1`,
+      )
+        .bind(versionId, viewer.eventId, "schedule-test-one")
+        .first(),
+    ).toEqual({ changeKind: "edit", durationMinutes: 90 });
+
+    workspace = await service.getWorkspace(viewer);
+    await service.undo(viewer, {
+      scheduleVersionId: versionId,
+      scheduleRevision: workspace.version!.revision,
+      undoToken: resized.undo.token,
+    });
+    expect(
+      await env.DB.prepare(
+        `SELECT content_status AS contentStatus,
+                duration_minutes AS durationMinutes,
+                approved_by_person_id AS approvedByPersonId,
+                approval_source AS approvalSource
+           FROM schedule_session_contents
+          WHERE schedule_version_id = ? AND event_id = ? AND session_id = ?`,
+      )
+        .bind(versionId, viewer.eventId, "schedule-test-one")
+        .first(),
+    ).toMatchObject({
+      contentStatus: "approved",
+      durationMinutes: 60,
+      approvedByPersonId: viewer.personId,
+      approvalSource: "editorial",
+    });
+  });
+
+  it("increments session revision when undoing a published session resize", async () => {
+    const service = new ScheduleService(scheduleTestEnv);
+    const versionId = await service.createDraft(viewer);
+    let workspace = await service.getWorkspace(viewer);
+    const startsAt = eventLocalTimeEpoch(
+      workspace.event.startsAt,
+      workspace.event.timezone,
+      9,
+    );
+    await service.place(viewer, {
+      scheduleVersionId: versionId,
+      scheduleRevision: workspace.version!.revision,
+      sessionId: "schedule-test-one",
+      roomId: "main",
+      startsAt,
+      endsAt: startsAt + 3_600,
+    });
+    await approveScheduledTestContent(versionId);
+    workspace = await service.getWorkspace(viewer);
+    await service.publish(viewer, {
+      scheduleVersionId: versionId,
+      scheduleRevision: workspace.version!.revision,
+    });
+    const publishedDraftId = await service.createDraft(viewer);
+    workspace = await service.getWorkspace(viewer);
+    const resized = await service.place(viewer, {
+      scheduleVersionId: publishedDraftId,
+      scheduleRevision: workspace.version!.revision,
+      sessionId: "schedule-test-one",
+      roomId: "main",
+      startsAt,
+      endsAt: startsAt + 5_400,
+    });
+    const afterResize = await env.DB.prepare(
+      `SELECT revision FROM sessions WHERE id = ? AND event_id = ?`,
+    )
+      .bind("schedule-test-one", viewer.eventId)
+      .first<{ revision: number }>();
+    workspace = await service.getWorkspace(viewer);
+    await service.undo(viewer, {
+      scheduleVersionId: publishedDraftId,
+      scheduleRevision: workspace.version!.revision,
+      undoToken: resized.undo.token,
+    });
+    await expect(
+      env.DB.prepare(
+        `SELECT revision, duration_minutes AS durationMinutes
+           FROM sessions WHERE id = ? AND event_id = ?`,
+      )
+        .bind("schedule-test-one", viewer.eventId)
+        .first(),
+    ).resolves.toEqual({
+      revision: afterResize!.revision + 1,
+      durationMinutes: 60,
+    });
+  });
 });

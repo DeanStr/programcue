@@ -123,19 +123,13 @@ export function buildSchedulePublicationStatements(input: {
            AND NOT EXISTS (
              SELECT 1
                FROM schedule_entries entry
-               JOIN sessions session
-                 ON session.id = entry.session_id
-                AND session.event_id = entry.event_id
-                AND session.visibility = 'public'
                JOIN schedule_session_contents content
                  ON content.schedule_version_id = entry.schedule_version_id
                 AND content.event_id = entry.event_id
                 AND content.session_id = entry.session_id
               WHERE entry.schedule_version_id = ? AND entry.event_id = ?
-                AND (
-                  content.visibility <> 'public'
-                  OR content.content_status <> 'approved'
-                )
+                AND content.visibility = 'public'
+                AND content.content_status <> 'approved'
            )
            AND NOT EXISTS (
              SELECT 1
@@ -200,9 +194,43 @@ export function buildSchedulePublicationStatements(input: {
     ).bind(parsed.scheduleVersionId, viewer.eventId, publishOperationId),
     env.DB.prepare(
       `
-        UPDATE sessions SET status = 'published', revision = revision + 1, updated_at = unixepoch()
+        UPDATE sessions
+           SET status = 'published',
+               visibility = COALESCE(
+                 (
+                   SELECT content.visibility
+                     FROM schedule_session_contents content
+                    WHERE content.schedule_version_id = ?
+                      AND content.event_id = sessions.event_id
+                      AND content.session_id = sessions.id
+                 ),
+                 visibility
+               ),
+               revision = revision + 1,
+               updated_at = unixepoch()
          WHERE event_id = ? AND id IN (SELECT session_id FROM schedule_entries WHERE schedule_version_id = ?)
            AND EXISTS (SELECT 1 FROM schedule_versions WHERE id = ? AND publication_operation_id = ?)
+      `,
+    ).bind(
+      parsed.scheduleVersionId,
+      viewer.eventId,
+      parsed.scheduleVersionId,
+      parsed.scheduleVersionId,
+      publishOperationId,
+    ),
+    env.DB.prepare(
+      `
+        UPDATE sessions
+           SET status = 'unscheduled', revision = revision + 1, updated_at = unixepoch()
+         WHERE event_id = ?
+           AND status = 'published'
+           AND id NOT IN (
+             SELECT session_id FROM schedule_entries WHERE schedule_version_id = ?
+           )
+           AND EXISTS (
+             SELECT 1 FROM schedule_versions
+              WHERE id = ? AND publication_operation_id = ?
+           )
       `,
     ).bind(
       viewer.eventId,

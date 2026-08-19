@@ -95,6 +95,12 @@ export function parseCsv(input: string): ParsedCsv {
   if (new Set(headers).size !== headers.length) {
     throw new CsvParseError("CSV headers must be unique.");
   }
+  const foldedHeaders = headers.map((header) => header.toLocaleLowerCase("en"));
+  if (new Set(foldedHeaders).size !== foldedHeaders.length) {
+    throw new CsvParseError(
+      "CSV headers that differ only by capitalisation are not unique.",
+    );
+  }
   const body = records.slice(1);
   if (!body.length) throw new CsvParseError("The CSV file has no data rows.");
   if (body.length > MAX_ROWS) {
@@ -113,4 +119,18 @@ export function parseCsv(input: string): ParsedCsv {
       );
     }),
   };
+}
+
+export function matchingCsvHeader(
+  headers: readonly string[],
+  candidates: readonly string[],
+): string | null {
+  for (const candidate of candidates) {
+    const needle = candidate.toLocaleLowerCase("en");
+    const match = headers.find(
+      (header) => header.toLocaleLowerCase("en") === needle,
+    );
+    if (match !== undefined) return match;
+  }
+  return null;
 }

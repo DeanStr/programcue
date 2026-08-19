@@ -217,18 +217,18 @@ export class AirtableProgrammeRepository {
     const missingContent = await this.env.DB.prepare(
       `SELECT entry.session_id AS sessionId
          FROM schedule_entries entry
-         JOIN sessions session
-           ON session.id = entry.session_id AND session.event_id = entry.event_id
-          AND session.status IN ('scheduled','published')
-          AND session.visibility = 'public'
          LEFT JOIN schedule_session_contents content
            ON content.schedule_version_id = entry.schedule_version_id
           AND content.session_id = entry.session_id
           AND content.event_id = entry.event_id
-          AND content.visibility = 'public'
-          AND content.content_status = 'approved'
         WHERE entry.event_id = ? AND entry.schedule_version_id = ?
-          AND content.session_id IS NULL
+          AND (
+            content.session_id IS NULL
+            OR (
+              content.visibility = 'public'
+              AND content.content_status <> 'approved'
+            )
+          )
         ORDER BY entry.session_id
         LIMIT 1`,
     )
@@ -277,16 +277,12 @@ export class AirtableProgrammeRepository {
              ON content.schedule_version_id = entry.schedule_version_id
             AND content.session_id = entry.session_id
             AND content.event_id = entry.event_id
-           JOIN sessions session
-             ON session.id = entry.session_id AND session.event_id = entry.event_id
            LEFT JOIN tracks track
              ON track.id = content.track_id AND track.event_id = content.event_id
             AND track.is_public = 1
           WHERE entry.event_id = ? AND entry.schedule_version_id = ?
             AND content.visibility = 'public'
             AND content.content_status = 'approved'
-            AND session.status IN ('scheduled','published')
-            AND session.visibility = 'public'
           ORDER BY entry.starts_at, entry.id`,
       )
         .bind(eventId, versionId)
@@ -320,13 +316,9 @@ export class AirtableProgrammeRepository {
              ON content.schedule_version_id = entry.schedule_version_id
             AND content.session_id = entry.session_id
             AND content.event_id = entry.event_id
-           JOIN sessions session
-             ON session.id = relation.session_id AND session.event_id = relation.event_id
           WHERE content.event_id = ? AND entry.schedule_version_id = ?
             AND content.visibility = 'public'
             AND content.content_status = 'approved'
-            AND session.status IN ('scheduled','published')
-            AND session.visibility = 'public'
             AND relation.visibility = 'public'
             AND relation.participation_status = 'confirmed'
             AND person.profile_status = 'published'

@@ -3,7 +3,15 @@ import { z } from "zod";
 export const saveSenderProfileSchema = z.object({
   id: z.uuid().optional(),
   name: z.string().trim().min(1).max(120),
-  fromName: z.string().trim().min(1).max(120),
+  fromName: z
+    .string()
+    .trim()
+    .min(1)
+    .max(120)
+    .refine(
+      (value) => !/[<>\r\n]/.test(value),
+      "Sender display name cannot contain <, >, or line breaks.",
+    ),
   fromEmail: z.email().transform((value) => value.toLowerCase()),
   replyToEmail: z
     .union([z.email(), z.literal("")])

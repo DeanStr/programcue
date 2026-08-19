@@ -192,7 +192,7 @@ export function parseEmailSubject(
 }
 
 export function firstName(name: string) {
-  return name.trim().split(/\s+/)[0] || name;
+  return name.trim().split(/\s+/u)[0] || name.trim();
 }
 
 export function mergeValues(

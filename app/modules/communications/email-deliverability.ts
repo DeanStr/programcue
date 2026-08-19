@@ -2,7 +2,7 @@ import { z } from "zod";
 
 const emailAddressSchema = z.email();
 const RESERVED_OR_LOCAL_EMAIL_DOMAIN =
-  /(?:^|\.)(?:example(?:\.(?:com|net|org))?|invalid|localhost|test)$/iu;
+  /(?:^|\.)(?:example(?:\.(?:com|net|org))?|invalid|localhost|test|local)$/iu;
 
 export type EmailDeliveryIssue =
   | "Invalid email address"
@@ -28,4 +28,12 @@ export function emailDeliveryIssue(
     return "Reserved or local-only domain";
   }
   return null;
+}
+
+export function formatMailbox(fromName: string, fromEmail: string) {
+  const escaped = fromName
+    .replaceAll("\\", "\\\\")
+    .replaceAll('"', '\\"')
+    .replace(/[\r\n]+/gu, " ");
+  return `"${escaped}" <${fromEmail}>`;
 }

@@ -205,8 +205,9 @@ describe("submission demo reset", () => {
     )
       .bind(sponsorEmail)
       .first<{ id: string }>();
-    if (!sponsor)
+    if (!sponsor) {
       throw new Error("The direct-session speaker was not created.");
+    }
     const acknowledgementTaskId = `resource-ack:resource-speaker-handbook:${sponsor.id}`;
     await expect(
       env.DB.prepare("SELECT id FROM task_instances WHERE id = ?")

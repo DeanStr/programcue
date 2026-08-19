@@ -470,12 +470,12 @@ describe("calendar provider workflows", () => {
       transactionId?: string;
     };
     expect(microsoftBody.start).toEqual({
-      dateTime: "2025-07-15T09:00:00",
-      timeZone: "America/Toronto",
+      dateTime: "2025-07-15T13:00:00",
+      timeZone: "UTC",
     });
     expect(microsoftBody.end).toEqual({
-      dateTime: "2025-07-15T10:30:00",
-      timeZone: "America/Toronto",
+      dateTime: "2025-07-15T14:30:00",
+      timeZone: "UTC",
     });
     expect(microsoftBody.transactionId).toMatch(/^programcue-[0-9a-f]{64}$/);
     const microsoftUpdateBody = JSON.parse(

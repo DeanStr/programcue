@@ -7,15 +7,45 @@ import {
   previewCommunicationSchema,
   saveCommunicationTriggerSchema,
 } from "./communication-schema";
-import { eventEmailLogoUrl } from "./communication-service-shared";
+import { eventEmailLogoUrl, firstName } from "./communication-service-shared";
+import { emailDeliveryIssue, formatMailbox } from "./email-deliverability";
 import {
   formatEventDateMarkers,
   formatTaskDueDate,
   renderMergeTemplate,
   UnknownMergeVariableError,
 } from "./merge-template";
+import { saveSenderProfileSchema } from "./sender-profile-schema";
 
 describe("communication and readiness rules", () => {
+  it("blocks reserved and local-only domains in production", () => {
+    expect(emailDeliveryIssue("ops@printer.local", "production")).toBe(
+      "Reserved or local-only domain",
+    );
+    expect(emailDeliveryIssue("ada@example.com", "production")).toBe(
+      "Reserved or local-only domain",
+    );
+  });
+
+  it("uses the first stored name token without guessing at honorifics", () => {
+    expect(firstName("  Ada   Lovelace ")).toBe("Ada");
+    expect(firstName("Dr. Ada Lovelace")).toBe("Dr.");
+  });
+
+  it("quotes sender display names so they cannot inject a second mailbox", () => {
+    expect(
+      formatMailbox("Security <attacker@evil.com>", "events@verified.example"),
+    ).toBe('"Security <attacker@evil.com>" <events@verified.example>');
+    expect(() =>
+      saveSenderProfileSchema.parse({
+        name: "Ops",
+        fromName: "Security <attacker@evil.com>",
+        fromEmail: "events@verified.example",
+        replyToEmail: "",
+      }),
+    ).toThrow(/display name/i);
+  });
+
   it("calculates deliverable recipients", () => {
     expect(
       calculateRecipientCount({ selected: 100, suppressed: 7, invalid: 3 }),

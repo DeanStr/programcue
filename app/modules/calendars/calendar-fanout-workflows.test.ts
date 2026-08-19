@@ -58,6 +58,70 @@ describe("calendar fan-out workflows", () => {
     expect(cancelDispatch.failures).toEqual([]);
   });
 
+  it("snapshots the same public confirmed speakers as live fan-out", async () => {
+    const { testEnv, sessionId, scheduleVersionId } =
+      await scheduledSpeakerEnvironment();
+    await testEnv.DB.prepare(
+      `UPDATE sessions SET visibility = 'hidden' WHERE id = ? AND event_id = ?`,
+    )
+      .bind(sessionId, viewer.eventId)
+      .run();
+    await testEnv.DB.prepare(
+      `INSERT INTO calendar_invitations (
+         id, event_id, session_id, person_id, ical_uid, sequence_number,
+         method, status, created_at, updated_at
+       ) VALUES (?, ?, ?, 'person-demo-speaker', ?, 0, 'REQUEST', 'sent',
+                 unixepoch(), unixepoch())`,
+    )
+      .bind(
+        `calendar-snapshot-hidden-${crypto.randomUUID()}`,
+        viewer.eventId,
+        sessionId,
+        `calendar-snapshot-hidden-${crypto.randomUUID()}@programcue`,
+      )
+      .run();
+    const operationId = `calendar-snapshot-hidden-${crypto.randomUUID()}`;
+    await testEnv.DB.batch([
+      testEnv.DB.prepare(
+        `INSERT INTO operation_jobs (
+           id, organisation_id, event_id, requested_by_person_id, type,
+           idempotency_key, correlation_id, status, payload_json,
+           progress_total, progress_completed, progress_failed, cancellable,
+           created_at, updated_at
+         ) VALUES (?, ?, ?, ?, 'schedule.calendar_fanout', ?, ?, 'queued', ?,
+                   0, 0, 0, 0, unixepoch(), unixepoch())`,
+      ).bind(
+        operationId,
+        viewer.organisationId,
+        viewer.eventId,
+        viewer.personId,
+        operationId,
+        operationId,
+        JSON.stringify({
+          type: "schedule.calendar_fanout",
+          operationId,
+          scheduleVersionId,
+        }),
+      ),
+      ...scheduleCalendarFanoutSnapshotStatements(
+        testEnv,
+        viewer,
+        scheduleVersionId,
+        operationId,
+      ),
+    ]);
+    const items = await testEnv.DB.prepare(
+      `SELECT json_extract(result_json, '$.method') AS method,
+              json_extract(result_json, '$.sessionId') AS sessionId
+         FROM operation_items
+        WHERE operation_id = ? AND entity_type = 'schedule_calendar_target'
+        ORDER BY method`,
+    )
+      .bind(operationId)
+      .all<{ method: string; sessionId: string }>();
+    expect(items.results).toEqual([{ method: "CANCEL", sessionId }]);
+  });
+
   it("heartbeats before every published-schedule fan-out target", async () => {
     const { testEnv, scheduleVersionId } = await scheduledSpeakerEnvironment();
     let heartbeatCount = 0;

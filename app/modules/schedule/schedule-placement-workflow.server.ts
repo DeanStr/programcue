@@ -2,6 +2,7 @@ import { requireValue } from "~/lib/required-value";
 import type { Viewer } from "~/platform/auth/authorize.server";
 import { scheduleConflictInsert } from "./schedule-conflict-statement.server";
 import {
+  ScheduleConfigurationError,
   ScheduleIdempotencyConflictError,
   ScheduleNotFoundError,
   SchedulePlacementBlockedError,
@@ -24,6 +25,7 @@ import type {
   SchedulePlacementCommand,
   SchedulePlacementResult,
   SchedulePlacementWarning,
+  ScheduleSession,
   ScheduleUnassignmentResult,
   ScheduleWorkspace,
 } from "./schedule-service.server";
@@ -34,12 +36,20 @@ type ScheduleEntrySnapshot = Pick<
   "id" | "sessionId" | "roomId" | "startsAt" | "endsAt" | "revision"
 >;
 
+type ContentApprovalSource = "editorial" | "legacy_publication";
+
 type ScheduleUndoMetadata = {
   undoToken: string;
   expiresAt: number;
   scheduleVersionId: string;
   previous: ScheduleEntrySnapshot | null;
   next: ScheduleEntrySnapshot | null;
+  previousDurationMinutes: number | null;
+  previousContentRevision: number | null;
+  previousContentStatus: ScheduleSession["contentStatus"] | null;
+  previousApprovedByPersonId: string | null;
+  previousApprovedAt: number | null;
+  previousApprovalSource: ContentApprovalSource | null;
 };
 
 function entrySnapshot(value: unknown): ScheduleEntrySnapshot | null {
@@ -61,6 +71,68 @@ function entrySnapshot(value: unknown): ScheduleEntrySnapshot | null {
     throw new ScheduleUndoUnavailableError();
   }
   return candidate as ScheduleEntrySnapshot;
+}
+
+const contentStatuses = new Set<ScheduleSession["contentStatus"]>([
+  "draft",
+  "in_review",
+  "approved",
+  "changes_requested",
+]);
+
+function durationMinutesSnapshot(value: unknown): number | null {
+  if (value === undefined || value === null) return null;
+  if (
+    typeof value !== "number" ||
+    !Number.isSafeInteger(value) ||
+    value < 1 ||
+    value > 1_440
+  ) {
+    throw new ScheduleUndoUnavailableError();
+  }
+  return value;
+}
+
+function contentRevisionSnapshot(value: unknown): number | null {
+  if (value === undefined || value === null) return null;
+  if (typeof value !== "number" || !Number.isSafeInteger(value) || value < 1) {
+    throw new ScheduleUndoUnavailableError();
+  }
+  return value;
+}
+
+function epochSnapshot(value: unknown): number | null {
+  if (value === undefined || value === null) return null;
+  if (typeof value !== "number" || !Number.isSafeInteger(value) || value < 1) {
+    throw new ScheduleUndoUnavailableError();
+  }
+  return value;
+}
+
+function contentStatusSnapshot(
+  value: unknown,
+): ScheduleSession["contentStatus"] | null {
+  if (value === undefined || value === null) return null;
+  if (typeof value !== "string" || !contentStatuses.has(value as never)) {
+    throw new ScheduleUndoUnavailableError();
+  }
+  return value as ScheduleSession["contentStatus"];
+}
+
+function optionalStringSnapshot(value: unknown): string | null {
+  if (value === undefined || value === null) return null;
+  if (typeof value !== "string" || value.length === 0) {
+    throw new ScheduleUndoUnavailableError();
+  }
+  return value;
+}
+
+function approvalSourceSnapshot(value: unknown): ContentApprovalSource | null {
+  if (value === undefined || value === null) return null;
+  if (value !== "editorial" && value !== "legacy_publication") {
+    throw new ScheduleUndoUnavailableError();
+  }
+  return value;
 }
 
 function parseUndoMetadata(value: string): ScheduleUndoMetadata {
@@ -87,6 +159,22 @@ function parseUndoMetadata(value: string): ScheduleUndoMetadata {
     scheduleVersionId: metadata.scheduleVersionId,
     previous: entrySnapshot(metadata.previous),
     next: entrySnapshot(metadata.next),
+    previousDurationMinutes: durationMinutesSnapshot(
+      metadata.previousDurationMinutes,
+    ),
+    previousContentRevision: contentRevisionSnapshot(
+      metadata.previousContentRevision,
+    ),
+    previousContentStatus: contentStatusSnapshot(
+      metadata.previousContentStatus,
+    ),
+    previousApprovedByPersonId: optionalStringSnapshot(
+      metadata.previousApprovedByPersonId,
+    ),
+    previousApprovedAt: epochSnapshot(metadata.previousApprovedAt),
+    previousApprovalSource: approvalSourceSnapshot(
+      metadata.previousApprovalSource,
+    ),
   };
 }
 
@@ -354,6 +442,48 @@ export class SchedulePlacementWorkflow {
       id: crypto.randomUUID(),
       severity: "warning",
     }));
+    const durationMinutes = (parsed.endsAt - parsed.startsAt) / 60;
+    if (
+      !Number.isInteger(durationMinutes) ||
+      durationMinutes < 5 ||
+      durationMinutes > 480
+    ) {
+      throw new ScheduleConfigurationError(
+        "A placed session must last a whole number of minutes between 5 and 480.",
+      );
+    }
+    const durationChanged = durationMinutes !== session.durationMinutes;
+    const durationContentGuard = durationChanged
+      ? `AND EXISTS (
+           SELECT 1 FROM schedule_session_contents current_content
+            WHERE current_content.schedule_version_id = schedule_versions.id
+              AND current_content.event_id = schedule_versions.event_id
+              AND current_content.session_id = ?
+              AND current_content.content_revision = ?
+         )`
+      : "";
+    const durationContentGuardBindings = durationChanged
+      ? [parsed.sessionId, session.contentRevision]
+      : [];
+    const previousContentApproval = durationChanged
+      ? ((await this.env.DB.prepare(
+          `SELECT approved_by_person_id AS approvedByPersonId,
+                  approved_at AS approvedAt,
+                  approval_source AS approvalSource
+             FROM schedule_session_contents
+            WHERE schedule_version_id = ? AND event_id = ? AND session_id = ?`,
+        )
+          .bind(parsed.scheduleVersionId, viewer.eventId, parsed.sessionId)
+          .first<{
+            approvedByPersonId: string | null;
+            approvedAt: number | null;
+            approvalSource: ContentApprovalSource | null;
+          }>()) ?? {
+          approvedByPersonId: null,
+          approvedAt: null,
+          approvalSource: null,
+        })
+      : null;
 
     const entryId = currentEntry?.id ?? crypto.randomUUID();
     const versionOperationId = crypto.randomUUID();
@@ -447,6 +577,7 @@ export class SchedulePlacementWorkflow {
                 AND placeable_session.event_id = schedule_versions.event_id
                 AND placeable_session.status IN ('unscheduled','scheduled','published')
            )
+           ${durationContentGuard}
            ${commandGuard}
       `,
       ).bind(
@@ -457,6 +588,7 @@ export class SchedulePlacementWorkflow {
         viewer.organisationId,
         workspace.event.revision,
         parsed.sessionId,
+        ...durationContentGuardBindings,
         ...commandGuardBindings,
       ),
       this.env.DB.prepare(
@@ -508,16 +640,40 @@ export class SchedulePlacementWorkflow {
       ),
       this.env.DB.prepare(
         `
-        UPDATE sessions SET status = 'scheduled', revision = revision + 1, updated_at = unixepoch()
-         WHERE id = ? AND event_id = ? AND status IN ('unscheduled','scheduled')
+        UPDATE sessions
+           SET status = CASE
+                 WHEN status = 'published' THEN status
+                 ELSE 'scheduled'
+               END,
+               duration_minutes = ?,
+               revision = revision + 1,
+               updated_at = unixepoch()
+         WHERE id = ? AND event_id = ?
+           AND status IN ('unscheduled','scheduled','published')
            AND EXISTS (SELECT 1 FROM schedule_versions WHERE id = ? AND publication_operation_id = ?)
       `,
       ).bind(
+        durationMinutes,
         parsed.sessionId,
         viewer.eventId,
         parsed.scheduleVersionId,
         versionOperationId,
       ),
+      ...this.sessionContentDurationStatements({
+        scheduleVersionId: parsed.scheduleVersionId,
+        eventId: viewer.eventId,
+        sessionId: parsed.sessionId,
+        durationMinutes,
+        expectedContentRevision: session.contentRevision,
+        contentStatus: "draft",
+        approvedByPersonId: null,
+        approvedAt: null,
+        approvalSource: null,
+        operationId: versionOperationId,
+        editorPersonId: viewer.personId,
+        changeKind: "edit",
+        include: durationChanged,
+      }),
       this.env.DB.prepare(
         `
         INSERT INTO audit_events (
@@ -538,6 +694,22 @@ export class SchedulePlacementWorkflow {
           scheduleVersionId: parsed.scheduleVersionId,
           previous: currentEntry ?? null,
           next: nextEntry,
+          previousDurationMinutes: durationChanged
+            ? session.durationMinutes
+            : null,
+          previousContentRevision: durationChanged
+            ? session.contentRevision
+            : null,
+          previousContentStatus: durationChanged ? session.contentStatus : null,
+          previousApprovedByPersonId: durationChanged
+            ? (previousContentApproval?.approvedByPersonId ?? null)
+            : null,
+          previousApprovedAt: durationChanged
+            ? (previousContentApproval?.approvedAt ?? null)
+            : null,
+          previousApprovalSource: durationChanged
+            ? (previousContentApproval?.approvalSource ?? null)
+            : null,
         }),
         parsed.scheduleVersionId,
         versionOperationId,
@@ -832,6 +1004,39 @@ export class SchedulePlacementWorkflow {
     }
     if (workspace.version.revision !== parsed.scheduleRevision)
       throw new ScheduleRevisionConflictError();
+    const durationSessionId = (metadata.previous ?? metadata.next)?.sessionId;
+    const durationSession = durationSessionId
+      ? workspace.sessions.find((item) => item.id === durationSessionId)
+      : undefined;
+    if (
+      metadata.next &&
+      (metadata.previousDurationMinutes === null) !==
+        (metadata.previousContentRevision === null)
+    ) {
+      throw new ScheduleUndoUnavailableError();
+    }
+    if (
+      metadata.next &&
+      metadata.previousContentStatus === "approved" &&
+      (metadata.previousApprovedAt === null ||
+        metadata.previousApprovalSource === null ||
+        (metadata.previousApprovalSource === "editorial" &&
+          metadata.previousApprovedByPersonId === null) ||
+        (metadata.previousApprovalSource === "legacy_publication" &&
+          metadata.previousApprovedByPersonId !== null))
+    ) {
+      throw new ScheduleUndoUnavailableError();
+    }
+    if (
+      metadata.next &&
+      metadata.previousDurationMinutes !== null &&
+      metadata.previousContentRevision !== null &&
+      (!durationSession ||
+        durationSession.contentRevision !==
+          metadata.previousContentRevision + 1)
+    ) {
+      throw new ScheduleUndoUnavailableError();
+    }
 
     const current = metadata.next
       ? workspace.entries.find(
@@ -956,6 +1161,20 @@ export class SchedulePlacementWorkflow {
             "Required metadata.previous is unavailable.",
           ).sessionId,
         ];
+    const durationContentGuard =
+      metadata.next && metadata.previousContentRevision !== null
+        ? `AND EXISTS (
+             SELECT 1 FROM schedule_session_contents current_content
+              WHERE current_content.schedule_version_id = schedule_versions.id
+                AND current_content.event_id = schedule_versions.event_id
+                AND current_content.session_id = ?
+                AND current_content.content_revision = ?
+           )`
+        : "";
+    const durationContentGuardBindings =
+      metadata.next && metadata.previousContentRevision !== null
+        ? [metadata.next.sessionId, metadata.previousContentRevision + 1]
+        : [];
     const statements: D1PreparedStatement[] = [
       this.env.DB.prepare(
         `
@@ -970,6 +1189,7 @@ export class SchedulePlacementWorkflow {
                 AND current_event.revision = ?
            )
            AND ${stateGuard}
+           ${durationContentGuard}
       `,
       ).bind(
         operationId,
@@ -980,6 +1200,7 @@ export class SchedulePlacementWorkflow {
         viewer.organisationId,
         workspace.event.revision,
         ...stateBindings,
+        ...durationContentGuardBindings,
       ),
     ];
 
@@ -1123,6 +1344,51 @@ export class SchedulePlacementWorkflow {
         viewer.eventId,
         operationId,
       ),
+      ...(metadata.next && metadata.previousDurationMinutes !== null
+        ? [
+            this.env.DB.prepare(
+              `
+              UPDATE sessions
+                 SET duration_minutes = ?,
+                     revision = revision + 1,
+                     updated_at = unixepoch()
+               WHERE id = ? AND event_id = ?
+                 AND EXISTS (
+                   SELECT 1 FROM schedule_versions
+                    WHERE id = ? AND event_id = ? AND publication_operation_id = ?
+                 )
+            `,
+            ).bind(
+              metadata.previousDurationMinutes,
+              metadata.next.sessionId,
+              viewer.eventId,
+              parsed.scheduleVersionId,
+              viewer.eventId,
+              operationId,
+            ),
+            ...this.sessionContentDurationStatements({
+              scheduleVersionId: parsed.scheduleVersionId,
+              eventId: viewer.eventId,
+              sessionId: metadata.next.sessionId,
+              durationMinutes: metadata.previousDurationMinutes,
+              expectedContentRevision:
+                metadata.previousContentRevision === null
+                  ? requireValue(
+                      durationSession,
+                      "Required duration session is unavailable.",
+                    ).contentRevision
+                  : metadata.previousContentRevision + 1,
+              contentStatus: metadata.previousContentStatus ?? "draft",
+              approvedByPersonId: metadata.previousApprovedByPersonId,
+              approvedAt: metadata.previousApprovedAt,
+              approvalSource: metadata.previousApprovalSource,
+              operationId,
+              editorPersonId: viewer.personId,
+              changeKind: "restore",
+              include: true,
+            }),
+          ]
+        : []),
       this.env.DB.prepare(
         `
         INSERT INTO audit_events (
@@ -1177,6 +1443,91 @@ export class SchedulePlacementWorkflow {
       ).sessionId,
       restoredPlacement,
     };
+  }
+
+  private sessionContentDurationStatements(input: {
+    scheduleVersionId: string;
+    eventId: string;
+    sessionId: string;
+    durationMinutes: number;
+    expectedContentRevision: number;
+    contentStatus: ScheduleSession["contentStatus"];
+    approvedByPersonId: string | null;
+    approvedAt: number | null;
+    approvalSource: ContentApprovalSource | null;
+    operationId: string;
+    editorPersonId: string;
+    changeKind: "edit" | "restore";
+    include: boolean;
+  }) {
+    if (!input.include) return [];
+    const historyRevisionId = crypto.randomUUID();
+    const nextContentRevision = input.expectedContentRevision + 1;
+    return [
+      this.env.DB.prepare(
+        `
+        UPDATE schedule_session_contents
+           SET duration_minutes = ?, content_status = ?,
+               content_revision = content_revision + 1,
+               last_edited_by_person_id = ?,
+               approved_by_person_id = ?,
+               approved_at = ?,
+               approval_source = ?,
+               last_operation_id = ?,
+               updated_at = unixepoch()
+         WHERE schedule_version_id = ? AND event_id = ? AND session_id = ?
+           AND content_revision = ?
+           AND EXISTS (
+             SELECT 1 FROM schedule_versions
+              WHERE id = schedule_session_contents.schedule_version_id
+                AND event_id = schedule_session_contents.event_id
+                AND publication_operation_id = ?
+           )
+      `,
+      ).bind(
+        input.durationMinutes,
+        input.contentStatus,
+        input.editorPersonId,
+        input.approvedByPersonId,
+        input.approvedAt,
+        input.approvalSource,
+        input.operationId,
+        input.scheduleVersionId,
+        input.eventId,
+        input.sessionId,
+        input.expectedContentRevision,
+        input.operationId,
+      ),
+      this.env.DB.prepare(
+        `
+        INSERT INTO session_content_revisions (
+          id, event_id, schedule_version_id, session_id, revision_number,
+          title, slug, description, track_id, format, duration_minutes,
+          required_resources_json, visibility, content_status, change_kind,
+          restored_from_revision_id, created_by_person_id, created_at
+        )
+        SELECT ?, content.event_id, content.schedule_version_id,
+               content.session_id, content.content_revision, content.title,
+               content.slug, content.description, content.track_id,
+               content.format, content.duration_minutes,
+               content.required_resources_json, content.visibility,
+               content.content_status, ?, NULL, ?, unixepoch()
+          FROM schedule_session_contents content
+         WHERE content.schedule_version_id = ? AND content.event_id = ?
+           AND content.session_id = ? AND content.last_operation_id = ?
+           AND content.content_revision = ?
+      `,
+      ).bind(
+        historyRevisionId,
+        input.changeKind,
+        input.editorPersonId,
+        input.scheduleVersionId,
+        input.eventId,
+        input.sessionId,
+        input.operationId,
+        nextContentRevision,
+      ),
+    ];
   }
 
   private conflictInsert(

@@ -11,20 +11,54 @@ export function publishedSocialCardAccent(value: string) {
   return value;
 }
 
+function graphemes(value: string) {
+  if (typeof Intl !== "undefined" && "Segmenter" in Intl) {
+    return [
+      ...new Intl.Segmenter("en", { granularity: "grapheme" }).segment(value),
+    ].map((part) => part.segment);
+  }
+  return [...value];
+}
+
+function graphemeLength(value: string) {
+  return graphemes(value).length;
+}
+
+function breakLongToken(token: string, maximum: number) {
+  const units = graphemes(token);
+  if (units.length <= maximum) return [token];
+  const pieces: string[] = [];
+  for (let index = 0; index < units.length; index += maximum) {
+    pieces.push(units.slice(index, index + maximum).join(""));
+  }
+  return pieces;
+}
+
 export function wrapSocialCardText(value: string, maximum = 34) {
-  const words = value.trim().split(/\s+/u);
+  const tokens = value
+    .trim()
+    .split(/\s+/u)
+    .flatMap((word) => breakLongToken(word, maximum));
   const lines: string[] = [];
   let line = "";
-  for (const word of words) {
-    if (line && `${line} ${word}`.length > maximum) {
+  for (const token of tokens) {
+    if (line && graphemeLength(`${line} ${token}`) > maximum) {
       lines.push(line);
-      line = word;
+      line = token;
     } else {
-      line = line ? `${line} ${word}` : word;
+      line = line ? `${line} ${token}` : token;
     }
   }
   if (line) lines.push(line);
-  return lines.slice(0, 3);
+  if (lines.length <= 3) return lines;
+  const kept = lines.slice(0, 3);
+  const last = kept[2] ?? "";
+  const lastUnits = graphemes(last);
+  kept[2] =
+    lastUnits.length >= maximum
+      ? `${lastUnits.slice(0, Math.max(1, maximum - 1)).join("")}…`
+      : `${last}…`;
+  return kept;
 }
 
 function xml(value: string) {

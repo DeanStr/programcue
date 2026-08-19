@@ -563,9 +563,8 @@ export function SchedulePublicationDialog({
           </div>
         ) : (
           <div className="validation-item ok">
-            Every scheduled public session has a public content snapshot. No
-            publication blockers found. Every invariant is revalidated before
-            publication.
+            Every public snapshot is approved. No publication blockers found.
+            Every invariant is revalidated before publication.
           </div>
         )}
         {preview.blockers.emptySchedule ? (

@@ -275,7 +275,7 @@ describe("published programme and itinerary", () => {
           WHERE schedule_version_id = 'demo-schedule-published'
             AND event_id = 'evt-foe-2025' AND session_id = 'demo-session-1'`,
       ).run(),
-    ).rejects.toThrow(/cannot lose approval/i);
+    ).rejects.toThrow(/approval and visibility are immutable/i);
     await expect(
       service.getPublished("future-of-events-2027"),
     ).resolves.not.toBeNull();
@@ -1236,7 +1236,7 @@ describe("published programme and itinerary", () => {
             AND event_id = 'evt-foe-2025'
             AND session_id = 'demo-session-1'`,
       ).run(),
-    ).rejects.toThrow(/cannot lose approval/i);
+    ).rejects.toThrow(/approval and visibility are immutable/i);
     await expect(
       service.getPublished("future-of-events-2027"),
     ).resolves.not.toBeNull();

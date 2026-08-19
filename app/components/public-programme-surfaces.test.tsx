@@ -8,6 +8,7 @@ import type {
 } from "~/modules/programme/public-programme-service.server";
 import {
   eventHeroImagePath,
+  initials,
   type PublicProgrammeModel,
   sessionSpeakerDetails,
   speakerAffiliation,
@@ -85,6 +86,13 @@ function model(overrides: Partial<PublicProgrammeModel> = {}) {
 }
 
 describe("public programme speaker surfaces", () => {
+  it("takes speaker initials from graphemes instead of UTF-16 code units", () => {
+    expect(initials("Ada Lovelace")).toBe("AL");
+    expect(initials("😀 Ada")).toBe("A");
+    expect(initials("👨‍👩‍👧‍👦 Ada")).toBe("A");
+    expect(initials("👨‍👩‍👧‍👦")).toBe("PC");
+  });
+
   it("uses only the authoritative HTTPS programme hero field", () => {
     expect(
       eventHeroImagePath({

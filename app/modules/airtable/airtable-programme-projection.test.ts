@@ -203,6 +203,7 @@ describe("Airtable authoritative room repository", () => {
       expect(frozenContent?.contentStatus).toBe("approved");
       await env.DB.prepare(
         `UPDATE sessions SET title = 'Mutable title after publication',
+                             visibility = 'private',
                              updated_at = unixepoch()
           WHERE id = ? AND event_id = ?`,
       )
@@ -292,6 +293,66 @@ describe("Airtable authoritative room repository", () => {
             record.fields.Status === "active",
         ).length,
       ).toBe(snapshot.sessions.length * 2 + snapshot.speakers.length);
+
+      const privateCandidate = snapshot.sessions.find(
+        (session) => session.id !== frozenContent!.sessionId,
+      );
+      expect(privateCandidate).toBeDefined();
+      const draftVersionId = `airtable-snapshot-visibility-${crypto.randomUUID()}`;
+      await env.DB.batch([
+        env.DB.prepare(
+          `INSERT INTO schedule_versions (
+             id, event_id, version_number, status, created_by_person_id
+           )
+           SELECT ?, event.id,
+                  COALESCE((SELECT MAX(version_number) + 1
+                              FROM schedule_versions
+                             WHERE event_id = event.id), 1),
+                  'draft', ?
+             FROM events event
+            WHERE event.id = ? AND event.organisation_id = ?`,
+        ).bind(
+          draftVersionId,
+          viewer.personId,
+          viewer.eventId,
+          viewer.organisationId,
+        ),
+        env.DB.prepare(
+          `INSERT INTO schedule_entries (
+             id, event_id, schedule_version_id, session_id, room_id,
+             starts_at, ends_at
+           )
+           SELECT lower(hex(randomblob(16))), event_id, ?, session_id, room_id,
+                  starts_at, ends_at
+             FROM schedule_entries
+            WHERE event_id = ? AND schedule_version_id = ?`,
+        ).bind(draftVersionId, viewer.eventId, version!.id),
+        env.DB.prepare(
+          `UPDATE schedule_session_contents
+              SET visibility = 'private', content_status = 'draft',
+                  approved_by_person_id = NULL, approved_at = NULL,
+                  approval_source = NULL, updated_at = unixepoch()
+            WHERE schedule_version_id = ? AND event_id = ? AND session_id = ?`,
+        ).bind(draftVersionId, viewer.eventId, privateCandidate!.id),
+      ]);
+      await expect(
+        programme.stagePublication(
+          {
+            organisationId: viewer.organisationId,
+            eventId: viewer.eventId,
+            personId: viewer.personId,
+          },
+          draftVersionId,
+        ),
+      ).resolves.toMatchObject({ idempotent: false });
+      expect(
+        provider.records.some(
+          (record) =>
+            record.fields["Version ID"] === draftVersionId &&
+            record.fields["Session ID"] === privateCandidate!.id &&
+            record.fields.Status === "active",
+        ),
+      ).toBe(false);
       await expect(
         programme.stagePublication(
           {

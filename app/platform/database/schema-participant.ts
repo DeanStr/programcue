@@ -447,7 +447,9 @@ export const resourcePages = sqliteTable(
     audienceScope: text("audience_scope")
       .notNull()
       .default("all_speakers")
-      .$type<"all_speakers" | "accepted_speakers" | "custom">(),
+      .$type<
+        "all_speakers" | "accepted_speakers" | "confirmed_speakers" | "custom"
+      >(),
     acknowledgementRequired: integer("acknowledgement_required", {
       mode: "boolean",
     })
@@ -490,7 +492,9 @@ export const resourcePageVersions = sqliteTable(
     audienceScope: text("audience_scope")
       .notNull()
       .default("all_speakers")
-      .$type<"all_speakers" | "accepted_speakers" | "custom">(),
+      .$type<
+        "all_speakers" | "accepted_speakers" | "confirmed_speakers" | "custom"
+      >(),
     acknowledgementRequired: integer("acknowledgement_required", {
       mode: "boolean",
     })

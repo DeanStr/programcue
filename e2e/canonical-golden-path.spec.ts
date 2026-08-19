@@ -544,7 +544,7 @@ test.describe
       await page.getByRole("button", { name: "Publish schedule" }).click();
       publication = page.getByRole("dialog", { name: "Publish schedule" });
       await expect(publication).toContainText(
-        "Every scheduled public session has a public content snapshot",
+        "Every public snapshot is approved",
       );
       await expect(publication).not.toContainText("not marked Approved");
       await expect(

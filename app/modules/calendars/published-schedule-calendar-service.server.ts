@@ -2,6 +2,7 @@ import { requireValue } from "~/lib/required-value";
 import { CalendarStateError } from "./calendar-errors";
 import {
   type CalendarQueueActor,
+  PUBLIC_CONFIRMED_SCHEDULE_CALENDAR_TARGET_SQL,
   type PublishedScheduleCalendarDispatch,
   type PublishedScheduleCalendarTarget,
   publishedScheduleCalendarIdempotencyKey,
@@ -134,11 +135,7 @@ export class PublishedScheduleCalendarService {
         LEFT JOIN calendar_invitations ci
           ON ci.event_id = se.event_id AND ci.session_id = se.session_id AND ci.person_id = ss.person_id
        WHERE se.event_id = ? AND sv.id = ? AND sv.status = 'published'
-         AND session.status = 'published'
-         AND session.visibility = 'public'
-         AND content.visibility = 'public'
-         AND ss.participation_status = 'confirmed'
-         AND ss.visibility = 'public'
+         AND ${PUBLIC_CONFIRMED_SCHEDULE_CALENDAR_TARGET_SQL}
        ORDER BY se.starts_at, se.session_id, ss.position
     `,
         )
@@ -194,11 +191,7 @@ export class PublishedScheduleCalendarService {
              JOIN session_speakers ss ON ss.session_id = se.session_id AND ss.event_id = se.event_id
             WHERE sv.id = ? AND sv.status = 'published'
               AND se.session_id = ci.session_id AND ss.person_id = ci.person_id
-              AND session.status = 'published'
-              AND session.visibility = 'public'
-              AND content.visibility = 'public'
-              AND ss.participation_status = 'confirmed'
-              AND ss.visibility = 'public'
+              AND ${PUBLIC_CONFIRMED_SCHEDULE_CALENDAR_TARGET_SQL}
          )
        ORDER BY ci.updated_at
     `,

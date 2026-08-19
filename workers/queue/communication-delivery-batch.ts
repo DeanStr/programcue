@@ -1,6 +1,7 @@
 import { z } from "zod";
 
 import { templateContentSchema } from "../../app/modules/communications/communication-schema";
+import { formatMailbox } from "../../app/modules/communications/email-deliverability";
 import {
   type EmailProvider,
   TRACKED_DELIVERY_EMAIL_TAG,
@@ -378,7 +379,7 @@ export async function deliverCommunicationBatch(input: {
             : undefined,
       });
       const result = await provider.send({
-        from: `${communication.fromName} <${communication.fromEmail}>`,
+        from: formatMailbox(communication.fromName, communication.fromEmail),
         replyTo: communication.replyToEmail,
         to: delivery.address,
         subject: delivery.renderedSubject ?? subject,

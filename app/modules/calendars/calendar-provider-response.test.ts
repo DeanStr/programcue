@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   GoogleCalendarProvider,
   MicrosoftCalendarProvider,
+  microsoftUtcDateTime,
 } from "./calendar-providers.server";
 
 describe("calendar provider response bounds", () => {
@@ -79,6 +80,40 @@ describe("calendar provider response bounds", () => {
     ).rejects.toMatchObject({
       name: "CalendarProviderRequestError",
       provider: "google",
+    });
+  });
+
+  it("sends unambiguous UTC instants for both DST fall-back occurrences", async () => {
+    const firstOccurrence = "2025-11-02T05:30:00.000Z";
+    const secondOccurrence = "2025-11-02T06:30:00.000Z";
+    expect(microsoftUtcDateTime(firstOccurrence)).toBe("2025-11-02T05:30:00");
+    expect(microsoftUtcDateTime(secondOccurrence)).toBe("2025-11-02T06:30:00");
+
+    const bodies: unknown[] = [];
+    const provider = new MicrosoftCalendarProvider(
+      "access-token",
+      (async (_input, init) => {
+        bodies.push(JSON.parse(String(init?.body)));
+        return Response.json({ id: "provider-id" });
+      }) as typeof fetch,
+      "https://calendar.test",
+    );
+    await provider.apply({
+      uid: "session@example.com",
+      title: "Session",
+      description: "Description",
+      location: "Room 1",
+      startsAtIso: secondOccurrence,
+      endsAtIso: "2025-11-02T07:30:00.000Z",
+      timezone: "America/Toronto",
+      attendeeEmail: "speaker@example.com",
+      attendeeName: "Speaker",
+      sequence: 0,
+      method: "REQUEST",
+    });
+    expect(bodies[0]).toMatchObject({
+      start: { dateTime: "2025-11-02T06:30:00", timeZone: "UTC" },
+      end: { dateTime: "2025-11-02T07:30:00", timeZone: "UTC" },
     });
   });
 });

@@ -547,7 +547,7 @@ describe("schedule publication workflows", () => {
     ).resolves.toEqual({ status: "draft" });
   });
 
-  it("rechecks public content visibility in the atomic publication write", async () => {
+  it("rechecks public snapshot approval in the atomic publication write", async () => {
     const service = new ScheduleService(scheduleTestEnv);
     const versionId = await service.createDraft(viewer);
     let workspace = await service.getWorkspace(viewer);
@@ -577,7 +577,10 @@ describe("schedule publication workflows", () => {
           await target
             .prepare(
               `UPDATE schedule_session_contents
-                  SET visibility = 'private'
+                  SET content_status = 'draft',
+                      approved_by_person_id = NULL,
+                      approved_at = NULL,
+                      approval_source = NULL
                 WHERE schedule_version_id = ? AND event_id = ?
                   AND session_id = 'schedule-test-one'`,
             )
@@ -599,7 +602,7 @@ describe("schedule publication workflows", () => {
         scheduleVersionId: versionId,
         scheduleRevision: workspace.version!.revision,
       }),
-    ).rejects.toThrow(/requires a public content snapshot.*private/i);
+    ).rejects.toThrow(/Approved content snapshot.*draft/i);
     expect(raced).toBe(true);
     await expect(
       env.DB.prepare(
@@ -1066,5 +1069,277 @@ describe("schedule publication workflows", () => {
       entityId: publication.calendar.operationId,
       changeType: "progress",
     });
+  });
+
+  it("demotes sessions removed from a later published version and copies snapshot visibility", async () => {
+    const service = new ScheduleService(scheduleTestEnv);
+    const firstVersionId = await service.createDraft(viewer);
+    let workspace = await service.getWorkspace(viewer);
+    const startsAt = eventLocalTimeEpoch(
+      workspace.event.startsAt,
+      workspace.event.timezone,
+      9,
+    );
+    await service.place(viewer, {
+      scheduleVersionId: firstVersionId,
+      scheduleRevision: workspace.version!.revision,
+      sessionId: "schedule-test-one",
+      roomId: "main",
+      startsAt,
+      endsAt: startsAt + 3_600,
+    });
+    workspace = await service.getWorkspace(viewer);
+    const firstSession = workspace.sessions.find(
+      (session) => session.id === "schedule-test-one",
+    )!;
+    await service.updateSessionContent(
+      viewer,
+      {
+        scheduleVersionId: firstVersionId,
+        scheduleRevision: workspace.version!.revision,
+        sessionId: firstSession.id,
+        sessionRevision: firstSession.revision,
+        idempotencyKey: crypto.randomUUID(),
+        title: firstSession.title,
+        description: firstSession.description ?? "",
+        format: firstSession.format,
+        durationMinutes: firstSession.durationMinutes,
+        trackId: firstSession.trackId,
+        visibility: "public",
+        requiredResources: firstSession.requiredResources,
+      },
+      "admin_ui",
+    );
+    await approveScheduledTestContent(firstVersionId);
+    workspace = await service.getWorkspace(viewer);
+    await service.publish(viewer, {
+      scheduleVersionId: firstVersionId,
+      scheduleRevision: workspace.version!.revision,
+    });
+    expect(
+      await env.DB.prepare(
+        "SELECT status, visibility FROM sessions WHERE id = ? AND event_id = ?",
+      )
+        .bind("schedule-test-one", viewer.eventId)
+        .first(),
+    ).toEqual({ status: "published", visibility: "public" });
+
+    const secondVersionId = await service.createDraft(viewer);
+    workspace = await service.getWorkspace(viewer);
+    const publishedEntry = workspace.entries.find(
+      (entry) => entry.sessionId === "schedule-test-one",
+    )!;
+    await service.unassign(viewer, {
+      scheduleVersionId: secondVersionId,
+      scheduleRevision: workspace.version!.revision,
+      entryId: publishedEntry.id,
+    });
+    workspace = await service.getWorkspace(viewer);
+    await service.place(viewer, {
+      scheduleVersionId: secondVersionId,
+      scheduleRevision: workspace.version!.revision,
+      sessionId: "schedule-test-two",
+      roomId: "main",
+      startsAt,
+      endsAt: startsAt + 3_600,
+    });
+    workspace = await service.getWorkspace(viewer);
+    const replacement = workspace.sessions.find(
+      (session) => session.id === "schedule-test-two",
+    )!;
+    await service.updateSessionContent(
+      viewer,
+      {
+        scheduleVersionId: secondVersionId,
+        scheduleRevision: workspace.version!.revision,
+        sessionId: replacement.id,
+        sessionRevision: replacement.revision,
+        idempotencyKey: crypto.randomUUID(),
+        title: replacement.title,
+        description: replacement.description ?? "",
+        format: replacement.format,
+        durationMinutes: replacement.durationMinutes,
+        trackId: replacement.trackId,
+        visibility: "public",
+        requiredResources: replacement.requiredResources,
+      },
+      "admin_ui",
+    );
+    await env.DB.prepare(
+      `UPDATE sessions SET visibility = 'hidden' WHERE id = ? AND event_id = ?`,
+    )
+      .bind("schedule-test-two", viewer.eventId)
+      .run();
+    await approveScheduledTestContent(secondVersionId);
+    workspace = await service.getWorkspace(viewer);
+    await service.publish(viewer, {
+      scheduleVersionId: secondVersionId,
+      scheduleRevision: workspace.version!.revision,
+    });
+
+    expect(
+      await env.DB.prepare(
+        "SELECT status FROM sessions WHERE id = ? AND event_id = ?",
+      )
+        .bind("schedule-test-one", viewer.eventId)
+        .first(),
+    ).toEqual({ status: "unscheduled" });
+    expect(
+      await env.DB.prepare(
+        "SELECT status, visibility FROM sessions WHERE id = ? AND event_id = ?",
+      )
+        .bind("schedule-test-two", viewer.eventId)
+        .first(),
+    ).toEqual({ status: "published", visibility: "public" });
+  });
+
+  it("repairs live visibility that a pre-upgrade draft edit diverged from the published snapshot", async () => {
+    const service = new ScheduleService(scheduleTestEnv);
+    const publicProgramme = new PublicProgrammeService(
+      env as unknown as CloudflareEnvironment,
+    );
+    const versionId = await service.createDraft(viewer);
+    let workspace = await service.getWorkspace(viewer);
+    const startsAt = eventLocalTimeEpoch(
+      workspace.event.startsAt,
+      workspace.event.timezone,
+      9,
+    );
+    await service.place(viewer, {
+      scheduleVersionId: versionId,
+      scheduleRevision: workspace.version!.revision,
+      sessionId: "schedule-test-one",
+      roomId: "main",
+      startsAt,
+      endsAt: startsAt + 3_600,
+    });
+    workspace = await service.getWorkspace(viewer);
+    const session = workspace.sessions.find(
+      (candidate) => candidate.id === "schedule-test-one",
+    )!;
+    await service.updateSessionContent(
+      viewer,
+      {
+        scheduleVersionId: versionId,
+        scheduleRevision: workspace.version!.revision,
+        sessionId: session.id,
+        sessionRevision: session.revision,
+        idempotencyKey: crypto.randomUUID(),
+        title: session.title,
+        description: session.description ?? "",
+        format: session.format,
+        durationMinutes: session.durationMinutes,
+        trackId: session.trackId,
+        visibility: "public",
+        requiredResources: session.requiredResources,
+      },
+      "admin_ui",
+    );
+    await approveScheduledTestContent(versionId);
+    workspace = await service.getWorkspace(viewer);
+    await service.publish(viewer, {
+      scheduleVersionId: versionId,
+      scheduleRevision: workspace.version!.revision,
+    });
+
+    const before = await env.DB.prepare(
+      `SELECT public_projection_revision AS revision FROM events WHERE id = ?`,
+    )
+      .bind(viewer.eventId)
+      .first<{ revision: number }>();
+    await env.DB.prepare(
+      `UPDATE sessions SET visibility = 'private' WHERE id = ? AND event_id = ?`,
+    )
+      .bind("schedule-test-one", viewer.eventId)
+      .run();
+    expect(
+      (
+        await publicProgramme.getPublished("future-of-events-2027")
+      )?.sessions.some((candidate) => candidate.id === "schedule-test-one"),
+    ).toBe(false);
+
+    await env.DB.batch([
+      env.DB.prepare(
+        `INSERT INTO event_changes (
+           event_id, entity_type, entity_id, change_type, correlation_id, created_at
+         )
+         SELECT DISTINCT session.event_id, 'event', session.event_id, 'updated',
+                'migration-0044-snapshot-visibility', unixepoch()
+           FROM sessions session
+           JOIN schedule_versions version
+             ON version.event_id = session.event_id
+            AND version.status = 'published'
+           JOIN schedule_entries entry
+             ON entry.event_id = session.event_id
+            AND entry.schedule_version_id = version.id
+            AND entry.session_id = session.id
+           JOIN schedule_session_contents content
+             ON content.event_id = session.event_id
+            AND content.schedule_version_id = version.id
+            AND content.session_id = session.id
+          WHERE session.visibility <> content.visibility
+            AND session.event_id = ?`,
+      ).bind(viewer.eventId),
+      env.DB.prepare(
+        `UPDATE sessions
+            SET visibility = (
+                  SELECT content.visibility
+                    FROM schedule_versions version
+                    JOIN schedule_entries entry
+                      ON entry.event_id = sessions.event_id
+                     AND entry.schedule_version_id = version.id
+                     AND entry.session_id = sessions.id
+                    JOIN schedule_session_contents content
+                      ON content.event_id = sessions.event_id
+                     AND content.schedule_version_id = version.id
+                     AND content.session_id = sessions.id
+                   WHERE version.event_id = sessions.event_id
+                     AND version.status = 'published'
+                ),
+                revision = revision + 1,
+                updated_at = unixepoch()
+          WHERE event_id = ?
+            AND EXISTS (
+              SELECT 1
+                FROM schedule_versions version
+                JOIN schedule_entries entry
+                  ON entry.event_id = sessions.event_id
+                 AND entry.schedule_version_id = version.id
+                 AND entry.session_id = sessions.id
+                JOIN schedule_session_contents content
+                  ON content.event_id = sessions.event_id
+                 AND content.schedule_version_id = version.id
+                 AND content.session_id = sessions.id
+               WHERE version.event_id = sessions.event_id
+                 AND version.status = 'published'
+                 AND content.visibility <> sessions.visibility
+            )`,
+      ).bind(viewer.eventId),
+    ]);
+
+    expect(
+      await env.DB.prepare(
+        "SELECT visibility FROM sessions WHERE id = ? AND event_id = ?",
+      )
+        .bind("schedule-test-one", viewer.eventId)
+        .first(),
+    ).toEqual({ visibility: "public" });
+    expect(
+      (
+        await publicProgramme.getPublished("future-of-events-2027")
+      )?.sessions.some((candidate) => candidate.id === "schedule-test-one"),
+    ).toBe(true);
+    const after = await env.DB.prepare(
+      `SELECT public_projection_revision AS revision,
+              (SELECT COUNT(*) FROM event_changes change
+                WHERE change.event_id = events.id
+                  AND change.correlation_id =
+                      'migration-0044-snapshot-visibility') AS changeCount
+         FROM events WHERE id = ?`,
+    )
+      .bind(viewer.eventId)
+      .first<{ revision: number; changeCount: number }>();
+    expect(after!.changeCount).toBe(1);
+    expect(after!.revision).toBeGreaterThan(before!.revision);
   });
 });
