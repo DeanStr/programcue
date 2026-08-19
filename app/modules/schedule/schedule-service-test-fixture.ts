@@ -65,7 +65,13 @@ export async function prepareScheduleServiceTest() {
           AND id IN ('schedule-test-one', 'schedule-test-two')`,
     ).bind(scheduleTestViewer.eventId),
     env.DB.prepare(
-      `UPDATE rooms SET resources_json = '[]'
+      `UPDATE rooms
+          SET resources_json = '[]',
+              capacity = CASE id
+                WHEN 'main' THEN 1200
+                WHEN '301a' THEN 300
+                ELSE capacity
+              END
         WHERE event_id = ? AND id IN ('main', '301a')`,
     ).bind(scheduleTestViewer.eventId),
     env.DB.prepare(

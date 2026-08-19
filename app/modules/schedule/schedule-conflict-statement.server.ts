@@ -7,6 +7,7 @@ export function scheduleConflictInsert(
   entryId: string,
   conflict: ScheduleConflict,
   operationId: string,
+  conflictId: string = crypto.randomUUID(),
 ) {
   const fingerprint = conflict.conflictingEntryId
     ? `${conflict.type}:${[entryId, conflict.conflictingEntryId].sort().join(":")}`
@@ -21,7 +22,7 @@ export function scheduleConflictInsert(
        WHERE EXISTS (SELECT 1 FROM schedule_versions WHERE id = ? AND publication_operation_id = ?)
     `,
   ).bind(
-    crypto.randomUUID(),
+    conflictId,
     eventId,
     versionId,
     conflict.type,

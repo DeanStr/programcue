@@ -278,20 +278,27 @@ export async function action({ request, context }: Route.ActionArgs) {
           return data(
             {
               ...realtimeFailure,
+              intent,
               committed: true,
               warnings: result.warnings,
               scheduleRevision: result.scheduleRevision,
+              placement: result.entry,
+              skipRevalidation: result.movedExistingEntry,
               undo: result.undo,
             },
             { status: 207 },
           );
         return {
           ok: true,
+          committed: true,
+          intent,
           message: result.warnings.length
             ? `Session placed with ${result.warnings.length} warning${result.warnings.length === 1 ? "" : "s"}.`
             : "Session placed.",
           warnings: result.warnings,
           scheduleRevision: result.scheduleRevision,
+          placement: result.entry,
+          skipRevalidation: result.movedExistingEntry,
           undo: result.undo,
         };
       }
@@ -557,12 +564,17 @@ export async function action({ request, context }: Route.ActionArgs) {
   } catch (error) {
     const publishIntent =
       intent === "publish" ? { intent: "publish" as const } : {};
+    const rejectedPlacement =
+      intent === "place"
+        ? { intent: "place" as const, skipRevalidation: true as const }
+        : {};
     if (error instanceof ZodError)
       return data(
         {
           ok: false,
           ...(autoPlacementIntent ? { intent: autoPlacementIntent } : {}),
           ...publishIntent,
+          ...rejectedPlacement,
           error: error.issues[0]?.message ?? "Invalid schedule change.",
         },
         { status: 422 },
@@ -613,7 +625,14 @@ export async function action({ request, context }: Route.ActionArgs) {
           { status: 409 },
         );
       }
-      return data({ ok: false, error: error.message }, { status: 409 });
+      return data(
+        {
+          ok: false,
+          ...(intent === "place" ? { intent: "place" as const } : {}),
+          error: error.message,
+        },
+        { status: 409 },
+      );
     }
     if (error instanceof ScheduleIdempotencyConflictError)
       return data(
@@ -642,7 +661,13 @@ export async function action({ request, context }: Route.ActionArgs) {
       );
     if (error instanceof SchedulePlacementBlockedError)
       return data(
-        { ok: false, error: error.message, conflicts: error.conflicts },
+        {
+          ok: false,
+          intent: "place",
+          skipRevalidation: true,
+          error: error.message,
+          conflicts: error.conflicts,
+        },
         { status: 409 },
       );
     if (error instanceof SchedulePublicationBlockedError)
@@ -661,6 +686,7 @@ export async function action({ request, context }: Route.ActionArgs) {
           ok: false,
           ...(autoPlacementIntent ? { intent: autoPlacementIntent } : {}),
           ...publishIntent,
+          ...rejectedPlacement,
           error: error.message,
         },
         { status: 422 },

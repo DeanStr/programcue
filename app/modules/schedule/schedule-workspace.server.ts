@@ -89,6 +89,7 @@ export function schedulePolicyAction(
 export async function loadScheduleWorkspaceD1(
   env: CloudflareEnvironment,
   viewer: ScheduleEventScope,
+  options: { includePublicationConflicts?: boolean } = {},
 ): Promise<ScheduleWorkspace> {
   const event = await env.DB.prepare(
     `
@@ -422,13 +423,14 @@ export async function loadScheduleWorkspaceD1(
   };
   return {
     ...workspace,
-    publicationConflicts: detectWorkspaceConflicts(workspace).map(
-      ({ entryId, conflict }) => ({
-        ...conflict,
-        entryIds: [entryId, conflict.conflictingEntryId].filter(
-          (id): id is string => Boolean(id),
-        ),
-      }),
-    ),
+    publicationConflicts:
+      options.includePublicationConflicts === false
+        ? []
+        : detectWorkspaceConflicts(workspace).map(({ entryId, conflict }) => ({
+            ...conflict,
+            entryIds: [entryId, conflict.conflictingEntryId].filter(
+              (id): id is string => Boolean(id),
+            ),
+          })),
   };
 }

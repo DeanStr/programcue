@@ -6,7 +6,7 @@ import {
   useSensors,
 } from "@dnd-kit/core";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { useFetcher, useNavigation } from "react-router";
+import { useFetcher, useNavigation, useRevalidator } from "react-router";
 import type { ScheduleWorkspace } from "~/modules/schedule/schedule-service.server";
 import {
   eventBoundaryCalendarDate,
@@ -16,6 +16,13 @@ import {
   eventLocalTimeEpoch,
 } from "~/modules/schedule/schedule-time";
 import type { action } from "~/routes/schedule-planner.server";
+import {
+  applyOptimisticSchedulePlacement,
+  committedScheduleMove,
+  needsAuthoritativeScheduleMoveRefresh,
+  type PendingSchedulePlacement,
+  reconcileCommittedScheduleMove,
+} from "./schedule-planner-optimistic";
 import type { SchedulePlannerWorkspaceData } from "./schedule-planner-panel-types";
 import {
   conflictEntryIds,
@@ -29,13 +36,51 @@ import { useScheduleAutoPlacement } from "./use-schedule-auto-placement";
 import { useScheduleUndoAvailability } from "./use-schedule-undo-availability";
 
 export function useSchedulePlannerController(
-  workspace: SchedulePlannerWorkspaceData,
+  loadedWorkspace: SchedulePlannerWorkspaceData,
 ) {
   const fetcher = useFetcher<typeof action>();
-
   const autoPlacementFetcher = useFetcher<typeof action>();
-
   const navigation = useNavigation();
+  const revalidator = useRevalidator();
+  const [committedWorkspace, setCommittedWorkspace] = useState(loadedWorkspace);
+  const [pendingPlacement, setPendingPlacement] =
+    useState<PendingSchedulePlacement | null>(null);
+  const placementLockRef = useRef(false);
+  const handledPlacementResultRef = useRef<unknown>(undefined);
+  const workspace = useMemo(
+    () =>
+      applyOptimisticSchedulePlacement(committedWorkspace, pendingPlacement),
+    [committedWorkspace, pendingPlacement],
+  );
+
+  useEffect(() => {
+    setCommittedWorkspace(loadedWorkspace);
+    setPendingPlacement(null);
+    placementLockRef.current = false;
+  }, [loadedWorkspace]);
+
+  useEffect(() => {
+    if (
+      fetcher.state !== "idle" ||
+      !isRecord(fetcher.data) ||
+      !("intent" in fetcher.data) ||
+      fetcher.data.intent !== "place" ||
+      fetcher.data === handledPlacementResultRef.current
+    ) {
+      return;
+    }
+    handledPlacementResultRef.current = fetcher.data;
+    const committed = committedScheduleMove(fetcher.data);
+    if (committed) {
+      setCommittedWorkspace((current) =>
+        reconcileCommittedScheduleMove(current, committed),
+      );
+    } else if (needsAuthoritativeScheduleMoveRefresh(fetcher.data)) {
+      void revalidator.revalidate();
+    }
+    setPendingPlacement(null);
+    placementLockRef.current = false;
+  }, [fetcher.data, fetcher.state, revalidator]);
 
   useEffect(() => {
     if (!workspace.focusedConflictId) return;
@@ -51,9 +96,21 @@ export function useSchedulePlannerController(
   );
 
   const [publishOpen, setPublishOpen] = useState(false);
+  const [publishRefreshing, setPublishRefreshing] = useState(false);
   useEffect(() => {
     if (!workspace.publicationPreview) setPublishOpen(false);
   }, [workspace.publicationPreview]);
+
+  async function requestPublish() {
+    if (publishRefreshing) return;
+    setPublishRefreshing(true);
+    try {
+      await revalidator.revalidate();
+      setPublishOpen(true);
+    } finally {
+      setPublishRefreshing(false);
+    }
+  }
 
   const [draggingSessionId, setDraggingSessionId] = useState<string | null>(
     null,
@@ -423,6 +480,46 @@ export function useSchedulePlannerController(
     const durationSeconds = existingEntry
       ? existingEntry.endsAt - existingEntry.startsAt
       : session.durationMinutes * 60;
+    submitPlacement({
+      sessionId,
+      roomId,
+      startsAt,
+      endsAt: startsAt + durationSeconds,
+      existingEntry,
+    });
+  }
+
+  function submitPlacement({
+    sessionId,
+    roomId,
+    startsAt,
+    endsAt,
+    existingEntry,
+  }: {
+    sessionId: string;
+    roomId: string;
+    startsAt: number;
+    endsAt: number;
+    existingEntry: ScheduleWorkspace["entries"][number] | undefined;
+  }) {
+    if (
+      workspace.version?.status !== "draft" ||
+      placementLockRef.current ||
+      fetcher.state !== "idle"
+    ) {
+      return;
+    }
+    placementLockRef.current = true;
+    setPendingPlacement({
+      entry: {
+        id: existingEntry?.id ?? `pending:${sessionId}`,
+        sessionId,
+        roomId,
+        startsAt,
+        endsAt,
+        revision: existingEntry?.revision ?? 1,
+      },
+    });
     void fetcher.submit(
       {
         intent: "place",
@@ -431,10 +528,21 @@ export function useSchedulePlannerController(
         sessionId,
         roomId,
         startsAt: String(startsAt),
-        endsAt: String(startsAt + durationSeconds),
+        endsAt: String(endsAt),
       },
       { method: "post" },
     );
+  }
+
+  function submitQuickPlacement() {
+    if (!quickSession || !quickRoomId) return;
+    submitPlacement({
+      sessionId: quickSession.id,
+      roomId: quickRoomId,
+      startsAt: quickStartsAt,
+      endsAt: quickStartsAt + quickDurationMinutes * 60,
+      existingEntry: quickEntry,
+    });
   }
 
   function unassign(entry: ScheduleWorkspace["entries"][number]) {
@@ -461,18 +569,13 @@ export function useSchedulePlannerController(
       durationMinutes > 480
     )
       return;
-    void fetcher.submit(
-      {
-        intent: "place",
-        scheduleVersionId: workspace.version.id,
-        scheduleRevision: String(workspace.version.revision),
-        sessionId: entry.sessionId,
-        roomId: entry.roomId,
-        startsAt: String(entry.startsAt),
-        endsAt: String(entry.startsAt + durationMinutes * 60),
-      },
-      { method: "post" },
-    );
+    submitPlacement({
+      sessionId: entry.sessionId,
+      roomId: entry.roomId,
+      startsAt: entry.startsAt,
+      endsAt: entry.startsAt + durationMinutes * 60,
+      existingEntry: entry,
+    });
   }
 
   function moveInStandardCalendar(
@@ -487,18 +590,13 @@ export function useSchedulePlannerController(
       endsAt <= startsAt
     )
       return;
-    void fetcher.submit(
-      {
-        intent: "place",
-        scheduleVersionId: workspace.version.id,
-        scheduleRevision: String(workspace.version.revision),
-        sessionId: entry.sessionId,
-        roomId: entry.roomId,
-        startsAt: String(startsAt),
-        endsAt: String(endsAt),
-      },
-      { method: "post" },
-    );
+    submitPlacement({
+      sessionId: entry.sessionId,
+      roomId: entry.roomId,
+      startsAt,
+      endsAt,
+      existingEntry: entry,
+    });
   }
 
   const actionResult = fetcher.data;
@@ -588,7 +686,9 @@ export function useSchedulePlannerController(
     navigation,
     place,
     placementAvailable,
+    placementBusy: pendingPlacement !== null,
     publishOpen,
+    publishRefreshing,
     quickDurationMinutes,
     quickEntry,
     quickRoomId,
@@ -596,6 +696,7 @@ export function useSchedulePlannerController(
     quickSessionId,
     quickStartsAt,
     readOnlyPlacementMessage,
+    requestPublish,
     resize,
     resourceInventory,
     revealConflictEntries,
@@ -616,11 +717,13 @@ export function useSchedulePlannerController(
     setView,
     slotLabel,
     slots,
+    submitQuickPlacement,
     trackGroups,
     unassign,
     undoAvailable,
     unscheduledSessions,
     view,
     visibleSessions,
+    workspace,
   };
 }

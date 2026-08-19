@@ -39,13 +39,18 @@ describe("schedule placement workflows", () => {
       env as unknown as CloudflareEnvironment,
     );
     const versionId = await service.createDraft(viewer);
+    await env.DB.prepare(
+      "UPDATE rooms SET capacity = 1 WHERE id = 'main' AND event_id = ?",
+    )
+      .bind(viewer.eventId)
+      .run();
     let workspace = await service.getWorkspace(viewer);
     const startsAt = eventLocalTimeEpoch(
       workspace.event.startsAt,
       workspace.event.timezone,
       9,
     );
-    await service.place(viewer, {
+    const placement = await service.place(viewer, {
       scheduleVersionId: versionId,
       scheduleRevision: workspace.version!.revision,
       sessionId: "schedule-test-one",
@@ -53,6 +58,31 @@ describe("schedule placement workflows", () => {
       startsAt,
       endsAt: startsAt + 3_600,
     });
+    expect(placement).toMatchObject({
+      movedExistingEntry: false,
+      entry: {
+        id: placement.entryId,
+        sessionId: "schedule-test-one",
+        roomId: "main",
+        startsAt,
+        endsAt: startsAt + 3_600,
+        revision: 1,
+      },
+      warnings: [
+        expect.objectContaining({
+          id: expect.any(String),
+          type: "capacity",
+          severity: "warning",
+        }),
+      ],
+    });
+    expect(
+      await env.DB.prepare(
+        "SELECT id FROM schedule_conflicts WHERE schedule_version_id = ? AND conflict_type = 'capacity'",
+      )
+        .bind(versionId)
+        .first(),
+    ).toEqual({ id: placement.warnings[0]!.id });
     workspace = await service.getWorkspace(viewer);
     expect(workspace.entries).toHaveLength(1);
     const blockedPlacement = service.place(viewer, {
@@ -227,6 +257,11 @@ describe("schedule placement workflows", () => {
     const secondService = new ScheduleService(
       env as unknown as CloudflareEnvironment,
     );
+    await env.DB.prepare(
+      "UPDATE rooms SET capacity = 1 WHERE id = 'main' AND event_id = ?",
+    )
+      .bind(viewer.eventId)
+      .run();
     const versionId = await firstService.createDraft(viewer);
     const workspace = await firstService.getWorkspace(viewer);
     const startsAt = eventLocalTimeEpoch(
@@ -254,6 +289,13 @@ describe("schedule placement workflows", () => {
     ]);
     expect(replay).toEqual(first);
     expect(first.scheduleRevision).toBe(input.scheduleRevision + 1);
+    expect(first.warnings).toEqual([
+      expect.objectContaining({
+        id: expect.any(String),
+        type: "capacity",
+        severity: "warning",
+      }),
+    ]);
     expect((await firstService.getWorkspace(viewer)).entries).toEqual([
       expect.objectContaining({
         id: first.entryId,
@@ -411,6 +453,16 @@ describe("schedule placement workflows", () => {
       roomId: "301a",
       startsAt: movedStartsAt,
       endsAt: movedStartsAt + 5_400,
+    });
+    expect(move).toMatchObject({
+      movedExistingEntry: true,
+      entry: {
+        sessionId: "schedule-test-one",
+        roomId: "301a",
+        startsAt: movedStartsAt,
+        endsAt: movedStartsAt + 5_400,
+        revision: 2,
+      },
     });
     workspace = await service.getWorkspace(viewer);
     expect(workspace.entries[0]).toMatchObject({

@@ -494,6 +494,36 @@ test.describe("mutable schedule authoring", () => {
     await event.hover();
     const eventBox = await event.locator("..").boundingBox();
     expect(eventBox).not.toBeNull();
+    const scheduleReloads: string[] = [];
+    page.on("request", (request) => {
+      const url = new URL(request.url());
+      const revalidatedRoutes = url.searchParams.get("_routes");
+      if (
+        request.method() === "GET" &&
+        (url.pathname === "/admin/schedule" ||
+          (url.pathname === "/admin/schedule.data" &&
+            (revalidatedRoutes === null ||
+              revalidatedRoutes
+                .split(",")
+                .includes("routes/schedule-planner"))))
+      ) {
+        scheduleReloads.push(url.href);
+      }
+    });
+    let releasePlacement = () => {};
+    const placementGate = new Promise<void>((resolve) => {
+      releasePlacement = resolve;
+    });
+    await page.route("**/admin/schedule.data*", async (route) => {
+      const request = route.request();
+      if (
+        request.method() === "POST" &&
+        request.postData()?.includes("intent=place")
+      ) {
+        await placementGate;
+      }
+      await route.continue();
+    });
     const resizeRequest = page.waitForResponse(
       (response) =>
         response.request().method() === "POST" &&
@@ -510,8 +540,17 @@ test.describe("mutable schedule authoring", () => {
       { steps: 5 },
     );
     await page.mouse.up();
+    try {
+      await expect(page.getByText("Saving schedule change…")).toBeVisible();
+      await expect
+        .poll(async () => (await event.locator("..").boundingBox())?.height)
+        .not.toBe(eventBox!.height);
+    } finally {
+      releasePlacement();
+    }
     expect((await resizeRequest).ok()).toBeTruthy();
     await expectStatus(page, "Session placed");
+    expect(scheduleReloads).toEqual([]);
     const undo = page.getByRole("button", { name: "Undo" });
     await expect(undo).toBeVisible();
     await undo.click();

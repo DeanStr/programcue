@@ -52,9 +52,11 @@ export type AutoPlacementResultNotice = {
 };
 
 export type ScheduleActionConflictNotice = {
+  id?: string;
   type: string;
   severity: "warning" | "blocking";
   message: string;
+  conflictingEntryId?: string;
 };
 
 export const SCHEDULE_ACTION_INVALID_RESPONSE_MESSAGE =
@@ -83,6 +85,7 @@ export function isScheduleActionConflictNotice(
 ): value is ScheduleActionConflictNotice {
   return (
     isRecord(value) &&
+    (value.id === undefined || typeof value.id === "string") &&
     typeof value.type === "string" &&
     value.type.length > 0 &&
     (value.severity === "warning" || value.severity === "blocking") &&

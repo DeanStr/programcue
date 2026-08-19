@@ -25,7 +25,7 @@ export {
 } from "./schedule-planner-workspace-helpers";
 
 export function SchedulePlannerWorkspace({
-  workspace,
+  workspace: loadedWorkspace,
 }: {
   workspace: SchedulePlannerWorkspaceData;
 }) {
@@ -35,10 +35,10 @@ export function SchedulePlannerWorkspace({
   const inspectorTitleRef = useRef<HTMLHeadingElement>(null);
   const inspectorFocusAfterToggle = useRef(false);
   useEffect(() => {
-    if (workspace.createdSessionId || workspace.focusedSessionId) {
+    if (loadedWorkspace.createdSessionId || loadedWorkspace.focusedSessionId) {
       setInspectorOpen(true);
     }
-  }, [workspace.createdSessionId, workspace.focusedSessionId]);
+  }, [loadedWorkspace.createdSessionId, loadedWorkspace.focusedSessionId]);
   useEffect(() => {
     if (!inspectorFocusAfterToggle.current) return;
     inspectorFocusAfterToggle.current = false;
@@ -67,7 +67,9 @@ export function SchedulePlannerWorkspace({
     navigation,
     place,
     placementAvailable,
+    placementBusy,
     publishOpen,
+    publishRefreshing,
     quickDurationMinutes,
     quickEntry,
     quickRoomId,
@@ -75,6 +77,7 @@ export function SchedulePlannerWorkspace({
     quickSessionId,
     quickStartsAt,
     readOnlyPlacementMessage,
+    requestPublish,
     resize,
     resourceInventory,
     revealConflictEntries,
@@ -95,12 +98,14 @@ export function SchedulePlannerWorkspace({
     setView,
     slotLabel,
     slots,
+    submitQuickPlacement,
     trackGroups,
     unassign,
     undoAvailable,
     view,
     visibleSessions,
-  } = useSchedulePlannerController(workspace);
+    workspace,
+  } = useSchedulePlannerController(loadedWorkspace);
   function inspectSession(sessionId: string) {
     selectQuickSession(sessionId);
     setInspectorOpen(true);
@@ -192,9 +197,10 @@ export function SchedulePlannerWorkspace({
             <button
               className="btn primary"
               type="button"
-              onClick={() => setPublishOpen(true)}
+              disabled={publishRefreshing || placementBusy}
+              onClick={requestPublish}
             >
-              Publish schedule
+              {publishRefreshing ? "Refreshing preview…" : "Publish schedule"}
             </button>
           ) : workspace.version ? (
             <button
@@ -339,6 +345,11 @@ export function SchedulePlannerWorkspace({
           </Link>
         </div>
       ) : null}
+      {placementBusy ? (
+        <div className="validation-item schedule-notice info mb" role="status">
+          <span>Saving schedule change…</span>
+        </div>
+      ) : null}
       {actionNotices.error ? (
         <div className="validation-item schedule-notice error mb" role="alert">
           <span>{actionNotices.error}</span>
@@ -425,7 +436,7 @@ export function SchedulePlannerWorkspace({
       ) : null}
       <DndContext
         id="schedule-planner-dnd-instructions"
-        sensors={sensors}
+        sensors={placementBusy ? [] : sensors}
         accessibility={{
           screenReaderInstructions: {
             draggable:
@@ -480,6 +491,7 @@ export function SchedulePlannerWorkspace({
             readOnlyPlacementMessage={readOnlyPlacementMessage}
             quickEntry={quickEntry}
             unassign={unassign}
+            submitQuickPlacement={submitQuickPlacement}
           />
           <div className="schedule-stage">
             <ScheduleCanvasPanel
@@ -491,6 +503,7 @@ export function SchedulePlannerWorkspace({
               eventDays={eventDays}
               setSelectedDay={setSelectedDay}
               placementAvailable={placementAvailable}
+              placementBusy={placementBusy}
               moveInStandardCalendar={moveInStandardCalendar}
               resize={resize}
               selectQuickSession={inspectSession}

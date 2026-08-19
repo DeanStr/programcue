@@ -163,10 +163,17 @@ export type SchedulePlacementCommand = {
   requestHash: string;
 };
 
+export type SchedulePlacementWarning = Omit<ScheduleConflict, "severity"> & {
+  id: string;
+  severity: "warning";
+};
+
 export type SchedulePlacementResult = {
   entryId: string;
+  entry: ScheduleEntry;
+  movedExistingEntry: boolean;
   scheduleRevision: number;
-  warnings: ScheduleConflict[];
+  warnings: SchedulePlacementWarning[];
   undo: { token: string; expiresAt: number };
 };
 
@@ -231,10 +238,10 @@ export class ScheduleService {
       this.env,
       workflowDependencies,
     );
-    this.placementWorkflow = new SchedulePlacementWorkflow(
-      this.env,
-      workflowDependencies,
-    );
+    this.placementWorkflow = new SchedulePlacementWorkflow(this.env, {
+      getWorkspace: (viewer: ScheduleEventScope) =>
+        this.getWorkspace(viewer, { includePublicationConflicts: false }),
+    });
     this.publicationReadiness = new SchedulePublicationReadiness(this.env);
   }
 
@@ -444,9 +451,12 @@ export class ScheduleService {
     };
   }
 
-  async getWorkspace(viewer: ScheduleEventScope): Promise<ScheduleWorkspace> {
+  async getWorkspace(
+    viewer: ScheduleEventScope,
+    options: { includePublicationConflicts?: boolean } = {},
+  ): Promise<ScheduleWorkspace> {
     if (this.projectionDepth === 0) await this.airtable.assertReadable(viewer);
-    return loadScheduleWorkspaceD1(this.env, viewer);
+    return loadScheduleWorkspaceD1(this.env, viewer, options);
   }
 
   async previewAutoPlacement(

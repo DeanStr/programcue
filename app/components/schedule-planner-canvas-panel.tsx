@@ -190,6 +190,7 @@ export function ScheduleCanvasPanel({
   eventDays,
   setSelectedDay,
   placementAvailable,
+  placementBusy,
   moveInStandardCalendar,
   resize,
   selectQuickSession,
@@ -209,6 +210,7 @@ export function ScheduleCanvasPanel({
   eventDays: number[];
   setSelectedDay: StateSetter<number>;
   placementAvailable: boolean;
+  placementBusy: boolean;
   moveInStandardCalendar(
     entry: ScheduleEntry,
     startsAt: number,
@@ -326,7 +328,7 @@ export function ScheduleCanvasPanel({
           view={view}
           selectedDay={selectedDay}
           placementAvailable={placementAvailable}
-          busy={fetcher.state !== "idle"}
+          busy={placementBusy || fetcher.state !== "idle"}
           onMove={moveInStandardCalendar}
           onResize={resize}
           onSelectSession={selectQuickSession}
@@ -501,7 +503,8 @@ export function ScheduleCanvasPanel({
                                     session.format,
                                   )}
                                   disabled={
-                                    workspace.version?.status !== "draft"
+                                    workspace.version?.status !== "draft" ||
+                                    placementBusy
                                   }
                                   focused={
                                     workspace.focusedSessionId === session.id

@@ -735,6 +735,21 @@ no-provider-call fixture proves in Chromium that the canonical human aggregate,
 immutable AI advisory and non-canonical human assessment remain distinct after
 the assessment is saved and the page is reloaded.
 
+### Schedule interaction performance evidence
+
+Moves and resizes of already-scheduled draft entries now keep the proposed
+position visible while the authoritative D1 rule check runs, roll back on a
+rejected result and reconcile the returned entry, revision and warnings on
+success. Successful moves no longer re-run the complete Schedule Planner
+loader; new placements and consequential or stale-revision paths retain normal
+revalidation. The placement mutation also omits the publication-wide quadratic
+conflict projection because it performs the candidate conflict check directly;
+publication still refreshes and rechecks the full authoritative preview before
+opening. Focused unit, Worker and Chromium coverage verifies the optimistic
+projection, durable placement response and absence of a post-move schedule
+loader request. Production drag frame pacing and field latency remain external
+acceptance evidence.
+
 ### Deterministic auto-placement evidence
 
 The draft Schedule Planner exposes deterministic first-fit auto-placement with

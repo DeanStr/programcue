@@ -104,6 +104,7 @@ export function ScheduleSourcePanel({
   readOnlyPlacementMessage,
   quickEntry,
   unassign,
+  submitQuickPlacement,
 }: {
   workspace: SchedulePlannerWorkspaceData;
   fetcher: ScheduleFetcher;
@@ -124,6 +125,7 @@ export function ScheduleSourcePanel({
   readOnlyPlacementMessage: string;
   quickEntry: ScheduleEntry | undefined;
   unassign(entry: ScheduleEntry): void;
+  submitQuickPlacement(): void;
 }) {
   const [placementFormOpen, setPlacementFormOpen] = useState(true);
   const [searchParams, setSearchParams] = useSearchParams();
@@ -203,7 +205,14 @@ export function ScheduleSourcePanel({
                 Keyboard alternative across every event day
               </span>
             </summary>
-            <fetcher.Form method="post" className="stack mt">
+            <fetcher.Form
+              method="post"
+              className="stack mt"
+              onSubmit={(event) => {
+                event.preventDefault();
+                submitQuickPlacement();
+              }}
+            >
               <input type="hidden" name="intent" value="place" />
               <input
                 type="hidden"
@@ -329,6 +338,7 @@ export function ScheduleSourcePanel({
                   !quickRoomId ||
                   !Number.isInteger(quickDurationMinutes) ||
                   quickDurationMinutes < 5 ||
+                  quickDurationMinutes > 480 ||
                   fetcher.state !== "idle"
                 }
               >

@@ -10,14 +10,32 @@ export { action, loader } from "./schedule-planner.server";
 
 export const meta = () => [{ title: "Schedule Planner · Program Cue" }];
 
+export function shouldRevalidateScheduleMutation(
+  actionResult: unknown,
+  defaultShouldRevalidate: boolean,
+) {
+  const reconciledPlacement =
+    actionResult &&
+    typeof actionResult === "object" &&
+    "intent" in actionResult &&
+    actionResult.intent === "place" &&
+    "skipRevalidation" in actionResult &&
+    actionResult.skipRevalidation === true;
+  return reconciledPlacement ? false : defaultShouldRevalidate;
+}
+
 export function shouldRevalidate({
   currentUrl,
   nextUrl,
   defaultShouldRevalidate,
   formMethod,
+  actionResult,
 }: ShouldRevalidateFunctionArgs) {
   if (formMethod && formMethod.toUpperCase() !== "GET") {
-    return defaultShouldRevalidate;
+    return shouldRevalidateScheduleMutation(
+      actionResult,
+      defaultShouldRevalidate,
+    );
   }
 
   return onlyClientSearchParametersChanged(

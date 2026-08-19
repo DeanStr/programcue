@@ -68,6 +68,26 @@ export function scheduleStandardFirstDay(epoch: number) {
   return new Date(`${calendarDate(epoch)}T12:00:00Z`).getUTCDay();
 }
 
+export function scheduleStandardChangedTimes(
+  info: EventDropInfo | EventResizeDoneInfo,
+  entryById: Map<string, ScheduleWorkspace["entries"][number]>,
+): {
+  entry: ScheduleWorkspace["entries"][number];
+  startsAt: number;
+  endsAt: number;
+} | null {
+  const entry = entryById.get(info.event.id);
+  const start = info.event.start;
+  const end = info.event.end;
+  const startsAt = start ? Math.floor(start.getTime() / 1_000) : null;
+  const endsAt = end ? Math.floor(end.getTime() / 1_000) : null;
+  if (!entry || startsAt === null || endsAt === null || endsAt <= startsAt) {
+    info.revert();
+    return null;
+  }
+  return { entry, startsAt, endsAt };
+}
+
 export function ScheduleStandardCalendar({
   workspace,
   view,
@@ -132,25 +152,6 @@ export function ScheduleStandardCalendar({
       },
     };
   });
-
-  function changedTimes(info: EventDropInfo | EventResizeDoneInfo): {
-    entry: ScheduleWorkspace["entries"][number];
-    startsAt: number;
-    endsAt: number;
-  } | null {
-    const entry = entryById.get(info.event.id);
-    const start = info.event.start;
-    const end = info.event.end;
-    const startsAt = start ? Math.floor(start.getTime() / 1_000) : null;
-    const endsAt = end ? Math.floor(end.getTime() / 1_000) : null;
-    info.revert();
-    if (!entry || startsAt === null || endsAt === null) return null;
-    return {
-      entry,
-      startsAt,
-      endsAt,
-    };
-  }
 
   return (
     <section
@@ -233,16 +234,23 @@ export function ScheduleStandardCalendar({
               if (sessionId) onSelectSession(sessionId);
             }}
             eventDrop={(info) => {
-              const changed = changedTimes(info);
+              const changed = scheduleStandardChangedTimes(info, entryById);
               if (changed)
                 onMove(changed.entry, changed.startsAt, changed.endsAt);
             }}
             eventResize={(info) => {
-              const changed = changedTimes(info);
+              const changed = scheduleStandardChangedTimes(info, entryById);
               if (!changed) return;
               const durationMinutes = (changed.endsAt - changed.startsAt) / 60;
-              if (Number.isInteger(durationMinutes))
+              if (
+                Number.isInteger(durationMinutes) &&
+                durationMinutes >= 5 &&
+                durationMinutes <= 480
+              ) {
                 onResize(changed.entry, durationMinutes);
+              } else {
+                info.revert();
+              }
             }}
           />
         </div>
@@ -259,9 +267,9 @@ export function ScheduleStandardCalendar({
       {placementAvailable && view !== "list" ? (
         <p className="help mt">
           Drag to change time or day, or drag an event’s lower edge to resize.
-          Every change is reverted locally until the server revalidates and
-          commits it. Use “Place or move with form” for a complete keyboard
-          alternative, including room changes.
+          Changes appear immediately, then roll back if authoritative server
+          validation rejects them. Use “Place or move with form” for a complete
+          keyboard alternative, including room changes.
         </p>
       ) : null}
     </section>

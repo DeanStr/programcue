@@ -23,6 +23,7 @@ import type {
   ScheduleEventScope,
   SchedulePlacementCommand,
   SchedulePlacementResult,
+  SchedulePlacementWarning,
   ScheduleUnassignmentResult,
   ScheduleWorkspace,
 } from "./schedule-service.server";
@@ -109,8 +110,13 @@ function parseSchedulePlacementResult(value: unknown): SchedulePlacementResult {
   }
   const candidate = value as Record<string, unknown>;
   const undo = candidate.undo;
+  const entry = candidate.entry;
   if (
     typeof candidate.entryId !== "string" ||
+    candidate.entryId.length === 0 ||
+    !entry ||
+    typeof entry !== "object" ||
+    typeof candidate.movedExistingEntry !== "boolean" ||
     typeof candidate.scheduleRevision !== "number" ||
     !Number.isSafeInteger(candidate.scheduleRevision) ||
     candidate.scheduleRevision < 1 ||
@@ -122,6 +128,28 @@ function parseSchedulePlacementResult(value: unknown): SchedulePlacementResult {
       "The completed schedule placement has an invalid durable result.",
     );
   }
+  const parsedEntry = entry as Record<string, unknown>;
+  if (
+    typeof parsedEntry.id !== "string" ||
+    parsedEntry.id !== candidate.entryId ||
+    typeof parsedEntry.sessionId !== "string" ||
+    parsedEntry.sessionId.length === 0 ||
+    typeof parsedEntry.roomId !== "string" ||
+    parsedEntry.roomId.length === 0 ||
+    typeof parsedEntry.startsAt !== "number" ||
+    !Number.isSafeInteger(parsedEntry.startsAt) ||
+    parsedEntry.startsAt <= 0 ||
+    typeof parsedEntry.endsAt !== "number" ||
+    !Number.isSafeInteger(parsedEntry.endsAt) ||
+    parsedEntry.endsAt <= parsedEntry.startsAt ||
+    typeof parsedEntry.revision !== "number" ||
+    !Number.isSafeInteger(parsedEntry.revision) ||
+    parsedEntry.revision < 1
+  ) {
+    throw new Error(
+      "The completed schedule placement has invalid durable entry data.",
+    );
+  }
   const parsedWarnings = candidate.warnings.map((warning) => {
     if (!warning || typeof warning !== "object") {
       throw new Error(
@@ -130,10 +158,13 @@ function parseSchedulePlacementResult(value: unknown): SchedulePlacementResult {
     }
     const parsed = warning as Record<string, unknown>;
     if (
+      typeof parsed.id !== "string" ||
+      parsed.id.length === 0 ||
       typeof parsed.type !== "string" ||
       !scheduleConflictTypes.has(parsed.type as ScheduleConflict["type"]) ||
-      (parsed.severity !== "warning" && parsed.severity !== "blocking") ||
+      parsed.severity !== "warning" ||
       typeof parsed.message !== "string" ||
+      parsed.message.length === 0 ||
       (parsed.conflictingEntryId !== undefined &&
         typeof parsed.conflictingEntryId !== "string")
     ) {
@@ -142,19 +173,22 @@ function parseSchedulePlacementResult(value: unknown): SchedulePlacementResult {
       );
     }
     return {
+      id: parsed.id,
       type: parsed.type,
       severity: parsed.severity,
       message: parsed.message,
       ...(parsed.conflictingEntryId === undefined
         ? {}
         : { conflictingEntryId: parsed.conflictingEntryId }),
-    } as ScheduleConflict;
+    } as SchedulePlacementWarning;
   });
   const parsedUndo = undo as Record<string, unknown>;
   if (
     typeof parsedUndo.token !== "string" ||
+    parsedUndo.token.length === 0 ||
     typeof parsedUndo.expiresAt !== "number" ||
-    !Number.isSafeInteger(parsedUndo.expiresAt)
+    !Number.isSafeInteger(parsedUndo.expiresAt) ||
+    parsedUndo.expiresAt < 1
   ) {
     throw new Error(
       "The completed schedule placement has invalid durable undo metadata.",
@@ -162,6 +196,8 @@ function parseSchedulePlacementResult(value: unknown): SchedulePlacementResult {
   }
   return {
     entryId: candidate.entryId,
+    entry: parsedEntry as ScheduleEntrySnapshot,
+    movedExistingEntry: candidate.movedExistingEntry,
     scheduleRevision: candidate.scheduleRevision,
     warnings: parsedWarnings,
     undo: { token: parsedUndo.token, expiresAt: parsedUndo.expiresAt },
@@ -313,6 +349,11 @@ export class SchedulePlacementWorkflow {
     );
     if (blockingConflicts.length)
       throw new SchedulePlacementBlockedError(blockingConflicts);
+    const warnings: SchedulePlacementWarning[] = conflicts.map((conflict) => ({
+      ...conflict,
+      id: crypto.randomUUID(),
+      severity: "warning",
+    }));
 
     const entryId = currentEntry?.id ?? crypto.randomUUID();
     const versionOperationId = crypto.randomUUID();
@@ -327,8 +368,10 @@ export class SchedulePlacementWorkflow {
     };
     const result: SchedulePlacementResult = {
       entryId,
+      entry: nextEntry,
+      movedExistingEntry: currentEntry !== undefined,
       scheduleRevision: parsed.scheduleRevision + 1,
-      warnings: conflicts,
+      warnings,
       undo: { token: versionOperationId, expiresAt: undoExpiresAt },
     };
     const commandRecordId = command ? crypto.randomUUID() : null;
@@ -453,13 +496,14 @@ export class SchedulePlacementWorkflow {
         parsed.scheduleVersionId,
         versionOperationId,
       ),
-      ...conflicts.map((conflict) =>
+      ...warnings.map((conflict) =>
         this.conflictInsert(
           viewer.eventId,
           parsed.scheduleVersionId,
           entryId,
           conflict,
           versionOperationId,
+          conflict.id,
         ),
       ),
       this.env.DB.prepare(
@@ -1141,6 +1185,7 @@ export class SchedulePlacementWorkflow {
     entryId: string,
     conflict: ScheduleConflict,
     operationId: string,
+    conflictId?: string,
   ) {
     return scheduleConflictInsert(
       this.env,
@@ -1149,6 +1194,7 @@ export class SchedulePlacementWorkflow {
       entryId,
       conflict,
       operationId,
+      conflictId,
     );
   }
 }
