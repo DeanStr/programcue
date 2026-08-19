@@ -115,6 +115,33 @@ function withSuppressedStatement(
   };
 }
 
+function withFirstBatchRace(
+  testEnv: CloudflareEnvironment,
+  race: () => Promise<void>,
+) {
+  let injectRace = true;
+  const racingDb = new Proxy(testEnv.DB, {
+    get(target, property) {
+      if (property === "batch") {
+        return async (statements: D1PreparedStatement[]) => {
+          if (injectRace) {
+            injectRace = false;
+            await race();
+          }
+          return target.batch(statements);
+        };
+      }
+      const value = Reflect.get(target, property);
+      return typeof value === "function" ? value.bind(target) : value;
+    },
+  });
+  return new Proxy(testEnv, {
+    get(target, property) {
+      return property === "DB" ? racingDb : Reflect.get(target, property);
+    },
+  });
+}
+
 async function insertPendingPublishedSpeaker(
   testEnv: CloudflareEnvironment,
   personId: string,
@@ -296,6 +323,323 @@ describe("speaker profile service", () => {
         .bind(taskId)
         .first(),
     ).resolves.toEqual({ status: "not_started" });
+  });
+
+  it("materialises only the confirming person's confirmed-speaker acknowledgements and preserves explicit waivers", async () => {
+    const testEnv = env as unknown as CloudflareEnvironment;
+    await ensureDemoSpeakerData(testEnv);
+    const sessionId = "session-demo-speaker";
+    const otherPersonId = `confirmation-other-${crypto.randomUUID()}`;
+    await testEnv.DB.batch([
+      testEnv.DB.prepare(
+        `UPDATE session_speakers
+            SET participation_status = 'pending', participation_confirmed_at = NULL
+          WHERE event_id = ? AND session_id = ? AND person_id = ?`,
+      ).bind(speaker.eventId, sessionId, speaker.personId),
+      testEnv.DB.prepare(
+        `INSERT INTO people (
+           id, email, display_name, email_verified, profile_status,
+           created_at, updated_at
+         ) VALUES (?, ?, 'Other Session Speaker', 1, 'published',
+                   unixepoch(), unixepoch())`,
+      ).bind(otherPersonId, `${otherPersonId}@example.com`),
+      testEnv.DB.prepare(
+        `INSERT INTO session_speakers (
+           session_id, event_id, person_id, position, role_label,
+           participation_status, participation_confirmed_at, visibility
+         ) VALUES (?, ?, ?, 9000, 'Speaker', 'pending', NULL, 'public')`,
+      ).bind(sessionId, speaker.eventId, otherPersonId),
+    ]);
+
+    const resources = new ResourceService(testEnv);
+    const publishResource = async (
+      label: string,
+      audienceScope: "accepted_speakers" | "confirmed_speakers",
+    ) => {
+      const pageId = await resources.save(admin, {
+        title: label,
+        slug: `${label.toLowerCase().replaceAll(" ", "-")}-${crypto.randomUUID().slice(0, 8)}`,
+        category: "Preparation",
+        audienceScope,
+        acknowledgementRequired: true,
+        document: {
+          type: "doc",
+          content: [
+            {
+              type: "paragraph",
+              content: [{ type: "text", text: "Read this briefing." }],
+            },
+          ],
+        },
+      });
+      const draft = (await resources.getAdminWorkspace(admin, pageId))
+        .selected!;
+      await resources.publish(admin, pageId, draft.revision);
+      return pageId;
+    };
+    const acceptedPageId = await publishResource(
+      "Accepted confirmation boundary",
+      "accepted_speakers",
+    );
+    const newConfirmedPageId = await publishResource(
+      "New confirmed acknowledgement",
+      "confirmed_speakers",
+    );
+    const waivedConfirmedPageId = await publishResource(
+      "Waived confirmed acknowledgement",
+      "confirmed_speakers",
+    );
+    const acceptedSpeakerTaskId = `resource-ack:${acceptedPageId}:${speaker.personId}`;
+    const acceptedOtherTaskId = `resource-ack:${acceptedPageId}:${otherPersonId}`;
+    const waivedConfirmedTaskId = `resource-ack:${waivedConfirmedPageId}:${speaker.personId}`;
+    const explicitWaiver = JSON.stringify({
+      reason: "Administrator explicitly waived this requirement",
+      by: admin.personId,
+    });
+    await testEnv.DB.batch([
+      testEnv.DB.prepare(
+        `UPDATE task_instances
+            SET status = 'waived', readiness_percent = 100,
+                waiver_json = ?, completed_at = unixepoch(),
+                completed_by_person_id = ?, revision = revision + 1
+          WHERE id IN (?, ?) AND event_id = ?`,
+      ).bind(
+        explicitWaiver,
+        admin.personId,
+        acceptedSpeakerTaskId,
+        acceptedOtherTaskId,
+        speaker.eventId,
+      ),
+      testEnv.DB.prepare(
+        `INSERT INTO task_instances (
+           id, event_id, template_id, target_type, target_id, owner_person_id,
+           title, description, task_type, impact, status, readiness_state,
+           readiness_percent, revision, waiver_json, completed_at,
+           completed_by_person_id, created_at, updated_at
+         ) VALUES (?, ?, ?, 'speaker', ?, ?, 'Read waived briefing',
+                   'Read and acknowledge the current published version.',
+                   'acknowledgement', 'medium', 'waived', 'on_track', 100, 1,
+                   ?, unixepoch(), ?, unixepoch(), unixepoch())`,
+      ).bind(
+        waivedConfirmedTaskId,
+        speaker.eventId,
+        `resource-ack:${waivedConfirmedPageId}`,
+        speaker.personId,
+        speaker.personId,
+        explicitWaiver,
+        admin.personId,
+      ),
+    ]);
+    const preservedTaskIds = [
+      acceptedSpeakerTaskId,
+      acceptedOtherTaskId,
+      waivedConfirmedTaskId,
+    ];
+    const preservedState = () =>
+      Promise.all(
+        preservedTaskIds.map((taskId) =>
+          testEnv.DB.prepare(
+            `SELECT status, revision, waiver_json AS waiverJson
+               FROM task_instances WHERE id = ?`,
+          )
+            .bind(taskId)
+            .first(),
+        ),
+      );
+    const before = await preservedState();
+    expect(before).toEqual([
+      { status: "waived", revision: 2, waiverJson: explicitWaiver },
+      { status: "waived", revision: 2, waiverJson: explicitWaiver },
+      { status: "waived", revision: 1, waiverJson: explicitWaiver },
+    ]);
+
+    const service = new SpeakerService(testEnv);
+    await expect(
+      service.confirmOwnParticipation(speaker, {
+        sessionId,
+        confirmation: "confirmed",
+      }),
+    ).resolves.toMatchObject({ changed: true });
+
+    await expect(preservedState()).resolves.toEqual(before);
+    await expect(
+      testEnv.DB.prepare(
+        "SELECT status, revision FROM task_instances WHERE id = ?",
+      )
+        .bind(`resource-ack:${newConfirmedPageId}:${speaker.personId}`)
+        .first(),
+    ).resolves.toEqual({ status: "not_started", revision: 1 });
+    for (const pageId of [newConfirmedPageId, waivedConfirmedPageId]) {
+      await expect(
+        testEnv.DB.prepare("SELECT id FROM task_instances WHERE id = ?")
+          .bind(`resource-ack:${pageId}:${otherPersonId}`)
+          .first(),
+      ).resolves.toBeNull();
+    }
+
+    const afterConfirmation = await preservedState();
+    await expect(
+      service.confirmOwnParticipation(speaker, {
+        sessionId,
+        confirmation: "confirmed",
+      }),
+    ).resolves.toMatchObject({ changed: false });
+    await expect(preservedState()).resolves.toEqual(afterConfirmation);
+  });
+
+  it("does not materialise acknowledgements from a losing concurrent confirmation", async () => {
+    const testEnv = env as unknown as CloudflareEnvironment;
+    await ensureDemoSpeakerData(testEnv);
+    const sessionId = "session-demo-speaker";
+    await testEnv.DB.prepare(
+      `UPDATE session_speakers
+          SET participation_status = 'pending', participation_confirmed_at = NULL
+        WHERE event_id = ? AND session_id = ? AND person_id = ?`,
+    )
+      .bind(speaker.eventId, sessionId, speaker.personId)
+      .run();
+    const resources = new ResourceService(testEnv);
+    const pageId = await resources.save(admin, {
+      title: "Concurrent confirmation waiver",
+      slug: `concurrent-confirm-waiver-${crypto.randomUUID().slice(0, 8)}`,
+      category: "Preparation",
+      audienceScope: "confirmed_speakers",
+      acknowledgementRequired: true,
+      document: {
+        type: "doc",
+        content: [
+          { type: "paragraph", content: [{ type: "text", text: "Read me." }] },
+        ],
+      },
+    });
+    const draft = (await resources.getAdminWorkspace(admin, pageId)).selected!;
+    await resources.publish(admin, pageId, draft.revision);
+    const taskId = `resource-ack:${pageId}:${speaker.personId}`;
+    const explicitWaiver = JSON.stringify({
+      reason: "Explicit concurrent waiver",
+      by: admin.personId,
+    });
+    await testEnv.DB.prepare(
+      `INSERT INTO task_instances (
+         id, event_id, template_id, target_type, target_id, owner_person_id,
+         title, description, task_type, impact, status, readiness_state,
+         readiness_percent, revision, waiver_json, completed_at,
+         completed_by_person_id, created_at, updated_at
+       ) VALUES (?, ?, ?, 'speaker', ?, ?, 'Read concurrent briefing',
+                 'Read and acknowledge the current published version.',
+                 'acknowledgement', 'medium', 'waived', 'on_track', 100, 4,
+                 ?, unixepoch(), ?, unixepoch(), unixepoch())`,
+    )
+      .bind(
+        taskId,
+        speaker.eventId,
+        `resource-ack:${pageId}`,
+        speaker.personId,
+        speaker.personId,
+        explicitWaiver,
+        admin.personId,
+      )
+      .run();
+    const before = await testEnv.DB.prepare(
+      `SELECT status, revision, waiver_json AS waiverJson
+         FROM task_instances WHERE id = ?`,
+    )
+      .bind(taskId)
+      .first();
+    const racingEnv = withFirstBatchRace(testEnv, async () => {
+      await testEnv.DB.prepare(
+        `UPDATE session_speakers
+            SET participation_status = 'confirmed',
+                participation_confirmed_at = unixepoch()
+          WHERE event_id = ? AND session_id = ? AND person_id = ?
+            AND participation_status = 'pending'`,
+      )
+        .bind(speaker.eventId, sessionId, speaker.personId)
+        .run();
+    });
+
+    await expect(
+      new SpeakerService(racingEnv).confirmOwnParticipation(speaker, {
+        sessionId,
+        confirmation: "confirmed",
+      }),
+    ).resolves.toMatchObject({ changed: false });
+    await expect(
+      testEnv.DB.prepare(
+        `SELECT status, revision, waiver_json AS waiverJson
+           FROM task_instances WHERE id = ?`,
+      )
+        .bind(taskId)
+        .first(),
+    ).resolves.toEqual(before);
+  });
+
+  it("does not rematerialise confirmed-speaker tasks after eligibility was already established", async () => {
+    const testEnv = env as unknown as CloudflareEnvironment;
+    await ensureDemoSpeakerData(testEnv);
+    const sessionId = "session-demo-speaker";
+    const existingConfirmedSessionId = `already-confirmed-${crypto.randomUUID()}`;
+    await testEnv.DB.batch([
+      testEnv.DB.prepare(
+        `UPDATE session_speakers
+            SET participation_status = 'pending', participation_confirmed_at = NULL
+          WHERE event_id = ? AND session_id = ? AND person_id = ?`,
+      ).bind(speaker.eventId, sessionId, speaker.personId),
+      testEnv.DB.prepare(
+        `INSERT INTO sessions (
+           id, event_id, title, slug, format, duration_minutes,
+           status, visibility, created_at, updated_at
+         ) VALUES (?, ?, 'Already confirmed session', ?, 'presentation', 45,
+                   'scheduled', 'public', unixepoch(), unixepoch())`,
+      ).bind(
+        existingConfirmedSessionId,
+        speaker.eventId,
+        existingConfirmedSessionId,
+      ),
+      testEnv.DB.prepare(
+        `INSERT INTO session_speakers (
+           session_id, event_id, person_id, position, role_label,
+           participation_status, participation_confirmed_at, visibility
+         ) VALUES (?, ?, ?, 0, 'Speaker', 'confirmed', unixepoch(), 'public')`,
+      ).bind(existingConfirmedSessionId, speaker.eventId, speaker.personId),
+    ]);
+    const resources = new ResourceService(testEnv);
+    const pageId = await resources.save(admin, {
+      title: "Established confirmation briefing",
+      slug: `established-confirmation-${crypto.randomUUID().slice(0, 8)}`,
+      category: "Preparation",
+      audienceScope: "confirmed_speakers",
+      acknowledgementRequired: true,
+      document: {
+        type: "doc",
+        content: [
+          { type: "paragraph", content: [{ type: "text", text: "Read me." }] },
+        ],
+      },
+    });
+    const draft = (await resources.getAdminWorkspace(admin, pageId)).selected!;
+    await resources.publish(admin, pageId, draft.revision);
+    const taskId = `resource-ack:${pageId}:${speaker.personId}`;
+    await expect(
+      testEnv.DB.prepare("SELECT id FROM task_instances WHERE id = ?")
+        .bind(taskId)
+        .first(),
+    ).resolves.toEqual({ id: taskId });
+    await testEnv.DB.prepare("DELETE FROM task_instances WHERE id = ?")
+      .bind(taskId)
+      .run();
+
+    await expect(
+      new SpeakerService(testEnv).confirmOwnParticipation(speaker, {
+        sessionId,
+        confirmation: "confirmed",
+      }),
+    ).resolves.toMatchObject({ changed: true });
+    await expect(
+      testEnv.DB.prepare("SELECT id FROM task_instances WHERE id = ?")
+        .bind(taskId)
+        .first(),
+    ).resolves.toBeNull();
   });
 
   it("invalidates public session and speaker cursors when confirmation joins the published programme", async () => {

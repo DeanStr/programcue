@@ -237,6 +237,11 @@ export function acknowledgementTaskStatementsForCandidates(
              completed_by_person_id = NULL, revision = revision + 1,
              updated_at = unixepoch()
        WHERE event_id = ? AND status = 'waived'
+         AND waiver_json IS NULL
+         AND json_extract(evidence_json, '$.reason') IN (
+           'Resource audience changed',
+           'Published resource no longer requires acknowledgement'
+         )
          AND EXISTS (
            SELECT 1
              FROM candidates candidate
@@ -251,6 +256,98 @@ export function acknowledgementTaskStatementsForCandidates(
          )
     `,
     ).bind(...candidateBindings, eventId),
+  ];
+}
+
+export function materializePublishedConfirmedSpeakerAcknowledgements(
+  env: CloudflareEnvironment,
+  eventId: string,
+  personId: string,
+  confirmationAuditEventId: string,
+) {
+  const firstConfirmationCandidateSql = `
+    SELECT ? AS person_id
+     WHERE EXISTS (
+       SELECT 1 FROM audit_events audit
+        WHERE audit.id = ? AND audit.event_id = ?
+          AND audit.action = 'speaker.participation.confirmed'
+          AND json_extract(audit.metadata_json, '$.personId') = ?
+     )
+       AND 1 = (
+         SELECT COUNT(*) FROM session_speakers relationship
+          WHERE relationship.event_id = ? AND relationship.person_id = ?
+            AND relationship.participation_status = 'confirmed'
+       )`;
+  const candidateBindings = [
+    personId,
+    confirmationAuditEventId,
+    eventId,
+    personId,
+    eventId,
+    personId,
+  ];
+  return [
+    env.DB.prepare(
+      `
+      WITH candidates(person_id) AS (${firstConfirmationCandidateSql})
+      INSERT OR IGNORE INTO task_instances (
+        id, event_id, template_id, target_type, target_id, owner_person_id,
+        title, description, task_type, impact, status, readiness_state,
+        readiness_percent, revision, created_at, updated_at
+      )
+      SELECT 'resource-ack:' || rp.id || ':' || candidate.person_id,
+             rp.event_id, template.id, 'speaker', candidate.person_id,
+             candidate.person_id, 'Read ' || rv.title,
+             'Read and acknowledge the current published version.',
+             'acknowledgement', 'medium', 'not_started', 'on_track', 0, 1,
+             unixepoch(), unixepoch()
+        FROM candidates candidate
+        JOIN resource_pages rp ON rp.event_id = ? AND rp.status = 'published'
+        JOIN resource_page_versions rv
+          ON rv.resource_page_id = rp.id AND rv.event_id = rp.event_id
+         AND rv.status = 'published' AND rv.acknowledgement_required = 1
+         AND rv.audience_scope = 'confirmed_speakers'
+        JOIN task_templates template
+          ON template.id = 'resource-ack:' || rp.id
+         AND template.event_id = rp.event_id AND template.status = 'active'
+    `,
+    ).bind(...candidateBindings, eventId),
+    env.DB.prepare(
+      `
+      WITH candidates(person_id) AS (${firstConfirmationCandidateSql})
+      UPDATE task_instances
+         SET title = 'Read ' || current_version.title,
+             description = 'Read and acknowledge the current published version.',
+             status = 'not_started', readiness_state = 'on_track',
+             readiness_percent = 0, evidence_json = NULL, waiver_json = NULL,
+             submitted_at = NULL, completed_at = NULL,
+             completed_by_person_id = NULL,
+             revision = task_instances.revision + 1,
+             updated_at = unixepoch()
+        FROM resource_pages page
+        JOIN resource_page_versions current_version
+          ON current_version.resource_page_id = page.id
+         AND current_version.event_id = page.event_id
+         AND current_version.status = 'published'
+         AND current_version.acknowledgement_required = 1
+         AND current_version.audience_scope = 'confirmed_speakers'
+       WHERE task_instances.event_id = ?
+         AND task_instances.target_id = ?
+         AND task_instances.template_id = 'resource-ack:' || page.id
+         AND page.event_id = task_instances.event_id
+         AND page.status = 'published'
+         AND task_instances.status = 'waived'
+         AND task_instances.waiver_json IS NULL
+         AND json_extract(task_instances.evidence_json, '$.reason') IN (
+           'Resource audience changed',
+           'Published resource no longer requires acknowledgement'
+         )
+         AND EXISTS (
+           SELECT 1 FROM candidates candidate
+            WHERE candidate.person_id = task_instances.target_id
+         )
+    `,
+    ).bind(...candidateBindings, eventId, personId),
   ];
 }
 

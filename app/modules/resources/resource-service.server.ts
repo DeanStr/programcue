@@ -2,6 +2,7 @@ import { ResourceAuthoringService } from "./resource-authoring-service.server";
 import { ResourceParticipantService } from "./resource-participant-service.server";
 
 export {
+  materializePublishedConfirmedSpeakerAcknowledgements,
   materializePublishedResourceAcknowledgementsForClaimedSpeaker,
   materializePublishedResourceAcknowledgementsForSession,
   ResourceAudienceError,

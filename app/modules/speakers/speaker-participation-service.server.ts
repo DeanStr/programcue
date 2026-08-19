@@ -5,7 +5,7 @@ import {
   type AirtableProviderBoundary,
   airtableCommandKey,
 } from "~/modules/airtable/airtable-provider-boundary.server";
-import { materializePublishedResourceAcknowledgementsForSession } from "~/modules/resources/resource-service-shared";
+import { materializePublishedConfirmedSpeakerAcknowledgements } from "~/modules/resources/resource-service-shared";
 import type { Viewer } from "~/platform/auth/authorize.server";
 import {
   atomicBatchGuardStatement,
@@ -185,10 +185,11 @@ export class SpeakerParticipationService {
     const origin =
       source === "administrator_external" ? "admin_ui" : "participant_ui";
     const acknowledgementStatements =
-      materializePublishedResourceAcknowledgementsForSession(
+      materializePublishedConfirmedSpeakerAcknowledgements(
         this.env,
         viewer.eventId,
-        sessionId,
+        personId,
+        auditEventId,
       );
     let results: D1Result[];
     try {
