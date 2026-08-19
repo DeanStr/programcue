@@ -277,8 +277,28 @@ test.describe
         .selectOption({ label: `${TEAM_NAME} (1)` });
       await row.getByRole("button", { name: "Assign" }).click();
       await expectStatus(page, "1 evaluator assignment created.");
+      const reviewers = row.locator('td[data-label="Reviewers"]');
+      await expect(reviewers).toContainText(
+        "Assigned reviewers · Initial review",
+      );
+      await expect(reviewers).toContainText("Jordan Lee · Assigned");
+      await expect(
+        reviewers.getByRole("button", { name: "Add another reviewer" }),
+      ).toBeVisible();
+      await expect(
+        reviewers.getByRole("option", { name: `${TEAM_NAME} (1)` }),
+      ).toHaveCount(0);
+      await expect(
+        reviewers.getByRole("option", { name: "Jordan Lee", exact: true }),
+      ).toHaveCount(0);
       await expect(row).toContainText("assigned");
       await expect(row).toContainText("0 / 1");
+
+      await page.reload();
+      await expect(reviewers).toContainText("Jordan Lee · Assigned");
+      await expect(
+        reviewers.getByRole("button", { name: "Add another reviewer" }),
+      ).toBeVisible();
     });
 
     test("completes two immutable rounds and releases acceptance into onboarding", async ({
@@ -353,7 +373,43 @@ test.describe
 
       await switchDemoRole(page, "administrator");
       await waitForInterface(page, "/admin/review");
-      await openEvaluationView(page, "Assignments");
+      await page
+        .getByLabel("Results round")
+        .selectOption({ label: "Initial review" });
+      await page.getByRole("button", { name: "Apply" }).click();
+      const historicalResult = page
+        .getByRole("region", { name: "Unified evaluation results" })
+        .getByRole("row", {
+          name: /Designing inclusive attendee journeys/,
+        });
+      await historicalResult
+        .getByLabel("More actions for Designing inclusive attendee journeys")
+        .click();
+      await historicalResult.getByRole("link", { name: "Assign" }).click();
+      await expect(page).toHaveURL((url) => {
+        const params = url.searchParams;
+        return (
+          params.get("view") === "assignments" &&
+          params.has("submission") &&
+          !params.has("resultsRound") &&
+          !params.has("filter") &&
+          !params.has("sort") &&
+          !params.has("preset") &&
+          !params.has("page")
+        );
+      });
+      const activeRoundOnlyRow = page
+        .getByRole("region", { name: "Evaluation proposal queue" })
+        .getByRole("row", {
+          name: /Designing inclusive attendee journeys/,
+        });
+      await expect(
+        activeRoundOnlyRow.locator('td[data-label="Reviews"] > span'),
+      ).toHaveText("0 / 0");
+      await expect(
+        activeRoundOnlyRow.locator('td[data-label="Reviewers"]'),
+      ).not.toContainText("Assigned reviewers · Initial review");
+
       const decisionRow = page
         .getByRole("region", { name: "Evaluation proposal queue" })
         .getByRole("row", { name: new RegExp(SUBMISSION_TITLE) });

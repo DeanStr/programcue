@@ -16,6 +16,7 @@ export function EvaluationSubmissionQueue() {
     setBulkAssignmentTarget,
     setBulkSubmissionIds,
     activeRound,
+    activeRoundAssignments,
     assignmentTargets,
     bulkAssignableSubmissions,
     navigation,
@@ -23,6 +24,9 @@ export function EvaluationSubmissionQueue() {
   const { confirm, dialog } = useConfirm();
   const selectedResultsRound = loaderData.plan?.rounds.find(
     (round) => round.id === loaderData.resultsRoundId,
+  );
+  const activeRoundReviewerIds = new Set(
+    activeRound?.reviewers.map((reviewer) => reviewer.personId) ?? [],
   );
   if (loaderData.resultsRoundId && !selectedResultsRound) {
     throw new Error("The selected evaluation results round is unavailable.");
@@ -82,7 +86,7 @@ export function EvaluationSubmissionQueue() {
                 <th scope="col">Status</th>
                 <th scope="col">Reviews</th>
                 <th scope="col">Average</th>
-                <th scope="col">Assign</th>
+                <th scope="col">Reviewers</th>
                 <th scope="col">Decision</th>
               </tr>
             </thead>
@@ -132,6 +136,59 @@ export function EvaluationSubmissionQueue() {
                 const decidable =
                   !terminal && submission.status !== "withdrawn";
                 const assignable = submission.reviewableInCurrentCycle;
+                const submissionAssignments = activeRoundAssignments.filter(
+                  (assignment) =>
+                    assignment.submissionId === submission.id &&
+                    assignment.status !== "cancelled",
+                );
+                const unavailableEvaluatorIds = new Set(
+                  loaderData.assignments
+                    .filter(
+                      (assignment) =>
+                        assignment.submissionId === submission.id &&
+                        (assignment.status === "recused" ||
+                          (assignment.roundId === activeRound?.id &&
+                            assignment.status !== "cancelled")),
+                    )
+                    .map((assignment) => assignment.evaluatorPersonId),
+                );
+                const availableAssignmentTargets = assignmentTargets.flatMap(
+                  (target) => {
+                    const [targetType, targetId] = target.value.split(":", 2);
+                    if (targetType === "person") {
+                      return unavailableEvaluatorIds.has(targetId)
+                        ? []
+                        : [target];
+                    }
+                    if (targetType !== "team") {
+                      throw new Error(
+                        `Evaluation assignment target ${target.value} is invalid.`,
+                      );
+                    }
+                    const team = loaderData.teams.find(
+                      (candidate) => candidate.id === targetId,
+                    );
+                    if (!team) {
+                      throw new Error(
+                        `Evaluation team ${targetId} is unavailable.`,
+                      );
+                    }
+                    const availableMemberCount = team.members.filter(
+                      (member) =>
+                        member.authorised &&
+                        activeRoundReviewerIds.has(member.personId) &&
+                        !unavailableEvaluatorIds.has(member.personId),
+                    ).length;
+                    return availableMemberCount > 0
+                      ? [
+                          {
+                            ...target,
+                            label: `${team.name} (${availableMemberCount})`,
+                          },
+                        ]
+                      : [];
+                  },
+                );
                 return (
                   <tr
                     key={submission.id}
@@ -583,9 +640,34 @@ export function EvaluationSubmissionQueue() {
                         ? "—"
                         : Number(submission.averageScore).toFixed(2)}
                     </td>
-                    <td data-label="Assign" className="pc-record-action-cell">
-                      {assignable && activeRound && assignmentTargets.length ? (
-                        <Form method="post" className="inline-form">
+                    <td
+                      data-label="Reviewers"
+                      className="pc-record-action-cell"
+                    >
+                      {submissionAssignments.length > 0 && activeRound ? (
+                        <div className="pc-record-stack">
+                          <strong>
+                            Assigned reviewers · {activeRound.name}
+                          </strong>
+                          {submissionAssignments.map((assignment) => (
+                            <small key={assignment.id}>
+                              <strong>{assignment.evaluatorName}</strong> ·{" "}
+                              {assignment.status
+                                .replaceAll("_", " ")
+                                .replace(/^./, (letter) =>
+                                  letter.toUpperCase(),
+                                )}
+                            </small>
+                          ))}
+                        </div>
+                      ) : null}
+                      {assignable &&
+                      activeRound &&
+                      availableAssignmentTargets.length ? (
+                        <Form
+                          method="post"
+                          className={`inline-form${submissionAssignments.length ? " mt" : ""}`}
+                        >
                           <input type="hidden" name="intent" value="assign" />
                           <input
                             type="hidden"
@@ -608,7 +690,7 @@ export function EvaluationSubmissionQueue() {
                             aria-label={`Evaluator or team for ${submission.title}`}
                           >
                             {(["Teams", "Individuals"] as const).map((kind) => {
-                              const targets = assignmentTargets.filter(
+                              const targets = availableAssignmentTargets.filter(
                                 (target) => target.kind === kind,
                               );
                               return targets.length ? (
@@ -626,7 +708,9 @@ export function EvaluationSubmissionQueue() {
                             })}
                           </select>
                           <button type="submit" className="pc-eval-text-action">
-                            Assign
+                            {submissionAssignments.length
+                              ? "Add another reviewer"
+                              : "Assign"}
                           </button>
                         </Form>
                       ) : (
@@ -635,7 +719,9 @@ export function EvaluationSubmissionQueue() {
                             ? "Review closed"
                             : !activeRound
                               ? "No active round"
-                              : "Add an evaluator or active team"}
+                              : assignmentTargets.length > 0
+                                ? "No additional eligible reviewers"
+                                : "Add an evaluator or active team"}
                         </span>
                       )}
                     </td>

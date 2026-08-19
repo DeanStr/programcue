@@ -253,6 +253,17 @@ function withViewParam(search: string, view: EvaluationAdminView): string {
   const params = new URLSearchParams(
     search.startsWith("?") ? search.slice(1) : search,
   );
+  if (view === "assignments") {
+    for (const resultParameter of [
+      "resultsRound",
+      "filter",
+      "sort",
+      "preset",
+      "page",
+    ]) {
+      params.delete(resultParameter);
+    }
+  }
   params.set("view", view);
   return `?${params.toString()}`;
 }

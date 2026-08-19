@@ -40,6 +40,16 @@ export function EvaluationUnifiedResults() {
     return `?${next.toString()}#evaluation-results`;
   }
 
+  function assignmentHref(
+    focusName: "submission" | "session",
+    targetId: string,
+  ) {
+    return `?${new URLSearchParams({
+      [focusName]: targetId,
+      view: "assignments",
+    })}#evaluation-assignments`;
+  }
+
   return (
     <section className="card pad pc-eval-results">
       <div className="card-title">
@@ -281,7 +291,7 @@ export function EvaluationUnifiedResults() {
                       ) : (
                         <Link
                           className="pc-eval-text-action is-primary"
-                          to={`?resultsRound=${encodeURIComponent(loaderData.resultsRoundId ?? "")}&${focusName}=${encodeURIComponent(result.id)}&view=assignments#evaluation-assignments`}
+                          to={assignmentHref(focusName, result.id)}
                         >
                           Assign
                         </Link>
@@ -296,7 +306,7 @@ export function EvaluationUnifiedResults() {
                           <div className="pc-eval-overflow-menu">
                             <Link
                               className="pc-eval-text-action"
-                              to={`?resultsRound=${encodeURIComponent(loaderData.resultsRoundId ?? "")}&${focusName}=${encodeURIComponent(result.id)}&view=assignments#evaluation-assignments`}
+                              to={assignmentHref(focusName, result.id)}
                             >
                               Assign
                             </Link>
