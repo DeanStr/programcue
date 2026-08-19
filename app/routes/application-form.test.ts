@@ -1,11 +1,12 @@
 import { env } from "cloudflare:test";
 import { RouterContextProvider } from "react-router";
-import { beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { hashApplicantToken } from "~/modules/submissions/applicant-session.server";
 import { verifyApplicationNotice } from "~/modules/submissions/application-notice.server";
 import { ensureDemoSubmissionForm } from "~/modules/submissions/demo-submissions.server";
 import { cloudflareContext } from "~/platform/cloudflare-context";
 import { ensureDemoData } from "~/platform/demo/seed.server";
+import { evaluationSessionCookie } from "~/platform/evaluation/evaluation-session.server";
 import {
   acceptedParticipantManagementHref,
   action,
@@ -25,7 +26,45 @@ function context(
   return provider;
 }
 
+function responseCookiePairs(response: Response) {
+  const headers = response.headers as Headers & {
+    getSetCookie?: () => string[];
+  };
+  return (headers.getSetCookie?.() ?? [headers.get("set-cookie") ?? ""])
+    .filter(Boolean)
+    .map((value) => value.split(";", 1)[0]!);
+}
+
+async function productionEvaluationEnvironment() {
+  const environment = {
+    ...(env as unknown as CloudflareEnvironment),
+    APP_ENV: "production",
+    DEMO_MODE: "false",
+    EVALUATION_MODE: "true",
+    EVALUATION_ACCESS_CODE: "evaluation-access-code-2026",
+    EVALUATION_SESSION_SECRET:
+      "evaluation-session-secret-with-more-than-thirty-two-characters",
+    BETTER_AUTH_SECRET:
+      "evaluation-applicant-auth-secret-with-more-than-thirty-two-characters",
+    TURNSTILE_SITE_KEY: "evaluation-turnstile-site-key",
+    TURNSTILE_SECRET_KEY: "evaluation-turnstile-secret-key",
+  } as CloudflareEnvironment;
+  await environment.DB.prepare(
+    `INSERT INTO audit_events (
+       id, actor_kind, origin, metadata_version, organisation_id, event_id,
+       actor_id, action, entity_type, entity_id, metadata_json, created_at
+     ) VALUES (?, 'system', 'internal', 1, 'org-future-events',
+               'evt-foe-2025', 'test-operator', 'evaluation.fixture.reset',
+               'event', 'evt-foe-2025', '{}', unixepoch())`,
+  )
+    .bind(crypto.randomUUID())
+    .run();
+  return environment;
+}
+
 beforeEach(async () => {
+  vi.restoreAllMocks();
+  vi.unstubAllGlobals();
   const testEnv = env as unknown as CloudflareEnvironment;
   await ensureDemoData(testEnv);
   await ensureDemoSubmissionForm(testEnv);
@@ -470,6 +509,119 @@ describe("public application mutations", () => {
   });
 
   describe("published navigation", () => {
+    it("describes the separate public applicant context while evaluation access is active", async () => {
+      const environment = await productionEvaluationEnvironment();
+
+      for (const [identity, identityLabel] of [
+        [null, null],
+        ["organizer", "Event organiser"],
+      ] as const) {
+        const result = await loader({
+          request: new Request("https://example.com/apply/form", {
+            headers: {
+              cookie: (
+                await evaluationSessionCookie(environment, identity)
+              ).split(";", 1)[0],
+            },
+          }),
+          params: { slug: "form" },
+          context: context(environment),
+        } as never);
+        if (result instanceof Response || "data" in result) {
+          throw new Error("Expected the evaluation public form payload.");
+        }
+        expect(result.evaluationApplicantContext).toEqual({ identityLabel });
+        expect(result.applicant).toBeNull();
+      }
+    });
+
+    it.each([
+      ["gate-only", null],
+      ["organiser", "organizer" as const],
+    ])(
+      "reopens the anonymous draft created under a %s evaluation session",
+      async (_label, identity) => {
+        const environment = await productionEvaluationEnvironment();
+        const evaluationCookie = (
+          await evaluationSessionCookie(environment, identity)
+        ).split(";", 1)[0]!;
+        const loaded = await loader({
+          request: new Request("https://example.com/apply/form", {
+            headers: { cookie: evaluationCookie },
+          }),
+          params: { slug: "form" },
+          context: context(environment),
+        } as never);
+        if (loaded instanceof Response || "data" in loaded) {
+          throw new Error("Expected the evaluation public form payload.");
+        }
+        vi.stubGlobal(
+          "fetch",
+          vi.fn(async (input: string | URL | Request) => {
+            if (String(input).includes("challenges.cloudflare.com")) {
+              return Response.json({
+                success: true,
+                hostname: "example.com",
+                action: "application_start_anonymous",
+              });
+            }
+            throw new Error(`Unexpected request to ${String(input)}`);
+          }),
+        );
+
+        const started = await action({
+          request: new Request("https://example.com/apply/form", {
+            method: "POST",
+            headers: {
+              "content-type": "application/x-www-form-urlencoded",
+              "cf-connecting-ip":
+                identity === null ? "203.0.113.171" : "203.0.113.172",
+              cookie: evaluationCookie,
+              origin: "https://example.com",
+            },
+            body: new URLSearchParams({
+              _intent: "start_anonymous",
+              intentId: `${loaded.intentId}:anonymous`,
+              "turnstile-token": "evaluation-public-application-token",
+            }),
+          }),
+          params: { slug: "form" },
+          context: context(environment),
+        } as never);
+        expect(started).toBeInstanceOf(Response);
+        const response = started as Response;
+        expect(response.status).toBe(302);
+        const applicantCookie = responseCookiePairs(response).find((cookie) =>
+          cookie.startsWith("__Host-pc_applicant_"),
+        );
+        if (!applicantCookie) {
+          throw new Error("Expected the anonymous applicant cookie.");
+        }
+
+        const reopened = await loader({
+          request: new Request(
+            new URL(response.headers.get("location")!, "https://example.com"),
+            {
+              headers: {
+                cookie: `${evaluationCookie}; ${applicantCookie}`,
+              },
+            },
+          ),
+          params: { slug: "form" },
+          context: context(environment),
+        } as never);
+        if (reopened instanceof Response || "data" in reopened) {
+          throw new Error("Expected the reopened anonymous draft payload.");
+        }
+        expect(reopened.applicant).toMatchObject({
+          verified: false,
+          anonymousDraftId: reopened.selected?.id,
+        });
+        expect(reopened.selected?.status).toBe("draft");
+        expect(reopened.notice).toBe("Your private draft has been created.");
+      },
+    );
+
     it("keeps published programme navigation independent of the speaker showcase", async () => {
       const publishedVersion = await env.DB.prepare(
         `SELECT id, schema_json AS schemaJson

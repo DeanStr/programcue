@@ -25,6 +25,10 @@ import {
 } from "~/modules/submissions/submission-service.server";
 import { signOutSession } from "~/platform/auth/auth.server";
 import { getCloudflareContext } from "~/platform/cloudflare-context";
+import {
+  EVALUATION_IDENTITIES,
+  readEvaluationSession,
+} from "~/platform/evaluation/evaluation-session.server";
 import { rejectCrossOriginBrowserMutation } from "~/platform/http/mutation-origin.server";
 import {
   AbuseProtectionConfigurationError,
@@ -39,6 +43,7 @@ import {
   webhookActorForAudit,
 } from "~/platform/operations/webhook-service.server";
 import { recordRouteChange } from "~/platform/realtime/route-realtime.server";
+import { requireRuntimeMode } from "~/platform/runtime-environment.server";
 import type { Route } from "./+types/application-form";
 
 export type ActionResult = {
@@ -122,6 +127,20 @@ export async function loader({ request, context, params }: Route.LoaderArgs) {
           ? { speakerId: claimedSpeakerId }
           : undefined,
     );
+    const evaluationSession = requireRuntimeMode(env).evaluation
+      ? await readEvaluationSession(request, env)
+      : null;
+    const isFixedEvaluationApplicant =
+      portal.applicant?.verified === true &&
+      portal.applicant.evaluation === true;
+    const evaluationApplicantContext =
+      evaluationSession && !isFixedEvaluationApplicant
+        ? {
+            identityLabel: evaluationSession.identityKey
+              ? EVALUATION_IDENTITIES[evaluationSession.identityKey].label
+              : null,
+          }
+        : null;
     const showLanding = !portal.applicant && !claimToken && !claimSpeakerId;
     const publishedProgramme = showLanding
       ? await new PublicProgrammeService(env).getPublishedLandingSummary(
@@ -212,6 +231,7 @@ export async function loader({ request, context, params }: Route.LoaderArgs) {
         : null,
       claim,
       claimRequested: Boolean(claimToken || claimSpeakerId),
+      evaluationApplicantContext,
       turnstileSiteKey,
       uploadTurnstileSiteKey,
       noticeWarning: webhookWarning,

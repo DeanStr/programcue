@@ -214,6 +214,24 @@ invitation acceptance remains explicit. It leaves her durable email unverified,
 creates no Better Auth state and claims neither verification email nor provider
 delivery.
 
+The isolated evaluation-public-application correction keeps that separate
+authentication realm while allowing gate-only and non-applicant evaluator
+sessions to reopen a valid form-scoped anonymous draft. Email proof upgrades
+that draft to an applicant token bound to the current fixture-reset generation;
+the token does not resolve without the evaluator session or after a reset.
+Fixed applicant personas still take precedence on eligible forms, and selected
+organiser/reviewer identities cannot leak Better Auth or ordinary applicant
+state into the public application. Password-protected forms still require their
+password. The application page explains that the selected persona applies only
+to private workspaces and that the public application uses a separate applicant
+session. Focused service tests cover anonymous reopen, fixed-person precedence,
+ordinary-token suppression, form/expiry/reset boundaries and password
+admission. Non-fixture verification fails before creating an applicant or
+delivering a code. Worker route coverage exercises the exact start-cookie,
+redirect and reopen path for gate-only and organiser sessions. This is local
+worktree evidence only: no deployment, production reset or fresh
+production-browser acceptance is claimed.
+
 Exactly four documented SBEK aliases resolve to the corresponding seeded
 routeable addresses only for a signed production-evaluation viewer inside an
 active event owned by the dedicated fixture organisation. Successful workflow

@@ -2,6 +2,7 @@ import { createEmailProvider } from "~/modules/communications/email-provider.ser
 import { createAuth } from "~/platform/auth/auth.server";
 import {
   EVALUATION_ORGANISATION_ID,
+  type EvaluationSessionPayload,
   evaluationPersonForSession,
   readEvaluationSession,
 } from "~/platform/evaluation/evaluation-session.server";
@@ -187,6 +188,20 @@ async function anonymousSessionIdentifierPrefix(form: PublicForm) {
   return `anonymous-${await applicationSessionIdentifierPrefix(form)}`;
 }
 
+async function evaluationApplicationSessionIdentifierPrefix(
+  form: PublicForm,
+  fixtureGeneration: string,
+) {
+  return `${await applicationSessionIdentifierPrefix(form)}evaluation:${await hashApplicantToken(fixtureGeneration)}:`;
+}
+
+function isEvaluationApplicantSession(session: EvaluationSessionPayload) {
+  return (
+    session.identityKey === "sbek_applicant" ||
+    session.identityKey === "applicant"
+  );
+}
+
 function anonymousApplicant(draftId: string): Applicant {
   return {
     personId: null,
@@ -199,6 +214,109 @@ function anonymousApplicant(draftId: string): Applicant {
   };
 }
 
+async function readApplicantSessionIdentifier(
+  env: CloudflareEnvironment,
+  request: Request,
+  form: PublicForm,
+) {
+  const rawToken = await readApplicantToken(request, env, form.id);
+  if (!rawToken) return null;
+  const tokenHash = await hashApplicantToken(rawToken);
+  return env.DB.prepare(
+    `SELECT identifier FROM verification_tokens
+      WHERE value = ? AND expires_at > unixepoch()
+      LIMIT 1`,
+  )
+    .bind(tokenHash)
+    .first<{ identifier: string }>();
+}
+
+async function resolveAnonymousApplicantSession(
+  env: CloudflareEnvironment,
+  form: PublicForm,
+  identifier: string,
+) {
+  const anonymousPrefix = await anonymousSessionIdentifierPrefix(form);
+  if (!identifier.startsWith(anonymousPrefix)) return null;
+  const draftId = identifier.slice(anonymousPrefix.length);
+  if (!draftId) return null;
+  const ownedDraft = await env.DB.prepare(
+    `SELECT submission.id
+       FROM submissions submission
+       JOIN form_versions version
+         ON version.id = submission.form_version_id
+        AND version.event_id = submission.event_id
+      WHERE submission.id = ? AND submission.event_id = ?
+        AND version.form_id = ? AND submission.status = 'draft'
+        AND submission.submitter_person_id IS NULL
+        AND submission.submitter_email IS NULL`,
+  )
+    .bind(draftId, form.eventId, form.id)
+    .first<{ id: string }>();
+  return ownedDraft ? anonymousApplicant(draftId) : null;
+}
+
+async function resolveVerifiedApplicantSession(
+  env: CloudflareEnvironment,
+  form: PublicForm,
+  identifier: string,
+  prefix: string,
+) {
+  if (!identifier.startsWith(prefix)) return null;
+  const personId = identifier.slice(prefix.length);
+  if (!personId) return null;
+  const row = await env.DB.prepare(
+    `SELECT id AS personId, email, display_name AS name,
+            COALESCE(biography, '') AS biography,
+            profile_revision AS profileRevision
+       FROM people WHERE id = ? AND email_verified = 1
+         AND (
+           ? <> 'account_required' OR EXISTS (
+             SELECT 1 FROM submission_speakers speaker
+             JOIN submissions submission
+               ON submission.id = speaker.submission_id
+              AND submission.event_id = speaker.event_id
+             JOIN form_versions version
+               ON version.id = submission.form_version_id
+              AND version.event_id = submission.event_id
+            WHERE speaker.person_id = people.id
+              AND speaker.invitation_status = 'claimed'
+              AND speaker.event_id = ? AND version.form_id = ?
+           )
+         )`,
+  )
+    .bind(personId, form.accessMode, form.eventId, form.id)
+    .first<{
+      personId: string;
+      email: string;
+      name: string;
+      biography: string;
+      profileRevision: number;
+    }>();
+  return row
+    ? {
+        ...row,
+        verified: true as const,
+        anonymousDraftId: null,
+        claimOnly: form.accessMode === "account_required" || undefined,
+      }
+    : null;
+}
+
+async function isEvaluationFixtureForm(
+  env: CloudflareEnvironment,
+  form: PublicForm,
+) {
+  const fixtureEvent = await env.DB.prepare(
+    `SELECT 1 FROM events
+      WHERE id = ? AND organisation_id = ?
+        AND activation_status = 'active'`,
+  )
+    .bind(form.eventId, EVALUATION_ORGANISATION_ID)
+    .first();
+  return Boolean(fixtureEvent);
+}
+
 export class ApplicantSessionService {
   constructor(private readonly env: CloudflareEnvironment) {}
 
@@ -209,17 +327,9 @@ export class ApplicantSessionService {
     if (evaluationSession) {
       if (
         form.accessMode !== "password_protected" &&
-        (evaluationSession.identityKey === "sbek_applicant" ||
-          evaluationSession.identityKey === "applicant")
+        isEvaluationApplicantSession(evaluationSession)
       ) {
-        const fixtureEvent = await this.env.DB.prepare(
-          `SELECT 1 FROM events
-            WHERE id = ? AND organisation_id = ?
-              AND activation_status = 'active'`,
-        )
-          .bind(form.eventId, EVALUATION_ORGANISATION_ID)
-          .first();
-        if (fixtureEvent) {
+        if (await isEvaluationFixtureForm(this.env, form)) {
           const evaluationPerson = await evaluationPersonForSession(
             this.env,
             evaluationSession,
@@ -237,7 +347,28 @@ export class ApplicantSessionService {
           };
         }
       }
-      return null;
+      const token = await readApplicantSessionIdentifier(
+        this.env,
+        request,
+        form,
+      );
+      if (!token) return null;
+      const anonymous = await resolveAnonymousApplicantSession(
+        this.env,
+        form,
+        token.identifier,
+      );
+      if (anonymous) return anonymous;
+      if (!(await isEvaluationFixtureForm(this.env, form))) return null;
+      return resolveVerifiedApplicantSession(
+        this.env,
+        form,
+        token.identifier,
+        await evaluationApplicationSessionIdentifierPrefix(
+          form,
+          evaluationSession.fixtureGeneration,
+        ),
+      );
     }
 
     if (form.accessMode !== "password_protected") {
@@ -265,78 +396,22 @@ export class ApplicantSessionService {
       }
     }
 
-    const rawToken = await readApplicantToken(request, this.env, form.id);
-    if (!rawToken) return null;
-    const tokenHash = await hashApplicantToken(rawToken);
-    const token = await this.env.DB.prepare(
-      `
-      SELECT identifier FROM verification_tokens
-       WHERE value = ? AND expires_at > unixepoch()
-       LIMIT 1
-    `,
-    )
-      .bind(tokenHash)
-      .first<{ identifier: string }>();
-    const anonymousPrefix = await anonymousSessionIdentifierPrefix(form);
-    if (token?.identifier.startsWith(anonymousPrefix)) {
-      const draftId = token.identifier.slice(anonymousPrefix.length);
-      if (!draftId) return null;
-      const ownedDraft = await this.env.DB.prepare(
-        `
-        SELECT s.id
-          FROM submissions s
-          JOIN form_versions version
-            ON version.id = s.form_version_id AND version.event_id = s.event_id
-         WHERE s.id = ? AND s.event_id = ? AND version.form_id = ?
-           AND s.status = 'draft' AND s.submitter_person_id IS NULL
-           AND s.submitter_email IS NULL
-      `,
-      )
-        .bind(draftId, form.eventId, form.id)
-        .first<{ id: string }>();
-      return ownedDraft ? anonymousApplicant(draftId) : null;
-    }
+    const token = await readApplicantSessionIdentifier(this.env, request, form);
+    if (!token) return null;
+    const anonymous = await resolveAnonymousApplicantSession(
+      this.env,
+      form,
+      token.identifier,
+    );
+    if (anonymous) return anonymous;
     const prefix = await applicationSessionIdentifierPrefix(form);
-    if (!token?.identifier.startsWith(prefix)) return null;
-    const personId = token.identifier.slice(prefix.length);
-    const row = await this.env.DB.prepare(
-      `
-      SELECT id AS personId, email, display_name AS name,
-             COALESCE(biography, '') AS biography,
-             profile_revision AS profileRevision
-        FROM people WHERE id = ? AND email_verified = 1
-          AND (
-            ? <> 'account_required' OR EXISTS (
-              SELECT 1 FROM submission_speakers speaker
-              JOIN submissions submission
-                ON submission.id = speaker.submission_id
-               AND submission.event_id = speaker.event_id
-              JOIN form_versions version
-                ON version.id = submission.form_version_id
-               AND version.event_id = submission.event_id
-             WHERE speaker.person_id = people.id
-               AND speaker.invitation_status = 'claimed'
-               AND speaker.event_id = ? AND version.form_id = ?
-            )
-          )
-    `,
-    )
-      .bind(personId, form.accessMode, form.eventId, form.id)
-      .first<{
-        personId: string;
-        email: string;
-        name: string;
-        biography: string;
-        profileRevision: number;
-      }>();
-    return row
-      ? {
-          ...row,
-          verified: true as const,
-          anonymousDraftId: null,
-          claimOnly: form.accessMode === "account_required" || undefined,
-        }
-      : null;
+    if (token.identifier.startsWith(`${prefix}evaluation:`)) return null;
+    return resolveVerifiedApplicantSession(
+      this.env,
+      form,
+      token.identifier,
+      prefix,
+    );
   }
 
   async startAnonymous(
@@ -483,6 +558,20 @@ export class ApplicantSessionService {
     }
   }
 
+  private async evaluationSessionForVerification(
+    request: Request | undefined,
+    form: PublicForm,
+  ) {
+    if (!request || !requireRuntimeMode(this.env).evaluation) return null;
+    const evaluationSession = await readEvaluationSession(request, this.env);
+    if (evaluationSession && !(await isEvaluationFixtureForm(this.env, form))) {
+      throw new ApplicantInputError(
+        "Lock evaluation access before verifying an application outside the evaluation fixture.",
+      );
+    }
+    return evaluationSession;
+  }
+
   async requestCode(
     form: PublicForm,
     emailInput: string,
@@ -498,6 +587,7 @@ export class ApplicantSessionService {
     if (!/^\S+@\S+\.\S+$/.test(email) || email.length > 254)
       throw new ApplicantInputError("Enter a valid email address");
 
+    await this.evaluationSessionForVerification(request, form);
     const current = request ? await this.get(request, form) : null;
     const anonymousDraftId =
       current && !current.verified ? current.anonymousDraftId : null;
@@ -580,6 +670,10 @@ export class ApplicantSessionService {
     request?: Request,
   ) {
     const email = emailInput.trim().toLowerCase();
+    const evaluationBound = await this.evaluationSessionForVerification(
+      request,
+      form,
+    );
     const codeHash = await hashApplicantToken(
       `application-code:${requireApplicantPepper(this.env)}:${form.id}:${email}:${codeInput.trim()}`,
     );
@@ -613,7 +707,14 @@ export class ApplicantSessionService {
       : null;
     const rawSession = crypto.randomUUID() + crypto.randomUUID();
     const sessionHash = await hashApplicantToken(rawSession);
-    const sessionIdentifier = `${await applicationSessionIdentifierPrefix(form)}${person.personId}`;
+    const sessionIdentifier = `${
+      evaluationBound
+        ? await evaluationApplicationSessionIdentifierPrefix(
+            form,
+            evaluationBound.fixtureGeneration,
+          )
+        : await applicationSessionIdentifierPrefix(form)
+    }${person.personId}`;
     const sessionId = crypto.randomUUID();
     const results = await this.env.DB.batch([
       this.env.DB.prepare(

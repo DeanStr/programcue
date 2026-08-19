@@ -16,6 +16,7 @@ import {
   TurnstileWidget,
 } from "~/components/turnstile-widget";
 import { DomainStatusBadge } from "~/components/ui/domain-status-badge";
+import { StatusNotice } from "~/components/ui/status-notice";
 import { programmeAccentPalette } from "~/modules/programme/programme-presentation";
 import type { Route } from "./+types/application-form";
 import type { ActionResult, action, loader } from "./application-form.server";
@@ -73,6 +74,26 @@ export function acceptedParticipantManagementHref(
     application: submissionId,
   })}#participant-application-detail`;
   return `/events/select?${new URLSearchParams({ eventId, returnTo })}`;
+}
+
+function EvaluationApplicantContextNotice({
+  context,
+  accessMode,
+}: {
+  context: { identityLabel: string | null } | null;
+  accessMode: "email_verified" | "password_protected" | "account_required";
+}) {
+  if (!context) return null;
+  const title = context.identityLabel
+    ? `${context.identityLabel} is selected for private workspaces.`
+    : "Evaluation access is active without a selected persona.";
+  return (
+    <StatusNotice className="mb" title={title}>
+      {accessMode === "account_required"
+        ? "This form requires an ordinary Program Cue account, which evaluation access deliberately does not inherit. Lock evaluation before signing in."
+        : "This public application uses a separate applicant session. Drafts can start anonymously; email verification is required before submission."}
+    </StatusNotice>
+  );
 }
 
 function AccessPanel({
@@ -999,7 +1020,13 @@ export default function ApplicationForm({ loaderData }: Route.ComponentProps) {
           featuredSpeakers={featuredSpeakers}
           programmeUrl={programmeUrl}
           accessPanel={
-            <AccessPanel loaderData={loaderData} actionData={actionData} />
+            <>
+              <EvaluationApplicantContextNotice
+                accessMode={form.accessMode}
+                context={loaderData.evaluationApplicantContext}
+              />
+              <AccessPanel loaderData={loaderData} actionData={actionData} />
+            </>
           }
         />
       </div>
@@ -1063,6 +1090,10 @@ export default function ApplicationForm({ loaderData }: Route.ComponentProps) {
           padding: "0 16px",
         }}
       >
+        <EvaluationApplicantContextNotice
+          accessMode={form.accessMode}
+          context={loaderData.evaluationApplicantContext}
+        />
         {form.participantWelcomeText ? (
           <section className="card pad mb participant-welcome">
             <span className="pc-page-eyebrow">From the event team</span>

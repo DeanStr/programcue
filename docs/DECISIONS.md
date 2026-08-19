@@ -71,6 +71,19 @@ still requires a verified application, accepted relationship or invitation,
 and invitation acceptance remains explicit. Published programme, gallery,
 embed, API and calendar-feed surfaces remain anonymous.
 
+A valid production-evaluation session is a separate authentication realm on
+public application routes as well as private workspaces. A fixed clean/showcase
+applicant persona takes precedence on eligible forms. Gate-only and
+non-applicant evaluation sessions may resolve a valid form-scoped anonymous
+draft and, after that draft's email proof, a verified applicant token issued
+inside the same current fixture-reset generation. They never inherit Better
+Auth or an ordinary applicant token. Password-protected forms retain their
+normal password admission; an evaluator persona is not a password bypass.
+Evaluation-bound verified tokens stop resolving when the evaluator session is
+absent or its fixture generation changes. Outside the dedicated evaluation
+fixture, an evaluator session may still use a form-scoped anonymous draft, but
+email verification requires locking evaluation and fails before code delivery.
+
 ## Abstract management decisions
 
 Blind review fails closed: only submitted fields explicitly marked with

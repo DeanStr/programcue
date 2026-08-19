@@ -7,7 +7,10 @@ import {
   activateEvaluationApplicantAccount,
   evaluationSessionCookie,
 } from "~/platform/evaluation/evaluation-session.server";
-import { ApplicantSessionService } from "./applicant-session.server";
+import {
+  ApplicantSessionService,
+  hashApplicantToken,
+} from "./applicant-session.server";
 import {
   SubmissionRevisionConflictError,
   SubmissionStateError,
@@ -33,6 +36,41 @@ const viewer: Viewer = {
   eventId: "evt-foe-2025",
   demo: true,
 };
+
+const EVALUATION_TEST_SECRET =
+  "evaluation-session-secret-with-more-than-thirty-two-characters";
+const EVALUATION_AUTH_SECRET =
+  "evaluation-applicant-auth-secret-with-more-than-thirty-two-characters";
+
+async function productionEvaluationEnvironment(testEnv: CloudflareEnvironment) {
+  const environment = {
+    ...testEnv,
+    APP_ENV: "production",
+    DEMO_MODE: "false",
+    EVALUATION_MODE: "true",
+    EVALUATION_ACCESS_CODE: "evaluation-access-code-2026",
+    EVALUATION_SESSION_SECRET: EVALUATION_TEST_SECRET,
+    BETTER_AUTH_SECRET: EVALUATION_AUTH_SECRET,
+  } as CloudflareEnvironment;
+  const fixtureGeneration = crypto.randomUUID();
+  await environment.DB.prepare(
+    `INSERT INTO audit_events (
+       id, actor_kind, origin, metadata_version, organisation_id, event_id,
+       actor_id, action, entity_type, entity_id, metadata_json, created_at
+     ) VALUES (?, 'system', 'internal', 1, 'org-future-events',
+               'evt-foe-2025', 'test-operator', 'evaluation.fixture.reset',
+               'event', 'evt-foe-2025', '{}', unixepoch())`,
+  )
+    .bind(fixtureGeneration)
+    .run();
+  return environment;
+}
+
+function cookiePair(setCookie: string) {
+  const pair = setCookie.split(";", 1)[0];
+  if (!pair) throw new Error("Expected a cookie pair.");
+  return pair;
+}
 
 async function publishedForm(overrides: Record<string, unknown> = {}) {
   const queued: unknown[] = [];
@@ -659,6 +697,243 @@ describe("Submissions D1 vertical slice", () => {
       ).resolves.toBeNull();
     });
 
+    it("lets gate-only and non-applicant evaluation sessions reopen only their anonymous draft", async () => {
+      const { slug, testEnv } = await publishedForm();
+      const environment = await productionEvaluationEnvironment(testEnv);
+      const service = new SubmissionService(environment);
+      const form = await service.getPublicForm(slug);
+      const started = await service.startAnonymousDraft(
+        slug,
+        "",
+        crypto.randomUUID(),
+      );
+      const applicantCookie = cookiePair(started.setCookies[0]!);
+      const gateCookie = cookiePair(
+        await evaluationSessionCookie(environment, null),
+      );
+      const organiserCookie = cookiePair(
+        await evaluationSessionCookie(environment, "organizer"),
+      );
+      const applicantSessions = new ApplicantSessionService(environment);
+
+      for (const evaluationCookie of [gateCookie, organiserCookie]) {
+        await expect(
+          applicantSessions.get(
+            new Request(`https://example.com/apply/${slug}`, {
+              headers: {
+                cookie: `${evaluationCookie}; ${applicantCookie}`,
+              },
+            }),
+            form,
+          ),
+        ).resolves.toMatchObject({
+          verified: false,
+          anonymousDraftId: started.draftId,
+        });
+      }
+
+      const ordinaryPersonId = crypto.randomUUID();
+      const ordinaryEmail = `ordinary-applicant-${ordinaryPersonId}@example.com`;
+      await environment.DB.prepare(
+        `INSERT INTO people (
+           id, email, display_name, email_verified, profile_status,
+           created_at, updated_at
+         ) VALUES (?, ?, 'Ordinary applicant', 1, 'published',
+                   unixepoch(), unixepoch())`,
+      )
+        .bind(ordinaryPersonId, ordinaryEmail)
+        .run();
+      const prepared = await applicantSessions.prepareVerifiedSession(
+        form,
+        ordinaryPersonId,
+      );
+      await environment.DB.prepare(
+        `INSERT INTO verification_tokens (
+           id, identifier, value, expires_at, created_at, updated_at
+         ) VALUES (?, ?, ?, unixepoch() + 1209600, unixepoch(), unixepoch())`,
+      )
+        .bind(
+          prepared.persistence.sessionId,
+          prepared.persistence.identifier,
+          prepared.persistence.sessionHash,
+        )
+        .run();
+      const ordinaryApplicantCookie = cookiePair(prepared.cookie);
+      await expect(
+        applicantSessions.get(
+          new Request(`https://example.com/apply/${slug}`, {
+            headers: {
+              cookie: `${organiserCookie}; ${ordinaryApplicantCookie}`,
+            },
+          }),
+          form,
+        ),
+      ).resolves.toBeNull();
+      await expect(
+        applicantSessions.get(
+          new Request(`https://example.com/apply/${slug}`, {
+            headers: { cookie: ordinaryApplicantCookie },
+          }),
+          form,
+        ),
+      ).resolves.toMatchObject({
+        personId: prepared.persistence.personId,
+        verified: true,
+      });
+    });
+
+    it("binds anonymous email verification to the active evaluation generation", async () => {
+      const { slug, testEnv } = await publishedForm();
+      const environment = await productionEvaluationEnvironment(testEnv);
+      const service = new SubmissionService(environment);
+      const form = await service.getPublicForm(slug);
+      const started = await service.startAnonymousDraft(
+        slug,
+        "",
+        crypto.randomUUID(),
+      );
+      const applicantCookie = cookiePair(started.setCookies[0]!);
+      const evaluationCookie = cookiePair(
+        await evaluationSessionCookie(environment, "organizer"),
+      );
+      const request = new Request(`https://example.com/apply/${slug}`, {
+        headers: { cookie: `${evaluationCookie}; ${applicantCookie}` },
+      });
+      const email = `evaluation-public-${crypto.randomUUID()}@example.com`;
+      const code = "424242";
+      const personId = crypto.randomUUID();
+      const codeHash = await hashApplicantToken(
+        `application-code:${EVALUATION_AUTH_SECRET}:${form.id}:${email}:${code}`,
+      );
+      await environment.DB.batch([
+        environment.DB.prepare(
+          `INSERT INTO people (
+             id, email, display_name, email_verified, profile_status,
+             created_at, updated_at
+           ) VALUES (?, ?, 'Evaluation public applicant', 0, 'draft',
+                     unixepoch(), unixepoch())`,
+        ).bind(personId, email),
+        environment.DB.prepare(
+          `INSERT INTO submission_email_verifications (
+             id, event_id, form_id, submission_id, email, token_hash, status,
+             attempt_count, expires_at, created_at
+           ) VALUES (?, ?, ?, ?, ?, ?, 'pending', 0,
+                     unixepoch() + 600, unixepoch())`,
+        ).bind(
+          crypto.randomUUID(),
+          form.eventId,
+          form.id,
+          started.draftId,
+          email,
+          codeHash,
+        ),
+      ]);
+
+      const verifiedSession = await service.applicants.verifyCode(
+        form,
+        email,
+        code,
+        request,
+      );
+      const verifiedCookie = cookiePair(verifiedSession.cookie);
+      const applicantSessions = new ApplicantSessionService(environment);
+      await expect(
+        applicantSessions.get(
+          new Request(`https://example.com/apply/${slug}`, {
+            headers: { cookie: `${evaluationCookie}; ${verifiedCookie}` },
+          }),
+          form,
+        ),
+      ).resolves.toMatchObject({
+        personId,
+        email,
+        verified: true,
+      });
+      await expect(
+        applicantSessions.get(
+          new Request(`https://example.com/apply/${slug}`, {
+            headers: { cookie: verifiedCookie },
+          }),
+          form,
+        ),
+      ).resolves.toBeNull();
+
+      await environment.DB.prepare(
+        `INSERT INTO audit_events (
+           id, actor_kind, origin, metadata_version, organisation_id, event_id,
+           actor_id, action, entity_type, entity_id, metadata_json, created_at
+         ) VALUES (?, 'system', 'internal', 1, 'org-future-events',
+                   'evt-foe-2025', 'test-operator', 'evaluation.fixture.reset',
+                   'event', 'evt-foe-2025', '{}', unixepoch() + 1)`,
+      )
+        .bind(crypto.randomUUID())
+        .run();
+      const nextEvaluationCookie = cookiePair(
+        await evaluationSessionCookie(environment, "organizer"),
+      );
+      await expect(
+        applicantSessions.get(
+          new Request(`https://example.com/apply/${slug}`, {
+            headers: {
+              cookie: `${nextEvaluationCookie}; ${verifiedCookie}`,
+            },
+          }),
+          form,
+        ),
+      ).resolves.toBeNull();
+    });
+
+    it("rejects expired and cross-form anonymous cookies under evaluation access", async () => {
+      const first = await publishedForm();
+      const second = await publishedForm();
+      const environment = await productionEvaluationEnvironment(first.testEnv);
+      const service = new SubmissionService(environment);
+      const firstForm = await service.getPublicForm(first.slug);
+      const secondDraft = await service.startAnonymousDraft(
+        second.slug,
+        "",
+        crypto.randomUUID(),
+      );
+      const evaluationCookie = cookiePair(
+        await evaluationSessionCookie(environment, null),
+      );
+      const secondCookie = cookiePair(secondDraft.cookie);
+      const applicantSessions = new ApplicantSessionService(environment);
+
+      await expect(
+        applicantSessions.get(
+          new Request(`https://example.com/apply/${first.slug}`, {
+            headers: { cookie: `${evaluationCookie}; ${secondCookie}` },
+          }),
+          firstForm,
+        ),
+      ).resolves.toBeNull();
+
+      const firstDraft = await service.startAnonymousDraft(
+        first.slug,
+        "",
+        crypto.randomUUID(),
+      );
+      const firstCookie = cookiePair(firstDraft.cookie);
+      const rawToken = decodeURIComponent(
+        firstCookie.split("=").slice(1).join("="),
+      );
+      await environment.DB.prepare(
+        `UPDATE verification_tokens SET expires_at = unixepoch() - 1
+          WHERE value = ?`,
+      )
+        .bind(await hashApplicantToken(rawToken))
+        .run();
+      await expect(
+        applicantSessions.get(
+          new Request(`https://example.com/apply/${first.slug}`, {
+            headers: { cookie: `${evaluationCookie}; ${firstCookie}` },
+          }),
+          firstForm,
+        ),
+      ).resolves.toBeNull();
+    });
+
     it("does not use a selected evaluation identity outside the fixture event", async () => {
       const { service, slug, testEnv } = await publishedForm();
       const form = await service.getPublicForm(slug);
@@ -695,6 +970,22 @@ describe("Submissions D1 vertical slice", () => {
           eventId: "another-tenant-event",
         }),
       ).resolves.toBeNull();
+      const outsideFixtureEmail = `outside-fixture-${crypto.randomUUID()}@example.com`;
+      await expect(
+        new ApplicantSessionService(evaluationEnvironment).requestCode(
+          { ...form, eventId: "another-tenant-event" },
+          outsideFixtureEmail,
+          "",
+          request,
+        ),
+      ).rejects.toThrow(/lock evaluation access/i);
+      await expect(
+        evaluationEnvironment.DB.prepare(
+          "SELECT id FROM people WHERE email = ? COLLATE NOCASE",
+        )
+          .bind(outsideFixtureEmail)
+          .first(),
+      ).resolves.toBeNull();
     });
 
     it("binds the showcase applicant as a verified fixture-org applicant and fails closed otherwise", async () => {
@@ -711,6 +1002,8 @@ describe("Submissions D1 vertical slice", () => {
         EVALUATION_ACCESS_CODE: "evaluation-access-code-2026",
         EVALUATION_SESSION_SECRET:
           "evaluation-session-secret-with-more-than-thirty-two-characters",
+        BETTER_AUTH_SECRET:
+          "program-cue-explicit-demo-only-verification-pepper",
       } as CloudflareEnvironment;
       await evaluationEnvironment.DB.prepare(
         `INSERT INTO audit_events (
@@ -748,6 +1041,26 @@ describe("Submissions D1 vertical slice", () => {
           evaluation: true,
         },
       );
+      const openService = new SubmissionService(evaluationEnvironment);
+      const openDraft = await openService.startAnonymousDraft(
+        openForm.slug,
+        "",
+        crypto.randomUUID(),
+      );
+      await expect(
+        applicantSessions.get(
+          new Request(`https://example.com/apply/${openForm.slug}`, {
+            headers: {
+              cookie: `${cookiePair(cookie)}; ${cookiePair(openDraft.cookie)}`,
+            },
+          }),
+          form,
+        ),
+      ).resolves.toMatchObject({
+        personId: "person-demo-submitter",
+        verified: true,
+        evaluation: true,
+      });
       await expect(
         applicantSessions.get(request, {
           ...form,
@@ -756,6 +1069,95 @@ describe("Submissions D1 vertical slice", () => {
       ).resolves.toBeNull();
       await expect(
         applicantSessions.get(request, protectedForm),
+      ).resolves.toBeNull();
+      const protectedService = new SubmissionService(evaluationEnvironment);
+      await expect(
+        protectedService.startAnonymousDraft(
+          passwordForm.slug,
+          "wrong-password",
+          crypto.randomUUID(),
+        ),
+      ).rejects.toThrow(/password is incorrect/i);
+      const protectedDraft = await protectedService.startAnonymousDraft(
+        passwordForm.slug,
+        "fixture-password",
+        crypto.randomUUID(),
+      );
+      await expect(
+        applicantSessions.get(
+          new Request(`https://example.com/apply/${passwordForm.slug}`, {
+            headers: {
+              cookie: `${cookiePair(cookie)}; ${cookiePair(protectedDraft.cookie)}`,
+            },
+          }),
+          protectedForm,
+        ),
+      ).resolves.toMatchObject({
+        anonymousDraftId: protectedDraft.draftId,
+        verified: false,
+      });
+      const protectedEmail = `evaluation-password-${crypto.randomUUID()}@example.com`;
+      const protectedPersonId = crypto.randomUUID();
+      const protectedCode = "424242";
+      await evaluationEnvironment.DB.batch([
+        evaluationEnvironment.DB.prepare(
+          `INSERT INTO people (
+             id, email, display_name, email_verified, profile_status,
+             created_at, updated_at
+           ) VALUES (?, ?, 'Evaluation password applicant', 0, 'draft',
+                     unixepoch(), unixepoch())`,
+        ).bind(protectedPersonId, protectedEmail),
+        evaluationEnvironment.DB.prepare(
+          `INSERT INTO submission_email_verifications (
+             id, event_id, form_id, submission_id, email, token_hash, status,
+             attempt_count, expires_at, created_at
+           ) VALUES (?, ?, ?, ?, ?, ?, 'pending', 0,
+                     unixepoch() + 600, unixepoch())`,
+        ).bind(
+          crypto.randomUUID(),
+          protectedForm.eventId,
+          protectedForm.id,
+          protectedDraft.draftId,
+          protectedEmail,
+          await hashApplicantToken(
+            `application-code:${evaluationEnvironment.BETTER_AUTH_SECRET}:${protectedForm.id}:${protectedEmail}:${protectedCode}`,
+          ),
+        ),
+      ]);
+      const protectedRequest = new Request(
+        `https://example.com/apply/${passwordForm.slug}`,
+        {
+          headers: {
+            cookie: `${cookiePair(cookie)}; ${cookiePair(protectedDraft.cookie)}`,
+          },
+        },
+      );
+      const protectedVerified = await protectedService.applicants.verifyCode(
+        protectedForm,
+        protectedEmail,
+        protectedCode,
+        protectedRequest,
+      );
+      await expect(
+        applicantSessions.get(
+          new Request(`https://example.com/apply/${passwordForm.slug}`, {
+            headers: {
+              cookie: `${cookiePair(cookie)}; ${cookiePair(protectedVerified.cookie)}`,
+            },
+          }),
+          protectedForm,
+        ),
+      ).resolves.toMatchObject({
+        email: protectedEmail,
+        verified: true,
+      });
+      await expect(
+        applicantSessions.get(
+          new Request(`https://example.com/apply/${passwordForm.slug}`, {
+            headers: { cookie: cookiePair(protectedVerified.cookie) },
+          }),
+          protectedForm,
+        ),
       ).resolves.toBeNull();
 
       await evaluationEnvironment.DB.prepare(
