@@ -117,16 +117,35 @@ test.describe
         '[name="criterionDescription"]',
       );
       const criterionOptions = roundEditor.locator('[name="criterionOptions"]');
+      await expect(roundEditor).toContainText(
+        "Every review already includes a required overall recommendation and confidence rating",
+      );
+      await expect(criterionOptions.first()).toHaveAttribute(
+        "placeholder",
+        "Introductory, Intermediate, Advanced",
+      );
+      await criterionNames.nth(2).fill("Recommendation");
+      await expect(
+        roundEditor.getByText(
+          "Every review already requires an overall recommendation. Rename this criterion to avoid asking reviewers twice.",
+        ),
+      ).toBeVisible();
+      await criterionNames.nth(2).fill("Confidence");
+      await expect(
+        roundEditor.getByText(
+          "Every review already requires a confidence rating. Rename this criterion to avoid asking reviewers twice.",
+        ),
+      ).toBeVisible();
       const rubric = [
         ["Originality", "scale_5", "50", "true", "Original perspective", ""],
         ["Relevance", "scale_5", "50", "true", "Fit for the programme", ""],
         [
-          "Recommendation",
+          "Audience level",
           "dropdown",
           "0",
           "true",
-          "Choose the committee recommendation",
-          "Accept, Maybe, Reject",
+          "Which audience experience level best matches this proposal?",
+          "Introductory, Intermediate, Advanced",
         ],
         [
           "Comments",
@@ -147,12 +166,17 @@ test.describe
         await criterionOptions.nth(index).fill(options);
       }
       await criterionNames.nth(4).fill("");
+      await expect(
+        roundEditor.getByText(
+          /Rename this criterion to avoid asking reviewers twice/u,
+        ),
+      ).toHaveCount(0);
       await roundEditor.getByRole("button", { name: "Save round" }).click();
       await expect(
         page.locator(".validation-item.ok[role='status']"),
       ).toContainText("Round and scorecard saved");
       await expect(
-        page.getByText("Dropdown: Accept, Maybe, Reject"),
+        page.getByText("Dropdown: Introductory, Intermediate, Advanced"),
       ).toBeVisible();
       await expect(initialCard).toContainText("blind review");
       await expect(initialCard).toContainText("2099");
@@ -373,6 +397,20 @@ test.describe
       await page.goto(`${e2eOrigin}${assignmentHref}`);
       await page.locator("body[data-hydrated='true']").waitFor();
       await expectReviewerCannotSeeIdentity(page);
+      const audienceLevel = page.getByLabel("Audience level");
+      await expect(audienceLevel).toBeVisible();
+      await expect(audienceLevel.locator("option")).toHaveText([
+        "Choose…",
+        "Introductory",
+        "Intermediate",
+        "Advanced",
+      ]);
+      await expect(
+        page.getByRole("radiogroup", { name: "Recommendation" }),
+      ).toHaveCount(1);
+      await expect(
+        page.getByLabel("Recommendation", { exact: true }),
+      ).toHaveCount(1);
 
       await switchDemoRole(page, "administrator", "/admin/review");
       await waitForInterface(

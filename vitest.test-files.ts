@@ -15,6 +15,7 @@ export const nodeOnlyTestFiles = [
   "app/components/communications-centre-panels.test.tsx",
   "app/components/evaluation-access-surface.test.tsx",
   "app/components/evaluation-banner.test.tsx",
+  "app/components/evaluation-rubric-fields.test.tsx",
   "app/components/evaluation-review-cycle-panel.test.tsx",
   "app/components/evaluation-ai-attempt-panel.test.tsx",
   "app/modules/ai/assistant-result-panel.test.tsx",

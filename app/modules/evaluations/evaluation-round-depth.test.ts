@@ -233,11 +233,11 @@ const criteria = [
     position: 1,
   },
   {
-    id: "abstract-recommendation",
-    name: "Recommendation",
-    description: "Choose the review recommendation.",
+    id: "abstract-audience-level",
+    name: "Audience level",
+    description: "Which audience experience level best matches this proposal?",
     inputType: "dropdown" as const,
-    options: ["Accept", "Maybe", "Reject"],
+    options: ["Introductory", "Intermediate", "Advanced"],
     weightPercent: 0,
     required: true,
     position: 2,
@@ -456,8 +456,8 @@ describe("abstract management round depth", () => {
     expect(
       initial.criteria.find((criterion) => criterion.inputType === "dropdown"),
     ).toMatchObject({
-      name: "Recommendation",
-      options: ["Accept", "Maybe", "Reject"],
+      name: "Audience level",
+      options: ["Introductory", "Intermediate", "Advanced"],
     });
   });
 
@@ -525,7 +525,7 @@ describe("abstract management round depth", () => {
             workspace.criteria.map((criterion) => [
               criterion.id,
               criterion.inputType === "dropdown"
-                ? "Accept"
+                ? "Intermediate"
                 : criterion.inputType === "free_text"
                   ? "Strong proposal."
                   : 5,
@@ -962,7 +962,7 @@ describe("abstract management round depth", () => {
       expect.arrayContaining([
         "Originality",
         "Relevance",
-        "Recommendation",
+        "Audience level",
         "Comments",
       ]),
     );
@@ -1186,7 +1186,7 @@ describe("abstract management round depth", () => {
         scores: {
           "abstract-originality": 5,
           "abstract-relevance": 4,
-          "abstract-recommendation": "Accept",
+          "abstract-audience-level": "Intermediate",
           "abstract-comments": "Strong fit.",
         },
         recommendation: "accept",
@@ -1202,12 +1202,14 @@ describe("abstract management round depth", () => {
     const reloaded = await service.getReviewerWorkspace(sam);
     expect(
       reloaded.criteria.find(
-        (criterion) => criterion.name === "Recommendation",
+        (criterion) => criterion.name === "Audience level",
       ),
-    ).toMatchObject({ options: ["Accept", "Maybe", "Reject"] });
+    ).toMatchObject({
+      options: ["Introductory", "Intermediate", "Advanced"],
+    });
     expect(reloaded.review).toMatchObject({
       scores: expect.objectContaining({
-        "abstract-recommendation": "Accept",
+        "abstract-audience-level": "Intermediate",
       }),
     });
 
