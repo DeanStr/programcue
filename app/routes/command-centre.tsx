@@ -1,9 +1,12 @@
 import {
+  Activity,
   AlertCircle,
   AlertTriangle,
   CheckCircle2,
+  ChevronRight,
   Clock3,
   RefreshCw,
+  Send,
   Sparkles,
 } from "lucide-react";
 import { Fragment, useEffect, useState } from "react";
@@ -116,11 +119,13 @@ function AutoRefresh({ eventId, cursor }: { eventId: string; cursor: number }) {
   );
 }
 
-/* 100% is silence. Colour is reserved for the rows that still need work. */
+/* 100% is silence. Below it the ramp has to be monotonic in severity or the
+   page misreports itself: the previous bands painted 33% gold and 50% copper,
+   so the workflow further behind looked calmer than the one ahead of it. */
 function progressTone(score: number) {
   if (score >= 100) return "quiet";
-  if (score >= 50) return "";
-  return score > 0 ? "amber" : "red";
+  if (score >= 67) return "";
+  return score >= 34 ? "amber" : "red";
 }
 
 function deliveryChannelLabel(channel: DeliveryChannel) {
@@ -184,7 +189,7 @@ function CommandReminderComposer({
   return (
     <div className="command-composer">
       <div className="command-panel-head">
-        <h2 className="command-band-head">Targeted reminder</h2>
+        <h2 className="command-section-head">Targeted reminder</h2>
         <span className="command-qualifier">Preview first</span>
       </div>
       <fetcher.Form
@@ -243,20 +248,23 @@ function CommandReminderComposer({
         </details>
         <div className="command-composer-actions">
           <button
-            className={canDraft ? "btn primary" : "btn ghost"}
+            className="btn primary"
             type="submit"
             disabled={pending || !canDraft}
           >
             <Sparkles aria-hidden size={14} />
             {pending ? "Drafting preview…" : "Draft preview"}
           </button>
-          {canDraft ? null : (
-            <p className="command-inline-note" role="alert">
+        </div>
+        {canDraft ? null : (
+          <p className="command-notice" role="alert">
+            <AlertCircle aria-hidden size={15} />
+            <span>
               {options.problem ??
                 "Drafting is unavailable until reminder delivery is configured."}
-            </p>
-          )}
-        </div>
+            </span>
+          </p>
+        )}
       </fetcher.Form>
       {fetcher.data?.ok ? (
         <>
@@ -266,8 +274,9 @@ function CommandReminderComposer({
           ) : null}
         </>
       ) : fetcher.data ? (
-        <p className="command-inline-note" role="alert">
-          {fetcher.data.error}
+        <p className="command-notice" role="alert">
+          <AlertCircle aria-hidden size={15} />
+          <span>{fetcher.data.error}</span>
         </p>
       ) : null}
     </div>
@@ -279,6 +288,10 @@ function CommandReadinessCommand() {
   const pending = fetcher.state !== "idle";
   return (
     <div className="command-advisor">
+      <div className="command-panel-head">
+        <h2 className="command-section-head">Readiness summary</h2>
+        <span className="command-qualifier">Advisory</span>
+      </div>
       <fetcher.Form method="post" action="/ai/context" className="stack">
         <input type="hidden" name="kind" value="readiness_summary" />
         <label className="label">
@@ -303,8 +316,9 @@ function CommandReadinessCommand() {
       {fetcher.data?.ok ? (
         <ContextualAiResultPanel result={fetcher.data.result} />
       ) : fetcher.data ? (
-        <p className="command-inline-note" role="alert">
-          {fetcher.data.error}
+        <p className="command-notice" role="alert">
+          <AlertCircle aria-hidden size={15} />
+          <span>{fetcher.data.error}</span>
         </p>
       ) : null}
     </div>
@@ -367,11 +381,11 @@ export default function CommandCentre({ loaderData }: Route.ComponentProps) {
 
       {completedSetupSteps < loaderData.setupGuide.length ? (
         <section
-          className="command-band"
+          className="command-region"
           id="command-setup"
           aria-labelledby="command-setup-title"
         >
-          <h2 className="command-band-head" id="command-setup-title">
+          <h2 className="command-section-head" id="command-setup-title">
             Programme setup · {completedWorkflowPhases} of{" "}
             {workflowPhases.length} phases ready
           </h2>
@@ -413,12 +427,14 @@ export default function CommandCentre({ loaderData }: Route.ComponentProps) {
         </section>
       ) : null}
 
-      <section className="command-hero" aria-label="Readiness">
+      <section className="command-region command-hero" aria-label="Readiness">
         <section
           className="command-score"
           data-state={loaderData.readiness.status}
         >
-          <h2 className="command-score-kicker">Overall readiness</h2>
+          <h2 className="command-section-head command-score-kicker">
+            Overall readiness
+          </h2>
           <p className="command-score-reading">
             <strong className="pc-num">
               {loaderData.readiness.percentage}
@@ -444,7 +460,7 @@ export default function CommandCentre({ loaderData }: Route.ComponentProps) {
 
         <section className="command-queue" id="action-queue">
           <div className="command-panel-head command-queue-head">
-            <h2 className="command-band-head">Action queue</h2>
+            <h2 className="command-section-head">Action queue</h2>
             <p>
               {blockerCount}
               {blockerCount === 1 ? " condition" : " conditions"}
@@ -464,29 +480,38 @@ export default function CommandCentre({ loaderData }: Route.ComponentProps) {
                     <AlertCircle aria-label="Needs attention" size={18} />
                   )}
                   <span className="command-blocker-copy">
-                    <strong>{blocker.label}</strong>
+                    <strong>
+                      {blocker.label}
+                      <b className="pc-num command-blocker-count">
+                        {blocker.count}
+                      </b>
+                    </strong>
                     <small>{blocker.action}</small>
                   </span>
-                  <b className="pc-num command-blocker-count">
-                    {blocker.count}
-                  </b>
+                  <ChevronRight
+                    aria-hidden
+                    className="command-blocker-go"
+                    size={16}
+                  />
                 </Link>
               ))}
             </div>
           ) : (
-            <p className="command-quiet">
-              No declared blockers in the current records.
-            </p>
+            <EmptyState
+              title="No blockers"
+              description="No declared blockers in the current records."
+              tone="positive"
+            />
           )}
         </section>
       </section>
 
       <section
-        className="command-band"
+        className="command-region"
         id="command-workflows"
         aria-labelledby="command-workflows-title"
       >
-        <h2 className="command-band-head" id="command-workflows-title">
+        <h2 className="command-section-head" id="command-workflows-title">
           Workflows
         </h2>
         <div className="command-workflow-list">
@@ -514,7 +539,7 @@ export default function CommandCentre({ loaderData }: Route.ComponentProps) {
       </section>
 
       <section
-        className="command-support"
+        className="command-region command-support"
         id="command-assistants"
         aria-label="Draft a reminder"
       >
@@ -569,22 +594,24 @@ export default function CommandCentre({ loaderData }: Route.ComponentProps) {
                 </table>
               </section>
             ) : (
-              <p className="command-quiet command-empty-copy">
-                Nothing has been sent for this event yet.
-              </p>
+              <EmptyState
+                title="No delivery activity"
+                description="Nothing has been sent for this event yet."
+                icon={Send}
+              />
             )}
           </section>
         </div>
       </section>
 
       <section
-        className="command-activity"
+        className="command-region command-activity"
         id="command-activity"
         aria-label="Schedule and operations"
       >
         <section className="command-agenda">
           <div className="command-panel-head">
-            <h2 className="command-band-head">Upcoming sessions</h2>
+            <h2 className="command-section-head">Upcoming sessions</h2>
             <Link className="command-text-link" to="/admin/schedule">
               Open schedule
             </Link>
@@ -651,7 +678,7 @@ export default function CommandCentre({ loaderData }: Route.ComponentProps) {
 
         <section className="command-ops">
           <div className="command-panel-head">
-            <h2 className="command-band-head">Operations</h2>
+            <h2 className="command-section-head">Operations</h2>
             <Link className="command-text-link" to="/admin/operations">
               View all
             </Link>
@@ -697,10 +724,11 @@ export default function CommandCentre({ loaderData }: Route.ComponentProps) {
               ))}
             </ul>
           ) : (
-            <p className="command-quiet command-empty-copy">
-              Nothing running. Bulk sends, publications and provider work appear
-              here while they are in progress.
-            </p>
+            <EmptyState
+              title="Nothing running"
+              description="Bulk sends, publications and provider work appear here while they are in progress."
+              icon={Activity}
+            />
           )}
         </section>
       </section>

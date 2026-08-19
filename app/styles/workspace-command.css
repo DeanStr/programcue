@@ -76,9 +76,16 @@
   color: var(--text-tertiary);
 }
 
-/* Supporting bands recede. Readiness is the page; these are kickers. */
-.command-band {
-  margin-top: var(--space-5);
+/* Two ranks of heading. A section head names a region of the page; a band head
+   names a list inside one. Seven identical 13px grey labels gave the page no
+   spine: nothing said Workflows outranked Delivery. */
+.command-section-head {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: var(--text-base);
+  font-weight: var(--weight-semibold);
+  letter-spacing: var(--tracking-snug);
+  line-height: var(--leading-tight);
 }
 .command-band-head {
   margin: 0;
@@ -88,12 +95,24 @@
   letter-spacing: var(--tracking-snug);
 }
 
+/* One separator rule for every top-level region. Three of the five bands drew
+   a hairline and two did not, at identical spacing, so the page read as a
+   uniform scroll with arbitrary rules through it. */
+.command-region + .command-region {
+  margin-top: var(--space-7);
+  padding-top: var(--space-6);
+  border-top: 1px solid var(--border);
+}
+.command-region > .command-section-head {
+  margin-bottom: var(--space-4);
+}
+
 .command-panel-head {
   display: flex;
   align-items: baseline;
   justify-content: space-between;
   gap: var(--space-3);
-  margin-bottom: var(--space-3);
+  margin-bottom: var(--space-4);
 }
 .command-panel-head h2,
 .command-panel-head h3 {
@@ -176,32 +195,34 @@
 .command-hero {
   align-items: start;
   display: grid;
-  gap: var(--space-6);
-  grid-template-columns: minmax(240px, 0.58fr) minmax(0, 1fr);
+  gap: var(--space-7);
+  grid-template-columns: minmax(260px, 0.72fr) minmax(0, 1fr);
 }
 .command-queue,
 .command-score {
   min-width: 0;
 }
 
+/* On track is not a warning. Painting the largest element on the page in
+   copper made a healthy score read as an alarm, so the numeral is ink unless
+   the state itself is coloured; the fill and the state word carry the hue. */
 .command-score {
-  --score-tone: var(--brand-700);
+  --score-tone: var(--text-primary);
+  --score-label: var(--text-secondary);
   --score-fill: var(--brand-600);
 }
 .command-score[data-state="ready"] {
   --score-tone: var(--state-good-text);
+  --score-label: var(--state-good-text);
   --score-fill: var(--state-good-solid);
 }
 .command-score[data-state="at_risk"] {
   --score-tone: var(--state-warn-text);
+  --score-label: var(--state-warn-text);
   --score-fill: var(--state-warn-solid);
 }
 .command-score-kicker {
-  margin: 0 0 var(--space-2);
-  color: var(--text-tertiary);
-  font-size: var(--text-xs);
-  font-weight: var(--weight-semibold);
-  letter-spacing: var(--tracking-snug);
+  margin-bottom: var(--space-3);
 }
 .command-score-reading {
   align-items: flex-end;
@@ -227,15 +248,16 @@
   vertical-align: 0.72em;
 }
 .command-score-state {
-  color: var(--text-tertiary);
+  color: var(--score-label);
   font-size: var(--text-sm);
-  font-weight: var(--weight-medium);
+  font-weight: var(--weight-semibold);
   letter-spacing: var(--tracking-snug);
   padding-bottom: 0.28em;
 }
+/* The track fills its column. A 192px stub under a 72px numeral read as a
+   leftover; at column width it reads as the gauge it is. */
 .command-score-track {
-  height: 6px;
-  max-width: 12rem;
+  height: 8px;
   margin: var(--space-5) 0 0;
   background: color-mix(in srgb, var(--score-fill) 16%, var(--track));
   overflow: hidden;
@@ -301,10 +323,12 @@
 .command-blocker.is-warning {
   --blocker-ink: var(--state-warn-text);
   --blocker-mark: var(--state-warn-solid);
+  --blocker-surface: var(--state-warn-surface);
 }
 .command-blocker.is-danger {
   --blocker-ink: var(--state-bad-text);
   --blocker-mark: var(--state-bad-solid);
+  --blocker-surface: var(--state-bad-surface);
 }
 .command-blocker > svg {
   color: var(--blocker-ink);
@@ -320,21 +344,39 @@
   font-size: var(--text-xs);
 }
 .command-blocker-copy strong {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
   font-size: var(--text-sm);
   font-weight: var(--weight-semibold);
   letter-spacing: var(--tracking-snug);
 }
+/* The count sits beside the label it counts. Pinned to the right edge of a
+   700px row it was half a column away from the words that gave it meaning,
+   and the row's own affordance had nowhere to live. */
 .command-blocker-count {
-  color: var(--text-tertiary);
-  font-size: var(--text-sm);
+  border-radius: var(--radius-full);
+  padding: 1px var(--space-2);
+  background: var(--blocker-surface);
+  color: var(--blocker-ink);
+  font-size: var(--text-2xs);
   font-weight: var(--weight-semibold);
   font-variant-numeric: tabular-nums;
-  letter-spacing: var(--tracking-snug);
-  line-height: 1;
+  letter-spacing: var(--tracking-normal);
+  line-height: 1.5;
 }
-.command-blocker.is-danger .command-blocker-count,
-.command-blocker.is-warning .command-blocker-count {
+.command-blocker-go {
+  flex: none;
+  color: var(--text-tertiary);
+  transition:
+    color var(--dur-fast) var(--ease-out),
+    transform var(--dur-fast) var(--ease-out);
+}
+.command-blocker:hover .command-blocker-go,
+.command-blocker:focus-visible .command-blocker-go {
   color: var(--blocker-ink);
+  transform: translateX(2px);
 }
 .command-blocker:hover,
 .command-blocker:focus-visible {
@@ -364,9 +406,9 @@
   color: inherit;
   display: grid;
   gap: var(--space-3);
-  grid-template-columns: minmax(180px, 0.75fr) minmax(0, 1.15fr) minmax(
-      120px,
-      0.9fr
+  grid-template-columns: minmax(180px, 0.8fr) minmax(0, 1.35fr) minmax(
+      110px,
+      0.5fr
     ) 3.25rem;
   min-height: 48px;
   padding: var(--space-3) 0;
@@ -430,11 +472,8 @@
 .command-support {
   align-items: start;
   display: grid;
-  gap: var(--space-5);
+  gap: var(--space-7);
   grid-template-columns: minmax(0, 1.05fr) minmax(0, 0.95fr);
-  margin-top: var(--space-5);
-  padding-top: var(--space-5);
-  border-top: 1px solid var(--border);
 }
 .command-assist-side {
   align-content: start;
@@ -487,15 +526,6 @@
   align-items: center;
   gap: var(--space-3);
 }
-.command-composer-actions .btn:disabled,
-.command-composer-actions .btn.primary:disabled,
-.command-composer-actions .btn.ghost:disabled {
-  background: transparent;
-  border-color: transparent;
-  color: var(--text-tertiary);
-  opacity: 1;
-  box-shadow: none;
-}
 .command-template-select {
   inline-size: 100%;
   min-inline-size: 0;
@@ -503,15 +533,25 @@
   overflow: hidden;
   text-overflow: ellipsis;
 }
-.command-inline-note {
+/* The reason an action is unavailable is not a caption on the button. Stripping
+   the button's own fill and border to make room for it left "Draft preview"
+   reading as body text beside a loose red paragraph: broken, not blocked. */
+.command-notice {
+  grid-column: 1 / -1;
+  align-items: start;
+  display: grid;
+  gap: var(--space-2);
+  grid-template-columns: auto minmax(0, 1fr);
   margin: 0;
-  color: var(--text-tertiary);
+  padding: var(--space-3);
+  border-radius: var(--radius-sm);
+  background: var(--state-bad-surface);
+  color: var(--state-bad-text);
   font-size: var(--text-xs);
   line-height: var(--leading-snug);
-  max-width: 42ch;
 }
-.command-inline-note[role="alert"] {
-  color: var(--state-bad-text);
+.command-notice > svg {
+  margin-top: 1px;
 }
 
 .command-delivery {
@@ -523,11 +563,8 @@
 .command-activity {
   align-items: start;
   display: grid;
-  gap: var(--space-6);
-  grid-template-columns: minmax(0, 1.25fr) minmax(0, 0.85fr);
-  margin-top: var(--space-5);
-  padding-top: var(--space-5);
-  border-top: 1px solid var(--border);
+  gap: var(--space-7);
+  grid-template-columns: minmax(0, 1.55fr) minmax(0, 0.8fr);
 }
 .command-activity > * {
   min-width: 0;
@@ -669,18 +706,6 @@
   padding: var(--space-2) 0;
   border-bottom: 1px solid var(--line);
   font-size: var(--text-2xs);
-}
-
-.command-quiet {
-  color: var(--text-secondary);
-  font-size: var(--text-sm);
-  line-height: var(--leading-snug);
-  margin: 0;
-}
-.command-empty-copy {
-  max-width: 36ch;
-  color: var(--text-tertiary);
-  font-size: var(--text-xs);
 }
 
 .pc-speaker-meta {

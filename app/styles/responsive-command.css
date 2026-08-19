@@ -2,7 +2,7 @@
 
 @media (max-width: 1200px) {
   .command-workflow-row {
-    grid-template-columns: minmax(160px, 1fr) minmax(100px, 0.8fr) 3.25rem;
+    grid-template-columns: minmax(160px, 1fr) minmax(100px, 0.45fr) 3.25rem;
   }
   .command-workflow-detail {
     display: none;
@@ -48,11 +48,9 @@
     width: auto;
   }
 
-  .command-band,
-  .command-support,
-  .command-activity {
-    margin-top: var(--space-5);
-    padding-top: var(--space-4);
+  .command-region + .command-region {
+    margin-top: var(--space-6);
+    padding-top: var(--space-5);
   }
 
   .command-workflow-phases {
@@ -86,9 +84,11 @@
     min-height: 48px;
   }
 
+  /* The track was narrower than the time's own min-width, so a two-digit hour
+     overflowed into the gap and sat against its title. */
   .command-session-row.command-agenda-link {
     display: grid;
-    grid-template-columns: 62px minmax(0, 1fr);
+    grid-template-columns: 72px minmax(0, 1fr);
     gap: var(--space-1) var(--space-2);
     align-items: baseline;
   }
