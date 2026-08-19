@@ -328,6 +328,54 @@ describe("public event site rules", () => {
     ).toContain('href="https://example.test/a(b)"');
   });
 
+  it("keeps mixed bold formatting inside one public link", () => {
+    const markdown = restrictedMarkdownFromEditorDocument({
+      type: "doc",
+      content: [
+        {
+          type: "paragraph",
+          content: [
+            {
+              type: "text",
+              text: "Read the ",
+              marks: [
+                {
+                  type: "link",
+                  attrs: { href: "https://example.test/guide" },
+                },
+              ],
+            },
+            {
+              type: "text",
+              text: "guide",
+              marks: [
+                { type: "bold" },
+                {
+                  type: "link",
+                  attrs: { href: "https://example.test/guide" },
+                },
+              ],
+            },
+          ],
+        },
+      ],
+    });
+
+    expect(markdown).toBe("[Read the **guide**](https://example.test/guide)");
+    expect(
+      restrictedMarkdownFromEditorDocument(
+        restrictedMarkdownEditorDocument(markdown),
+      ),
+    ).toBe(markdown);
+    const markup = renderToStaticMarkup(
+      createElement(RestrictedMarkdown, null, markdown),
+    );
+    expect(markup.match(/<a /gu) ?? []).toHaveLength(1);
+    expect(markup).toContain(
+      '<a href="https://example.test/guide" rel="noreferrer">Read the <strong>guide</strong></a>',
+    );
+  });
+
   it("escapes formatting delimiters in visual-editor text", () => {
     const markdown = restrictedMarkdownFromEditorDocument({
       type: "doc",

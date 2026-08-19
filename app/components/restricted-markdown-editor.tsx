@@ -70,20 +70,40 @@ export function restrictedMarkdownEditorDocument(value: string): TiptapNode {
 }
 
 function serializeInline(node: TiptapNode) {
-  return (node.content ?? [])
-    .map((child) => {
-      const text = escapeRestrictedMarkdownText(
-        (child.text ?? "").replace(/\s*\n\s*/gu, " "),
-      );
-      const bold = child.marks?.some((mark) => mark.type === "bold");
-      const rawHref = child.marks?.find((mark) => mark.type === "link")?.attrs
-        ?.href;
-      const href = rawHref ? safeRestrictedMarkdownLink(rawHref) : null;
-      const label = bold && text ? `**${text}**` : text;
-      const destination = href && /[()]/u.test(href) ? `<${href}>` : href;
-      return destination && label ? `[${label}](${destination})` : label;
-    })
-    .join("");
+  const segments = (node.content ?? []).map((child) => {
+    const text = escapeRestrictedMarkdownText(
+      (child.text ?? "").replace(/\s*\n\s*/gu, " "),
+    );
+    const bold = child.marks?.some((mark) => mark.type === "bold");
+    const rawHref = child.marks?.find((mark) => mark.type === "link")?.attrs
+      ?.href;
+    return {
+      href: rawHref ? safeRestrictedMarkdownLink(rawHref) : null,
+      label: bold && text ? `**${text}**` : text,
+    };
+  });
+  const markdown: string[] = [];
+  for (let index = 0; index < segments.length; ) {
+    const segment = segments[index];
+    if (!segment?.href) {
+      markdown.push(segment?.label ?? "");
+      index += 1;
+      continue;
+    }
+    const labels = [segment.label];
+    let nextIndex = index + 1;
+    while (segments[nextIndex]?.href === segment.href) {
+      labels.push(segments[nextIndex]?.label ?? "");
+      nextIndex += 1;
+    }
+    const label = labels.join("");
+    const destination = /[()]/u.test(segment.href)
+      ? `<${segment.href}>`
+      : segment.href;
+    markdown.push(label ? `[${label}](${destination})` : "");
+    index = nextIndex;
+  }
+  return markdown.join("");
 }
 
 function bulletListMarkdown(node: TiptapNode): string[] {
@@ -150,6 +170,7 @@ export function RestrictedMarkdownEditor({
   onChangeRef.current = onChange;
   const pendingLocalValuesRef = useRef<string[]>([]);
   const linkSelectionRef = useRef<{ from: number; to: number } | null>(null);
+  const linkInputRef = useRef<HTMLInputElement>(null);
   const editingExistingLinkRef = useRef(false);
   const [, refreshToolbar] = useReducer((revision: number) => revision + 1, 0);
   const [linkEditorOpen, setLinkEditorOpen] = useState(false);
@@ -228,6 +249,12 @@ export function RestrictedMarkdownEditor({
       refreshToolbar();
     }
   }, [editor, initialDocument]);
+
+  useEffect(() => {
+    if (!linkEditorOpen) return;
+    linkInputRef.current?.focus();
+    linkInputRef.current?.select();
+  }, [linkEditorOpen]);
 
   if (!editor)
     return <div className="public-site-rich-text-loading">Loading editor…</div>;
@@ -381,6 +408,7 @@ export function RestrictedMarkdownEditor({
             <legend className="sr-only">Link settings</legend>
             <label htmlFor={linkInputId}>HTTPS link</label>
             <input
+              ref={linkInputRef}
               id={linkInputId}
               className="field"
               type="text"
@@ -429,14 +457,15 @@ export function RestrictedMarkdownEditor({
         ) : null}
         <EditorContent editor={editor} />
       </div>
-      <span
-        className={tooLong ? "pc-field-error" : "help"}
-        id={descriptionId}
-        aria-live="polite"
-      >
+      <span className={tooLong ? "pc-field-error" : "help"} id={descriptionId}>
         {value.length.toLocaleString()} of {maximumLength.toLocaleString()}{" "}
         characters
         {tooLong ? " — shorten this content before saving." : ""}
+      </span>
+      <span className="sr-only" aria-atomic="true" aria-live="polite">
+        {tooLong
+          ? "Character limit exceeded. Shorten this content before saving."
+          : ""}
       </span>
     </div>
   );

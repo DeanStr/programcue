@@ -7,21 +7,42 @@ import {
 
 function inlineMarkdown(nodes: RestrictedMarkdownInline[]): ReactNode[] {
   const occurrences = new Map<string, number>();
-  return nodes.map((node) => {
-    const identity = `${node.text}:${node.bold ?? false}:${node.href ?? ""}`;
+  const rendered: ReactNode[] = [];
+  const content = (node: RestrictedMarkdownInline, key: string) =>
+    node.bold ? <strong key={`${key}:strong`}>{node.text}</strong> : node.text;
+  for (let index = 0; index < nodes.length; ) {
+    const node = nodes[index];
+    if (!node) break;
+    if (!node.href) {
+      const identity = `${node.text}:${node.bold ?? false}`;
+      const occurrence = occurrences.get(identity) ?? 0;
+      occurrences.set(identity, occurrence + 1);
+      rendered.push(content(node, `${identity}:${occurrence}`));
+      index += 1;
+      continue;
+    }
+    const linkNodes = [node];
+    let nextIndex = index + 1;
+    while (nodes[nextIndex]?.href === node.href) {
+      linkNodes.push(nodes[nextIndex] as RestrictedMarkdownInline);
+      nextIndex += 1;
+    }
+    const identity = `${linkNodes
+      .map((segment) => `${segment.text}:${segment.bold ?? false}`)
+      .join("")}:${node.href}`;
     const occurrence = occurrences.get(identity) ?? 0;
     occurrences.set(identity, occurrence + 1);
     const key = `${identity}:${occurrence}`;
-    let content: ReactNode = node.text;
-    if (node.bold) content = <strong key={`${key}:strong`}>{content}</strong>;
-    return node.href ? (
+    rendered.push(
       <a key={`${key}:link`} href={node.href} rel="noreferrer">
-        {content}
-      </a>
-    ) : (
-      content
+        {linkNodes.map((segment, segmentIndex) =>
+          content(segment, `${key}:${segmentIndex}`),
+        )}
+      </a>,
     );
-  });
+    index = nextIndex;
+  }
+  return rendered;
 }
 
 /** Plain text for metadata derived from the same deliberately small subset. */

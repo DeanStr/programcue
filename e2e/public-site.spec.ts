@@ -627,21 +627,32 @@ test("organisers preview unpublished edits and publish a replacement", async ({
     name: "Page content",
   });
   await aboutContent.fill("Why attend");
-  await aboutContent.press("ControlOrMeta+a");
-  await aboutPage.getByRole("button", { name: "Subheading" }).click();
-  await expect(aboutContent.locator("h2")).toHaveText("Why attend");
+  const counterId = await aboutContent.getAttribute("aria-describedby");
+  expect(counterId).toBeTruthy();
+  const aboutCounter = aboutPage.locator(`[id="${counterId}"]`);
+  await expect(aboutCounter).not.toHaveAttribute("aria-live");
   await aboutContent.press("End");
   await aboutContent.press("Enter");
   await aboutContent.type("Meet practitioners building better events.");
+  await expect(aboutContent.locator("p")).toHaveCount(2);
+  await expect(aboutContent.locator("p").first()).toHaveText("Why attend");
+  await aboutContent.locator("p").first().click();
+  await aboutPage.getByRole("button", { name: "Subheading" }).click();
+  await expect(aboutCounter).toContainText("57 of 8,000 characters");
+  await expect(aboutContent.locator("h2")).toHaveText("Why attend");
+  await expect(aboutContent.locator("p")).toHaveText(
+    "Meet practitioners building better events.",
+  );
+  await aboutContent.locator("p").click();
+  await aboutContent.press("End");
   for (let character = 0; character < "events.".length; character += 1)
     await aboutContent.press("Shift+ArrowLeft");
   await aboutPage.getByRole("button", { name: "Link" }).click();
   const linkSettings = aboutPage.getByRole("group", {
     name: "Link settings",
   });
-  await linkSettings
-    .getByLabel("HTTPS link")
-    .fill("https://example.test/events");
+  const linkInput = linkSettings.getByLabel("HTTPS link");
+  await linkInput.fill("https://example.test/events");
   await linkSettings.getByRole("button", { name: "Apply link" }).click();
   const sponsorsPage = page
     .locator(".public-site-page-editor fieldset")
@@ -652,9 +663,28 @@ test("organisers preview unpublished edits and publish a replacement", async ({
   await sponsorsPage
     .getByLabel("Navigation label")
     .fill(longSponsorsNavigationLabel);
-  await sponsorsPage
-    .getByRole("textbox", { name: "Page content" })
-    .fill("Thanks to the organisations supporting this event.");
+  const sponsorsContent = sponsorsPage.getByRole("textbox", {
+    name: "Page content",
+  });
+  const sponsorsCharacterStatus = sponsorsPage
+    .locator(".public-site-rich-text-field")
+    .locator('.sr-only[aria-live="polite"]');
+  await sponsorsContent.fill("A".repeat(8_001));
+  await expect(sponsorsCharacterStatus).toHaveText(
+    "Character limit exceeded. Shorten this content before saving.",
+  );
+  await sponsorsContent.fill(
+    "Thanks to the organisations supporting this event.",
+  );
+  await expect(sponsorsCharacterStatus).toBeEmpty();
+  await sponsorsContent.press("ControlOrMeta+a");
+  const sponsorsLinkButton = sponsorsPage.getByRole("button", { name: "Link" });
+  await sponsorsLinkButton.focus();
+  await sponsorsLinkButton.press("Enter");
+  const sponsorsLinkInput = sponsorsPage.getByLabel("HTTPS link");
+  await expect(sponsorsLinkInput).toBeFocused();
+  await sponsorsLinkInput.press("Escape");
+  await expect(sponsorsLinkInput).toBeHidden();
   /* Every page ships enabled in the baseline, so one is switched off here to
      exercise the preview's "not enabled" notice below. */
   const codeOfConductPage = page
