@@ -1,8 +1,10 @@
 import { DndContext, DragOverlay, type DragStartEvent } from "@dnd-kit/core";
+import { PanelRightClose } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { Form, Link } from "react-router";
 import { ScheduleContentWorkflows } from "~/components/schedule-content-workflows";
 import { statusPresentation } from "~/components/ui/domain-status-badge";
+import { StatusNotice } from "~/components/ui/status-notice";
 import { ScheduleCanvasPanel } from "./schedule-planner-canvas-panel";
 import {
   AutoPlacementPreviewDialog,
@@ -60,6 +62,7 @@ export function SchedulePlannerWorkspace({
     conflictSeverityByEntryId,
     dismissAutoPreview,
     draggingSessionId,
+    editLock,
     entriesBySlot,
     eventDays,
     fetcher,
@@ -76,7 +79,6 @@ export function SchedulePlannerWorkspace({
     quickSession,
     quickSessionId,
     quickStartsAt,
-    readOnlyPlacementMessage,
     requestPublish,
     resize,
     resourceInventory,
@@ -116,11 +118,9 @@ export function SchedulePlannerWorkspace({
   }
   const unscheduledCount = workspace.sessions.length - scheduledSessionIds.size;
   const showAutoPlaceButton =
-    workspace.version?.status === "draft" ||
-    workspace.autoPlacementReadiness.canPreview;
+    placementAvailable || workspace.autoPlacementReadiness.canPreview;
   const showAutoPlaceReadiness =
-    workspace.version?.status === "draft" &&
-    !workspace.autoPlacementReadiness.canPreview;
+    placementAvailable && !workspace.autoPlacementReadiness.canPreview;
 
   return (
     <div className="schedule-page">
@@ -193,7 +193,7 @@ export function SchedulePlannerWorkspace({
               {statusPresentation("version", workspace.version.status).label}
             </span>
           ) : null}
-          {workspace.version?.status === "draft" ? (
+          {placementAvailable ? (
             <button
               className="btn primary"
               type="button"
@@ -226,6 +226,18 @@ export function SchedulePlannerWorkspace({
           )}
         </div>
       </div>
+      {/* The remedy is written out rather than repeated as a button: the header
+          already carries “Create next draft” a few pixels away, and two buttons
+          of the same name on one screen help nobody. */}
+      {editLock.reason ? (
+        <StatusNotice
+          className="schedule-read-only-notice"
+          tone={editLock.reason.tone}
+          title={`Schedule read-only · ${editLock.reason.title}`}
+        >
+          {editLock.reason.detail} {editLock.reason.remedy}.
+        </StatusNotice>
+      ) : null}
       {workspace.createdSessionId ? (
         <div
           className={`validation-item schedule-notice ${workspace.createdSessionNeedsAttention ? "warn" : "ok"} mb`}
@@ -364,7 +376,7 @@ export function SchedulePlannerWorkspace({
               {conflict.message}
             </span>
           ))}
-          {undoAvailable && workspace.version?.status === "draft" ? (
+          {undoAvailable && placementAvailable && workspace.version ? (
             <fetcher.Form method="post">
               <input type="hidden" name="intent" value="undo" />
               <input
@@ -405,7 +417,7 @@ export function SchedulePlannerWorkspace({
               {warning.message}
             </span>
           ))}
-          {undoAvailable && workspace.version?.status === "draft" ? (
+          {undoAvailable && placementAvailable && workspace.version ? (
             <fetcher.Form method="post">
               <input type="hidden" name="intent" value="undo" />
               <input
@@ -488,7 +500,7 @@ export function SchedulePlannerWorkspace({
             resourceInventory={resourceInventory}
             visibleSessions={visibleSessions}
             scheduledSessionIds={scheduledSessionIds}
-            readOnlyPlacementMessage={readOnlyPlacementMessage}
+            editLock={editLock}
             quickEntry={quickEntry}
             unassign={unassign}
             submitQuickPlacement={submitQuickPlacement}
@@ -533,6 +545,7 @@ export function SchedulePlannerWorkspace({
           >
             <strong>Notes and session content</strong>
             <span className="help">
+              {editLock.reason ? "Read-only · " : ""}
               {quickSession ? quickSession.title : "Schedule notes"}
             </span>
           </button>
@@ -558,14 +571,23 @@ export function SchedulePlannerWorkspace({
                     : "Schedule notes and the selected session"}
                 </p>
               </div>
+              {/* No read-only marker here. The page-level bar stays on screen
+                  in this fixed-height layout, each editor below carries its own
+                  caption, and the frozen fields now render inert — a pill added
+                  a fourth copy at the cost of wrapping the heading and
+                  truncating the session name in a 320px column. */}
+              {/* An icon: the head is 320px at its narrowest, and a spelled-out
+                  label crowds the session name it sits beside. */}
               <button
                 type="button"
-                className="btn small"
+                className="icon-btn schedule-inspector-hide"
                 aria-expanded={inspectorOpen}
                 aria-controls="schedule-inspector"
+                aria-label="Hide panel"
+                title="Hide panel"
                 onClick={() => toggleInspector(false)}
               >
-                Hide panel
+                <PanelRightClose aria-hidden size={16} />
               </button>
             </div>
             <div className="schedule-inspector-body">

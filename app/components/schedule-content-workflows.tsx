@@ -6,6 +6,10 @@ import {
 } from "~/components/draft-recovery-feedback";
 import { CharacterCount } from "~/components/ui/character-count";
 import { requireValue } from "~/lib/required-value";
+import {
+  type ScheduleEditLock,
+  scheduleEditLock,
+} from "~/modules/schedule/schedule-edit-lock";
 import type {
   ScheduleSession,
   ScheduleWorkspace,
@@ -18,6 +22,7 @@ import {
   PersistenceStatus,
   type RecoveryScope,
   type ScheduleCalendarPreview,
+  ScheduleReadOnlyMarker,
   statusFor,
   useOnlineState,
   useScheduleAutosave,
@@ -28,13 +33,15 @@ export type { ScheduleCalendarPreview } from "./schedule-content-editor-shared";
 
 function ScheduleNotesEditor({
   workspace,
+  editLock,
   recoveryScope,
 }: {
   workspace: ScheduleWorkspace;
+  editLock: ScheduleEditLock;
   recoveryScope: RecoveryScope;
 }) {
   const version = workspace.version;
-  const editable = version?.status === "draft";
+  const editable = editLock.editable;
   const [notes, setNotes] = useState(version?.notes ?? "");
   const notesRef = useRef(notes);
   const [savedNotes, setSavedNotes] = useState(version?.notes ?? "");
@@ -191,10 +198,14 @@ function ScheduleNotesEditor({
           <DraftRecoveryStatus state={recovery.state} />
         </span>
       </div>
-      <p className="help">
-        Notes belong to this schedule version. Publishing freezes them; editing
-        resumes only on the next draft.
-      </p>
+      {editLock.reason ? (
+        <ScheduleReadOnlyMarker />
+      ) : (
+        <p className="help">
+          Notes belong to this schedule version. Publishing freezes them;
+          editing resumes only on the next draft.
+        </p>
+      )}
       <DraftRecoveryFeedback recovery={recovery} />
       {serverError ? (
         <div className="validation-item error mb" role="alert">
@@ -260,7 +271,11 @@ function ScheduleNotesEditor({
         className="textarea"
         rows={6}
         maxLength={12_000}
-        aria-label="Schedule notes"
+        aria-label={
+          editLock.reason
+            ? `Schedule notes. Read-only. ${editLock.reason.remedy}.`
+            : "Schedule notes"
+        }
         value={notes}
         disabled={!editable}
         onChange={(event) => {
@@ -285,11 +300,13 @@ export function ScheduleContentWorkflows({
   recoveryScope: RecoveryScope;
   calendarPreview: ScheduleCalendarPreview | null;
 }) {
+  const editLock = scheduleEditLock(workspace.version);
   return (
     <>
       <ScheduleNotesEditor
         key={`notes:${workspace.version?.id ?? "none"}`}
         workspace={workspace}
+        editLock={editLock}
         recoveryScope={recoveryScope}
       />
       {session ? (
@@ -297,6 +314,7 @@ export function ScheduleContentWorkflows({
           key={`session:${workspace.version?.id ?? "none"}:${session.id}`}
           workspace={workspace}
           session={session}
+          editLock={editLock}
           recoveryScope={recoveryScope}
           calendarPreview={calendarPreview}
         />

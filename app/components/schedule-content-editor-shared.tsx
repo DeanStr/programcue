@@ -1,8 +1,27 @@
+import { Lock } from "lucide-react";
 import { useEffect, useState } from "react";
 import type {
   ScheduleSession,
   ScheduleWorkspace,
 } from "~/modules/schedule/schedule-service.server";
+
+/* Which version froze the panel and how to unfreeze it are on the page-level
+   bar, which never scrolls away on desktop. Repeating either here just wrote
+   the same two facts a third time down a 320px column, so the marker carries
+   only the fact the bar cannot: that this control, the one under the pointer,
+   is the frozen one. It stays per panel because the inspector body scrolls
+   independently, and on mobile the bar does scroll off. */
+export function ScheduleReadOnlyMarker() {
+  return (
+    <p
+      className="schedule-read-only-marker"
+      data-testid="schedule-read-only-marker"
+    >
+      <Lock aria-hidden size={13} />
+      Read-only
+    </p>
+  );
+}
 
 export type RecoveryScope = { eventId: string; personId: string };
 

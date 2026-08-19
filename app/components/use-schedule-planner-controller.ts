@@ -7,6 +7,7 @@ import {
 } from "@dnd-kit/core";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useFetcher, useNavigation, useRevalidator } from "react-router";
+import { scheduleEditLock } from "~/modules/schedule/schedule-edit-lock";
 import type { ScheduleWorkspace } from "~/modules/schedule/schedule-service.server";
 import {
   eventBoundaryCalendarDate,
@@ -251,11 +252,11 @@ export function useSchedulePlannerController(
     [workspace.rooms],
   );
 
-  const placementAvailable = workspace.version?.status === "draft";
-
-  const readOnlyPlacementMessage = workspace.version
-    ? "Create the next draft to place"
-    : "Create a schedule to place";
+  const editLock = useMemo(
+    () => scheduleEditLock(workspace.version),
+    [workspace.version],
+  );
+  const placementAvailable = editLock.editable;
 
   const unscheduledSessions = workspace.sessions.filter(
     (session) =>
@@ -679,6 +680,7 @@ export function useSchedulePlannerController(
     conflictSeverityByEntryId,
     dismissAutoPreview,
     draggingSessionId,
+    editLock,
     entriesBySlot,
     eventDays,
     fetcher,
@@ -695,7 +697,6 @@ export function useSchedulePlannerController(
     quickSession,
     quickSessionId,
     quickStartsAt,
-    readOnlyPlacementMessage,
     requestPublish,
     resize,
     resourceInventory,

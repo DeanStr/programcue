@@ -333,6 +333,21 @@ export default function DesignSystem() {
                   required
                 />
               </Field>
+              {/* Unavailable is a state a control has to show, not only
+                  announce. Read-only recedes to the sunken surface; disabled
+                  adds the dashed edge, because the value cannot be focused or
+                  copied either. */}
+              <Field
+                label="Public programme slug"
+                description="Frozen while the programme is published. Create the next draft to change it."
+              >
+                <input
+                  className="field"
+                  value="future-of-events-2027"
+                  disabled
+                  readOnly
+                />
+              </Field>
             </div>
             <ErrorSummary
               errors={[

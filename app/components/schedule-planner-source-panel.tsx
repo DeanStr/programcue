@@ -5,6 +5,7 @@ import { Link, useSearchParams } from "react-router";
 import { EmptyState } from "~/components/ui/states";
 import { requireValue } from "~/lib/required-value";
 import { SessionCopyAction } from "~/modules/ai/contextual-ai-actions";
+import type { ScheduleEditLock } from "~/modules/schedule/schedule-edit-lock";
 import type { ScheduleSession } from "~/modules/schedule/schedule-service.server";
 import type {
   ScheduleEntry,
@@ -44,7 +45,7 @@ function DraggableSession({
   scheduled: boolean;
   focused: boolean;
   placementAvailable: boolean;
-  readOnlyMessage: string;
+  readOnlyMessage: string | null;
 }) {
   const disabled = scheduled || !placementAvailable;
   const { attributes, listeners, setNodeRef, transform, isDragging } =
@@ -60,7 +61,7 @@ function DraggableSession({
       className={`schedule-session-source ${session.format}${isDragging ? " dragging" : ""}${focused ? " focused" : ""}${scheduled ? " is-placed" : ""}`}
       aria-current={focused ? "true" : undefined}
       aria-label={
-        !scheduled && !placementAvailable
+        !scheduled && !placementAvailable && readOnlyMessage
           ? `${session.title}. ${readOnlyMessage}`
           : undefined
       }
@@ -101,7 +102,7 @@ export function ScheduleSourcePanel({
   resourceInventory,
   visibleSessions,
   scheduledSessionIds,
-  readOnlyPlacementMessage,
+  editLock,
   quickEntry,
   unassign,
   submitQuickPlacement,
@@ -122,7 +123,7 @@ export function ScheduleSourcePanel({
   resourceInventory: string[];
   visibleSessions: ScheduleSession[];
   scheduledSessionIds: Set<string>;
-  readOnlyPlacementMessage: string;
+  editLock: ScheduleEditLock;
   quickEntry: ScheduleEntry | undefined;
   unassign(entry: ScheduleEntry): void;
   submitQuickPlacement(): void;
@@ -523,7 +524,7 @@ export function ScheduleSourcePanel({
             scheduled={false}
             focused={workspace.focusedSessionId === session.id}
             placementAvailable={placementAvailable}
-            readOnlyMessage={readOnlyPlacementMessage}
+            readOnlyMessage={editLock.reason?.remedy ?? null}
           />
         ))}
         {placedSessions.length ? (
@@ -542,7 +543,7 @@ export function ScheduleSourcePanel({
             scheduled
             focused={workspace.focusedSessionId === session.id}
             placementAvailable={placementAvailable}
-            readOnlyMessage={readOnlyPlacementMessage}
+            readOnlyMessage={editLock.reason?.remedy ?? null}
           />
         ))}
         {matchingVisibleSessions.length === 0 ? (

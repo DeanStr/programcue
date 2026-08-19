@@ -155,7 +155,7 @@ test("schedule and programme render the event calendar date and timezone", async
   ).toBeVisible();
   await expect(
     page.getByRole("button", {
-      name: "Community and Connection",
+      name: "View Community and Connection details.",
       exact: true,
     }),
   ).toBeVisible();
@@ -269,15 +269,70 @@ test("keeps notes and session content beside the planner", async ({ page }) => {
   const otherSession = page.locator(
     '.schedule-room-board .session-card[data-session-id="demo-session-2"]',
   );
-  // Published cards stay in the tab order with aria-disabled so drag is
-  // off, but a pointer click still selects the session. Playwright's
-  // actionability check treats aria-disabled as not enabled.
-  await otherSession.click({ force: true });
+  // Publishing disables movement, not inspection. The card must remain an
+  // honestly enabled button for pointer, keyboard and assistive-technology
+  // users even though its dnd-kit activator is disabled.
+  await expect(otherSession).toBeEnabled();
+  await expect(otherSession).not.toHaveAttribute("aria-disabled", "true");
+  await expect(otherSession).toHaveAccessibleName(
+    "View AI in Event Operations details.",
+  );
+  await otherSession.focus();
+  await page.keyboard.press("Enter");
   await expect(inspector).toBeVisible();
   await expect(inspector.getByLabel("Title")).toHaveValue(
     "AI in Event Operations",
   );
   await expect(otherSession).toBeFocused();
+});
+
+test("states why the published planner is read-only and clears it on the next draft", async ({
+  page,
+}) => {
+  await waitForInterface(page, "/admin/schedule?session=demo-session-1");
+  const notice = page.locator(".schedule-read-only-notice");
+  await expect(notice).toContainText(
+    "Schedule read-only · Version 1 is published",
+  );
+  await expect(notice).toContainText("Create the next draft to edit");
+
+  const inspector = page.getByRole("complementary", {
+    name: "Notes and session content",
+  });
+  // The head is 320px at its narrowest and its contents are clipped, so a
+  // control that overflows it disappears in silence rather than failing.
+  const hide = inspector.getByRole("button", { name: "Hide panel" });
+  const hideBox = await hide.boundingBox();
+  const inspectorBox = await inspector.boundingBox();
+  expect(hideBox, "hide control should be measured").toBeTruthy();
+  expect(inspectorBox, "inspector should be measured").toBeTruthy();
+  expect(hideBox!.x + hideBox!.width).toBeLessThanOrEqual(
+    inspectorBox!.x + inspectorBox!.width,
+  );
+  // Notes used to disable their textarea in silence, which is the state this
+  // covers: the marker has to sit on the frozen panel, not only at page level.
+  await expect(
+    page
+      .getByTestId("schedule-notes-editor")
+      .getByTestId("schedule-read-only-marker"),
+  ).toBeVisible();
+  await expect(
+    page
+      .getByTestId("session-content-editor")
+      .getByTestId("schedule-read-only-marker"),
+  ).toBeVisible();
+  await expect(
+    inspector.getByRole("textbox", { name: /^Schedule notes/ }),
+  ).toBeDisabled();
+  await expect(inspector.getByLabel("Title")).toBeDisabled();
+
+  await createNextScheduleDraft(page);
+  await expect(page.getByText(/Version \d+ · Draft/)).toBeVisible();
+  await expect(notice).toBeHidden();
+  await expect(page.getByTestId("schedule-read-only-marker")).toHaveCount(0);
+  await expect(
+    inspector.getByRole("textbox", { name: "Schedule notes" }),
+  ).toBeEnabled();
 });
 
 test.describe("mutable schedule authoring", () => {

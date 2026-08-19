@@ -54,6 +54,7 @@ export const nodeOnlyTestFiles = [
   "app/modules/schedule/schedule-rules.test.ts",
   "app/modules/schedule/schedule-auto-placement.test.ts",
   "app/modules/schedule/schedule-time.test.ts",
+  "app/modules/schedule/schedule-edit-lock.test.ts",
   "app/modules/files/uppy-multipart-client.test.ts",
   "app/modules/files/file-policy.test.ts",
   "app/modules/files/multipart-r2-provider.server.test.ts",

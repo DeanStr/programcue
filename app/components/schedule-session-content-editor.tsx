@@ -14,6 +14,7 @@ import {
 } from "~/components/draft-recovery-feedback";
 import { CharacterCount } from "~/components/ui/character-count";
 import { requireValue } from "~/lib/required-value";
+import type { ScheduleEditLock } from "~/modules/schedule/schedule-edit-lock";
 import type {
   ScheduleSession,
   ScheduleWorkspace,
@@ -29,6 +30,7 @@ import {
   PersistenceStatus,
   type RecoveryScope,
   type ScheduleCalendarPreview,
+  ScheduleReadOnlyMarker,
   type SessionContentDraft,
   statusFor,
   useOnlineState,
@@ -38,6 +40,7 @@ import {
 type SessionContentEditorProps = {
   workspace: ScheduleWorkspace;
   session: ScheduleSession;
+  editLock: ScheduleEditLock;
   recoveryScope: RecoveryScope;
   calendarPreview: ScheduleCalendarPreview | null;
 };
@@ -45,11 +48,12 @@ type SessionContentEditorProps = {
 function useSessionContentEditorState({
   workspace,
   session,
+  editLock,
   recoveryScope,
   calendarPreview,
 }: SessionContentEditorProps) {
   const version = workspace.version;
-  const editable = version?.status === "draft";
+  const editable = editLock.editable;
   const initialDraft = useMemo<SessionContentDraft>(
     () => ({
       title: session.title,
@@ -340,6 +344,7 @@ function useSessionContentEditorState({
     session,
     calendarPreview,
     editable,
+    editLock,
     draft,
     setDraft,
     serverError,
@@ -377,6 +382,7 @@ function SessionContentFieldsPanel() {
     workspace,
     session,
     editable,
+    editLock,
     draft,
     setDraft,
     serverError,
@@ -417,12 +423,7 @@ function SessionContentFieldsPanel() {
           <DraftRecoveryStatus state={recovery.state} />
         </span>
       </div>
-      {!editable ? (
-        <p className="help schedule-inspector-caption">
-          This published version is read-only. Create the next draft before
-          changing session content.
-        </p>
-      ) : null}
+      {editLock.reason ? <ScheduleReadOnlyMarker /> : null}
       <DraftRecoveryFeedback recovery={recovery} />
       {serverError ? (
         <div className="validation-item error mb" role="alert">

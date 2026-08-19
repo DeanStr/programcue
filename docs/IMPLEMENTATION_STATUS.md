@@ -783,6 +783,55 @@ unavailable rooms and conflicts. Focused Worker tests and desktop Chromium
 coverage verify both the eligible flow and the explicit unpublished-speaker
 blocker.
 
+### Read-only schedule state evidence
+
+Only a draft schedule version accepts placements, schedule notes and session
+content. `scheduleEditLock` in `app/modules/schedule/schedule-edit-lock.ts` is
+the single derivation of that state, replacing four separate inline checks that
+could disagree about what "not a draft" meant.
+
+**Reachable in this interface:** no version, `draft` and `published` only. The
+workspace query selects `status IN ('draft','published')`
+(`app/modules/schedule/schedule-workspace.server.ts`), so the remaining
+statuses the `schedule_versions` CHECK constraint permits cannot currently
+reach the planner: `publishing` is set and cleared inside the single atomic
+publication batch, `archived` is only ever applied to a superseded version that
+the query then skips, and no code path writes `failed` at all. The module still
+maps those three because the rows exist in the domain and the `default:` branch
+throws rather than inventing a caption, but their captions are unit-tested
+domain coverage, not verified interface behaviour.
+
+The state is stated in full exactly once, on a page-level bar that never
+scrolls away in this fixed-height layout: which version froze the planner, what
+is frozen — the board, schedule notes and session content — and the remedy. It
+is titled "Schedule read-only" rather than "Read-only" because creating
+sessions and breaks stays available on a published version and does not touch
+it. Everywhere else carries only the fact the bar cannot: the board drops its
+drag affordance while placed cards remain honestly enabled view controls,
+frozen fields render inert, the collapsed inspector rail prefixes "Read-only",
+and each frozen editor shows a one-line "Read-only" marker. The markers name
+neither the version nor the remedy — repeating those
+wrote the same two facts three times down a 320px column — but stay per panel
+because the inspector body scrolls independently and the bar does scroll off at
+mobile widths. The inspector head carries no marker at all; a further copy only
+wrapped its heading and truncated the session name, and its close control is an
+icon with an accessible name and tooltip for the same reason. Desktop Chromium
+coverage verifies that the bar, the per-panel markers and the disabled notes
+and session-content controls appear on a published version and clear on the
+next draft, that a placed card remains keyboard-inspectable without claiming
+to be disabled, and that the close control stays inside the clipped head. This
+replaces the previous behaviour, where notes were disabled silently and the
+session editor claimed "published" for every frozen status.
+
+Disabled `.field`, `.select` and `.textarea` controls now render as inert
+across every shell: sunken surface, secondary text, dashed border and a
+refusing cursor. Buttons, checkboxes and radios already had a disabled
+treatment, so a frozen text control was the only one that still looked
+editable. The design-system reference documents the state beside the existing
+read-only example, and the full responsive visual inventory is unchanged by
+it — no reviewed surface captures a disabled text control in its baseline
+state.
+
 ## Audit and revision evidence
 
 - **Production slice; deployed:** Audit writes

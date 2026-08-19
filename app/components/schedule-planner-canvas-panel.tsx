@@ -38,7 +38,7 @@ function ScheduledEntryCard({
   entry,
   session,
   formatLabel,
-  disabled,
+  dragDisabled,
   focused,
   revealed,
   conflictSeverity,
@@ -48,7 +48,7 @@ function ScheduledEntryCard({
   entry: ScheduleEntry;
   session: ScheduleSession;
   formatLabel: string;
-  disabled: boolean;
+  dragDisabled: boolean;
   focused: boolean;
   revealed: boolean;
   conflictSeverity: "warning" | "blocking" | undefined;
@@ -59,11 +59,16 @@ function ScheduledEntryCard({
     useDraggable({
       id: `entry:${entry.id}`,
       data: { sessionId: session.id },
-      disabled,
+      disabled: dragDisabled,
     });
+  /* dnd-kit marks a drag-disabled activator aria-disabled. This button's
+     inspection action remains available, so exposing it as disabled would
+     contradict both its pointer and keyboard behaviour. */
+  const { "aria-disabled": _dragDisabledAttribute, ...buttonAttributes } =
+    attributes;
   const minutes = Math.round((entry.endsAt - entry.startsAt) / 60);
-  const moveLabel = disabled
-    ? session.title
+  const moveLabel = dragDisabled
+    ? `View ${session.title} details.`
     : `Move ${session.title}. Press Space, choose a destination with the arrow keys, then press Space again.`;
   const conflictLabel =
     conflictSeverity === "blocking"
@@ -87,7 +92,7 @@ function ScheduledEntryCard({
           : moveLabel
       }
       {...listeners}
-      {...attributes}
+      {...buttonAttributes}
       onClick={() => {
         if (isDragging) return;
         onSelect(session.id);
@@ -295,7 +300,9 @@ export function ScheduleCanvasPanel({
     </fieldset>
   );
   return (
-    <section className="schedule-canvas">
+    <section
+      className={`schedule-canvas${placementAvailable ? "" : " is-readonly"}`}
+    >
       <div className="schedule-canvas-toolbar">
         <div>
           <h2>
@@ -502,9 +509,8 @@ export function ScheduleCanvasPanel({
                                     workspace.sessionFormats,
                                     session.format,
                                   )}
-                                  disabled={
-                                    workspace.version?.status !== "draft" ||
-                                    placementBusy
+                                  dragDisabled={
+                                    !placementAvailable || placementBusy
                                   }
                                   focused={
                                     workspace.focusedSessionId === session.id

@@ -60,6 +60,23 @@
   color: var(--text-secondary);
   cursor: default;
 }
+/* Buttons, checkboxes and radios all had a disabled treatment; text controls
+   never did, so a frozen field looked exactly like an editable one across
+   every shell. Disabled goes further than read-only: the value cannot be
+   focused or copied, so the dashed edge marks it without relying on colour
+   alone, and the cursor refuses the click a solid border invites.
+   background-color, not the shorthand: .select paints its own chevron as a
+   background-image and appearance:none removed the native one, so a shorthand
+   here would leave a disabled select with no dropdown indicator at all. */
+.field:disabled,
+.select:disabled,
+.textarea:disabled {
+  border-style: dashed;
+  border-color: var(--line);
+  background-color: var(--surface-sunken);
+  color: var(--text-secondary);
+  cursor: not-allowed;
+}
 .field::placeholder,
 .textarea::placeholder {
   color: var(--text-tertiary);
