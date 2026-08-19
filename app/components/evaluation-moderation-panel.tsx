@@ -54,8 +54,8 @@ export function EvaluationModerationPanel() {
                         {assignment.weightedScore === null
                           ? ""
                           : ` · ${Number(assignment.weightedScore).toFixed(2)} / 5`}
-                        {assignment.recommendation
-                          ? ` · ${assignment.recommendation.replaceAll("_", " ")}`
+                        {assignment.recommendationLabel
+                          ? ` · ${assignment.recommendationLabel}`
                           : ""}
                       </small>
                       {assignment.conflictNotes ? (

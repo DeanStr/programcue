@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  createEvaluationRecommendationCounts,
   evaluationResultFlags,
   matchesEvaluationResultPreset,
 } from "./evaluation-result-workbench";
@@ -14,6 +15,19 @@ const complete = {
 };
 
 describe("evaluation result workbench rules", () => {
+  it("counts recommendation IDs without object-prototype collisions", () => {
+    const counts = createEvaluationRecommendationCounts();
+
+    for (const id of ["__proto__", "constructor"]) {
+      counts[id] = (counts[id] ?? 0) + 1;
+    }
+
+    expect(Object.entries(counts)).toEqual([
+      ["__proto__", 1],
+      ["constructor", 1],
+    ]);
+  });
+
   it("keeps decision readiness transparent and assignment-authoritative", () => {
     expect(evaluationResultFlags(complete)).toEqual({
       mixedRecommendations: false,

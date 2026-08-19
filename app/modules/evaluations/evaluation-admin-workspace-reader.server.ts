@@ -3,6 +3,7 @@ import { z } from "zod";
 import { routingSchema } from "~/modules/submissions/submission-schema";
 import type { Viewer } from "~/platform/auth/authorize.server";
 import { EvaluationStateError } from "./evaluation-errors";
+import { parseRecommendationChoicesJson } from "./evaluation-recommendation-choices";
 import {
   type Criterion,
   type Round,
@@ -405,6 +406,7 @@ export class EvaluationAdminWorkspaceReader {
                r.scores_json AS scoresJson,
                r.weighted_score AS weightedScore,
                r.recommendation, r.confidence,
+               r.recommendation_choices_snapshot_json AS recommendationChoicesSnapshotJson,
                r.submitter_feedback AS submitterFeedback,
                r.private_notes AS privateNotes,
                conflict.notes AS conflictNotes,
@@ -468,6 +470,7 @@ export class EvaluationAdminWorkspaceReader {
           scoresJson: string | null;
           weightedScore: number | null;
           recommendation: string | null;
+          recommendationChoicesSnapshotJson: string | null;
           confidence: number | null;
           submitterFeedback: string | null;
           privateNotes: string | null;
@@ -694,7 +697,41 @@ export class EvaluationAdminWorkspaceReader {
       submissions,
       acceptedSpeakerInvitations: acceptedSpeakerInvitationRows.results,
       sessions: sessionRows.results,
-      assignments: assignmentRows.results,
+      assignments: assignmentRows.results.map(
+        ({ recommendationChoicesSnapshotJson, ...assignment }) => {
+          if (!assignment.reviewId) {
+            return {
+              ...assignment,
+              recommendationChoices: null,
+              recommendationLabel: null,
+            };
+          }
+          if (!recommendationChoicesSnapshotJson) {
+            throw new EvaluationStateError(
+              `Review ${assignment.reviewId} is missing its recommendation choice snapshot.`,
+            );
+          }
+          const recommendationChoices = parseRecommendationChoicesJson(
+            recommendationChoicesSnapshotJson,
+            `Review ${assignment.reviewId}`,
+          );
+          const recommendationLabel = assignment.recommendation
+            ? recommendationChoices.find(
+                (choice) => choice.id === assignment.recommendation,
+              )?.label
+            : null;
+          if (assignment.recommendation && !recommendationLabel) {
+            throw new EvaluationStateError(
+              `Review ${assignment.reviewId} has an invalid persisted recommendation.`,
+            );
+          }
+          return {
+            ...assignment,
+            recommendationChoices,
+            recommendationLabel,
+          };
+        },
+      ),
       reviewerProgress,
       moderations: moderationRows.results,
     };
@@ -713,6 +750,7 @@ export class EvaluationAdminWorkspaceReader {
                r.blinded_reviewing AS anonymous,
                r.scorecard_id AS scorecardId,
                r.scorecard_version AS scorecardVersion,
+               r.recommendation_choices_json AS recommendationChoicesJson,
                (SELECT COUNT(*)
                   FROM operation_jobs operation
                  WHERE operation.event_id = r.event_id
@@ -729,8 +767,9 @@ export class EvaluationAdminWorkspaceReader {
       )
         .bind(organisationId, eventId, planId)
         .all<
-          Omit<Round, "criteria" | "reviewers"> & {
+          Omit<Round, "criteria" | "reviewers" | "recommendationChoices"> & {
             anonymous: number | boolean;
+            recommendationChoicesJson: string;
           }
         >(),
       this.env.DB.prepare(
@@ -770,9 +809,13 @@ export class EvaluationAdminWorkspaceReader {
           email: string;
         }>(),
     ]);
-    return roundRows.results.map((round) => ({
+    return roundRows.results.map(({ recommendationChoicesJson, ...round }) => ({
       ...round,
       anonymous: Boolean(round.anonymous),
+      recommendationChoices: parseRecommendationChoicesJson(
+        recommendationChoicesJson,
+        `Evaluation round ${round.id}`,
+      ),
       reviewers: reviewerRows.results
         .filter((reviewer) => reviewer.roundId === round.id)
         .map(({ roundId: _roundId, ...reviewer }) => reviewer),

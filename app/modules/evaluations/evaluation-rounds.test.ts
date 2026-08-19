@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it } from "vitest";
 
 import type { Viewer } from "~/platform/auth/authorize.server";
 import { ensureDemoData } from "~/platform/demo/seed.server";
+import { defaultRecommendationChoices } from "./evaluation-recommendation-choices";
 import {
   EvaluationRevisionConflictError,
   EvaluationService,
@@ -423,6 +424,7 @@ describe("evaluation vertical slice", () => {
             id: roundId,
             name: "Original round",
             anonymous: false,
+            recommendationChoices: defaultRecommendationChoices(),
             criteria: criteria.map((criterion) => ({
               ...criterion,
               id: `${criterion.id}-${token}-original`,
@@ -462,6 +464,7 @@ describe("evaluation vertical slice", () => {
               id: replacementRoundId,
               name: "Replacement round",
               anonymous: false,
+              recommendationChoices: defaultRecommendationChoices(),
               criteria: criteria.map((criterion) => ({
                 ...criterion,
                 id: `${criterion.id}-replacement`,
@@ -515,6 +518,7 @@ describe("evaluation vertical slice", () => {
             id: roundId,
             name: "Original AI-assessed round",
             anonymous: false,
+            recommendationChoices: defaultRecommendationChoices(),
             criteria,
           },
         ],
@@ -528,6 +532,7 @@ describe("evaluation vertical slice", () => {
             id: replacementRoundId,
             name: "Replacement round",
             anonymous: false,
+            recommendationChoices: defaultRecommendationChoices(),
             criteria: criteria.map((criterion) => ({
               ...criterion,
               id: `${criterion.id}-ai-replacement`,
@@ -617,6 +622,7 @@ describe("evaluation vertical slice", () => {
             id: roundId,
             name: "Original AI generation round",
             anonymous: false,
+            recommendationChoices: defaultRecommendationChoices(),
             criteria,
           },
         ],
@@ -630,6 +636,7 @@ describe("evaluation vertical slice", () => {
             id: replacementRoundId,
             name: "Replacement round",
             anonymous: false,
+            recommendationChoices: defaultRecommendationChoices(),
             criteria: criteria.map((criterion) => ({
               ...criterion,
               id: `${criterion.id}-${token}-replacement`,
@@ -703,6 +710,7 @@ describe("evaluation vertical slice", () => {
             id: roundId,
             name: "Scoped round",
             anonymous: false,
+            recommendationChoices: defaultRecommendationChoices(),
             criteria,
           },
         ],
@@ -736,6 +744,7 @@ describe("evaluation vertical slice", () => {
                 id: replacementRoundId,
                 name: "Safe replacement round",
                 anonymous: false,
+                recommendationChoices: defaultRecommendationChoices(),
                 criteria: criteria.map((criterion) => ({
                   ...criterion,
                   id: `${criterion.id}-${token}-safe-replacement`,
@@ -776,12 +785,14 @@ describe("evaluation vertical slice", () => {
             id: firstRoundId,
             name: "Active review",
             anonymous: false,
+            recommendationChoices: defaultRecommendationChoices(),
             criteria,
           },
           {
             id: guardedRoundId,
             name: "Guarded draft review",
             anonymous: false,
+            recommendationChoices: defaultRecommendationChoices(),
             criteria: criteria.map((criterion) => ({
               ...criterion,
               id: `${criterion.id}-${token}-draft`,
@@ -806,6 +817,7 @@ describe("evaluation vertical slice", () => {
         revision: guardedRound.revision,
         name: "Unsafe edited draft review",
         dueAt: null,
+        recommendationChoices: guardedRound.recommendationChoices,
         criteria: guardedRound.criteria.map((criterion) => ({
           ...criterion,
           description: criterion.description ?? "",
@@ -891,6 +903,7 @@ describe("evaluation vertical slice", () => {
             id: "eval-multi-round-one",
             name: "Initial review",
             anonymous: false,
+            recommendationChoices: defaultRecommendationChoices(),
             criteria,
           },
         ],
@@ -917,6 +930,7 @@ describe("evaluation vertical slice", () => {
         revision: 1,
         name: "Final review",
         dueAt: null,
+        recommendationChoices: nextRound.recommendationChoices,
         criteria: nextRound.criteria.map((criterion) => ({
           ...criterion,
           description: criterion.description ?? "",
@@ -1131,6 +1145,7 @@ describe("evaluation vertical slice", () => {
             id: "eval-advance-recusal-one",
             name: "Initial review",
             anonymous: false,
+            recommendationChoices: defaultRecommendationChoices(),
             criteria,
           },
         ],
@@ -1229,6 +1244,7 @@ describe("evaluation vertical slice", () => {
             id: "eval-moderation-round",
             name: "Panel review",
             anonymous: false,
+            recommendationChoices: defaultRecommendationChoices(),
             criteria: [
               {
                 id: "eval-scale-ten",

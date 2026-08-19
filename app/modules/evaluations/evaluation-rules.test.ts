@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 
+import { defaultRecommendationChoices } from "./evaluation-recommendation-choices";
 import {
   calculateRubricWeightedScore,
   calculateWeightedScore,
@@ -42,6 +43,7 @@ describe("evaluation rules", () => {
             id: "round-one",
             name: "Initial review",
             anonymous: false,
+            recommendationChoices: defaultRecommendationChoices(),
             criteria: [
               {
                 id: "quality",
@@ -57,6 +59,34 @@ describe("evaluation rules", () => {
         ],
       }),
     ).toThrow(/100%/);
+  });
+
+  it("requires recommendation choices instead of silently applying defaults", () => {
+    expect(() =>
+      evaluationPlanSchema.parse({
+        revision: 0,
+        name: "Programme review",
+        status: "draft",
+        rounds: [
+          {
+            id: "round-one",
+            name: "Initial review",
+            anonymous: false,
+            criteria: [
+              {
+                id: "quality",
+                name: "Quality",
+                description: "",
+                inputType: "scale_5",
+                weightPercent: 100,
+                required: true,
+                position: 0,
+              },
+            ],
+          },
+        ],
+      }),
+    ).toThrow(/recommendationChoices/);
   });
 
   it("normalises 1-10 criteria onto the common five-point weighted score", () => {
@@ -100,6 +130,7 @@ describe("evaluation rules", () => {
             id: "round-one",
             name: "Initial review",
             anonymous: false,
+            recommendationChoices: defaultRecommendationChoices(),
             criteria: [
               {
                 id: "quality",
@@ -143,6 +174,7 @@ describe("evaluation rules", () => {
             id: "round-one",
             name: "Initial review",
             anonymous: false,
+            recommendationChoices: defaultRecommendationChoices(),
             criteria: [
               {
                 id: "quality",

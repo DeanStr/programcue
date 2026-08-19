@@ -87,6 +87,28 @@ function readRubricCriteria(values: FormData) {
     .map((criterion, position) => ({ ...criterion, position }));
 }
 
+function readRecommendationChoices(values: FormData) {
+  const ids = values.getAll("recommendationChoiceId").map(String);
+  const labels = values.getAll("recommendationChoiceLabel").map(String);
+  if (
+    ids.length !== labels.length ||
+    ids.some((id) => id.trim().length === 0)
+  ) {
+    throw new EvaluationValidationError(
+      "Recommendation choice identities are missing or inconsistent. Refresh and try again.",
+    );
+  }
+  return ids.map((id, index) => {
+    const label = labels[index];
+    if (label === undefined) {
+      throw new EvaluationValidationError(
+        "Recommendation choice identities are missing or inconsistent. Refresh and try again.",
+      );
+    }
+    return { id: id.trim(), label };
+  });
+}
+
 function readRoundDateTime(
   values: FormData,
   field: string,
@@ -337,6 +359,7 @@ export async function action({ request, context }: ActionFunctionArgs) {
               "roundClosesAt",
               event.timezone,
             ),
+            recommendationChoices: readRecommendationChoices(values),
             criteria,
           },
         ],
@@ -377,6 +400,7 @@ export async function action({ request, context }: ActionFunctionArgs) {
           opensAt: readRoundDateTime(values, "roundOpensAt", event.timezone),
           closesAt: readRoundDateTime(values, "roundClosesAt", event.timezone),
           anonymous: values.get("anonymous") === "true",
+          recommendationChoices: readRecommendationChoices(values),
           criteria,
         },
         confirmed: values.get("confirmed") === "true",
@@ -481,6 +505,7 @@ export async function action({ request, context }: ActionFunctionArgs) {
         scorecardId: values.get("scorecardId") || null,
         scorecardVersion: values.get("scorecardVersion") || undefined,
         dueAt: null,
+        recommendationChoices: readRecommendationChoices(values),
         criteria: readRubricCriteria(values),
       });
       const realtimeFailure = await recordRouteChange(env, viewer, {

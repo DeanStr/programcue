@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it } from "vitest";
 
 import type { Viewer } from "~/platform/auth/authorize.server";
 import { ensureDemoEvaluationData } from "./demo.server";
+import { defaultRecommendationChoices } from "./evaluation-recommendation-choices";
 import {
   EvaluationRevisionConflictError,
   EvaluationService,
@@ -42,6 +43,7 @@ const newCycleInput = {
     opensAt: null,
     closesAt: null,
     anonymous: true,
+    recommendationChoices: defaultRecommendationChoices(),
     criteria: [
       {
         name: "Programme fit",

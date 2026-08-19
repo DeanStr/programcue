@@ -15,6 +15,7 @@ const unassignedSubmissionId = "evaluation-results-unassigned-submission";
 const largeSubmissionPrefix = "evaluation-results-large-submission-";
 const expandedSubmissionPrefix = "evaluation-results-expanded-submission-";
 const expandedCriterionPrefix = "evaluation-results-expanded-criterion-";
+const configurableRoundId = "evaluation-results-configurable-round";
 
 const administrator: Viewer = {
   personId: "person-demo-admin",
@@ -52,6 +53,9 @@ function observeDatabaseBatches(batchShapes: number[][]) {
 
 async function submitFirstReview(scoresJson = JSON.stringify(scores)) {
   await workerEnv.DB.batch([
+    workerEnv.DB.prepare(
+      "DELETE FROM evaluation_rounds WHERE id = ? AND event_id = ?",
+    ).bind(configurableRoundId, eventId),
     workerEnv.DB.prepare(
       `UPDATE evaluator_assignments
           SET status = 'submitted', submitted_at = unixepoch()
@@ -224,6 +228,110 @@ beforeEach(async () => {
 });
 
 describe("Abstract review results export", () => {
+  it("uses configured labels and order in recommendation breakdowns", async () => {
+    const recommendationChoices = [
+      { id: "decline", label: "Decline" },
+      { id: "discuss", label: "Discuss" },
+      { id: "advance", label: "Advance" },
+    ];
+    const recommendationChoicesJson = JSON.stringify(recommendationChoices);
+    await workerEnv.DB.batch([
+      workerEnv.DB.prepare(
+        `INSERT INTO evaluation_rounds (
+           id, event_id, plan_id, round_number, name, status, scorecard_id,
+           scorecard_version, recommendation_choices_json
+         )
+         SELECT ?, event_id, plan_id, 99, 'Configurable review', 'active',
+                ?, 1, ?
+           FROM evaluation_rounds WHERE id = ? AND event_id = ?`,
+      ).bind(
+        configurableRoundId,
+        configurableRoundId,
+        recommendationChoicesJson,
+        roundId,
+        eventId,
+      ),
+      workerEnv.DB.prepare(
+        `INSERT INTO evaluation_criteria (
+           id, event_id, round_id, name, input_type, options_json,
+           weight_percent, required, position
+         ) VALUES (
+           'evaluation-results-configurable-criterion', ?, ?, 'Fit',
+           'scale_5', '[]', 100, 1, 0
+         )`,
+      ).bind(eventId, configurableRoundId),
+      workerEnv.DB.prepare(
+        `INSERT INTO evaluator_assignments (
+           id, event_id, round_id, submission_id, evaluator_person_id,
+           status, submitted_at
+         ) VALUES (?, ?, ?, ?, ?, 'submitted', unixepoch())`,
+      ).bind(
+        "evaluation-results-configurable-assignment-a",
+        eventId,
+        configurableRoundId,
+        firstSubmissionId,
+        "person-demo-evaluator",
+      ),
+      workerEnv.DB.prepare(
+        `INSERT INTO evaluator_assignments (
+           id, event_id, round_id, submission_id, evaluator_person_id,
+           status, submitted_at
+         ) VALUES (?, ?, ?, ?, ?, 'submitted', unixepoch())`,
+      ).bind(
+        "evaluation-results-configurable-assignment-b",
+        eventId,
+        configurableRoundId,
+        firstSubmissionId,
+        administrator.personId,
+      ),
+    ]);
+    await workerEnv.DB.batch([
+      workerEnv.DB.prepare(
+        `INSERT INTO reviews (
+           id, event_id, assignment_id, status, scores_json, weighted_score,
+           recommendation, recommendation_choices_snapshot_json, confidence,
+           submitted_at
+         ) VALUES (?, ?, ?, 'submitted', ?, 5, 'advance', ?, 5, unixepoch())`,
+      ).bind(
+        "evaluation-results-configurable-review-a",
+        eventId,
+        "evaluation-results-configurable-assignment-a",
+        JSON.stringify({ "evaluation-results-configurable-criterion": 5 }),
+        recommendationChoicesJson,
+      ),
+      workerEnv.DB.prepare(
+        `INSERT INTO reviews (
+           id, event_id, assignment_id, status, scores_json, weighted_score,
+           recommendation, recommendation_choices_snapshot_json, confidence,
+           submitted_at
+         ) VALUES (?, ?, ?, 'submitted', ?, 3, 'decline', ?, 3, unixepoch())`,
+      ).bind(
+        "evaluation-results-configurable-review-b",
+        eventId,
+        "evaluation-results-configurable-assignment-b",
+        JSON.stringify({ "evaluation-results-configurable-criterion": 3 }),
+        recommendationChoicesJson,
+      ),
+    ]);
+
+    const result = await new EvaluationResultsExportService(workerEnv).create(
+      administrator,
+      configurableRoundId,
+      crypto.randomUUID(),
+    );
+    const reviewed = parseCsv(new TextDecoder().decode(result.body)).rows.find(
+      (row) => row.submissionId === firstSubmissionId,
+    );
+
+    expect(reviewed).toMatchObject({
+      recommendation: "mixed",
+      recommendationBreakdown: JSON.stringify([
+        { id: "decline", label: "Decline", count: 1 },
+        { id: "advance", label: "Advance", count: 1 },
+      ]),
+    });
+  });
+
   it("exports one safe aggregate row per assigned round and submission", async () => {
     await submitFirstReview();
 
@@ -265,7 +373,9 @@ describe("Abstract review results export", () => {
       outstandingReviews: "0",
       aggregateWeightedScore: "4.25",
       recommendation: "accept",
-      recommendationBreakdown: JSON.stringify({ accept: 1 }),
+      recommendationBreakdown: JSON.stringify([
+        { id: "accept", label: "Accept", count: 1 },
+      ]),
     });
     expect(JSON.parse(reviewed!.criterionResults)).toEqual(
       expect.arrayContaining([

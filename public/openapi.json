@@ -5107,14 +5107,9 @@
               "string",
               "null"
             ],
-            "enum": [
-              "accept",
-              "minor_changes",
-              "conditional_accept",
-              "waitlist",
-              "reject",
-              null
-            ]
+            "minLength": 1,
+            "maxLength": 80,
+            "description": "Stable choice ID configured on the assignment's evaluation round."
           },
           "confidence": {
             "type": [
@@ -5950,6 +5945,27 @@
           }
         }
       },
+      "EvaluationRecommendationChoice": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "label"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 80,
+            "description": "Stable identity preserved in reviews and historical snapshots."
+          },
+          "label": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 120
+          }
+        }
+      },
       "EvaluationRoundInput": {
         "type": "object",
         "additionalProperties": false,
@@ -5959,6 +5975,7 @@
           "anonymous",
           "scorecardId",
           "scorecardVersion",
+          "recommendationChoices",
           "criteria"
         ],
         "properties": {
@@ -6004,6 +6021,15 @@
           "scorecardVersion": {
             "type": "integer",
             "minimum": 1
+          },
+          "recommendationChoices": {
+            "type": "array",
+            "minItems": 2,
+            "maxItems": 7,
+            "description": "Ordered reviewer recommendation choices. IDs and order become immutable once assignments exist; final applicant decisions remain separate.",
+            "items": {
+              "$ref": "#/components/schemas/EvaluationRecommendationChoice"
+            }
           },
           "criteria": {
             "type": "array",

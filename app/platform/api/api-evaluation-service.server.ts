@@ -2,6 +2,7 @@ import { z } from "zod";
 import { requireValue } from "~/lib/required-value";
 
 import { AirtableProviderBoundary } from "~/modules/airtable/airtable-provider-boundary.server";
+import { parseRecommendationChoicesJson } from "~/modules/evaluations/evaluation-recommendation-choices";
 import { ApiError, type ApiPrincipal } from "./api.server";
 import {
   decodePrivateCursor,
@@ -373,6 +374,7 @@ export class ApiEvaluationService {
                round.blinded_reviewing AS blindedReviewing,
                round.scorecard_id AS scorecardId,
                round.scorecard_version AS scorecardVersion,
+               round.recommendation_choices_json AS recommendationChoicesJson,
                round.advancement_rule_json AS advancementRuleJson,
                round.revision, round.created_at AS createdAt,
                round.updated_at AS updatedAt
@@ -469,7 +471,9 @@ export class ApiEvaluationService {
                evaluator.display_name AS evaluatorName,
                review.status, review.scores_json AS scoresJson,
                review.weighted_score AS weightedScore,
-               review.recommendation, review.confidence,
+               review.recommendation,
+               review.recommendation_choices_snapshot_json AS recommendationChoicesSnapshotJson,
+               review.confidence,
                review.submitter_feedback AS submitterFeedback,
                review.private_notes AS privateNotes, review.revision,
                review.created_at AS createdAt, review.updated_at AS updatedAt,
@@ -587,14 +591,35 @@ export class ApiEvaluationService {
         result.advancementRuleJson,
         `Evaluation round ${String(result.id)} advancement rule`,
       );
+      result.recommendationChoices = parseRecommendationChoicesJson(
+        String(result.recommendationChoicesJson),
+        `Evaluation round ${String(result.id)}`,
+      );
       delete result.advancementRuleJson;
+      delete result.recommendationChoicesJson;
     }
     if (resource === "reviews") {
       result.scores = parseJson(
         result.scoresJson,
         `Review ${String(result.id)} scores`,
       );
+      const recommendationChoices = parseRecommendationChoicesJson(
+        String(result.recommendationChoicesSnapshotJson),
+        `Review ${String(result.id)}`,
+      );
+      result.recommendationChoices = recommendationChoices;
+      result.recommendationLabel = result.recommendation
+        ? recommendationChoices.find(
+            (choice) => choice.id === result.recommendation,
+          )?.label
+        : null;
+      if (result.recommendation && !result.recommendationLabel) {
+        throw new Error(
+          `Review ${String(result.id)} has an invalid persisted recommendation.`,
+        );
+      }
       delete result.scoresJson;
+      delete result.recommendationChoicesSnapshotJson;
     }
     return result;
   }

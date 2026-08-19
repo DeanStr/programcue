@@ -539,28 +539,20 @@ export function ReviewScorePanel() {
                 role="radiogroup"
                 aria-labelledby="review-recommendation-label"
               >
-                {(
-                  [
-                    ["accept", "Accept"],
-                    ["minor_changes", "Minor"],
-                    ["conditional_accept", "Conditional"],
-                    ["waitlist", "Waitlist"],
-                    ["reject", "Reject"],
-                  ] as const
-                ).map(([value, label]) => (
-                  <label className="review-choice-option" key={value}>
+                {workspace.recommendationChoices.map((choice) => (
+                  <label className="review-choice-option" key={choice.id}>
                     <input
                       className="review-scale-input"
                       type="radio"
                       name="recommendation"
-                      value={value}
+                      value={choice.id}
                       defaultChecked={
-                        workspace.review?.recommendation === value
+                        workspace.review?.recommendation === choice.id
                       }
                       required
                       disabled={readOnly}
                     />
-                    <span>{label}</span>
+                    <span>{choice.label}</span>
                   </label>
                 ))}
               </div>

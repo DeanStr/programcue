@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it } from "vitest";
 
 import type { Viewer } from "~/platform/auth/authorize.server";
 import { ensureDemoData } from "~/platform/demo/seed.server";
+import { defaultRecommendationChoices } from "./evaluation-recommendation-choices";
 import { EvaluationService } from "./evaluation-service.server";
 
 const admin: Viewer = {
@@ -288,6 +289,7 @@ describe("evaluation vertical slice", () => {
             id: "eval-team-round",
             name: "Committee review",
             anonymous: false,
+            recommendationChoices: defaultRecommendationChoices(),
             criteria,
           },
         ],

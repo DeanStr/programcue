@@ -13,11 +13,13 @@ import {
 import { EvaluationDiscussionPanel } from "~/components/evaluation-discussion-panel";
 
 import { EvaluationMetrics } from "~/components/evaluation-metrics";
+import { RecommendationChoiceFields } from "~/components/evaluation-recommendation-choice-fields";
 import { EvaluationReviewCyclePanel } from "~/components/evaluation-review-cycle-panel";
 import { EvaluationRoundsPanel } from "~/components/evaluation-rounds-panel";
 import { RubricFields } from "~/components/evaluation-rubric-fields";
 import { EvaluationTeamsPanel } from "~/components/evaluation-teams-panel";
 import { AdminPageSection } from "~/components/ui/admin-page-sections";
+import { defaultRecommendationChoices } from "~/modules/evaluations/evaluation-recommendation-choices";
 
 const defaultRubric = [
   {
@@ -189,6 +191,9 @@ export function EvaluationPlanState() {
               </span>
             </div>
           )}
+          <RecommendationChoiceFields
+            choices={defaultRecommendationChoices()}
+          />
           <RubricFields
             criteria={defaultRubric.map((criterion) => ({
               ...criterion,

@@ -63,25 +63,53 @@ describe("evaluation and integration API reads", () => {
       createdAt: string;
       criteria: unknown[];
       advancementRule: Record<string, unknown>;
+      recommendationChoices: Array<{ id: string; label: string }>;
     }>;
     expect(roundRecords.length).toBeGreaterThan(0);
     expect(roundRecords[0]).toMatchObject({
       criteria: expect.any(Array),
       advancementRule: expect.any(Object),
+      recommendationChoices: expect.arrayContaining([
+        { id: "accept", label: "Accept" },
+        { id: "reject", label: "Reject" },
+      ]),
     });
     expect(roundRecords[0]?.createdAt).toMatch(/Z$/u);
     const assignments = await service.list(principal, "assignments", {
       limit: 20,
     });
     const assignmentRecords = assignments.assignments as unknown as Array<{
+      id: string;
       evaluatorPersonId: string;
     }>;
     expect(assignmentRecords.length).toBeGreaterThan(0);
     expect(assignmentRecords[0]).toHaveProperty("evaluatorPersonId");
+    await testEnv.DB.prepare(
+      `INSERT INTO reviews (
+         id, event_id, assignment_id, status, recommendation
+       ) VALUES ('api-recommendation-read-review', ?, ?, 'draft', 'accept')`,
+    )
+      .bind(principal.eventId, assignmentRecords[0]!.id)
+      .run();
+    const reviews = await service.list(principal, "reviews", { limit: 10 });
+    const reviewRecords = reviews.reviews as unknown as Array<{
+      recommendation: string | null;
+      recommendationLabel: string | null;
+      recommendationChoices: Array<{ id: string; label: string }>;
+    }>;
+    expect(reviewRecords.length).toBeGreaterThan(0);
+    expect(reviewRecords[0]).toMatchObject({
+      recommendationChoices: expect.arrayContaining([
+        { id: "accept", label: "Accept" },
+        { id: "reject", label: "Reject" },
+      ]),
+    });
+    if (reviewRecords[0]?.recommendation) {
+      expect(reviewRecords[0].recommendationLabel).toEqual(expect.any(String));
+    }
     for (const resource of [
       "plans",
       "teams",
-      "reviews",
       "round-reviewers",
       "conflicts",
       "moderations",
@@ -276,6 +304,10 @@ describe("evaluation and integration API reads", () => {
           anonymous: false,
           scorecardId: `api-scorecard-${suffix}`,
           scorecardVersion: 1,
+          recommendationChoices: [
+            { id: "advance", label: "Advance" },
+            { id: "decline", label: "Decline" },
+          ],
           criteria: [
             {
               id: `api-criterion-${suffix}`,
@@ -335,9 +367,31 @@ describe("evaluation and integration API reads", () => {
     await expect(missingScorecard.json()).resolves.toMatchObject({
       error: { code: "VALIDATION_ERROR" },
     });
+    const {
+      recommendationChoices: _recommendationChoices,
+      ...roundWithoutRecommendationChoices
+    } = body.rounds[0]!;
+    const missingRecommendationChoices = await invoke({
+      ...body,
+      rounds: [roundWithoutRecommendationChoices],
+    });
+    expect(missingRecommendationChoices.status).toBe(422);
+    await expect(missingRecommendationChoices.json()).resolves.toMatchObject({
+      error: { code: "VALIDATION_ERROR" },
+    });
     const first = await invoke(body);
     expect(first.status).toBe(200);
     const firstBody = (await first.json()) as { planId: string };
+    const persistedRounds = await new ApiEvaluationService(testEnv).list(
+      { ...principal, eventId },
+      "rounds",
+      { limit: 10 },
+    );
+    expect(persistedRounds.rounds).toEqual([
+      expect.objectContaining({
+        recommendationChoices: body.rounds[0]!.recommendationChoices,
+      }),
+    ]);
     const replay = await invoke(body);
     await expect(replay.json()).resolves.toMatchObject({
       planId: firstBody.planId,

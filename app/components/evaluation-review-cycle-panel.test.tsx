@@ -21,6 +21,10 @@ function renderPanel(runningAssessmentOperationCount: number) {
             roundNumber: 1,
             name: "Initial review",
             scorecardVersion: 1,
+            recommendationChoices: [
+              { id: "advance", label: "Advance" },
+              { id: "decline", label: "Decline" },
+            ],
             criteria: [
               {
                 id: "criterion-original",
@@ -37,6 +41,11 @@ function renderPanel(runningAssessmentOperationCount: number) {
             roundNumber: 2,
             name: "Final review",
             scorecardVersion: 3,
+            recommendationChoices: [
+              { id: "strong_accept", label: "Strong accept" },
+              { id: "discuss", label: "Discuss" },
+              { id: "reject", label: "Reject" },
+            ],
             criteria: [
               {
                 id: "criterion-relevance",
@@ -91,6 +100,7 @@ describe("evaluation review-cycle controls", () => {
       "Prefilled from Round 2 — Final review · Scorecard v3",
     );
     expect(markup).toContain('value="Relevance"');
+    expect(markup).toContain('value="Strong accept"');
     expect(markup).not.toContain('value="Original rubric"');
     expect(startButton).toContain("disabled");
   });

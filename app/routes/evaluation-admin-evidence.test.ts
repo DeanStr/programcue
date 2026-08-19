@@ -5,11 +5,18 @@ import { parseHistoricalReviewRevision } from "./evaluation-admin.server";
 const completeEvidence = {
   id: "revision-a",
   scoresJson: JSON.stringify({ relevance: 4 }),
-  contentJson: JSON.stringify({ privateNotes: "Chair evidence" }),
+  contentJson: JSON.stringify({
+    recommendation: "strong_accept",
+    privateNotes: "Chair evidence",
+  }),
   scorecardId: "scorecard-a",
   scorecardVersion: 2,
   criteriaSnapshotJson: JSON.stringify([
     { id: "relevance", name: "Relevance" },
+  ]),
+  recommendationChoicesSnapshotJson: JSON.stringify([
+    { id: "strong_accept", label: "Strong accept" },
+    { id: "reject", label: "Reject" },
   ]),
 };
 
@@ -18,6 +25,7 @@ describe("historical review evidence", () => {
     expect(parseHistoricalReviewRevision(completeEvidence)).toMatchObject({
       scores: { relevance: 4 },
       criteria: [{ id: "relevance", name: "Relevance" }],
+      recommendationLabel: "Strong accept",
     });
     expect(
       parseHistoricalReviewRevision({

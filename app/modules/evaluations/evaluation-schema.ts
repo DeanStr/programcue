@@ -1,5 +1,7 @@
 import { z } from "zod";
 
+import { recommendationChoicesSchema } from "./evaluation-recommendation-choices";
+
 export const criterionSchema = z.object({
   id: z.string().trim().min(1).max(80),
   name: z.string().trim().min(1, "Criterion name is required.").max(120),
@@ -26,6 +28,7 @@ export const evaluationRoundSchema = z
     anonymous: z.boolean().default(false),
     scorecardId: z.string().trim().min(1).max(120).optional(),
     scorecardVersion: z.coerce.number().int().positive().default(1),
+    recommendationChoices: recommendationChoicesSchema,
     criteria: z
       .array(criterionSchema)
       .min(1, "Add at least one criterion.")
@@ -162,6 +165,7 @@ const reviewCycleRoundDefinitionSchema = z
     opensAt: z.iso.datetime({ offset: true }).nullable().optional(),
     closesAt: z.iso.datetime({ offset: true }).nullable().optional(),
     anonymous: z.boolean().default(false),
+    recommendationChoices: recommendationChoicesSchema,
     criteria: z
       .array(criterionSchema.omit({ id: true, position: true }))
       .min(1)
@@ -236,13 +240,7 @@ export const assignmentUndoSchema = z.object({
   confirmed: z.literal(true),
 });
 
-const recommendationSchema = z.enum([
-  "accept",
-  "minor_changes",
-  "conditional_accept",
-  "waitlist",
-  "reject",
-]);
+const recommendationSchema = z.string().trim().min(1).max(80);
 
 export const reviewerAiCriterionSuggestionsSchema = z
   .array(
@@ -557,6 +555,7 @@ export const draftRoundUpdateSchema = z
     anonymous: z.boolean().optional(),
     scorecardId: z.string().trim().min(1).max(120).nullable().optional(),
     scorecardVersion: z.coerce.number().int().positive().optional(),
+    recommendationChoices: recommendationChoicesSchema,
     criteria: z.array(criterionSchema).min(1).max(30),
   })
   .superRefine((round, context) => {

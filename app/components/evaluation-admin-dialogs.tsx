@@ -367,8 +367,8 @@ export function ModerationDialog() {
                   {assignment.weightedScore === null
                     ? "unscored"
                     : `${Number(assignment.weightedScore).toFixed(2)} / 5`}
-                  {assignment.recommendation
-                    ? ` · ${assignment.recommendation.replaceAll("_", " ")}`
+                  {assignment.recommendationLabel
+                    ? ` · ${assignment.recommendationLabel}`
                     : ""}
                   {assignment.confidence
                     ? ` · confidence ${assignment.confidence} / 5`

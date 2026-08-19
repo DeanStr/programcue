@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it } from "vitest";
 
 import type { Viewer } from "~/platform/auth/authorize.server";
 import { ensureDemoData } from "~/platform/demo/seed.server";
+import { defaultRecommendationChoices } from "./evaluation-recommendation-choices";
 import {
   encodeScorecardSelection,
   parseScorecardSelection,
@@ -388,6 +389,7 @@ function planInput() {
         anonymous: true,
         scorecardId: "scorecard-initial-v2",
         scorecardVersion: 2,
+        recommendationChoices: defaultRecommendationChoices(),
         criteria,
       },
       {
@@ -398,6 +400,7 @@ function planInput() {
         anonymous: false,
         scorecardId: "scorecard-final-v4",
         scorecardVersion: 4,
+        recommendationChoices: defaultRecommendationChoices(),
         criteria: criteria.map((criterion) => ({
           ...criterion,
           id: `${criterion.id}-final`,
@@ -668,6 +671,11 @@ describe("abstract management round depth", () => {
       scorecardId: activeRound.scorecardId,
       scorecardVersion: activeRound.scorecardVersion,
       dueAt: null,
+      recommendationChoices: [
+        { id: "strong_accept", label: "Strong accept" },
+        { id: "discuss", label: "Discuss" },
+        { id: "decline", label: "Decline" },
+      ],
       criteria: activeRound.criteria,
     });
 
@@ -683,6 +691,11 @@ describe("abstract management round depth", () => {
     expect(editedRound.criteria.map((criterion) => criterion.id)).toEqual(
       activeRound.criteria.map((criterion) => criterion.id),
     );
+    expect(editedRound.recommendationChoices).toEqual([
+      { id: "strong_accept", label: "Strong accept" },
+      { id: "discuss", label: "Discuss" },
+      { id: "decline", label: "Decline" },
+    ]);
 
     await env.DB.prepare(
       `INSERT INTO ai_review_assessments (
@@ -717,6 +730,7 @@ describe("abstract management round depth", () => {
         revision: editedRound.revision,
         name: editedRound.name,
         dueAt: null,
+        recommendationChoices: editedRound.recommendationChoices,
         criteria: editedRound.criteria,
       }),
     ).rejects.toThrow(/AI-assessment activity|not editable/i);
@@ -732,6 +746,7 @@ describe("abstract management round depth", () => {
         revision: editedRound.revision,
         name: editedRound.name,
         dueAt: null,
+        recommendationChoices: editedRound.recommendationChoices,
         criteria: editedRound.criteria.map((criterion, index) => ({
           ...criterion,
           id: `replacement-id-${index}`,
@@ -756,6 +771,7 @@ describe("abstract management round depth", () => {
         revision: editedRound.revision,
         name: "Should not save",
         dueAt: null,
+        recommendationChoices: editedRound.recommendationChoices,
         criteria: editedRound.criteria,
       }),
     ).rejects.toThrow(/without assignments|not editable/i);
@@ -793,6 +809,7 @@ describe("abstract management round depth", () => {
         revision: finalRound.revision,
         name: " INITIAL REVIEW ",
         dueAt: null,
+        recommendationChoices: finalRound.recommendationChoices,
         criteria: finalRound.criteria,
       }),
     ).rejects.toThrow(/round with that name already exists/i);
@@ -980,6 +997,7 @@ describe("abstract management round depth", () => {
       scorecardId: "scorecard-initial-v2",
       scorecardVersion: 2,
       dueAt: null,
+      recommendationChoices: addedRound.recommendationChoices,
       criteria: addedRound.criteria.map((criterion, index) => ({
         ...criterion,
         name: index === 0 ? "Forked Originality" : criterion.name,

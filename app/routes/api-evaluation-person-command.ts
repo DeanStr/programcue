@@ -17,13 +17,7 @@ import {
 import type { Route } from "./+types/api-evaluation-person-command";
 
 const commandSchema = z.enum(["review", "conflict", "moderation", "reopen"]);
-const recommendationSchema = z.enum([
-  "accept",
-  "minor_changes",
-  "conditional_accept",
-  "waitlist",
-  "reject",
-]);
+const recommendationSchema = z.string().trim().min(1).max(80);
 const reviewSchema = z
   .object({
     assignmentId: z.string().trim().min(1).max(200),

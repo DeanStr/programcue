@@ -550,12 +550,14 @@ export class EvaluationReviewerWorkflows extends EvaluationServiceFoundation {
           content_json, save_kind, saved_by_person_id, idempotency_key,
           scorecard_id, scorecard_version, criteria_snapshot_json,
           ai_suggestion_id, imported_criterion_ids_json,
-          confirmed_ai_criterion_ids_json, created_at
+          confirmed_ai_criterion_ids_json,
+          recommendation_choices_snapshot_json, created_at
         )
         SELECT ?, review.event_id, review.id, ?, review.scores_json, ?,
                'reopened', ?, ?, ?, ?, ?, review.ai_suggestion_id,
                review.imported_criterion_ids_json,
-               review.confirmed_ai_criterion_ids_json, unixepoch()
+               review.confirmed_ai_criterion_ids_json,
+               review.recommendation_choices_snapshot_json, unixepoch()
           FROM reviews review
          WHERE review.id = ? AND review.event_id = ?
            AND review.status = 'reopened'

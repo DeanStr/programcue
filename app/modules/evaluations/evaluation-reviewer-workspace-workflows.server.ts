@@ -4,6 +4,7 @@ import {
 } from "~/modules/submissions/submission-schema";
 import type { Viewer } from "~/platform/auth/authorize.server";
 import { EvaluationStateError } from "./evaluation-errors";
+import { parseRecommendationChoicesJson } from "./evaluation-recommendation-choices";
 import {
   blindReviewerVisibleAnswers,
   type Criterion,
@@ -178,6 +179,7 @@ export class EvaluationReviewerWorkspaceWorkflows extends EvaluationServiceFound
              r.blinded_reviewing AS blindedReviewing,
              r.scorecard_id AS scorecardId,
              r.scorecard_version AS scorecardVersion,
+             r.recommendation_choices_json AS recommendationChoicesJson,
              r.opens_at AS opensAt, r.closes_at AS closesAt
         FROM evaluator_assignments a
         LEFT JOIN submissions submission
@@ -222,6 +224,7 @@ export class EvaluationReviewerWorkspaceWorkflows extends EvaluationServiceFound
         blindedReviewing: number | boolean;
         scorecardId: string;
         scorecardVersion: number;
+        recommendationChoicesJson: string;
         opensAt: number | null;
         closesAt: number | null;
       }>();
@@ -231,8 +234,13 @@ export class EvaluationReviewerWorkspaceWorkflows extends EvaluationServiceFound
         sessionSnapshotJson,
         submissionReference,
         sessionReference,
+        recommendationChoicesJson,
         ...assignment
       }) => {
+        const recommendationChoices = parseRecommendationChoicesJson(
+          recommendationChoicesJson,
+          `Evaluation round ${assignment.roundId}`,
+        );
         const blindedReviewing = Boolean(assignment.blindedReviewing);
         if (assignment.submissionId) {
           const snapshot = requireSubmittedSnapshot(
@@ -258,6 +266,7 @@ export class EvaluationReviewerWorkspaceWorkflows extends EvaluationServiceFound
             category: summaryAnswer(answers.category),
             format: summaryAnswer(answers.format),
             blindedReviewing,
+            recommendationChoices,
           };
         }
         if (!assignment.sessionId) {
@@ -281,6 +290,7 @@ export class EvaluationReviewerWorkspaceWorkflows extends EvaluationServiceFound
           category: blindedReviewing ? null : snapshot.trackName,
           format: blindedReviewing ? null : snapshot.format,
           blindedReviewing,
+          recommendationChoices,
         };
       },
     );
@@ -300,6 +310,7 @@ export class EvaluationReviewerWorkspaceWorkflows extends EvaluationServiceFound
         criteria: [],
         submission: null,
         review: null,
+        recommendationChoices: [],
         attachments: [],
       };
     const [criteria, source, review, attachments] = await Promise.all([
@@ -380,7 +391,8 @@ export class EvaluationReviewerWorkspaceWorkflows extends EvaluationServiceFound
                r.conflict_affirmed_at AS conflictAffirmedAt, r.revision,
                r.ai_suggestion_id AS aiSuggestionId,
                r.imported_criterion_ids_json AS importedCriterionIdsJson,
-               r.confirmed_ai_criterion_ids_json AS confirmedAiCriterionIdsJson
+               r.confirmed_ai_criterion_ids_json AS confirmedAiCriterionIdsJson,
+               r.recommendation_choices_snapshot_json AS recommendationChoicesSnapshotJson
           FROM reviews r
           JOIN evaluator_assignments a
             ON a.id = r.assignment_id AND a.event_id = r.event_id
@@ -420,6 +432,7 @@ export class EvaluationReviewerWorkspaceWorkflows extends EvaluationServiceFound
           aiSuggestionId: string | null;
           importedCriterionIdsJson: string;
           confirmedAiCriterionIdsJson: string;
+          recommendationChoicesSnapshotJson: string;
         }>(),
       this.env.DB.prepare(
         `
@@ -482,6 +495,28 @@ export class EvaluationReviewerWorkspaceWorkflows extends EvaluationServiceFound
       throw new Error(
         `Evaluation assignment ${selected.id} lost its source target.`,
       );
+    }
+    if (review) {
+      const snapshot = parseRecommendationChoicesJson(
+        review.recommendationChoicesSnapshotJson,
+        `Review ${review.id}`,
+      );
+      if (
+        JSON.stringify(snapshot) !==
+        JSON.stringify(selected.recommendationChoices)
+      ) {
+        throw new EvaluationStateError(
+          `Review ${review.id} does not match its assigned recommendation choices.`,
+        );
+      }
+      if (
+        review.recommendation !== null &&
+        !snapshot.some((choice) => choice.id === review.recommendation)
+      ) {
+        throw new EvaluationStateError(
+          `Review ${review.id} has an invalid persisted recommendation.`,
+        );
+      }
     }
     let selectedSubmissionSnapshot: ReturnType<
       typeof requireSubmittedSnapshot
@@ -573,6 +608,7 @@ export class EvaluationReviewerWorkspaceWorkflows extends EvaluationServiceFound
     return {
       assignments: reviewerAssignments,
       selected,
+      recommendationChoices: selected.recommendationChoices,
       criteria: criteria.results.map(({ optionsJson, ...criterion }) => ({
         ...criterion,
         options: parseReviewerCriterionOptions(

@@ -375,9 +375,11 @@ export class EvaluationPlanSaveWorkflow extends EvaluationServiceFoundation {
         INSERT INTO evaluation_rounds (
           id, event_id, plan_id, round_number, name, status, opens_at, closes_at,
           blinded_reviewing, scorecard_id, scorecard_version,
-          advancement_rule_json, revision, created_at, updated_at
+          recommendation_choices_json, advancement_rule_json, revision,
+          created_at, updated_at
         )
-        SELECT ?, p.event_id, p.id, ?, ?, ?, ?, ?, ?, ?, ?, '{}', 1, unixepoch(), unixepoch()
+        SELECT ?, p.event_id, p.id, ?, ?, ?, ?, ?, ?, ?, ?, ?, '{}', 1,
+               unixepoch(), unixepoch()
           FROM evaluation_plans p
          WHERE p.id = ? AND p.event_id = ? AND p.revision = ? AND p.name = ? AND p.status = ?
            AND EXISTS (
@@ -395,6 +397,7 @@ export class EvaluationPlanSaveWorkflow extends EvaluationServiceFoundation {
           round.anonymous ? 1 : 0,
           round.scorecardId ?? round.id,
           round.scorecardVersion,
+          JSON.stringify(round.recommendationChoices),
           planId,
           viewer.eventId,
           parsed.revision + 1,

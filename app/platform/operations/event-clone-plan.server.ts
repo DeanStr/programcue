@@ -585,7 +585,7 @@ export function buildEventClonePlan(
     ),
     ...rounds.results.map((row) =>
       env.DB.prepare(
-        "INSERT INTO evaluation_rounds (id,event_id,plan_id,round_number,name,status,opens_at,closes_at,blinded_reviewing,scorecard_id,scorecard_version,advancement_rule_json,revision,created_at,updated_at) VALUES (?,?,?,?,?,'draft',NULL,NULL,?,?,?, ?,1,unixepoch(),unixepoch())",
+        "INSERT INTO evaluation_rounds (id,event_id,plan_id,round_number,name,status,opens_at,closes_at,blinded_reviewing,scorecard_id,scorecard_version,recommendation_choices_json,advancement_rule_json,revision,created_at,updated_at) VALUES (?,?,?,?,?,'draft',NULL,NULL,?,?,?,?,?,1,unixepoch(),unixepoch())",
       ).bind(
         roundIds.get(row.id),
         eventId,
@@ -595,6 +595,7 @@ export function buildEventClonePlan(
         row.blindedReviewing,
         row.scorecardId,
         row.scorecardVersion,
+        row.recommendationChoicesJson,
         row.advancementRuleJson,
       ),
     ),

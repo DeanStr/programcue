@@ -136,7 +136,7 @@ export async function readEventCloneSource(
         decisionRole: string;
       }>(),
     env.DB.prepare(
-      "SELECT r.id, r.plan_id AS planId, r.round_number AS roundNumber, r.name, r.opens_at AS opensAt, r.closes_at AS closesAt, r.blinded_reviewing AS blindedReviewing, r.scorecard_id AS scorecardId, r.scorecard_version AS scorecardVersion, r.advancement_rule_json AS advancementRuleJson FROM evaluation_rounds r JOIN evaluation_plans p ON p.id = r.plan_id AND p.event_id = r.event_id WHERE r.event_id = ? AND r.status <> 'archived' AND p.status <> 'archived' ORDER BY r.plan_id, r.round_number",
+      "SELECT r.id, r.plan_id AS planId, r.round_number AS roundNumber, r.name, r.opens_at AS opensAt, r.closes_at AS closesAt, r.blinded_reviewing AS blindedReviewing, r.scorecard_id AS scorecardId, r.scorecard_version AS scorecardVersion, r.recommendation_choices_json AS recommendationChoicesJson, r.advancement_rule_json AS advancementRuleJson FROM evaluation_rounds r JOIN evaluation_plans p ON p.id = r.plan_id AND p.event_id = r.event_id WHERE r.event_id = ? AND r.status <> 'archived' AND p.status <> 'archived' ORDER BY r.plan_id, r.round_number",
     )
       .bind(viewer.eventId)
       .all<{
@@ -149,6 +149,7 @@ export async function readEventCloneSource(
         blindedReviewing: number;
         scorecardId: string;
         scorecardVersion: number;
+        recommendationChoicesJson: string;
         advancementRuleJson: string;
       }>(),
     env.DB.prepare(

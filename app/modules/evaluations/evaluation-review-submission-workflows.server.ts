@@ -11,6 +11,7 @@ import {
   EvaluationStateError,
   EvaluationValidationError,
 } from "./evaluation-errors";
+import { parseRecommendationChoicesJson } from "./evaluation-recommendation-choices";
 import {
   planReviewResponses,
   type ReviewCriterion,
@@ -63,6 +64,7 @@ export class EvaluationReviewSubmissionWorkflows extends EvaluationServiceFounda
              a.submission_id AS submissionId, a.session_id AS sessionId,
              a.round_id AS roundId, r.scorecard_id AS scorecardId,
              r.scorecard_version AS scorecardVersion,
+             r.recommendation_choices_json AS recommendationChoicesJson,
              COALESCE(submission.submitted_snapshot_json, a.session_snapshot_json)
                AS sourceSnapshotJson
         FROM evaluator_assignments a
@@ -109,6 +111,7 @@ export class EvaluationReviewSubmissionWorkflows extends EvaluationServiceFounda
         roundId: string;
         scorecardId: string;
         scorecardVersion: number;
+        recommendationChoicesJson: string;
         sourceSnapshotJson: string | null;
       }>();
     if (!assignment)
@@ -120,6 +123,23 @@ export class EvaluationReviewSubmissionWorkflows extends EvaluationServiceFounda
         "This assignment has no immutable source snapshot.",
       );
     }
+    const recommendationChoices = parseRecommendationChoicesJson(
+      assignment.recommendationChoicesJson,
+      `Evaluation round ${assignment.roundId}`,
+    );
+    if (
+      parsed.recommendation !== null &&
+      !recommendationChoices.some(
+        (choice) => choice.id === parsed.recommendation,
+      )
+    ) {
+      throw new EvaluationValidationError(
+        "Select a recommendation available for this evaluation round.",
+      );
+    }
+    const recommendationChoicesSnapshotJson = JSON.stringify(
+      recommendationChoices,
+    );
     const sourceSnapshotHash = await reviewSourceSnapshotHash(
       assignment.sourceSnapshotJson,
     );
@@ -148,7 +168,8 @@ export class EvaluationReviewSubmissionWorkflows extends EvaluationServiceFounda
       `SELECT review.id, review.revision, review.status,
               review.ai_suggestion_id AS aiSuggestionId,
               review.imported_criterion_ids_json AS importedCriterionIdsJson,
-              review.scores_json AS scoresJson
+              review.scores_json AS scoresJson,
+              review.recommendation_choices_snapshot_json AS recommendationChoicesSnapshotJson
          FROM reviews review
          JOIN events event
            ON event.id = review.event_id AND event.organisation_id = ?
@@ -162,10 +183,24 @@ export class EvaluationReviewSubmissionWorkflows extends EvaluationServiceFounda
         aiSuggestionId: string | null;
         importedCriterionIdsJson: string;
         scoresJson: string;
+        recommendationChoicesSnapshotJson: string;
       }>();
     if ((existing?.revision ?? 0) !== parsed.revision)
       throw new EvaluationRevisionConflictError();
     const reviewId = existing?.id ?? crypto.randomUUID();
+    if (
+      existing &&
+      JSON.stringify(
+        parseRecommendationChoicesJson(
+          existing.recommendationChoicesSnapshotJson,
+          `Review ${existing.id}`,
+        ),
+      ) !== recommendationChoicesSnapshotJson
+    ) {
+      throw new EvaluationStateError(
+        `Review ${existing.id} does not match its assigned recommendation choices.`,
+      );
+    }
     let existingImportedCriterionIds: string[] = [];
     let existingResponses: Record<string, string | number | boolean> = {};
     try {
@@ -517,8 +552,8 @@ export class EvaluationReviewSubmissionWorkflows extends EvaluationServiceFounda
         )
       : this.env.DB.prepare(
           `
-      INSERT INTO reviews (id, event_id, assignment_id, status, scores_json, weighted_score, recommendation, confidence, submitter_feedback, private_notes, ai_suggestion_id, imported_criterion_ids_json, confirmed_ai_criterion_ids_json, conflict_affirmed_at, revision, last_operation_id, created_at, updated_at, submitted_at, locked_at)
-      SELECT ?, ?, assignment.id, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
+      INSERT INTO reviews (id, event_id, assignment_id, status, scores_json, weighted_score, recommendation, recommendation_choices_snapshot_json, confidence, submitter_feedback, private_notes, ai_suggestion_id, imported_criterion_ids_json, confirmed_ai_criterion_ids_json, conflict_affirmed_at, revision, last_operation_id, created_at, updated_at, submitted_at, locked_at)
+      SELECT ?, ?, assignment.id, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
              CASE WHEN ? = 1 THEN unixepoch() END,
              1, ?, unixepoch(), unixepoch(),
              CASE WHEN ? = 'submitted' THEN unixepoch() END,
@@ -591,6 +626,7 @@ export class EvaluationReviewSubmissionWorkflows extends EvaluationServiceFounda
           JSON.stringify(responses),
           weightedScore,
           parsed.recommendation,
+          recommendationChoicesSnapshotJson,
           parsed.confidence,
           parsed.submitterFeedback || null,
           parsed.privateNotes || null,
@@ -716,9 +752,9 @@ export class EvaluationReviewSubmissionWorkflows extends EvaluationServiceFounda
           save_kind, saved_by_person_id, idempotency_key, scorecard_id,
           scorecard_version, criteria_snapshot_json, ai_suggestion_id,
           imported_criterion_ids_json, confirmed_ai_criterion_ids_json,
-          created_at
+          recommendation_choices_snapshot_json, created_at
         )
-        SELECT ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, unixepoch()
+        SELECT ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, unixepoch()
          WHERE EXISTS (
            SELECT 1 FROM reviews review
             JOIN events event
@@ -748,6 +784,7 @@ export class EvaluationReviewSubmissionWorkflows extends EvaluationServiceFounda
         suggestionId,
         JSON.stringify(importedCriterionIds),
         JSON.stringify(confirmedAiCriterionIds),
+        recommendationChoicesSnapshotJson,
         viewer.organisationId,
         reviewId,
         operationId,

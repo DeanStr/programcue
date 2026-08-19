@@ -4,6 +4,7 @@ import type { AiModelProvider } from "~/modules/ai/openai-responses-provider.ser
 import { ReviewerAiSuggestionService } from "~/modules/ai/reviewer-ai-suggestion.server";
 import type { Viewer } from "~/platform/auth/authorize.server";
 import { ensureDemoData } from "~/platform/demo/seed.server";
+import { defaultRecommendationChoices } from "./evaluation-recommendation-choices";
 import {
   EvaluationService,
   EvaluationValidationError,
@@ -380,6 +381,7 @@ async function prepareReviewerAiGenerationFixture(roundId: string) {
         id: roundId,
         name: "Initial review",
         anonymous: true,
+        recommendationChoices: defaultRecommendationChoices(),
         criteria,
       },
     ],
@@ -1729,6 +1731,7 @@ describe("evaluation vertical slice", () => {
             id: "eval-ai-suggestion-round",
             name: "Initial review",
             anonymous: true,
+            recommendationChoices: defaultRecommendationChoices(),
             criteria: suggestionCriteria,
           },
         ],
@@ -2120,6 +2123,11 @@ describe("evaluation vertical slice", () => {
             id: "eval-test-round",
             name: "Initial review",
             anonymous: true,
+            recommendationChoices: [
+              { id: "strong_accept", label: "Strong accept" },
+              { id: "discuss", label: "Discuss" },
+              { id: "decline", label: "Decline" },
+            ],
             criteria,
           },
         ],
@@ -2135,6 +2143,11 @@ describe("evaluation vertical slice", () => {
       const workspace = await service.getReviewerWorkspace(evaluator);
       expect(workspace.selected?.submissionId).toBe("eval-test-submission");
       expect(workspace.selected?.blindedReviewing).toBe(true);
+      expect(workspace.recommendationChoices).toEqual([
+        { id: "strong_accept", label: "Strong accept" },
+        { id: "discuss", label: "Discuss" },
+        { id: "decline", label: "Decline" },
+      ]);
       expect(workspace.selected).toMatchObject({
         title: "Blinded proposal",
         category: null,
@@ -2190,7 +2203,7 @@ describe("evaluation vertical slice", () => {
             assignmentId: workspace.selected!.id,
             revision: 1,
             scores: { [criteria[0]!.id]: 4 },
-            recommendation: "accept",
+            recommendation: "strong_accept",
             confidence: 4,
             submitterFeedback: "Useful proposal.",
             privateNotes: "Recommend acceptance.",
@@ -2201,13 +2214,31 @@ describe("evaluation vertical slice", () => {
         ),
       ).rejects.toBeInstanceOf(EvaluationValidationError);
 
+      await expect(
+        service.saveReview(
+          evaluator,
+          {
+            assignmentId: workspace.selected!.id,
+            revision: 1,
+            scores,
+            recommendation: "accept",
+            confidence: 4,
+            submitterFeedback: "Useful proposal.",
+            privateNotes: "Recommend acceptance.",
+            conflictAffirmed: true,
+            intent: "submit",
+          },
+          "participant_ui",
+        ),
+      ).rejects.toThrow(/available for this evaluation round/i);
+
       const submitted = await service.saveReview(
         evaluator,
         {
           assignmentId: workspace.selected!.id,
           revision: 1,
           scores,
-          recommendation: "accept",
+          recommendation: "strong_accept",
           confidence: 4,
           submitterFeedback: "Useful proposal.",
           privateNotes: "Recommend acceptance.",
@@ -2218,7 +2249,8 @@ describe("evaluation vertical slice", () => {
       );
       expect(submitted.weightedScore).toBe(4.25);
       const stored = await env.DB.prepare(
-        `SELECT status, revision,
+        `SELECT status, revision, recommendation,
+                recommendation_choices_snapshot_json AS recommendationChoicesSnapshotJson,
                 conflict_affirmed_at AS conflictAffirmedAt
            FROM reviews WHERE id = ?`,
       )
@@ -2226,13 +2258,19 @@ describe("evaluation vertical slice", () => {
         .first<{
           status: string;
           revision: number;
+          recommendation: string;
+          recommendationChoicesSnapshotJson: string;
           conflictAffirmedAt: number | null;
         }>();
-      expect(stored).toEqual({
+      expect(stored).toMatchObject({
         status: "submitted",
         revision: 2,
+        recommendation: "strong_accept",
         conflictAffirmedAt: expect.any(Number),
       });
+      expect(JSON.parse(stored!.recommendationChoicesSnapshotJson)).toEqual(
+        workspace.recommendationChoices,
+      );
       const revisionEvidence = await env.DB.prepare(
         `SELECT scorecard_id AS scorecardId,
                 scorecard_version AS scorecardVersion,
@@ -2298,7 +2336,7 @@ describe("evaluation vertical slice", () => {
         expect(closedRoundWorkspace.review).toMatchObject({
           status: "submitted",
           weightedScore: 4.25,
-          recommendation: "accept",
+          recommendation: "strong_accept",
           privateNotes: "Recommend acceptance.",
           submitterFeedback: "Useful proposal.",
           revision: 2,
@@ -2355,6 +2393,7 @@ describe("evaluation vertical slice", () => {
               id: "eval-snapshot-invariant-round",
               name: "Initial review",
               anonymous: false,
+              recommendationChoices: defaultRecommendationChoices(),
               criteria,
             },
           ],
@@ -2431,6 +2470,7 @@ describe("evaluation vertical slice", () => {
               id: "eval-conflict-race-round",
               name: "Initial review",
               anonymous: false,
+              recommendationChoices: defaultRecommendationChoices(),
               criteria,
             },
           ],

@@ -64,7 +64,8 @@ export class EvaluationRoundAddWorkflow extends EvaluationServiceFoundation {
         SELECT r.id, blinded_reviewing AS anonymous,
                opens_at AS opensAt, closes_at AS closesAt,
                scorecard_id AS scorecardId,
-               scorecard_version AS scorecardVersion
+               scorecard_version AS scorecardVersion,
+               recommendation_choices_json AS recommendationChoicesJson
           FROM evaluation_rounds r
           JOIN events e ON e.id = r.event_id AND e.organisation_id = ?
          WHERE r.id = ? AND r.event_id = ? AND r.plan_id = ?
@@ -83,6 +84,7 @@ export class EvaluationRoundAddWorkflow extends EvaluationServiceFoundation {
           closesAt: number | null;
           scorecardId: string;
           scorecardVersion: number;
+          recommendationChoicesJson: string;
         }>(),
       this.env.DB.prepare(
         `
@@ -245,12 +247,13 @@ export class EvaluationRoundAddWorkflow extends EvaluationServiceFoundation {
         INSERT INTO evaluation_rounds (
           id, event_id, plan_id, round_number, name, status, opens_at, closes_at,
           blinded_reviewing, scorecard_id, scorecard_version,
-          advancement_rule_json, revision, created_at, updated_at
+          recommendation_choices_json, advancement_rule_json, revision,
+          created_at, updated_at
         )
         SELECT ?, p.event_id, p.id,
                COALESCE((SELECT MAX(round_number) FROM evaluation_rounds
                           WHERE event_id = p.event_id AND plan_id = p.id), 0) + 1,
-               ?, 'draft', ?, ?, ?, ?, ?,
+               ?, 'draft', ?, ?, ?, ?, ?, ?,
                '{}', 1, unixepoch(), unixepoch()
           FROM evaluation_plans p
          WHERE p.id = ? AND p.event_id = ? AND p.revision = ?
@@ -267,6 +270,7 @@ export class EvaluationRoundAddWorkflow extends EvaluationServiceFoundation {
         anonymous ? 1 : 0,
         scorecardId,
         scorecardVersion,
+        clone.recommendationChoicesJson,
         parsed.planId,
         viewer.eventId,
         parsed.planRevision + 1,

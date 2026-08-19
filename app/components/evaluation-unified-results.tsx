@@ -5,14 +5,6 @@ import { useEvaluationAdminModel } from "~/components/evaluation-admin-model";
 import { EventDateTime } from "~/components/ui/event-date-time";
 import { EmptyState } from "~/components/ui/states";
 
-const recommendationOrder = [
-  "accept",
-  "minor_changes",
-  "conditional_accept",
-  "waitlist",
-  "reject",
-];
-
 function humanise(value: string) {
   return value.replaceAll("_", " ");
 }
@@ -179,15 +171,16 @@ export function EvaluationUnifiedResults() {
             </thead>
             <tbody>
               {loaderData.results.map((result) => {
-                const recommendationEntries = recommendationOrder
-                  .map(
-                    (recommendation) =>
-                      [
-                        recommendation,
-                        result.recommendations[recommendation] ?? 0,
-                      ] as const,
-                  )
-                  .filter(([, count]) => count > 0);
+                const recommendationEntries =
+                  loaderData.resultRecommendationChoices
+                    .map(
+                      (choice) =>
+                        [
+                          choice.label,
+                          result.recommendations[choice.id] ?? 0,
+                        ] as const,
+                    )
+                    .filter(([, count]) => count > 0);
                 const focusName =
                   result.targetType === "proposal" ? "submission" : "session";
                 return (
@@ -229,9 +222,7 @@ export function EvaluationUnifiedResults() {
                     <td data-label="Recommendations">
                       {recommendationEntries.length
                         ? recommendationEntries
-                            .map(
-                              ([name, count]) => `${humanise(name)} ${count}`,
-                            )
+                            .map(([name, count]) => `${name} ${count}`)
                             .join(" · ")
                         : "—"}
                     </td>
@@ -485,7 +476,7 @@ export function EvaluationUnifiedResults() {
                                     ? "Unscored"
                                     : `${Number(review.weightedScore).toFixed(2)} / 5`}
                                   {review.recommendation
-                                    ? ` · ${humanise(review.recommendation)}`
+                                    ? ` · ${review.recommendationLabel}`
                                     : ""}
                                 </p>
                                 {Object.entries(review.scores).length ? (
@@ -554,6 +545,17 @@ export function EvaluationUnifiedResults() {
                                               ? ` · scorecard ${revision.scorecardId} v${revision.scorecardVersion}`
                                               : " · pre-contract scorecard labels unavailable"}
                                           </p>
+                                          {revision.recommendationLabel ||
+                                          revision.content.confidence ? (
+                                            <p>
+                                              {revision.recommendationLabel
+                                                ? `Recommendation: ${revision.recommendationLabel}`
+                                                : "No recommendation"}
+                                              {revision.content.confidence
+                                                ? ` · Confidence: ${revision.content.confidence} / 5`
+                                                : ""}
+                                            </p>
+                                          ) : null}
                                           {Object.entries(revision.scores)
                                             .length ? (
                                             <dl>

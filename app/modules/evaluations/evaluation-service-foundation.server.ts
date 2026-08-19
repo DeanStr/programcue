@@ -15,6 +15,7 @@ import {
   EvaluationStateError,
   EvaluationValidationError,
 } from "./evaluation-errors";
+import type { RecommendationChoice } from "./evaluation-recommendation-choices";
 
 export {
   EvaluationDecisionAuthorityError,
@@ -255,6 +256,7 @@ export type Round = {
   closesAt: number | null;
   scorecardId: string;
   scorecardVersion: number;
+  recommendationChoices: RecommendationChoice[];
   runningAiAssessmentCount: number;
   reviewers: Array<{ personId: string; name: string; email: string }>;
   criteria: Criterion[];

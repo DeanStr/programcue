@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it } from "vitest";
 
 import type { Viewer } from "~/platform/auth/authorize.server";
 import { ensureDemoData } from "~/platform/demo/seed.server";
+import { defaultRecommendationChoices } from "./evaluation-recommendation-choices";
 import { EvaluationService } from "./evaluation-service.server";
 import { ensureEvaluationDecisionTemplateFixture } from "./evaluation-test-fixtures";
 
@@ -410,6 +411,7 @@ describe("evaluation vertical slice", () => {
               id: "eval-chair-self-grant-round",
               name: "Initial review",
               anonymous: false,
+              recommendationChoices: defaultRecommendationChoices(),
               criteria,
             },
           ],
@@ -433,6 +435,7 @@ describe("evaluation vertical slice", () => {
             id: "eval-chair-admin-authority-round",
             name: "Initial review",
             anonymous: false,
+            recommendationChoices: defaultRecommendationChoices(),
             criteria,
           },
         ],

@@ -13,6 +13,9 @@ from .forward_evaluation_verification_generation import (
 from .forward_contextual_revision_evidence import (
     validate_contextual_revision_evidence_forward_migration,
 )
+from .forward_configurable_review_recommendations import (
+    validate_configurable_review_recommendations_forward_migration,
+)
 
 from .forward_advisory_content_and_itinerary_privacy import (
     validate_advisory_content_and_itinerary_privacy_forward_migration,
@@ -62,3 +65,4 @@ def validate_forward_migrations(root: Path) -> None:
     validate_snapshot_visibility_publication_boundary_forward_migration(root)
     validate_resource_confirmed_speaker_audience_forward_migration(root)
     validate_evaluation_verification_generation_forward_migration(root)
+    validate_configurable_review_recommendations_forward_migration(root)

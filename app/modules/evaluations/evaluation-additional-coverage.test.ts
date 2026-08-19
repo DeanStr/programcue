@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it } from "vitest";
 
 import type { Viewer } from "~/platform/auth/authorize.server";
 import { ensureDemoData } from "~/platform/demo/seed.server";
+import { defaultRecommendationChoices } from "./evaluation-recommendation-choices";
 import {
   EvaluationRevisionConflictError,
   EvaluationService,
@@ -293,6 +294,7 @@ describe("evaluation vertical slice", () => {
               id: winningRoundId,
               name: "Winning round",
               anonymous: false,
+              recommendationChoices: defaultRecommendationChoices(),
               criteria: criteria.map((criterion) => ({
                 ...criterion,
                 id: `${criterion.id}-${token}-winner`,
@@ -312,6 +314,7 @@ describe("evaluation vertical slice", () => {
               id: losingRoundId,
               name: "Losing round",
               anonymous: false,
+              recommendationChoices: defaultRecommendationChoices(),
               criteria: criteria.map((criterion) => ({
                 ...criterion,
                 id: `${criterion.id}-${token}-loser`,
@@ -398,6 +401,7 @@ describe("evaluation vertical slice", () => {
             id: "eval-api-round",
             name: "API review",
             anonymous: false,
+            recommendationChoices: defaultRecommendationChoices(),
             criteria,
           },
         ],

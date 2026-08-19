@@ -5,6 +5,7 @@ import {
   EvaluationStateError,
   EvaluationValidationError,
 } from "~/modules/evaluations/evaluation-errors";
+import { recommendationChoicesSchema } from "~/modules/evaluations/evaluation-recommendation-choices";
 import {
   assignmentBatchSchema,
   evaluationPlanSchema,
@@ -43,6 +44,7 @@ const roundInputSchema = z
     anonymous: z.boolean(),
     scorecardId: z.string().trim().min(1).max(120),
     scorecardVersion: z.number().int().positive(),
+    recommendationChoices: recommendationChoicesSchema,
     criteria: z.array(criterionInputSchema).min(1).max(30),
   })
   .strict();

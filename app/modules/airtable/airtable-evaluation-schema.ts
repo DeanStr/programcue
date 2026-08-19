@@ -86,7 +86,8 @@ export const AIRTABLE_EVALUATION_TABLE_SPECS: readonly AirtableEventTableSpec[] 
       entityType: "evaluation_round",
       query: `SELECT id, event_id, plan_id, round_number, name, status,
                    opens_at, closes_at, blinded_reviewing, scorecard_id,
-                   scorecard_version, advancement_rule_json, revision,
+                   scorecard_version, recommendation_choices_json,
+                   advancement_rule_json, revision,
                    created_at, updated_at
               FROM evaluation_rounds WHERE event_id = ? ORDER BY id`,
       schema: z
@@ -101,6 +102,7 @@ export const AIRTABLE_EVALUATION_TABLE_SPECS: readonly AirtableEventTableSpec[] 
           blinded_reviewing: booleanInteger,
           scorecard_id: text.min(1),
           scorecard_version: integer.positive(),
+          recommendation_choices_json: jsonArrayText,
           advancement_rule_json: jsonText,
           revision: integer.positive(),
           ...timestamps,
@@ -233,6 +235,7 @@ export const AIRTABLE_EVALUATION_TABLE_SPECS: readonly AirtableEventTableSpec[] 
       entityType: "review",
       query: `SELECT id, event_id, assignment_id, status, scores_json,
                    weighted_score, recommendation, confidence,
+                   recommendation_choices_snapshot_json,
                    submitter_feedback, private_notes, revision, created_at,
                    updated_at, submitted_at, locked_at
               FROM reviews WHERE event_id = ? ORDER BY id`,
@@ -243,15 +246,8 @@ export const AIRTABLE_EVALUATION_TABLE_SPECS: readonly AirtableEventTableSpec[] 
           status: z.enum(["draft", "submitted", "locked", "reopened"]),
           scores_json: jsonText,
           weighted_score: z.number().nullable(),
-          recommendation: z
-            .enum([
-              "accept",
-              "minor_changes",
-              "conditional_accept",
-              "waitlist",
-              "reject",
-            ])
-            .nullable(),
+          recommendation: nullableText,
+          recommendation_choices_snapshot_json: jsonArrayText,
           confidence: nullableInteger,
           submitter_feedback: nullableText,
           private_notes: nullableText,
@@ -269,7 +265,8 @@ export const AIRTABLE_EVALUATION_TABLE_SPECS: readonly AirtableEventTableSpec[] 
       domain: "evaluations",
       entityType: "review_revision",
       query: `SELECT id, event_id, review_id, revision_number, scores_json,
-                   content_json, save_kind, saved_by_person_id, created_at
+                   content_json, save_kind, saved_by_person_id,
+                   recommendation_choices_snapshot_json, created_at
               FROM review_revisions WHERE event_id = ? ORDER BY id`,
       schema: z
         .object({
@@ -278,6 +275,7 @@ export const AIRTABLE_EVALUATION_TABLE_SPECS: readonly AirtableEventTableSpec[] 
           revision_number: integer.positive(),
           scores_json: jsonText,
           content_json: jsonText,
+          recommendation_choices_snapshot_json: jsonArrayText,
           save_kind: z.enum(["autosave", "manual", "submitted", "reopened"]),
           saved_by_person_id: text.min(1),
           created_at: integer,

@@ -117,6 +117,16 @@ test.describe
         '[name="criterionDescription"]',
       );
       const criterionOptions = roundEditor.locator('[name="criterionOptions"]');
+      const recommendationLabels = roundEditor.locator(
+        '[name="recommendationChoiceLabel"]',
+      );
+      await recommendationLabels.nth(0).fill("Strong accept");
+      await recommendationLabels.nth(1).fill("Discuss");
+      await recommendationLabels.nth(2).fill("Decline");
+      await roundEditor
+        .getByRole("button", { name: "Remove Waitlist" })
+        .click();
+      await roundEditor.getByRole("button", { name: "Remove Reject" }).click();
       await expect(roundEditor).toContainText(
         "Every review already includes a required overall recommendation and confidence rating",
       );
@@ -405,9 +415,13 @@ test.describe
         "Intermediate",
         "Advanced",
       ]);
+      const recommendationGroup = page.getByRole("radiogroup", {
+        name: "Recommendation",
+      });
+      await expect(recommendationGroup).toHaveCount(1);
       await expect(
-        page.getByRole("radiogroup", { name: "Recommendation" }),
-      ).toHaveCount(1);
+        recommendationGroup.locator(".review-choice-option"),
+      ).toHaveText(["Strong accept", "Discuss", "Decline"]);
       await expect(
         page.getByLabel("Recommendation", { exact: true }),
       ).toHaveCount(1);

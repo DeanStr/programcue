@@ -308,6 +308,7 @@ export class EvaluationRoundUpdateWorkflow extends EvaluationServiceFoundation {
         `
         UPDATE evaluation_rounds SET name = ?, opens_at = ?, closes_at = ?,
                blinded_reviewing = ?, scorecard_id = ?, scorecard_version = ?,
+               recommendation_choices_json = ?,
                revision = revision + 1, last_operation_id = ?,
                updated_at = unixepoch()
          WHERE id = ? AND event_id = ? AND revision = ?
@@ -328,6 +329,7 @@ export class EvaluationRoundUpdateWorkflow extends EvaluationServiceFoundation {
         anonymous ? 1 : 0,
         scorecardId,
         scorecardVersion,
+        JSON.stringify(parsed.recommendationChoices),
         operationId,
         parsed.roundId,
         viewer.eventId,

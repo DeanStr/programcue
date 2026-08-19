@@ -1,6 +1,7 @@
 import { Form, Link } from "react-router";
 
 import { useEvaluationAdminModel } from "~/components/evaluation-admin-model";
+import { RecommendationChoiceFields } from "~/components/evaluation-recommendation-choice-fields";
 import { RubricFields } from "~/components/evaluation-rubric-fields";
 import { useConfirm } from "~/components/ui/confirm-dialog";
 import { EventDateTime } from "~/components/ui/event-date-time";
@@ -91,6 +92,12 @@ export function EvaluationRoundsPanel() {
                 )}
               </div>
             ))}
+            <p className="help">
+              Overall recommendation:{" "}
+              {round.recommendationChoices
+                .map((choice) => choice.label)
+                .join(" · ")}
+            </p>
             {Number(round.runningAiAssessmentCount) > 0 ? (
               <div className="validation-item warn mt" role="status">
                 <strong>AI assessment in progress</strong>
@@ -179,6 +186,10 @@ export function EvaluationRoundsPanel() {
                       round
                     </span>
                   </label>
+                  <RecommendationChoiceFields
+                    key={`${round.id}:${round.revision}`}
+                    choices={round.recommendationChoices}
+                  />
                   <RubricFields criteria={round.criteria} />
                   <button
                     type="submit"

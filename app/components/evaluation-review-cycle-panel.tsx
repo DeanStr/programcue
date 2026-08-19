@@ -1,6 +1,7 @@
 import { Form } from "react-router";
 import { useEvaluationAdminModel } from "~/components/evaluation-admin-model";
 import { bindEvalDateTime } from "~/components/evaluation-progression-panel";
+import { RecommendationChoiceFields } from "~/components/evaluation-recommendation-choice-fields";
 import { RubricFields } from "~/components/evaluation-rubric-fields";
 import { useConfirm } from "~/components/ui/confirm-dialog";
 
@@ -127,6 +128,10 @@ export function EvaluationReviewCyclePanel() {
                 edit every criterion before starting the new cycle.
               </span>
             </div>
+            <RecommendationChoiceFields
+              key={`${sourceRound.id}:${sourceRound.revision}`}
+              choices={sourceRound.recommendationChoices}
+            />
             <RubricFields criteria={sourceRound.criteria} />
             <button
               className="btn danger"

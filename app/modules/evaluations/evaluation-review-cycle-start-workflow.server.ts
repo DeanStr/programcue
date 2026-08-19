@@ -308,10 +308,11 @@ export class EvaluationReviewCycleStartWorkflow extends EvaluationServiceFoundat
         `INSERT INTO evaluation_rounds (
            id, event_id, plan_id, round_number, name, status,
            opens_at, closes_at, blinded_reviewing, scorecard_id,
-           scorecard_version, advancement_rule_json, revision,
+           scorecard_version, recommendation_choices_json,
+           advancement_rule_json, revision,
            created_at, updated_at
          )
-         SELECT ?, plan.event_id, plan.id, 1, ?, 'active', ?, ?, ?, ?, 1,
+         SELECT ?, plan.event_id, plan.id, 1, ?, 'active', ?, ?, ?, ?, 1, ?,
                 '{}', 1, unixepoch(), unixepoch()
            FROM evaluation_plans plan
            JOIN events event
@@ -325,6 +326,7 @@ export class EvaluationReviewCycleStartWorkflow extends EvaluationServiceFoundat
         closesAt,
         parsed.round.anonymous ? 1 : 0,
         roundId,
+        JSON.stringify(parsed.round.recommendationChoices),
         viewer.organisationId,
         planId,
         viewer.eventId,

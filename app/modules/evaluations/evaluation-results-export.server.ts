@@ -1,6 +1,7 @@
 import { z } from "zod";
 
 import type { Viewer } from "~/platform/auth/authorize.server";
+import { parseRecommendationChoicesJson } from "./evaluation-recommendation-choices";
 import { EvaluationServiceFoundation } from "./evaluation-service-foundation.server";
 
 const MAX_EXPORT_ASSIGNMENTS = 25_000;
@@ -21,6 +22,7 @@ type AssignmentRow = {
   roundNumber: number;
   roundName: string;
   roundStatus: string;
+  recommendationChoicesJson: string;
   submissionId: string;
   submissionReference: string;
   submissionTitle: string;
@@ -37,13 +39,8 @@ type AssignmentRow = {
   reviewStatus: "draft" | "submitted" | "locked" | "reopened" | null;
   scoresJson: string | null;
   weightedScore: number | null;
-  recommendation:
-    | "accept"
-    | "minor_changes"
-    | "conditional_accept"
-    | "waitlist"
-    | "reject"
-    | null;
+  recommendation: string | null;
+  recommendationChoicesSnapshotJson: string | null;
 };
 
 type CriterionRow = {
@@ -74,7 +71,7 @@ const exportSourceSnapshotCtes = `
      LIMIT 1
   ), selected_round AS (
     SELECT round.id, round.event_id, round.round_number,
-           round.name, round.status
+           round.name, round.status, round.recommendation_choices_json
       FROM current_plan plan
       JOIN evaluation_rounds round
         ON round.plan_id = plan.id AND round.event_id = ?
@@ -82,6 +79,7 @@ const exportSourceSnapshotCtes = `
   ), assignment_source AS (
     SELECT round.id AS roundId, round.round_number AS roundNumber,
            round.name AS roundName, round.status AS roundStatus,
+           round.recommendation_choices_json AS recommendationChoicesJson,
            submission.id AS submissionId,
            submission.public_reference AS submissionReference,
            submission.title AS submissionTitle,
@@ -92,9 +90,11 @@ const exportSourceSnapshotCtes = `
            review.scores_json AS scoresJson,
            review.weighted_score AS weightedScore,
            review.recommendation,
+           review.recommendation_choices_snapshot_json AS recommendationChoicesSnapshotJson,
            length(CAST(round.id AS BLOB))
              + length(CAST(round.name AS BLOB))
              + length(CAST(round.status AS BLOB))
+             + length(CAST(round.recommendation_choices_json AS BLOB))
              + length(CAST(submission.id AS BLOB))
              + length(CAST(submission.public_reference AS BLOB))
              + length(CAST(submission.title AS BLOB))
@@ -104,6 +104,7 @@ const exportSourceSnapshotCtes = `
              + length(CAST(COALESCE(review.status, '') AS BLOB))
              + length(CAST(COALESCE(review.scores_json, '') AS BLOB))
              + length(CAST(COALESCE(review.recommendation, '') AS BLOB))
+             + length(CAST(COALESCE(review.recommendation_choices_snapshot_json, '') AS BLOB))
              AS sourceBytes
       FROM selected_round round
       JOIN submissions submission
@@ -406,11 +407,13 @@ export class EvaluationResultsExportService extends EvaluationServiceFoundation 
               `WITH ${exportSourceSnapshotCtes}
              SELECT source.roundId, source.roundNumber, source.roundName,
                     source.roundStatus, source.submissionId,
+                    source.recommendationChoicesJson,
                     source.submissionReference, source.submissionTitle,
                     source.submissionStatus, source.assignmentId,
                     source.assignmentStatus, source.reviewStatus,
                     source.scoresJson, source.weightedScore,
-                    source.recommendation
+                    source.recommendation,
+                    source.recommendationChoicesSnapshotJson
                FROM assignment_source source
                CROSS JOIN source_stats stats
               WHERE stats.assignmentCount <= ? AND stats.sourceBytes <= ?
@@ -517,6 +520,13 @@ export class EvaluationResultsExportService extends EvaluationServiceFoundation 
         const criteriaById = new Map(
           criteria.map((criterion) => [criterion.id, criterion]),
         );
+        const recommendationChoices = parseRecommendationChoicesJson(
+          first.recommendationChoicesJson,
+          `Evaluation round ${first.roundId}`,
+        );
+        const recommendationChoiceById = new Map(
+          recommendationChoices.map((choice) => [choice.id, choice]),
+        );
         const responsesByCriterion = new Map<
           string,
           Array<string | number | boolean>
@@ -530,6 +540,14 @@ export class EvaluationResultsExportService extends EvaluationServiceFoundation 
         let assignedReviews = 0;
 
         for (const assignment of assignments) {
+          if (
+            assignment.recommendationChoicesJson !==
+            first.recommendationChoicesJson
+          ) {
+            throw new Error(
+              `Evaluation round ${first.roundId} has inconsistent recommendation configuration.`,
+            );
+          }
           if (assignment.assignmentId === null) {
             if (
               assignment.assignmentStatus !== null ||
@@ -573,6 +591,31 @@ export class EvaluationResultsExportService extends EvaluationServiceFoundation 
           if (assignment.scoresJson === null) {
             throw new Error(
               `Submitted review for assignment ${assignment.assignmentId} is missing its scorecard responses.`,
+            );
+          }
+          if (!assignment.recommendationChoicesSnapshotJson) {
+            throw new Error(
+              `Submitted review for assignment ${assignment.assignmentId} is missing its recommendation choice snapshot.`,
+            );
+          }
+          const reviewRecommendationChoices = parseRecommendationChoicesJson(
+            assignment.recommendationChoicesSnapshotJson,
+            `Review for assignment ${assignment.assignmentId}`,
+          );
+          if (
+            JSON.stringify(reviewRecommendationChoices) !==
+            JSON.stringify(recommendationChoices)
+          ) {
+            throw new Error(
+              `Submitted review for assignment ${assignment.assignmentId} does not match the round recommendation configuration.`,
+            );
+          }
+          if (
+            assignment.recommendation !== null &&
+            !recommendationChoiceById.has(assignment.recommendation)
+          ) {
+            throw new Error(
+              `Submitted review for assignment ${assignment.assignmentId} has an invalid recommendation.`,
             );
           }
           const parsedScores = persistedScoresSchema.parse(
@@ -623,14 +666,18 @@ export class EvaluationResultsExportService extends EvaluationServiceFoundation 
                 : completedReviews > 0
                   ? "partial"
                   : "not_started";
-        const recommendationEntries = [...recommendations.entries()].sort(
-          ([left], [right]) => left.localeCompare(right),
-        );
+        const recommendationEntries = recommendationChoices
+          .map((choice) => ({
+            id: choice.id,
+            label: choice.label,
+            count: recommendations.get(choice.id) ?? 0,
+          }))
+          .filter((entry) => entry.count > 0);
         const recommendation =
           recommendationEntries.length === 0
             ? ""
             : recommendationEntries.length === 1
-              ? recommendationEntries[0][0]
+              ? recommendationEntries[0].id
               : "mixed";
         const aggregateWeightedScore =
           weightedScores.length === 0
@@ -659,9 +706,7 @@ export class EvaluationResultsExportService extends EvaluationServiceFoundation 
           cancelledReviews,
           aggregateWeightedScore,
           recommendation,
-          recommendationBreakdown: JSON.stringify(
-            Object.fromEntries(recommendationEntries),
-          ),
+          recommendationBreakdown: JSON.stringify(recommendationEntries),
           criterionResults: JSON.stringify(
             criteria.map((criterion) =>
               criterionResult(

@@ -4,7 +4,9 @@ import { requireValue } from "~/lib/required-value";
 import { AiReviewAssessmentService } from "~/modules/ai/ai-review-assessment.server";
 import { ReviewerAiSuggestionService } from "~/modules/ai/reviewer-ai-suggestion.server";
 import { ensureDemoEvaluationData } from "~/modules/evaluations/demo.server";
+import { parseRecommendationChoicesJson } from "~/modules/evaluations/evaluation-recommendation-choices";
 import {
+  createEvaluationRecommendationCounts,
   EVALUATION_RESULT_PRESETS,
   type EvaluationResultPreset,
   evaluationResultFlags,
@@ -71,6 +73,7 @@ export function parseHistoricalReviewRevision(input: {
   scorecardId: string | null;
   scorecardVersion: number | null;
   criteriaSnapshotJson: string | null;
+  recommendationChoicesSnapshotJson: string;
 }) {
   const scores = parseRevisionEvidence(
     input.id,
@@ -84,6 +87,20 @@ export function parseHistoricalReviewRevision(input: {
     input.contentJson,
     historicalReviewContentSchema,
   );
+  const recommendationChoices = parseRecommendationChoicesJson(
+    input.recommendationChoicesSnapshotJson,
+    `Review revision ${input.id}`,
+  );
+  const recommendationLabel = content.recommendation
+    ? recommendationChoices.find(
+        (choice) => choice.id === content.recommendation,
+      )?.label
+    : null;
+  if (content.recommendation && !recommendationLabel) {
+    throw new Error(
+      `Review revision ${input.id} contains an invalid recommendation.`,
+    );
+  }
   const evidencePresence = [
     input.scorecardId !== null,
     input.scorecardVersion !== null,
@@ -95,7 +112,13 @@ export function parseHistoricalReviewRevision(input: {
     );
   }
   if (!evidencePresence.some(Boolean)) {
-    return { scores, content, criteria: null };
+    return {
+      scores,
+      content,
+      criteria: null,
+      recommendationChoices,
+      recommendationLabel,
+    };
   }
   if (
     !historicalEvidenceIdSchema.safeParse(input.scorecardId).success ||
@@ -133,7 +156,13 @@ export function parseHistoricalReviewRevision(input: {
       `Review revision ${input.id} contains a score without matching criterion evidence.`,
     );
   }
-  return { scores, content, criteria };
+  return {
+    scores,
+    content,
+    criteria,
+    recommendationChoices,
+    recommendationLabel,
+  };
 }
 
 export async function loader({ request, context }: LoaderFunctionArgs) {
@@ -299,6 +328,12 @@ export async function loader({ request, context }: LoaderFunctionArgs) {
     workspace.plan?.rounds.find((round) => round.status === "active")?.id ||
     workspace.plan?.rounds.at(-1)?.id ||
     null;
+  const resultRecommendationChoices = resultsRoundId
+    ? requireValue(
+        workspace.plan?.rounds.find((round) => round.id === resultsRoundId),
+        "The selected evaluation results round is unavailable.",
+      ).recommendationChoices
+    : [];
   const submissionResults = new Map<
     string,
     {
@@ -316,6 +351,7 @@ export async function loader({ request, context }: LoaderFunctionArgs) {
         evaluatorName: string;
         weightedScore: number | null;
         recommendation: string | null;
+        recommendationLabel: string | null;
         privateNotes: string | null;
         submitterFeedback: string | null;
         scores: Record<string, string | number | boolean>;
@@ -339,6 +375,7 @@ export async function loader({ request, context }: LoaderFunctionArgs) {
         evaluatorName: string;
         weightedScore: number | null;
         recommendation: string | null;
+        recommendationLabel: string | null;
         privateNotes: string | null;
         submitterFeedback: string | null;
         scores: Record<string, string | number | boolean>;
@@ -368,7 +405,7 @@ export async function loader({ request, context }: LoaderFunctionArgs) {
         minimumScore: null,
         maximumScore: null,
         recusedCount: 0,
-        recommendations: {},
+        recommendations: createEvaluationRecommendationCounts(),
         reviews: [],
       };
       if (assignment.status === "recused") {
@@ -427,6 +464,7 @@ export async function loader({ request, context }: LoaderFunctionArgs) {
           evaluatorName: assignment.evaluatorName,
           weightedScore: assignment.weightedScore,
           recommendation: assignment.recommendation,
+          recommendationLabel: assignment.recommendationLabel ?? null,
           privateNotes: assignment.privateNotes,
           submitterFeedback: assignment.submitterFeedback,
           scores,
@@ -983,6 +1021,7 @@ export async function loader({ request, context }: LoaderFunctionArgs) {
                 revision.scorecard_id AS scorecardId,
                 revision.scorecard_version AS scorecardVersion,
                 revision.criteria_snapshot_json AS criteriaSnapshotJson,
+                revision.recommendation_choices_snapshot_json AS recommendationChoicesSnapshotJson,
                 revision.created_at AS createdAt,
                 person.display_name AS savedByName
            FROM review_revisions revision
@@ -1007,6 +1046,7 @@ export async function loader({ request, context }: LoaderFunctionArgs) {
           scorecardId: string | null;
           scorecardVersion: number | null;
           criteriaSnapshotJson: string | null;
+          recommendationChoicesSnapshotJson: string;
           createdAt: number;
           savedByName: string;
         }>()
@@ -1018,7 +1058,13 @@ export async function loader({ request, context }: LoaderFunctionArgs) {
       history: reviewRevisionRows.results
         .filter((revision) => revision.reviewId === review.reviewId)
         .map(
-          ({ scoresJson, contentJson, criteriaSnapshotJson, ...revision }) => ({
+          ({
+            scoresJson,
+            contentJson,
+            criteriaSnapshotJson,
+            recommendationChoicesSnapshotJson,
+            ...revision
+          }) => ({
             ...revision,
             ...parseHistoricalReviewRevision({
               id: revision.id,
@@ -1027,6 +1073,7 @@ export async function loader({ request, context }: LoaderFunctionArgs) {
               scorecardId: revision.scorecardId,
               scorecardVersion: revision.scorecardVersion,
               criteriaSnapshotJson,
+              recommendationChoicesSnapshotJson,
             }),
           }),
         ),
@@ -1097,6 +1144,7 @@ export async function loader({ request, context }: LoaderFunctionArgs) {
     resultSort,
     resultPreset,
     resultsRoundId,
+    resultRecommendationChoices,
     resultsPage,
     resultsPageSize,
     resultsTotal,

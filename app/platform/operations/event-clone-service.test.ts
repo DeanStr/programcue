@@ -171,8 +171,15 @@ describe("event cloning", () => {
         "INSERT OR IGNORE INTO evaluation_plans (id,event_id,name,status,created_by_person_id) VALUES ('clone-plan',?,'Review plan','active',?)",
       ).bind(viewer.eventId, viewer.personId),
       env.DB.prepare(
-        "INSERT OR IGNORE INTO evaluation_rounds (id,event_id,plan_id,round_number,name,status,opens_at,closes_at,blinded_reviewing,scorecard_id,scorecard_version) VALUES ('clone-round',?,'clone-plan',1,'First round','active',unixepoch(),unixepoch()+86400,1,'clone-scorecard',2)",
-      ).bind(viewer.eventId),
+        "INSERT OR IGNORE INTO evaluation_rounds (id,event_id,plan_id,round_number,name,status,opens_at,closes_at,blinded_reviewing,scorecard_id,scorecard_version,recommendation_choices_json) VALUES ('clone-round',?,'clone-plan',1,'First round','active',unixepoch(),unixepoch()+86400,1,'clone-scorecard',2,?)",
+      ).bind(
+        viewer.eventId,
+        JSON.stringify([
+          { id: "advance", label: "Advance" },
+          { id: "discuss", label: "Discuss" },
+          { id: "decline", label: "Decline" },
+        ]),
+      ),
       env.DB.prepare(
         "INSERT OR IGNORE INTO evaluation_criteria (id,event_id,round_id,name,input_type,options_json,weight_percent,required,position) VALUES ('clone-criterion',?,'clone-round','Fit','dropdown','[\"Strong\",\"Weak\"]',0,1,0)",
       ).bind(viewer.eventId),
@@ -457,7 +464,8 @@ describe("event cloning", () => {
       await env.DB.prepare(
         `SELECT status, opens_at AS opensAt, closes_at AS closesAt,
                 blinded_reviewing AS blindedReviewing, scorecard_id AS scorecardId,
-                scorecard_version AS scorecardVersion
+                scorecard_version AS scorecardVersion,
+                recommendation_choices_json AS recommendationChoicesJson
            FROM evaluation_rounds WHERE event_id = ?`,
       )
         .bind(cloned.eventId)
@@ -469,6 +477,11 @@ describe("event cloning", () => {
       blindedReviewing: 1,
       scorecardId: "clone-scorecard",
       scorecardVersion: 2,
+      recommendationChoicesJson: JSON.stringify([
+        { id: "advance", label: "Advance" },
+        { id: "discuss", label: "Discuss" },
+        { id: "decline", label: "Decline" },
+      ]),
     });
     expect(
       await env.DB.prepare(

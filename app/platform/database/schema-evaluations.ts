@@ -148,6 +148,11 @@ export const evaluationRounds = sqliteTable(
       .default(false),
     scorecardId: text("scorecard_id").notNull(),
     scorecardVersion: integer("scorecard_version").notNull().default(1),
+    recommendationChoicesJson: text("recommendation_choices_json")
+      .notNull()
+      .default(
+        '[{"id":"accept","label":"Accept"},{"id":"minor_changes","label":"Minor"},{"id":"conditional_accept","label":"Conditional"},{"id":"waitlist","label":"Waitlist"},{"id":"reject","label":"Reject"}]',
+      ),
     advancementRuleJson: text("advancement_rule_json").notNull().default("{}"),
     revision: integer("revision").notNull().default(1),
     lastOperationId: text("last_operation_id"),
@@ -402,9 +407,14 @@ export const reviews = sqliteTable(
       .$type<"draft" | "submitted" | "locked" | "reopened">(),
     scoresJson: text("scores_json").notNull().default("{}"),
     weightedScore: real("weighted_score"),
-    recommendation: text("recommendation").$type<
-      "accept" | "minor_changes" | "conditional_accept" | "waitlist" | "reject"
-    >(),
+    recommendation: text("recommendation"),
+    recommendationChoicesSnapshotJson: text(
+      "recommendation_choices_snapshot_json",
+    )
+      .notNull()
+      .default(
+        '[{"id":"accept","label":"Accept"},{"id":"minor_changes","label":"Minor"},{"id":"conditional_accept","label":"Conditional"},{"id":"waitlist","label":"Waitlist"},{"id":"reject","label":"Reject"}]',
+      ),
     confidence: integer("confidence"),
     submitterFeedback: text("submitter_feedback"),
     privateNotes: text("private_notes"),
@@ -653,6 +663,13 @@ export const reviewRevisions = sqliteTable(
     scorecardId: text("scorecard_id"),
     scorecardVersion: integer("scorecard_version"),
     criteriaSnapshotJson: text("criteria_snapshot_json"),
+    recommendationChoicesSnapshotJson: text(
+      "recommendation_choices_snapshot_json",
+    )
+      .notNull()
+      .default(
+        '[{"id":"accept","label":"Accept"},{"id":"minor_changes","label":"Minor"},{"id":"conditional_accept","label":"Conditional"},{"id":"waitlist","label":"Waitlist"},{"id":"reject","label":"Reject"}]',
+      ),
     aiSuggestionId: text("ai_suggestion_id").references(
       () => reviewerAiSuggestions.id,
     ),

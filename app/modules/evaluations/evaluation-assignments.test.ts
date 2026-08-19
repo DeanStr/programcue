@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it } from "vitest";
 
 import type { Viewer } from "~/platform/auth/authorize.server";
 import { ensureDemoData } from "~/platform/demo/seed.server";
+import { defaultRecommendationChoices } from "./evaluation-recommendation-choices";
 import {
   EvaluationRevisionConflictError,
   EvaluationService,
@@ -330,6 +331,7 @@ describe("evaluation vertical slice", () => {
               id: "eval-session-round",
               name: "Session quality review",
               anonymous: false,
+              recommendationChoices: defaultRecommendationChoices(),
               criteria,
             },
           ],
@@ -529,6 +531,7 @@ describe("evaluation vertical slice", () => {
               id: "eval-session-state-round",
               name: "Session review",
               anonymous: false,
+              recommendationChoices: defaultRecommendationChoices(),
               criteria,
             },
           ],
@@ -763,6 +766,7 @@ describe("evaluation vertical slice", () => {
               id: "eval-explicit-selection-round",
               name: "Initial review",
               anonymous: false,
+              recommendationChoices: defaultRecommendationChoices(),
               criteria,
             },
           ],
@@ -909,6 +913,7 @@ describe("evaluation vertical slice", () => {
               id: "eval-revoked-round",
               name: "Initial review",
               anonymous: false,
+              recommendationChoices: defaultRecommendationChoices(),
               criteria,
             },
           ],
@@ -1091,6 +1096,7 @@ describe("evaluation vertical slice", () => {
             id: "eval-self-review-email-round",
             name: "Initial review",
             anonymous: false,
+            recommendationChoices: defaultRecommendationChoices(),
             criteria,
           },
         ],
@@ -1146,6 +1152,7 @@ describe("evaluation vertical slice", () => {
             id: "eval-assistant-assignment-round",
             name: "Assistant assignment round",
             anonymous: false,
+            recommendationChoices: defaultRecommendationChoices(),
             criteria,
           },
         ],
@@ -1187,6 +1194,7 @@ describe("evaluation vertical slice", () => {
             id: "eval-undo-round",
             name: "Initial review",
             anonymous: false,
+            recommendationChoices: defaultRecommendationChoices(),
             criteria,
           },
         ],

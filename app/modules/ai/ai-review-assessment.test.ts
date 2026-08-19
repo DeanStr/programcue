@@ -2,6 +2,7 @@ import { env } from "cloudflare:test";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { ensureDemoEvaluationData } from "~/modules/evaluations/demo.server";
+import { defaultRecommendationChoices } from "~/modules/evaluations/evaluation-recommendation-choices";
 import { EvaluationService } from "~/modules/evaluations/evaluation-service.server";
 import { CANONICAL_EVENT_FILE_POLICY_JSON } from "~/modules/files/file-policy";
 import type { Viewer } from "~/platform/auth/authorize.server";
@@ -1055,6 +1056,7 @@ describe("persisted AI first-pass review assessments", () => {
         opensAt: null,
         closesAt: null,
         anonymous: true,
+        recommendationChoices: defaultRecommendationChoices(),
         criteria: [
           {
             name: "Programme fit",
@@ -1425,6 +1427,7 @@ describe("persisted AI first-pass review assessments", () => {
               opensAt: null,
               closesAt: null,
               anonymous: true,
+              recommendationChoices: defaultRecommendationChoices(),
               criteria: [
                 {
                   name: "Programme fit",

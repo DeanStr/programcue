@@ -15,6 +15,10 @@ export type EvaluationResultSignals = {
   moderationStatus: string | null;
 };
 
+export function createEvaluationRecommendationCounts() {
+  return Object.create(null) as Record<string, number>;
+}
+
 export function evaluationResultFlags(result: EvaluationResultSignals) {
   const mixedRecommendations =
     Object.values(result.recommendationCounts).filter((count) => count > 0)

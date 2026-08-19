@@ -7,6 +7,7 @@ import type { Viewer } from "~/platform/auth/authorize.server";
 import { ensureDemoData } from "~/platform/demo/seed.server";
 import { processCommunicationSend } from "../../../workers/queue/communication-send";
 import { EvaluationDecisionService } from "./evaluation-decision-service.server";
+import { defaultRecommendationChoices } from "./evaluation-recommendation-choices";
 import {
   EvaluationRevisionConflictError,
   EvaluationService,
@@ -2604,6 +2605,7 @@ describe("evaluation vertical slice", () => {
               id: "eval-decision-assignment-round",
               name: "Initial review",
               anonymous: false,
+              recommendationChoices: defaultRecommendationChoices(),
               criteria,
             },
           ],

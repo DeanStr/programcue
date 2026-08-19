@@ -648,6 +648,15 @@ invalidation subsystem remain excluded.
   retained fetcher response is not a CAS token; an older response cannot clear
   newer edits or advance the revision. The server remains the serialising and
   compare-and-set authority.
+- **Per-round reviewer recommendation vocabulary:** Each evaluation round owns
+  an ordered list of two to seven choices with stable IDs and editable labels.
+  The list becomes immutable when the round receives its first assignment, and
+  reviews plus every review revision retain the exact ordered choice snapshot.
+  Result views, API reads, Airtable projection and CSV exports resolve labels
+  and ordering from that configuration rather than a platform enum. Reviewer
+  recommendations remain advisory: moderation and final applicant decisions
+  keep their separate fixed consequential statuses, with no automatic mapping,
+  weights, colours, branching or policy automation.
 
 - **Form configuration authority:** protected Track and Format questions are
   complete ordered projections of Event Setup, not independently editable
