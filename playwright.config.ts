@@ -12,7 +12,7 @@ const laptopVisualTag = /@laptop-visual/;
 export const desktopChromiumProject = {
   name: "desktop-chromium",
   grepInvert: laptopVisualTag,
-  testIgnore: /cross-browser-smoke\.spec\.ts/,
+  testIgnore: /(cross-browser-smoke|evaluation-public-application)\.spec\.ts/,
   use: {
     ...devices["Desktop Chrome"],
     viewport: { width: 1440, height: 1000 },
