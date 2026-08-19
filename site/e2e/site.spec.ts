@@ -189,9 +189,7 @@ test("the product guide hub lists every topic and opens an article", async ({
     page.getByRole("heading", { name: "If you run the event" }),
   ).toBeVisible();
   await expect(page.locator("main")).toContainText("Programme setup");
-  await expect(page.locator("main")).toContainText(
-    "19 August 2026",
-  );
+  await expect(page.locator("main")).toContainText("19 August 2026");
   await expect(page.locator(".page-head")).toHaveScreenshot("public-guide.png");
   await expectContained(page, "public guide visual");
 
