@@ -254,7 +254,9 @@ function PersonaCard({
           <h3>{identity.label}</h3>
           <p>{identity.name}</p>
         </div>
-        {isCurrent ? <span className="status success">Current</span> : null}
+        {isCurrent ? (
+          <span className="status success">Selected persona</span>
+        ) : null}
       </div>
       <p className="pc-eval-persona-copy">{identity.description}</p>
       <div className="pc-eval-try">
@@ -680,8 +682,9 @@ export function EvaluationAccessSurface({
           <div className="pc-admin-section-head-copy">
             <h2 id="showcase-personas-title">Showcase personas</h2>
             <p>
-              Populated roles for exploring the product. Each opens on useful
-              seeded work rather than an empty workspace.
+              Populated roles for exploring the product. Their cards describe
+              the reset baseline; because the fixture is shared and mutable,
+              later workflow actions can change that seeded work.
             </p>
           </div>
         </div>

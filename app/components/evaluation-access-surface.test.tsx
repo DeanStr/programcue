@@ -226,7 +226,15 @@ describe("evaluation persona board", () => {
     );
     expect(markup).toContain('href="/admin/command"');
     expect(markup).toContain("Continue as Jordan Alvarez");
-    expect(markup).toContain("Current</span>");
+    expect(markup).toContain("Selected persona</span>");
+  });
+
+  it("distinguishes showcase reset baselines from mutable shared state", () => {
+    const markup = render();
+
+    expect(markup).toContain("Their cards describe");
+    expect(markup).toContain("the reset baseline");
+    expect(markup).toContain("later workflow actions can change");
   });
 
   it("does not promise account-free switching where an activation step exists", () => {

@@ -229,12 +229,20 @@ describe("production evaluation guide", () => {
         "enable reviewer AI in Review & selection",
       ),
     });
-    expect(
-      unlockedGuide.identities.find((identity) => identity.key === "reviewer"),
-    ).toMatchObject({
-      description: expect.stringContaining("completed scoring"),
-      whatToTry: expect.stringContaining("then switch to Clean reviewer"),
+    const showcaseReviewer = unlockedGuide.identities.find(
+      (identity) => identity.key === "reviewer",
+    );
+    expect(showcaseReviewer).toMatchObject({
+      description: expect.stringContaining(
+        "Reset baseline: a reviewer queue with completed scoring",
+      ),
+      whatToTry: expect.stringContaining(
+        "If this baseline no longer matches the workspace, the shared fixture has progressed",
+      ),
     });
+    expect(showcaseReviewer?.whatToTry).toContain(
+      "then switch to Clean reviewer",
+    );
 
     const selected = await action({
       request: request(

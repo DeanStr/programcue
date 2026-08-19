@@ -48,9 +48,9 @@ export const EVALUATION_IDENTITIES = {
     ...DEMO_IDENTITIES.evaluator,
     label: "Reviewer",
     description:
-      "A reviewer queue with completed scoring on one proposal and an open assignment on another.",
+      "Reset baseline: a reviewer queue with completed scoring on one proposal and an open assignment on another.",
     whatToTry:
-      "Inspect completed scoring history, then open the assigned proposal. To try reviewer AI, enable it as Event organiser, assign a proposal, then switch to Clean reviewer.",
+      "After a reset, inspect the completed review, then open the assigned proposal. If this baseline no longer matches the workspace, the shared fixture has progressed; reset before starting a separate run. To try reviewer AI, enable it as Event organiser, assign a proposal, then switch to Clean reviewer.",
     group: "showcase",
   },
   applicant: {
