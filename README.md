@@ -57,7 +57,8 @@ Useful routes:
 - Participant workspace: `http://127.0.0.1:5173/participant/dashboard`
 - Public programme: `http://127.0.0.1:5173/public/programme/future-of-events-2027`
 - Public speakers: `http://127.0.0.1:5173/public/programme/future-of-events-2027/speakers`
-- Public timetable: `http://127.0.0.1:5173/public/programme/future-of-events-2027/schedule`
+- Public timetable: `http://127.0.0.1:5173/public/programme/future-of-events-2027/timetable`
+- Public day-by-day schedule: `http://127.0.0.1:5173/public/programme/future-of-events-2027/schedule`
 - Public Speaker Gallery: `http://127.0.0.1:5173/public/programme/future-of-events-2027/gallery`
 - Public application: `http://127.0.0.1:5173/apply/form`
 - API reference: `http://127.0.0.1:5173/api/docs`

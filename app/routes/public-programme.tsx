@@ -257,15 +257,15 @@ export async function loader({ request, params, context }: Route.LoaderArgs) {
   if (!slug) throw new Response("Published event not found", { status: 404 });
   const url = new URL(request.url);
   const embedded = url.pathname.startsWith("/embed/");
-  // Agenda and Schedule previously exposed two chronological lists. Preserve
-  // already-shared URLs while sending visitors to the consolidated Programme
-  // view; managed agenda embeds are normalised when their configuration loads.
+  // Preserve already-shared chronological Agenda URLs without keeping Agenda
+  // as an authorable surface. Managed agenda embeds are normalised when their
+  // configuration loads and installed widgets normalise in the hosted script.
   if (params.surface === "agenda") {
     const destination = new URL(request.url);
     destination.pathname = embedded
-      ? `/embed/${encodeURIComponent(slug)}/sessions`
-      : publicProgrammeSurfacePath(slug, "sessions");
-    throw redirect(`${destination.pathname}${destination.search}`);
+      ? `/embed/${encodeURIComponent(slug)}/schedule`
+      : publicProgrammeSurfacePath(slug, "schedule");
+    throw redirect(`${destination.pathname}${destination.search}`, 308);
   }
   const managedEmbedSlug =
     "embedSlug" in params && typeof params.embedSlug === "string"

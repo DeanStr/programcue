@@ -11,6 +11,7 @@ export const PROGRAMME_EMBED_CONTROLS = [
 export const PROGRAMME_EMBED_SURFACES = [
   "sessions",
   "speakers",
+  "timetable",
   "schedule",
   "gallery",
 ] as const;
@@ -152,7 +153,7 @@ export function parseProgrammeEmbedSurface(
     return raw as ProgrammeEmbedSurface;
   }
   throw new ProgrammeEmbedConfigurationError(
-    "Embed surface must be sessions, speakers, schedule or gallery.",
+    "Embed surface must be sessions, speakers, timetable, schedule or gallery.",
   );
 }
 
@@ -406,10 +407,9 @@ export function parseProgrammeEmbedConfiguration(
 export function parsePersistedProgrammeEmbedConfiguration(
   value: unknown,
 ): ProgrammeEmbedConfiguration {
-  // Agenda was a published embed surface before Programme and Timetable were
-  // given distinct jobs. Existing managed embeds are durable external
-  // installations, so read that one retired value as the consolidated
-  // Programme surface. Strict authoring paths use
+  // Agenda was a published chronological embed surface. Existing managed
+  // embeds are durable external installations, so read that one retired value
+  // as the surviving chronological Schedule surface. Strict authoring paths use
   // parseProgrammeEmbedConfiguration and reject the retired value.
   if (
     value &&
@@ -419,7 +419,7 @@ export function parsePersistedProgrammeEmbedConfiguration(
   ) {
     return parseProgrammeEmbedConfiguration({
       ...value,
-      surface: "sessions",
+      surface: "schedule",
     });
   }
   return parseProgrammeEmbedConfiguration(value);

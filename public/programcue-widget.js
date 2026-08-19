@@ -64,12 +64,12 @@
   var surface = script.hasAttribute("data-surface")
     ? (script.dataset.surface || "").trim()
     : "sessions";
-  // Keep already-installed widgets working after Agenda was consolidated into
-  // Programme. New snippets never generate this retired surface.
-  if (surface === "agenda") surface = "sessions";
-  if (!/^(sessions|speakers|schedule|gallery)$/.test(surface)) {
+  // Keep already-installed chronological Agenda widgets working. New snippets
+  // never generate this retired surface.
+  if (surface === "agenda") surface = "schedule";
+  if (!/^(sessions|speakers|timetable|schedule|gallery)$/.test(surface)) {
     throw new Error(
-      "Program Cue widget data-surface must be sessions, speakers, schedule or gallery.",
+      "Program Cue widget data-surface must be sessions, speakers, timetable, schedule or gallery.",
     );
   }
   var frameUrl = new URL(

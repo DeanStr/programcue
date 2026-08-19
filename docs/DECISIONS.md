@@ -193,8 +193,9 @@ event-scoped ZIP operation ID so polling and a ready download survive reload.
 
 ## Public programme workstream decisions
 
-**Public embed surfaces.** The embed URL and generated widget allow exactly four
-published surfaces: programme sessions, speakers, timetable and gallery. One
+**Public embed surfaces.** The embed URL and generated widget allow exactly five
+published surfaces: programme sessions, speakers, timetable, day-by-day
+schedule and gallery. One
 strict allowlist controls optional supporting fields such as time, location,
 track, format, descriptions, rich speaker details and linked sessions. Session
 titles and speaker names remain the identifying minimum; disabling the
@@ -203,22 +204,25 @@ detail-panel activation without hiding those names. Speaker-directory
 visibility is the separate sessions-overview `directory` choice. Iframe and
 auto-resizing widget output share this stateless contract, unknown surfaces or
 fields fail explicitly, and every surface continues to read only the current
-immutable published programme snapshot. Saved embed records, arbitrary CSS and
+immutable published programme snapshot. Managed embed records store only
+validated presentation configuration and lifecycle state; arbitrary CSS and
 parallel content stores are not introduced. The retired agenda surface is not
-available for new embeds. Durable managed agenda embeds read as Programme, and
-already-shared stateless agenda URLs redirect there. Existing script installs
-with `data-surface="agenda"` also normalise to Programme when the hosted widget
-runtime loads; new generated snippets never emit that retired value.
+available for new embeds. Durable managed agenda embeds read as Schedule, and
+already-shared stateless agenda URLs permanently redirect there without losing
+their query. Existing script installs with `data-surface="agenda"` also
+normalise to Schedule when the hosted widget runtime loads; strict create and
+update input rejects Agenda and new generated snippets never emit it.
 
 **Public homepage view state.** When an event has a published event site, the
-root programme URL is Event home and does not render the Programme/Timetable
-view switcher. That switcher appears on the dedicated Programme and Timetable
-routes, where exactly one destination is current. Without a published event
-site, the root remains the programme itself and retains the switcher.
+root programme URL is Event home and does not render a local view switcher.
+Programme is also a complete destination without a duplicative local switch.
+The dedicated Schedule and Timetable routes share a `Timetable | Day-by-day`
+switch, while speakers retain `Directory | Gallery`. Without a published event
+site, the root remains the programme itself.
 
 | Decision                  | Outcome                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           |
 | ------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Public programme surfaces | Programme, Timetable, speakers and Speaker Gallery are route-level views over one `PublishedProgramme` snapshot. Programme owns browsing, filters, expandable descriptions and session saving. Timetable alone owns the time-by-room comparison, reflowing to chronological cards on narrow screens. Activating a Timetable session opens its permitted published details without replacing the timetable: standalone pages use a focus-restoring modal and retain an explicit session-page link, while embeds use a focus-managed inline disclosure so auto-sized widgets cannot centre details outside the host viewport. My itinerary navigation and its panel appear only after a visitor saves a session (or opens a shared itinerary). The gallery does not create a second speaker or schedule store, and all private reads retain event, publication, visibility and profile predicates. This four-surface navigation is an intentional product consolidation; it does not count as the evaluator-distinct fifth Schedule Itinerary embed, which remains outstanding and must be recorded as such. Optional speaker title, organisation and biography fields render only when present; attendee surfaces do not turn missing profile data into administrator-facing quality labels. |
+| Public programme surfaces | Programme, speakers, Timetable, Day-by-day Schedule and Speaker Gallery are route-level views over one `PublishedProgramme` snapshot. Programme owns browsing and filtering. Schedule is one attendee concept with two explicit views: Timetable owns room-by-time comparison, while Day-by-day owns chronological, information-rich cards with session descriptions, full time and place, track/format, speaker affiliations and standalone save controls. Activating a Timetable session opens its permitted published details without replacing the timetable: standalone pages use a focus-restoring modal and retain an explicit session-page link, while embeds use a focus-managed inline disclosure so auto-sized widgets cannot centre details outside the host viewport. My itinerary remains the visitor's saved subset; its navigation and panel appear only after a visitor saves a session (or opens a shared itinerary). The gallery does not create a second speaker or schedule store, and all private reads retain event, publication, visibility and profile predicates. Optional speaker title, organisation and biography fields render only when present; attendee surfaces do not turn missing profile data into administrator-facing quality labels. Stable identifiers retain their historical meaning: `schedule` is chronological, `timetable` is the grid and retired `agenda` is compatibility-only. |
 | Demo headshots            | Only the canonical local-demo or production-evaluation event's published programme projection and optional application featured-speaker preview may use the four bundled raster assets for the four explicitly allowlisted fixture people (Priya Shah, Alex Morgan, Priya Raman and Marcus Okafor). They are not authenticated profile or file state. Any non-deleted real headshot asset, including an unreleased, quarantined or otherwise ineligible one, suppresses that person's bundle. Ordinary production requires a released clean R2 version and never treats participant-upload metadata as upload or scanner success. |
 | Gallery accessibility     | Gallery cards are keyboard-activatable controls; detail is an in-page dialog panel with an explicit close button, deterministic biography expansion and focus restoration to the opening card. Search state remains component-owned while the panel is open.                                                                                                                                                                                                                                                                                                                                                                      |
 | Speaker amplification     | `?speaker=` is public speaker-detail state resolved server-side against the current published snapshot. Invalid or unpublished identities return 404. Opening and closing a profile changes browser history; Copy link is universal and Web Share is progressive enhancement. Canonical and unfurl URLs are absolute and speaker-specific. `og:image` is emitted only for a current anonymously readable released headshot, never for a bundled demo portrait or private file. Social OAuth and generated promotional images remain out of scope.                                                                                 |
@@ -1048,7 +1052,7 @@ editorial changes invalidate the representation together.
 The programme and fixed event pages share one event header, navigation and
 footer contract. With a published site, the root is explicitly Event home while
 Programme and Speakers use their dedicated programme routes. Those three
-primary destinations stay visible on wide screens; Timetable, gallery and the
+primary destinations stay visible on wide screens; Schedule, gallery and the
 five bounded editorial pages live in one keyboard-accessible Browse
 popover grouped as Programme views and Event information. At tablet widths all
 destinations use the same grouped Browse disclosure, so navigation capacity
@@ -1124,10 +1128,10 @@ Applications, Speakers, Programme, Communications, Event settings and
 Operations. Existing route-specific tools remain second-level destinations;
 they do not move or disappear with event phase. The public programme exposes
 Programme and Speakers as its stable concepts; My itinerary appears only after
-a visitor saves a session or opens a shared itinerary. Programme and
-Timetable, and Directory and Gallery, remain ordinary deep-linkable views
-within those concepts. The retired Agenda URL redirects to Programme instead
-of remaining a competing view. Every organiser destination has one
+a visitor saves a session or opens a shared itinerary. Timetable and
+Day-by-day, and Directory and Gallery, remain ordinary deep-linkable views
+within those concepts. The retired Agenda URL permanently redirects to
+Day-by-day Schedule instead of remaining a competing view. Every organiser destination has one
 explicit family assignment; an authorised child is promoted when its parent is
 unavailable, while missing or duplicate assignments fail validation instead of
 falling into a catch-all group. Record-detail routes own a small typed

@@ -195,7 +195,7 @@ describe("published programme and itinerary", () => {
       throw new Error("Historical agenda embed returned a raw response.");
     expect(historicalAgenda.data).toMatchObject({
       embedded: true,
-      surface: "sessions",
+      surface: "schedule",
       managedEmbedRevision: 2,
     });
 

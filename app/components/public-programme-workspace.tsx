@@ -54,8 +54,11 @@ function PublicProgrammeViewNavigation({
 }: {
   model: PublicProgrammeModel;
 }) {
+  const location = useLocation();
   const { surface, programme } = model;
   const speakerViews = ["speakers", "gallery"].includes(surface);
+  const scheduleViews = ["schedule", "timetable"].includes(surface);
+  if (!speakerViews && !scheduleViews) return null;
   // Home, list, and the speaker cast share the wide measure so a pair of
   // portraits can own the row the way the homepage already does.
   const wideSurface =
@@ -80,22 +83,22 @@ function PublicProgrammeViewNavigation({
       ]
     : [
         {
-          label: "Programme",
-          shortLabel: "Programme",
-          href: publicProgrammeSurfacePath(programme.event.slug, "sessions"),
-          active: surface === "overview" || surface === "sessions",
-        },
-        {
           label: "Timetable",
           shortLabel: "Timetable",
-          href: publicProgrammeSurfacePath(programme.event.slug, "schedule"),
+          href: `${publicProgrammeSurfacePath(programme.event.slug, "timetable")}${location.search}`,
+          active: surface === "timetable",
+        },
+        {
+          label: "Day-by-day",
+          shortLabel: "Day-by-day",
+          href: `${publicProgrammeSurfacePath(programme.event.slug, "schedule")}${location.search}`,
           active: surface === "schedule",
         },
       ];
   return (
     <nav
       className={`public-view-navigation${wideSurface ? " is-wide" : ""}`}
-      aria-label={speakerViews ? "Speaker views" : "Programme views"}
+      aria-label={speakerViews ? "Speaker views" : "Schedule views"}
     >
       {views.map((view) => (
         <Link
@@ -1168,6 +1171,7 @@ export function PublicProgrammeWorkspace({
   const homeSurface = loaderData.surface === "overview";
   const siblingSurface =
     loaderData.surface === "schedule" ||
+    loaderData.surface === "timetable" ||
     loaderData.surface === "speakers" ||
     loaderData.surface === "gallery";
   const showHero = embedded || !siblingSurface;

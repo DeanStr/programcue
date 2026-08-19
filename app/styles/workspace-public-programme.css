@@ -1154,6 +1154,83 @@
   margin: 2px 0 0;
 }
 
+/* --- Day-by-day schedule ------------------------------------------------
+   A rail runs down the time column so each day reads as one chronological
+   sequence rather than a stack of unrelated cards. */
+.public-itinerary-list {
+  display: grid;
+  gap: var(--space-3);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.public-itinerary-card {
+  display: grid;
+  grid-template-columns: 168px minmax(0, 1fr);
+  gap: var(--space-5);
+  align-items: start;
+  padding: var(--space-5);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--surface);
+  box-shadow: var(--elev-1);
+}
+.public-itinerary-card.without-time {
+  grid-template-columns: minmax(0, 1fr);
+}
+.public-itinerary-title-row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-4);
+}
+/* biome-ignore lint/style/noDescendingSpecificity: Component variants intentionally precede broader child rules; their higher specificity preserves the intended state and layout overrides. */
+.public-itinerary-title-row h2 {
+  flex: 1 1 auto;
+  max-width: var(--measure-prose);
+}
+.public-itinerary-time {
+  display: grid;
+  align-content: start;
+  gap: 2px;
+  position: relative;
+  padding-left: var(--space-4);
+}
+.public-itinerary-time::before {
+  content: "";
+  position: absolute;
+  top: 4px;
+  bottom: 0;
+  left: 0;
+  width: 3px;
+  border-radius: var(--radius-full);
+  background: var(--accent-ink);
+  opacity: 0.55;
+}
+.public-itinerary-time .session-time-range {
+  font-size: var(--text-base);
+}
+.public-itinerary-content {
+  min-width: 0;
+}
+/* biome-ignore lint/style/noDescendingSpecificity: Component variants intentionally precede broader child rules; their higher specificity preserves the intended state and layout overrides. */
+.public-itinerary-content h2 {
+  margin: 0 0 var(--space-2);
+  font-size: var(--text-lg);
+  line-height: var(--leading-snug);
+  letter-spacing: var(--tracking-snug);
+}
+.public-itinerary-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2) var(--space-3);
+}
+.public-itinerary-card .session-save {
+  align-self: start;
+  margin: 0;
+}
+
 /* --- Timetable ----------------------------------------------------------
    Desktop answers the genuinely spatial question: what overlaps, and in
    which room? Source order remains chronological, and phones reflow the same

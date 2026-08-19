@@ -49,7 +49,7 @@ test("anonymous visitors can use all programme surfaces and the gallery detail",
     "Event home",
     "Programme",
     "Speakers",
-    "Timetable",
+    "Schedule",
     "Speaker Gallery",
     "About",
     "Sponsors",
@@ -78,29 +78,37 @@ test("anonymous visitors can use all programme surfaces and the gallery detail",
   await expect(
     eventNavigation.getByRole("link", { name: "Programme" }),
   ).toHaveAttribute("aria-current", "page");
-  const programmeViews = page.getByRole("navigation", {
-    name: "Programme views",
-  });
-  await expect(programmeViews.locator(".public-view-full")).toHaveText([
-    "Programme",
-    "Timetable",
-  ]);
   await expect(
-    programmeViews.getByRole("link", { name: "Programme" }),
-  ).toHaveAttribute("aria-current", "page");
-  await programmeViews.getByRole("link", { name: "Timetable" }).click();
+    page.getByRole("navigation", { name: "Schedule views" }),
+  ).toHaveCount(0);
+  await eventNavigation.getByLabel("Browse programme and event pages").click();
+  await eventNavigation.getByRole("link", { name: "Schedule" }).click();
   await expect(page).toHaveURL(
     /\/public\/programme\/future-of-events-2027\/schedule$/u,
   );
+  const scheduleViews = page.getByRole("navigation", {
+    name: "Schedule views",
+  });
+  await expect(scheduleViews.locator(".public-view-full")).toHaveText([
+    "Timetable",
+    "Day-by-day",
+  ]);
   await expect(
-    programmeViews.getByRole("link", { name: "Timetable" }),
+    scheduleViews.getByRole("link", { name: "Day-by-day" }),
   ).toHaveAttribute("aria-current", "page");
-  await programmeViews.getByRole("link", { name: "Programme" }).click();
+  await scheduleViews.getByRole("link", { name: "Timetable" }).click();
+  await expect(page).toHaveURL(
+    /\/public\/programme\/future-of-events-2027\/timetable$/u,
+  );
+  await expect(
+    scheduleViews.getByRole("link", { name: "Timetable" }),
+  ).toHaveAttribute("aria-current", "page");
+  await eventNavigation.getByRole("link", { name: "Programme" }).click();
   await expect(page).toHaveURL(
     /\/public\/programme\/future-of-events-2027\/sessions$/u,
   );
   await expect(
-    programmeViews.getByRole("link", { name: "Programme" }),
+    eventNavigation.getByRole("link", { name: "Programme" }),
   ).toHaveAttribute("aria-current", "page");
   await page
     .locator(".programme-entry")
@@ -146,12 +154,37 @@ test("anonymous visitors can use all programme surfaces and the gallery detail",
   await expect(page.getByText("Priya Shah", { exact: true })).toBeVisible();
   await expect(page.getByLabel("Search speakers by name")).toHaveCount(0);
 
+  const retiredAgenda = await page.request.get(
+    "/public/programme/future-of-events-2027/agenda?query=AI+operations",
+    { maxRedirects: 0 },
+  );
+  expect(retiredAgenda.status()).toBe(308);
+  expect(retiredAgenda.headers().location).toBe(
+    "/public/programme/future-of-events-2027/schedule?query=AI+operations",
+  );
   await openAnonymous(page, "/public/programme/future-of-events-2027/agenda");
   await expect(page).toHaveURL(
-    /\/public\/programme\/future-of-events-2027\/sessions$/u,
+    /\/public\/programme\/future-of-events-2027\/schedule$/u,
   );
 
   await openAnonymous(page, "/public/programme/future-of-events-2027/schedule");
+  await expect(
+    page.getByRole("heading", { name: "Day-by-day schedule", exact: true }),
+  ).toBeVisible();
+  await expect(page.locator(".public-itinerary-card")).toHaveCount(3);
+  await expect(page.locator(".public-itinerary-card").first()).toContainText(
+    "Director of Experience Design",
+  );
+  await expect(
+    page.getByRole("button", {
+      name: "Save The Future of Attendee Engagement to my itinerary",
+    }),
+  ).toBeVisible();
+
+  await openAnonymous(
+    page,
+    "/public/programme/future-of-events-2027/timetable",
+  );
   await expect(
     page.getByRole("heading", { name: "Timetable", exact: true }),
   ).toBeVisible();
@@ -169,6 +202,15 @@ test("anonymous visitors can use all programme surfaces and the gallery detail",
   await expect(dayButtons.first()).toBeFocused();
   await expect(dayButtons.first()).toHaveAttribute("aria-pressed", "true");
   await expect(page).toHaveURL(/day=Thursday%2C\+May\+20/u);
+  await scheduleViews.getByRole("link", { name: "Day-by-day" }).click();
+  await expect(page).toHaveURL(
+    /\/public\/programme\/future-of-events-2027\/schedule\?day=Thursday%2C\+May\+20$/u,
+  );
+  await expect(page.locator(".public-itinerary-card")).toHaveCount(3);
+  await scheduleViews.getByRole("link", { name: "Timetable" }).click();
+  await expect(page).toHaveURL(
+    /\/public\/programme\/future-of-events-2027\/timetable\?day=Thursday%2C\+May\+20$/u,
+  );
   const timetableSession = page.getByRole("button", {
     name: "Open details for AI in Event Operations",
   });
@@ -311,7 +353,10 @@ test("mobile programme navigation closes after activation and reflows at 320px",
     ),
   ).toBe(true);
 
-  await openAnonymous(page, "/public/programme/future-of-events-2027/schedule");
+  await openAnonymous(
+    page,
+    "/public/programme/future-of-events-2027/timetable",
+  );
   await expect(page.locator(".public-timetable-room").first()).toBeHidden();
   await expect(page.locator(".public-timetable-session")).toHaveCount(3);
   const timetableContainment = await page.evaluate(() => ({

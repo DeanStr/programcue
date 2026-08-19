@@ -105,11 +105,12 @@ describe("programme embed configuration", () => {
   it("accepts only explicit widget surfaces and allowlisted visible fields", () => {
     expect(parseProgrammeEmbedSurface(undefined)).toBe("sessions");
     expect(parseProgrammeEmbedSurface("gallery")).toBe("gallery");
+    expect(parseProgrammeEmbedSurface("timetable")).toBe("timetable");
     expect(() => parseProgrammeEmbedSurface("timeline")).toThrow(
-      /surface must be sessions, speakers, schedule or gallery/i,
+      /surface must be sessions, speakers, timetable, schedule or gallery/i,
     );
     expect(() => parseProgrammeEmbedSurface("agenda")).toThrow(
-      /surface must be sessions, speakers, schedule or gallery/i,
+      /surface must be sessions, speakers, timetable, schedule or gallery/i,
     );
     expect(parseProgrammeEmbedFields("time,location,description")).toEqual([
       "time",
@@ -303,7 +304,9 @@ describe("programme embed configuration", () => {
         ...configuration,
         surface: "agenda",
       }),
-    ).toThrow(/surface must be sessions, speakers, schedule or gallery/i);
+    ).toThrow(
+      /surface must be sessions, speakers, timetable, schedule or gallery/i,
+    );
     expect(
       parsePersistedProgrammeEmbedConfiguration(
         JSON.parse(JSON.stringify(configuration)),
@@ -324,7 +327,7 @@ describe("programme embed configuration", () => {
         ...configuration,
         surface: "agenda",
       }).surface,
-    ).toBe("sessions");
+    ).toBe("schedule");
   });
 
   it("generates stable managed iframe and widget destinations", () => {

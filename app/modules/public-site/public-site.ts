@@ -23,7 +23,7 @@ export const PUBLIC_EVENT_NAVIGATION_LABELS = {
   home: "Event home",
   sessions: "Programme",
   speakers: "Speakers",
-  schedule: "Timetable",
+  schedule: "Schedule",
   gallery: "Speaker Gallery",
   itinerary: "My itinerary",
   sharedItinerary: "Shared itinerary",
@@ -121,9 +121,12 @@ const publicSitePageSchema = z.object({
 });
 
 const reservedNavigationLabels = new Set(
-  Object.values(PUBLIC_EVENT_NAVIGATION_LABELS).map((label) =>
-    label.toLocaleLowerCase("en-US"),
-  ),
+  [
+    ...Object.values(PUBLIC_EVENT_NAVIGATION_LABELS),
+    "Timetable",
+    "Day-by-day",
+    "Day-by-day schedule",
+  ].map((label) => label.toLocaleLowerCase("en-US")),
 );
 
 const publicSitePagesSchema = z

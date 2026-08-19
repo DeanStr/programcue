@@ -10,6 +10,7 @@ export const PUBLIC_PROGRAMME_SURFACES = [
   "sessions",
   "speakers",
   "schedule",
+  "timetable",
   "gallery",
 ] as const;
 

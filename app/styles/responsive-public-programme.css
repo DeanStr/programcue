@@ -149,6 +149,11 @@
   .public-surface-search {
     width: 100%;
   }
+  .public-itinerary-card {
+    grid-template-columns: minmax(0, 1fr);
+    gap: var(--space-3);
+    padding: var(--space-4);
+  }
   .public-timetable-frame {
     overflow: visible;
     border: 0;
@@ -393,11 +398,18 @@
   .programme-entry.active {
     box-shadow: inset 3px 0 0 var(--event-accent);
   }
+  .public-itinerary-title-row,
   .public-timetable-session-heading {
     flex-direction: column;
   }
+  .public-itinerary-card .session-save,
   .public-timetable-session .session-save {
     width: 100%;
+  }
+  .public-itinerary-time {
+    display: flex;
+    align-items: baseline;
+    gap: var(--space-2);
   }
   .public-footer {
     flex-direction: column;

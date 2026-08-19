@@ -71,13 +71,17 @@ describe("public event site rules", () => {
       /navigation labels must be unique/i,
     );
 
-    const reserved = defaultPublicSiteDraft();
-    reserved.pages.about.enabled = true;
-    reserved.pages.about.navigationLabel = "sPeAkErS";
-    expect(() => publicSiteDraftSchema.parse(reserved)).toThrow(
-      /cannot use an event navigation label/i,
-    );
+    for (const label of ["sPeAkErS", "Timetable", "Day-by-day schedule"]) {
+      const reserved = defaultPublicSiteDraft();
+      reserved.pages.about.enabled = true;
+      reserved.pages.about.navigationLabel = label;
+      expect(() => publicSiteDraftSchema.parse(reserved)).toThrow(
+        /cannot use an event navigation label/i,
+      );
+    }
 
+    const reserved = defaultPublicSiteDraft();
+    reserved.pages.about.navigationLabel = "Timetable";
     reserved.pages.about.enabled = false;
     expect(publicSiteDraftSchema.parse(reserved).pages.about.enabled).toBe(
       false,

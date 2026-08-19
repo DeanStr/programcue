@@ -204,6 +204,10 @@ test("public and scheduling surfaces use complete, unique landmarks", async ({
     },
     {
       role: "administrator",
+      path: "/public/programme/future-of-events-2027/timetable",
+    },
+    {
+      role: "administrator",
       path: "/public/programme/future-of-events-2027/gallery",
     },
     { role: "submitter", path: "/apply/form" },

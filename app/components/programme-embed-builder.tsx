@@ -16,6 +16,7 @@ import type { ManagedProgrammeEmbed } from "~/modules/programme/programme-embed-
 import {
   type ProgrammeEmbedBuilderController,
   type ProgrammeEmbedSession,
+  programmeEmbedSurfaceDescriptions,
   programmeEmbedSurfaceLabels,
   useProgrammeEmbedBuilder,
 } from "./use-programme-embed-builder";
@@ -99,12 +100,27 @@ function EmbedConfigurationWorkflow({
                   update("surface", event.target.value as ProgrammeEmbedSurface)
                 }
               >
-                {PROGRAMME_EMBED_SURFACES.map((surface) => (
+                {PROGRAMME_EMBED_SURFACES.filter(
+                  (surface) => surface === "sessions" || surface === "speakers",
+                ).map((surface) => (
                   <option key={surface} value={surface}>
                     {programmeEmbedSurfaceLabels[surface]}
                   </option>
                 ))}
+                <optgroup label="Schedule">
+                  {(["timetable", "schedule"] as const).map((surface) => (
+                    <option key={surface} value={surface}>
+                      {programmeEmbedSurfaceLabels[surface]}
+                    </option>
+                  ))}
+                </optgroup>
+                <option value="gallery">
+                  {programmeEmbedSurfaceLabels.gallery}
+                </option>
               </select>
+              <span className="help">
+                {programmeEmbedSurfaceDescriptions[configuration.surface]}
+              </span>
             </label>
           </fieldset>
 

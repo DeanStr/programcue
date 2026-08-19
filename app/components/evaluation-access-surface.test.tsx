@@ -94,6 +94,7 @@ describe("evaluation access gate", () => {
 
     for (const href of [
       "/public/programme/future-of-events-2027",
+      "/public/programme/future-of-events-2027/timetable",
       "/public/programme/future-of-events-2027/schedule",
       "/public/programme/future-of-events-2027/gallery",
       "/apply/form",

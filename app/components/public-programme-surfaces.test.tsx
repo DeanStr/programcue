@@ -22,6 +22,7 @@ import {
   PublicScheduleSurface,
   PublicSpeakerGallerySurface,
   PublicSpeakersSurface,
+  PublicTimetableSurface,
   publicTimetableLayout,
 } from "./public-programme-surfaces";
 
@@ -158,7 +159,7 @@ describe("public programme speaker surfaces", () => {
       speakers: [speaker],
     } as PublishedProgramme;
     const markup = renderToStaticMarkup(
-      <PublicScheduleSurface
+      <PublicTimetableSurface
         model={model({
           programme: timetableProgramme,
           day: "All days",
@@ -196,7 +197,7 @@ describe("public programme speaker surfaces", () => {
       speakers: [speaker],
     } as PublishedProgramme;
     const markup = renderToStaticMarkup(
-      <PublicScheduleSurface
+      <PublicTimetableSurface
         model={model({
           programme: timetableProgramme,
           day: "All days",
@@ -215,6 +216,38 @@ describe("public programme speaker surfaces", () => {
     );
     expect(markup).not.toContain('aria-label="Speakers"');
     expect(markup).not.toContain('class="public-session-speakers"');
+  });
+
+  it("renders the day-by-day schedule as rich chronological cards", () => {
+    const scheduleProgramme = {
+      ...programme,
+      sessions: [session],
+      speakers: [speaker],
+    } as PublishedProgramme;
+    const markup = renderToStaticMarkup(
+      <PublicScheduleSurface
+        model={model({
+          programme: scheduleProgramme,
+          day: "All days",
+          days: ["Tuesday, May 20"],
+          visible: [session],
+          embedded: true,
+          shared: false,
+          speakerById: new Map([[speaker.id, speaker]]),
+          expandedDescriptions: [],
+          toggleDescription: vi.fn(),
+        })}
+      />,
+    );
+
+    expect(markup).toContain(">Day-by-day schedule<");
+    expect(markup).toContain(
+      "Browse the published programme in chronological order, with the details included in this view.",
+    );
+    expect(markup).toContain('class="public-itinerary-card"');
+    expect(markup).toContain("A published session description.");
+    expect(markup).toContain("Director of Experience Design · EventLab");
+    expect(markup).not.toContain("Save The Future of Attendee Engagement");
   });
 
   it("keeps contextual speaker avatars decorative", () => {

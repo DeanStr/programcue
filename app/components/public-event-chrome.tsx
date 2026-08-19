@@ -87,7 +87,10 @@ export function PublicEventHeader({
         key: surface,
         label: PUBLIC_EVENT_NAVIGATION_LABELS[surface],
         href: publicProgrammeSurfacePath(slug, surface),
-        active: activeSurface === surface,
+        active:
+          surface === "schedule"
+            ? activeSurface === "schedule" || activeSurface === "timetable"
+            : activeSurface === surface,
         routed: true,
       }))
     : [];

@@ -40,8 +40,20 @@ export const programmeEmbedSurfaceLabels: Record<
 > = {
   sessions: "Programme / session list",
   speakers: "Speakers list",
-  schedule: "Timetable",
+  timetable: "Timetable",
+  schedule: "Day-by-day schedule",
   gallery: "Speaker gallery",
+};
+
+export const programmeEmbedSurfaceDescriptions: Record<
+  ProgrammeEmbedSurface,
+  string
+> = {
+  sessions: "Best for browsing and filtering the complete programme.",
+  speakers: "Best for a compact published speaker directory.",
+  timetable: "Best for comparing rooms, times and overlapping sessions.",
+  schedule: "Best for mobile sites and rich chronological session browsing.",
+  gallery: "Best for a visual, portrait-led speaker showcase.",
 };
 
 export function useProgrammeEmbedBuilder({

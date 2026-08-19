@@ -153,6 +153,67 @@ function PublicSessionSpeakerNames({
   );
 }
 
+function PublicSessionSpeakers({
+  session,
+  model,
+}: {
+  session: PublishedSession;
+  model: PublicProgrammeModel;
+}) {
+  const speakers = sessionSpeakerDetails(session, model.speakerById);
+  return speakers.length ? (
+    <div className="public-session-speakers">
+      {speakers.map((speaker) => (
+        <div className="public-session-speaker" key={speaker.id}>
+          {model.showEmbedField("images") ? (
+            <PublicSpeakerAvatar speaker={speaker} size={32} />
+          ) : null}
+          <span>
+            <strong>{speaker.displayName}</strong>
+            {model.showEmbedField("affiliations") &&
+            speakerAffiliation(speaker) ? (
+              <span>{speakerAffiliation(speaker)}</span>
+            ) : null}
+          </span>
+        </div>
+      ))}
+    </div>
+  ) : (
+    <p className="subtle">Speaker to be announced</p>
+  );
+}
+
+function SessionCardDescription({
+  session,
+  model,
+}: {
+  session: PublishedSession;
+  model: PublicProgrammeModel;
+}) {
+  const description = normaliseDescription(session.description);
+  const snippet = descriptionSnippet(description);
+  const expanded = model.expandedDescriptions.includes(session.id);
+  return (
+    <div className="public-surface-description">
+      <p id={`public-${session.id}-description`}>
+        {expanded ? description : snippet || "Description not provided."}
+      </p>
+      {snippet !== description ? (
+        <button
+          type="button"
+          className="btn small"
+          aria-expanded={expanded}
+          aria-controls={`public-${session.id}-description`}
+          aria-label={`${expanded ? "Show less" : "Show more"} of the ${session.title} description`}
+          onClick={() => model.toggleDescription(session.id)}
+        >
+          {expanded ? "Show less" : "Show more"}
+        </button>
+      ) : null}
+    </div>
+  );
+}
+
 const SPARSE_SPEAKER_SEARCH = 6;
 
 /**
@@ -224,6 +285,111 @@ function SpeakerSearchField({
         type="search"
       />
     </div>
+  );
+}
+
+/**
+ * The information-rich chronological read. Schedule keeps this stable meaning;
+ * Timetable owns the separate room-by-time comparison.
+ */
+export function PublicScheduleSurface({
+  model,
+}: {
+  model: PublicProgrammeModel;
+}) {
+  const activeDay =
+    model.day === "All days" ? (model.days[0] ?? "All days") : model.day;
+  const days = groupSessionsByDay(
+    model.embedded && model.day === "All days"
+      ? model.visible
+      : model.visible.filter(
+          (session) =>
+            formatDay(session.startsAt, model.programme.event.timezone) ===
+            activeDay,
+        ),
+    model.programme.event.timezone,
+  );
+  const sessionCount = days.reduce(
+    (total, group) => total + group.sessions.length,
+    0,
+  );
+  return (
+    <section className="public-surface" aria-labelledby="public-schedule-title">
+      <SurfaceHeading
+        title="Day-by-day schedule"
+        id="public-schedule-title"
+        description="Browse the published programme in chronological order, with the details included in this view."
+        count={`${sessionCount} sessions`}
+      />
+      {!model.embedded && model.showControl("day") ? (
+        <PublicDayTabs model={model} label="Day-by-day schedule days" />
+      ) : null}
+      {days.length ? (
+        days.map((group) => (
+          <section className="public-itinerary-day" key={group.key}>
+            <ProgrammeDayHeading
+              label={group.label}
+              count={group.sessions.length}
+            />
+            <ol className="public-itinerary-list" aria-label={group.label}>
+              {group.sessions.map((session) => (
+                <li
+                  className={`public-itinerary-card${model.showEmbedField("time") ? "" : " without-time"}`}
+                  key={session.id}
+                >
+                  {model.showEmbedField("time") ? (
+                    <div className="public-itinerary-time">
+                      <SessionTime
+                        session={session}
+                        timezone={model.programme.event.timezone}
+                      />
+                    </div>
+                  ) : null}
+                  <div className="public-itinerary-content">
+                    <div className="public-itinerary-title-row">
+                      <h2>{session.title}</h2>
+                      {model.embedded || model.shared ? null : (
+                        <SaveSessionButton session={session} model={model} />
+                      )}
+                    </div>
+                    {model.showEmbedField("location") ||
+                    model.showEmbedField("track") ||
+                    model.showEmbedField("format") ? (
+                      <div className="public-itinerary-meta">
+                        {model.showEmbedField("location") ? (
+                          <SessionPlace session={session} />
+                        ) : null}
+                        {model.showEmbedField("track") ||
+                        model.showEmbedField("format") ? (
+                          <SessionTags
+                            session={session}
+                            showTrack={model.showEmbedField("track")}
+                            showFormat={model.showEmbedField("format")}
+                          />
+                        ) : null}
+                      </div>
+                    ) : null}
+                    {model.showEmbedField("description") ? (
+                      <SessionCardDescription session={session} model={model} />
+                    ) : null}
+                    {model.showSpeakerDetails ? (
+                      <PublicSessionSpeakers session={session} model={model} />
+                    ) : (
+                      <PublicSessionSpeakerNames
+                        session={session}
+                        model={model}
+                      />
+                    )}
+                  </div>
+                </li>
+              ))}
+            </ol>
+          </section>
+        ))
+      ) : (
+        <p className="empty">No published sessions match the current day.</p>
+      )}
+    </section>
   );
 }
 
@@ -353,6 +519,7 @@ function PublicTimetableDay({
               1,
               Math.ceil((session.endsAt - session.startsAt) / 60),
             );
+            const detailsExpanded = selectedSessionId === session.id;
             return (
               <article
                 className="public-timetable-session"
@@ -371,12 +538,12 @@ function PublicTimetableDay({
                       className="public-timetable-session-trigger"
                       aria-haspopup={model.embedded ? undefined : "dialog"}
                       aria-controls={
-                        model.embedded && selectedSessionId === session.id
+                        model.embedded && detailsExpanded
                           ? `public-timetable-inline-detail-${session.id}`
                           : undefined
                       }
-                      aria-expanded={selectedSessionId === session.id}
-                      aria-label={`Open details for ${session.title}`}
+                      aria-expanded={detailsExpanded}
+                      aria-label={`${model.embedded && detailsExpanded ? "Close" : "Open"} details for ${session.title}`}
                       onClick={(event) =>
                         openSessionDetails(session, event.currentTarget)
                       }
@@ -626,18 +793,16 @@ function PublicTimetableSessionDialog({
   );
 }
 
-export function PublicScheduleSurface({
+export function PublicTimetableSurface({
   model,
 }: {
   model: PublicProgrammeModel;
 }) {
-  const [detailSession, setDetailSession] = useState<PublishedSession | null>(
-    null,
-  );
+  const [detailSessionId, setDetailSessionId] = useState<string | null>(null);
   const detailDialogRef = useRef<HTMLDialogElement>(null);
   const detailReturnFocusRef = useRef<HTMLButtonElement | null>(null);
   const detailsClosed = () => {
-    setDetailSession(null);
+    setDetailSessionId(null);
     const returnFocus = detailReturnFocusRef.current;
     detailReturnFocusRef.current = null;
     if (typeof window !== "undefined") {
@@ -658,8 +823,12 @@ export function PublicScheduleSurface({
     session: PublishedSession,
     trigger: HTMLButtonElement,
   ) => {
+    if (model.embedded && detailSessionId === session.id) {
+      detailsClosed();
+      return;
+    }
     detailReturnFocusRef.current = trigger;
-    setDetailSession(session);
+    setDetailSessionId(session.id);
   };
   const activeDay =
     model.day === "All days" ? (model.days[0] ?? "All days") : model.day;
@@ -677,11 +846,27 @@ export function PublicScheduleSurface({
     (total, group) => total + group.sessions.length,
     0,
   );
+  const detailSession =
+    detailSessionId === null
+      ? null
+      : (days
+          .flatMap((group) => group.sessions)
+          .find((session) => session.id === detailSessionId) ?? null);
+
+  useEffect(() => {
+    if (detailSessionId === null || detailSession !== null) return;
+    setDetailSessionId(null);
+    detailReturnFocusRef.current = null;
+  }, [detailSession, detailSessionId]);
+
   return (
-    <section className="public-surface" aria-labelledby="public-schedule-title">
+    <section
+      className="public-surface"
+      aria-labelledby="public-timetable-title"
+    >
       <SurfaceHeading
         title="Timetable"
-        id="public-schedule-title"
+        id="public-timetable-title"
         description="Compare times and rooms at a glance. Open a session to see the details included in this timetable."
         count={`${sessionCount} sessions`}
       />
@@ -1075,6 +1260,8 @@ export function PublicProgrammeSurfaceContent({
 }) {
   if (model.surface === "schedule")
     return <PublicScheduleSurface model={model} />;
+  if (model.surface === "timetable")
+    return <PublicTimetableSurface model={model} />;
   if (model.surface === "speakers")
     return <PublicSpeakersSurface model={model} />;
   if (model.surface === "gallery")

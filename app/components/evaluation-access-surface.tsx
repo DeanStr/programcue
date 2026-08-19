@@ -115,10 +115,16 @@ export const PUBLIC_DESTINATIONS: readonly Destination[] = [
     detail: "The live attendee programme.",
   },
   {
+    to: "/public/programme/future-of-events-2027/timetable",
+    icon: CalendarDays,
+    label: "Timetable",
+    detail: "Compare published sessions by time and room.",
+  },
+  {
     to: "/public/programme/future-of-events-2027/schedule",
     icon: CalendarDays,
-    label: "Schedule",
-    detail: "The published day-by-day agenda.",
+    label: "Day-by-day schedule",
+    detail: "Browse rich chronological session and speaker details.",
   },
   {
     to: "/public/programme/future-of-events-2027/gallery",

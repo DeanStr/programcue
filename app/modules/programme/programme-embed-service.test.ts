@@ -24,7 +24,7 @@ const admin: Viewer = {
 };
 
 describe("managed programme embeds", () => {
-  it("rejects retired agenda authoring while reading historical rows as Programme", async () => {
+  it("rejects retired agenda authoring while reading historical rows as Schedule", async () => {
     const testEnvironment = env as unknown as CloudflareEnvironment;
     await ensureDemoProgramme(testEnvironment);
     const service = new ProgrammeEmbedService(testEnvironment);
@@ -85,7 +85,7 @@ describe("managed programme embeds", () => {
       (await service.list(admin)).find((embed) => embed.id === historicalId),
     ).toMatchObject({
       slug: historicalSlug,
-      configuration: { surface: "sessions" },
+      configuration: { surface: "schedule" },
     });
   });
 
