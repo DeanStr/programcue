@@ -86,7 +86,12 @@ export function PublicEventHeader({
     ? (["schedule", "gallery"] as const).map((surface) => ({
         key: surface,
         label: PUBLIC_EVENT_NAVIGATION_LABELS[surface],
-        href: publicProgrammeSurfacePath(slug, surface),
+        href: publicProgrammeSurfacePath(
+          slug,
+          surface === "schedule" && activeSurface === "timetable"
+            ? "timetable"
+            : surface,
+        ),
         active:
           surface === "schedule"
             ? activeSurface === "schedule" || activeSurface === "timetable"

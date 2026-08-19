@@ -103,6 +103,15 @@ test("anonymous visitors can use all programme surfaces and the gallery detail",
   await expect(
     scheduleViews.getByRole("link", { name: "Timetable" }),
   ).toHaveAttribute("aria-current", "page");
+  await eventNavigation.getByLabel("Browse, current page Schedule").click();
+  const currentScheduleLink = eventNavigation.getByRole("link", {
+    name: "Schedule",
+  });
+  await expect(currentScheduleLink).toHaveAttribute("aria-current", "page");
+  await expect(currentScheduleLink).toHaveAttribute(
+    "href",
+    "/public/programme/future-of-events-2027/timetable",
+  );
   await eventNavigation.getByRole("link", { name: "Programme" }).click();
   await expect(page).toHaveURL(
     /\/public\/programme\/future-of-events-2027\/sessions$/u,
