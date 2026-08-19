@@ -5,6 +5,7 @@ import { useConfirm } from "~/components/ui/confirm-dialog";
 import { EventDateTime } from "~/components/ui/event-date-time";
 import { EmptyState } from "~/components/ui/states";
 import { shortReference } from "~/lib/short-reference";
+import { availableEvaluationAssignmentTargets } from "~/modules/evaluations/evaluation-assignment-availability";
 
 export function EvaluationSubmissionQueue() {
   const {
@@ -24,9 +25,6 @@ export function EvaluationSubmissionQueue() {
   const { confirm, dialog } = useConfirm();
   const selectedResultsRound = loaderData.plan?.rounds.find(
     (round) => round.id === loaderData.resultsRoundId,
-  );
-  const activeRoundReviewerIds = new Set(
-    activeRound?.reviewers.map((reviewer) => reviewer.personId) ?? [],
   );
   if (loaderData.resultsRoundId && !selectedResultsRound) {
     throw new Error("The selected evaluation results round is unavailable.");
@@ -141,54 +139,14 @@ export function EvaluationSubmissionQueue() {
                     assignment.submissionId === submission.id &&
                     assignment.status !== "cancelled",
                 );
-                const unavailableEvaluatorIds = new Set(
-                  loaderData.assignments
-                    .filter(
-                      (assignment) =>
-                        assignment.submissionId === submission.id &&
-                        (assignment.status === "recused" ||
-                          (assignment.roundId === activeRound?.id &&
-                            assignment.status !== "cancelled")),
-                    )
-                    .map((assignment) => assignment.evaluatorPersonId),
-                );
-                const availableAssignmentTargets = assignmentTargets.flatMap(
-                  (target) => {
-                    const [targetType, targetId] = target.value.split(":", 2);
-                    if (targetType === "person") {
-                      return unavailableEvaluatorIds.has(targetId)
-                        ? []
-                        : [target];
-                    }
-                    if (targetType !== "team") {
-                      throw new Error(
-                        `Evaluation assignment target ${target.value} is invalid.`,
-                      );
-                    }
-                    const team = loaderData.teams.find(
-                      (candidate) => candidate.id === targetId,
-                    );
-                    if (!team) {
-                      throw new Error(
-                        `Evaluation team ${targetId} is unavailable.`,
-                      );
-                    }
-                    const availableMemberCount = team.members.filter(
-                      (member) =>
-                        member.authorised &&
-                        activeRoundReviewerIds.has(member.personId) &&
-                        !unavailableEvaluatorIds.has(member.personId),
-                    ).length;
-                    return availableMemberCount > 0
-                      ? [
-                          {
-                            ...target,
-                            label: `${team.name} (${availableMemberCount})`,
-                          },
-                        ]
-                      : [];
-                  },
-                );
+                const availableAssignmentTargets =
+                  availableEvaluationAssignmentTargets({
+                    assignmentTargets,
+                    assignments: loaderData.assignments,
+                    teams: loaderData.teams,
+                    activeRound,
+                    target: { type: "submission", id: submission.id },
+                  });
                 return (
                   <tr
                     key={submission.id}

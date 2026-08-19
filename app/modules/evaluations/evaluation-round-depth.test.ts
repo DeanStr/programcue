@@ -598,6 +598,90 @@ describe("abstract management round depth", () => {
     }
   });
 
+  it("adds only the unassigned members when a team is partially assigned", async () => {
+    const service = new EvaluationService(
+      env as unknown as CloudflareEnvironment,
+    );
+    await service.savePlan(admin, planInput());
+    const teamId = await service.saveTeam(admin, {
+      name: "Partially assigned review team",
+      description: "One member already has the target assignment.",
+      chairPersonId: null,
+      status: "active",
+    });
+    try {
+      await service.changeTeamMember(admin, {
+        teamId,
+        personId: sam.personId,
+        role: "evaluator",
+        operation: "add",
+      });
+      await service.changeTeamMember(admin, {
+        teamId,
+        personId: "person-demo-evaluator",
+        role: "evaluator",
+        operation: "add",
+      });
+      await service.changeRoundReviewerPool(admin, {
+        roundId: "abstract-initial-round",
+        personId: sam.personId,
+        operation: "add",
+      });
+      await service.changeRoundReviewerPool(admin, {
+        roundId: "abstract-initial-round",
+        personId: "person-demo-evaluator",
+        operation: "add",
+      });
+      await service.assign(admin, {
+        roundId: "abstract-initial-round",
+        targetType: "submission",
+        targetIds: [submissionId],
+        evaluatorPersonIds: [sam.personId],
+        teamId: null,
+      });
+
+      await expect(
+        service.assign(admin, {
+          roundId: "abstract-initial-round",
+          targetType: "submission",
+          targetIds: [submissionId],
+          evaluatorPersonIds: [],
+          teamId,
+        }),
+      ).resolves.toMatchObject({
+        createdAssignmentCount: 1,
+        requestedAssignmentCount: 2,
+      });
+      await expect(
+        env.DB.prepare(
+          `SELECT evaluator_person_id AS evaluatorPersonId
+             FROM evaluator_assignments
+            WHERE event_id = ? AND round_id = ? AND submission_id = ?
+              AND status NOT IN ('recused', 'cancelled')
+            ORDER BY evaluator_person_id`,
+        )
+          .bind(admin.eventId, "abstract-initial-round", submissionId)
+          .all(),
+      ).resolves.toEqual({
+        results: [
+          { evaluatorPersonId: "person-demo-evaluator" },
+          { evaluatorPersonId: sam.personId },
+        ],
+        success: true,
+        meta: expect.anything(),
+      });
+    } finally {
+      await env.DB.prepare("DELETE FROM evaluation_plans WHERE event_id = ?")
+        .bind(admin.eventId)
+        .run();
+      await env.DB.prepare(
+        "DELETE FROM evaluation_teams WHERE id = ? AND event_id = ?",
+      )
+        .bind(teamId, admin.eventId)
+        .run();
+    }
+  });
+
   it("preserves round pools when an unassigned plan is replaced", async () => {
     const service = new EvaluationService(
       env as unknown as CloudflareEnvironment,

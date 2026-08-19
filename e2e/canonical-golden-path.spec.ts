@@ -441,6 +441,46 @@ test.describe
         "Decision released and notification queued. 1 demo speaker invitation was saved; explicit demo mode sent no email.",
       );
 
+      await waitForInterface(page, "/admin/review");
+      await openEvaluationView(page, "Assignments");
+      const sessionRow = page
+        .getByRole("region", { name: "Evaluation session queue" })
+        .getByRole("row", { name: new RegExp(SUBMISSION_TITLE) });
+      await expect(
+        sessionRow.locator('td[data-label="Reviews"]'),
+      ).toContainText("0 / 0");
+      await sessionRow
+        .getByLabel(`Evaluator or team for ${SUBMISSION_TITLE}`)
+        .selectOption({ label: `${TEAM_NAME} (1)` });
+      await sessionRow.getByRole("button", { name: "Assign" }).click();
+      await expectStatus(page, "1 evaluator assignment created.");
+      const sessionReviewers = sessionRow.locator('td[data-label="Reviewers"]');
+      await expect(sessionReviewers).toContainText(
+        "Assigned reviewers · Final programme review",
+      );
+      await expect(sessionReviewers).toContainText("Jordan Lee · Assigned");
+      await expect(sessionReviewers).toContainText(
+        "No additional eligible reviewers",
+      );
+      await expect(
+        sessionReviewers.getByRole("option", { name: `${TEAM_NAME} (1)` }),
+      ).toHaveCount(0);
+      await expect(
+        sessionReviewers.getByRole("option", {
+          name: "Jordan Lee",
+          exact: true,
+        }),
+      ).toHaveCount(0);
+      await expect(
+        sessionRow.locator('td[data-label="Reviews"]'),
+      ).toContainText("0 / 1");
+
+      await page.reload();
+      await expect(sessionReviewers).toContainText("Jordan Lee · Assigned");
+      await expect(sessionReviewers).toContainText(
+        "No additional eligible reviewers",
+      );
+
       await waitForInterface(page, "/admin/speakers?query=Riley%20Golden");
       const speakerRow = page.getByRole("row", {
         name: new RegExp(`${SPEAKER_NAME}.*${APPLICANT_EMAIL}`, "i"),

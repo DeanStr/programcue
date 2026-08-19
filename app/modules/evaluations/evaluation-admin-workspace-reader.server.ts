@@ -401,7 +401,8 @@ export class EvaluationAdminWorkspaceReader {
                COALESCE(submission.title, session.title) AS targetTitle,
                a.evaluator_person_id AS evaluatorPersonId,
                p.display_name AS evaluatorName, a.team_id AS teamId,
-               t.name AS teamName, a.status, a.revision,
+               t.name AS teamName, a.status,
+               a.cancellation_reason AS cancellationReason, a.revision,
                r.id AS reviewId, r.status AS reviewStatus,
                r.scores_json AS scoresJson,
                r.weighted_score AS weightedScore,
@@ -464,6 +465,7 @@ export class EvaluationAdminWorkspaceReader {
           teamId: string | null;
           teamName: string | null;
           status: string;
+          cancellationReason: string | null;
           revision: number;
           reviewId: string | null;
           reviewStatus: string | null;

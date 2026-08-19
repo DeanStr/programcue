@@ -61,7 +61,6 @@ export type EvaluationAdminModel = {
   activeRound: EvaluationRound | undefined;
   nextRound: EvaluationRound | null | undefined;
   activeRoundAssignments: EvaluationAssignment[];
-  sessionReviewAssignments: EvaluationAssignment[];
   unfinishedAssignmentCount: number;
   advanceableSubmissions: EvaluationSubmission[];
   assignmentTargets: Array<{
@@ -156,9 +155,6 @@ export function useEvaluationAdminState(
         (assignment) => assignment.roundId === activeRound.id,
       )
     : [];
-  const sessionReviewAssignments = activeRoundAssignments.filter(
-    (assignment) => assignment.targetType === "session",
-  );
   const unfinishedAssignmentCount = activeRoundAssignments.filter(
     (assignment) =>
       assignment.status === "assigned" ||
@@ -262,7 +258,6 @@ export function useEvaluationAdminState(
     activeRound,
     nextRound,
     activeRoundAssignments,
-    sessionReviewAssignments,
     unfinishedAssignmentCount,
     advanceableSubmissions,
     assignmentTargets,
