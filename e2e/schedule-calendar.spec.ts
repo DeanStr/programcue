@@ -299,6 +299,8 @@ test("states why the published planner is read-only and clears it on the next dr
   const inspector = page.getByRole("complementary", {
     name: "Notes and session content",
   });
+  const notesEditor = page.getByTestId("schedule-notes-editor");
+  const sessionEditor = page.getByTestId("session-content-editor");
   // The head is 320px at its narrowest and its contents are clipped, so a
   // control that overflows it disappears in silence rather than failing.
   const hide = inspector.getByRole("button", { name: "Hide panel" });
@@ -312,14 +314,17 @@ test("states why the published planner is read-only and clears it on the next dr
   // Notes used to disable their textarea in silence, which is the state this
   // covers: the marker has to sit on the frozen panel, not only at page level.
   await expect(
-    page
-      .getByTestId("schedule-notes-editor")
-      .getByTestId("schedule-read-only-marker"),
+    notesEditor.getByTestId("schedule-read-only-marker"),
   ).toBeVisible();
   await expect(
-    page
-      .getByTestId("session-content-editor")
-      .getByTestId("schedule-read-only-marker"),
+    sessionEditor.getByTestId("schedule-read-only-marker"),
+  ).toBeVisible();
+  await expect(
+    notesEditor.getByText("Saved with this schedule version."),
+  ).toBeHidden();
+  await expect(sessionEditor.getByLabel("Approved status")).toBeVisible();
+  await expect(
+    sessionEditor.getByText("Revision 1", { exact: true }),
   ).toBeVisible();
   await expect(
     inspector.getByRole("textbox", { name: /^Schedule notes/ }),
@@ -333,6 +338,16 @@ test("states why the published planner is read-only and clears it on the next dr
   await expect(
     inspector.getByRole("textbox", { name: "Schedule notes" }),
   ).toBeEnabled();
+  const notes = notesEditor.getByRole("textbox", { name: "Schedule notes" });
+  const scopeNote = notesEditor.getByText("Saved with this schedule version.");
+  await expect(scopeNote).toBeVisible();
+  const notesBox = await notes.boundingBox();
+  const scopeNoteBox = await scopeNote.boundingBox();
+  expect(notesBox, "schedule notes should be measured").toBeTruthy();
+  expect(scopeNoteBox, "schedule scope note should be measured").toBeTruthy();
+  expect(scopeNoteBox!.y).toBeGreaterThanOrEqual(
+    notesBox!.y + notesBox!.height,
+  );
 });
 
 test.describe("mutable schedule authoring", () => {

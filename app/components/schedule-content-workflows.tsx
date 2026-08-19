@@ -198,14 +198,7 @@ function ScheduleNotesEditor({
           <DraftRecoveryStatus state={recovery.state} />
         </span>
       </div>
-      {editLock.reason ? (
-        <ScheduleReadOnlyMarker />
-      ) : (
-        <p className="help">
-          Notes belong to this schedule version. Publishing freezes them;
-          editing resumes only on the next draft.
-        </p>
-      )}
+      {editLock.reason ? <ScheduleReadOnlyMarker /> : null}
       <DraftRecoveryFeedback recovery={recovery} />
       {serverError ? (
         <div className="validation-item error mb" role="alert">
@@ -285,6 +278,11 @@ function ScheduleNotesEditor({
         }}
       />
       <CharacterCount value={notes} maximum={12_000} />
+      {!editLock.reason ? (
+        <p className="help schedule-editor-footnote">
+          Saved with this schedule version.
+        </p>
+      ) : null}
     </section>
   );
 }

@@ -13,6 +13,7 @@ import {
   DraftRecoveryStatus,
 } from "~/components/draft-recovery-feedback";
 import { CharacterCount } from "~/components/ui/character-count";
+import { DomainStatusBadge } from "~/components/ui/domain-status-badge";
 import { requireValue } from "~/lib/required-value";
 import type { ScheduleEditLock } from "~/modules/schedule/schedule-edit-lock";
 import type {
@@ -407,12 +408,17 @@ function SessionContentFieldsPanel() {
         <div>
           <span className="pc-page-eyebrow">Revisioned content</span>
           <h2 id="session-content-title">Session editor</h2>
+          <span className="schedule-editor-metadata">
+            <DomainStatusBadge
+              domain="content"
+              status={session.contentStatus}
+            />
+            <span className="schedule-editor-revision">
+              Revision {session.contentRevision}
+            </span>
+          </span>
         </div>
         <span className="row-actions right">
-          <span className="pill">
-            {session.contentStatus.replaceAll("_", " ")} · revision{" "}
-            {session.contentRevision}
-          </span>
           <Link
             className="btn small"
             to={`/admin/content/sessions/${encodeURIComponent(session.id)}`}
