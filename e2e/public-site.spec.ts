@@ -211,9 +211,7 @@ test("reset restores a published public event site", async ({ page }) => {
     "href",
     "/public/programme/future-of-events-2027/pages/sponsors",
   );
-  await expect(
-    page.getByText("When and where does the conference take place?"),
-  ).toBeVisible();
+  await expect(page.locator(".public-site-faq-section")).toHaveCount(0);
   const featuredSessionLink = page.getByRole("link", {
     name: "The Future of Attendee Engagement",
   });
@@ -320,11 +318,6 @@ test("reset restores a published public event site", async ({ page }) => {
       .locator(".public-top")
       .evaluate((element) => element.scrollWidth <= element.clientWidth),
   ).toBe(true);
-  const publishedFaq = page
-    .locator(".public-site-faq details")
-    .filter({ hasText: "When and where does the conference take place?" });
-  await publishedFaq.locator("summary").click();
-  await expect(publishedFaq).toHaveAttribute("open", "");
   const headingSizes = await page
     .locator(".public-site-section-heading h2")
     .evaluateAll((headings) =>
@@ -474,9 +467,20 @@ test("reset restores a published public event site", async ({ page }) => {
   ).toBe(true);
   await page.setViewportSize({ width: 1280, height: 720 });
 
-  await eventNavigation.getByLabel("Browse programme and event pages").click();
+  await eventNavigation.getByLabel(/^Browse/u).click();
   await expect(eventNavigation.getByText("Programme views")).toBeVisible();
   await expect(eventNavigation.getByText("Event information")).toBeVisible();
+  await eventNavigation.getByRole("link", { name: "FAQ", exact: true }).click();
+  await expect(page).toHaveURL(
+    /\/public\/programme\/future-of-events-2027\/pages\/faq$/u,
+  );
+  const publishedFaq = page
+    .locator(".public-site-faq details")
+    .filter({ hasText: "When and where does the conference take place?" });
+  await publishedFaq.locator("summary").click();
+  await expect(publishedFaq).toHaveAttribute("open", "");
+
+  await eventNavigation.getByLabel(/^Browse/u).click();
   await eventNavigation.getByRole("link", { name: "About" }).click();
   await expect(page).toHaveURL(
     /\/public\/programme\/future-of-events-2027\/pages\/about$/u,
@@ -574,6 +578,11 @@ test("organisers preview unpublished edits and publish a replacement", async ({
   await expect(
     page.locator(".public-site-faq-editor > fieldset").first(),
   ).toBeHidden();
+  await page
+    .locator(".public-site-section-order > li")
+    .filter({ hasText: "Frequently asked questions" })
+    .getByRole("checkbox")
+    .check();
   await openSiteCollection(page, "FAQ");
   /* The new question is appended, so it starts wherever the seeded baseline
      ends. Walking it to the top from there is what proves reordering works
@@ -897,6 +906,11 @@ test("organisers preview unpublished edits and publish a replacement", async ({
     page.getByRole("heading", { name: "Community", exact: true }),
   ).toBeVisible();
   await expect(page.getByText("Example Partner")).toBeVisible();
+  const communitySponsors = page.locator(".public-site-sponsor-tier").filter({
+    has: page.getByRole("heading", { name: "Community", exact: true }),
+  });
+  await expect(communitySponsors.getByRole("list")).toBeVisible();
+  await expect(communitySponsors.getByRole("listitem")).toHaveCount(1);
   /* A sponsor entry carries the mark, the name and the way out to the sponsor's
      own site. The seeded organisations supply none of the two optional fields,
      so this is where the complete entry is rendered. */

@@ -508,9 +508,9 @@ export function PublicSitePageContent({
             {/* Not the homepage's `public-site-sponsor-grid`: that is a credits
                 line where names sit on one baseline, and a tier of sponsors
                 carrying a sentence each needs an entry per sponsor. */}
-            <div className="public-site-sponsor-cards">
+            <ul className="public-site-sponsor-cards">
               {sponsors.map((sponsor) => (
-                <article className="public-site-sponsor-card" key={sponsor.id}>
+                <li className="public-site-sponsor-card" key={sponsor.id}>
                   {sponsor.logoUrl ? (
                     <img
                       src={sponsor.logoUrl}
@@ -533,9 +533,9 @@ export function PublicSitePageContent({
                       Visit sponsor <ExternalLink aria-hidden size={13} />
                     </PreviewSafeLink>
                   ) : null}
-                </article>
+                </li>
               ))}
-            </div>
+            </ul>
           </section>
         ))}
       </>

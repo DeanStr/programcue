@@ -34,7 +34,7 @@ describe("demo public-site showcase fixture", () => {
       featured_sessions: true,
       statistics: true,
       venue: true,
-      faq: true,
+      faq: false,
     });
     expect(draft.featuredSessionIds).toEqual([
       ...DEMO_SHOWCASE_FEATURED_SESSION_IDS,

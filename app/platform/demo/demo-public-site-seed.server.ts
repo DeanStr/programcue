@@ -157,7 +157,6 @@ export async function ensureDemoPublicSite(env: CloudflareEnvironment) {
             "featured_sessions",
             "statistics",
             "venue",
-            "faq",
           ],
           pages: DEMO_SHOWCASE_ENABLED_PAGES,
           sponsorCount: DEMO_SHOWCASE_SITE_SPONSORS.length,

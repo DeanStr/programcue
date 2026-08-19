@@ -72,7 +72,7 @@ export const DEMO_SHOWCASE_PUBLIC_SITE_TAGLINE =
    reset and is append-only — the old row stays as a true record of what the
    previous fixture published, and the new generation writes its own. */
 export const DEMO_SHOWCASE_PUBLIC_SITE_OPERATION_ID =
-  "demo-showcase:public-site-publish-2";
+  "demo-showcase:public-site-publish-3";
 export const DEMO_SHOWCASE_FAQ_ITEMS = [
   {
     id: "demo-showcase-faq-when",
@@ -126,7 +126,7 @@ export const DEMO_SHOWCASE_FAQ_ITEMS = [
 export const DEMO_SHOWCASE_SPONSOR_EVENTLAB_ID =
   "demo-showcase-sponsor-eventlab";
 export const DEMO_SHOWCASE_PUBLIC_SITE_AUDIT_ID =
-  "audit-demo-showcase-public-site-published-2";
+  "audit-demo-showcase-public-site-published-3";
 
 /* The showcase sponsors are fictional organisations, so they carry no website
    or logo URL: a demo that links "Visit sponsor" at a domain nobody owns is a
@@ -323,7 +323,9 @@ export function demoShowcasePublicSiteDraft(): PublicSiteDraft {
       ...draft.sectionVisibility,
       featured_speakers: true,
       featured_sessions: true,
-      faq: true,
+      // The complete FAQ has its own page; repeating all eight questions here
+      // makes the event home unnecessarily long, especially on a phone.
+      faq: false,
     },
     featuredSpeakerIds: [...DEMO_SHOWCASE_FEATURED_SPEAKER_IDS],
     featuredSessionIds: [...DEMO_SHOWCASE_FEATURED_SESSION_IDS],

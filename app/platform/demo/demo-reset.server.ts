@@ -1743,6 +1743,8 @@ async function baselineEvidence(env: CloudflareEnvironment) {
         AND site.last_operation_id = ?
         AND json_extract(site.draft_json, '$.theme') = 'light'
         AND json_extract(site.draft_json, '$.tagline') = ?
+        AND json_extract(site.draft_json, '$.sectionVisibility.faq') = 0
+        AND json_extract(site.published_json, '$.sectionVisibility.faq') = 0
         ${DEMO_SHOWCASE_ENABLED_PAGES.map(
           () => "AND json_extract(site.draft_json, ?) = 1",
         ).join("\n        ")}

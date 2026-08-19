@@ -362,7 +362,7 @@ describe("complete evaluator demo reset", () => {
           featured_sessions: true,
           statistics: true,
           venue: true,
-          faq: true,
+          faq: false,
         },
         featuredSessionIds: ["demo-session-1", "demo-session-2"],
         featuredSpeakerIds: ["person-demo-speaker", "person-demo-submitter"],
@@ -830,6 +830,43 @@ describe("complete evaluator demo reset", () => {
       });
     });
 
+    it("reports a stale homepage FAQ setting as an incomplete baseline", async () => {
+      const testEnvironment = demoEnvironment();
+      await ensureJudgedDemoWorkflow(testEnvironment);
+
+      try {
+        await testEnvironment.DB.prepare(
+          `UPDATE event_public_sites
+              SET draft_json = json_set(
+                    draft_json, '$.sectionVisibility.faq', json('true')
+                  ),
+                  published_json = json_set(
+                    published_json, '$.sectionVisibility.faq', json('true')
+                  )
+            WHERE event_id = ? AND last_operation_id = ?`,
+        )
+          .bind(DEMO_EVENT_ID, DEMO_SHOWCASE_PUBLIC_SITE_OPERATION_ID)
+          .run();
+
+        const prepared = await prepareJudgedDemoWorkflow(testEnvironment);
+        expect(prepared.complete).toBe(false);
+        expect(prepared.evidence.showcasePublishedPublicSites).toBe(0);
+      } finally {
+        await testEnvironment.DB.prepare(
+          `UPDATE event_public_sites
+              SET draft_json = json_set(
+                    draft_json, '$.sectionVisibility.faq', json('false')
+                  ),
+                  published_json = json_set(
+                    published_json, '$.sectionVisibility.faq', json('false')
+                  )
+            WHERE event_id = ? AND last_operation_id = ?`,
+        )
+          .bind(DEMO_EVENT_ID, DEMO_SHOWCASE_PUBLIC_SITE_OPERATION_ID)
+          .run();
+      }
+    });
+
     /* A database seeded by an earlier fixture generation must not be topped up
        into a mixture of the two. The seed inserts on OR IGNORE, so the site row
        and the publication audit both survive; only the generation identity
@@ -837,8 +874,8 @@ describe("complete evaluator demo reset", () => {
     it("refuses to top up a database left on a previous fixture generation", async () => {
       const testEnvironment = demoEnvironment();
       await ensureJudgedDemoWorkflow(testEnvironment);
-      const previousGeneration = "demo-showcase:public-site-publish";
-      const previousAuditId = "audit-demo-showcase-public-site-published";
+      const previousGeneration = "demo-showcase:public-site-publish-2";
+      const previousAuditId = "audit-demo-showcase-public-site-published-2";
       const previousAuditMetadata = JSON.stringify({
         revision: 1,
         sections: [
@@ -849,8 +886,8 @@ describe("complete evaluator demo reset", () => {
           "venue",
           "faq",
         ],
-        pages: ["about", "sponsors"],
-        sponsorCount: 2,
+        pages: DEMO_SHOWCASE_ENABLED_PAGES,
+        sponsorCount: DEMO_SHOWCASE_SITE_SPONSORS.length,
       });
       expect(DEMO_SHOWCASE_PUBLIC_SITE_AUDIT_ID).not.toBe(previousAuditId);
       await testEnvironment.DB.batch([
@@ -938,7 +975,6 @@ describe("complete evaluator demo reset", () => {
             "featured_sessions",
             "statistics",
             "venue",
-            "faq",
           ],
           pages: DEMO_SHOWCASE_ENABLED_PAGES,
           sponsorCount: DEMO_SHOWCASE_SITE_SPONSORS.length,

@@ -1298,6 +1298,9 @@ a.public-site-feature-card:focus-visible .public-site-speaker-profile-cue {
 .public-site-sponsor-cards {
   --sponsor-gap: clamp(var(--space-6), 5cqi, var(--space-9));
   display: grid;
+  margin: 0;
+  padding: 0;
+  list-style: none;
   grid-template-columns: repeat(
       auto-fit,
       minmax(
