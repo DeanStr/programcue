@@ -1,6 +1,6 @@
 # Verified implementation status
 
-Last verified: 2026-08-18.
+Last verified: 2026-08-19.
 
 This is the canonical implementation audit and requirements traceability record. The product specification remains authoritative for intended scope; this file records observed code, focused tests and local evidence only.
 
@@ -397,6 +397,15 @@ test), the 101-table/124-index/124-trigger migration and recovery contracts
 (including a populated `0034` to `0036` forward upgrade), and
 the new pull-request browser command (19 application tests across two isolated
 Chromium shards plus 14 public-site desktop/mobile tests).
+
+Validation-infrastructure hardening on 19 August 2026 moved the supported
+runtime and both GitHub Actions workflows to Node 24.11+, made the hosted
+pull-request browser job explicitly use one Worker/Chromium stack, and retained
+Playwright results plus Wrangler logs for seven days after a browser-job
+failure. Local verification passed the complete core gate and the compact
+browser command with the CI shard setting (25 application tests against one
+Worker plus 16 public-site desktop/mobile tests). A hosted CI result remains
+outstanding until these uncommitted changes are committed and pushed.
 
 ## Capability status
 

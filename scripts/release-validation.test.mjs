@@ -3,6 +3,7 @@ import { readFile } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
+import { parse as parseYaml } from "yaml";
 import { validateReleaseStateEvidence } from "./validate-release-state.mjs";
 import {
   lastImmutableMigrationName,
@@ -710,6 +711,7 @@ test("repository release commands and workflows enforce the ordered gates", asyn
     /deploy:schema.*deploy-production\.mjs/u,
   );
   assert.doesNotMatch(packageJson.scripts["deploy:cutover"], /npm run build/u);
+  assert.equal(packageJson.engines.node, ">=24.11.0");
 
   const coreWorkflow = await readFile(
     resolve(repositoryRoot, ".github/workflows/ci.yml"),
@@ -719,6 +721,40 @@ test("repository release commands and workflows enforce the ordered gates", asyn
   assert.match(coreWorkflow, /npm run check:core/u);
   assert.match(coreWorkflow, /dependency-audit:/u);
   assert.match(coreWorkflow, /run: npm run security:dependencies/u);
+  const coreWorkflowConfig = parseYaml(coreWorkflow);
+  for (const jobName of ["dependency-audit", "core", "browser"]) {
+    const setupNode = coreWorkflowConfig.jobs[jobName].steps.find(
+      (step) =>
+        typeof step.uses === "string" &&
+        step.uses.startsWith("actions/setup-node@"),
+    );
+    assert.equal(setupNode?.with?.["node-version"], "24.11.0");
+  }
+
+  const browserSteps = coreWorkflowConfig.jobs.browser.steps;
+  const browserGate = browserSteps.find(
+    (step) => step.run === "npm run check:browser:pr",
+  );
+  assert.deepEqual(browserGate?.env, { PROGRAM_CUE_E2E_SHARDS: "1" });
+
+  const browserDiagnostics = browserSteps.find(
+    (step) =>
+      typeof step.uses === "string" &&
+      step.uses.startsWith("actions/upload-artifact@"),
+  );
+  assert.equal(
+    browserDiagnostics?.uses,
+    "actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a",
+  );
+  assert.equal(browserDiagnostics?.if, `\${{ failure() }}`);
+  assert.deepEqual(browserDiagnostics?.with?.path.trim().split(/\s+/u), [
+    "test-results/",
+    "playwright-report/",
+    "~/.config/.wrangler/logs/",
+  ]);
+  assert.equal(browserDiagnostics?.with?.["if-no-files-found"], "warn");
+  assert.equal(browserDiagnostics?.with?.["include-hidden-files"], true);
+  assert.equal(browserDiagnostics?.with?.["retention-days"], 7);
 
   const checkRunner = await readFile(
     resolve(repositoryRoot, "scripts/run-checks.mjs"),
@@ -733,7 +769,14 @@ test("repository release commands and workflows enforce the ordered gates", asyn
     resolve(repositoryRoot, ".github/workflows/release.yml"),
     "utf8",
   );
+  const releaseWorkflowConfig = parseYaml(releaseWorkflow);
+  const releaseSetupNode = releaseWorkflowConfig.jobs.release.steps.find(
+    (step) =>
+      typeof step.uses === "string" &&
+      step.uses.startsWith("actions/setup-node@"),
+  );
   assert.match(releaseWorkflow, /run: npm run deploy/u);
+  assert.equal(releaseSetupNode?.with?.["node-version"], "24.11.0");
   assert.doesNotMatch(releaseWorkflow, /npm run deploy:cutover/u);
 
   const deployProduction = await readFile(

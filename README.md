@@ -6,7 +6,7 @@ The repository contains connected server-backed slices for event setup, submissi
 
 ## Local development
 
-Requirements: Node.js 22.18+ on the Node 22 line, or Node.js 24.11+, Python 3.9+ for migration validation, Chromium for the primary browser suite, and Playwright Firefox/WebKit for the full cross-browser smoke gate.
+Requirements: Node.js 24.11+, Python 3.9+ for migration validation, Chromium for the primary browser suite, and Playwright Firefox/WebKit for the full cross-browser smoke gate.
 
 ```bash
 npm install
@@ -133,7 +133,8 @@ projects using Vitest's changed-file graph;
 without also starting the separate Agents Durable Object project.
 
 `check:browser:pr` runs the compact pull-request Chromium golden/provider/AI/
-accessibility lane plus the public-site browser suite. `check:quick` runs the complete core gate plus sharded desktop Chromium
+accessibility lane plus the public-site browser suite. `check:quick` runs the
+complete core gate plus sharded desktop Chromium
 behavior, excluding the representative visual inventory and cross-browser
 smoke. It is an integration aid, not an ordinary completion gate. `test:unit`
 runs deterministic Node-compatible rules without starting Workerd or applying
@@ -148,6 +149,10 @@ audit, dependency review, core and compact browser jobs for pull requests;
 dependency audit, core and browser also run on `main`. The local core command is
 network-independent; the complete release gate and dedicated CI job fail closed
 on high/critical dependency advisories or an unavailable advisory service.
+The compact browser job uploads its Playwright results and Wrangler logs for
+seven days when it fails, so an exited local Worker is distinguishable from an
+application assertion. That hosted job explicitly uses one Worker/Chromium
+stack; local runs retain two shards unless `PROGRAM_CUE_E2E_SHARDS` is set.
 Configure these checks as
 required in branch protection so the repository gate cannot be bypassed by a
 direct merge. Workflow dependencies are pinned to immutable revisions. The manually
