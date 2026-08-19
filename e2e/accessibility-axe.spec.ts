@@ -37,6 +37,17 @@ const SURFACES = [
   { role: "administrator", path: "/admin/resources" },
   { role: "administrator", path: "/api/docs" },
   { role: "administrator", path: "/public/programme/future-of-events-2027" },
+  /* The fixed pages set prose at their own scale and paint links, subhead
+     ticks and sponsor entries in the event accent, so they are the surfaces
+     where a customer colour meets long-form body copy. */
+  {
+    role: "administrator",
+    path: "/public/programme/future-of-events-2027/pages/about",
+  },
+  {
+    role: "administrator",
+    path: "/public/programme/future-of-events-2027/pages/sponsors",
+  },
 ] as const;
 
 /* The suite previously ran only at 1440x1000, so rules that fire inside a

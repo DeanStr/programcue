@@ -54,6 +54,42 @@ async function resolvedColorMix(locator: Locator, mix: string) {
   }, mix);
 }
 
+/* A fixed page has no section heading between its title and its body, so the
+   restricted Markdown subheads and the Sponsors page's tier headings all sit at
+   level 2: the page reads title then peers rather than dropping to a subsection
+   and climbing back out of it. `heading-order` is an axe best-practice rule
+   rather than a WCAG one, so the axe surface added for these pages does not
+   check it and this does. */
+async function expectFixedPageOutline(page: Page) {
+  const levels = await page
+    .locator(".public-site-page")
+    .evaluate((element) =>
+      [...element.querySelectorAll("h1, h2, h3, h4, h5, h6")].map((heading) =>
+        Number(heading.tagName.slice(1)),
+      ),
+    );
+  expect(levels.length).toBeGreaterThan(1);
+  expect(levels[0]).toBe(1);
+  expect([...new Set(levels.slice(1))]).toEqual([2]);
+}
+
+/* A 120x40 PNG served from the test process, so a sponsor mark is a real
+   decoded image with real intrinsic dimensions and the suite still makes no
+   outbound request. */
+const SPONSOR_LOGO_URL = "https://example.com/partner-logo.png";
+const SPONSOR_LOGO_PNG = Buffer.from(
+  "iVBORw0KGgoAAAANSUhEUgAAAHgAAAAoCAYAAAA16j4lAAAAWklEQVR42u3RQREAAAQAQYlU8Ne/" +
+    "DzmYfVyB28iu0d/CBMACLMACLMACLMCABViABViABViAAQuwAAuwAAuwAAswYAEWYAEWYAEWYMAC" +
+    "LMACLMACLMCABVg3W7uWFmEIQ/JRAAAAAElFTkSuQmCC",
+  "base64",
+);
+
+async function serveSponsorLogo(page: Page) {
+  await page.route(SPONSOR_LOGO_URL, (route) =>
+    route.fulfill({ contentType: "image/png", body: SPONSOR_LOGO_PNG }),
+  );
+}
+
 async function homeColumnCounts(home: Locator) {
   return home.evaluate((element) => {
     const columns = (selector: string) => {
@@ -176,7 +212,7 @@ test("reset restores a published public event site", async ({ page }) => {
     "/public/programme/future-of-events-2027/pages/sponsors",
   );
   await expect(
-    page.getByText("When does the conference take place?"),
+    page.getByText("When and where does the conference take place?"),
   ).toBeVisible();
   const featuredSessionLink = page.getByRole("link", {
     name: "The Future of Attendee Engagement",
@@ -286,7 +322,7 @@ test("reset restores a published public event site", async ({ page }) => {
   ).toBe(true);
   const publishedFaq = page
     .locator(".public-site-faq details")
-    .filter({ hasText: "When does the conference take place?" });
+    .filter({ hasText: "When and where does the conference take place?" });
   await publishedFaq.locator("summary").click();
   await expect(publishedFaq).toHaveAttribute("open", "");
   const headingSizes = await page
@@ -445,11 +481,11 @@ test("reset restores a published public event site", async ({ page }) => {
   await expect(page).toHaveURL(
     /\/public\/programme\/future-of-events-2027\/pages\/about$/u,
   );
-  await expect(page.getByRole("heading", { name: "Why attend" })).toBeVisible();
-  await expect(page.getByRole("link", { name: "Programme" })).toHaveAttribute(
-    "href",
-    "/public/programme/future-of-events-2027/sessions",
-  );
+  await expect(page.getByRole("heading", { name: "Who comes" })).toBeVisible();
+  await expect(
+    page.getByRole("link", { name: "Programme", exact: true }),
+  ).toHaveAttribute("href", "/public/programme/future-of-events-2027/sessions");
+  await expectFixedPageOutline(page);
   const fixedPageResponse = await page.request.get(page.url());
   const fixedPageEtag = fixedPageResponse.headers().etag;
   expect(fixedPageResponse.headers()["cache-control"]).toContain("public");
@@ -488,6 +524,7 @@ test("organisers preview unpublished edits and publish a replacement", async ({
   page,
 }) => {
   test.setTimeout(180_000);
+  await serveSponsorLogo(page);
   await page.goto("/admin/site");
   await page.locator("body[data-hydrated='true']").waitFor();
   await expect(
@@ -538,15 +575,31 @@ test("organisers preview unpublished edits and publish a replacement", async ({
     page.locator(".public-site-faq-editor > fieldset").first(),
   ).toBeHidden();
   await openSiteCollection(page, "FAQ");
-  await page.getByRole("button", { name: "Add question" }).click();
+  /* The new question is appended, so it starts wherever the seeded baseline
+     ends. Walking it to the top from there is what proves reordering works
+     over a list the organiser did not just create. The count is read through
+     an assertion so the row is in the DOM before it is addressed by index. */
   const faqQuestions = page.locator(".public-site-faq-editor > fieldset");
-  await faqQuestions.nth(2).getByLabel("Question").fill("Priority question");
-  await faqQuestions.nth(2).getByLabel("Answer").fill("Priority answer");
-  await faqQuestions.nth(2).getByRole("button", { name: "Move up" }).click();
-  await faqQuestions.nth(1).getByRole("button", { name: "Move up" }).click();
-  await expect(faqQuestions.nth(0).getByLabel("Question")).toHaveValue(
-    "Priority question",
-  );
+  const seededFaq = await faqQuestions.count();
+  await page.getByRole("button", { name: "Add question" }).click();
+  await expect(faqQuestions).toHaveCount(seededFaq + 1);
+  await faqQuestions
+    .nth(seededFaq)
+    .getByLabel("Question")
+    .fill("Priority question");
+  await faqQuestions
+    .nth(seededFaq)
+    .getByLabel("Answer")
+    .fill("Priority answer");
+  for (let position = seededFaq; position > 0; position -= 1) {
+    await faqQuestions
+      .nth(position)
+      .getByRole("button", { name: "Move up" })
+      .click();
+    await expect(
+      faqQuestions.nth(position - 1).getByLabel("Question"),
+    ).toHaveValue("Priority question");
+  }
 
   await openSiteCollection(page, "Event pages");
   const aboutPage = page
@@ -571,6 +624,14 @@ test("organisers preview unpublished edits and publish a replacement", async ({
   await sponsorsPage
     .getByLabel("Restricted Markdown")
     .fill("Thanks to the organisations supporting this event.");
+  /* Every page ships enabled in the baseline, so one is switched off here to
+     exercise the preview's "not enabled" notice below. */
+  const codeOfConductPage = page
+    .locator(".public-site-page-editor fieldset")
+    .filter({ has: page.locator("legend", { hasText: "Code of conduct" }) });
+  await codeOfConductPage
+    .getByLabel("Publish this page with the site")
+    .uncheck();
 
   await page
     .getByRole("complementary", { name: "Primary navigation" })
@@ -676,6 +737,14 @@ test("organisers preview unpublished edits and publish a replacement", async ({
   await newSponsor
     .getByLabel("Website URL")
     .fill("https://example.com/partner");
+  /* The showcase fixture's organisations are fictional, so none of them carries
+     a logo and the published homepage always renders the strip's other state —
+     the typographic credits lockup. A logo here is the only place the mark
+     layout is exercised in a browser at all. The route registered before the
+     editor opened serves the bytes, so this reaches the layout a decoded image
+     produces rather than the one a broken `src` leaves behind, and no request
+     leaves the machine. */
+  await newSponsor.getByLabel("Logo URL").fill(SPONSOR_LOGO_URL);
   await newSponsor.getByRole("button", { name: "Add sponsor" }).click();
   await expect(
     page.getByText("Sponsor saved to the website draft."),
@@ -722,6 +791,32 @@ test("organisers preview unpublished edits and publish a replacement", async ({
       hasText: "Northstar Events",
     }),
   ).toBeVisible();
+  /* One sponsor carrying a mark takes the whole strip out of the credits
+     lockup, because a band of names ruled for typography is not the layout a
+     row of logos needs. The link follows the sponsor's own site rather than
+     this event's sponsors page once there is a site to follow. */
+  await expect(page.locator(".public-site-sponsor-strip")).not.toHaveClass(
+    /is-credits/u,
+  );
+  const stripMark = page.locator(".public-site-sponsor-grid img");
+  await expect(stripMark).toHaveAttribute("src", SPONSOR_LOGO_URL);
+  /* The bytes decoded, and the strip scaled the mark into its 36px cap with the
+     aspect kept — 120x40 lands at 108x36. That is the laid-out logo rather than
+     a broken `src`, which would occupy no space at all. */
+  expect(
+    await stripMark.evaluate((image: HTMLImageElement) => {
+      const box = image.getBoundingClientRect();
+      return {
+        decoded: `${image.naturalWidth}x${image.naturalHeight}`,
+        rendered: `${Math.round(box.width)}x${Math.round(box.height)}`,
+      };
+    }),
+  ).toEqual({ decoded: "120x40", rendered: "108x36" });
+  await expect(
+    page.locator(".public-site-sponsor-grid a").filter({
+      hasText: "Example Partner",
+    }),
+  ).toHaveAttribute("href", "https://example.com/partner");
   await expect(page.getByText("Priority question")).toBeVisible();
   await expect(page.locator(".public-shell")).toHaveAttribute(
     "data-public-theme",
@@ -798,8 +893,33 @@ test("organisers preview unpublished edits and publish a replacement", async ({
   await pageNavigation
     .getByRole("link", { name: longSponsorsNavigationLabel })
     .click();
-  await expect(page.getByRole("heading", { name: "Community" })).toBeVisible();
+  await expect(
+    page.getByRole("heading", { name: "Community", exact: true }),
+  ).toBeVisible();
   await expect(page.getByText("Example Partner")).toBeVisible();
+  /* A sponsor entry carries the mark, the name and the way out to the sponsor's
+     own site. The seeded organisations supply none of the two optional fields,
+     so this is where the complete entry is rendered. */
+  const markedSponsor = page.locator(".public-site-sponsor-card").filter({
+    hasText: "Example Partner",
+  });
+  const cardMark = markedSponsor.locator("img");
+  await expect(cardMark).toHaveAttribute("src", SPONSOR_LOGO_URL);
+  /* The page card allows a larger mark than the strip, so the same image sits
+     at its intrinsic size here instead of being scaled down. */
+  expect(
+    await cardMark.evaluate((image: HTMLImageElement) => {
+      const box = image.getBoundingClientRect();
+      return {
+        decoded: `${image.naturalWidth}x${image.naturalHeight}`,
+        rendered: `${Math.round(box.width)}x${Math.round(box.height)}`,
+      };
+    }),
+  ).toEqual({ decoded: "120x40", rendered: "120x40" });
+  await expect(
+    markedSponsor.getByRole("link", { name: "Visit sponsor" }),
+  ).toHaveAttribute("href", "https://example.com/partner");
+  await expectFixedPageOutline(page);
 
   await page.goto("/admin/site");
   await openSiteCollection(page, "Event pages");
@@ -827,7 +947,9 @@ test("organisers preview unpublished edits and publish a replacement", async ({
   const replacement = page.getByRole("dialog", {
     name: "Publish the event website?",
   });
-  await expect(replacement).toContainText("Pages removed: About, Sponsors");
+  await expect(replacement).toContainText(
+    "Pages removed: About the conference, Partners and sponsors",
+  );
   await expect(replacement).toContainText("Sponsors removed: Example Partner");
 });
 

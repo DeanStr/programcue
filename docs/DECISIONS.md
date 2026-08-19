@@ -1283,3 +1283,22 @@ surfaces they actually occupy. Contrast is checked after foregrounds reach
 their final hexadecimal colours, with a safety margin where the colour space
 allows one. Browser and presentation-rule coverage exercise representative
 pale, dark and boundary accents against the rendered surfaces.
+
+Sponsor tier sequencing on the public sponsors page is the alphabetical order of
+the tier names an organiser typed, because tier is free text and nothing in the
+schema ranks one tier above another. `idx_event_site_sponsors_order` and the
+service's read both encode `tier, position, name, id`, so `position` orders
+sponsors within a tier and never between tiers. That is a real limitation: a
+roster of Platinum, Gold and Bronze publishes in the order Bronze, Gold,
+Platinum.
+
+Ranking tiers explicitly is the correct fix and is deferred rather than
+declined. It needs a stored rank, a backfill rule for existing rows, a numbered
+migration replacing the index, editor affordances for ordering the tiers and a
+decision about what a tier is when two events spell one differently. None of
+that was required to seed and lay out the evaluation event's pages, and doing it
+inside a content change would have altered the published meaning of already
+persisted `position` values without a migration. The demo fixture works within
+the current rule by naming its tiers Headline, Major and Supporting, which read
+in their own hierarchy alphabetically; `demo-reset-fixtures.ts` records that
+constraint where a maintainer adding a tier will meet it.

@@ -52,6 +52,9 @@ test("anonymous visitors can use all programme surfaces and the gallery detail",
     "Schedule",
     "Speaker Gallery",
     "About",
+    "FAQ",
+    "Venue",
+    "Code of conduct",
     "Sponsors",
   ]);
   const eventNavigation = page

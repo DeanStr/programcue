@@ -553,9 +553,11 @@ manual assistive-technology acceptance remains external.
   completed reviews with a 2.30-point score spread, one committee
   discussion, a published waitlist decision, one historical public
   speaker-profile snapshot, an active named schedule embed, a published public
-  event-site snapshot (featured sessions and speakers, FAQ, About, Sponsors,
-  two text-only sponsors without outbound URLs, matching published references,
-  the fixture publication change, equal draft and published revisions) and
+  event-site snapshot (featured sessions and speakers, eight FAQ entries, all
+  five optional pages — About, FAQ, Venue, Code of conduct and Sponsors —
+  enabled with long-form bodies, seven text-only sponsors across three tiers
+  without outbound URLs, matching published references, the fixture publication
+  change, equal draft and published revisions) and
   canonical venue/map context. Reset completeness requires those records while
   still requiring zero prior SBEK submissions, assignments, speaker tasks and
   clean applicant activation.
@@ -1072,7 +1074,11 @@ revoked and deleted during file erasure.
   renderer as the public homepage and can select any fixed page through the
   public page-content renderer; disabled pages are explicitly identified.
   About, FAQ, Venue, Code of Conduct and Sponsors are the only optional pages;
-  content uses restricted Markdown with no arbitrary HTML or routes. Enabled
+  content uses restricted Markdown with no arbitrary HTML or routes. Fixed
+  pages set that Markdown at their own reading measure and scale, with visible
+  link affordances and body subheads one level below the page title; the
+  Sponsors page groups entries into tier sections in the order the service
+  reads them, which is by tier name. Enabled
   page navigation labels are case-insensitively unique and cannot reuse built-in
   destinations. Invalid or credentialed Markdown links fail draft validation
   and remain sanitized at render time as defense in depth.

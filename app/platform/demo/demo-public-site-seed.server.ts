@@ -8,6 +8,7 @@ import {
   DEMO_ORGANISATION_ID,
 } from "~/platform/demo/demo-identities";
 import {
+  DEMO_SHOWCASE_ENABLED_PAGES,
   DEMO_SHOWCASE_FEATURED_SESSION_IDS,
   DEMO_SHOWCASE_FEATURED_SPEAKER_IDS,
   DEMO_SHOWCASE_PUBLIC_SITE_AUDIT_ID,
@@ -158,7 +159,7 @@ export async function ensureDemoPublicSite(env: CloudflareEnvironment) {
             "venue",
             "faq",
           ],
-          pages: ["about", "sponsors"],
+          pages: DEMO_SHOWCASE_ENABLED_PAGES,
           sponsorCount: DEMO_SHOWCASE_SITE_SPONSORS.length,
         }),
         DEMO_SHOWCASE_TIMESTAMP - 600,

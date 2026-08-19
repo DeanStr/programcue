@@ -51,8 +51,23 @@ export function restrictedMarkdownPlainText(value: string) {
     .trim();
 }
 
-/** A deliberately small Markdown subset: headings, lists, paragraphs, bold and HTTPS links. */
-export function RestrictedMarkdown({ children }: { children: string }) {
+/**
+ * A deliberately small Markdown subset: headings, lists, paragraphs, bold and
+ * HTTPS links.
+ *
+ * `headingLevel` is the level `## ` renders at. It defaults to 3 because most
+ * of this content sits under a section heading on the event homepage. A fixed
+ * page has no section heading between its `h1` and its body, so it passes 2
+ * and the page reads h1 → h2 rather than skipping a level.
+ */
+export function RestrictedMarkdown({
+  children,
+  headingLevel = 3,
+}: {
+  children: string;
+  headingLevel?: 2 | 3;
+}) {
+  const Heading = headingLevel === 2 ? "h2" : "h3";
   const lines = children.replace(/\r\n?/gu, "\n").split("\n");
   const blocks: ReactNode[] = [];
   let paragraph: string[] = [];
@@ -89,7 +104,9 @@ export function RestrictedMarkdown({ children }: { children: string }) {
       flushParagraph();
       flushList();
       blocks.push(
-        <h3 key={`h:${blocks.length}`}>{inlineMarkdown(line.slice(3))}</h3>,
+        <Heading key={`h:${blocks.length}`}>
+          {inlineMarkdown(line.slice(3))}
+        </Heading>,
       );
     } else if (line.startsWith("- ")) {
       flushParagraph();

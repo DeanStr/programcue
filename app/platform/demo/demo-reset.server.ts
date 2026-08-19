@@ -35,6 +35,8 @@ import {
   DEMO_SHOWCASE_DISCUSSION_ID,
   DEMO_SHOWCASE_EMBED_CONFIGURATION,
   DEMO_SHOWCASE_EMBED_ID,
+  DEMO_SHOWCASE_ENABLED_PAGES,
+  DEMO_SHOWCASE_FAQ_ITEMS,
   DEMO_SHOWCASE_FEATURED_SESSION_IDS,
   DEMO_SHOWCASE_FEATURED_SPEAKER_IDS,
   DEMO_SHOWCASE_POSITIVE_REVIEW_ID,
@@ -1741,11 +1743,12 @@ async function baselineEvidence(env: CloudflareEnvironment) {
         AND site.last_operation_id = ?
         AND json_extract(site.draft_json, '$.theme') = 'light'
         AND json_extract(site.draft_json, '$.tagline') = ?
-        AND json_extract(site.draft_json, '$.pages.about.enabled') = 1
-        AND json_extract(site.draft_json, '$.pages.sponsors.enabled') = 1
+        ${DEMO_SHOWCASE_ENABLED_PAGES.map(
+          () => "AND json_extract(site.draft_json, ?) = 1",
+        ).join("\n        ")}
         AND json_array_length(json_extract(site.draft_json, '$.featuredSessionIds')) = ?
         AND json_array_length(json_extract(site.draft_json, '$.featuredSpeakerIds')) = ?
-        AND json_array_length(json_extract(site.draft_json, '$.faqItems')) = 2
+        AND json_array_length(json_extract(site.draft_json, '$.faqItems')) = ?
         AND json_array_length(json_extract(site.published_json, '$.sponsors')) = ?
         AND (SELECT COUNT(*) FROM event_public_site_references reference
               WHERE reference.event_id = site.event_id
@@ -1771,8 +1774,10 @@ async function baselineEvidence(env: CloudflareEnvironment) {
       DEMO_ORGANISATION_ID,
       DEMO_SHOWCASE_PUBLIC_SITE_OPERATION_ID,
       DEMO_SHOWCASE_PUBLIC_SITE_TAGLINE,
+      ...DEMO_SHOWCASE_ENABLED_PAGES.map((page) => `$.pages."${page}".enabled`),
       DEMO_SHOWCASE_FEATURED_SESSION_IDS.length,
       DEMO_SHOWCASE_FEATURED_SPEAKER_IDS.length,
+      DEMO_SHOWCASE_FAQ_ITEMS.length,
       DEMO_SHOWCASE_SITE_SPONSORS.length,
       ...DEMO_SHOWCASE_FEATURED_SESSION_IDS,
       ...DEMO_SHOWCASE_FEATURED_SPEAKER_IDS,

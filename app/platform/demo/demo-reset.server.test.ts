@@ -20,8 +20,12 @@ import {
 } from "~/platform/demo/demo-identities";
 import { ensureDemoPublicSite } from "~/platform/demo/demo-public-site-seed.server";
 import {
+  DEMO_SHOWCASE_ENABLED_PAGES,
+  DEMO_SHOWCASE_PUBLIC_SITE_AUDIT_ID,
   DEMO_SHOWCASE_PUBLIC_SITE_OPERATION_ID,
-  DEMO_SHOWCASE_SPONSOR_COMMUNITY_ID,
+  DEMO_SHOWCASE_SITE_SPONSORS,
+  DEMO_SHOWCASE_SPONSOR_EVENTLAB_ID,
+  demoShowcasePublishedSponsors,
 } from "~/platform/demo/demo-reset-fixtures";
 import {
   DEMO_EVENT_ID,
@@ -364,25 +368,28 @@ describe("complete evaluator demo reset", () => {
         featuredSpeakerIds: ["person-demo-speaker", "person-demo-submitter"],
         pages: {
           about: { enabled: true, navigationLabel: "About" },
+          faq: { enabled: true, navigationLabel: "FAQ" },
+          venue: { enabled: true, navigationLabel: "Venue" },
+          "code-of-conduct": {
+            enabled: true,
+            navigationLabel: "Code of conduct",
+          },
           sponsors: { enabled: true, navigationLabel: "Sponsors" },
         },
-        sponsors: [
-          expect.objectContaining({
-            id: "demo-showcase-sponsor-community",
-            name: "EventLab",
-            tier: "Community",
-            logoUrl: null,
-            websiteUrl: null,
-          }),
-          expect.objectContaining({
-            id: "demo-showcase-sponsor-partner",
-            name: "Northstar Events",
-            tier: "Partner",
-            logoUrl: null,
-            websiteUrl: null,
-          }),
-        ],
       });
+      // The published order is the organiser's, headline tier first, and the
+      // fictional showcase organisations carry no website or logo.
+      expect(publishedSite?.configuration.sponsors).toEqual(
+        demoShowcasePublishedSponsors(),
+      );
+      expect(
+        publishedSite?.configuration.sponsors
+          .slice(0, 2)
+          .map((sponsor) => [sponsor.name, sponsor.tier]),
+      ).toEqual([
+        ["Northstar Events", "Headline partner"],
+        ["EventLab", "Major partner"],
+      ]);
       await expect(
         testEnvironment.DB.prepare(
           `SELECT draft_revision AS draftRevision,
@@ -722,7 +729,7 @@ describe("complete evaluator demo reset", () => {
           ).bind(DEMO_EVENT_ID, DEMO_SHOWCASE_PUBLIC_SITE_OPERATION_ID),
           testEnvironment.DB.prepare(
             "DELETE FROM event_site_sponsors WHERE event_id = ? AND id = ?",
-          ).bind(DEMO_EVENT_ID, DEMO_SHOWCASE_SPONSOR_COMMUNITY_ID),
+          ).bind(DEMO_EVENT_ID, DEMO_SHOWCASE_SPONSOR_EVENTLAB_ID),
           testEnvironment.DB.prepare(
             `DELETE FROM event_public_site_references
               WHERE event_id = ? AND kind = 'session' AND record_id = 'demo-session-2'`,
@@ -754,7 +761,7 @@ describe("complete evaluator demo reset", () => {
           testEnvironment.DB.prepare(
             "SELECT id FROM event_site_sponsors WHERE event_id = ? AND id = ?",
           )
-            .bind(DEMO_EVENT_ID, DEMO_SHOWCASE_SPONSOR_COMMUNITY_ID)
+            .bind(DEMO_EVENT_ID, DEMO_SHOWCASE_SPONSOR_EVENTLAB_ID)
             .first(),
         ).resolves.toBeNull();
         await expect(
@@ -793,7 +800,7 @@ describe("complete evaluator demo reset", () => {
       await testEnvironment.DB.batch([
         testEnvironment.DB.prepare(
           "DELETE FROM event_site_sponsors WHERE event_id = ? AND id = ?",
-        ).bind(DEMO_EVENT_ID, DEMO_SHOWCASE_SPONSOR_COMMUNITY_ID),
+        ).bind(DEMO_EVENT_ID, DEMO_SHOWCASE_SPONSOR_EVENTLAB_ID),
         testEnvironment.DB.prepare(
           `DELETE FROM event_changes
             WHERE event_id = ? AND entity_type = 'public_site'
@@ -807,9 +814,9 @@ describe("complete evaluator demo reset", () => {
         testEnvironment.DB.prepare(
           "SELECT id FROM event_site_sponsors WHERE event_id = ? AND id = ?",
         )
-          .bind(DEMO_EVENT_ID, DEMO_SHOWCASE_SPONSOR_COMMUNITY_ID)
+          .bind(DEMO_EVENT_ID, DEMO_SHOWCASE_SPONSOR_EVENTLAB_ID)
           .first(),
-      ).resolves.toEqual({ id: DEMO_SHOWCASE_SPONSOR_COMMUNITY_ID });
+      ).resolves.toEqual({ id: DEMO_SHOWCASE_SPONSOR_EVENTLAB_ID });
       await expect(
         testEnvironment.DB.prepare(
           `SELECT correlation_id AS correlationId FROM event_changes
@@ -820,6 +827,133 @@ describe("complete evaluator demo reset", () => {
           .first(),
       ).resolves.toEqual({
         correlationId: DEMO_SHOWCASE_PUBLIC_SITE_OPERATION_ID,
+      });
+    });
+
+    /* A database seeded by an earlier fixture generation must not be topped up
+       into a mixture of the two. The seed inserts on OR IGNORE, so the site row
+       and the publication audit both survive; only the generation identity
+       tells the seed that what is already there is not what it would write. */
+    it("refuses to top up a database left on a previous fixture generation", async () => {
+      const testEnvironment = demoEnvironment();
+      await ensureJudgedDemoWorkflow(testEnvironment);
+      const previousGeneration = "demo-showcase:public-site-publish";
+      const previousAuditId = "audit-demo-showcase-public-site-published";
+      const previousAuditMetadata = JSON.stringify({
+        revision: 1,
+        sections: [
+          "introduction",
+          "featured_speakers",
+          "featured_sessions",
+          "statistics",
+          "venue",
+          "faq",
+        ],
+        pages: ["about", "sponsors"],
+        sponsorCount: 2,
+      });
+      expect(DEMO_SHOWCASE_PUBLIC_SITE_AUDIT_ID).not.toBe(previousAuditId);
+      await testEnvironment.DB.batch([
+        testEnvironment.DB.prepare(
+          `UPDATE event_public_sites SET last_operation_id = ?
+            WHERE event_id = ? AND last_operation_id = ?`,
+        ).bind(
+          previousGeneration,
+          DEMO_EVENT_ID,
+          DEMO_SHOWCASE_PUBLIC_SITE_OPERATION_ID,
+        ),
+        testEnvironment.DB.prepare(
+          "DELETE FROM event_site_sponsors WHERE event_id = ?",
+        ).bind(DEMO_EVENT_ID),
+        /* Audit rows cannot be rewritten or deleted. Model the record the old
+           fixture left behind so this test requires the two generations to use
+           distinct ids and proves reset preserves both. */
+        testEnvironment.DB.prepare(
+          `INSERT INTO audit_events (
+             id, actor_kind, origin, metadata_version, organisation_id,
+             event_id, actor_person_id, action, entity_type, entity_id,
+             correlation_id, metadata_json, created_at
+           ) VALUES (?, 'person', 'internal', 1, ?, ?, 'person-demo-admin',
+                     'public_site.published', 'public_site', ?, ?, ?, 1)`,
+        ).bind(
+          previousAuditId,
+          DEMO_ORGANISATION_ID,
+          DEMO_EVENT_ID,
+          DEMO_EVENT_ID,
+          previousGeneration,
+          previousAuditMetadata,
+        ),
+      ]);
+
+      const stale = await prepareJudgedDemoWorkflow(testEnvironment);
+      expect(stale.complete).toBe(false);
+      // No sponsors are written beside the previous generation's own records.
+      await expect(
+        testEnvironment.DB.prepare(
+          "SELECT COUNT(*) AS count FROM event_site_sponsors WHERE event_id = ?",
+        )
+          .bind(DEMO_EVENT_ID)
+          .first<{ count: number }>(),
+      ).resolves.toEqual({ count: 0 });
+      // The site the organiser is holding is left exactly as it was found.
+      await expect(
+        testEnvironment.DB.prepare(
+          `SELECT last_operation_id AS lastOperationId FROM event_public_sites
+            WHERE event_id = ?`,
+        )
+          .bind(DEMO_EVENT_ID)
+          .first(),
+      ).resolves.toEqual({ lastOperationId: previousGeneration });
+
+      await resetDemoEvent(
+        testEnvironment,
+        "person-demo-admin",
+        DEMO_RESET_CONFIRMATION,
+      );
+
+      await expect(
+        testEnvironment.DB.prepare(
+          "SELECT COUNT(*) AS count FROM event_site_sponsors WHERE event_id = ?",
+        )
+          .bind(DEMO_EVENT_ID)
+          .first<{ count: number }>(),
+      ).resolves.toEqual({ count: DEMO_SHOWCASE_SITE_SPONSORS.length });
+      /* Audit history is append-only and outlives the reset, so the current
+         generation must write its own row rather than inherit a record whose
+         page list and sponsor count describe the fixture it replaced. */
+      await expect(
+        testEnvironment.DB.prepare(
+          `SELECT correlation_id AS correlationId, metadata_json AS metadataJson
+             FROM audit_events WHERE id = ? AND event_id = ?`,
+        )
+          .bind(DEMO_SHOWCASE_PUBLIC_SITE_AUDIT_ID, DEMO_EVENT_ID)
+          .first<{ correlationId: string; metadataJson: string }>(),
+      ).resolves.toEqual({
+        correlationId: DEMO_SHOWCASE_PUBLIC_SITE_OPERATION_ID,
+        metadataJson: JSON.stringify({
+          revision: 1,
+          sections: [
+            "introduction",
+            "featured_speakers",
+            "featured_sessions",
+            "statistics",
+            "venue",
+            "faq",
+          ],
+          pages: DEMO_SHOWCASE_ENABLED_PAGES,
+          sponsorCount: DEMO_SHOWCASE_SITE_SPONSORS.length,
+        }),
+      });
+      await expect(
+        testEnvironment.DB.prepare(
+          `SELECT correlation_id AS correlationId, metadata_json AS metadataJson
+             FROM audit_events WHERE id = ? AND event_id = ?`,
+        )
+          .bind(previousAuditId, DEMO_EVENT_ID)
+          .first<{ correlationId: string; metadataJson: string }>(),
+      ).resolves.toEqual({
+        correlationId: previousGeneration,
+        metadataJson: previousAuditMetadata,
       });
     });
 

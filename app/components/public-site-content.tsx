@@ -456,7 +456,9 @@ export function PublicSitePageContent({
     return (
       <>
         {pageConfiguration.body ? (
-          <RestrictedMarkdown>{pageConfiguration.body}</RestrictedMarkdown>
+          <RestrictedMarkdown headingLevel={2}>
+            {pageConfiguration.body}
+          </RestrictedMarkdown>
         ) : null}
         <div className="public-site-faq">
           {configuration.faqItems.map((item) => (
@@ -473,7 +475,9 @@ export function PublicSitePageContent({
     return (
       <>
         {pageConfiguration.body ? (
-          <RestrictedMarkdown>{pageConfiguration.body}</RestrictedMarkdown>
+          <RestrictedMarkdown headingLevel={2}>
+            {pageConfiguration.body}
+          </RestrictedMarkdown>
         ) : null}
         <PublicVenueDetails
           preview={preview}
@@ -485,6 +489,8 @@ export function PublicSitePageContent({
     );
   }
   if (page === "sponsors") {
+    /* The service supplies sponsors in tier-name, position, name and id order.
+       Group that sequence without adding a second renderer-specific sort. */
     const tiers = new Map<string, typeof configuration.sponsors>();
     for (const sponsor of configuration.sponsors) {
       tiers.set(sponsor.tier, [...(tiers.get(sponsor.tier) ?? []), sponsor]);
@@ -492,14 +498,19 @@ export function PublicSitePageContent({
     return (
       <>
         {pageConfiguration.body ? (
-          <RestrictedMarkdown>{pageConfiguration.body}</RestrictedMarkdown>
+          <RestrictedMarkdown headingLevel={2}>
+            {pageConfiguration.body}
+          </RestrictedMarkdown>
         ) : null}
         {[...tiers.entries()].map(([tier, sponsors]) => (
           <section className="public-site-sponsor-tier" key={tier}>
-            <h2>{tier}</h2>
-            <div className="public-site-sponsor-grid">
+            <h2 className="public-site-sponsor-tier-name">{tier}</h2>
+            {/* Not the homepage's `public-site-sponsor-grid`: that is a credits
+                line where names sit on one baseline, and a tier of sponsors
+                carrying a sentence each needs an entry per sponsor. */}
+            <div className="public-site-sponsor-cards">
               {sponsors.map((sponsor) => (
-                <div className="public-site-sponsor-card" key={sponsor.id}>
+                <article className="public-site-sponsor-card" key={sponsor.id}>
                   {sponsor.logoUrl ? (
                     <img
                       src={sponsor.logoUrl}
@@ -509,7 +520,9 @@ export function PublicSitePageContent({
                   ) : null}
                   <strong>{sponsor.name}</strong>
                   {sponsor.description ? (
-                    <small>{sponsor.description}</small>
+                    <p className="public-site-sponsor-note">
+                      {sponsor.description}
+                    </p>
                   ) : null}
                   {sponsor.websiteUrl ? (
                     <PreviewSafeLink
@@ -520,7 +533,7 @@ export function PublicSitePageContent({
                       Visit sponsor <ExternalLink aria-hidden size={13} />
                     </PreviewSafeLink>
                   ) : null}
-                </div>
+                </article>
               ))}
             </div>
           </section>
@@ -531,7 +544,7 @@ export function PublicSitePageContent({
   const body =
     pageConfiguration.body ||
     (page === "about" ? (event.description ?? "") : "");
-  return <RestrictedMarkdown>{body}</RestrictedMarkdown>;
+  return <RestrictedMarkdown headingLevel={2}>{body}</RestrictedMarkdown>;
 }
 
 export function PublicEventSiteWorkspace({
