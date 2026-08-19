@@ -669,6 +669,14 @@ test("organisers preview unpublished edits and publish a replacement", async ({
   const sponsorsCharacterStatus = sponsorsPage
     .locator(".public-site-rich-text-field")
     .locator('.sr-only[aria-live="polite"]');
+  await sponsorsContent.fill("");
+  await sponsorsPage.getByRole("button", { name: "Subheading" }).click();
+  await expect(sponsorsContent.locator("h2")).toBeEmpty();
+  await expect(
+    sponsorsPage.getByRole("button", { name: "Subheading" }),
+  ).toHaveAttribute("aria-pressed", "true");
+  await sponsorsContent.type("Empty-first heading");
+  await expect(sponsorsContent.locator("h2")).toHaveText("Empty-first heading");
   await sponsorsContent.fill("A".repeat(8_001));
   await expect(sponsorsCharacterStatus).toHaveText(
     "Character limit exceeded. Shorten this content before saving.",

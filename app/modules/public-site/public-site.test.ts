@@ -218,6 +218,31 @@ describe("public event site rules", () => {
     ).toBe("- First\n- Second");
   });
 
+  it("keeps empty formatted blocks out of durable Markdown", () => {
+    expect(
+      restrictedMarkdownFromEditorDocument({
+        type: "doc",
+        content: [{ type: "heading", attrs: { level: 2 } }],
+      }),
+    ).toBe("");
+    expect(
+      restrictedMarkdownFromEditorDocument({
+        type: "doc",
+        content: [
+          {
+            type: "bulletList",
+            content: [
+              {
+                type: "listItem",
+                content: [{ type: "paragraph" }],
+              },
+            ],
+          },
+        ],
+      }),
+    ).toBe("");
+  });
+
   it("flattens pasted nested bullets without discarding their text", () => {
     expect(
       restrictedMarkdownFromEditorDocument({

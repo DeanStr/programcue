@@ -142,7 +142,10 @@ function isFlatRestrictedDocument(document: TiptapNode) {
 export function restrictedMarkdownFromEditorDocument(document: TiptapNode) {
   return (document.content ?? [])
     .map((node) => {
-      if (node.type === "heading") return `## ${serializeInline(node)}`;
+      if (node.type === "heading") {
+        const content = serializeInline(node);
+        return content ? `## ${content}` : "";
+      }
       if (node.type === "bulletList")
         return bulletListMarkdown(node).join("\n");
       return paragraphMarkdown(node);
