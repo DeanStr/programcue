@@ -2752,7 +2752,8 @@ components:
           type: string
           minLength: 1
           maxLength: 80
-          description: Stable identity preserved in reviews and historical snapshots.
+          not: { const: mixed }
+          description: Stable identity preserved in reviews and historical snapshots. The ID `mixed` is reserved for aggregate export results.
         label: { type: string, minLength: 1, maxLength: 120 }
     EvaluationRoundInput:
       type: object

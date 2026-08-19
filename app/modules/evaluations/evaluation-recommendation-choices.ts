@@ -10,7 +10,14 @@ export const DEFAULT_RECOMMENDATION_CHOICES = [
 
 export const recommendationChoiceSchema = z
   .object({
-    id: z.string().trim().min(1).max(80),
+    id: z
+      .string()
+      .trim()
+      .min(1)
+      .max(80)
+      .refine((id) => id !== "mixed", {
+        message: 'Recommendation choice identifier "mixed" is reserved.',
+      }),
     label: z
       .string()
       .trim()

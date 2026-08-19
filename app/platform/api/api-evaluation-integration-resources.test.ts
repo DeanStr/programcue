@@ -379,6 +379,22 @@ describe("evaluation and integration API reads", () => {
     await expect(missingRecommendationChoices.json()).resolves.toMatchObject({
       error: { code: "VALIDATION_ERROR" },
     });
+    const reservedMixedChoice = await invoke({
+      ...body,
+      rounds: [
+        {
+          ...body.rounds[0]!,
+          recommendationChoices: [
+            { id: "mixed", label: "Mixed" },
+            { id: "decline", label: "Decline" },
+          ],
+        },
+      ],
+    });
+    expect(reservedMixedChoice.status).toBe(422);
+    await expect(reservedMixedChoice.json()).resolves.toMatchObject({
+      error: { code: "VALIDATION_ERROR" },
+    });
     const first = await invoke(body);
     expect(first.status).toBe(200);
     const firstBody = (await first.json()) as { planId: string };

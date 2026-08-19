@@ -44,6 +44,7 @@ WHEN EXISTS (
       OR json_type(choice.value, '$.id') <> 'text'
       OR length(trim(json_extract(choice.value, '$.id'))) NOT BETWEEN 1 AND 80
       OR json_extract(choice.value, '$.id') <> trim(json_extract(choice.value, '$.id'))
+      OR json_extract(choice.value, '$.id') = 'mixed'
       OR json_type(choice.value, '$.label') <> 'text'
       OR length(trim(json_extract(choice.value, '$.label'))) NOT BETWEEN 1 AND 120
       OR json_extract(choice.value, '$.label') <> trim(json_extract(choice.value, '$.label'))
@@ -75,6 +76,7 @@ WHEN EXISTS (
       OR json_type(choice.value, '$.id') <> 'text'
       OR length(trim(json_extract(choice.value, '$.id'))) NOT BETWEEN 1 AND 80
       OR json_extract(choice.value, '$.id') <> trim(json_extract(choice.value, '$.id'))
+      OR json_extract(choice.value, '$.id') = 'mixed'
       OR json_type(choice.value, '$.label') <> 'text'
       OR length(trim(json_extract(choice.value, '$.label'))) NOT BETWEEN 1 AND 120
       OR json_extract(choice.value, '$.label') <> trim(json_extract(choice.value, '$.label'))

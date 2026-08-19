@@ -154,6 +154,40 @@ def validate_configurable_review_recommendations_forward_migration(root: Path) -
         )
         """,
     )
+    mixed_choices_json = (
+        '[{"id":"mixed","label":"Mixed"},'
+        '{"id":"decline","label":"Decline"}]'
+    )
+    expect_integrity_error(
+        deployed,
+        """
+        INSERT INTO evaluation_rounds (
+          id, event_id, plan_id, round_number, name, status,
+          scorecard_id, scorecard_version, recommendation_choices_json
+        ) VALUES (
+          'mixed-round', 'recommendation-event', 'recommendation-plan', 3,
+          'Mixed round', 'draft', 'mixed-scorecard', 1, ?
+        )
+        """,
+        (mixed_choices_json,),
+    )
+    deployed.execute(
+        """
+        INSERT INTO evaluation_rounds (
+          id, event_id, plan_id, round_number, name, status,
+          scorecard_id, scorecard_version, recommendation_choices_json
+        ) VALUES (
+          'editable-round', 'recommendation-event', 'recommendation-plan', 3,
+          'Editable round', 'draft', 'editable-scorecard', 1, ?
+        )
+        """,
+        (standard_json,),
+    )
+    expect_integrity_error(
+        deployed,
+        "UPDATE evaluation_rounds SET recommendation_choices_json = ? WHERE id = 'editable-round'",
+        (mixed_choices_json,),
+    )
     deployed.execute(
         """
         INSERT INTO evaluator_assignments (

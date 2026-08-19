@@ -42,6 +42,15 @@ describe("evaluation recommendation choices", () => {
     ).toBe(false);
   });
 
+  it('reserves "mixed" for aggregate export results', () => {
+    expect(
+      recommendationChoicesSchema.safeParse([
+        { id: "mixed", label: "Mixed" },
+        { id: "decline", label: "Decline" },
+      ]).success,
+    ).toBe(false);
+  });
+
   it("fails explicitly for corrupt persisted choices", () => {
     expect(() => parseRecommendationChoicesJson("{}", "Round test")).toThrow(
       "Round test has invalid persisted recommendation choices",
