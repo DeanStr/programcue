@@ -216,36 +216,42 @@ function CommandReminderComposer({
             <option value="optional">Optional email</option>
           </select>
         </label>
-        <details className="command-composer-more">
-          <summary>Foundation and purpose</summary>
-          <label className="label">
-            Approved reminder foundation
-            <select
-              className="select command-template-select"
-              name="baseTemplateVersionId"
-              required
-              disabled={!options.templates.length}
-            >
-              {options.templates.map((template) => (
+        {/* Both fields are required and both shape what the model is told to
+            do, so neither sits behind a disclosure: an operator could otherwise
+            queue a reminder without ever seeing which approved foundation it
+            was built from. The disclosure also bought no height — the column
+            has more slack than the two fields consume. */}
+        <label className="label">
+          Approved reminder foundation
+          <select
+            className="select command-template-select"
+            name="baseTemplateVersionId"
+            required
+            disabled={!options.templates.length}
+          >
+            {options.templates.length ? (
+              options.templates.map((template) => (
                 <option value={template.id} key={template.id}>
                   {template.name} · v{template.versionNumber}
                 </option>
-              ))}
-            </select>
-          </label>
-          <label className="label">
-            Message purpose
-            <textarea
-              className="textarea"
-              name="objective"
-              minLength={3}
-              maxLength={500}
-              rows={3}
-              required
-              defaultValue={DEFAULT_REMINDER_PURPOSE}
-            />
-          </label>
-        </details>
+              ))
+            ) : (
+              <option value="">No approved reminder template yet</option>
+            )}
+          </select>
+        </label>
+        <label className="label">
+          Message purpose
+          <textarea
+            className="textarea"
+            name="objective"
+            minLength={3}
+            maxLength={500}
+            rows={3}
+            required
+            defaultValue={DEFAULT_REMINDER_PURPOSE}
+          />
+        </label>
         <div className="command-composer-actions">
           <button
             className="btn primary"
@@ -257,7 +263,7 @@ function CommandReminderComposer({
           </button>
         </div>
         {canDraft ? null : (
-          <p className="command-notice" role="alert">
+          <p className="command-notice" role="status">
             <AlertCircle aria-hidden size={15} />
             <span>
               {options.problem ??
@@ -446,7 +452,8 @@ export default function CommandCentre({ loaderData }: Route.ComponentProps) {
             <span style={{ width: `${loaderData.readiness.percentage}%` }} />
           </div>
           <p className="command-score-caption">
-            Equal weight across {loaderData.workflows.length} workflows.
+            Equal weight across {loaderData.workflows.length} workflows, capped
+            by programme setup.
           </p>
           <details className="command-score-method">
             <summary>How this is scored</summary>
@@ -541,7 +548,7 @@ export default function CommandCentre({ loaderData }: Route.ComponentProps) {
       <section
         className="command-region command-support"
         id="command-assistants"
-        aria-label="Draft a reminder"
+        aria-label="Assistants and delivery"
       >
         <CommandReminderComposer options={loaderData.reminderOptions} />
         <div className="command-assist-side">

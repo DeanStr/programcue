@@ -87,9 +87,11 @@ test("mobile administration sections reveal linked content without overflow", as
   ).toBeVisible();
   await expect(page.getByRole("heading", { name: "Workflows" })).toBeVisible();
   await expect(page.getByLabel("Operational focus")).toBeVisible();
-  await page.getByText("Foundation and purpose", { exact: true }).click();
+  // The reminder foundation and purpose are required inputs that shape the
+  // draft, so they are shown outright rather than behind a disclosure.
   const reminderSelector = page.getByLabel("Approved reminder foundation");
   await expect(reminderSelector).toBeVisible();
+  await expect(page.getByLabel("Message purpose")).toBeVisible();
   const selectorBox = await reminderSelector.boundingBox();
   expect(selectorBox).not.toBeNull();
   expect(selectorBox!.x + selectorBox!.width).toBeLessThanOrEqual(390);

@@ -27,9 +27,6 @@
   .command-score-reading strong {
     font-size: clamp(48px, 11vw, 72px);
   }
-  .command-composer-form {
-    grid-template-columns: minmax(0, 1fr);
-  }
 }
 
 @media (max-width: 760px) {
