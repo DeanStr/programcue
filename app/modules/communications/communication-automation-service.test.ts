@@ -275,7 +275,7 @@ describe("communication scheduling and reminder automation", () => {
     )
       .bind(taskId, viewer.eventId, now - 60)
       .run();
-    await service.saveTrigger(viewer, {
+    const trigger = await service.saveTrigger(viewer, {
       templateId: template.templateId,
       triggerType: "task_overdue",
       audienceType: "overdue_speakers",
@@ -304,6 +304,11 @@ describe("communication scheduling and reminder automation", () => {
       readinessState: "overdue",
       readinessPercent: 0,
     });
+    await testEnv.DB.prepare(
+      "UPDATE communication_triggers SET enabled = 0 WHERE id = ? AND event_id = ?",
+    )
+      .bind(trigger.id, viewer.eventId)
+      .run();
   });
 
   it("marks a no-recipient reminder day complete instead of retrying all day", async () => {
