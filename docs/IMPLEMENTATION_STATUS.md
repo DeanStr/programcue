@@ -48,7 +48,14 @@ operational trust boundaries and the required Google integration disclosure.
 The product guide at `/guide` is a static, task-oriented walkthrough. Role
 entry pages cover evaluators and speakers/submitters; organiser chapters
 cover accounts, event setup, applications, review, speakers, scheduling,
-communications and operations. It does not read event data. Signing up is
+communications and operations. The 19 August 2026 copy matches current
+product names and rules: Command Centre Programme setup in four phases,
+per-round recommendation choices, visible assigned reviewers, required
+conflict-of-interest answers, portal invitation versus session
+confirmation, publication blocked by unconfirmed speakers, Track/Format
+questions from Event settings, and public Programme, Timetable, itinerary
+and event-website pages. It does
+not read event data. Signing up is
 described as login-only; a new conference workspace is requested through
 support, after which organisation owners and administrators can create
 further events. The administration command palette and the participant
