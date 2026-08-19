@@ -564,15 +564,21 @@ manual assistive-technology acceptance remains external.
   Focused Worker and Playwright coverage verifies the public-site showcase
   locally. A later `/demo` load does not restore deleted sponsors or stale
   featured references onto an already-edited site.
-- **Production evaluator repository slice:** On 16 August 2026 the
-  access-code-gated evaluator reset completed under deployed revision
-  `ad9b752`, rotated the evaluator-session generation and returned a fresh
-  unlocked role picker. That reset verified the preceding showcase cohort
-  (reviews, discussion, decision, profile revision, embed and venue), not the
-  public-site snapshot. Production health reported that exact revision and the
-  temporary operator reset endpoint remained unavailable with HTTP 404. After
-  this fixture is deployed and another production reset runs, attach that
-  evidence here.
+- **Production evaluator repository slice:** On 19 August 2026 the routine
+  access-code-gated `/evaluate` reset completed under deployed revision
+  `98f4f10a89c1e52cd1715799f2bfb985f98f4fc6`, rotated the evaluator-session
+  generation and returned an unlocked picker with no selected persona. Its
+  server-side completion check accepted the current showcase baseline,
+  including the published public-site snapshot. A production browser check
+  verified that the homepage does not duplicate the dedicated FAQ and that
+  About, FAQ, Venue, Code of conduct and Sponsors all resolve with their seeded
+  content. Production health reported the exact revision and the temporary
+  operator reset endpoint remained unavailable with HTTP 404. Fresh
+  `organizer`, `speaker` and `reviewer` browser states were then captured and
+  restored successfully at `/admin/command`, `/apply/form` and `/events/select`;
+  the speaker capture performed the documented fixed-account activation without
+  claiming mailbox or provider delivery. The evaluator plan reports exactly
+  those three personas as pre-authenticated.
 
 ### Reference-board adoption evidence
 
