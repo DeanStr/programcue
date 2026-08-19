@@ -11,6 +11,7 @@ import {
   publicSitePageDescriptions,
   publicSiteSectionLabels,
 } from "./admin-public-site-constants";
+import { RestrictedMarkdownEditor } from "./restricted-markdown-editor";
 
 type FeaturedPickerItem = {
   id: string;
@@ -270,16 +271,12 @@ function SitePageEditor({
               }
             />
           </label>
-          <label className="label">
-            Restricted Markdown
-            <textarea
-              className="textarea"
-              maxLength={8000}
-              rows={5}
-              value={value.body}
-              onChange={(event) => update({ body: event.target.value })}
-            />
-          </label>
+          <RestrictedMarkdownEditor
+            label="Page content"
+            maximumLength={8_000}
+            value={value.body}
+            onChange={(body) => update({ body })}
+          />
         </div>
       </details>
     </fieldset>
@@ -631,25 +628,23 @@ export function AdminPublicSiteEditor({
                   }
                 />
               </label>
-              <label className="label mt">
-                Answer
-                <textarea
-                  className="textarea"
-                  maxLength={2000}
-                  rows={4}
+              <div className="mt">
+                <RestrictedMarkdownEditor
+                  label="Answer"
+                  maximumLength={2_000}
                   value={item.answer}
-                  onChange={(event) =>
+                  onChange={(answer) =>
                     setConfiguration((current) => ({
                       ...current,
                       faqItems: current.faqItems.map((candidate) =>
                         candidate.id === item.id
-                          ? { ...candidate, answer: event.target.value }
+                          ? { ...candidate, answer }
                           : candidate,
                       ),
                     }))
                   }
                 />
-              </label>
+              </div>
               <button
                 className="btn small mt"
                 type="button"
@@ -790,24 +785,22 @@ export function AdminPublicSiteEditor({
               }
             />
           </label>
-          <label className="label mt">
-            Introduction
-            <textarea
-              className="textarea"
-              maxLength={2000}
-              rows={3}
+          <div className="mt">
+            <RestrictedMarkdownEditor
+              label="Introduction"
+              maximumLength={2_000}
               value={configuration.postEvent.body}
-              onChange={(event) =>
+              onChange={(body) =>
                 setConfiguration((current) => ({
                   ...current,
                   postEvent: {
                     ...current.postEvent,
-                    body: event.target.value,
+                    body,
                   },
                 }))
               }
             />
-          </label>
+          </div>
         </fieldset>
       </details>
 

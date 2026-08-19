@@ -1086,8 +1086,11 @@ revoked and deleted during file erasure.
   or enabled. Desktop/mobile previews use the same
   renderer as the public homepage and can select any fixed page through the
   public page-content renderer; disabled pages are explicitly identified.
-  About, FAQ, Venue, Code of Conduct and Sponsors are the only optional pages;
-  content uses restricted Markdown with no arbitrary HTML or routes. Fixed
+  About, FAQ, Venue, Code of Conduct and Sponsors are the only optional pages.
+  Fixed-page bodies, FAQ answers and post-event introduction use a constrained
+  Tiptap editor for subheadings, bullet lists, bold text and credential-free
+  HTTPS links while preserving restricted Markdown as the validated and
+  published storage contract, with no arbitrary HTML or routes. Fixed
   pages set that Markdown at their own reading measure and scale, with visible
   link affordances and body subheads one level below the page title; the
   Sponsors page groups entries into tier sections in the order the service

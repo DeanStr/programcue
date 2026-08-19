@@ -30,10 +30,10 @@ async function openSiteCollection(page: Page, title: string) {
 }
 
 async function ensurePageContentOpen(editor: Locator) {
-  const markdown = editor.getByLabel("Restricted Markdown");
-  if (await markdown.isVisible()) return;
+  const pageContent = editor.getByRole("textbox", { name: "Page content" });
+  if (await pageContent.isVisible()) return;
   await editor.locator(":scope > details > summary").click();
-  await expect(markdown).toBeVisible();
+  await expect(pageContent).toBeVisible();
 }
 
 async function paintedColours(locator: Locator) {
@@ -596,10 +596,15 @@ test("organisers preview unpublished edits and publish a replacement", async ({
     .nth(seededFaq)
     .getByLabel("Question")
     .fill("Priority question");
+  const priorityAnswer = faqQuestions
+    .nth(seededFaq)
+    .getByRole("textbox", { name: "Answer" });
+  await priorityAnswer.fill("Priority answer");
+  await priorityAnswer.press("ControlOrMeta+a");
   await faqQuestions
     .nth(seededFaq)
-    .getByLabel("Answer")
-    .fill("Priority answer");
+    .getByRole("button", { name: "Bold" })
+    .click();
   for (let position = seededFaq; position > 0; position -= 1) {
     await faqQuestions
       .nth(position)
@@ -618,9 +623,26 @@ test("organisers preview unpublished edits and publish a replacement", async ({
   await ensurePageContentOpen(aboutPage);
   const longAboutNavigationLabel = "A".repeat(40);
   await aboutPage.getByLabel("Navigation label").fill(longAboutNavigationLabel);
-  await aboutPage
-    .getByLabel("Restricted Markdown")
-    .fill("## Why attend\n\nMeet practitioners building better events.");
+  const aboutContent = aboutPage.getByRole("textbox", {
+    name: "Page content",
+  });
+  await aboutContent.fill("Why attend");
+  await aboutContent.press("ControlOrMeta+a");
+  await aboutPage.getByRole("button", { name: "Subheading" }).click();
+  await expect(aboutContent.locator("h2")).toHaveText("Why attend");
+  await aboutContent.press("End");
+  await aboutContent.press("Enter");
+  await aboutContent.type("Meet practitioners building better events.");
+  for (let character = 0; character < "events.".length; character += 1)
+    await aboutContent.press("Shift+ArrowLeft");
+  await aboutPage.getByRole("button", { name: "Link" }).click();
+  const linkSettings = aboutPage.getByRole("group", {
+    name: "Link settings",
+  });
+  await linkSettings
+    .getByLabel("HTTPS link")
+    .fill("https://example.test/events");
+  await linkSettings.getByRole("button", { name: "Apply link" }).click();
   const sponsorsPage = page
     .locator(".public-site-page-editor fieldset")
     .filter({ has: page.locator("legend", { hasText: "Sponsors" }) });
@@ -631,7 +653,7 @@ test("organisers preview unpublished edits and publish a replacement", async ({
     .getByLabel("Navigation label")
     .fill(longSponsorsNavigationLabel);
   await sponsorsPage
-    .getByLabel("Restricted Markdown")
+    .getByRole("textbox", { name: "Page content" })
     .fill("Thanks to the organisations supporting this event.");
   /* Every page ships enabled in the baseline, so one is switched off here to
      exercise the preview's "not enabled" notice below. */
@@ -666,6 +688,11 @@ test("organisers preview unpublished edits and publish a replacement", async ({
       .locator(".public-site-preview-frame")
       .getByRole("heading", { name: "Why attend" }),
   ).toBeVisible();
+  await expect(
+    page
+      .locator(".public-site-preview-frame")
+      .getByRole("link", { name: "events." }),
+  ).toHaveAttribute("href", "https://example.test/events");
   await page.getByLabel("Preview content").selectOption("code-of-conduct");
   await expect(
     page.locator(".public-site-preview-frame > header"),
@@ -707,6 +734,7 @@ test("organisers preview unpublished edits and publish a replacement", async ({
     .filter({ hasText: "Priority question" });
   await previewFaq.locator("summary").click();
   await expect(previewFaq).toHaveAttribute("open", "");
+  await expect(previewFaq.locator("strong")).toHaveText("Priority answer");
   await previewFaq.scrollIntoViewIfNeeded();
   await expect(previewFrame).toHaveScreenshot(
     "public-site-preview-mobile-light-faq-open.png",
@@ -1032,7 +1060,9 @@ test("organisers first-publish a bounded site on a blank event", async ({
   await page.getByRole("button", { name: "Add question" }).click();
   const faq = page.locator(".public-site-faq-editor > fieldset").first();
   await faq.getByLabel("Question").fill("When does registration open?");
-  await faq.getByLabel("Answer").fill("The organiser will publish dates here.");
+  await faq
+    .getByRole("textbox", { name: "Answer" })
+    .fill("The organiser will publish dates here.");
   await openSiteCollection(page, "Event pages");
   const aboutPage = page
     .locator(".public-site-page-editor fieldset")
@@ -1040,7 +1070,7 @@ test("organisers first-publish a bounded site on a blank event", async ({
   await aboutPage.getByLabel("Publish this page with the site").check();
   await ensurePageContentOpen(aboutPage);
   await aboutPage
-    .getByLabel("Restricted Markdown")
+    .getByRole("textbox", { name: "Page content" })
     .fill("This site was published before a programme existed.");
   const sponsorsPage = page
     .locator(".public-site-page-editor fieldset")

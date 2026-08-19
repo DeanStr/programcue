@@ -1,6 +1,6 @@
 import { z } from "zod";
-
 import { optionalCredentialFreeHttpsUrlSchema } from "~/modules/events/https-url";
+import { restrictedMarkdownLink } from "./restricted-markdown";
 
 export const PUBLIC_SITE_SECTION_TYPES = [
   "introduction",
@@ -51,11 +51,11 @@ function credentialFreeHttpsUrl(value: string) {
 
 const restrictedMarkdown = (maximum: number, lengthMessage: string) =>
   boundedText(maximum, lengthMessage).superRefine((value, context) => {
-    const markdownLink = /\[[^\]\r\n]+\]\(([^)]*)\)/gu;
-    for (const match of value.matchAll(markdownLink)) {
-      const rawTarget = match[1] ?? "";
-      const target = rawTarget.trim();
-      if (target !== rawTarget || !credentialFreeHttpsUrl(target)) {
+    for (const match of value.matchAll(restrictedMarkdownLink)) {
+      const rawTarget = match[2] ?? "";
+      const enclosed = rawTarget.startsWith("<") && rawTarget.endsWith(">");
+      const target = enclosed ? rawTarget.slice(1, -1) : rawTarget;
+      if (target !== target.trim() || !credentialFreeHttpsUrl(target)) {
         context.addIssue({
           code: "custom",
           message: "Markdown links must use a credential-free HTTPS URL.",

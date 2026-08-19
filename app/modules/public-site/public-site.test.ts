@@ -6,6 +6,10 @@ import {
   RestrictedMarkdown,
   restrictedMarkdownPlainText,
 } from "~/components/restricted-markdown";
+import {
+  restrictedMarkdownEditorDocument,
+  restrictedMarkdownFromEditorDocument,
+} from "~/components/restricted-markdown-editor";
 import type { PublishedProgramme } from "~/modules/programme/public-programme-types";
 import { submissionApplicationAvailability } from "~/modules/submissions/submission-availability";
 import {
@@ -162,6 +166,271 @@ describe("public event site rules", () => {
         "## Why attend\n\n- Meet **practitioners**\n- Read [the guide](https://example.test/guide)",
       ),
     ).toBe("Why attend Meet practitioners Read the guide");
+  });
+
+  it("round-trips every visual editor format through restricted Markdown", () => {
+    const markdown = [
+      "## Practical details",
+      "",
+      "Read **the schedule** and [travel advice](https://example.test/travel).",
+      "",
+      "- Bring photo identification",
+      "- Ask **the team** for help",
+    ].join("\n");
+
+    expect(
+      restrictedMarkdownFromEditorDocument(
+        restrictedMarkdownEditorDocument(markdown),
+      ),
+    ).toBe(markdown);
+  });
+
+  it("keeps adjacent visual-editor bullets in one Markdown list", () => {
+    expect(
+      restrictedMarkdownFromEditorDocument({
+        type: "doc",
+        content: [
+          {
+            type: "bulletList",
+            content: [
+              {
+                type: "listItem",
+                content: [
+                  {
+                    type: "paragraph",
+                    content: [{ type: "text", text: "First" }],
+                  },
+                ],
+              },
+              {
+                type: "listItem",
+                content: [
+                  {
+                    type: "paragraph",
+                    content: [{ type: "text", text: "Second" }],
+                  },
+                ],
+              },
+            ],
+          },
+        ],
+      }),
+    ).toBe("- First\n- Second");
+  });
+
+  it("flattens pasted nested bullets without discarding their text", () => {
+    expect(
+      restrictedMarkdownFromEditorDocument({
+        type: "doc",
+        content: [
+          {
+            type: "bulletList",
+            content: [
+              {
+                type: "listItem",
+                content: [
+                  {
+                    type: "paragraph",
+                    content: [{ type: "text", text: "Parent" }],
+                  },
+                  {
+                    type: "bulletList",
+                    content: [
+                      {
+                        type: "listItem",
+                        content: [
+                          {
+                            type: "paragraph",
+                            content: [{ type: "text", text: "Child" }],
+                          },
+                        ],
+                      },
+                    ],
+                  },
+                ],
+              },
+            ],
+          },
+        ],
+      }),
+    ).toBe("- Parent\n- Child");
+  });
+
+  it("flattens every pasted list-item paragraph without discarding text", () => {
+    expect(
+      restrictedMarkdownFromEditorDocument({
+        type: "doc",
+        content: [
+          {
+            type: "bulletList",
+            content: [
+              {
+                type: "listItem",
+                content: [
+                  {
+                    type: "paragraph",
+                    content: [{ type: "text", text: "First paragraph" }],
+                  },
+                  {
+                    type: "paragraph",
+                    content: [{ type: "text", text: "Second paragraph" }],
+                  },
+                ],
+              },
+            ],
+          },
+        ],
+      }),
+    ).toBe("- First paragraph\n- Second paragraph");
+  });
+
+  it("round-trips HTTPS links containing Markdown delimiters", () => {
+    const markdown = restrictedMarkdownFromEditorDocument({
+      type: "doc",
+      content: [
+        {
+          type: "paragraph",
+          content: [
+            {
+              type: "text",
+              text: "Parenthesised link",
+              marks: [
+                {
+                  type: "link",
+                  attrs: { href: "https://example.test/a(b)" },
+                },
+              ],
+            },
+          ],
+        },
+      ],
+    });
+
+    expect(markdown).toBe("[Parenthesised link](<https://example.test/a(b)>)");
+    expect(
+      restrictedMarkdownEditorDocument(markdown).content?.[0]?.content?.[0]
+        ?.marks?.[0]?.attrs?.href,
+    ).toBe("https://example.test/a(b)");
+    expect(
+      publicSiteDraftSchema.parse({
+        ...defaultPublicSiteDraft(),
+        pages: {
+          ...defaultPublicSiteDraft().pages,
+          about: {
+            ...defaultPublicSiteDraft().pages.about,
+            body: markdown,
+          },
+        },
+      }).pages.about.body,
+    ).toBe(markdown);
+    expect(
+      renderToStaticMarkup(createElement(RestrictedMarkdown, null, markdown)),
+    ).toContain('href="https://example.test/a(b)"');
+  });
+
+  it("escapes formatting delimiters in visual-editor text", () => {
+    const markdown = restrictedMarkdownFromEditorDocument({
+      type: "doc",
+      content: [
+        {
+          type: "paragraph",
+          content: [
+            {
+              type: "text",
+              text: "[New]",
+              marks: [
+                {
+                  type: "link",
+                  attrs: { href: "https://example.test/new" },
+                },
+              ],
+            },
+            { type: "text", text: " and " },
+            {
+              type: "text",
+              text: "2 * 3",
+              marks: [{ type: "bold" }],
+            },
+            { type: "text", text: " \\ **literal**" },
+          ],
+        },
+      ],
+    });
+
+    expect(markdown).toBe(
+      "[\\[New\\]](https://example.test/new) and **2 \\* 3** \\\\ \\*\\*literal\\*\\*",
+    );
+    expect(
+      restrictedMarkdownFromEditorDocument(
+        restrictedMarkdownEditorDocument(markdown),
+      ),
+    ).toBe(markdown);
+    const markup = renderToStaticMarkup(
+      createElement(RestrictedMarkdown, null, markdown),
+    );
+    expect(markup).toContain(
+      '<a href="https://example.test/new" rel="noreferrer">[New]</a>',
+    );
+    expect(markup).toContain("<strong>2 * 3</strong> \\ **literal**");
+  });
+
+  it("escapes block markers typed as ordinary paragraph text", () => {
+    const markdown = restrictedMarkdownFromEditorDocument({
+      type: "doc",
+      content: [
+        {
+          type: "paragraph",
+          content: [{ type: "text", text: "## Not a heading" }],
+        },
+        {
+          type: "paragraph",
+          content: [{ type: "text", text: "- Not a list item" }],
+        },
+      ],
+    });
+
+    expect(markdown).toBe("\\## Not a heading\n\n\\- Not a list item");
+    expect(restrictedMarkdownEditorDocument(markdown)).toMatchObject({
+      content: [
+        { type: "paragraph", content: [{ text: "## Not a heading" }] },
+        { type: "paragraph", content: [{ text: "- Not a list item" }] },
+      ],
+    });
+  });
+
+  it("renders bold text inside a safe link without permitting unsafe links", () => {
+    const safeMarkup = renderToStaticMarkup(
+      createElement(
+        RestrictedMarkdown,
+        null,
+        "[**Read the guide**](https://example.test/guide)",
+      ),
+    );
+    const unsafeMarkup = renderToStaticMarkup(
+      createElement(
+        RestrictedMarkdown,
+        null,
+        "[Private](https://user:password@example.test/guide)",
+      ),
+    );
+
+    expect(safeMarkup).toContain(
+      '<a href="https://example.test/guide" rel="noreferrer"><strong>Read the guide</strong></a>',
+    );
+    expect(unsafeMarkup).not.toContain("href=");
+    expect(unsafeMarkup).not.toContain("user:password");
+    expect(unsafeMarkup).toContain("Private");
+  });
+
+  it("does not introduce spaces around inline formatting in metadata", () => {
+    const markup = renderToStaticMarkup(
+      createElement(RestrictedMarkdown, null, "Meet **Sam**, then apply."),
+    );
+
+    expect(markup).toContain("Meet <strong>Sam</strong>, then apply.");
+    expect(restrictedMarkdownPlainText("Meet **Sam**, then apply.")).toBe(
+      "Meet Sam, then apply.",
+    );
   });
 
   it("renders post-event Markdown and published accessibility resources", () => {
