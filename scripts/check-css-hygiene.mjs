@@ -63,6 +63,11 @@ for (const name of [
   "--pc-entry-minutes",
   "--pc-entry-column",
   "--pc-entry-columns",
+  "--timetable-min-width",
+  "--timetable-columns",
+  "--timetable-rows",
+  "--timetable-column",
+  "--timetable-row",
 ]) {
   definedTokens.add(name);
 }
