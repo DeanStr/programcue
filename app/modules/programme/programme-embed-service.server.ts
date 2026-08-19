@@ -3,6 +3,7 @@ import type { Viewer } from "~/platform/auth/authorize.server";
 import {
   type ProgrammeEmbedConfiguration,
   parsePersistedProgrammeEmbedConfiguration,
+  parseProgrammeEmbedConfiguration,
 } from "./programme-embed-configuration";
 import { PublicProgrammeService } from "./public-programme-service.server";
 
@@ -122,7 +123,7 @@ function parseConfigurationJson(value: unknown) {
       "Managed embed configuration is invalid. Refresh and try again.",
     );
   }
-  return parsePersistedProgrammeEmbedConfiguration(parsed);
+  return parseProgrammeEmbedConfiguration(parsed);
 }
 
 function parseRow(row: EmbedRow): ManagedProgrammeEmbed {

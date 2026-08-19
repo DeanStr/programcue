@@ -525,25 +525,22 @@ function PublicTimetableSessionDialog({
           )}
         </section>
 
-        <footer className="public-timetable-detail-actions">
-          {model.embedded || model.shared ? null : (
-            <SaveSessionButton session={session} model={model} />
-          )}
-          <a
-            className="btn small"
-            href={publicSessionDetailPath(
-              model.programme.event.slug,
-              session.id,
+        {model.embedded ? null : (
+          <footer className="public-timetable-detail-actions">
+            {model.shared ? null : (
+              <SaveSessionButton session={session} model={model} />
             )}
-            target={model.embedded ? "_blank" : undefined}
-            rel={model.embedded ? "noopener noreferrer" : undefined}
-          >
-            Open session page
-            {model.embedded ? (
-              <span className="sr-only"> (opens in a new tab)</span>
-            ) : null}
-          </a>
-        </footer>
+            <a
+              className="btn small"
+              href={publicSessionDetailPath(
+                model.programme.event.slug,
+                session.id,
+              )}
+            >
+              Open session page
+            </a>
+          </footer>
+        )}
       </article>
     </dialog>
   );

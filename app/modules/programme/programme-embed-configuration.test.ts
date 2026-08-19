@@ -5,6 +5,7 @@ import {
   managedProgrammeEmbedUrl,
   managedProgrammeWidgetSnippet,
   parsePersistedProgrammeEmbedConfiguration,
+  parseProgrammeEmbedConfiguration,
   parseProgrammeEmbedControls,
   parseProgrammeEmbedDensity,
   parseProgrammeEmbedFields,
@@ -290,8 +291,19 @@ describe("programme embed configuration", () => {
     ).toContain('data-surface="gallery"');
   });
 
-  it("validates persisted managed configurations without filling missing values", () => {
+  it("keeps retired agenda compatibility confined to persisted configurations", () => {
     const configuration = defaultProgrammeEmbedConfiguration();
+    expect(
+      parseProgrammeEmbedConfiguration(
+        JSON.parse(JSON.stringify(configuration)),
+      ),
+    ).toEqual(configuration);
+    expect(() =>
+      parseProgrammeEmbedConfiguration({
+        ...configuration,
+        surface: "agenda",
+      }),
+    ).toThrow(/surface must be sessions, speakers, schedule or gallery/i);
     expect(
       parsePersistedProgrammeEmbedConfiguration(
         JSON.parse(JSON.stringify(configuration)),

@@ -352,7 +352,7 @@ export function assertProgrammeEmbedConfiguration(
   assertEmbedHeight(configuration.height);
 }
 
-export function parsePersistedProgrammeEmbedConfiguration(
+export function parseProgrammeEmbedConfiguration(
   value: unknown,
 ): ProgrammeEmbedConfiguration {
   if (!value || typeof value !== "object" || Array.isArray(value)) {
@@ -394,20 +394,35 @@ export function parsePersistedProgrammeEmbedConfiguration(
       "Managed embed configuration has an invalid shape.",
     );
   }
-  // Agenda was a published embed surface before Programme and Timetable were
-  // given distinct jobs. Existing managed embeds are durable external
-  // installations, so read that one retired value as the consolidated
-  // Programme surface while all newly authored configurations reject it.
-  const configuration = {
-    ...candidate,
-    surface: candidate.surface === "agenda" ? "sessions" : candidate.surface,
-  } as ProgrammeEmbedConfiguration;
+  const configuration = candidate as ProgrammeEmbedConfiguration;
   assertProgrammeEmbedConfiguration(configuration);
   return {
     ...configuration,
     controls: [...configuration.controls],
     fields: [...configuration.fields],
   };
+}
+
+export function parsePersistedProgrammeEmbedConfiguration(
+  value: unknown,
+): ProgrammeEmbedConfiguration {
+  // Agenda was a published embed surface before Programme and Timetable were
+  // given distinct jobs. Existing managed embeds are durable external
+  // installations, so read that one retired value as the consolidated
+  // Programme surface. Strict authoring paths use
+  // parseProgrammeEmbedConfiguration and reject the retired value.
+  if (
+    value &&
+    typeof value === "object" &&
+    !Array.isArray(value) &&
+    (value as Record<string, unknown>).surface === "agenda"
+  ) {
+    return parseProgrammeEmbedConfiguration({
+      ...value,
+      surface: "sessions",
+    });
+  }
+  return parseProgrammeEmbedConfiguration(value);
 }
 
 export function programmeEmbedSearchConfiguration(

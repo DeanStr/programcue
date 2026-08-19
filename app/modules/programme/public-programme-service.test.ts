@@ -141,7 +141,7 @@ describe("published programme and itinerary", () => {
       installationNote: "",
       configurationJson: JSON.stringify({
         ...defaultProgrammeEmbedConfiguration(),
-        surface: "agenda",
+        surface: "sessions",
       }),
     });
     const context = new RouterContextProvider();
@@ -178,6 +178,26 @@ describe("published programme and itinerary", () => {
       (error: unknown) => error,
     );
     expect(queryRejected).toMatchObject({ status: 400 });
+
+    await testEnv.DB.prepare(
+      "UPDATE programme_embeds SET configuration_json = ? WHERE id = ?",
+    )
+      .bind(
+        JSON.stringify({
+          ...defaultProgrammeEmbedConfiguration(),
+          surface: "agenda",
+        }),
+        id,
+      )
+      .run();
+    const historicalAgenda = await load();
+    if (historicalAgenda instanceof Response)
+      throw new Error("Historical agenda embed returned a raw response.");
+    expect(historicalAgenda.data).toMatchObject({
+      embedded: true,
+      surface: "sessions",
+      managedEmbedRevision: 2,
+    });
 
     await testEnv.DB.prepare(
       "UPDATE programme_embeds SET configuration_json = ? WHERE id = ?",

@@ -3,7 +3,10 @@ import { describe, expect, it } from "vitest";
 
 import type { Viewer } from "~/platform/auth/authorize.server";
 import { ensureDemoProgramme } from "~/platform/demo/seed.server";
-import { defaultProgrammeEmbedConfiguration } from "./programme-embed-configuration";
+import {
+  defaultProgrammeEmbedConfiguration,
+  ProgrammeEmbedConfigurationError,
+} from "./programme-embed-configuration";
 import {
   ProgrammeEmbedRevisionConflictError,
   ProgrammeEmbedService,
@@ -21,6 +24,71 @@ const admin: Viewer = {
 };
 
 describe("managed programme embeds", () => {
+  it("rejects retired agenda authoring while reading historical rows as Programme", async () => {
+    const testEnvironment = env as unknown as CloudflareEnvironment;
+    await ensureDemoProgramme(testEnvironment);
+    const service = new ProgrammeEmbedService(testEnvironment);
+    const configuration = defaultProgrammeEmbedConfiguration();
+    const retiredConfiguration = JSON.stringify({
+      ...configuration,
+      surface: "agenda",
+    });
+
+    await expect(
+      service.create(admin, {
+        name: "Retired create surface",
+        slug: `retired-create-${crypto.randomUUID().slice(0, 8)}`,
+        installationNote: "",
+        configurationJson: retiredConfiguration,
+      }),
+    ).rejects.toBeInstanceOf(ProgrammeEmbedConfigurationError);
+
+    const authoredId = await service.create(admin, {
+      name: "Current surface",
+      slug: `current-${crypto.randomUUID().slice(0, 8)}`,
+      installationNote: "",
+      configurationJson: JSON.stringify(configuration),
+    });
+    await expect(
+      service.update(admin, {
+        id: authoredId,
+        revision: 1,
+        name: "Retired update surface",
+        installationNote: "",
+        configurationJson: retiredConfiguration,
+        confirmed: "yes",
+      }),
+    ).rejects.toBeInstanceOf(ProgrammeEmbedConfigurationError);
+
+    const historicalId = crypto.randomUUID();
+    const historicalSlug = `historical-${historicalId.slice(0, 8)}`;
+    await testEnvironment.DB.prepare(
+      `INSERT INTO programme_embeds (
+         id, event_id, organisation_id, name, slug, status,
+         configuration_json, installation_note, revision,
+         created_by_person_id, updated_by_person_id
+       ) VALUES (?, ?, ?, ?, ?, 'draft', ?, NULL, 1, ?, ?)`,
+    )
+      .bind(
+        historicalId,
+        admin.eventId,
+        admin.organisationId,
+        "Historical agenda",
+        historicalSlug,
+        retiredConfiguration,
+        admin.personId,
+        admin.personId,
+      )
+      .run();
+
+    expect(
+      (await service.list(admin)).find((embed) => embed.id === historicalId),
+    ).toMatchObject({
+      slug: historicalSlug,
+      configuration: { surface: "sessions" },
+    });
+  });
+
   it("persists audited revisions and enforces the terminal lifecycle", async () => {
     const testEnvironment = env as unknown as CloudflareEnvironment;
     await ensureDemoProgramme(testEnvironment);

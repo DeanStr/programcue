@@ -213,10 +213,11 @@ test("previews every public widget type and applies granular field selection", a
   await expect(timetableDetail).toBeVisible();
   await expect(timetableFrame.locator(".public-shell.embedded")).toBeVisible();
   await expect(
-    timetableDetail.getByRole("link", {
-      name: /Open session page \(opens in a new tab\)/i,
-    }),
-  ).toHaveAttribute("target", "_blank");
+    timetableDetail.getByRole("link", { name: "Open session page" }),
+  ).toHaveCount(0);
+  await expect(
+    timetableDetail.locator(".public-timetable-detail-actions"),
+  ).toHaveCount(0);
   await timetableDetail
     .getByRole("button", { name: "Close session details" })
     .click();
