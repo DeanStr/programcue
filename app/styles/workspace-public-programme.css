@@ -1330,6 +1330,18 @@
   background: rgb(18 25 35 / 58%);
   backdrop-filter: blur(2px);
 }
+.public-timetable-inline-detail {
+  margin-top: var(--space-4);
+  scroll-margin-block: var(--space-4);
+  border: 1px solid var(--line-strong);
+  border-left: 4px solid var(--event-accent);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+  box-shadow: var(--elev-2);
+}
+.public-timetable-inline-detail:focus-within {
+  border-color: var(--event-accent);
+}
 .public-timetable-detail {
   display: grid;
   gap: var(--space-5);

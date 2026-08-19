@@ -279,16 +279,20 @@ function PublicTimetableDay({
   label,
   model,
   selectedSessionId,
+  detailSession,
   openSessionDetails,
+  closeSessionDetails,
 }: {
   sessions: PublishedSession[];
   label: string;
   model: PublicProgrammeModel;
   selectedSessionId: string | null;
+  detailSession: PublishedSession | null;
   openSessionDetails: (
     session: PublishedSession,
     trigger: HTMLButtonElement,
   ) => void;
+  closeSessionDetails: () => void;
 }) {
   const layout = publicTimetableLayout(
     sessions,
@@ -365,7 +369,12 @@ function PublicTimetableDay({
                     <button
                       type="button"
                       className="public-timetable-session-trigger"
-                      aria-haspopup="dialog"
+                      aria-haspopup={model.embedded ? undefined : "dialog"}
+                      aria-controls={
+                        model.embedded && selectedSessionId === session.id
+                          ? `public-timetable-inline-detail-${session.id}`
+                          : undefined
+                      }
                       aria-expanded={selectedSessionId === session.id}
                       aria-label={`Open details for ${session.title}`}
                       onClick={(event) =>
@@ -407,6 +416,176 @@ function PublicTimetableDay({
           })}
         </div>
       </div>
+      {model.embedded && detailSession ? (
+        <PublicTimetableSessionInlineDetail
+          session={detailSession}
+          model={model}
+          close={closeSessionDetails}
+          key={detailSession.id}
+        />
+      ) : null}
+    </section>
+  );
+}
+
+function PublicTimetableSessionDetail({
+  session,
+  model,
+  close,
+  closeButtonRef,
+}: {
+  session: PublishedSession;
+  model: PublicProgrammeModel;
+  close: () => void;
+  closeButtonRef?: RefObject<HTMLButtonElement | null>;
+}) {
+  const speakers = sessionSpeakerDetails(session, model.speakerById);
+  const titleId = `public-timetable-detail-title-${session.id}`;
+  const description = normaliseDescription(session.description);
+
+  return (
+    <article className="public-timetable-detail">
+      <header className="public-timetable-detail-heading">
+        <div>
+          <h2 id={titleId}>{session.title}</h2>
+          {model.showEmbedField("track") || model.showEmbedField("format") ? (
+            <SessionTags
+              session={session}
+              showTrack={model.showEmbedField("track")}
+              showFormat={model.showEmbedField("format")}
+            />
+          ) : null}
+        </div>
+        <button
+          type="button"
+          className="btn small"
+          ref={closeButtonRef}
+          onClick={close}
+        >
+          Close session details
+        </button>
+      </header>
+
+      {model.showEmbedField("time") || model.showEmbedField("location") ? (
+        <dl className="public-timetable-detail-facts">
+          {model.showEmbedField("time") ? (
+            <div>
+              <dt>When</dt>
+              <dd>
+                {formatDay(session.startsAt, model.programme.event.timezone)}
+                <br />
+                {formatProgrammeTimeRange(
+                  session.startsAt,
+                  session.endsAt,
+                  model.programme.event.timezone,
+                )}{" "}
+                · {formatProgrammeDuration(session.startsAt, session.endsAt)}
+              </dd>
+            </div>
+          ) : null}
+          {model.showEmbedField("location") ? (
+            <div>
+              <dt>Where</dt>
+              <dd>
+                <SessionPlace session={session} />
+              </dd>
+            </div>
+          ) : null}
+        </dl>
+      ) : null}
+
+      {model.showEmbedField("description") ? (
+        <section aria-labelledby={`${titleId}-about`}>
+          <h3 id={`${titleId}-about`}>About this session</h3>
+          <p>{description || "Description not provided."}</p>
+        </section>
+      ) : null}
+
+      <section aria-labelledby={`${titleId}-speakers`}>
+        <h3 id={`${titleId}-speakers`}>
+          {speakers.length === 1 ? "Speaker" : "Speakers"}
+        </h3>
+        {model.showSpeakerDetails && speakers.length ? (
+          <div className="public-timetable-detail-speakers">
+            {speakers.map((speaker) => {
+              const affiliation = speakerAffiliation(speaker);
+              return (
+                <article key={speaker.id}>
+                  <div className="public-timetable-detail-speaker-heading">
+                    {model.showEmbedField("images") ? (
+                      <PublicSpeakerAvatar speaker={speaker} size={40} />
+                    ) : null}
+                    <div>
+                      <strong>{speaker.displayName}</strong>
+                      {model.showEmbedField("affiliations") && affiliation ? (
+                        <span>{affiliation}</span>
+                      ) : null}
+                    </div>
+                  </div>
+                  {model.showEmbedField("biography") && speaker.biography ? (
+                    <p>{normaliseDescription(speaker.biography)}</p>
+                  ) : null}
+                </article>
+              );
+            })}
+          </div>
+        ) : (
+          <PublicSessionSpeakerNames session={session} model={model} />
+        )}
+      </section>
+
+      {model.embedded ? null : (
+        <footer className="public-timetable-detail-actions">
+          {model.shared ? null : (
+            <SaveSessionButton session={session} model={model} />
+          )}
+          <a
+            className="btn small"
+            href={publicSessionDetailPath(
+              model.programme.event.slug,
+              session.id,
+            )}
+          >
+            Open session page
+          </a>
+        </footer>
+      )}
+    </article>
+  );
+}
+
+function PublicTimetableSessionInlineDetail({
+  session,
+  model,
+  close,
+}: {
+  session: PublishedSession;
+  model: PublicProgrammeModel;
+  close: () => void;
+}) {
+  const closeButtonRef = useRef<HTMLButtonElement>(null);
+
+  useEffect(() => {
+    closeButtonRef.current?.focus();
+  }, []);
+
+  return (
+    <section
+      className="public-timetable-inline-detail"
+      id={`public-timetable-inline-detail-${session.id}`}
+      aria-labelledby={`public-timetable-detail-title-${session.id}`}
+      onKeyDown={(event) => {
+        if (event.key !== "Escape") return;
+        event.preventDefault();
+        close();
+      }}
+    >
+      <PublicTimetableSessionDetail
+        session={session}
+        model={model}
+        close={close}
+        closeButtonRef={closeButtonRef}
+      />
     </section>
   );
 }
@@ -424,9 +603,7 @@ function PublicTimetableSessionDialog({
   close: () => void;
   closed: () => void;
 }) {
-  const speakers = sessionSpeakerDetails(session, model.speakerById);
   const titleId = `public-timetable-detail-title-${session.id}`;
-  const description = normaliseDescription(session.description);
 
   useEffect(() => {
     const dialog = dialogRef.current;
@@ -440,108 +617,11 @@ function PublicTimetableSessionDialog({
       ref={dialogRef}
       onClose={closed}
     >
-      <article className="public-timetable-detail">
-        <header className="public-timetable-detail-heading">
-          <div>
-            <h2 id={titleId}>{session.title}</h2>
-            {model.showEmbedField("track") || model.showEmbedField("format") ? (
-              <SessionTags
-                session={session}
-                showTrack={model.showEmbedField("track")}
-                showFormat={model.showEmbedField("format")}
-              />
-            ) : null}
-          </div>
-          <button type="button" className="btn small" onClick={close}>
-            Close session details
-          </button>
-        </header>
-
-        {model.showEmbedField("time") || model.showEmbedField("location") ? (
-          <dl className="public-timetable-detail-facts">
-            {model.showEmbedField("time") ? (
-              <div>
-                <dt>When</dt>
-                <dd>
-                  {formatDay(session.startsAt, model.programme.event.timezone)}
-                  <br />
-                  {formatProgrammeTimeRange(
-                    session.startsAt,
-                    session.endsAt,
-                    model.programme.event.timezone,
-                  )}{" "}
-                  · {formatProgrammeDuration(session.startsAt, session.endsAt)}
-                </dd>
-              </div>
-            ) : null}
-            {model.showEmbedField("location") ? (
-              <div>
-                <dt>Where</dt>
-                <dd>
-                  <SessionPlace session={session} />
-                </dd>
-              </div>
-            ) : null}
-          </dl>
-        ) : null}
-
-        {model.showEmbedField("description") ? (
-          <section aria-labelledby={`${titleId}-about`}>
-            <h3 id={`${titleId}-about`}>About this session</h3>
-            <p>{description || "Description not provided."}</p>
-          </section>
-        ) : null}
-
-        <section aria-labelledby={`${titleId}-speakers`}>
-          <h3 id={`${titleId}-speakers`}>
-            {speakers.length === 1 ? "Speaker" : "Speakers"}
-          </h3>
-          {model.showSpeakerDetails && speakers.length ? (
-            <div className="public-timetable-detail-speakers">
-              {speakers.map((speaker) => {
-                const affiliation = speakerAffiliation(speaker);
-                return (
-                  <article key={speaker.id}>
-                    <div className="public-timetable-detail-speaker-heading">
-                      {model.showEmbedField("images") ? (
-                        <PublicSpeakerAvatar speaker={speaker} size={40} />
-                      ) : null}
-                      <div>
-                        <strong>{speaker.displayName}</strong>
-                        {model.showEmbedField("affiliations") && affiliation ? (
-                          <span>{affiliation}</span>
-                        ) : null}
-                      </div>
-                    </div>
-                    {model.showEmbedField("biography") && speaker.biography ? (
-                      <p>{normaliseDescription(speaker.biography)}</p>
-                    ) : null}
-                  </article>
-                );
-              })}
-            </div>
-          ) : (
-            <PublicSessionSpeakerNames session={session} model={model} />
-          )}
-        </section>
-
-        {model.embedded ? null : (
-          <footer className="public-timetable-detail-actions">
-            {model.shared ? null : (
-              <SaveSessionButton session={session} model={model} />
-            )}
-            <a
-              className="btn small"
-              href={publicSessionDetailPath(
-                model.programme.event.slug,
-                session.id,
-              )}
-            >
-              Open session page
-            </a>
-          </footer>
-        )}
-      </article>
+      <PublicTimetableSessionDetail
+        session={session}
+        model={model}
+        close={close}
+      />
     </dialog>
   );
 }
@@ -556,10 +636,6 @@ export function PublicScheduleSurface({
   );
   const detailDialogRef = useRef<HTMLDialogElement>(null);
   const detailReturnFocusRef = useRef<HTMLButtonElement | null>(null);
-  const closeDetails = () => {
-    const dialog = detailDialogRef.current;
-    if (dialog?.open) dialog.close();
-  };
   const detailsClosed = () => {
     setDetailSession(null);
     const returnFocus = detailReturnFocusRef.current;
@@ -569,6 +645,14 @@ export function PublicScheduleSurface({
         if (returnFocus?.isConnected) returnFocus.focus();
       });
     }
+  };
+  const closeDetails = () => {
+    if (model.embedded) {
+      detailsClosed();
+      return;
+    }
+    const dialog = detailDialogRef.current;
+    if (dialog?.open) dialog.close();
   };
   const openDetails = (
     session: PublishedSession,
@@ -598,7 +682,7 @@ export function PublicScheduleSurface({
       <SurfaceHeading
         title="Timetable"
         id="public-schedule-title"
-        description="Compare times and rooms at a glance. Open a session for its full description and speaker details."
+        description="Compare times and rooms at a glance. Open a session to see the details included in this timetable."
         count={`${sessionCount} sessions`}
       />
       {!model.embedded && model.showControl("day") ? (
@@ -611,14 +695,21 @@ export function PublicScheduleSurface({
             label={group.label}
             model={model}
             selectedSessionId={detailSession?.id ?? null}
+            detailSession={
+              detailSession &&
+              group.sessions.some((session) => session.id === detailSession.id)
+                ? detailSession
+                : null
+            }
             openSessionDetails={openDetails}
+            closeSessionDetails={closeDetails}
             key={group.key}
           />
         ))
       ) : (
         <p className="empty">No published sessions match the current day.</p>
       )}
-      {detailSession ? (
+      {!model.embedded && detailSession ? (
         <PublicTimetableSessionDialog
           session={detailSession}
           model={model}

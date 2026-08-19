@@ -180,7 +180,10 @@ describe("public programme speaker surfaces", () => {
     expect(markup).toContain(
       'aria-label="Open details for The Future of Attendee Engagement"',
     );
-    expect(markup).toContain('aria-haspopup="dialog"');
+    expect(markup).not.toContain('aria-haspopup="dialog"');
+    expect(markup).toContain(
+      "Open a session to see the details included in this timetable.",
+    );
     expect(markup).not.toContain(
       "/public/programme/future-of-events-2027/sessions?session=session-1",
     );

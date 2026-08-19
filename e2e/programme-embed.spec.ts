@@ -1,4 +1,4 @@
-import { expect, type Page, test } from "@playwright/test";
+import { expect, type Locator, type Page, test } from "@playwright/test";
 
 import { e2eOrigin } from "./support/e2e-origin";
 
@@ -6,6 +6,23 @@ async function waitForInterface(page: Page, path: string) {
   const response = await page.goto(path);
   expect(response?.ok()).toBeTruthy();
   await page.locator("body[data-hydrated='true']").waitFor();
+}
+
+async function expectInHostViewport(page: Page, locator: Locator) {
+  await expect
+    .poll(async () => {
+      const box = await locator.boundingBox();
+      const viewport = page.viewportSize();
+      return Boolean(
+        box &&
+          viewport &&
+          box.x < viewport.width &&
+          box.x + box.width > 0 &&
+          box.y < viewport.height &&
+          box.y + box.height > 0,
+      );
+    })
+    .toBe(true);
 }
 
 test.beforeEach(async ({ page }) => {
@@ -209,9 +226,12 @@ test("previews every public widget type and applies granular field selection", a
     .getByRole("button", { name: /Open details for/i })
     .first();
   await timetableSession.click();
-  const timetableDetail = timetableFrame.getByRole("dialog");
+  const timetableDetail = timetableFrame.locator(
+    ".public-timetable-inline-detail",
+  );
   await expect(timetableDetail).toBeVisible();
   await expect(timetableFrame.locator(".public-shell.embedded")).toBeVisible();
+  await expect(timetableFrame.getByRole("dialog")).toHaveCount(0);
   await expect(
     timetableDetail.getByRole("link", { name: "Open session page" }),
   ).toHaveCount(0);
@@ -573,6 +593,51 @@ test("exports static programme files and mounts a filtered auto-resizing widget"
       Number.parseInt(await frame.evaluate((node) => node.style.height), 10),
     )
     .toBeGreaterThan(720);
+
+  const widgetFrame = frame.contentFrame();
+  const sessionTriggers = widgetFrame.getByRole("button", {
+    name: /Open details for/i,
+  });
+  const firstSession = sessionTriggers.first();
+  const lastSession = sessionTriggers.last();
+  await widgetFrame.locator(".public-timetable-grid").evaluate((grid) => {
+    const sessions = grid.querySelectorAll<HTMLElement>(
+      ".public-timetable-session",
+    );
+    grid.style.paddingBottom = "3600px";
+    const last = sessions.item(sessions.length - 1);
+    last.style.transform = "translateY(3400px)";
+    last.style.zIndex = "3";
+  });
+  await expect
+    .poll(async () =>
+      Number.parseInt(await frame.evaluate((node) => node.style.height), 10),
+    )
+    .toBeGreaterThan(4_000);
+
+  await firstSession.click();
+  let inlineDetail = widgetFrame.locator(".public-timetable-inline-detail");
+  let closeDetail = inlineDetail.getByRole("button", {
+    name: "Close session details",
+  });
+  await expect(closeDetail).toBeFocused();
+  await expectInHostViewport(page, closeDetail);
+  await closeDetail.press("Escape");
+  await expect(inlineDetail).toHaveCount(0);
+  await expect(firstSession).toBeFocused();
+  await expectInHostViewport(page, firstSession);
+
+  await lastSession.click();
+  inlineDetail = widgetFrame.locator(".public-timetable-inline-detail");
+  closeDetail = inlineDetail.getByRole("button", {
+    name: "Close session details",
+  });
+  await expect(closeDetail).toBeFocused();
+  await expectInHostViewport(page, closeDetail);
+  await closeDetail.click();
+  await expect(inlineDetail).toHaveCount(0);
+  await expect(lastSession).toBeFocused();
+  await expectInHostViewport(page, lastSession);
 });
 
 test("keeps programme detail panels inside the active embed filters", async ({
