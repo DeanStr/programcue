@@ -180,8 +180,7 @@ test("previews every public widget type and applies granular field selection", a
   const preview = page.locator(".programme-embed-preview iframe");
   const widgetTypes = [
     ["speakers", "Speakers"],
-    ["agenda", "Agenda"],
-    ["schedule", "Schedule Itinerary"],
+    ["schedule", "Timetable"],
     ["gallery", "Speaker Gallery"],
     ["sessions", null],
   ] as const;
@@ -203,21 +202,44 @@ test("previews every public widget type and applies granular field selection", a
     }
   }
 
-  await page.getByLabel("Public surface").selectOption("agenda");
+  await page.getByLabel("Public surface").selectOption("schedule");
+  let timetableFrame = preview.contentFrame();
+  await timetableFrame.locator("body[data-hydrated='true']").waitFor();
+  const timetableSession = timetableFrame
+    .getByRole("button", { name: /Open details for/i })
+    .first();
+  await timetableSession.click();
+  const timetableDetail = timetableFrame.getByRole("dialog");
+  await expect(timetableDetail).toBeVisible();
+  await expect(timetableFrame.locator(".public-shell.embedded")).toBeVisible();
+  await expect(
+    timetableDetail.getByRole("link", {
+      name: /Open session page \(opens in a new tab\)/i,
+    }),
+  ).toHaveAttribute("target", "_blank");
+  await timetableDetail
+    .getByRole("button", { name: "Close session details" })
+    .click();
+  await expect(timetableDetail).toHaveCount(0);
+  await expect(timetableSession).toBeFocused();
+
   await page.getByLabel("Time and duration").uncheck();
   await page.getByLabel("Room and location").uncheck();
   await page.getByLabel("Descriptions").uncheck();
   await expect(preview).toHaveAttribute("src", /fields=/);
-  const agendaFrame = preview.contentFrame();
-  await agendaFrame.locator("body[data-hydrated='true']").waitFor();
-  await expect(agendaFrame.locator(".agenda-card-title").first()).toBeVisible();
+  timetableFrame = preview.contentFrame();
+  await timetableFrame.locator("body[data-hydrated='true']").waitFor();
   await expect(
-    agendaFrame.getByLabel("Search sessions, speakers, or topics"),
+    timetableFrame.locator(".public-timetable-session").first(),
   ).toBeVisible();
-  await expect(agendaFrame.getByLabel("Filter by day")).toBeVisible();
-  await expect(agendaFrame.locator(".agenda-card-time")).toHaveCount(0);
-  await expect(agendaFrame.locator(".session-place")).toHaveCount(0);
-  await expect(agendaFrame.locator(".agenda-card-description")).toHaveCount(0);
+  await expect(
+    timetableFrame.getByLabel("Search sessions, speakers, or topics"),
+  ).toBeVisible();
+  await expect(timetableFrame.getByLabel("Filter by day")).toBeVisible();
+  await expect(timetableFrame.locator(".session-time")).toHaveCount(0);
+  await expect(
+    timetableFrame.locator(".public-timetable-session-room:visible"),
+  ).toHaveCount(0);
 
   await page.getByLabel("Installation format").selectOption("widget");
   await expect(
@@ -225,7 +247,7 @@ test("previews every public widget type and applies granular field selection", a
       name: "Auto-resizing widget code",
       exact: true,
     }),
-  ).toHaveValue(/data-surface="agenda".*data-fields=/s);
+  ).toHaveValue(/data-surface="schedule".*data-fields=/s);
 
   await page.getByLabel("Speaker detail blocks and profile links").uncheck();
 
@@ -252,22 +274,13 @@ test("previews every public widget type and applies granular field selection", a
     fieldFrame.getByRole("link", { name: /View profile and sessions/i }),
   ).toHaveCount(0);
 
-  for (const surface of ["agenda", "schedule"] as const) {
-    await page.getByLabel("Public surface").selectOption(surface);
-    fieldFrame = preview.contentFrame();
-    await fieldFrame.locator("body[data-hydrated='true']").waitFor();
-    await expect(
-      fieldFrame.locator(".public-session-speaker-names").first(),
-    ).toBeVisible();
-    await expect(fieldFrame.locator(".public-session-speakers")).toHaveCount(0);
-    if (surface === "agenda") {
-      await expect(
-        fieldFrame.locator(
-          ".public-surface-detail .public-session-speaker-names",
-        ),
-      ).toHaveCount(0);
-    }
-  }
+  await page.getByLabel("Public surface").selectOption("schedule");
+  fieldFrame = preview.contentFrame();
+  await fieldFrame.locator("body[data-hydrated='true']").waitFor();
+  await expect(
+    fieldFrame.locator(".public-session-speaker-names").first(),
+  ).toBeVisible();
+  await expect(fieldFrame.locator(".public-session-speakers")).toHaveCount(0);
 
   await page.getByLabel("Public surface").selectOption("speakers");
   fieldFrame = preview.contentFrame();
@@ -360,7 +373,7 @@ test("rejects unsupported embed configuration instead of silently falling back",
   );
   expect(invalidSurface.status()).toBe(404);
   expect(await invalidSurface.text()).toContain(
-    "Embed surface must be sessions, speakers, agenda, schedule or gallery",
+    "Embed surface must be sessions, speakers, schedule or gallery",
   );
 });
 
@@ -413,6 +426,24 @@ test("widget preserves invalid options for rejection and fails before mounting",
   );
   await expect(page.locator("#programme-widget iframe")).toHaveCount(0);
 
+  await page.route(`${e2eOrigin}/__programcue-widget-legacy-agenda`, (route) =>
+    route.fulfill({
+      contentType: "text/html",
+      body: `
+        <div id="programme-widget"></div>
+        <script src="${e2eOrigin}/programcue-widget.js"
+          data-programcue-event="future-of-events-2027"
+          data-target="#programme-widget"
+          data-surface="agenda"></script>
+      `,
+    }),
+  );
+  await page.goto(`${e2eOrigin}/__programcue-widget-legacy-agenda`);
+  await expect(page.locator("#programme-widget iframe")).toHaveAttribute(
+    "src",
+    /\/embed\/future-of-events-2027\/sessions$/u,
+  );
+
   await page.route(
     `${e2eOrigin}/__programcue-widget-invalid-surface`,
     (route) =>
@@ -431,7 +462,7 @@ test("widget preserves invalid options for rejection and fails before mounting",
   await page.goto(`${e2eOrigin}/__programcue-widget-invalid-surface`);
   await expect(surfaceError).resolves.toHaveProperty(
     "message",
-    "Program Cue widget data-surface must be sessions, speakers, agenda, schedule or gallery.",
+    "Program Cue widget data-surface must be sessions, speakers, schedule or gallery.",
   );
   await expect(page.locator("#programme-widget iframe")).toHaveCount(0);
 
@@ -451,7 +482,7 @@ test("widget preserves invalid options for rejection and fails before mounting",
   await page.goto(`${e2eOrigin}/__programcue-widget-empty-surface`);
   await expect(emptySurfaceError).resolves.toHaveProperty(
     "message",
-    "Program Cue widget data-surface must be sessions, speakers, agenda, schedule or gallery.",
+    "Program Cue widget data-surface must be sessions, speakers, schedule or gallery.",
   );
   await expect(page.locator("#programme-widget iframe")).toHaveCount(0);
 
@@ -510,7 +541,7 @@ test("exports static programme files and mounts a filtered auto-resizing widget"
           <script src="${e2eOrigin}/programcue-widget.js"
             data-programcue-event="future-of-events-2027"
             data-target="#programme-widget"
-            data-surface="agenda"
+            data-surface="schedule"
             data-day="2027-05-21"
             data-accent="#0d9488"
             data-controls="search"
@@ -523,7 +554,7 @@ test("exports static programme files and mounts a filtered auto-resizing widget"
   const frame = page.locator("#programme-widget iframe");
   await expect(frame).toHaveAttribute(
     "src",
-    /\/embed\/future-of-events-2027\/agenda\?day=2027-05-21&accent=%230d9488&controls=search&density=compact&fields=location%2Ctrack%2Cformat%2Cspeaker-details$/,
+    /\/embed\/future-of-events-2027\/schedule\?day=2027-05-21&accent=%230d9488&controls=search&density=compact&fields=location%2Ctrack%2Cformat%2Cspeaker-details$/,
   );
   await frame.contentFrame().locator("body[data-hydrated='true']").waitFor();
   await expect(
@@ -532,13 +563,10 @@ test("exports static programme files and mounts a filtered auto-resizing widget"
   await expect(
     frame.contentFrame().locator(".public-filters select"),
   ).toHaveCount(0);
-  await expect(frame.contentFrame().locator(".agenda-card")).toHaveCount(2);
-  await expect(frame.contentFrame().locator(".agenda-card-time")).toHaveCount(
-    0,
-  );
   await expect(
-    frame.contentFrame().locator(".agenda-card-description"),
-  ).toHaveCount(0);
+    frame.contentFrame().locator(".public-timetable-session"),
+  ).toHaveCount(2);
+  await expect(frame.contentFrame().locator(".session-time")).toHaveCount(0);
   await expect
     .poll(async () =>
       Number.parseInt(await frame.evaluate((node) => node.style.height), 10),
@@ -658,22 +686,17 @@ test("keeps omitted fields out of session and speaker detail views", async ({
     page,
     "/embed/future-of-events-2027/schedule?fields=none",
   );
-  await expect
-    .poll(() =>
-      page
-        .locator(".public-itinerary-card")
-        .first()
-        .evaluate(
-          (element) =>
-            getComputedStyle(element).gridTemplateColumns.split(" ").length,
-        ),
-    )
-    .toBe(1);
+  await expect(page.locator(".public-timetable-session").first()).toBeVisible();
+  await expect(
+    page.locator(".public-timetable-session .session-time"),
+  ).toHaveCount(0);
 
   await waitForInterface(
     page,
     "/embed/future-of-events-2027/agenda?fields=none",
   );
-  await expect(page.locator(".programme-day-divider")).toHaveCount(2);
-  await expect(page.locator(".agenda-board")).toHaveCount(2);
+  await expect(page).toHaveURL(
+    /\/embed\/future-of-events-2027\/sessions\?fields=none$/u,
+  );
+  await expect(page.locator(".programme-row")).toHaveCount(5);
 });

@@ -193,8 +193,8 @@ event-scoped ZIP operation ID so polling and a ready download survive reload.
 
 ## Public programme workstream decisions
 
-**Public embed surfaces.** The embed URL and generated widget allow exactly five
-published surfaces: sessions, speakers, agenda, schedule and gallery. One
+**Public embed surfaces.** The embed URL and generated widget allow exactly four
+published surfaces: programme sessions, speakers, timetable and gallery. One
 strict allowlist controls optional supporting fields such as time, location,
 track, format, descriptions, rich speaker details and linked sessions. Session
 titles and speaker names remain the identifying minimum; disabling the
@@ -204,11 +204,15 @@ visibility is the separate sessions-overview `directory` choice. Iframe and
 auto-resizing widget output share this stateless contract, unknown surfaces or
 fields fail explicitly, and every surface continues to read only the current
 immutable published programme snapshot. Saved embed records, arbitrary CSS and
-parallel content stores are not introduced.
+parallel content stores are not introduced. The retired agenda surface is not
+available for new embeds. Durable managed agenda embeds read as Programme, and
+already-shared stateless agenda URLs redirect there. Existing script installs
+with `data-surface="agenda"` also normalise to Programme when the hosted widget
+runtime loads; new generated snippets never emit that retired value.
 
 | Decision                  | Outcome                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           |
 | ------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Public programme surfaces | Sessions, speakers, agenda, schedule/itinerary and Speaker Gallery are route-level views over one `PublishedProgramme` snapshot. The gallery does not create a second speaker or schedule store, and all private reads retain event, publication, visibility and profile predicates. Optional speaker title, organisation and biography fields render only when present; attendee surfaces do not turn missing profile data into administrator-facing quality labels.                                                                                                                                                             |
+| Public programme surfaces | Programme, Timetable, speakers and Speaker Gallery are route-level views over one `PublishedProgramme` snapshot. Programme owns browsing, filters, expandable descriptions and session saving. Timetable alone owns the time-by-room comparison, reflowing to chronological cards on narrow screens. Activating a Timetable session opens its full published details in a focus-restoring modal without replacing the timetable or an embedding iframe; an explicit session-page link remains available and opens a new tab from embeds. My itinerary navigation and its panel appear only after a visitor saves a session (or opens a shared itinerary). The gallery does not create a second speaker or schedule store, and all private reads retain event, publication, visibility and profile predicates. Optional speaker title, organisation and biography fields render only when present; attendee surfaces do not turn missing profile data into administrator-facing quality labels. |
 | Demo headshots            | Only the canonical local-demo or production-evaluation event's published programme projection and optional application featured-speaker preview may use the four bundled raster assets for the four explicitly allowlisted fixture people (Priya Shah, Alex Morgan, Priya Raman and Marcus Okafor). They are not authenticated profile or file state. Any non-deleted real headshot asset, including an unreleased, quarantined or otherwise ineligible one, suppresses that person's bundle. Ordinary production requires a released clean R2 version and never treats participant-upload metadata as upload or scanner success. |
 | Gallery accessibility     | Gallery cards are keyboard-activatable controls; detail is an in-page dialog panel with an explicit close button, deterministic biography expansion and focus restoration to the opening card. Search state remains component-owned while the panel is open.                                                                                                                                                                                                                                                                                                                                                                      |
 | Speaker amplification     | `?speaker=` is public speaker-detail state resolved server-side against the current published snapshot. Invalid or unpublished identities return 404. Opening and closing a profile changes browser history; Copy link is universal and Web Share is progressive enhancement. Canonical and unfurl URLs are absolute and speaker-specific. `og:image` is emitted only for a current anonymously readable released headshot, never for a bundled demo portrait or private file. Social OAuth and generated promotional images remain out of scope.                                                                                 |
@@ -1037,9 +1041,9 @@ editorial changes invalidate the representation together.
 
 The programme and fixed event pages share one event header, navigation and
 footer contract. With a published site, the root is explicitly Event home while
-All sessions and Speakers use their dedicated programme routes. Those three
-primary destinations stay visible on wide screens; agenda, schedule, gallery
-and the five bounded editorial pages live in one keyboard-accessible Browse
+Programme and Speakers use their dedicated programme routes. Those three
+primary destinations stay visible on wide screens; Timetable, gallery and the
+five bounded editorial pages live in one keyboard-accessible Browse
 popover grouped as Programme views and Event information. At tablet widths all
 destinations use the same grouped Browse disclosure, so navigation capacity
 does not depend on label length or JavaScript width measurement. Featured
@@ -1113,9 +1117,11 @@ The organiser rail exposes seven stable workspace families: Home,
 Applications, Speakers, Programme, Communications, Event settings and
 Operations. Existing route-specific tools remain second-level destinations;
 they do not move or disappear with event phase. The public programme exposes
-Programme, Speakers and My itinerary as its three concepts. List, Agenda and
-Schedule, and Directory and Gallery, remain ordinary deep-linkable routes
-presented as views within those concepts. Every organiser destination has one
+Programme and Speakers as its stable concepts; My itinerary appears only after
+a visitor saves a session or opens a shared itinerary. Programme and
+Timetable, and Directory and Gallery, remain ordinary deep-linkable views
+within those concepts. The retired Agenda URL redirects to Programme instead
+of remaining a competing view. Every organiser destination has one
 explicit family assignment; an authorised child is promoted when its parent is
 unavailable, while missing or duplicate assignments fail validation instead of
 falling into a catch-all group. Record-detail routes own a small typed

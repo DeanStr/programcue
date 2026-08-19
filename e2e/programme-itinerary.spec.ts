@@ -32,8 +32,20 @@ test("keeps personal itinerary state private and disables it in embeds", async (
   );
   expect(publicResponse?.headers()["cache-control"]).toBe("private, no-store");
   await page.locator("body[data-hydrated='true']").waitFor();
+  await expect(page.getByRole("heading", { name: "My itinerary" })).toHaveCount(
+    0,
+  );
+  await expect(page.getByRole("link", { name: /My itinerary/ })).toHaveCount(0);
+  await page
+    .getByRole("button", {
+      name: "Save The Future of Attendee Engagement to my itinerary",
+    })
+    .click();
   await expect(
     page.getByRole("heading", { name: "My itinerary" }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("link", { name: /My itinerary, 1 saved/ }),
   ).toBeVisible();
 
   const embedResponse = await page.goto("/embed/future-of-events-2027");
@@ -84,7 +96,7 @@ test("publishes speaker profiles and a read-only itinerary share link", async ({
 
   await page
     .locator(".public-nav")
-    .getByRole("link", { name: "All sessions", exact: true })
+    .getByRole("link", { name: "Programme", exact: true })
     .click();
   await page.locator(".programme-row").first().click();
   await expect(

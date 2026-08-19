@@ -21,10 +21,9 @@ export const PUBLIC_SITE_PAGE_TYPES = [
 
 export const PUBLIC_EVENT_NAVIGATION_LABELS = {
   home: "Event home",
-  sessions: "All sessions",
+  sessions: "Programme",
   speakers: "Speakers",
-  agenda: "Day agenda",
-  schedule: "Full schedule",
+  schedule: "Timetable",
   gallery: "Speaker Gallery",
   itinerary: "My itinerary",
   sharedItinerary: "Shared itinerary",

@@ -105,7 +105,10 @@ describe("programme embed configuration", () => {
     expect(parseProgrammeEmbedSurface(undefined)).toBe("sessions");
     expect(parseProgrammeEmbedSurface("gallery")).toBe("gallery");
     expect(() => parseProgrammeEmbedSurface("timeline")).toThrow(
-      /surface must be sessions, speakers, agenda, schedule or gallery/i,
+      /surface must be sessions, speakers, schedule or gallery/i,
+    );
+    expect(() => parseProgrammeEmbedSurface("agenda")).toThrow(
+      /surface must be sessions, speakers, schedule or gallery/i,
     );
     expect(parseProgrammeEmbedFields("time,location,description")).toEqual([
       "time",
@@ -304,6 +307,12 @@ describe("programme embed configuration", () => {
         accent: "red",
       }),
     ).toThrow(/six-digit hexadecimal colour/i);
+    expect(
+      parsePersistedProgrammeEmbedConfiguration({
+        ...configuration,
+        surface: "agenda",
+      }).surface,
+    ).toBe("sessions");
   });
 
   it("generates stable managed iframe and widget destinations", () => {

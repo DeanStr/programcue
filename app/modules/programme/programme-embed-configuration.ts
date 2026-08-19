@@ -11,7 +11,6 @@ export const PROGRAMME_EMBED_CONTROLS = [
 export const PROGRAMME_EMBED_SURFACES = [
   "sessions",
   "speakers",
-  "agenda",
   "schedule",
   "gallery",
 ] as const;
@@ -153,7 +152,7 @@ export function parseProgrammeEmbedSurface(
     return raw as ProgrammeEmbedSurface;
   }
   throw new ProgrammeEmbedConfigurationError(
-    "Embed surface must be sessions, speakers, agenda, schedule or gallery.",
+    "Embed surface must be sessions, speakers, schedule or gallery.",
   );
 }
 
@@ -395,7 +394,14 @@ export function parsePersistedProgrammeEmbedConfiguration(
       "Managed embed configuration has an invalid shape.",
     );
   }
-  const configuration = candidate as ProgrammeEmbedConfiguration;
+  // Agenda was a published embed surface before Programme and Timetable were
+  // given distinct jobs. Existing managed embeds are durable external
+  // installations, so read that one retired value as the consolidated
+  // Programme surface while all newly authored configurations reject it.
+  const configuration = {
+    ...candidate,
+    surface: candidate.surface === "agenda" ? "sessions" : candidate.surface,
+  } as ProgrammeEmbedConfiguration;
   assertProgrammeEmbedConfiguration(configuration);
   return {
     ...configuration,

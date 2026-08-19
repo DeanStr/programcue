@@ -143,26 +143,86 @@
     flex-direction: column;
     align-items: stretch;
   }
-  .agenda-card {
-    grid-template-columns: minmax(0, 1fr);
-    gap: var(--space-3);
-  }
-  .agenda-card-time {
-    padding-left: 0;
-  }
-  .agenda-card-time::before {
-    display: none;
-  }
   .public-surface-heading-aside {
     flex-wrap: wrap;
   }
   .public-surface-search {
     width: 100%;
   }
-  .public-itinerary-card {
+  .public-timetable-frame {
+    overflow: visible;
+    border: 0;
+    background: transparent;
+    box-shadow: none;
+  }
+  .public-timetable-grid {
+    display: grid;
+    min-width: 0;
     grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: none;
     gap: var(--space-3);
+  }
+  .public-timetable-corner,
+  .public-timetable-room,
+  .public-timetable-marker {
+    display: none;
+  }
+  .public-timetable-session {
+    grid-column: 1;
+    grid-row: auto;
+    margin: 0;
     padding: var(--space-4);
+    overflow: visible;
+  }
+  .public-timetable-session-trigger {
+    display: inline;
+    overflow: visible;
+    -webkit-line-clamp: unset;
+  }
+  .public-timetable-session .public-detail-tags {
+    overflow: visible;
+    flex-wrap: wrap;
+  }
+  .public-timetable-session-room,
+  .public-timetable-session .public-session-speaker-names {
+    position: static;
+    display: block;
+    width: auto;
+    height: auto;
+    padding: 0;
+    overflow: visible;
+    clip: auto;
+    white-space: normal;
+  }
+  .public-timetable-session-room {
+    margin: 0;
+  }
+  .public-timetable-session .public-session-speaker-names {
+    margin: var(--space-1) 0 0;
+  }
+  .public-timetable-detail-dialog {
+    width: calc(100% - 24px);
+    max-height: calc(100dvh - 24px);
+  }
+  .public-timetable-detail {
+    gap: var(--space-4);
+    padding: var(--space-4);
+  }
+  .public-timetable-detail-heading {
+    flex-direction: column;
+    gap: var(--space-3);
+  }
+  .public-timetable-detail-heading .btn {
+    width: 100%;
+  }
+  .public-timetable-detail-facts {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .public-timetable-detail-actions {
+    flex-direction: column;
+  }
+  .public-timetable-detail-actions .btn {
+    width: 100%;
   }
   .public-speaker-detail-heading .public-speaker-photo {
     width: 112px;
@@ -201,9 +261,6 @@
   }
   .public-speaker-directory-card > p {
     font-size: var(--text-xs);
-  }
-  .agenda-board {
-    grid-template-columns: 1fr;
   }
   /* biome-ignore lint/style/noDescendingSpecificity: Sparse heading scale is a surface rule, not the embedded hero. */
   .public-surface-heading.is-sparse h1 {
@@ -245,9 +302,6 @@
 }
 
 @media (max-width: 400px) {
-  .public-view-navigation > span {
-    display: none;
-  }
   .public-view-full {
     display: none;
   }
@@ -255,8 +309,7 @@
     display: inline;
   }
   .public-view-navigation,
-  .public-view-navigation.is-wide,
-  .public-view-navigation.is-agenda {
+  .public-view-navigation.is-wide {
     width: calc(100% - 24px);
     overflow-x: auto;
     flex-wrap: nowrap;
@@ -340,16 +393,11 @@
   .programme-entry.active {
     box-shadow: inset 3px 0 0 var(--event-accent);
   }
-  .public-itinerary-title-row {
+  .public-timetable-session-heading {
     flex-direction: column;
   }
-  .public-itinerary-card .session-save {
+  .public-timetable-session .session-save {
     width: 100%;
-  }
-  .public-itinerary-time {
-    display: flex;
-    align-items: baseline;
-    gap: var(--space-2);
   }
   .public-footer {
     flex-direction: column;

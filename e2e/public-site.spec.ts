@@ -271,7 +271,7 @@ test("reset restores a published public event site", async ({ page }) => {
     eventNavigation.getByRole("link", { name: "Event home" }),
   ).toHaveAttribute("aria-current", "page");
   await expect(
-    eventNavigation.getByRole("link", { name: "All sessions" }),
+    eventNavigation.getByRole("link", { name: "Programme" }),
   ).toHaveAttribute("href", "/public/programme/future-of-events-2027/sessions");
   await expect(
     eventNavigation.getByRole("link", { name: "Speakers", exact: true }),
@@ -417,7 +417,7 @@ test("reset restores a published public event site", async ({ page }) => {
       };
     }),
   ).toEqual({
-    overflowing: true,
+    overflowing: false,
     display: "block",
     textOverflow: "ellipsis",
   });
@@ -446,9 +446,10 @@ test("reset restores a published public event site", async ({ page }) => {
     /\/public\/programme\/future-of-events-2027\/pages\/about$/u,
   );
   await expect(page.getByRole("heading", { name: "Why attend" })).toBeVisible();
-  await expect(
-    page.getByRole("link", { name: "All sessions" }),
-  ).toHaveAttribute("href", "/public/programme/future-of-events-2027/sessions");
+  await expect(page.getByRole("link", { name: "Programme" })).toHaveAttribute(
+    "href",
+    "/public/programme/future-of-events-2027/sessions",
+  );
   const fixedPageResponse = await page.request.get(page.url());
   const fixedPageEtag = fixedPageResponse.headers().etag;
   expect(fixedPageResponse.headers()["cache-control"]).toContain("public");
@@ -458,12 +459,12 @@ test("reset restores a published public event site", async ({ page }) => {
   });
   expect(notModified.status()).toBe(304);
 
-  await page.getByRole("link", { name: "All sessions" }).first().click();
+  await page.getByRole("link", { name: "Programme" }).first().click();
   await expect(page).toHaveURL(
     /\/public\/programme\/future-of-events-2027\/sessions$/u,
   );
   await expect(
-    page.getByRole("link", { name: "All sessions" }).first(),
+    page.getByRole("link", { name: "Programme" }).first(),
   ).toHaveAttribute("aria-current", "page");
   const heroAction = await paintedColours(
     page.locator(".hero").getByRole("link", { name: "Add to calendar" }),
@@ -777,9 +778,10 @@ test("organisers preview unpublished edits and publish a replacement", async ({
       .getByLabel(`Browse, current page ${longAboutNavigationLabel}`),
   ).toBeVisible();
   await expect(page.getByRole("heading", { name: "Why attend" })).toBeVisible();
-  await expect(
-    page.getByRole("link", { name: "All sessions" }),
-  ).toHaveAttribute("href", "/public/programme/future-of-events-2027/sessions");
+  await expect(page.getByRole("link", { name: "Programme" })).toHaveAttribute(
+    "href",
+    "/public/programme/future-of-events-2027/sessions",
+  );
   const fixedPageResponse = await page.request.get(page.url());
   const fixedPageEtag = fixedPageResponse.headers().etag;
   expect(fixedPageResponse.headers()["cache-control"]).toContain("public");

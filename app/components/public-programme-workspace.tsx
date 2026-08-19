@@ -80,32 +80,23 @@ function PublicProgrammeViewNavigation({
       ]
     : [
         {
-          label: "List",
-          shortLabel: "List",
+          label: "Programme",
+          shortLabel: "Programme",
           href: publicProgrammeSurfacePath(programme.event.slug, "sessions"),
           active: surface === "overview" || surface === "sessions",
         },
         {
-          label: "Agenda",
-          shortLabel: "Agenda",
-          href: publicProgrammeSurfacePath(programme.event.slug, "agenda"),
-          active: surface === "agenda",
-        },
-        {
-          label: "Schedule",
-          shortLabel: "Grid",
+          label: "Timetable",
+          shortLabel: "Timetable",
           href: publicProgrammeSurfacePath(programme.event.slug, "schedule"),
           active: surface === "schedule",
         },
       ];
   return (
     <nav
-      className={`public-view-navigation${wideSurface ? " is-wide" : ""}${
-        surface === "agenda" ? " is-agenda" : ""
-      }`}
+      className={`public-view-navigation${wideSurface ? " is-wide" : ""}`}
       aria-label={speakerViews ? "Speaker views" : "Programme views"}
     >
-      <span>{speakerViews ? "Speakers" : "Programme"}</span>
       {views.map((view) => (
         <Link
           key={view.label}
@@ -1176,7 +1167,6 @@ export function PublicProgrammeWorkspace({
     loaderData.surface === "overview" || loaderData.surface === "sessions";
   const homeSurface = loaderData.surface === "overview";
   const siblingSurface =
-    loaderData.surface === "agenda" ||
     loaderData.surface === "schedule" ||
     loaderData.surface === "speakers" ||
     loaderData.surface === "gallery";
@@ -1209,7 +1199,11 @@ export function PublicProgrammeWorkspace({
           programme={programme}
           site={loaderData.site?.configuration ?? null}
           activeSurface={loaderData.surface}
-          itinerary={{ shared: model.shared, savedCount: model.saved.length }}
+          itinerary={
+            model.shared || model.saved.length
+              ? { shared: model.shared, savedCount: model.saved.length }
+              : undefined
+          }
         />
       ) : null}
       <main
@@ -1236,7 +1230,7 @@ export function PublicProgrammeWorkspace({
             loaderData.surface === "gallery"
               ? " is-cast"
               : ""
-          }${loaderData.surface === "agenda" ? " is-agenda" : ""}`}
+          }`}
         >
           {!overviewSurface ? (
             <div className="public-surface-content">
@@ -1273,7 +1267,9 @@ export function PublicProgrammeWorkspace({
                 where it stops being a rail — a tapped session's detail is the
                 next thing under the list rather than 2,400px below it. */}
               <aside className="public-rail" id="itinerary">
-                {!embedded ? <ItineraryPanel model={model} /> : null}
+                {!embedded && (model.shared || model.saved.length) ? (
+                  <ItineraryPanel model={model} />
+                ) : null}
                 <SessionDetailPanel model={model} />
                 {!embedded && !homeStatesVenue ? (
                   <VenuePanel model={model} />

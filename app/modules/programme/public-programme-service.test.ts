@@ -171,7 +171,7 @@ describe("published programme and itinerary", () => {
       throw new Error("Managed embed returned a raw response.");
     expect(active.data).toMatchObject({
       embedded: true,
-      surface: "agenda",
+      surface: "sessions",
       managedEmbedRevision: 2,
     });
     const queryRejected = await load("?density=compact").catch(

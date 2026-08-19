@@ -19,9 +19,10 @@ import {
   SaveSessionButton,
 } from "./public-programme-parts";
 import {
-  PublicAgendaSurface,
+  PublicScheduleSurface,
   PublicSpeakerGallerySurface,
   PublicSpeakersSurface,
+  publicTimetableLayout,
 } from "./public-programme-surfaces";
 
 const speaker: PublishedSpeaker = {
@@ -127,46 +128,79 @@ describe("public programme speaker surfaces", () => {
     ).toThrow(/banner URL is invalid/i);
   });
 
-  it("exposes an explicit agenda detail close action", () => {
-    const agendaProgramme = {
+  it("lays timetable sessions out against exact time and room axes", () => {
+    expect(publicTimetableLayout([session], "America/Toronto")).toEqual({
+      rangeStartsAt: Date.parse("2025-05-20T13:00:00Z") / 1_000,
+      rangeMinutes: 60,
+      rooms: ["Main Stage"],
+      markers: [
+        Date.parse("2025-05-20T13:00:00Z") / 1_000,
+        Date.parse("2025-05-20T13:30:00Z") / 1_000,
+        Date.parse("2025-05-20T14:00:00Z") / 1_000,
+      ],
+    });
+    expect(publicTimetableLayout([session], "Asia/Kathmandu")).toMatchObject({
+      rangeStartsAt: Date.parse("2025-05-20T12:45:00Z") / 1_000,
+      rangeMinutes: 60,
+      markers: [
+        Date.parse("2025-05-20T12:45:00Z") / 1_000,
+        Date.parse("2025-05-20T13:15:00Z") / 1_000,
+        Date.parse("2025-05-20T13:45:00Z") / 1_000,
+      ],
+    });
+    expect(publicTimetableLayout([], "America/Toronto")).toBeNull();
+  });
+
+  it("renders the timetable as a room grid with in-place detail controls", () => {
+    const timetableProgramme = {
       ...programme,
       sessions: [session],
       speakers: [speaker],
     } as PublishedProgramme;
     const markup = renderToStaticMarkup(
-      <PublicAgendaSurface
+      <PublicScheduleSurface
         model={model({
-          programme: agendaProgramme,
+          programme: timetableProgramme,
           day: "All days",
           days: ["Tuesday, May 20"],
           visible: [session],
-          selected: session,
-          setSelectedId: vi.fn(),
+          embedded: true,
+          shared: false,
           speakerById: new Map([[speaker.id, speaker]]),
         })}
       />,
     );
 
-    expect(markup).toContain("Close session details");
-    expect(markup).toContain('aria-controls="public-session-detail"');
-    expect(markup).toContain('aria-expanded="true"');
+    expect(markup).toContain(">Timetable<");
+    expect(markup).toContain('aria-label="Tuesday, May 20 timetable"');
+    expect(markup).toContain('class="public-timetable-room"');
+    expect(markup).toContain("Main Stage");
+    expect(markup).toContain('class="session-time"');
+    expect(markup).toContain('<span class="sr-only">Room: </span>Main Stage');
+    expect(markup).toContain(
+      'aria-label="Open details for The Future of Attendee Engagement"',
+    );
+    expect(markup).toContain('aria-haspopup="dialog"');
+    expect(markup).not.toContain(
+      "/public/programme/future-of-events-2027/sessions?session=session-1",
+    );
   });
 
   it("keeps plain speaker names in accessible text when details are hidden", () => {
-    const agendaProgramme = {
+    const timetableProgramme = {
       ...programme,
       sessions: [session],
       speakers: [speaker],
     } as PublishedProgramme;
     const markup = renderToStaticMarkup(
-      <PublicAgendaSurface
+      <PublicScheduleSurface
         model={model({
-          programme: agendaProgramme,
+          programme: timetableProgramme,
           day: "All days",
           days: ["Tuesday, May 20"],
           visible: [session],
-          selected: session,
-          setSelectedId: vi.fn(),
+          embedded: true,
+          shared: false,
           speakerById: new Map([[speaker.id, speaker]]),
           showSpeakerDetails: false,
         })}
@@ -178,9 +212,6 @@ describe("public programme speaker surfaces", () => {
     );
     expect(markup).not.toContain('aria-label="Speakers"');
     expect(markup).not.toContain('class="public-session-speakers"');
-    expect(markup).not.toMatch(
-      /public-surface-detail[\s\S]*public-session-speaker-names/u,
-    );
   });
 
   it("keeps contextual speaker avatars decorative", () => {

@@ -83,7 +83,7 @@ export function PublicEventHeader({
       ]
     : [homeLink];
   const programmeOverflowLinks: EventNavigationLink[] = hasPublishedProgramme
-    ? (["agenda", "schedule", "gallery"] as const).map((surface) => ({
+    ? (["schedule", "gallery"] as const).map((surface) => ({
         key: surface,
         label: PUBLIC_EVENT_NAVIGATION_LABELS[surface],
         href: publicProgrammeSurfacePath(slug, surface),

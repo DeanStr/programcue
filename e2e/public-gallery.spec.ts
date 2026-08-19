@@ -47,10 +47,9 @@ test("anonymous visitors can use all programme surfaces and the gallery detail",
   await openAnonymous(page, "/public/programme/future-of-events-2027");
   await expect(page.locator(".public-nav a")).toHaveText([
     "Event home",
-    "All sessions",
+    "Programme",
     "Speakers",
-    "Day agenda",
-    "Full schedule",
+    "Timetable",
     "Speaker Gallery",
     "About",
     "Sponsors",
@@ -59,7 +58,7 @@ test("anonymous visitors can use all programme surfaces and the gallery detail",
     page
       .getByRole("navigation", { name: "Programme views" })
       .locator(".public-view-full"),
-  ).toHaveText(["List", "Agenda", "Schedule"]);
+  ).toHaveText(["Programme", "Timetable"]);
   await expect(page.locator(".programme-row")).toHaveCount(5);
   await page
     .locator(".programme-entry")
@@ -106,14 +105,18 @@ test("anonymous visitors can use all programme surfaces and the gallery detail",
   await expect(page.getByLabel("Search speakers by name")).toHaveCount(0);
 
   await openAnonymous(page, "/public/programme/future-of-events-2027/agenda");
+  await expect(page).toHaveURL(
+    /\/public\/programme\/future-of-events-2027\/sessions$/u,
+  );
+
+  await openAnonymous(page, "/public/programme/future-of-events-2027/schedule");
   await expect(
-    page.getByRole("heading", { name: "Agenda", exact: true }),
+    page.getByRole("heading", { name: "Timetable", exact: true }),
   ).toBeVisible();
-  await expect(
-    page.getByText("Main Stage", { exact: true }).first(),
-  ).toBeVisible();
+  await expect(page.locator(".public-timetable-session")).toHaveCount(3);
+  await expect(page.locator(".public-timetable-room")).toHaveCount(3);
   const dayButtons = page
-    .getByRole("group", { name: "Agenda days" })
+    .getByRole("group", { name: "Timetable days" })
     .getByRole("button");
   await expect(dayButtons).toHaveCount(2);
   await dayButtons.first().focus();
@@ -123,35 +126,27 @@ test("anonymous visitors can use all programme surfaces and the gallery detail",
   await dayButtons.nth(1).press("Home");
   await expect(dayButtons.first()).toBeFocused();
   await expect(dayButtons.first()).toHaveAttribute("aria-pressed", "true");
-  const expandedAgendaTrigger = page.locator(
-    ".agenda-card-trigger[aria-expanded='true']",
-  );
-  const expandedAgendaTriggerId =
-    await expandedAgendaTrigger.getAttribute("id");
-  expect(expandedAgendaTriggerId).toBeTruthy();
-  const initiallyExpandedAgendaTrigger = page.locator(
-    `#${expandedAgendaTriggerId}`,
-  );
-  await page.getByRole("button", { name: "Close session details" }).click();
-  await expect(initiallyExpandedAgendaTrigger).toBeFocused();
-  const agendaDetailTrigger = page.getByRole("button", {
-    name: "View details for AI in Event Operations",
+  await expect(page).toHaveURL(/day=Thursday%2C\+May\+20/u);
+  const timetableSession = page.getByRole("button", {
+    name: "Open details for AI in Event Operations",
   });
-  await agendaDetailTrigger.click();
-  const agendaDetail = page.locator(".public-surface-detail");
-  await expect(agendaDetail).toBeFocused();
-  await expect(agendaDetail).toContainText("AI in Event Operations");
-  await agendaDetail
-    .getByRole("button", { name: "Close session details" })
-    .click();
-  await expect(agendaDetail).toHaveCount(0);
-  await expect(agendaDetailTrigger).toBeFocused();
-
-  await openAnonymous(page, "/public/programme/future-of-events-2027/schedule");
+  const timetableUrl = page.url();
+  await timetableSession.click();
+  await expect(page).toHaveURL(timetableUrl);
+  const timetableDetail = page.getByRole("dialog");
+  await expect(timetableDetail).toBeVisible();
+  await expect(timetableDetail).toContainText("AI in Event Operations");
+  await expect(timetableDetail).toContainText("About this session");
+  await expect(timetableDetail).toContainText("Alex Morgan");
   await expect(
-    page.getByRole("heading", { name: "Schedule Itinerary", exact: true }),
-  ).toBeVisible();
-  await expect(page.locator(".public-itinerary-card")).toHaveCount(3);
+    timetableDetail.getByRole("link", { name: "Open session page" }),
+  ).toHaveAttribute(
+    "href",
+    "/public/programme/future-of-events-2027/sessions?session=demo-session-2",
+  );
+  await page.keyboard.press("Escape");
+  await expect(timetableDetail).toHaveCount(0);
+  await expect(timetableSession).toBeFocused();
 
   await openAnonymous(page, "/public/programme/future-of-events-2027/gallery");
   await expect(
@@ -160,12 +155,7 @@ test("anonymous visitors can use all programme surfaces and the gallery detail",
   await expect(page.getByLabel("Search speaker gallery by name")).toHaveCount(
     0,
   );
-  await expect(
-    page.getByRole("link", { name: /My itinerary/ }),
-  ).toHaveAttribute(
-    "href",
-    "/public/programme/future-of-events-2027#itinerary",
-  );
+  await expect(page.getByRole("link", { name: /My itinerary/ })).toHaveCount(0);
   await openAnonymous(
     page,
     "/public/programme/future-of-events-2027/gallery?galleryQuery=Priya+Shah",
@@ -276,6 +266,29 @@ test("mobile programme navigation closes after activation and reflows at 320px",
   expect(
     compactPublicTargetSizes.every(
       ({ width, height }) => width >= 24 && height >= 24,
+    ),
+  ).toBe(true);
+
+  await openAnonymous(page, "/public/programme/future-of-events-2027/schedule");
+  await expect(page.locator(".public-timetable-room").first()).toBeHidden();
+  await expect(page.locator(".public-timetable-session")).toHaveCount(3);
+  const timetableContainment = await page.evaluate(() => ({
+    viewportWidth: document.documentElement.clientWidth,
+    documentWidth: document.documentElement.scrollWidth,
+    cards: [...document.querySelectorAll(".public-timetable-session")].map(
+      (element) => ({
+        left: Math.round(element.getBoundingClientRect().left),
+        right: Math.round(element.getBoundingClientRect().right),
+      }),
+    ),
+  }));
+  expect(timetableContainment.documentWidth).toBeLessThanOrEqual(
+    timetableContainment.viewportWidth,
+  );
+  expect(
+    timetableContainment.cards.every(
+      ({ left, right }) =>
+        left >= 0 && right <= timetableContainment.viewportWidth + 1,
     ),
   ).toBe(true);
 });

@@ -40,8 +40,7 @@ export const programmeEmbedSurfaceLabels: Record<
 > = {
   sessions: "Programme / session list",
   speakers: "Speakers list",
-  agenda: "Agenda",
-  schedule: "Schedule itinerary",
+  schedule: "Timetable",
   gallery: "Speaker gallery",
 };
 
