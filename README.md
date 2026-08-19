@@ -127,6 +127,9 @@ It also enforces the repository's Biome formatting and enabled lint rules.
 `test:e2e:evaluation` runs the isolated production-shaped `/evaluate` browser
 regression with ephemeral credentials, fixture data and a loopback Siteverify
 endpoint; it does not contact or claim success from production providers.
+The pull-request browser gate and complete `check` run this regression after
+the ordinary application suite while reusing its production build;
+`check:quick` deliberately omits it.
 `quality` checks formatting and lint without changing files; `quality:fix`
 applies safe fixes, while `format` and `lint` run those tools separately.
 Use `typecheck` instead when route types, Worker bindings or generated types

@@ -234,13 +234,14 @@ ordinary-token suppression, form/expiry/reset boundaries and password
 admission. Non-fixture verification fails before creating an applicant or
 delivering a code. Worker route coverage exercises the exact start-cookie,
 redirect and reopen path for gate-only and organiser sessions. A dedicated
-local production-shaped Chromium profile additionally unlocks `/evaluate`
-without choosing a persona, follows the public application link, starts an
-anonymous draft and lets the browser carry the issued cookies through the
-redirect before asserting that the editor reopened. Its Siteverify fixture is
-explicit and loopback-only; it does not claim external-provider success. This
-is local worktree evidence only: no deployment, production reset or fresh
-production-browser acceptance is claimed.
+production-shaped Chromium profile, run by the pull-request and complete
+release browser gates, additionally unlocks `/evaluate` without choosing a
+persona, follows the public application link, starts an anonymous draft and
+lets the browser carry the issued cookies through the redirect before asserting
+that the editor reopened. Its Siteverify fixture is explicit and loopback-only;
+it does not claim external-provider success. This is repository test evidence
+only: no deployment, production reset or fresh production-browser acceptance
+is claimed.
 
 Exactly four documented SBEK aliases resolve to the corresponding seeded
 routeable addresses only for a signed production-evaluation viewer inside an

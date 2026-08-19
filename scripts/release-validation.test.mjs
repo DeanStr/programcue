@@ -764,6 +764,29 @@ test("repository release commands and workflows enforce the ordered gates", asyn
     checkRunner,
     /if \(mode === "--full"\)[\s\S]*\["run", "security:dependencies"\]/u,
   );
+  assert.match(
+    checkRunner,
+    /if \(!quick\)[\s\S]*\["scripts\/run-evaluation-e2e\.mjs"\]/u,
+  );
+
+  const quickPlaywrightConfig = await readFile(
+    resolve(repositoryRoot, "playwright.quick.config.ts"),
+    "utf8",
+  );
+  assert.match(
+    quickPlaywrightConfig,
+    /evaluation-public-application\\\.spec\\\.ts/u,
+  );
+
+  const pullRequestBrowserRunner = await readFile(
+    resolve(repositoryRoot, "scripts/run-pr-browser-checks.mjs"),
+    "utf8",
+  );
+  assert.match(
+    pullRequestBrowserRunner,
+    /\["scripts\/run-evaluation-e2e\.mjs"\]/u,
+  );
+  assert.match(pullRequestBrowserRunner, /PROGRAM_CUE_E2E_SKIP_BUILD: "1"/u);
 
   const releaseWorkflow = await readFile(
     resolve(repositoryRoot, ".github/workflows/release.yml"),

@@ -89,6 +89,9 @@ loopback HTTP URL. Every other runtime retains the fixed Cloudflare Siteverify
 endpoint. Siteverify requests use manual redirect handling and reject every 3xx
 response, so neither the production
 nor fixture secret can be forwarded to another origin.
+The production-only browser specification is excluded from ordinary demo and
+quick Playwright projects and runs through this harness in the pull-request and
+complete release browser gates after the shared production build is ready.
 
 ## Abstract management decisions
 

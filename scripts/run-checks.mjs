@@ -116,15 +116,28 @@ if (mode !== "--core") {
   if (quick && !process.env.PROGRAM_CUE_E2E_SHARDS) {
     e2eEnvironment.PROGRAM_CUE_E2E_SHARDS = "2";
   }
-  /* Both suites start local Workerd and Chromium processes. Running the small
-     site suite after the sharded application gate avoids cross-suite CPU and
-     focus contention without reducing coverage. */
+  /* Each browser suite starts local Workerd and Chromium processes. Running
+     them sequentially avoids cross-suite CPU and focus contention without
+     reducing coverage. */
   const e2e = await runProcess("node", e2eArguments, {
     cwd: repositoryRoot,
     env: e2eEnvironment,
     label: quick ? "quick Chromium behavior gate" : "full browser gate",
   });
   if (e2e.code !== 0) process.exit(1);
+
+  if (!quick) {
+    const evaluationE2e = await runProcess(
+      "node",
+      ["scripts/run-evaluation-e2e.mjs"],
+      {
+        cwd: repositoryRoot,
+        env: e2eEnvironment,
+        label: "production-shaped evaluation browser gate",
+      },
+    );
+    if (evaluationE2e.code !== 0) process.exit(1);
+  }
 
   const siteE2e = await runProcess(npmCommand, ["run", "test:site:e2e"], {
     cwd: repositoryRoot,

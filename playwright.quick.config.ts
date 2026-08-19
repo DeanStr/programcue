@@ -9,6 +9,7 @@ export default defineConfig({
       ...desktopChromiumProject,
       testIgnore: [
         /cross-browser-smoke\.spec\.ts/,
+        /evaluation-public-application\.spec\.ts/,
         /performance\.spec\.ts/,
         /visual\.spec\.ts/,
       ],
