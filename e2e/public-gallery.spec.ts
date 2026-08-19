@@ -54,12 +54,54 @@ test("anonymous visitors can use all programme surfaces and the gallery detail",
     "About",
     "Sponsors",
   ]);
+  const eventNavigation = page
+    .getByRole("navigation", { name: "Event navigation" })
+    .first();
   await expect(
-    page
-      .getByRole("navigation", { name: "Programme views" })
-      .locator(".public-view-full"),
-  ).toHaveText(["Programme", "Timetable"]);
+    eventNavigation.getByRole("link", { name: "Event home" }),
+  ).toHaveAttribute("aria-current", "page");
+  await expect(
+    eventNavigation.getByRole("link", { name: "Programme" }),
+  ).not.toHaveAttribute("aria-current", "page");
+  await expect(
+    page.getByRole("navigation", { name: "Programme views" }),
+  ).toHaveCount(0);
   await expect(page.locator(".programme-row")).toHaveCount(5);
+
+  await eventNavigation.getByRole("link", { name: "Programme" }).click();
+  await expect(page).toHaveURL(
+    /\/public\/programme\/future-of-events-2027\/sessions$/u,
+  );
+  await expect(
+    eventNavigation.getByRole("link", { name: "Event home" }),
+  ).not.toHaveAttribute("aria-current", "page");
+  await expect(
+    eventNavigation.getByRole("link", { name: "Programme" }),
+  ).toHaveAttribute("aria-current", "page");
+  const programmeViews = page.getByRole("navigation", {
+    name: "Programme views",
+  });
+  await expect(programmeViews.locator(".public-view-full")).toHaveText([
+    "Programme",
+    "Timetable",
+  ]);
+  await expect(
+    programmeViews.getByRole("link", { name: "Programme" }),
+  ).toHaveAttribute("aria-current", "page");
+  await programmeViews.getByRole("link", { name: "Timetable" }).click();
+  await expect(page).toHaveURL(
+    /\/public\/programme\/future-of-events-2027\/schedule$/u,
+  );
+  await expect(
+    programmeViews.getByRole("link", { name: "Timetable" }),
+  ).toHaveAttribute("aria-current", "page");
+  await programmeViews.getByRole("link", { name: "Programme" }).click();
+  await expect(page).toHaveURL(
+    /\/public\/programme\/future-of-events-2027\/sessions$/u,
+  );
+  await expect(
+    programmeViews.getByRole("link", { name: "Programme" }),
+  ).toHaveAttribute("aria-current", "page");
   await page
     .locator(".programme-entry")
     .filter({ hasText: "AI in Event Operations" })

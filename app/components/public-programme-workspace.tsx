@@ -1213,7 +1213,9 @@ export function PublicProgrammeWorkspace({
         tabIndex={-1}
       >
         {showHero ? <PublicProgrammeHero model={model} /> : null}
-        {!embedded ? <PublicProgrammeViewNavigation model={model} /> : null}
+        {!embedded && (!homeSurface || !loaderData.site) ? (
+          <PublicProgrammeViewNavigation model={model} />
+        ) : null}
         {homeSurface && loaderData.site ? (
           <>
             <PublicSiteHome
