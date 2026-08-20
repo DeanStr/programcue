@@ -82,22 +82,36 @@ test("an event switch persists across reloads on the local HTTP Worker", async (
 
   await page.reload();
   await expect(page.locator(".event-switcher strong")).toHaveText(eventName);
-  await page
-    .getByLabel("Event name")
-    .fill("Unsaved configuration from the previous event");
+  await page.getByLabel("Event name").fill("   ");
+  await page.getByRole("button", { name: "Save event" }).click();
+  const priorEventError = page.getByRole("link", {
+    name: "Event name is required.",
+  });
+  await expect(priorEventError).toBeVisible();
 
-  await page.locator(".event-switcher").click();
-  const originalChoice = page
-    .getByRole("dialog", { name: "Current event" })
-    .locator("form")
-    .filter({ hasText: "Future of Events 2027" });
-  await originalChoice.getByRole("button", { name: "Switch event" }).click();
+  await page.getByRole("button", { name: /Search or run a command/ }).click();
+  await page
+    .getByRole("button", { name: "Whole organisation", exact: true })
+    .click();
+  await page
+    .getByRole("combobox", { name: "Program Cue commands" })
+    .fill("room Main Stage");
+  await page
+    .getByRole("option", { name: /Main Stage.*Future of Events 2027/ })
+    .click();
+  const warning = page.getByRole("dialog", { name: "Leave without saving?" });
+  await warning.getByRole("button", { name: "Leave and discard" }).click();
+
   await expect(page.locator(".event-switcher strong")).toHaveText(
     "Future of Events 2027",
   );
   await expect(page.getByLabel("Event name")).toHaveValue(
     "Future of Events 2027",
   );
+  await expect(priorEventError).toHaveCount(0);
+  await expect(
+    page.getByRole("button", { name: "Structure", exact: true }),
+  ).toHaveAttribute("aria-pressed", "true");
 });
 
 test("an invited speaker can explicitly choose the created event and see its tasks", async ({

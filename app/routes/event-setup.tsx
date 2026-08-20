@@ -507,25 +507,43 @@ export default function EventSetupRoute({ loaderData }: Route.ComponentProps) {
     | ActionResponse
     | undefined;
   const navigation = useNavigation();
-  const saveStartedRef = useRef(false);
-  const [actionData, setActionData] = useState<ActionResponse>();
+  const saveEventIdRef = useRef<string | null>(null);
+  const [retainedSaveResponse, setRetainedSaveResponse] = useState<{
+    eventId: string;
+    data: ActionResponse;
+  }>();
+  const eventId = loaderData.event.id;
+  const actionData =
+    retainedSaveResponse?.eventId === eventId
+      ? retainedSaveResponse.data
+      : undefined;
+
+  useEffect(() => {
+    saveEventIdRef.current = null;
+    setRetainedSaveResponse((current) =>
+      current?.eventId === eventId ? current : undefined,
+    );
+  }, [eventId]);
 
   useEffect(() => {
     if (
       navigation.state === "submitting" &&
       navigation.formData?.get("_intent") === "save"
     ) {
-      saveStartedRef.current = true;
+      saveEventIdRef.current = eventId;
       return;
     }
-    if (!saveStartedRef.current || !submittedActionData) return;
-    saveStartedRef.current = false;
-    setActionData(submittedActionData);
-  }, [navigation.formData, navigation.state, submittedActionData]);
+    if (!saveEventIdRef.current || !submittedActionData) return;
+    setRetainedSaveResponse({
+      eventId: saveEventIdRef.current,
+      data: submittedActionData,
+    });
+    saveEventIdRef.current = null;
+  }, [eventId, navigation.formData, navigation.state, submittedActionData]);
 
   return (
     <EventSetupForm
-      key={loaderData.event.revision}
+      key={`${eventId}:${loaderData.event.revision}`}
       event={loaderData.event}
       incompleteEvents={loaderData.incompleteEvents}
       focusedRecord={loaderData.focusedRecord}
