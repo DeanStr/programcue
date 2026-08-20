@@ -7,6 +7,7 @@ import {
   useBeforeUnload,
   useBlocker,
   useFetcher,
+  useLocation,
   useNavigate,
   useNavigation,
 } from "react-router";
@@ -607,9 +608,19 @@ export function EventSetupForm({
   canManageFileRetention: boolean;
   canManageOrganisationAdministrators: boolean;
 }) {
-  const actionData = useActionData<typeof action>() as
+  const location = useLocation();
+  const submittedActionData = useActionData<typeof action>() as
     | ActionResponse
     | undefined;
+  const actionScope = `${location.pathname}${location.search}`;
+  const retainedAction = (
+    location.state as {
+      eventSetupAction?: { scope: string; data: ActionResponse };
+    } | null
+  )?.eventSetupAction;
+  const actionData =
+    submittedActionData ??
+    (retainedAction?.scope === actionScope ? retainedAction.data : undefined);
   const inviteFetcher = useFetcher<typeof action>();
   const repositoryFetcher = useFetcher<typeof action>();
   const roomFetcher = useFetcher<typeof action>();
@@ -645,6 +656,36 @@ export function EventSetupForm({
   const saving =
     navigation.state === "submitting" &&
     navigation.formData?.get("_intent") === "save";
+  const showPanel = useCallback(
+    (panel: EventSetupPanel, actionToRetain?: ActionResponse) => {
+      setActivePanel(panel);
+      const currentState =
+        location.state && typeof location.state === "object"
+          ? location.state
+          : {};
+      void navigate(
+        {
+          pathname: location.pathname,
+          search: location.search,
+          hash: `#event-setup-${panel}`,
+        },
+        {
+          replace: true,
+          preventScrollReset: true,
+          state: actionToRetain
+            ? {
+                ...currentState,
+                eventSetupAction: {
+                  scope: actionScope,
+                  data: actionToRetain,
+                },
+              }
+            : location.state,
+        },
+      );
+    },
+    [actionScope, location.pathname, location.search, location.state, navigate],
+  );
 
   // Invitation fetchers revalidate this route without changing the persisted
   // event revision. Preserve local room edits across that revalidation and only
@@ -667,30 +708,29 @@ export function EventSetupForm({
     });
   }, [focusedRecordId, focusedRecordKind]);
   useEffect(() => {
-    const panel = eventSetupPanelForErrors(actionData?.errors);
-    if (panel) setActivePanel(panel);
-  }, [actionData]);
+    const panel = eventSetupPanelForErrors(submittedActionData?.errors);
+    if (!panel) return;
+    showPanel(panel, submittedActionData);
+  }, [showPanel, submittedActionData]);
   useEffect(() => {
-    const revealHashTarget = () => {
-      if (!window.location.hash) return;
-      let id: string;
-      try {
-        id = decodeURIComponent(window.location.hash.slice(1));
-      } catch {
-        return;
-      }
-      const target = document.getElementById(id);
-      const panel = eventSetupPanelForTarget(target);
-      if (!target || !panel) return;
-      setActivePanel(panel);
-      window.requestAnimationFrame(() =>
-        target.scrollIntoView({ block: "start" }),
-      );
-    };
-    revealHashTarget();
-    window.addEventListener("hashchange", revealHashTarget);
-    return () => window.removeEventListener("hashchange", revealHashTarget);
-  }, []);
+    if (!location.hash) {
+      setActivePanel(focusedRecordId ? "structure" : "identity");
+      return;
+    }
+    let id: string;
+    try {
+      id = decodeURIComponent(location.hash.slice(1));
+    } catch {
+      return;
+    }
+    const target = document.getElementById(id);
+    const panel = eventSetupPanelForTarget(target);
+    if (!target || !panel) return;
+    setActivePanel(panel);
+    window.requestAnimationFrame(() =>
+      target.scrollIntoView({ block: "start" }),
+    );
+  }, [focusedRecordId, location.hash]);
   useEffect(() => {
     if (inviteFetcher.data && (inviteFetcher.data as ActionResponse).ok)
       setInviteOpen(false);
@@ -866,20 +906,13 @@ export function EventSetupForm({
     });
   }
 
-  function showPanel(panel: EventSetupPanel) {
-    setActivePanel(panel);
-    const url = new URL(window.location.href);
-    url.hash = `event-setup-${panel}`;
-    window.history.replaceState(window.history.state, "", url);
-  }
-
   function revealFirstInvalidField(form: HTMLFormElement) {
     const invalid = form.querySelector<HTMLElement>(
       "input:invalid, select:invalid, textarea:invalid",
     );
     if (!invalid) return false;
     const panel = eventSetupPanelForTarget(invalid);
-    if (panel) setActivePanel(panel);
+    if (panel) showPanel(panel);
     const recordPanel = invalid.closest<HTMLDetailsElement>("details");
     window.requestAnimationFrame(() => {
       if (recordPanel) recordPanel.open = true;
@@ -936,6 +969,7 @@ export function EventSetupForm({
         ref={captureEventSetupForm}
         method="post"
         preventScrollReset
+        action={`${location.pathname}${location.search}#event-setup-${activePanel}`}
         className="event-setup-form"
         noValidate
         onInput={(inputEvent) => {
@@ -994,7 +1028,13 @@ export function EventSetupForm({
           value={JSON.stringify(orderedSessionFormats)}
         />
 
-        <ErrorSummary errors={summaryErrors} />
+        <ErrorSummary
+          errors={summaryErrors}
+          onTargetReveal={(target) => {
+            const panel = eventSetupPanelForTarget(target);
+            if (panel) showPanel(panel);
+          }}
+        />
 
         <div className="page-head event-setup-page-head">
           <div>

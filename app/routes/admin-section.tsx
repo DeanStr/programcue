@@ -1,6 +1,6 @@
 import { CalendarDays, ExternalLink } from "lucide-react";
 import { useEffect, useState } from "react";
-import { data, Link } from "react-router";
+import { data, Link, useLocation, useNavigate } from "react-router";
 import { ProgrammeEmbedBuilder } from "~/components/programme-embed-builder";
 import { AdminWorkspaceTabs } from "~/components/ui/admin-workspace-tabs";
 import { DomainStatusBadge } from "~/components/ui/domain-status-badge";
@@ -196,6 +196,8 @@ function programmeWorkspacePanelForHash(
 }
 
 export default function AdminSection({ loaderData }: Route.ComponentProps) {
+  const location = useLocation();
+  const navigate = useNavigate();
   const summary = summarizeProgramme(loaderData.sessions);
   const activeManagedEmbedCount = loaderData.managedEmbeds.filter(
     (embed) => embed.status === "active",
@@ -204,28 +206,28 @@ export default function AdminSection({ loaderData }: Route.ComponentProps) {
     useState<ProgrammeWorkspacePanel>("programme");
 
   useEffect(() => {
-    const revealLinkedPanel = () => {
-      const panel = programmeWorkspacePanelForHash(window.location.hash);
-      if (!panel) return;
-      setActivePanel(panel);
-      const hash = PROGRAMME_WORKSPACE_HASHES[panel];
-      if (!hash) return;
-      window.requestAnimationFrame(() =>
-        document
-          .getElementById(hash.slice(1))
-          ?.scrollIntoView({ block: "start" }),
-      );
-    };
-    revealLinkedPanel();
-    window.addEventListener("hashchange", revealLinkedPanel);
-    return () => window.removeEventListener("hashchange", revealLinkedPanel);
-  }, []);
+    const panel = programmeWorkspacePanelForHash(location.hash);
+    if (!panel) return;
+    setActivePanel(panel);
+    const hash = PROGRAMME_WORKSPACE_HASHES[panel];
+    if (!hash) return;
+    window.requestAnimationFrame(() =>
+      document
+        .getElementById(hash.slice(1))
+        ?.scrollIntoView({ block: "start" }),
+    );
+  }, [location.hash]);
 
   function showProgrammePanel(panel: ProgrammeWorkspacePanel) {
     setActivePanel(panel);
-    const url = new URL(window.location.href);
-    url.hash = PROGRAMME_WORKSPACE_HASHES[panel];
-    window.history.replaceState(window.history.state, "", url);
+    void navigate(
+      {
+        pathname: location.pathname,
+        search: location.search,
+        hash: PROGRAMME_WORKSPACE_HASHES[panel],
+      },
+      { replace: true, preventScrollReset: true },
+    );
   }
 
   return (

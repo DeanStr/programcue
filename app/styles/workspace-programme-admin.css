@@ -65,6 +65,15 @@
   margin-bottom: var(--space-4);
 }
 
+#programme-embed-title,
+#managed-programme-embeds {
+  scroll-margin-block-start: calc(
+    var(--eval-banner-offset, 0px) +
+    var(--topbar) +
+    var(--space-4)
+  );
+}
+
 .programme-workspace-panel[hidden],
 .programme-embed-builder > [hidden] {
   display: none;

@@ -1,4 +1,5 @@
 import { Check, Clipboard, ExternalLink, RotateCcw } from "lucide-react";
+import { useRef } from "react";
 import { Form } from "react-router";
 import { DerivedSlugField } from "~/components/ui/derived-slug-field";
 import { EventDateTime } from "~/components/ui/event-date-time";
@@ -530,7 +531,11 @@ function ManagedEmbedWorkflow({
         </p>
       ) : null}
 
-      <Form method="post" className="programme-managed-form stack">
+      <Form
+        method="post"
+        action="/admin/programme#managed-programme-embeds"
+        className="programme-managed-form stack"
+      >
         <input
           type="hidden"
           name="intent"
@@ -754,7 +759,11 @@ function ManagedEmbedWorkflow({
                           </button>
                         ) : null}
                         {nextStatus ? (
-                          <Form method="post" className="stack">
+                          <Form
+                            method="post"
+                            action="/admin/programme#managed-programme-embeds"
+                            className="stack"
+                          >
                             <input
                               type="hidden"
                               name="intent"
@@ -808,7 +817,11 @@ function ManagedEmbedWorkflow({
                           </Form>
                         ) : null}
                         {embed.status !== "revoked" ? (
-                          <Form method="post" className="stack">
+                          <Form
+                            method="post"
+                            action="/admin/programme#managed-programme-embeds"
+                            className="stack"
+                          >
                             <input
                               type="hidden"
                               name="intent"
@@ -879,6 +892,7 @@ export function ProgrammeEmbedBuilder({
   activePanel: "builder" | "managed";
   onOpenBuilder(): void;
 }) {
+  const builderHeadingRef = useRef<HTMLHeadingElement>(null);
   const { configurationWorkflow, managedWorkflow } = useProgrammeEmbedBuilder({
     publicOrigin,
     publicSlug,
@@ -887,6 +901,13 @@ export function ProgrammeEmbedBuilder({
     sessions,
     managedEmbeds,
   });
+  function openBuilderFromManagedEmbed() {
+    onOpenBuilder();
+    window.requestAnimationFrame(() => {
+      builderHeadingRef.current?.focus();
+      builderHeadingRef.current?.scrollIntoView({ block: "start" });
+    });
+  }
   return (
     <div className="programme-embed-builder">
       <section
@@ -894,7 +915,9 @@ export function ProgrammeEmbedBuilder({
         hidden={activePanel !== "builder"}
       >
         <div className="programme-panel-heading">
-          <h2 id="programme-embed-title">Embed builder</h2>
+          <h2 id="programme-embed-title" ref={builderHeadingRef} tabIndex={-1}>
+            Embed builder
+          </h2>
           <p className="help">
             Configure, preview and copy a stateless published-programme embed.
           </p>
@@ -907,7 +930,7 @@ export function ProgrammeEmbedBuilder({
       <div hidden={activePanel !== "managed"}>
         <ManagedEmbedWorkflow
           workflow={managedWorkflow}
-          onOpenBuilder={onOpenBuilder}
+          onOpenBuilder={openBuilderFromManagedEmbed}
         />
       </div>
     </div>

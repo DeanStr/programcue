@@ -70,6 +70,7 @@ test("programme workspace restores and copies panel deep links", async ({
   page,
   context,
 }) => {
+  await page.setViewportSize({ width: 1280, height: 720 });
   await waitForInterface(page, "/admin/programme#programme-embed-title");
   await expect(
     page.getByRole("button", { name: "Embed builder", exact: true }),
@@ -77,6 +78,19 @@ test("programme workspace restores and copies panel deep links", async ({
   await expect(
     page.getByRole("heading", { name: "Embed builder" }),
   ).toBeVisible();
+  await expect
+    .poll(async () => {
+      const headingBox = await page
+        .getByRole("heading", { name: "Embed builder" })
+        .boundingBox();
+      const topbarBox = await page.locator(".topbar").boundingBox();
+      return Boolean(
+        headingBox &&
+          topbarBox &&
+          headingBox.y >= topbarBox.y + topbarBox.height,
+      );
+    })
+    .toBe(true);
 
   await context.grantPermissions(["clipboard-read", "clipboard-write"]);
   await page
@@ -99,6 +113,23 @@ test("programme workspace restores and copies panel deep links", async ({
   await expect(
     managedPage.getByRole("heading", { name: "Managed embeds" }),
   ).toBeVisible();
+
+  await managedPage
+    .getByRole("button", { name: /Search or run a command/ })
+    .click();
+  await managedPage
+    .getByRole("combobox", { name: "Program Cue commands" })
+    .fill("save current view");
+  await managedPage
+    .getByRole("option", { name: /^Save current view\b/ })
+    .click();
+  await expect(
+    managedPage.locator('form[action="/admin/views"] input[name="href"]'),
+  ).toHaveValue("/admin/programme#managed-programme-embeds");
+  await expect(
+    managedPage.locator('form[action="/admin/views"] input[name="returnTo"]'),
+  ).toHaveValue("/admin/programme#managed-programme-embeds");
+  await managedPage.getByRole("button", { name: "Close" }).click();
 
   await showProgrammePanel(managedPage, "Programme");
   await expect(managedPage).toHaveURL(`${e2eOrigin}/admin/programme`);
@@ -210,19 +241,26 @@ test("saves and controls a stable managed embed lifecycle", async ({
     .fill("Homepage below the hero");
   await page.getByRole("button", { name: "Save draft" }).click();
   await expect(page.getByText("Managed embed saved as a draft.")).toBeVisible();
+  await expect
+    .poll(() => new URL(page.url()).hash)
+    .toBe("#managed-programme-embeds");
   await expect(
     page.getByRole("button", { name: /^Managed embeds\s+2\s+·\s+1 active$/ }),
   ).toBeVisible();
 
   const row = page.getByRole("row").filter({ hasText: "Conference homepage" });
   await expect(row).toContainText("draft");
-  await row.getByRole("button", { name: "Load in builder" }).click();
+  await row.getByRole("button", { name: "Load in builder" }).focus();
+  await row.getByRole("button", { name: "Load in builder" }).press("Enter");
   await expect(
     page.getByRole("button", { name: "Embed builder", exact: true }),
   ).toHaveAttribute("aria-pressed", "true");
   await expect
     .poll(() => new URL(page.url()).hash)
     .toBe("#programme-embed-title");
+  await expect(
+    page.getByRole("heading", { name: "Embed builder" }),
+  ).toBeFocused();
   await expect(page.locator(".programme-embed-preview iframe")).toBeVisible();
   await showProgrammePanel(page, "Managed embeds");
   await expect(page.getByText(/Current revision 1/)).toBeVisible();
@@ -230,6 +268,9 @@ test("saves and controls a stable managed embed lifecycle", async ({
   await row.getByLabel("I previewed this configuration.").check();
   await row.getByRole("button", { name: "Activate" }).click();
   await expect(page.getByText("Managed embed activated.")).toBeVisible();
+  await expect
+    .poll(() => new URL(page.url()).hash)
+    .toBe("#managed-programme-embeds");
   await expect(
     page.getByRole("button", { name: /^Managed embeds\s+2\s+·\s+2 active$/ }),
   ).toBeVisible();
@@ -248,6 +289,9 @@ test("saves and controls a stable managed embed lifecycle", async ({
   await expect(
     page.getByRole("row").filter({ hasText: "Conference homepage" }),
   ).toContainText("paused");
+  await expect
+    .poll(() => new URL(page.url()).hash)
+    .toBe("#managed-programme-embeds");
   await expect(
     page.getByRole("button", { name: /^Managed embeds\s+2\s+·\s+1 active$/ }),
   ).toBeVisible();
@@ -267,6 +311,9 @@ test("saves and controls a stable managed embed lifecycle", async ({
   await expect(
     page.getByRole("row").filter({ hasText: "Conference homepage" }),
   ).toContainText("revoked");
+  await expect
+    .poll(() => new URL(page.url()).hash)
+    .toBe("#managed-programme-embeds");
   const revoked = await page.request.get(
     "/embed/future-of-events-2027/saved/e2e-homepage",
   );

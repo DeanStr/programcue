@@ -51,6 +51,7 @@ test("Event Setup saves through D1 and survives a reload", async ({ page }) => {
     await venue.fill("Beanfield Centre — persistence check");
     await venueAddress.fill("105 Princes' Boulevard, Toronto, ON");
     await venueMapUrl.fill("https://maps.example.test/beanfield-centre");
+    await showEventSettingsPanel(page, "Structure");
     const save = page.getByRole("button", { name: "Save event" });
     await save.scrollIntoViewIfNeeded();
     const scrollBeforeSave = await page.evaluate(() => window.scrollY);
@@ -66,6 +67,12 @@ test("Event Setup saves through D1 and survives a reload", async ({ page }) => {
         ),
       )
       .toBe(true);
+    await expect(
+      page.getByRole("button", { name: "Structure", exact: true }),
+    ).toHaveAttribute("aria-pressed", "true");
+    await expect
+      .poll(() => new URL(page.url()).hash)
+      .toBe("#event-setup-structure");
     await page.reload();
     await expect(venue).toHaveValue("Beanfield Centre — persistence check");
     await expect(venueAddress).toHaveValue(
@@ -110,10 +117,43 @@ test("Event Setup rejects an invalid date range before persistence", async ({
   await page.goto("/admin/event");
   await page.locator("body[data-hydrated='true']").waitFor();
   await page.getByLabel("End date").fill("2025-05-19");
+  await showEventSettingsPanel(page, "Structure");
   await page.getByRole("button", { name: "Save event" }).click();
   await expect(page.getByRole("alert")).toContainText(
     "End date cannot be before the start date",
   );
+  await expect
+    .poll(() => new URL(page.url()).hash)
+    .toBe("#event-setup-identity");
+});
+
+test("Event Setup error-summary links reveal their hidden panel", async ({
+  page,
+}) => {
+  await page.goto("/admin/event");
+  await page.locator("body[data-hydrated='true']").waitFor();
+  const eventName = page.getByLabel("Event name");
+  await eventName.fill("   ");
+  await showEventSettingsPanel(page, "Structure");
+  await page.getByRole("button", { name: "Save event" }).click();
+
+  const nameError = page.getByRole("link", {
+    name: "Event name is required.",
+  });
+  await expect(nameError).toBeVisible();
+  await expect
+    .poll(() => new URL(page.url()).hash)
+    .toBe("#event-setup-identity");
+
+  await showEventSettingsPanel(page, "Structure");
+  await nameError.click();
+  await expect(
+    page.getByRole("button", { name: "Identity", exact: true }),
+  ).toHaveAttribute("aria-pressed", "true");
+  await expect(eventName).toBeFocused();
+  await expect
+    .poll(() => new URL(page.url()).hash)
+    .toBe("#event-setup-identity");
 });
 
 test("Event Setup reveals a hidden panel before focusing an invalid field", async ({
@@ -130,12 +170,87 @@ test("Event Setup reveals a hidden panel before focusing an invalid field", asyn
   await expect(
     page.getByRole("button", { name: "Identity", exact: true }),
   ).toHaveAttribute("aria-pressed", "true");
+  await expect
+    .poll(() => new URL(page.url()).hash)
+    .toBe("#event-setup-identity");
   await expect(eventName).toBeFocused();
   expect(
     await eventName.evaluate(
       (input) => (input as HTMLInputElement).validity.valid,
     ),
   ).toBe(false);
+});
+
+test("Event Setup sticky controls account for the evaluation banner", async ({
+  page,
+}) => {
+  await page.goto("/admin/event");
+  await page.locator("body[data-hydrated='true']").waitFor();
+  const toolbar = page.locator(".event-setup-workspace-toolbar");
+  const baselineTop = await toolbar.evaluate((element) =>
+    Number.parseFloat(getComputedStyle(element).top),
+  );
+
+  await page.evaluate(() =>
+    document.documentElement.style.setProperty("--eval-banner-offset", "37px"),
+  );
+
+  await expect
+    .poll(() =>
+      toolbar.evaluate((element) =>
+        Number.parseFloat(getComputedStyle(element).top),
+      ),
+    )
+    .toBe(baselineTop + 37);
+});
+
+test("Event Setup panel links clear the sticky toolbar", async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 720 });
+
+  for (const panel of ["identity", "access"] as const) {
+    await page.goto(`/admin/event#event-setup-${panel}`);
+    await page.locator("body[data-hydrated='true']").waitFor();
+    const heading = page.locator(`#event-setup-${panel}-title`);
+    const toolbar = page.locator(".event-setup-workspace-toolbar");
+
+    await expect(heading).toBeVisible();
+    await expect
+      .poll(async () => {
+        const headingBox = await heading.boundingBox();
+        const toolbarBox = await toolbar.boundingBox();
+        return Boolean(
+          headingBox &&
+            toolbarBox &&
+            headingBox.y >= toolbarBox.y + toolbarBox.height,
+        );
+      })
+      .toBe(true);
+  }
+});
+
+test("Event Setup panel navigation stays synchronized with the admin shell", async ({
+  page,
+}) => {
+  await page.goto("/admin/event");
+  await page.locator("body[data-hydrated='true']").waitFor();
+  await showEventSettingsPanel(page, "Data");
+
+  await page.getByRole("button", { name: "Switch event" }).click();
+  const dialog = page.getByRole("dialog", { name: "Current event" });
+  await expect(dialog.locator('input[name="returnTo"]').first()).toHaveValue(
+    "/admin/event#event-setup-data",
+  );
+  await dialog.getByRole("button", { name: "Close" }).click();
+
+  await page.getByRole("button", { name: /Search or run a command/ }).click();
+  await page
+    .getByRole("combobox", { name: "Program Cue commands" })
+    .fill("Event settings");
+  await page.getByRole("option", { name: /^Event settings\b/ }).click();
+  await expect(page).toHaveURL(/\/admin\/event$/);
+  await expect(
+    page.getByRole("button", { name: "Identity", exact: true }),
+  ).toHaveAttribute("aria-pressed", "true");
 });
 
 test("Event Setup opens a collapsed record before focusing an invalid field", async ({
@@ -443,4 +558,13 @@ test("the command palette resolves a room alias to the exact Event Setup record"
 
   await expect(page).toHaveURL(/\/admin\/event\?room=main$/);
   await expect(page.locator("#event-room-main")).toBeFocused();
+
+  await page.getByRole("button", { name: "Save event" }).click();
+  await expect(
+    page.getByText("Event settings saved.", { exact: true }),
+  ).toBeVisible();
+  await expect(page).toHaveURL(
+    /\/admin\/event\?room=main#event-setup-structure$/,
+  );
+  await expect(page.locator("#event-room-main")).toBeVisible();
 });
