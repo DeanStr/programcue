@@ -1368,7 +1368,7 @@ export class MultipartUploadService {
          )`
       : "";
     const assetAccessBindings = participantTaskGuard?.bindings ?? [];
-    const [versionCommitted, uploadCommitted] = await this.env.DB.batch([
+    const commitResults = await this.env.DB.batch([
       this.env.DB.prepare(
         `UPDATE file_versions
             SET upload_status = 'uploaded', signature_status = 'valid',
@@ -1507,13 +1507,34 @@ export class MultipartUploadService {
         ...assetAccessBindings,
       ),
       this.env.DB.prepare(
-        `UPDATE file_assets SET updated_at = unixepoch()
+        `UPDATE file_assets
+            SET status = CASE
+                  WHEN status = 'rejected' AND current_version_id IS NULL
+                    THEN 'pending'
+                  ELSE status
+                END,
+                updated_at = unixepoch()
           WHERE id = ? AND event_id = ? AND status <> 'deleted'
             AND NOT EXISTS (
               SELECT 1 FROM audit_events audit
                WHERE audit.id = 'file-erasure:' || file_assets.id
+            )
+            AND EXISTS (
+              SELECT 1
+                FROM file_versions version
+                JOIN file_multipart_uploads upload
+                  ON upload.version_id = version.id
+                 AND upload.event_id = version.event_id
+                 AND upload.asset_id = version.asset_id
+               WHERE version.id = ? AND version.event_id = file_assets.event_id
+                 AND version.asset_id = file_assets.id
+                 AND version.upload_status = 'uploaded'
+                 AND version.signature_status = 'valid'
+                 AND version.scan_status = 'pending'
+                 AND version.deleted_at IS NULL
+                 AND upload.status = 'completed'
             )`,
-      ).bind(row.assetId, actor.eventId),
+      ).bind(row.assetId, actor.eventId, row.versionId),
       this.env.DB.prepare(
         `INSERT OR IGNORE INTO audit_events (
            id, actor_kind, origin, metadata_version, organisation_id, event_id, actor_person_id, action,
@@ -1551,9 +1572,11 @@ export class MultipartUploadService {
         actor.eventId,
       ),
     ]);
+    const [versionCommitted, uploadCommitted, assetCommitted] = commitResults;
     if (
       (versionCommitted.meta.changes ?? 0) !== 1 ||
-      (uploadCommitted.meta.changes ?? 0) !== 1
+      (uploadCommitted.meta.changes ?? 0) !== 1 ||
+      (assetCommitted.meta.changes ?? 0) !== 1
     ) {
       const failures: unknown[] = [];
       try {

@@ -1,13 +1,21 @@
 import { env } from "cloudflare:test";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ensureDemoSpeakerData } from "~/modules/speakers/demo.server";
 import type { Viewer } from "~/platform/auth/authorize.server";
+import {
+  completeTestDirectUpload,
+  testFileScanCallbackIdentity,
+} from "./direct-upload.test-helper";
 import {
   CANONICAL_EVENT_FILE_POLICY,
   FILE_SIZE_MIB,
   FilePolicyError,
 } from "./file-policy";
-import { FileScanDispatchConfigurationError } from "./file-scan-dispatch.server";
+import {
+  FileScanDispatchConfigurationError,
+  type FileScanQueueMessage,
+  processFileScanDispatch,
+} from "./file-scan-dispatch.server";
 import {
   FileAccessError,
   FileService,
@@ -64,6 +72,7 @@ describe("direct R2 multipart upload", () => {
   });
 
   afterEach(async () => {
+    vi.unstubAllGlobals();
     await env.DB.prepare("UPDATE events SET file_policy_json = ? WHERE id = ?")
       .bind(JSON.stringify(CANONICAL_EVENT_FILE_POLICY), speaker.eventId)
       .run();
@@ -1399,6 +1408,107 @@ describe("direct R2 multipart upload", () => {
       signatureStatus: "valid",
       scanStatus: "pending",
       operationStatus: "queued",
+    });
+  });
+
+  it("dispatches and releases a valid headshot retry after rejecting the first upload", async () => {
+    const suffix = crypto.randomUUID();
+    const retryingSpeaker: Viewer = {
+      ...speaker,
+      personId: `person-headshot-retry-${suffix}`,
+      email: `headshot-retry-${suffix}@example.com`,
+    };
+    await env.DB.prepare(
+      `INSERT INTO people (id, email, display_name, email_verified)
+       VALUES (?, ?, 'Headshot retry speaker', 1)`,
+    )
+      .bind(retryingSpeaker.personId, retryingSpeaker.email)
+      .run();
+
+    const testEnvironment = configuredMultipartEnvironment();
+    const target = {
+      targetType: "person" as const,
+      targetId: retryingSpeaker.personId,
+      assetKind: "headshot" as const,
+    };
+    await expect(
+      completeTestDirectUpload(
+        testEnvironment,
+        retryingSpeaker,
+        target,
+        new File(["not a png"], "invalid.png", { type: "image/png" }),
+      ),
+    ).rejects.toThrow();
+
+    const valid = await completeTestDirectUpload(
+      testEnvironment,
+      retryingSpeaker,
+      target,
+      new File(
+        [
+          new Uint8Array([
+            0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0, 0, 0,
+          ]),
+        ],
+        "valid.png",
+        { type: "image/png" },
+      ),
+    );
+    await expect(
+      env.DB.prepare("SELECT status FROM file_assets WHERE id = ?")
+        .bind(valid.assetId)
+        .first(),
+    ).resolves.toEqual({ status: "pending" });
+
+    const operation = await env.DB.prepare(
+      "SELECT payload_json AS payloadJson FROM operation_jobs WHERE id = ?",
+    )
+      .bind(`file-scan-dispatch:${valid.versionId}`)
+      .first<{ payloadJson: string }>();
+    expect(operation).not.toBeNull();
+    const scanner = vi.fn(async () => new Response(null, { status: 202 }));
+    vi.stubGlobal("fetch", scanner);
+    await expect(
+      processFileScanDispatch(
+        JSON.parse(operation!.payloadJson) as FileScanQueueMessage,
+        testEnvironment,
+      ),
+    ).resolves.toEqual({ duplicate: false, awaitingCallback: true });
+    expect(scanner).toHaveBeenCalledTimes(1);
+
+    const callback = await testFileScanCallbackIdentity(
+      testEnvironment,
+      retryingSpeaker.eventId,
+      valid.versionId,
+    );
+    await new FileService(testEnvironment).recordScanResult({
+      ...callback,
+      eventId: retryingSpeaker.eventId,
+      versionId: valid.versionId,
+      provider: "test-scanner",
+      callbackId: `callback-${valid.versionId}`,
+      status: "clean",
+      result: { verdict: "clean" },
+    });
+    await expect(
+      env.DB.prepare(
+        `SELECT asset.status AS assetStatus,
+                asset.current_version_id AS currentVersionId,
+                version.scan_status AS scanStatus,
+                operation.status AS operationStatus
+           FROM file_assets asset
+           JOIN file_versions version
+             ON version.id = ? AND version.asset_id = asset.id
+           JOIN operation_jobs operation
+             ON operation.id = 'file-scan-dispatch:' || version.id`,
+      )
+        .bind(valid.versionId)
+        .first(),
+    ).resolves.toEqual({
+      assetStatus: "active",
+      currentVersionId: valid.versionId,
+      scanStatus: "clean",
+      operationStatus: "completed",
     });
   });
 });
