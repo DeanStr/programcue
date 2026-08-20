@@ -42,7 +42,7 @@ describe("speaker next-action hero", () => {
         status: "not_started",
         resourcePageId: "resource-speaker-handbook",
       } as never,
-      handbook,
+      [handbook],
     );
     expect(actions.resourceAction?.href).toContain("speaker-handbook");
     expect(actions.taskAction).toBeNull();
@@ -57,7 +57,7 @@ describe("speaker next-action hero", () => {
         status: "not_started",
         resourcePageId: null,
       } as never,
-      handbook,
+      [handbook],
     );
     expect(actions.taskAction?.id).toBe("task-slides");
     expect(actions.resourceAction).toBeNull();
@@ -72,10 +72,30 @@ describe("speaker next-action hero", () => {
         status: "not_started",
         resourcePageId: "resource-other-handbook",
       } as never,
-      handbook,
+      [handbook],
     );
     expect(actions.taskAction?.id).toBe("task-other-handbook");
     expect(actions.resourceAction).toBeNull();
+  });
+
+  it("opens the next task's resource even when another page is listed first", () => {
+    const codeOfConduct = {
+      id: "resource-code-of-conduct",
+      title: "Code of conduct",
+      href: "/participant/resources?resource=code-of-conduct",
+    };
+    const actions = speakerHeroActions(
+      {
+        id: "task-handbook",
+        title: "Read the speaker handbook",
+        description: "Acknowledge the current handbook.",
+        status: "not_started",
+        resourcePageId: "resource-speaker-handbook",
+      } as never,
+      [codeOfConduct, handbook],
+    );
+    expect(actions.resourceAction).toEqual(handbook);
+    expect(actions.taskAction).toBeNull();
   });
 });
 

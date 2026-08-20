@@ -31,8 +31,6 @@ export async function loader({ request, context }: Route.LoaderArgs) {
   const requiredResources = resources.pages.filter(
     (page) => page.acknowledgementRequired,
   );
-  const outstandingResource =
-    requiredResources.find((page) => !page.acknowledged) ?? null;
   return {
     tasks,
     applications,
@@ -40,13 +38,13 @@ export async function loader({ request, context }: Route.LoaderArgs) {
     acknowledgedResourceCount: requiredResources.filter(
       (page) => page.acknowledged,
     ).length,
-    outstandingResource: outstandingResource
-      ? {
-          id: outstandingResource.id,
-          title: outstandingResource.title,
-          href: `/participant/resources?resource=${encodeURIComponent(outstandingResource.slug)}`,
-        }
-      : null,
+    outstandingResources: requiredResources
+      .filter((page) => !page.acknowledged)
+      .map((page) => ({
+        id: page.id,
+        title: page.title,
+        href: `/participant/resources?resource=${encodeURIComponent(page.slug)}`,
+      })),
   };
 }
 
@@ -76,7 +74,7 @@ export default function SpeakerDashboard({ loaderData }: Route.ComponentProps) {
             next={next}
             completedCount={finished}
             requirementCount={tasks.length}
-            outstandingResource={loaderData.outstandingResource}
+            outstandingResources={loaderData.outstandingResources}
             requiredResourceCount={loaderData.requiredResourceCount}
             acknowledgedResourceCount={loaderData.acknowledgedResourceCount}
           />

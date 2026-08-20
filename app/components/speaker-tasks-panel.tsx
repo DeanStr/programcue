@@ -6,7 +6,7 @@ import {
   LockKeyhole,
 } from "lucide-react";
 import { useState } from "react";
-import { Form } from "react-router";
+import { Form, Link } from "react-router";
 
 import {
   DirectMultipartUpload,
@@ -354,7 +354,20 @@ export function SpeakerTasksPanel({
                     />
                   </div>
                 ) : null}
-                {canComplete ? (
+                {canComplete && task.resourcePageId ? (
+                  <div className="speaker-task-action">
+                    {task.resourceHref ? (
+                      <Link className="btn primary" to={task.resourceHref}>
+                        Open resource
+                      </Link>
+                    ) : (
+                      <p className="speaker-task-note">
+                        Acknowledge this requirement from the published
+                        resource. The resource is not available yet.
+                      </p>
+                    )}
+                  </div>
+                ) : canComplete ? (
                   <div className="speaker-task-action">
                     <Form method="post" className="speaker-task-form">
                       <input

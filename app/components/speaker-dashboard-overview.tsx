@@ -109,17 +109,16 @@ export type SpeakerOutstandingResource = {
 
 export function speakerHeroActions(
   next: SpeakerTask | undefined,
-  outstandingResource: SpeakerOutstandingResource | null,
+  outstandingResources: readonly SpeakerOutstandingResource[] = [],
 ) {
-  const resourceMatchesNext = Boolean(
-    next &&
-      outstandingResource &&
-      next.resourcePageId === outstandingResource.id,
+  const resourceById = new Map(
+    outstandingResources.map((resource) => [resource.id, resource]),
   );
-  const resourceAction =
-    outstandingResource && (!next || resourceMatchesNext)
-      ? outstandingResource
-      : null;
+  const resourceAction = next?.resourcePageId
+    ? (resourceById.get(next.resourcePageId) ?? null)
+    : next
+      ? null
+      : (outstandingResources[0] ?? null);
   return {
     resourceAction,
     taskAction: resourceAction ? null : (next ?? null),
@@ -131,7 +130,7 @@ export function SpeakerDashboardOverview({
   next,
   completedCount,
   requirementCount,
-  outstandingResource = null,
+  outstandingResources = [],
   requiredResourceCount,
   acknowledgedResourceCount,
 }: {
@@ -139,7 +138,7 @@ export function SpeakerDashboardOverview({
   next: SpeakerTask | undefined;
   completedCount: number;
   requirementCount: number;
-  outstandingResource?: SpeakerOutstandingResource | null;
+  outstandingResources?: readonly SpeakerOutstandingResource[];
   requiredResourceCount: number;
   acknowledgedResourceCount: number;
 }) {
@@ -156,7 +155,7 @@ export function SpeakerDashboardOverview({
   const preparationComplete = completedStages === milestones.length;
   const { resourceAction, taskAction } = speakerHeroActions(
     next,
-    outstandingResource,
+    outstandingResources,
   );
   const waitingOnTeam = taskAction
     ? ["submitted", "blocked"].includes(taskAction.status)

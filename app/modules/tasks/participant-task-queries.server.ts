@@ -85,27 +85,66 @@ export class ParticipantTaskQueries extends ParticipantTaskWorkflowFoundation {
             authorName: string;
           }>()
       : { results: [] };
-    return tasks.results.map((task) => ({
-      ...task,
-      formFields: structuredTaskForm(task.configurationJson)?.fields ?? [],
-      destinationUrl:
-        task.taskType === "link_visit"
-          ? taskDestinationUrl(task.configurationJson)
-          : null,
-      fileScope:
-        task.taskType === "file_upload"
-          ? (taskConfiguration(task.configurationJson).fileScope ?? null)
-          : null,
-      resourcePageId:
+    const resourcePageIds = [
+      ...new Set(
+        tasks.results.flatMap((task) => {
+          if (task.taskType !== "acknowledgement") return [];
+          const resourcePageId = taskResourcePageId(task.configurationJson);
+          return resourcePageId ? [resourcePageId] : [];
+        }),
+      ),
+    ];
+    const resourceHrefs = new Map<string, string>();
+    if (resourcePageIds.length) {
+      const pages = await this.env.DB.prepare(
+        `
+        SELECT rp.id, rv.slug
+          FROM resource_pages rp
+          JOIN resource_page_versions rv
+            ON rv.resource_page_id = rp.id AND rv.event_id = rp.event_id
+         WHERE rp.event_id = ? AND rp.status = 'published'
+           AND rv.status = 'published'
+           AND rp.id IN (SELECT CAST(value AS TEXT) FROM json_each(?))
+         ORDER BY rv.version_number DESC
+      `,
+      )
+        .bind(viewer.eventId, JSON.stringify(resourcePageIds))
+        .all<{ id: string; slug: string }>();
+      for (const page of pages.results) {
+        if (resourceHrefs.has(page.id)) continue;
+        resourceHrefs.set(
+          page.id,
+          `/participant/resources?resource=${encodeURIComponent(page.slug)}`,
+        );
+      }
+    }
+    return tasks.results.map((task) => {
+      const resourcePageId =
         task.taskType === "acknowledgement"
           ? taskResourcePageId(task.configurationJson)
+          : null;
+      return {
+        ...task,
+        formFields: structuredTaskForm(task.configurationJson)?.fields ?? [],
+        destinationUrl:
+          task.taskType === "link_visit"
+            ? taskDestinationUrl(task.configurationJson)
+            : null,
+        fileScope:
+          task.taskType === "file_upload"
+            ? (taskConfiguration(task.configurationJson).fileScope ?? null)
+            : null,
+        resourcePageId,
+        resourceHref: resourcePageId
+          ? (resourceHrefs.get(resourcePageId) ?? null)
           : null,
-      dependencies: dependencies.results.filter(
-        (dependency) => dependency.taskId === task.id,
-      ),
-      comments: comments.results.filter(
-        (comment) => comment.taskId === task.id,
-      ),
-    }));
+        dependencies: dependencies.results.filter(
+          (dependency) => dependency.taskId === task.id,
+        ),
+        comments: comments.results.filter(
+          (comment) => comment.taskId === task.id,
+        ),
+      };
+    });
   }
 }

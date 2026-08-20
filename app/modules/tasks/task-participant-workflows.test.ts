@@ -520,10 +520,21 @@ describe("onboarding task service", () => {
       const handbook = (
         await new TaskService(testEnv).listParticipantTasks(speaker)
       ).find((task) => task.id === "task-demo-handbook");
+      if (!handbook) throw new Error("Demo handbook task is missing.");
       expect(handbook).toMatchObject({
         taskType: "acknowledgement",
         resourcePageId: "resource-speaker-handbook",
+        resourceHref: "/participant/resources?resource=speaker-handbook",
       });
+      await expect(
+        new TaskService(testEnv).completeParticipant(speaker, {
+          taskId: handbook.id,
+          revision: handbook.revision,
+          confirmed: true,
+        }),
+      ).rejects.toThrow(
+        "Open and acknowledge the published resource to complete this task.",
+      );
     });
   });
 

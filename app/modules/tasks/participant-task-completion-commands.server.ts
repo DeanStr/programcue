@@ -15,6 +15,7 @@ import {
   type TaskCompletionMutationResult,
   TaskStateError,
   taskDestinationUrl,
+  taskResourcePageId,
 } from "./task-service-foundation.server";
 
 export class ParticipantTaskCompletionCommands extends ParticipantTaskWorkflowFoundation {
@@ -53,6 +54,14 @@ export class ParticipantTaskCompletionCommands extends ParticipantTaskWorkflowFo
       throw new TaskStateError("Only an administrator can complete this task.");
     if (task.taskType === "file_upload")
       throw new TaskStateError("Upload a file to submit this task.");
+    if (
+      task.taskType === "acknowledgement" &&
+      taskResourcePageId(task.configurationJson)
+    ) {
+      throw new TaskStateError(
+        "Open and acknowledge the published resource to complete this task.",
+      );
+    }
     if (!(await this.dependenciesComplete(task.id)))
       throw new TaskStateError("Complete the prerequisite tasks first.");
     const evidence: Record<string, unknown> = {};
