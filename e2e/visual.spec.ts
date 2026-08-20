@@ -613,13 +613,13 @@ test.describe
             : surface.name === "tasks-readiness"
               ? // Relative-day copy changes with wall-clock time; its layout and absolute due date remain visible here while unit tests own the calculation.
                 ".task-due-distance { visibility: hidden !important; }"
-            : testInfo.project.name === "mobile-chromium" &&
-                surface.name === "evaluation-admin"
-              ? ".pc-admin-section-nav { position: static !important; }"
               : testInfo.project.name === "mobile-chromium" &&
-                  surface.role === "speaker"
-                ? ".speaker-nav { visibility: hidden !important; }"
-                : null;
+                  surface.name === "evaluation-admin"
+                ? ".pc-admin-section-nav { position: static !important; }"
+                : testInfo.project.name === "mobile-chromium" &&
+                    surface.role === "speaker"
+                  ? ".speaker-nav { visibility: hidden !important; }"
+                  : null;
         const fullPageCaptureStyle = fullPageCaptureCss
           ? await page.addStyleTag({ content: fullPageCaptureCss })
           : null;

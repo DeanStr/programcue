@@ -293,7 +293,6 @@
   }
   .programme-embed-output .segmented,
   .programme-embed-output .segmented .btn,
-  /* biome-ignore lint/style/noDescendingSpecificity: Responsive rules intentionally follow embedded variants and narrower breakpoints while embedded specificity continues to win. */
   .programme-embed-copy-row .btn {
     width: 100%;
   }

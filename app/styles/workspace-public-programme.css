@@ -2160,7 +2160,6 @@
   color: var(--muted-on-surface);
   font-size: var(--text-2xs);
 }
-/* biome-ignore lint/style/noDescendingSpecificity: Component variants intentionally precede broader child rules; their higher specificity preserves the intended state and layout overrides. */
 .public-detail-list dd {
   margin: 0;
   font-size: var(--text-xs);
