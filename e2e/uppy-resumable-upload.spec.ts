@@ -157,6 +157,13 @@ test("Uppy resumes an interrupted direct upload from R2's server-authoritative p
       });
     },
   );
+  await page.route("**/files/task-evidence", async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({ ok: true }),
+    });
+  });
 
   await page.context().addCookies([
     {
@@ -168,14 +175,15 @@ test("Uppy resumes an interrupted direct upload from R2's server-authoritative p
       sameSite: "Lax",
     },
   ]);
-  await page.goto("/participant/files");
+  await page.goto("/participant/tasks");
   await page.locator("body[data-hydrated='true']").waitFor();
-  const profileUploader = () =>
-    page.locator("form.speaker-upload-form").filter({
-      has: page.locator('option[value="video"]'),
-    });
-  let uploader = profileUploader();
-  await uploader.getByLabel("File purpose").selectOption("video");
+  const taskUploader = () =>
+    page
+      .locator("article.speaker-task")
+      .filter({ hasText: "Upload presentation slides" })
+      .locator("form.speaker-upload-form");
+  let uploader = taskUploader();
+  await uploader.getByLabel("File purpose").selectOption("task_evidence");
   const file = {
     name: "resume-me.mp4",
     mimeType: "video/mp4",
@@ -203,8 +211,8 @@ test("Uppy resumes an interrupted direct upload from R2's server-authoritative p
 
   await page.reload();
   await page.locator("body[data-hydrated='true']").waitFor();
-  uploader = profileUploader();
-  await uploader.getByLabel("File purpose").selectOption("video");
+  uploader = taskUploader();
+  await uploader.getByLabel("File purpose").selectOption("task_evidence");
   await uploader.locator('input[type="file"]').setInputFiles(file);
   await uploader.getByRole("button", { name: "Upload file" }).click();
   await expect(uploader.getByRole("status")).toContainText("Upload complete");
@@ -332,6 +340,13 @@ test("a failed direct transfer remains resumable and cancellable in place", asyn
       });
     },
   );
+  await page.route("**/files/task-evidence", async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({ ok: true }),
+    });
+  });
   await page.context().addCookies([
     {
       name: "program_cue_demo_identity",
@@ -342,12 +357,13 @@ test("a failed direct transfer remains resumable and cancellable in place", asyn
       sameSite: "Lax",
     },
   ]);
-  await page.goto("/participant/files");
+  await page.goto("/participant/tasks");
   await page.locator("body[data-hydrated='true']").waitFor();
-  const uploader = page.locator("form.speaker-upload-form").filter({
-    has: page.locator('option[value="video"]'),
-  });
-  await uploader.getByLabel("File purpose").selectOption("video");
+  const uploader = page
+    .locator("article.speaker-task")
+    .filter({ hasText: "Upload presentation slides" })
+    .locator("form.speaker-upload-form");
+  await uploader.getByLabel("File purpose").selectOption("task_evidence");
   await uploader.locator('input[type="file"]').setInputFiles({
     name: "retry-in-place.mp4",
     mimeType: "video/mp4",

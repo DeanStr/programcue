@@ -258,7 +258,7 @@ test.describe
       await switchDemoRole(page, "administrator");
       await waitForInterface(page, "/admin/tasks");
       const evidenceRow = page.getByRole("row", {
-        name: /Upload presentation slides.*Priya Shah/i,
+        name: /Upload presentation slides.*Designing inclusive event technology/i,
       });
       await expect(evidenceRow).toContainText(
         "Latest evidence: submitted · private file",
