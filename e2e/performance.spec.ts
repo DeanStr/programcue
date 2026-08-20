@@ -515,6 +515,7 @@ test.describe("explicit local performance evidence", () => {
             .getByRole("button", { name: "Save event" })
             .click();
           const response = await responsePromise;
+          expect(await response.finished()).toBeNull();
           expect(response.ok()).toBeTruthy();
           mutationSamples.push(Date.now() - startedAt);
         } finally {

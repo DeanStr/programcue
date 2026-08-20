@@ -8,6 +8,7 @@ const trace =
     : "off";
 
 const laptopVisualTag = /@laptop-visual/;
+const scaleFixture = process.env.PROGRAM_CUE_E2E_SCALE_FIXTURE === "1";
 
 export const desktopChromiumProject = {
   name: "desktop-chromium",
@@ -58,13 +59,12 @@ export default defineConfig({
     // The outer runner creates one immutable production build before it starts
     // any shards. A shard must never rebuild the shared output while another
     // Workerd instance is serving it.
-    command:
-      process.env.PROGRAM_CUE_E2E_SCALE_FIXTURE === "1"
-        ? "node scripts/serve-performance-scale-e2e-worker.mjs"
-        : "npm run serve:e2e:prepared",
+    command: scaleFixture
+      ? "node scripts/serve-performance-scale-e2e-worker.mjs"
+      : "npm run serve:e2e:prepared",
     url: `${e2eOrigin}/admin/event`,
     reuseExistingServer: false,
-    timeout: 120_000,
+    timeout: scaleFixture ? 360_000 : 120_000,
   },
   projects: [
     desktopChromiumProject,
