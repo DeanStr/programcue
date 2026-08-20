@@ -1,6 +1,11 @@
 import type { Viewer } from "~/platform/auth/authorize.server";
 import { ParticipantTaskWorkflowFoundation } from "./participant-task-workflow-foundation.server";
 import {
+  loadParticipantSessionDetailsReview,
+  SESSION_DETAILS_REVIEW_PRESET,
+} from "./session-details-review.server";
+import {
+  parseTaskEvidenceDetails,
   structuredTaskForm,
   type TaskRow,
   taskConfiguration,
@@ -118,33 +123,60 @@ export class ParticipantTaskQueries extends ParticipantTaskWorkflowFoundation {
         );
       }
     }
-    return tasks.results.map((task) => {
-      const resourcePageId =
-        task.taskType === "acknowledgement"
-          ? taskResourcePageId(task.configurationJson)
+    return Promise.all(
+      tasks.results.map(async (task) => {
+        const configuration = taskConfiguration(task.configurationJson);
+        const isSessionDetailsReview =
+          configuration.preset === SESSION_DETAILS_REVIEW_PRESET &&
+          task.targetType === "session" &&
+          task.taskType === "acknowledgement" &&
+          task.evidenceMode === "checkbox";
+        const evidenceDetails = task.evidenceJson
+          ? parseTaskEvidenceDetails(task.id, task.evidenceJson)
           : null;
-      return {
-        ...task,
-        formFields: structuredTaskForm(task.configurationJson)?.fields ?? [],
-        destinationUrl:
-          task.taskType === "link_visit"
-            ? taskDestinationUrl(task.configurationJson)
+        if (
+          isSessionDetailsReview &&
+          task.status === "completed" &&
+          !evidenceDetails?.sessionDetailsReview
+        )
+          throw new Error(
+            `Completed session-details review task ${task.id} is missing its canonical review evidence.`,
+          );
+        const resourcePageId =
+          task.taskType === "acknowledgement"
+            ? taskResourcePageId(task.configurationJson)
+            : null;
+        return {
+          ...task,
+          formFields: structuredTaskForm(task.configurationJson)?.fields ?? [],
+          destinationUrl:
+            task.taskType === "link_visit"
+              ? taskDestinationUrl(task.configurationJson)
+              : null,
+          fileScope:
+            task.taskType === "file_upload"
+              ? (configuration.fileScope ?? null)
+              : null,
+          sessionDetailsReview: isSessionDetailsReview
+            ? await loadParticipantSessionDetailsReview(
+                this.env,
+                viewer,
+                task.targetId,
+              )
             : null,
-        fileScope:
-          task.taskType === "file_upload"
-            ? (taskConfiguration(task.configurationJson).fileScope ?? null)
+          reviewedSessionDetails: evidenceDetails?.sessionDetailsReview ?? null,
+          resourcePageId,
+          resourceHref: resourcePageId
+            ? (resourceHrefs.get(resourcePageId) ?? null)
             : null,
-        resourcePageId,
-        resourceHref: resourcePageId
-          ? (resourceHrefs.get(resourcePageId) ?? null)
-          : null,
-        dependencies: dependencies.results.filter(
-          (dependency) => dependency.taskId === task.id,
-        ),
-        comments: comments.results.filter(
-          (comment) => comment.taskId === task.id,
-        ),
-      };
-    });
+          dependencies: dependencies.results.filter(
+            (dependency) => dependency.taskId === task.id,
+          ),
+          comments: comments.results.filter(
+            (comment) => comment.taskId === task.id,
+          ),
+        };
+      }),
+    );
   }
 }

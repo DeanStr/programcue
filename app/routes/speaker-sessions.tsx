@@ -1,5 +1,5 @@
 import { Mic2 } from "lucide-react";
-import { data, Form, useActionData, useNavigation } from "react-router";
+import { data, Form, Link, useActionData, useNavigation } from "react-router";
 import { ZodError } from "zod";
 import { SpeakerActionNotice } from "~/components/speaker-action-notice";
 import { useSpeakerWorkspace } from "~/components/speaker-workspace-context";
@@ -22,20 +22,31 @@ export const meta = () => [{ title: "My Sessions · Program Cue" }];
 export async function action({ request, context }: Route.ActionArgs) {
   const { env, viewer } = await requireSpeakerWorkspace(request, context);
   const form = await request.formData();
-  if (form.get("intent") !== "confirm-participation") {
+  const intent = form.get("intent");
+  if (
+    intent !== "confirm-participation" &&
+    intent !== "decline-participation"
+  ) {
     return data(
       { ok: false, message: "Unsupported session action." },
       { status: 400 },
     );
   }
   try {
-    const result = await new SpeakerService(env).confirmOwnParticipation(
-      viewer,
-      {
-        sessionId: form.get("sessionId"),
-        confirmation: form.get("confirmation"),
-      },
-    );
+    const service = new SpeakerService(env);
+    const result =
+      intent === "confirm-participation"
+        ? await service.confirmOwnParticipation(viewer, {
+            sessionId: form.get("sessionId"),
+            participationRevision: form.get("participationRevision"),
+            confirmation: form.get("confirmation"),
+          })
+        : await service.declineOwnParticipation(viewer, {
+            sessionId: form.get("sessionId"),
+            participationRevision: form.get("participationRevision"),
+            declineConfirmation: form.get("declineConfirmation"),
+            reason: form.get("reason") ?? "",
+          });
     const realtimeFailure =
       result.changeSequence != null
         ? await notifyRouteChange(
@@ -54,9 +65,10 @@ export async function action({ request, context }: Route.ActionArgs) {
     if (realtimeFailure) return data(realtimeFailure, { status: 207 });
     return data({
       ok: true,
-      message: result.changed
-        ? `Participation confirmed for “${result.title}”.`
-        : `Participation for “${result.title}” was already confirmed.`,
+      message:
+        intent === "confirm-participation"
+          ? `Participation confirmed for “${result.title}”.`
+          : `You declined “${result.title}”.`,
     });
   } catch (error) {
     if (error instanceof ZodError) {
@@ -100,7 +112,7 @@ export default function SpeakerSessions(_props: Route.ComponentProps) {
       <div className="page-head">
         <div>
           <h1>My sessions</h1>
-          <p>Published schedule details and your role in each session.</p>
+          <p>Current session details and your role in each session.</p>
         </div>
         <p className="speaker-work-count">
           <b className="pc-num">{portal.sessions.length}</b>
@@ -122,9 +134,11 @@ export default function SpeakerSessions(_props: Route.ComponentProps) {
                   data-state={
                     session.participationStatus === "confirmed"
                       ? "confirmed"
-                      : session.status === "cancelled"
-                        ? "cancelled"
-                        : "pending"
+                      : session.participationStatus === "declined"
+                        ? "declined"
+                        : session.status === "cancelled"
+                          ? "cancelled"
+                          : "pending"
                   }
                   key={session.id}
                 >
@@ -150,6 +164,10 @@ export default function SpeakerSessions(_props: Route.ComponentProps) {
                       <p className="speaker-task-meta">
                         <span>{session.roleLabel ?? "Speaker"}</span>
                         <span aria-hidden="true"> · </span>
+                        <span>{session.format}</span>
+                        <span aria-hidden="true"> · </span>
+                        <span>{session.trackName ?? "No track assigned"}</span>
+                        <span aria-hidden="true"> · </span>
                         <span>
                           {session.startsAt ? (
                             <EventDateTime
@@ -171,55 +189,159 @@ export default function SpeakerSessions(_props: Route.ComponentProps) {
                     </div>
                     <div className="speaker-session-measure">
                       <span
-                        className={`status ${session.participationStatus === "confirmed" ? "success" : session.status === "cancelled" ? "" : "warning"}`}
+                        className={`status ${session.participationStatus === "confirmed" ? "success" : session.participationStatus === "declined" ? "danger" : session.status === "cancelled" ? "" : "warning"}`}
                       >
                         {session.participationStatus === "confirmed"
                           ? "Confirmed"
-                          : session.status === "cancelled"
-                            ? "Not required"
-                            : "Confirmation needed"}
+                          : session.participationStatus === "declined"
+                            ? "Declined by you"
+                            : session.status === "cancelled"
+                              ? "Not required"
+                              : "Confirmation needed"}
                       </span>
                       {needsConfirm ? (
-                        <Form method="post" className="speaker-session-confirm">
-                          <input
-                            type="hidden"
-                            name="intent"
-                            value="confirm-participation"
-                          />
-                          <input
-                            type="hidden"
-                            name="sessionId"
-                            value={session.id}
-                          />
-                          <input
-                            type="hidden"
-                            name="confirmation"
-                            value="confirmed"
-                          />
-                          <button
-                            className="btn primary"
-                            type="button"
-                            disabled={busy}
-                            aria-label={`Confirm participation in ${session.title}`}
-                            onClick={(event) => {
-                              const form = event.currentTarget.form;
-                              if (!form) return;
-                              confirm(
-                                {
-                                  title: "Confirm participation?",
-                                  description:
-                                    "This tells the event team you will take part. There is no self-service undo after you confirm.",
-                                  records: [session.title],
-                                  confirmLabel: "Confirm participation",
-                                  tone: "primary",
-                                },
-                                () => form.requestSubmit(),
-                              );
-                            }}
+                        <div className="speaker-session-confirm">
+                          <Form method="post">
+                            <input
+                              type="hidden"
+                              name="intent"
+                              value="confirm-participation"
+                            />
+                            <input
+                              type="hidden"
+                              name="sessionId"
+                              value={session.id}
+                            />
+                            <input
+                              type="hidden"
+                              name="participationRevision"
+                              value={session.participationRevision}
+                            />
+                            <input
+                              type="hidden"
+                              name="confirmation"
+                              value="confirmed"
+                            />
+                            <button
+                              className="btn primary"
+                              type="button"
+                              disabled={busy}
+                              aria-label={`Accept participation in ${session.title}`}
+                              onClick={(event) => {
+                                const form = event.currentTarget.form;
+                                if (!form) return;
+                                confirm(
+                                  {
+                                    title: "Accept this session?",
+                                    description:
+                                      "This tells the event team you will take part. There is no self-service undo after you confirm.",
+                                    records: [session.title],
+                                    confirmLabel: "Accept session",
+                                    tone: "primary",
+                                  },
+                                  () => form.requestSubmit(),
+                                );
+                              }}
+                            >
+                              Accept session
+                            </button>
+                          </Form>
+                          <details className="speaker-task-comment">
+                            <summary>Decline this session</summary>
+                            <Form
+                              method="post"
+                              className="speaker-task-comment-form"
+                            >
+                              <input
+                                type="hidden"
+                                name="intent"
+                                value="decline-participation"
+                              />
+                              <input
+                                type="hidden"
+                                name="sessionId"
+                                value={session.id}
+                              />
+                              <input
+                                type="hidden"
+                                name="participationRevision"
+                                value={session.participationRevision}
+                              />
+                              <label className="label">
+                                Reason (optional)
+                                <textarea
+                                  className="textarea"
+                                  name="reason"
+                                  maxLength={500}
+                                  rows={3}
+                                  placeholder="Share a short private note with the event team"
+                                />
+                              </label>
+                              <input
+                                type="hidden"
+                                name="declineConfirmation"
+                                value="declined"
+                              />
+                              <button
+                                className="btn danger"
+                                type="button"
+                                disabled={busy}
+                                onClick={(event) => {
+                                  const form = event.currentTarget.form;
+                                  if (!form) return;
+                                  confirm(
+                                    {
+                                      title: "Decline this session?",
+                                      description:
+                                        "The event team will be told that you cannot take part. Your optional reason remains private.",
+                                      records: [session.title],
+                                      confirmLabel: "Decline session",
+                                      tone: "danger",
+                                    },
+                                    () => form.requestSubmit(),
+                                  );
+                                }}
+                              >
+                                Decline session
+                              </button>
+                            </Form>
+                          </details>
+                        </div>
+                      ) : session.participationStatus === "confirmed" ? (
+                        portal.event.participantSupportUrl ? (
+                          <a
+                            className="btn small"
+                            href={portal.event.participantSupportUrl}
                           >
-                            Confirm participation
-                          </button>
-                        </Form>
+                            Contact the event team to withdraw
+                          </a>
+                        ) : (
+                          <p className="subtle">
+                            Contact the event team if you need to withdraw.
+                          </p>
+                        )
+                      ) : session.participationStatus === "declined" ? (
+                        <p className="subtle">
+                          The event team must reset this session before you can
+                          respond again.
+                        </p>
+                      ) : null}
+                      {session.participationStatus !== "declined" ? (
+                        session.sessionDetailsReviewTaskId ? (
+                          <Link
+                            className="btn small"
+                            to={`/participant/tasks?task=${encodeURIComponent(session.sessionDetailsReviewTaskId)}&compose=comment#task-${encodeURIComponent(session.sessionDetailsReviewTaskId)}`}
+                          >
+                            Request a correction
+                          </Link>
+                        ) : portal.event.participantSupportUrl ? (
+                          <a
+                            className="btn small"
+                            href={portal.event.participantSupportUrl}
+                          >
+                            Request a correction
+                          </a>
+                        ) : null
                       ) : null}
                     </div>
                   </div>

@@ -460,6 +460,13 @@ describe("D1-backed command centre", () => {
          VALUES ('readiness-upcoming-room', ?, 'Readiness room', 100)`,
       ).bind(viewer.eventId),
       env.DB.prepare(
+        `INSERT INTO session_speakers (
+           session_id, event_id, person_id, position, role_label,
+           participation_status, visibility
+         ) VALUES ('readiness-upcoming-session', ?, ?, 0, 'Speaker',
+                   'pending', 'public')`,
+      ).bind(viewer.eventId, viewer.personId),
+      env.DB.prepare(
         `INSERT INTO schedule_versions (id, event_id, version_number, name)
          SELECT 'readiness-upcoming-schedule', ?,
                 COALESCE(MAX(version_number), 0) + 1,

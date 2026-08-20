@@ -86,8 +86,61 @@ export function AdminTaskPlanPanel({
         : "Speaker";
   const showPlan = mode === "all" || mode === "plan";
   const showCreate = mode === "all" || mode === "create";
+  const sessionDetailsReviewReady = data.templates.some(
+    (template) =>
+      template.status === "active" &&
+      template.preset === "session_details_review_v1" &&
+      template.targetType === "session" &&
+      template.taskType === "acknowledgement" &&
+      template.evidenceMode === "checkbox" &&
+      Boolean(template.autoAssignOnAcceptance),
+  );
   return (
     <aside className="tasks-side stack">
+      {showPlan ? (
+        <section className="tasks-plan-block">
+          <div className="card-title">
+            <h2>Session-detail review</h2>
+          </div>
+          <p className="subtle">
+            Optionally ask active session participants to review the shared
+            title, description, format, duration and track. Any one of them may
+            complete the task for the session; corrections use the existing task
+            comments instead of a parallel proposal workflow.
+          </p>
+          {sessionDetailsReviewReady ? (
+            <p className="status success">Optional preset ready</p>
+          ) : (
+            <Form method="post" className="stack">
+              <input
+                type="hidden"
+                name="intent"
+                value="create-session-details-review"
+              />
+              <label className="speaker-confirm">
+                <input
+                  type="checkbox"
+                  name="confirmed"
+                  value="create-session-details-review"
+                  required
+                />{" "}
+                I confirm this optional task should be created and automatically
+                assigned when a submission is accepted.
+              </label>
+              <button type="submit" className="btn" disabled={busy}>
+                <Plus aria-hidden size={15} /> Create session review task
+              </button>
+            </Form>
+          )}
+          {!sessionDetailsReviewReady && !data.participantSupportUrl ? (
+            <p className="help" role="status">
+              No participant support URL is configured. Until this optional task
+              is assigned, session pages will not offer a correction
+              destination.
+            </p>
+          ) : null}
+        </section>
+      ) : null}
       {showPlan ? (
         <section className="tasks-plan-block">
           <div className="card-title">

@@ -222,9 +222,10 @@ export class ParticipantTaskEvidenceCommands extends ParticipantTaskWorkflowFoun
                AND json_extract(task_instances.configuration_json, '$.fileScope') = 'session_deliverable'
                AND EXISTS (
                  SELECT 1 FROM session_speakers relation
-                  WHERE relation.event_id = task_instances.event_id
+                 WHERE relation.event_id = task_instances.event_id
                     AND relation.session_id = task_instances.target_id
                     AND relation.person_id = ?
+                    AND relation.participation_status IN ('pending','confirmed')
                )
              )
            )

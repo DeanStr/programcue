@@ -13,24 +13,24 @@ export class SchedulePublicationReadiness {
     scheduleVersionId: string,
   ) {
     return this.env.DB.prepare(
-      `SELECT session.title
+      `SELECT session.title,
+              relationship.participation_status AS participationStatus
          FROM schedule_entries entry
          JOIN sessions session
            ON session.id = entry.session_id AND session.event_id = entry.event_id
+         JOIN session_speakers relationship
+           ON relationship.session_id = session.id
+          AND relationship.event_id = session.event_id
         WHERE entry.schedule_version_id = ? AND entry.event_id = ?
-          AND (
-            EXISTS (
-              SELECT 1 FROM session_speakers relationship
-               WHERE relationship.session_id = session.id
-                 AND relationship.event_id = session.event_id
-                 AND relationship.participation_status IS NOT 'confirmed'
-            )
-          )
+          AND relationship.participation_status IS NOT 'confirmed'
         ORDER BY session.title COLLATE NOCASE, session.id
         LIMIT 1`,
     )
       .bind(scheduleVersionId, viewer.eventId)
-      .first<{ title: string }>();
+      .first<{
+        title: string;
+        participationStatus: "pending" | "declined";
+      }>();
   }
 
   async hasMissingScheduledContentSnapshot(

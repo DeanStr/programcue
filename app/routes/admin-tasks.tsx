@@ -104,6 +104,9 @@ export async function loader({ request, context }: Route.LoaderArgs) {
     (task.status === "overdue" ||
       task.readinessState === "overdue" ||
       (task.dueAt !== null && task.dueAt < now));
+  const readinessTasks = workspace.tasks.filter(
+    (task) => task.participantActionable,
+  );
   const tasks = workspace.tasks
     .filter((task) => {
       const stateMatches =
@@ -127,7 +130,7 @@ export async function loader({ request, context }: Route.LoaderArgs) {
      a partially ready event into a 100% one. */
   const taskSummary = {
     readiness: calculateReadiness(
-      workspace.tasks.map((task) => ({
+      readinessTasks.map((task) => ({
         id: task.id,
         impact: task.impact,
         readinessPercent: ["completed", "waived"].includes(task.status)
@@ -135,14 +138,13 @@ export async function loader({ request, context }: Route.LoaderArgs) {
           : task.readinessPercent,
       })),
     ).percentage,
-    outstanding: workspace.tasks.filter(
+    outstanding: readinessTasks.filter(
       (task) => !["completed", "waived"].includes(task.status),
     ).length,
-    evidenceReview: workspace.tasks.filter(
-      (task) => task.status === "submitted",
-    ).length,
-    blocked: workspace.tasks.filter((task) => task.status === "blocked").length,
-    overdue: workspace.tasks.filter(isOverdue).length,
+    evidenceReview: readinessTasks.filter((task) => task.status === "submitted")
+      .length,
+    blocked: readinessTasks.filter((task) => task.status === "blocked").length,
+    overdue: readinessTasks.filter(isOverdue).length,
   };
   const filterSignature = JSON.stringify(filters);
   return {
@@ -218,6 +220,27 @@ export async function action({ request, context }: Route.ActionArgs) {
           templates.createdTemplateIds.length === 0
             ? "Hotel stay and flight reimbursement forms were already ready. No duplicates were created."
             : "Hotel stay and flight reimbursement forms are ready and will be assigned automatically on acceptance.",
+      });
+    }
+    if (intent === "create-session-details-review") {
+      const result = await service.createSessionDetailsReviewTemplate(
+        viewer,
+        form.get("confirmed") === "create-session-details-review",
+      );
+      const realtimeFailure = result.created
+        ? await recordRouteChange(env, viewer, {
+            entityType: "task_template",
+            entityId: result.templateId,
+            changeType: "created",
+          })
+        : null;
+      if (realtimeFailure)
+        return data({ ...realtimeFailure, committed: true }, { status: 207 });
+      return data({
+        ok: true,
+        message: result.created
+          ? "The optional session-details review task is ready and will be assigned automatically on future acceptances."
+          : "The session-details review task was already ready. No duplicate was created.",
       });
     }
     if (intent === "create-template") {

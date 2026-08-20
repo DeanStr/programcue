@@ -118,6 +118,12 @@ export function buildParticipantRetentionFinalisationStatements(
       viewer.eventId,
     ),
     guarded(
+      `UPDATE session_speakers
+          SET participation_decline_reason = NULL
+        WHERE event_id = ? AND participation_decline_reason IS NOT NULL`,
+      viewer.eventId,
+    ),
+    guarded(
       `UPDATE schedule_session_contents
           SET description = NULL, updated_at = unixepoch()
         WHERE event_id = ?

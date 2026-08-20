@@ -22,8 +22,10 @@ import {
   requiredReviewerAiReviewColumns,
   requiredReviewerAiSchemaObjects,
   requiredReviewerAiSuggestionColumns,
+  requiredSessionParticipationDecisionColumns,
   requiredSpeakerRelationshipIdentityObjects,
   reviewerAiMigrationName,
+  sessionParticipationDecisionsMigrationName,
   speakerRelationshipIdentityGuardMigrationName,
   taskInstanceConfigurationSnapshotMigrationName,
   validatePendingTaskConfigurationInventory,
@@ -189,6 +191,10 @@ function remoteEvidence(appliedMigrations = migrations) {
     },
     { success: true, results: [{ invalidCount: 0 }] },
     { success: true, results: [] },
+    {
+      success: true,
+      results: columnEvidence(requiredSessionParticipationDecisionColumns),
+    },
   ];
 }
 
@@ -758,6 +764,27 @@ test("remote schema validation requires the exact migration ledger and deployed 
   assert.throws(
     () => validateRemoteSchemaEvidence(foreignKeyFailure, migrations),
     /foreign_key_check returned violations/u,
+  );
+});
+
+test("remote schema validation verifies deployed session participation decision columns", () => {
+  const participationMigrations = [
+    ...speakerRelationshipIdentityGuardMigrations,
+    taskInstanceConfigurationSnapshotMigrationName,
+    sessionParticipationDecisionsMigrationName,
+  ];
+  const evidence = remoteEvidence(participationMigrations);
+
+  assert.doesNotThrow(() =>
+    validateRemoteSchemaEvidence(evidence, participationMigrations),
+  );
+
+  evidence[12].results = evidence[12].results.filter(
+    ({ name }) => name !== "participation_revision",
+  );
+  assert.throws(
+    () => validateRemoteSchemaEvidence(evidence, participationMigrations),
+    /session_speakers\.participation_revision is missing or has the wrong contract/u,
   );
 });
 

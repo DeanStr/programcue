@@ -87,6 +87,7 @@ describe("schedule publication preview", () => {
             sessionId: "schedule-test-one",
             title: "First test session",
             speakerName: "Priya Shah",
+            participationStatus: "pending",
           },
         ],
       },

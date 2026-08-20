@@ -6,6 +6,7 @@ import {
   fixedDateEndEpoch,
   hashUndoSecret,
   parseTaskEvidenceDetails,
+  participantResourceTaskAccessSql,
   randomUndoSecret,
   statusProgress,
   structuredTaskForm,
@@ -14,6 +15,7 @@ import {
   TaskServiceFoundation,
   TaskStateError,
   type TemplateRow,
+  taskConfiguration,
 } from "./task-service-foundation.server";
 
 export class TaskAdministrationWorkflows extends TaskServiceFoundation {
@@ -255,6 +257,15 @@ export class TaskAdministrationWorkflows extends TaskServiceFoundation {
                ti.last_operation_id AS lastOperationId,
                ti.evidence_mode AS evidenceMode,
                ti.configuration_json AS configurationJson
+               , CASE WHEN (
+                   (ti.target_type <> 'session' OR EXISTS (
+                     SELECT 1 FROM session_speakers eligible_participant
+                      WHERE eligible_participant.event_id = ti.event_id
+                        AND eligible_participant.session_id = ti.target_id
+                        AND eligible_participant.participation_status IN ('pending','confirmed')
+                   ))
+                   AND ${participantResourceTaskAccessSql("ti")}
+                 ) THEN 1 ELSE 0 END AS participantActionable
           FROM task_instances ti
           LEFT JOIN people p ON p.id = ti.owner_person_id
           LEFT JOIN sessions target_session
@@ -349,15 +360,18 @@ export class TaskAdministrationWorkflows extends TaskServiceFoundation {
     ]);
     return {
       eventTimezone: event.timezone,
+      participantSupportUrl: event.participantSupportUrl,
       eventTarget: { id: event.id, name: event.name },
       templates: templates.results.map((template) => ({
         ...template,
+        preset: taskConfiguration(template.configurationJson).preset ?? null,
         dependencies: dependencyRows.results
           .filter((row) => row.templateId === template.id)
           .map((row) => row.dependsOnTemplateId),
       })),
       tasks: tasks.results.map((task) => ({
         ...task,
+        participantActionable: task.participantActionable === 1,
         formFields: structuredTaskForm(task.configurationJson)?.fields ?? [],
         evidence: evidence.results
           .filter((item) => item.taskId === task.id)

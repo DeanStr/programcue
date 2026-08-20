@@ -8295,7 +8295,8 @@
                 "type": "string",
                 "enum": [
                   "speaker_travel_hotel_v1",
-                  "speaker_travel_flight_v1"
+                  "speaker_travel_flight_v1",
+                  "session_details_review_v1"
                 ]
               },
               "form": {
@@ -8837,6 +8838,15 @@
                 }
               ]
             }
+          },
+          "sessionDetailsFingerprint": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{64}$"
+          },
+          "sessionDetailsRevision": {
+            "type": "integer",
+            "exclusiveMinimum": 0,
+            "maximum": 9007199254740991
           }
         },
         "required": [

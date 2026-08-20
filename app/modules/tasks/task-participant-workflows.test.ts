@@ -7,6 +7,7 @@ import {
 } from "~/modules/files/direct-upload.test-helper";
 import { FileService } from "~/modules/files/file-service.server";
 import { ensureDemoSpeakerData } from "~/modules/speakers/demo.server";
+import { SpeakerService } from "~/modules/speakers/speaker-service.server";
 import type { Viewer } from "~/platform/auth/authorize.server";
 import { TaskService } from "./task-service.server";
 import {
@@ -45,6 +46,15 @@ const submitter: Viewer = {
 async function createSessionCoSpeaker(testEnv: CloudflareEnvironment) {
   const suffix = crypto.randomUUID();
   const personId = `person-session-co-speaker-${suffix}`;
+  const position = await testEnv.DB.prepare(
+    `SELECT COALESCE(MAX(position), -1) + 1 AS value
+       FROM session_speakers
+      WHERE event_id = ? AND session_id = 'session-demo-speaker'`,
+  )
+    .bind(admin.eventId)
+    .first<{ value: number }>();
+  if (!position || !Number.isSafeInteger(position.value))
+    throw new Error("Could not resolve the next session-speaker position.");
   await testEnv.DB.batch([
     testEnv.DB.prepare(
       `INSERT INTO people (
@@ -65,9 +75,9 @@ async function createSessionCoSpeaker(testEnv: CloudflareEnvironment) {
       `INSERT INTO session_speakers (
          session_id, event_id, person_id, position, role_label,
          participation_status, participation_confirmed_at, visibility
-       ) VALUES ('session-demo-speaker', ?, ?, 1, 'Co-speaker',
+       ) VALUES ('session-demo-speaker', ?, ?, ?, 'Co-speaker',
                  'confirmed', unixepoch(), 'public')`,
-    ).bind(admin.eventId, personId),
+    ).bind(admin.eventId, personId, position.value),
   ]);
   return {
     personId,
@@ -338,6 +348,176 @@ describe("onboarding task service", () => {
       });
     });
 
+    it("binds the built-in session-details acknowledgement to the displayed session revision", async () => {
+      const testEnv = env as unknown as CloudflareEnvironment;
+      await ensureDemoSpeakerData(testEnv);
+      const coSpeaker = await createSessionCoSpeaker(testEnv);
+      const service = new TaskService(testEnv);
+      const original = await testEnv.DB.prepare(
+        `SELECT title, revision FROM sessions
+          WHERE id = 'session-demo-speaker' AND event_id = ?`,
+      )
+        .bind(speaker.eventId)
+        .first<{ title: string; revision: number }>();
+      if (!original) throw new Error("Demo session is missing.");
+      await testEnv.DB.prepare(
+        `UPDATE session_speakers
+            SET participation_status = 'pending', participation_revision = 1,
+                participation_confirmed_at = NULL,
+                participation_declined_at = NULL,
+                participation_decline_reason = NULL
+          WHERE event_id = ? AND session_id = 'session-demo-speaker'
+            AND person_id = ?`,
+      )
+        .bind(speaker.eventId, speaker.personId)
+        .run();
+
+      try {
+        const preset = await service.createSessionDetailsReviewTemplate(
+          admin,
+          true,
+        );
+        const { taskId } = await service.assignTemplate(
+          admin,
+          preset.templateId,
+          "session-demo-speaker",
+        );
+        const duplicateTemplateId = await service.createTemplate(admin, {
+          name: `Duplicate session review ${crypto.randomUUID()}`,
+          description:
+            "A duplicate preset must not become the correction route.",
+          targetType: "session",
+          taskType: "acknowledgement",
+          impact: "high",
+          evidenceMode: "checkbox",
+          dueAnchor: "none",
+          dueOffsetDays: null,
+          fixedDueDate: null,
+          autoAssignOnAcceptance: true,
+          dependencyIds: [],
+          configuration: { preset: "session_details_review_v1" },
+        });
+        const duplicateTask = await service.assignTemplate(
+          admin,
+          duplicateTemplateId,
+          "session-demo-speaker",
+        );
+        await testEnv.DB.prepare(
+          `UPDATE task_instances SET created_at = unixepoch() + 60
+            WHERE id = ? AND event_id = ?`,
+        )
+          .bind(duplicateTask.taskId, speaker.eventId)
+          .run();
+        const portalSession = (
+          await new SpeakerService(testEnv).getPortal(speaker)
+        ).sessions.find((session) => session.id === "session-demo-speaker");
+        expect(portalSession?.sessionDetailsReviewTaskId).toBe(taskId);
+        const displayed = (await service.listParticipantTasks(speaker)).find(
+          (task) => task.id === taskId,
+        );
+        expect(displayed?.sessionDetailsReview).toMatchObject({
+          sessionRevision: original.revision,
+          fields: {
+            title: original.title,
+            format: "presentation",
+            durationMinutes: 45,
+          },
+        });
+        if (!displayed?.sessionDetailsReview)
+          throw new Error("Session review details were not loaded.");
+        const coSpeakerDisplay = (
+          await service.listParticipantTasks(coSpeaker)
+        ).find((task) => task.id === taskId);
+        expect(coSpeakerDisplay?.sessionDetailsReview).toEqual(
+          displayed.sessionDetailsReview,
+        );
+        expect(displayed.sessionDetailsReview.fields).not.toHaveProperty(
+          "roleLabel",
+        );
+
+        await expect(
+          new TaskService(
+            withBatchRace(testEnv, async () => {
+              await testEnv.DB.prepare(
+                `UPDATE sessions
+                    SET title = 'Changed after participant loaded the task',
+                        revision = revision + 1,
+                        updated_at = unixepoch()
+                  WHERE id = 'session-demo-speaker' AND event_id = ?`,
+              )
+                .bind(speaker.eventId)
+                .run();
+            }),
+          ).completeParticipant(speaker, {
+            taskId,
+            revision: displayed.revision,
+            confirmed: true,
+            sessionDetailsRevision:
+              displayed.sessionDetailsReview.sessionRevision,
+            sessionDetailsFingerprint:
+              displayed.sessionDetailsReview.fingerprint,
+          }),
+        ).rejects.toThrow(/changed after this page loaded/i);
+
+        const current = (await service.listParticipantTasks(speaker)).find(
+          (task) => task.id === taskId,
+        );
+        if (!current?.sessionDetailsReview)
+          throw new Error("Current session review details were not loaded.");
+        await service.completeParticipant(speaker, {
+          taskId,
+          revision: current.revision,
+          confirmed: true,
+          sessionDetailsRevision: current.sessionDetailsReview.sessionRevision,
+          sessionDetailsFingerprint: current.sessionDetailsReview.fingerprint,
+        });
+        const completed = (await service.listParticipantTasks(speaker)).find(
+          (task) => task.id === taskId,
+        );
+        expect(completed?.reviewedSessionDetails).toMatchObject({
+          sessionRevision: original.revision + 1,
+          fields: { title: "Changed after participant loaded the task" },
+          reviewedAt: expect.any(Number),
+        });
+        expect(
+          (await service.listParticipantTasks(coSpeaker)).find(
+            (task) => task.id === taskId,
+          ),
+        ).toMatchObject({
+          status: "completed",
+          reviewedSessionDetails: completed?.reviewedSessionDetails,
+        });
+        if (!completed?.evidenceJson)
+          throw new Error("Completed session review evidence is missing.");
+        try {
+          await testEnv.DB.prepare(
+            `UPDATE task_instances SET evidence_json = '{"confirmed":true}'
+              WHERE id = ? AND event_id = ?`,
+          )
+            .bind(taskId, speaker.eventId)
+            .run();
+          await expect(service.listParticipantTasks(speaker)).rejects.toThrow(
+            /missing its canonical review evidence/i,
+          );
+        } finally {
+          await testEnv.DB.prepare(
+            `UPDATE task_instances SET evidence_json = ?
+              WHERE id = ? AND event_id = ?`,
+          )
+            .bind(completed.evidenceJson, taskId, speaker.eventId)
+            .run();
+        }
+      } finally {
+        await testEnv.DB.prepare(
+          `UPDATE sessions SET title = ?, revision = revision + 1,
+                  updated_at = unixepoch()
+            WHERE id = 'session-demo-speaker' AND event_id = ?`,
+        )
+          .bind(original.title, speaker.eventId)
+          .run();
+      }
+    });
+
     it("rejects unsupported evidence combinations and persists an explicit supported scope", async () => {
       const testEnv = env as unknown as CloudflareEnvironment;
       await ensureDemoSpeakerData(testEnv);
@@ -359,6 +539,14 @@ describe("onboarding task service", () => {
       await expect(
         service.createTemplate(admin, { ...base, evidenceMode: "file" }),
       ).rejects.toBeInstanceOf(ZodError);
+      await expect(
+        service.createTemplate(admin, {
+          ...base,
+          configuration: { preset: "session_details_review_v1" },
+        }),
+      ).rejects.toThrow(
+        /session-details review preset must be an automatically assigned session acknowledgement/i,
+      );
       await expect(
         service.createTemplate(admin, { ...base, targetType: "session" }),
       ).resolves.toEqual(expect.any(String));
@@ -1441,11 +1629,23 @@ describe("onboarding task service", () => {
       ).toEqual({ deletedAt: expect.any(Number) });
     });
 
-    it("revokes every participant task and evidence surface when a named owner leaves the session", async () => {
+    it("revokes the declined participant's exact-session task and file access while another speaker keeps the shared task active", async () => {
       const testEnv = env as unknown as CloudflareEnvironment;
       await ensureDemoSpeakerData(testEnv);
+      const coSpeaker = await createSessionCoSpeaker(testEnv);
       const tasks = new TaskService(testEnv);
       const files = new FileService(testEnv);
+      await testEnv.DB.prepare(
+        `UPDATE session_speakers
+            SET participation_status = 'pending', participation_revision = 1,
+                participation_confirmed_at = NULL,
+                participation_declined_at = NULL,
+                participation_decline_reason = NULL
+          WHERE event_id = ? AND session_id = 'session-demo-speaker'
+            AND person_id = ?`,
+      )
+        .bind(speaker.eventId, speaker.personId)
+        .run();
       const fileTaskId = await createSessionFileTask(
         testEnv,
         `Revoked session deliverable ${crypto.randomUUID()}`,
@@ -1519,19 +1719,28 @@ describe("onboarding task service", () => {
       );
       expect(checklist).toBeDefined();
 
-      await testEnv.DB.prepare(
-        `DELETE FROM session_speakers
-          WHERE event_id = ? AND session_id = 'session-demo-speaker'
-            AND person_id = ?`,
-      )
-        .bind(speaker.eventId, speaker.personId)
-        .run();
+      await new SpeakerService(testEnv).declineOwnParticipation(speaker, {
+        sessionId: "session-demo-speaker",
+        participationRevision: 1,
+        declineConfirmation: "declined",
+        reason: "I am unavailable for this session.",
+      });
 
       const visibleTaskIds = (await tasks.listParticipantTasks(speaker)).map(
         (task) => task.id,
       );
       expect(visibleTaskIds).not.toContain(fileTaskId);
       expect(visibleTaskIds).not.toContain(checklistTaskId);
+      const coSpeakerTaskIds = (
+        await tasks.listParticipantTasks(coSpeaker)
+      ).map((task) => task.id);
+      expect(coSpeakerTaskIds).toContain(fileTaskId);
+      expect(coSpeakerTaskIds).toContain(checklistTaskId);
+      expect(
+        (await tasks.getAdminWorkspace(admin)).tasks.find(
+          (task) => task.id === checklistTaskId,
+        )?.participantActionable,
+      ).toBe(true);
       await expect(
         tasks.completeParticipant(speaker, {
           taskId: checklistTaskId,
@@ -1564,6 +1773,18 @@ describe("onboarding task service", () => {
           uploaded.versionId,
         ),
       ).rejects.toThrow("outside your tasks");
+      await testEnv.DB.prepare(
+        `UPDATE session_speakers
+            SET participation_status = 'pending',
+                participation_revision = participation_revision + 1,
+                participation_confirmed_at = NULL,
+                participation_declined_at = NULL,
+                participation_decline_reason = NULL
+          WHERE event_id = ? AND session_id = 'session-demo-speaker'
+            AND person_id = ?`,
+      )
+        .bind(speaker.eventId, speaker.personId)
+        .run();
     });
 
     it("revalidates session membership in participant completion and comment writes", async () => {

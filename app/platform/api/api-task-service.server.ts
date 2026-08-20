@@ -918,7 +918,9 @@ export class ApiTaskService {
          WHERE event_id = ? AND person_id = ? AND role = 'speaker'
            AND accepted_at IS NOT NULL AND revoked_at IS NULL
         UNION
-        SELECT 1 FROM session_speakers WHERE event_id = ? AND person_id = ?
+        SELECT 1 FROM session_speakers
+         WHERE event_id = ? AND person_id = ?
+           AND participation_status IN ('pending','confirmed')
         LIMIT 1
       `,
         )
@@ -944,6 +946,7 @@ export class ApiTaskService {
         ? await this.env.DB.prepare(
             `SELECT 1 FROM session_speakers
               WHERE event_id = ? AND session_id = ? AND person_id = ?
+                AND participation_status IN ('pending','confirmed')
               LIMIT 1`,
           )
             .bind(principal.eventId, input.targetId, input.ownerPersonId)
@@ -953,7 +956,9 @@ export class ApiTaskService {
               WHERE event_id = ? AND person_id = ?
                 AND accepted_at IS NOT NULL AND revoked_at IS NULL
              UNION
-             SELECT 1 FROM session_speakers WHERE event_id = ? AND person_id = ?
+             SELECT 1 FROM session_speakers
+              WHERE event_id = ? AND person_id = ?
+                AND participation_status IN ('pending','confirmed')
              LIMIT 1`,
           )
             .bind(

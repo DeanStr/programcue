@@ -115,6 +115,7 @@ describe("communications presentation", () => {
           personId: "speaker",
           personName: "Test Speaker",
           email: "speaker@example.com",
+          participationStatus: "confirmed",
           invitationId: null,
           method: null,
           invitationStatus: null,
@@ -131,6 +132,7 @@ describe("communications presentation", () => {
           personId: "speaker",
           personName: "Test Speaker",
           email: "speaker@example.com",
+          participationStatus: "confirmed",
           invitationId: "cancelled-invitation",
           method: "CANCEL",
           invitationStatus: "cancelled",
@@ -168,5 +170,55 @@ describe("communications presentation", () => {
     expect(markup).toContain('value="microsoft-connection"');
     expect(markup).not.toContain("Update Google Calendar");
     expect(markup).not.toContain("Update Microsoft Outlook");
+  });
+
+  it("offers cancellation but no request or update for declined invitation history", () => {
+    const loaderData = {
+      connections: [],
+      calendarTargets: [
+        {
+          sessionId: "declined-session",
+          sessionTitle: "Declined session",
+          personId: "declined-speaker",
+          personName: "Declined Speaker",
+          email: "declined@example.com",
+          participationStatus: "declined",
+          invitationId: "historical-invitation",
+          method: "REQUEST",
+          invitationStatus: "sent",
+          sequenceNumber: 0,
+          invitationConnectionId: null,
+          invitationProvider: "google",
+          rsvpStatus: null,
+          activeConnectionId: null,
+          activeProvider: null,
+        },
+      ],
+      eventTimezone: "UTC",
+    } as unknown as CommunicationsCentreLoaderData;
+    const router = createMemoryRouter(
+      [
+        {
+          path: "/",
+          element: (
+            <CalendarAdministration
+              loaderData={loaderData}
+              working={false}
+              pendingIntent={null}
+            />
+          ),
+        },
+      ],
+      { initialEntries: ["/"] },
+    );
+
+    const markup = renderToStaticMarkup(<RouterProvider router={router} />);
+
+    expect(markup).toContain("Cancel invitation");
+    expect(markup).toContain("Participation Declined");
+    expect(markup).not.toContain("Email the invitation");
+    expect(markup).not.toContain("Email an update");
+    expect(markup).not.toContain("Update Google Calendar");
+    expect(markup).not.toContain("Reconcile RSVP");
   });
 });

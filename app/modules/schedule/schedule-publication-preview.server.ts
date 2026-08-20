@@ -57,7 +57,11 @@ export type SchedulePublicationPreview = {
     contentVisibility: SchedulePublicationChange[];
     contentApproval: SchedulePublicationChange[];
     unconfirmedSpeakers: Array<
-      SchedulePublicationChange & { speakerId: string; speakerName: string }
+      SchedulePublicationChange & {
+        speakerId: string;
+        speakerName: string;
+        participationStatus: "pending" | "declined";
+      }
     >;
     publicDependencies: string[];
   };
@@ -141,7 +145,8 @@ export async function buildSchedulePublicationPreview(
       env.DB.prepare(
         `SELECT session.id AS sessionId, content.title,
                 relationship.person_id AS speakerId,
-                COALESCE(person.display_name, relationship.person_id) AS speakerName
+                COALESCE(person.display_name, relationship.person_id) AS speakerName,
+                relationship.participation_status AS participationStatus
            FROM schedule_entries entry
            JOIN sessions session
              ON session.id = entry.session_id AND session.event_id = entry.event_id
@@ -164,6 +169,7 @@ export async function buildSchedulePublicationPreview(
           title: string;
           speakerId: string;
           speakerName: string;
+          participationStatus: "pending" | "declined";
         }>(),
       listPublishedSiteReferenceProblemsForSchedule(env, {
         eventId: viewer.eventId,

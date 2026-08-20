@@ -199,7 +199,9 @@ export class SchedulePublicationWorkflow {
     if (unconfirmedSpeaker) {
       throw new SchedulePublicationBlockedError(
         [],
-        `Every scheduled speaker must confirm their participation before publication. “${unconfirmedSpeaker.title}” still has an unconfirmed speaker.`,
+        unconfirmedSpeaker.participationStatus === "declined"
+          ? `Every scheduled speaker must confirm their participation before publication. A participant declined “${unconfirmedSpeaker.title}”.`
+          : `Every scheduled speaker must confirm their participation before publication. “${unconfirmedSpeaker.title}” still has a speaker awaiting confirmation.`,
       );
     }
 
@@ -327,7 +329,9 @@ export class SchedulePublicationWorkflow {
       if (newlyUnconfirmedSpeaker) {
         throw new SchedulePublicationBlockedError(
           [],
-          `Every scheduled speaker must confirm their participation before publication. “${newlyUnconfirmedSpeaker.title}” still has an unconfirmed speaker.`,
+          newlyUnconfirmedSpeaker.participationStatus === "declined"
+            ? `Every scheduled speaker must confirm their participation before publication. A participant declined “${newlyUnconfirmedSpeaker.title}”.`
+            : `Every scheduled speaker must confirm their participation before publication. “${newlyUnconfirmedSpeaker.title}” still has a speaker awaiting confirmation.`,
         );
       }
       const newlyInvalidSiteReference =

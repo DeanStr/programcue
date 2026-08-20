@@ -96,7 +96,9 @@ export abstract class IntegrationExportWorkflows extends IntegrationMappingWorkf
                 AND relationship.event_id = session.event_id
            JOIN people person ON person.id = relationship.person_id
           WHERE version.event_id = ? AND version.status = 'published'
-            AND session.status = 'published' AND relationship.visibility <> 'hidden'
+            AND session.status = 'published'
+            AND relationship.participation_status = 'confirmed'
+            AND relationship.visibility <> 'hidden'
           ORDER BY person.display_name, person.id`,
         )
           .bind(viewer.eventId)
@@ -150,6 +152,7 @@ export abstract class IntegrationExportWorkflows extends IntegrationMappingWorkf
            JOIN people person ON person.id = relationship.person_id
           WHERE version.event_id = ? AND version.status = 'published'
             AND session.status = 'published'
+            AND relationship.participation_status = 'confirmed'
             AND relationship.visibility <> 'hidden'
           ORDER BY session.id, relationship.position, relationship.person_id`,
         )

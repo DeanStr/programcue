@@ -5,6 +5,10 @@ import {
   type PreparedWebhookEvent,
   WebhookService,
 } from "~/platform/operations/webhook-service.server";
+import {
+  SESSION_DETAILS_REVIEW_PRESET,
+  SESSION_DETAILS_REVIEW_TEMPLATE_INTENT,
+} from "./session-details-review.server";
 import { taskTemplateInputSchema } from "./task-schema";
 import {
   fixedDateEndEpoch,
@@ -86,6 +90,34 @@ export class TaskTemplateWorkflows extends TaskServiceFoundation {
       rawInput,
       () => this.createTemplateD1(viewer, rawInput, intentId),
     );
+  }
+
+  async createSessionDetailsReviewTemplate(viewer: Viewer, confirmed: unknown) {
+    if (confirmed !== true) {
+      throw new TaskStateError(
+        "Review and confirm the optional session-details task before creating it.",
+      );
+    }
+    const result = await this.createTemplateWithResult(
+      viewer,
+      {
+        name: "Review session details",
+        description:
+          "Review the shared session title, description, format, duration and track. Any active session participant may confirm them for the session or leave a correction comment.",
+        targetType: "session",
+        taskType: "acknowledgement",
+        impact: "high",
+        evidenceMode: "checkbox",
+        dueAnchor: "none",
+        dueOffsetDays: null,
+        fixedDueDate: null,
+        autoAssignOnAcceptance: true,
+        dependencyIds: [],
+        configuration: { preset: SESSION_DETAILS_REVIEW_PRESET },
+      },
+      SESSION_DETAILS_REVIEW_TEMPLATE_INTENT,
+    );
+    return { templateId: result.id, created: result.created };
   }
 
   protected async createTemplateD1(

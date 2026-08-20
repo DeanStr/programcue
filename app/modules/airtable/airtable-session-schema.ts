@@ -55,7 +55,9 @@ export const AIRTABLE_SESSION_TABLE_SPECS: readonly AirtableEventTableSpec[] = [
     domain: "sessions",
     entityType: "session_speaker",
     query: `SELECT session_id, event_id, person_id, position, role_label,
-                   participation_status, participation_confirmed_at, visibility
+                   participation_status, participation_revision,
+                   participation_confirmed_at, participation_declined_at,
+                   participation_decline_reason, visibility
               FROM session_speakers WHERE event_id = ?
              ORDER BY session_id, person_id`,
     schema: z
@@ -65,13 +67,16 @@ export const AIRTABLE_SESSION_TABLE_SPECS: readonly AirtableEventTableSpec[] = [
         person_id: text.min(1),
         position: integer.nonnegative(),
         role_label: nullableText,
-        participation_status: z.enum(["pending", "confirmed"]),
+        participation_status: z.enum(["pending", "confirmed", "declined"]),
+        participation_revision: integer.positive(),
         participation_confirmed_at: nullableInteger,
+        participation_declined_at: nullableInteger,
+        participation_decline_reason: nullableText,
         visibility: z.enum(["public", "private", "hidden"]),
       })
       .strict(),
     entityId: (row) => `${String(row.session_id)}:${String(row.person_id)}`,
-    revision: () => 1,
+    revision: (row) => Number(row.participation_revision),
   },
   {
     key: "programmePeople",

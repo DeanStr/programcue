@@ -356,7 +356,7 @@ describe("schedule publication workflows", () => {
         scheduleVersionId: versionId,
         scheduleRevision: workspace.version!.revision,
       }),
-    ).rejects.toThrow(/must confirm.*unconfirmed speaker/i);
+    ).rejects.toThrow(/must confirm.*awaiting confirmation/i);
     await expect(
       env.DB.prepare(
         `SELECT status FROM schedule_versions WHERE id = ? AND event_id = ?`,
@@ -471,7 +471,7 @@ describe("schedule publication workflows", () => {
         scheduleVersionId: versionId,
         scheduleRevision: workspace.version!.revision,
       }),
-    ).rejects.toThrow(/must confirm.*unconfirmed speaker/i);
+    ).rejects.toThrow(/must confirm.*awaiting confirmation/i);
     expect(raced).toBe(true);
     await expect(
       env.DB.prepare(

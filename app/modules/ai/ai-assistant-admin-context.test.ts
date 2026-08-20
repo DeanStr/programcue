@@ -327,6 +327,59 @@ describe("contextual administrator actions", () => {
     ).rejects.toThrow('Body contains unresolved template token "{{deadline}}"');
   });
 
+  it("excludes declined participants from AI-generated session-copy evidence", async () => {
+    const suffix = crypto.randomUUID();
+    const sessionId = `ai-copy-session-${suffix}`;
+    const activePersonId = `ai-copy-active-${suffix}`;
+    const declinedPersonId = `ai-copy-declined-${suffix}`;
+    await env.DB.batch([
+      env.DB.prepare(
+        `INSERT INTO sessions (
+           id,event_id,title,slug,format,duration_minutes,status,visibility,
+           created_at,updated_at
+         ) VALUES (?,?,'AI copy source',?,'panel',45,'scheduled','public',
+                   unixepoch(),unixepoch())`,
+      ).bind(sessionId, admin.eventId, sessionId),
+      env.DB.prepare(
+        `INSERT INTO people (id,email,display_name,email_verified,created_at,updated_at)
+         VALUES (?,?,'Active Copy Speaker',1,unixepoch(),unixepoch())`,
+      ).bind(activePersonId, `${activePersonId}@example.test`),
+      env.DB.prepare(
+        `INSERT INTO people (id,email,display_name,email_verified,created_at,updated_at)
+         VALUES (?,?,'Declined Copy Speaker',1,unixepoch(),unixepoch())`,
+      ).bind(declinedPersonId, `${declinedPersonId}@example.test`),
+      env.DB.prepare(
+        `INSERT INTO session_speakers (
+           session_id,event_id,person_id,position,role_label,
+           participation_status,participation_revision,visibility
+         ) VALUES (?,?,?,0,'Speaker','pending',1,'public')`,
+      ).bind(sessionId, admin.eventId, activePersonId),
+      env.DB.prepare(
+        `INSERT INTO session_speakers (
+           session_id,event_id,person_id,position,role_label,
+           participation_status,participation_revision,
+           participation_declined_at,visibility
+         ) VALUES (?,?,?,1,'Speaker','declined',1,unixepoch(),'public')`,
+      ).bind(sessionId, admin.eventId, declinedPersonId),
+    ]);
+    const fetcher = vi
+      .fn<typeof fetch>()
+      .mockResolvedValue(
+        textResponse("Suggested public copy grounded in active participants."),
+      );
+
+    await new AiAssistantService(env as unknown as CloudflareEnvironment, {
+      fetcher,
+      providerConfiguration,
+    }).generateSessionCopy(admin, sessionId);
+
+    const request = JSON.parse(String(fetcher.mock.calls[0]![1]?.body)) as {
+      input: string;
+    };
+    expect(request.input).toContain("Active Copy Speaker");
+    expect(request.input).not.toContain("Declined Copy Speaker");
+  });
+
   it("explains a scoped deterministic schedule conflict without claiming an unvalidated slot", async () => {
     const suffix = crypto.randomUUID();
     const versionId = `ai-version-${suffix}`;

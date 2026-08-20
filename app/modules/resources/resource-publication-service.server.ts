@@ -27,6 +27,7 @@ const publicationCandidateAudienceSql = `(
       SELECT 1 FROM session_speakers accepted_relationship
        WHERE accepted_relationship.event_id = resource_pages.event_id
          AND accepted_relationship.person_id = candidate.id
+         AND accepted_relationship.participation_status IN ('pending','confirmed')
     )
   )
   OR (
@@ -54,6 +55,7 @@ const publicationCandidateAudienceSql = `(
                 WHERE session_relationship.event_id = resource_pages.event_id
                   AND session_relationship.session_id = audience.target_id
                   AND session_relationship.person_id = candidate.id
+                  AND session_relationship.participation_status IN ('pending','confirmed')
              )
            )
          )

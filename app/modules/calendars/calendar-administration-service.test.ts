@@ -21,6 +21,104 @@ const credentialKey = btoa(
 );
 
 describe("calendar administration", () => {
+  it("lists confirmed request targets while retaining declined invitation history", async () => {
+    const testEnv = env as unknown as CloudflareEnvironment;
+    await ensureDemoProgramme(testEnv);
+    const session = await testEnv.DB.prepare(
+      `SELECT session.id
+         FROM sessions session
+         JOIN schedule_entries entry
+           ON entry.session_id = session.id AND entry.event_id = session.event_id
+         JOIN schedule_versions version
+           ON version.id = entry.schedule_version_id
+          AND version.event_id = entry.event_id
+          AND version.status = 'published'
+        WHERE session.event_id = ?
+        LIMIT 1`,
+    )
+      .bind(viewer.eventId)
+      .first<{ id: string }>();
+    if (!session) throw new Error("Published demo session is missing.");
+    const position = await testEnv.DB.prepare(
+      `SELECT COALESCE(MAX(position), -1) + 1 AS value
+         FROM session_speakers WHERE session_id = ? AND event_id = ?`,
+    )
+      .bind(session.id, viewer.eventId)
+      .first<{ value: number }>();
+    if (!position || !Number.isSafeInteger(position.value))
+      throw new Error("Could not resolve the next calendar speaker position.");
+    const hiddenPersonId = `declined-calendar-hidden-${crypto.randomUUID()}`;
+    const historicalPersonId = `declined-calendar-history-${crypto.randomUUID()}`;
+    const invitationId = `declined-calendar-invitation-${crypto.randomUUID()}`;
+    const attemptId = `declined-calendar-attempt-${crypto.randomUUID()}`;
+    await testEnv.DB.batch([
+      testEnv.DB.prepare(
+        `INSERT INTO people (id,email,display_name,email_verified,created_at,updated_at)
+         VALUES (?,?,'Declined hidden',1,unixepoch(),unixepoch())`,
+      ).bind(hiddenPersonId, `${hiddenPersonId}@example.test`),
+      testEnv.DB.prepare(
+        `INSERT INTO people (id,email,display_name,email_verified,created_at,updated_at)
+         VALUES (?,?,'Declined history',1,unixepoch(),unixepoch())`,
+      ).bind(historicalPersonId, `${historicalPersonId}@example.test`),
+      testEnv.DB.prepare(
+        `INSERT INTO session_speakers (
+           session_id,event_id,person_id,position,role_label,
+           participation_status,participation_revision,
+           participation_declined_at,visibility
+         ) VALUES (?,?,?,?,'Speaker','declined',1,unixepoch(),'public')`,
+      ).bind(session.id, viewer.eventId, hiddenPersonId, position.value),
+      testEnv.DB.prepare(
+        `INSERT INTO session_speakers (
+           session_id,event_id,person_id,position,role_label,
+           participation_status,participation_revision,
+           participation_declined_at,visibility
+         ) VALUES (?,?,?,?,'Speaker','declined',1,unixepoch(),'public')`,
+      ).bind(
+        session.id,
+        viewer.eventId,
+        historicalPersonId,
+        position.value + 1,
+      ),
+      testEnv.DB.prepare(
+        `INSERT INTO calendar_invitations (
+           id,event_id,session_id,person_id,ical_uid,sequence_number,method,status
+         ) VALUES (?,?,?,?,?,0,'REQUEST','sent')`,
+      ).bind(
+        invitationId,
+        viewer.eventId,
+        session.id,
+        historicalPersonId,
+        `${crypto.randomUUID()}@calendar.programcue.app`,
+      ),
+      testEnv.DB.prepare(
+        `INSERT INTO calendar_sync_attempts (
+           id,invitation_id,sequence_number,method,provider,status
+         ) VALUES (?,?,0,'REQUEST','email_ics','succeeded')`,
+      ).bind(attemptId, invitationId),
+      testEnv.DB.prepare(
+        "UPDATE calendar_invitations SET current_attempt_id = ? WHERE id = ?",
+      ).bind(attemptId, invitationId),
+    ]);
+
+    const targets = await new CalendarAdministrationService(
+      testEnv,
+    ).listTargets(viewer);
+
+    expect(targets.some((target) => target.personId === hiddenPersonId)).toBe(
+      false,
+    );
+    expect(
+      targets.find((target) => target.personId === historicalPersonId),
+    ).toMatchObject({
+      invitationId,
+      invitationProvider: "email_ics",
+      participationStatus: "declined",
+    });
+    expect(
+      targets.some((target) => target.participationStatus === "confirmed"),
+    ).toBe(true);
+  });
+
   it("lists shared accounts only when their owner participates in the current event", async () => {
     const testEnv = env as unknown as CloudflareEnvironment;
     await ensureDemoProgramme(testEnv);

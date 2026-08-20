@@ -120,6 +120,7 @@ describe("administrator task discoverability", () => {
             readinessState: "on_track",
             readinessPercent: 100,
             isOverdue: false,
+            participantActionable: true,
             revision: 3,
             dueAt: null,
             evidenceJson: '{"confirmed":true}',

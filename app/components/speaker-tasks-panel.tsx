@@ -5,7 +5,7 @@ import {
   ExternalLink,
   LockKeyhole,
 } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Form, Link } from "react-router";
 
 import {
@@ -140,6 +140,7 @@ export function SpeakerTasksPanel({
   finished,
   busy,
   intentId,
+  composeTaskId = null,
 }: {
   portal: SpeakerPortal;
   tasks: Array<
@@ -148,7 +149,16 @@ export function SpeakerTasksPanel({
   finished: number;
   busy: boolean;
   intentId: string;
+  composeTaskId?: string | null;
 }) {
+  const correctionInputRef = useRef<HTMLInputElement>(null);
+  useEffect(() => {
+    if (!composeTaskId) return;
+    const frame = window.requestAnimationFrame(() => {
+      correctionInputRef.current?.focus();
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [composeTaskId]);
   const ordered = [...tasks].sort((left, right) => {
     const leftDone = isFinished(left.status) ? 1 : 0;
     const rightDone = isFinished(right.status) ? 1 : 0;
@@ -201,6 +211,51 @@ export function SpeakerTasksPanel({
                     ) : null}
                     {task.description ? (
                       <p className="speaker-task-desc">{task.description}</p>
+                    ) : null}
+                    {task.sessionDetailsReview ? (
+                      <dl className="speaker-task-desc stack">
+                        <div>
+                          <dt>Title</dt>
+                          <dd>{task.sessionDetailsReview.fields.title}</dd>
+                        </div>
+                        <div>
+                          <dt>Description</dt>
+                          <dd>
+                            {task.sessionDetailsReview.fields.description ??
+                              "No description"}
+                          </dd>
+                        </div>
+                        <div>
+                          <dt>Format and duration</dt>
+                          <dd>
+                            {task.sessionDetailsReview.fields.format} ·{" "}
+                            {task.sessionDetailsReview.fields.durationMinutes}{" "}
+                            minutes
+                          </dd>
+                        </div>
+                        <div>
+                          <dt>Track</dt>
+                          <dd>
+                            {task.sessionDetailsReview.fields.trackName ??
+                              "No track assigned"}
+                          </dd>
+                        </div>
+                      </dl>
+                    ) : null}
+                    {task.sessionDetailsReview &&
+                    task.reviewedSessionDetails &&
+                    (task.sessionDetailsReview.sessionRevision !==
+                      task.reviewedSessionDetails.sessionRevision ||
+                      task.sessionDetailsReview.fingerprint !==
+                        task.reviewedSessionDetails.fingerprint) ? (
+                      <p className="speaker-task-note" role="status">
+                        {task.sessionDetailsReview.sessionRevision ===
+                        task.reviewedSessionDetails.sessionRevision
+                          ? `The displayed details have changed since this task was completed for session revision ${task.reviewedSessionDetails.sessionRevision}.`
+                          : `This task was completed for session revision ${task.reviewedSessionDetails.sessionRevision}; current revision ${task.sessionDetailsReview.sessionRevision}.`}{" "}
+                        Ask the event team to reopen this task if another
+                        acknowledgement is required.
+                      </p>
                     ) : null}
                     <p className="speaker-task-meta">
                       <Clock3 aria-hidden size={12} />
@@ -381,6 +436,20 @@ export function SpeakerTasksPanel({
                         name="revision"
                         value={task.revision}
                       />
+                      {task.sessionDetailsReview ? (
+                        <>
+                          <input
+                            type="hidden"
+                            name="sessionDetailsFingerprint"
+                            value={task.sessionDetailsReview.fingerprint}
+                          />
+                          <input
+                            type="hidden"
+                            name="sessionDetailsRevision"
+                            value={task.sessionDetailsReview.sessionRevision}
+                          />
+                        </>
+                      ) : null}
                       {task.taskType === "short_form" &&
                       task.formFields.length ? (
                         <fieldset className="speaker-task-fields">
@@ -489,7 +558,14 @@ export function SpeakerTasksPanel({
                           />
                         </div>
                       ) : (
-                        <AcknowledgementCompleteControls busy={busy} />
+                        <AcknowledgementCompleteControls
+                          busy={busy}
+                          label={
+                            task.sessionDetailsReview
+                              ? "I have reviewed these shared session details and they are correct"
+                              : undefined
+                          }
+                        />
                       )}
                       {task.taskType === "short_form" ? (
                         <button
@@ -503,7 +579,10 @@ export function SpeakerTasksPanel({
                     </Form>
                   </div>
                 ) : null}
-                <details className="speaker-task-comment">
+                <details
+                  className="speaker-task-comment"
+                  open={composeTaskId === task.id ? true : undefined}
+                >
                   <summary>Add a comment</summary>
                   <Form method="post" className="speaker-task-comment-form">
                     <input type="hidden" name="intent" value="comment" />
@@ -516,6 +595,11 @@ export function SpeakerTasksPanel({
                     <label className="label">
                       Message
                       <input
+                        ref={
+                          composeTaskId === task.id
+                            ? correctionInputRef
+                            : undefined
+                        }
                         className="field"
                         name="body"
                         required

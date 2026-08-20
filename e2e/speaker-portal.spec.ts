@@ -60,8 +60,56 @@ test("speaker profile, sessions and D1 task state render through the production 
     "Practical patterns for accessible, calm and effective attendee experiences.",
   );
   await expect(sessionCard).toContainText("Confirmation needed");
+  await sessionCard.getByText("Decline this session", { exact: true }).click();
   await sessionCard
-    .getByRole("button", { name: "Confirm participation" })
+    .getByLabel("Reason (optional)")
+    .fill("A private scheduling concern");
+  await sessionCard.getByRole("button", { name: "Decline session" }).click();
+  await acceptConfirm(page);
+  await expect(page.getByRole("status")).toContainText("You declined");
+  await expect(sessionCard).toContainText("Declined by you");
+
+  await page.context().addCookies([
+    {
+      name: "program_cue_demo_identity",
+      value: "administrator",
+      domain: "127.0.0.1",
+      path: "/",
+      httpOnly: true,
+      sameSite: "Lax",
+    },
+  ]);
+  await page.goto("/admin/speakers/person-demo-speaker#sessions");
+  const adminSessionRow = page
+    .getByRole("row")
+    .filter({ hasText: "Designing inclusive event technology" });
+  await expect(adminSessionRow).toContainText("Declined by participant");
+  await expect(adminSessionRow).toContainText(
+    "Private reason: A private scheduling concern",
+  );
+  await adminSessionRow
+    .getByRole("button", { name: "Reset to awaiting confirmation" })
+    .click();
+  await acceptConfirm(page);
+  await expect(page.locator(".pc-status-notice")).toContainText(
+    "Reset “Designing inclusive event technology” to awaiting confirmation. No message was sent.",
+  );
+  await expect(adminSessionRow).toContainText("Awaiting confirmation");
+  await expect(adminSessionRow).not.toContainText("Private reason:");
+
+  await page.context().addCookies([
+    {
+      name: "program_cue_demo_identity",
+      value: "speaker",
+      domain: "127.0.0.1",
+      path: "/",
+      httpOnly: true,
+      sameSite: "Lax",
+    },
+  ]);
+  await page.goto("/participant/sessions");
+  await sessionCard
+    .getByRole("button", { name: "Accept participation" })
     .click();
   await acceptConfirm(page);
   await expect(page.getByRole("status")).toContainText(
@@ -69,7 +117,7 @@ test("speaker profile, sessions and D1 task state render through the production 
   );
   await expect(sessionCard).toContainText("Confirmed");
   await expect(
-    sessionCard.getByRole("button", { name: "Confirm participation" }),
+    sessionCard.getByRole("button", { name: "Accept participation" }),
   ).toHaveCount(0);
   await page.reload();
   await expect(sessionCard).toContainText("Confirmed");
@@ -90,6 +138,19 @@ test("speaker profile, sessions and D1 task state render through the production 
     "accept",
     /\.mp4,.webm/u,
   );
+  const commentTask = page.locator('article[id^="task-"]').first();
+  const commentTaskElementId = await commentTask.getAttribute("id");
+  if (!commentTaskElementId)
+    throw new Error("Participant task anchor is missing.");
+  const commentTaskId = commentTaskElementId.slice("task-".length);
+  await page.goto(
+    `/participant/tasks?task=${encodeURIComponent(commentTaskId)}&compose=comment#${encodeURIComponent(commentTaskElementId)}`,
+  );
+  await page.locator("body[data-hydrated='true']").waitFor();
+  const correctionTask = page.locator(`article[id="${commentTaskElementId}"]`);
+  const correctionField = correctionTask.getByLabel("Message");
+  await expect(correctionTask.locator("details")).toHaveAttribute("open", "");
+  await expect(correctionField).toBeFocused();
   await page.getByRole("link", { name: "Files" }).click();
   await expect(page.getByRole("link", { name: /^Download / })).toHaveCount(0);
   await expect(

@@ -93,7 +93,7 @@ def validate_baseline(connection: sqlite3.Connection, schema_source: str) -> Non
         "file_versions": {"object_key", "upload_status", "signature_status", "scan_status", "released_at"},
         "file_multipart_uploads": {"version_id", "asset_id", "upload_id", "idempotency_key", "status", "manifest_json", "expires_at"},
         "schedule_policies": {"room_overlap_action", "speaker_overlap_action", "required_resource_overlap_action"},
-        "session_speakers": {"participation_status", "participation_confirmed_at"},
+        "session_speakers": {"participation_status", "participation_revision", "participation_confirmed_at", "participation_declined_at", "participation_decline_reason"},
         "rooms": {"status"},
         "tags": {"event_id", "name", "colour_token"},
         "session_archives": {"event_id", "previous_status", "archive_operation_id"},

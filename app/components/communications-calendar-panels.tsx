@@ -276,9 +276,10 @@ export function CalendarAdministration({
                   target.method !== "CANCEL" &&
                   target.invitationStatus !== "cancelled";
                 const providerSelectionAvailable =
-                  !target.invitationId ||
-                  (target.method === "CANCEL" &&
-                    target.invitationStatus === "cancelled");
+                  target.participationStatus === "confirmed" &&
+                  (!target.invitationId ||
+                    (target.method === "CANCEL" &&
+                      target.invitationStatus === "cancelled"));
                 const providerConnections = connectedProviderConnections(
                   loaderData.connections,
                   target.personId,
@@ -298,6 +299,12 @@ export function CalendarAdministration({
                       {target.invitationStatus
                         ? `${target.invitationProvider ?? "pending"} · seq ${target.sequenceNumber} · ${target.invitationStatus}${target.rsvpStatus ? ` · RSVP ${categoryLabel(target.rsvpStatus)}` : ""}`
                         : "Not sent"}
+                      {target.participationStatus !== "confirmed" ? (
+                        <small>
+                          Participation{" "}
+                          {categoryLabel(target.participationStatus)}
+                        </small>
+                      ) : null}
                     </td>
                     <td className="pc-record-action-cell" data-label="Actions">
                       <div className="row-actions">
@@ -320,7 +327,8 @@ export function CalendarAdministration({
                               />
                             ))}
                           </>
-                        ) : target.invitationProvider ? (
+                        ) : target.participationStatus === "confirmed" &&
+                          target.invitationProvider ? (
                           <CalendarAction
                             target={target}
                             method="REQUEST"
@@ -338,7 +346,8 @@ export function CalendarAdministration({
                             working={working}
                           />
                         ) : null}
-                        {active &&
+                        {target.participationStatus === "confirmed" &&
+                        active &&
                         target.invitationId &&
                         target.invitationProvider !== "email_ics" &&
                         (target.invitationStatus === "sent" ||

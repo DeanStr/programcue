@@ -47,12 +47,28 @@ export class SpeakerService {
     return this.participation.confirmOwnParticipation(viewer, rawInput);
   }
 
+  declineOwnParticipation(viewer: Viewer, rawInput: unknown) {
+    return this.participation.declineOwnParticipation(viewer, rawInput);
+  }
+
   confirmExternalParticipation(
     viewer: Viewer,
     rawPersonId: string,
     rawInput: unknown,
   ) {
     return this.participation.confirmExternalParticipation(
+      viewer,
+      rawPersonId,
+      rawInput,
+    );
+  }
+
+  resetDeclinedParticipation(
+    viewer: Viewer,
+    rawPersonId: string,
+    rawInput: unknown,
+  ) {
+    return this.participation.resetDeclinedParticipation(
       viewer,
       rawPersonId,
       rawInput,

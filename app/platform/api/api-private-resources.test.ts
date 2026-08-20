@@ -590,6 +590,16 @@ describe("typed task API service", () => {
     )
       .bind(sessionId, eventId, sessionId)
       .run();
+    await env.DB.prepare(
+      `INSERT INTO session_speakers (
+         session_id,event_id,person_id,position,role_label,
+         participation_status,participation_revision,
+         participation_declined_at,visibility
+       ) VALUES (?,?,'person-demo-submitter',0,'Speaker','declined',1,
+                 unixepoch(),'public')`,
+    )
+      .bind(sessionId, eventId)
+      .run();
     await expect(
       service.create(
         principal,
@@ -633,6 +643,41 @@ describe("typed task API service", () => {
       status: 422,
       code: "INVALID_TASK_OWNER",
     } satisfies Partial<ApiError>);
+    await env.DB.prepare(
+      `UPDATE session_speakers
+          SET participation_status = 'pending', participation_revision = 2,
+              participation_confirmed_at = NULL,
+              participation_declined_at = NULL,
+              participation_decline_reason = NULL
+        WHERE event_id = ? AND session_id = ?
+          AND person_id = 'person-demo-submitter'`,
+    )
+      .bind(eventId, sessionId)
+      .run();
+    await expect(
+      service.create(
+        principal,
+        {
+          title: "Checklist assigned to an active session participant",
+          description: null,
+          targetType: "session",
+          targetId: sessionId,
+          ownerPersonId: "person-demo-submitter",
+          taskType: "checklist",
+          impact: "high",
+          dueAt: null,
+          dependencyIds: [],
+        },
+        "corr-valid-pending-session-owner",
+        `valid-pending-session-owner-${crypto.randomUUID()}`,
+      ),
+    ).resolves.toMatchObject({
+      task: {
+        targetType: "session",
+        targetId: sessionId,
+        ownerPersonId: "person-demo-submitter",
+      },
+    });
     await expect(
       service.create(
         principal,

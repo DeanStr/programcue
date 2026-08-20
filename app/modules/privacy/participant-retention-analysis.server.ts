@@ -113,6 +113,9 @@ export abstract class ParticipantRetentionAnalysis extends ParticipantRetentionF
                      AND identity_link.person_id = record.person_id
                      AND identity_link.identity_kind = 'pseudonym'
                 ))
+          + (SELECT COUNT(*) FROM session_speakers record
+              WHERE record.event_id IN locked
+                AND record.participation_decline_reason IS NOT NULL)
           + (SELECT COUNT(*) FROM evaluator_assignments record
               WHERE record.event_id IN locked
                 AND record.session_snapshot_json IS NOT NULL

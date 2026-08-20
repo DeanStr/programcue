@@ -1549,7 +1549,9 @@ describe("speaker resource service", () => {
     await ensureDemoSpeakerData(testEnv);
     await testEnv.DB.prepare(
       `UPDATE session_speakers
-          SET participation_status = 'pending', participation_confirmed_at = NULL
+          SET participation_status = 'pending', participation_revision = 1,
+              participation_confirmed_at = NULL, participation_declined_at = NULL,
+              participation_decline_reason = NULL
         WHERE event_id = ? AND session_id = 'session-demo-speaker'
           AND person_id = ?`,
     )
@@ -1612,6 +1614,7 @@ describe("speaker resource service", () => {
 
     await new SpeakerService(testEnv).confirmOwnParticipation(speaker, {
       sessionId: "session-demo-speaker",
+      participationRevision: 1,
       confirmation: "confirmed",
     });
     await expect(
@@ -1630,6 +1633,97 @@ describe("speaker resource service", () => {
     await expect(
       resources.getParticipantWorkspace(speaker, confirmedDraft.slug),
     ).resolves.toHaveProperty("selected.id", confirmedPageId);
+  });
+
+  it("revokes and restores a generated acknowledgement task with its accepted-speaker resource audience", async () => {
+    const testEnv = env as unknown as CloudflareEnvironment;
+    await ensureDemoSpeakerData(testEnv);
+    await testEnv.DB.prepare(
+      `UPDATE session_speakers
+          SET participation_status = 'pending', participation_revision = 1,
+              participation_confirmed_at = NULL, participation_declined_at = NULL,
+              participation_decline_reason = NULL
+        WHERE event_id = ? AND session_id = 'session-demo-speaker'
+          AND person_id = ?`,
+    )
+      .bind(admin.eventId, speaker.personId)
+      .run();
+    const resources = new ResourceService(testEnv);
+    const tasks = new TaskService(testEnv);
+    const pageId = await resources.save(admin, {
+      title: "Current accepted-speaker briefing",
+      slug: `current-accepted-speaker-${crypto.randomUUID().slice(0, 8)}`,
+      category: "Preparation",
+      audienceScope: "accepted_speakers",
+      acknowledgementRequired: true,
+      document: {
+        type: "doc",
+        content: [
+          {
+            type: "paragraph",
+            content: [{ type: "text", text: "Current audience only." }],
+          },
+        ],
+      },
+    });
+    const draft = (await resources.getAdminWorkspace(admin, pageId)).selected!;
+    await resources.publish(admin, pageId, draft.revision);
+    const taskId = `resource-ack:${pageId}:${speaker.personId}`;
+    const assigned = (await tasks.listParticipantTasks(speaker)).find(
+      (task) => task.id === taskId,
+    );
+    expect(assigned).toBeDefined();
+    if (!assigned) throw new Error("Resource acknowledgement task is missing.");
+
+    await new SpeakerService(testEnv).declineOwnParticipation(speaker, {
+      sessionId: "session-demo-speaker",
+      participationRevision: 1,
+      declineConfirmation: "declined",
+      reason: "Unavailable for this session.",
+    });
+    await expect(
+      resources.getParticipantWorkspace(speaker, draft.slug),
+    ).rejects.toMatchObject({ status: 404 });
+    expect(
+      (await tasks.listParticipantTasks(speaker)).some(
+        (task) => task.id === taskId,
+      ),
+    ).toBe(false);
+    await expect(
+      tasks.completeParticipant(speaker, {
+        taskId,
+        revision: assigned.revision,
+        confirmed: true,
+      }),
+    ).rejects.toThrow("not owned by this speaker");
+    expect(
+      (await tasks.getAdminWorkspace(admin)).tasks.find(
+        (task) => task.id === taskId,
+      )?.participantActionable,
+    ).toBe(false);
+
+    await new SpeakerService(testEnv).resetDeclinedParticipation(
+      admin,
+      speaker.personId,
+      {
+        sessionId: "session-demo-speaker",
+        participationRevision: 2,
+        resetConfirmation: "pending",
+      },
+    );
+    await expect(
+      resources.getParticipantWorkspace(speaker, draft.slug),
+    ).resolves.toHaveProperty("selected.id", pageId);
+    expect(
+      (await tasks.listParticipantTasks(speaker)).some(
+        (task) => task.id === taskId,
+      ),
+    ).toBe(true);
+    expect(
+      (await tasks.getAdminWorkspace(admin)).tasks.find(
+        (task) => task.id === taskId,
+      )?.participantActionable,
+    ).toBe(true);
   });
 
   it("escapes text and rejects malformed or disabled provider blocks", () => {

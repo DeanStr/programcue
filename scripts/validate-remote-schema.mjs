@@ -21,6 +21,23 @@ export const speakerRelationshipIdentityGuardMigrationName =
   "0043_session_speaker_identity_immutable.sql";
 export const taskInstanceConfigurationSnapshotMigrationName =
   "0049_task_instance_configuration_snapshot.sql";
+export const sessionParticipationDecisionsMigrationName =
+  "0050_session_participation_decisions.sql";
+
+export const requiredSessionParticipationDecisionColumns = new Map([
+  [
+    "participation_revision",
+    { type: "INTEGER", notnull: 1, defaultValue: "1" },
+  ],
+  [
+    "participation_declined_at",
+    { type: "INTEGER", notnull: 0, defaultValue: null },
+  ],
+  [
+    "participation_decline_reason",
+    { type: "TEXT", notnull: 0, defaultValue: null },
+  ],
+]);
 
 export const pendingTaskConfigurationInventoryQuery = `SELECT 'template' AS recordType, template.id AS recordId,
             template.task_type AS taskType, template.target_type AS targetType,
@@ -374,7 +391,7 @@ export function validateRemoteSchemaEvidence(
   localMigrationNames,
   { allowPendingMigrations = false } = {},
 ) {
-  if (!Array.isArray(response) || response.length !== 12) {
+  if (!Array.isArray(response) || response.length !== 13) {
     throw new Error(
       "Remote D1 schema validation returned an unexpected result set.",
     );
@@ -411,6 +428,17 @@ export function validateRemoteSchemaEvidence(
     );
     throw new Error(
       `Remote D1 migration ledger does not match this release (missing: ${missing.join(", ") || "none"}; unexpected: ${unexpected.join(", ") || "none"}; order mismatch: ${orderMismatch ? "yes" : "no"}).`,
+    );
+  }
+
+  const sessionParticipationDecisionsApplied = appliedMigrationNames.includes(
+    sessionParticipationDecisionsMigrationName,
+  );
+  if (sessionParticipationDecisionsApplied) {
+    validateColumns(
+      successfulResults(response[12], "session participation decision columns"),
+      requiredSessionParticipationDecisionColumns,
+      "session_speakers",
     );
   }
 
@@ -876,6 +904,7 @@ function run() {
       WHERE json_extract(configuration_json, '$.theme') IS NULL
          OR json_extract(configuration_json, '$.theme') NOT IN ('light','dark','system')`,
     pendingTaskConfigurationInventoryQuery,
+    "PRAGMA table_info(session_speakers)",
   ].join("; ");
   const result = spawnSync(
     resolvePackageExecutable("wrangler", "wrangler"),

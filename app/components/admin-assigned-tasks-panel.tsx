@@ -148,6 +148,11 @@ export function AdminAssignedTasksPanel({
                 <td data-label="Status">
                   <div className="pc-record-stack">
                     <DomainStatusBadge domain="task" status={task.status} />
+                    {!task.participantActionable ? (
+                      <small className="status warning">
+                        Inactive — no eligible participant
+                      </small>
+                    ) : null}
                     <div className="pc-record-stack task-readiness-cell">
                       <div
                         className={`progress ${readinessTone(task.readinessPercent)}${task.readinessPercent === 0 ? " is-zero" : ""}`}

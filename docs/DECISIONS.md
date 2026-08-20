@@ -283,6 +283,60 @@ the atomic publication write. Direct sessions still reject unrelated global
 identities, manual applications require accepted event participants, and public
 co-speakers are linked only when claimed.
 
+Session participation has three explicit states: `pending`, `confirmed` and
+`declined`. A participant may accept or decline only a pending invitation;
+decline notes are optional, private and bounded to 500 characters. A confirmed
+participant uses the event support channel to coordinate withdrawal because
+that change may require public-programme and calendar work. An organiser may
+reset a declined relationship to awaiting confirmation, but that reset sends
+nothing. Every transition advances a relationship-scoped participation
+revision. Commands compare that invitation-cycle revision so exact retries
+converge while delayed requests from an earlier cycle and changed decline
+reasons fail stale. Reset clears the decline timestamp and reason. Audit records
+the transition and actor but never copies the free-text reason. Missing or
+malformed D1 batch results are integrity failures; they are never interpreted
+as a zero-row transition or a converged retry.
+
+A declined relationship grants no access to that session's participant tasks,
+comments, evidence, files or session-targeted resources and contributes no
+session-task recipient if that audience is added later. Existing reminder
+audiences resolve speaker-targeted tasks only, so declining one session does
+not suppress unrelated speaker reminders. Shared session work remains active
+while another pending or confirmed participant can act; it stops contributing
+participant readiness only when none remains. Declining one session does not
+alter event membership, submitter access, another active session or an
+event-wide speaker workflow. Generated resource-acknowledgement tasks recheck
+the current published resource audience, so a task cannot outlive the exact
+accepted/session audience that granted it while event-wide person, role and
+speaker audiences remain independent.
+
+External active-participation consumers fail closed consistently. Accelevents
+exports only confirmed speaker relationships. Calendar administration offers a
+new request only for confirmed participation but retains an existing invitation
+for explicit cancellation and history. Private task API owner/target fallback
+checks count only pending or confirmed relationships unless an independent
+accepted event membership grants the speaker scope. AI draft session copy may
+include pending participants but excludes declined relationships.
+
+Participant session corrections use one optional built-in task preset,
+`session_details_review_v1`, rather than a participant-authored proposal
+system. The task is explicitly shared at session level and presents the
+canonical title, description, format, duration and track; a pending or confirmed
+participant may complete it for the session, and `completed_by_person_id`
+records who did so. Participant role is deliberately excluded because it varies
+per relationship and would make shared evidence falsely personal. Completion
+records and compare-and-sets both the displayed session revision and a
+fingerprint of those displayed values. Later edits are shown as a task-level
+revision mismatch and do not imply approval by every linked participant or of
+the new content; another review is an explicit organiser action. A completed
+preset without canonical review evidence is corrupt and fails explicitly rather
+than appearing to have no prior review. The session
+page links only to that exact task's comments and focuses the message field. If
+the preset is not assigned, it uses the configured participant support URL and
+otherwise omits the correction action. Comments request a correction without
+completing the task. Individual participation consent remains the separate
+per-session Accept/Decline decision.
+
 Manual and direct-session speaker invitations validate authentication, sender
 and Queue readiness before the domain mutation. Their communication operation,
 delivery and verification token are then persisted atomically with the pending

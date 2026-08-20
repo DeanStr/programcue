@@ -4,6 +4,7 @@ import {
   airtableCommandKey,
   airtableIntentCommand,
 } from "~/modules/airtable/airtable-provider-boundary.server";
+import { participantAudienceSql } from "~/modules/resources/resource-service-shared";
 import { eventLocalExclusiveEndEpoch } from "~/modules/schedule/schedule-time";
 import type { Viewer } from "~/platform/auth/authorize.server";
 import {
@@ -11,6 +12,7 @@ import {
   WebhookService,
   webhookActorForAudit,
 } from "~/platform/operations/webhook-service.server";
+import { sessionDetailsReviewEvidenceSchema } from "./session-details-review.server";
 import {
   assignedTaskConfigurationSchema,
   taskDestinationUrlSchema,
@@ -32,21 +34,77 @@ export class TaskEvidenceAttachmentConflictError extends TaskStateError {
 
 type ParticipantTaskSqlAlias = "ti" | "task" | "task_instances";
 
+export function participantResourceTaskAccessSql(
+  alias: ParticipantTaskSqlAlias,
+) {
+  const personIdSql = `${alias}.target_id`;
+  const speakerAccessSql = `(
+    EXISTS (
+      SELECT 1 FROM memberships resource_membership
+      JOIN events resource_event
+        ON resource_event.id = resource_membership.event_id
+       AND resource_event.organisation_id = resource_membership.organisation_id
+       WHERE resource_membership.event_id = rp.event_id
+         AND resource_membership.person_id = ${personIdSql}
+         AND resource_membership.role = 'speaker'
+         AND resource_membership.accepted_at IS NOT NULL
+         AND resource_membership.revoked_at IS NULL
+    )
+    OR EXISTS (
+      SELECT 1 FROM session_speakers resource_relationship
+       WHERE resource_relationship.event_id = rp.event_id
+         AND resource_relationship.person_id = ${personIdSql}
+         AND resource_relationship.participation_status IN ('pending','confirmed')
+    )
+  )`;
+  return `(
+    ${alias}.template_id IS NULL
+    OR ${alias}.template_id NOT LIKE 'resource-ack:%'
+    OR (
+      ${alias}.owner_person_id = ${alias}.target_id
+      AND ${alias}.target_type = 'speaker'
+      AND json_valid(${alias}.configuration_json)
+      AND json_extract(${alias}.configuration_json, '$.resourcePageId') IS NOT NULL
+      AND EXISTS (
+        SELECT 1 FROM resource_pages rp
+        JOIN resource_page_versions resource_version
+          ON resource_version.resource_page_id = rp.id
+         AND resource_version.event_id = rp.event_id
+         AND resource_version.status = 'published'
+       WHERE rp.id = json_extract(${alias}.configuration_json, '$.resourcePageId')
+         AND rp.event_id = ${alias}.event_id
+         AND rp.status = 'published'
+         AND ${alias}.template_id = 'resource-ack:' || rp.id
+         AND ${participantAudienceSql(
+           personIdSql,
+           "resource_version",
+           speakerAccessSql,
+         )}
+      )
+    )
+  )`;
+}
+
 export function participantTaskAccessSql(
   alias: ParticipantTaskSqlAlias = "ti",
+  requireCurrentResourceAudience = false,
 ) {
-  return `(
+  const taskIdentityAccessSql = `(
     (${alias}.target_type = 'session' AND EXISTS (
       SELECT 1 FROM session_speakers participant_session
        WHERE participant_session.event_id = ${alias}.event_id
          AND participant_session.session_id = ${alias}.target_id
          AND participant_session.person_id = ?
+         AND participant_session.participation_status IN ('pending','confirmed')
     ))
     OR (${alias}.target_type <> 'session' AND (
       ${alias}.owner_person_id = ?
       OR (${alias}.target_type = 'speaker' AND ${alias}.target_id = ?)
     ))
   )`;
+  return requireCurrentResourceAudience
+    ? `(${taskIdentityAccessSql} AND ${participantResourceTaskAccessSql(alias)})`
+    : taskIdentityAccessSql;
 }
 
 export function taskTemplateIdForIntent(eventId: string, intentId: string) {
@@ -128,6 +186,7 @@ export type TaskRow = {
   completedByPersonId: string | null;
   lastOperationId: string | null;
   configurationJson: string;
+  participantActionable?: number | boolean;
 };
 
 export const completionUndoResultSchema = z.object({
@@ -299,6 +358,7 @@ export const taskEvidenceDetailsSchema = z
     responses: z
       .record(z.string(), z.union([z.string(), z.boolean()]))
       .optional(),
+    sessionDetailsReview: sessionDetailsReviewEvidenceSchema.optional(),
   })
   .passthrough();
 
@@ -432,7 +492,8 @@ export class TaskServiceFoundation {
 
   protected async assertEvent(viewer: Viewer) {
     const row = await this.env.DB.prepare(
-      `SELECT id, name, timezone, starts_at AS startsAt
+      `SELECT id, name, timezone, starts_at AS startsAt,
+              participant_support_url AS participantSupportUrl
          FROM events WHERE id = ? AND organisation_id = ?`,
     )
       .bind(viewer.eventId, viewer.organisationId)
@@ -441,6 +502,7 @@ export class TaskServiceFoundation {
         name: string;
         timezone: string;
         startsAt: number;
+        participantSupportUrl: string | null;
       }>();
     if (!row)
       throw new Response("This event could not be found.", { status: 404 });
@@ -513,6 +575,6 @@ export class TaskServiceFoundation {
   }
 
   protected taskAccessClause() {
-    return participantTaskAccessSql();
+    return participantTaskAccessSql("ti", true);
   }
 }

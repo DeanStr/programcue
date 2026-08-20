@@ -99,6 +99,7 @@ export class CalendarAdministrationService {
     const result = await this.env.DB.prepare(
       `SELECT s.id AS sessionId, content.title AS sessionTitle,
               p.id AS personId, p.display_name AS personName, p.email,
+              ss.participation_status AS participationStatus,
               ci.id AS invitationId, ci.method, ci.status AS invitationStatus,
               ci.sequence_number AS sequenceNumber,
               ci.connection_id AS invitationConnectionId,
@@ -141,6 +142,7 @@ export class CalendarAdministrationService {
               LIMIT 1
            )
         WHERE se.event_id = ?
+          AND (ss.participation_status = 'confirmed' OR ci.id IS NOT NULL)
         ORDER BY se.starts_at, content.title, ss.position`,
     )
       .bind(viewer.organisationId, viewer.eventId)
@@ -150,6 +152,7 @@ export class CalendarAdministrationService {
         personId: string;
         personName: string;
         email: string;
+        participationStatus: "pending" | "confirmed" | "declined";
         invitationId: string | null;
         method: "REQUEST" | "CANCEL" | null;
         invitationStatus: string | null;

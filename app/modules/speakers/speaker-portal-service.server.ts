@@ -1,6 +1,8 @@
 import type { AirtableProviderBoundary } from "~/modules/airtable/airtable-provider-boundary.server";
 import { parseEventFilePolicy } from "~/modules/files/file-policy";
 import { PublishedHeadshotService } from "~/modules/programme/published-headshot-service.server";
+import { SESSION_DETAILS_REVIEW_TEMPLATE_INTENT } from "~/modules/tasks/session-details-review.server";
+import { taskTemplateIdForIntent } from "~/modules/tasks/task-service-foundation.server";
 import type { Viewer } from "~/platform/auth/authorize.server";
 import { readSpeakerProfileHistory } from "./speaker-profile-revision.server";
 
@@ -27,11 +29,16 @@ export type SessionRow = {
   durationMinutes: number;
   status: string;
   roleLabel: string | null;
-  participationStatus: "pending" | "confirmed";
+  trackName: string | null;
+  participationStatus: "pending" | "confirmed" | "declined";
+  participationRevision: number;
   participationConfirmedAt: number | null;
+  participationDeclinedAt: number | null;
+  participationDeclineReason: string | null;
   startsAt: number | null;
   endsAt: number | null;
   roomName: string | null;
+  sessionDetailsReviewTaskId: string | null;
 };
 
 export type FileRow = {
@@ -89,6 +96,10 @@ export class SpeakerPortalService {
   async getPortal(viewer: Viewer) {
     await this.airtable.assertReadable(viewer);
     await this.assertParticipant(viewer);
+    const sessionDetailsReviewTemplateId = taskTemplateIdForIntent(
+      viewer.eventId,
+      SESSION_DETAILS_REVIEW_TEMPLATE_INTENT,
+    );
     const [profile, event, sessions, files, profileHistory] = await Promise.all(
       [
         this.env.DB.prepare(
@@ -141,12 +152,29 @@ export class SpeakerPortalService {
           `
         SELECT s.id, s.title, s.description, s.format, s.duration_minutes AS durationMinutes,
                s.status, ss.role_label AS roleLabel,
+               track.name AS trackName,
                ss.participation_status AS participationStatus,
+               ss.participation_revision AS participationRevision,
                ss.participation_confirmed_at AS participationConfirmedAt,
+               ss.participation_declined_at AS participationDeclinedAt,
+               ss.participation_decline_reason AS participationDeclineReason,
                se.starts_at AS startsAt,
-               se.ends_at AS endsAt, r.name AS roomName
+               se.ends_at AS endsAt, r.name AS roomName,
+               (SELECT task.id
+                 FROM task_instances task
+                 WHERE task.event_id = s.event_id
+                   AND task.template_id = ?
+                   AND task.target_type = 'session'
+                   AND task.target_id = s.id
+                   AND task.task_type = 'acknowledgement'
+                   AND task.evidence_mode = 'checkbox'
+                   AND json_valid(task.configuration_json)
+                   AND json_extract(task.configuration_json, '$.preset') = 'session_details_review_v1'
+                 ORDER BY task.created_at DESC, task.id DESC LIMIT 1
+               ) AS sessionDetailsReviewTaskId
           FROM session_speakers ss
           JOIN sessions s ON s.id = ss.session_id AND s.event_id = ss.event_id
+          LEFT JOIN tracks track ON track.id = s.track_id AND track.event_id = s.event_id
           LEFT JOIN schedule_versions sv ON sv.event_id = s.event_id AND sv.status = 'published'
           LEFT JOIN schedule_entries se ON se.schedule_version_id = sv.id AND se.session_id = s.id
           LEFT JOIN rooms r ON r.id = se.room_id AND r.event_id = s.event_id
@@ -154,7 +182,7 @@ export class SpeakerPortalService {
          ORDER BY se.starts_at IS NULL, se.starts_at, s.title
       `,
         )
-          .bind(viewer.eventId, viewer.personId)
+          .bind(sessionDetailsReviewTemplateId, viewer.eventId, viewer.personId)
           .all<SessionRow>(),
         this.env.DB.prepare(
           `
@@ -288,6 +316,7 @@ export class SpeakerPortalService {
                   WHERE relation.event_id = task.event_id
                     AND relation.session_id = task.target_id
                     AND relation.person_id = ?
+                    AND relation.participation_status IN ('pending','confirmed')
                )
              )
            )
@@ -384,9 +413,10 @@ export class SpeakerPortalService {
                  AND json_extract(task.configuration_json, '$.fileScope') = 'session_deliverable'
                  AND EXISTS (
                    SELECT 1 FROM session_speakers relation
-                    WHERE relation.event_id = task.event_id
+                   WHERE relation.event_id = task.event_id
                       AND relation.session_id = task.target_id
                       AND relation.person_id = ?
+                      AND relation.participation_status IN ('pending','confirmed')
                  )
                  AND (
                    version.created_by_person_id = ?

@@ -40,6 +40,9 @@ from .forward_snapshot_visibility_publication_boundary import (
     validate_snapshot_visibility_publication_boundary_forward_migration,
 )
 from .forward_session_participation import validate_session_participation_forward_migration
+from .forward_session_participation_decisions import (
+    validate_session_participation_decisions_forward_migration,
+)
 from .forward_speaker_profile_depth import validate_speaker_profile_depth_forward_migration
 from .forward_speaker_workflow import validate_speaker_workflow_forward_migration
 from .forward_task_instance_configuration_snapshot import (
@@ -70,3 +73,4 @@ def validate_forward_migrations(root: Path) -> None:
     validate_evaluation_verification_generation_forward_migration(root)
     validate_configurable_review_recommendations_forward_migration(root)
     validate_task_instance_configuration_snapshot_forward_migration(root)
+    validate_session_participation_decisions_forward_migration(root)

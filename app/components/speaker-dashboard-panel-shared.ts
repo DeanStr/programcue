@@ -9,7 +9,9 @@ export type SpeakerTask = Awaited<
 export function speakerStatusClass(status: string) {
   if (["completed", "waived", "active", "published"].includes(status))
     return "success";
-  if (["overdue", "rejected", "infected", "failed"].includes(status))
+  if (
+    ["overdue", "rejected", "declined", "infected", "failed"].includes(status)
+  )
     return "danger";
   if (["blocked", "pending", "submitted"].includes(status)) return "warning";
   return "info";

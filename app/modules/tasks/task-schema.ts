@@ -54,6 +54,7 @@ export const taskFormFieldSchema = z
 export const taskTemplatePresetSchema = z.enum([
   "speaker_travel_hotel_v1",
   "speaker_travel_flight_v1",
+  "session_details_review_v1",
 ]);
 
 export const taskDestinationUrlSchema = z
@@ -188,6 +189,23 @@ export const taskTemplateInputSchema = z
         message: "Session deliverables must use session scope.",
       });
     }
+    if (
+      input.configuration.preset === "session_details_review_v1" &&
+      (input.targetType !== "session" ||
+        input.taskType !== "acknowledgement" ||
+        input.evidenceMode !== "checkbox" ||
+        !input.autoAssignOnAcceptance ||
+        input.configuration.form !== undefined ||
+        input.configuration.destinationUrl !== undefined ||
+        input.configuration.fileScope !== undefined)
+    ) {
+      context.addIssue({
+        code: "custom",
+        path: ["configuration", "preset"],
+        message:
+          "The session-details review preset must be an automatically assigned session acknowledgement using checkbox evidence.",
+      });
+    }
     const fieldIds = input.configuration.form?.fields.map((field) => field.id);
     if (fieldIds && new Set(fieldIds).size !== fieldIds.length) {
       context.addIssue({
@@ -292,6 +310,11 @@ export const participantEvidenceSchema = z.object({
   responses: z
     .record(z.string(), z.union([z.string().max(4_000), z.boolean()]))
     .default({}),
+  sessionDetailsFingerprint: z
+    .string()
+    .regex(/^[a-f0-9]{64}$/)
+    .optional(),
+  sessionDetailsRevision: z.coerce.number().int().positive().optional(),
 });
 
 export type TaskTemplateInput = z.infer<typeof taskTemplateInputSchema>;

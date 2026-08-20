@@ -12,7 +12,7 @@ import { Form, Link, useActionData, useNavigation } from "react-router";
 import { DirectMultipartUpload } from "~/components/direct-multipart-upload";
 import { SpeakerActionNotice } from "~/components/speaker-action-notice";
 import { SpeakerProfileHistory } from "~/components/speaker-profile-history";
-import { ConfirmDialog } from "~/components/ui/confirm-dialog";
+import { ConfirmDialog, useConfirm } from "~/components/ui/confirm-dialog";
 import { DomainStatusBadge } from "~/components/ui/domain-status-badge";
 import { EmptyState } from "~/components/ui/states";
 import { useUnsavedChanges } from "~/components/ui/use-unsaved-changes";
@@ -81,6 +81,7 @@ export function AdminSpeakerDetailPage({
   const busy = navigation.state !== "idle";
   const [profileDirty, setProfileDirty] = useState(false);
   const blocker = useUnsavedChanges(profileDirty);
+  const { confirm: confirmAction, dialog: actionDialog } = useConfirm();
   // biome-ignore lint/correctness/useExhaustiveDependencies: These persisted version tokens deliberately clear dirty state after either profile scope is saved, including when normalized values remain unchanged.
   useEffect(
     () => setProfileDirty(false),
@@ -102,6 +103,7 @@ export function AdminSpeakerDetailPage({
           onConfirm={() => blocker.proceed()}
         />
       ) : null}
+      {actionDialog}
       <div className="crm-workspace crm-record">
         <div className="page-head pc-page-header">
           <div className="crm-record-hero">
@@ -520,13 +522,15 @@ export function AdminSpeakerDetailPage({
                       <td data-label="Participation">
                         <span className="pc-speaker-meta">
                           <span
-                            className={`status ${session.participationStatus === "confirmed" ? "success" : session.status === "cancelled" ? "" : "warning"}`}
+                            className={`status ${session.participationStatus === "confirmed" ? "success" : session.participationStatus === "declined" ? "danger" : session.status === "cancelled" ? "" : "warning"}`}
                           >
                             {session.participationStatus === "confirmed"
                               ? "Confirmed"
-                              : session.status === "cancelled"
-                                ? "Not required"
-                                : "Pending"}
+                              : session.participationStatus === "declined"
+                                ? "Declined by participant"
+                                : session.status === "cancelled"
+                                  ? "Not required"
+                                  : "Awaiting confirmation"}
                           </span>
                           {session.participationConfirmedAt !== null ? (
                             <small className="subtle">
@@ -534,6 +538,20 @@ export function AdminSpeakerDetailPage({
                                 session.participationConfirmedAt,
                                 event.timezone,
                               )}
+                            </small>
+                          ) : null}
+                          {session.participationDeclinedAt !== null ? (
+                            <small className="subtle">
+                              {formatTimestamp(
+                                session.participationDeclinedAt,
+                                event.timezone,
+                              )}
+                            </small>
+                          ) : null}
+                          {session.participationDeclineReason ? (
+                            <small>
+                              Private reason:{" "}
+                              {session.participationDeclineReason}
                             </small>
                           ) : null}
                         </span>
@@ -579,6 +597,11 @@ export function AdminSpeakerDetailPage({
                             />
                             <input
                               type="hidden"
+                              name="participationRevision"
+                              value={session.participationRevision}
+                            />
+                            <input
+                              type="hidden"
                               name="confirmation"
                               value="confirmed"
                             />
@@ -602,6 +625,52 @@ export function AdminSpeakerDetailPage({
                               aria-label={`Record external confirmation for ${session.title}`}
                             >
                               Record external confirmation
+                            </button>
+                          </Form>
+                        ) : session.participationStatus === "declined" &&
+                          session.status !== "cancelled" ? (
+                          <Form method="post" className="stack">
+                            <input
+                              type="hidden"
+                              name="_intent"
+                              value="reset_declined_participation"
+                            />
+                            <input
+                              type="hidden"
+                              name="sessionId"
+                              value={session.id}
+                            />
+                            <input
+                              type="hidden"
+                              name="participationRevision"
+                              value={session.participationRevision}
+                            />
+                            <input
+                              type="hidden"
+                              name="resetConfirmation"
+                              value="pending"
+                            />
+                            <button
+                              className="btn small"
+                              type="button"
+                              disabled={busy}
+                              onClick={(event) => {
+                                const form = event.currentTarget.form;
+                                if (!form) return;
+                                confirmAction(
+                                  {
+                                    title: "Reset to awaiting confirmation?",
+                                    description:
+                                      "This clears the private decline reason and lets the participant respond again. It does not send an invitation or reminder.",
+                                    records: [session.title, profile.name],
+                                    confirmLabel: "Reset status",
+                                    tone: "primary",
+                                  },
+                                  () => form.requestSubmit(),
+                                );
+                              }}
+                            >
+                              Reset to awaiting confirmation
                             </button>
                           </Form>
                         ) : session.status === "cancelled" ? (

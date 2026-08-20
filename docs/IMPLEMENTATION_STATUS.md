@@ -109,14 +109,23 @@ until claim, and keep that portal-access lifecycle separate from session-level
 participation confirmation. Claimed/submitted relationships are explicitly
 confirmed; administrator-created relationships remain pending until speaker
 self-confirmation or an audited administrator acknowledgement of external
-confirmation. Publication blocks and atomically rechecks unconfirmed scheduled
-participation while allowing a confirmed speaker whose portal invitation remains
-pending. Manual and direct-session invitation delivery intent is persisted
+confirmation. The current release candidate adds per-session participant
+accept/decline, optional private decline notes and an organiser-only reset to
+awaiting confirmation. A relationship revision binds every decision to one
+invitation cycle: exact retries converge, while stale earlier-cycle requests
+and changed decline reasons fail. Reset sends no communication, confirmed
+withdrawal remains coordinated through event support, and audit metadata does
+not retain the free-text decline note. Missing D1 mutation results fail as
+integrity errors rather than being treated as zero-row retries. Publication distinguishes pending from
+declined participation and atomically blocks both while allowing a confirmed
+speaker whose portal invitation remains pending. Manual and direct-session invitation delivery intent is persisted
 atomically and replays report its durable status; missing delivery configuration
 fails before the participant mutation. Participant UI and REST profile writes now converge on one
 compare-and-set mutation with shared validation, audit, webhook, realtime and
-Airtable-authority behavior. Focused Worker and browser coverage verifies these
-boundaries.
+Airtable-authority behavior. Migration
+`0050_session_participation_decisions.sql` preserves the existing
+featured-speaker and relationship-integrity triggers and is covered by local
+migration and remote-schema validation. This candidate has not been deployed.
 
 The speaker roster keeps expanded manual-entry and CSV-import controls above a
 non-sticky roster header so those actions remain operable at the supported
@@ -222,7 +231,36 @@ an invalid participant erase control. Current session membership, rather than a
 stored task owner, authorizes every participant task, comment, upload, evidence
 history and download surface for session-targeted work; focused race coverage
 also rechecks that relationship at the completion, comment and upload mutation
-boundaries. Task evidence accepts MP4/WebM session
+boundaries. That authorization now requires pending or confirmed participation:
+a declined person loses the exact session's task, comment, evidence, file and
+resource access without losing unrelated workspace access. A shared task stays
+participant-actionable while another eligible session participant remains and
+otherwise drops out of participant readiness. Generated resource acknowledgement
+tasks revalidate the current published audience, preventing an inaccessible
+session/accepted-speaker resource from leaving behind an actionable orphan task.
+Existing reminder audiences are speaker-task scoped, so no unrelated event-wide
+reminder suppression was added.
+
+Confirmed participation is required when Accelevents exports speaker records or
+session-speaker associations. Calendar administration offers new invitation
+requests only for confirmed relationships while retaining existing invitation
+rows for cancellation and history. Private task API ownership checks accept an
+independent active event membership or pending/confirmed session participation,
+and AI session-copy evidence excludes declined relationships while retaining
+pending draft participants.
+
+An optional one-click `session_details_review_v1` task preset presents the
+fixed shared title, description, format, duration and track. Any pending or
+confirmed participant may complete this session-level task; completion records
+the actual actor, compare-and-sets the displayed session revision and canonical
+field fingerprint, stores both as task evidence and reports later content drift
+without implying that every linked participant personally reviewed it. A
+completed preset with missing canonical evidence fails explicitly rather than
+appearing unreviewed. The
+session correction action targets only this preset's comment area, moves focus
+to its message field, then falls back to the configured participant support URL;
+it never guesses another task. No proposal schema, approval state or separate
+notification workflow was added. Task evidence accepts MP4/WebM session
 video against the event's video limit in browser validation, declaration and
 multipart completion; other evidence retains the supporting-document limit.
 Private task API reads return the validated immutable configuration written at

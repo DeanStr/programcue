@@ -107,6 +107,90 @@ describe("Accelevents integration service", () => {
     expect(providerCalls?.count).toBe(0);
   });
 
+  it("excludes declined session relationships from Accelevents speakers and associations", async () => {
+    const declinedPersonId = `declined-export-${crypto.randomUUID()}`;
+    const publishedSession = await env.DB.prepare(
+      `SELECT session.id
+         FROM sessions session
+         JOIN schedule_entries entry
+           ON entry.session_id = session.id AND entry.event_id = session.event_id
+         JOIN schedule_versions version
+           ON version.id = entry.schedule_version_id
+          AND version.event_id = entry.event_id
+          AND version.status = 'published'
+        WHERE session.event_id = ? AND session.status = 'published'
+        LIMIT 1`,
+    )
+      .bind(viewer.eventId)
+      .first<{ id: string }>();
+    if (!publishedSession)
+      throw new Error("Published demo session is missing.");
+    const nextPosition = await env.DB.prepare(
+      `SELECT COALESCE(MAX(position), -1) + 1 AS value
+         FROM session_speakers WHERE session_id = ? AND event_id = ?`,
+    )
+      .bind(publishedSession.id, viewer.eventId)
+      .first<{ value: number }>();
+    if (!nextPosition || !Number.isSafeInteger(nextPosition.value))
+      throw new Error("Could not resolve the next export speaker position.");
+    await env.DB.batch([
+      env.DB.prepare(
+        `INSERT INTO people (
+           id, email, display_name, email_verified, created_at, updated_at
+         ) VALUES (?, ?, 'Declined Export', 1, unixepoch(), unixepoch())`,
+      ).bind(declinedPersonId, `${declinedPersonId}@example.test`),
+      env.DB.prepare(
+        `INSERT INTO session_speakers (
+           session_id, event_id, person_id, position, role_label,
+           participation_status, participation_revision,
+           participation_declined_at, visibility
+         ) VALUES (?, ?, ?, ?, 'Speaker', 'declined', 1, unixepoch(), 'public')`,
+      ).bind(
+        publishedSession.id,
+        viewer.eventId,
+        declinedPersonId,
+        nextPosition.value,
+      ),
+    ]);
+    const service = new IntegrationService(
+      env as unknown as CloudflareEnvironment,
+      {
+        createAccelevents: () => ({
+          validateConnection: async () => undefined,
+        }),
+      },
+    );
+    const configured = await service.configureAccelevents(viewer, {
+      provider: "accelevents",
+      apiKey: "provider-key",
+      eventUrl: "future-of-events",
+      externalEventId: 441,
+      sessionTypeFormat: "IN_PERSON",
+    });
+
+    const preview = await service.preview(viewer, configured.connectionId);
+
+    expect(
+      preview.items.some(
+        (item) =>
+          item.entityType === "speaker" && item.entityId === declinedPersonId,
+      ),
+    ).toBe(false);
+    expect(
+      preview.items.some(
+        (item) =>
+          item.entityType === "session_speaker" &&
+          item.entityId === `${publishedSession.id}:${declinedPersonId}`,
+      ),
+    ).toBe(false);
+    expect(
+      preview.items.some(
+        (item) =>
+          item.entityType === "speaker" && item.entityId !== declinedPersonId,
+      ),
+    ).toBe(true);
+  });
+
   it("requires an exact preview fingerprint before recording a live export", async () => {
     const service = new IntegrationService(
       env as unknown as CloudflareEnvironment,
@@ -233,6 +317,7 @@ describe("Accelevents integration service", () => {
          FROM people person
          JOIN session_speakers speaker ON speaker.person_id = person.id
         WHERE speaker.event_id = ?
+          AND speaker.participation_status = 'confirmed'
         ORDER BY person.id LIMIT 1`,
     )
       .bind(viewer.eventId)

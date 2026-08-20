@@ -2,6 +2,10 @@ import { z } from "zod";
 import type { Viewer } from "~/platform/auth/authorize.server";
 import { WebhookService } from "~/platform/operations/webhook-service.server";
 import { ParticipantTaskWorkflowFoundation } from "./participant-task-workflow-foundation.server";
+import {
+  loadParticipantSessionDetailsReview,
+  SESSION_DETAILS_REVIEW_PRESET,
+} from "./session-details-review.server";
 import { participantEvidenceSchema } from "./task-schema";
 import {
   completionUndoResultSchema,
@@ -14,6 +18,7 @@ import {
   structuredTaskEvidence,
   type TaskCompletionMutationResult,
   TaskStateError,
+  taskConfiguration,
   taskDestinationUrl,
   taskResourcePageId,
 } from "./task-service-foundation.server";
@@ -65,6 +70,51 @@ export class ParticipantTaskCompletionCommands extends ParticipantTaskWorkflowFo
     if (!(await this.dependenciesComplete(task.id)))
       throw new TaskStateError("Complete the prerequisite tasks first.");
     const evidence: Record<string, unknown> = {};
+    let reviewedSessionDetails: Awaited<
+      ReturnType<typeof loadParticipantSessionDetailsReview>
+    > = null;
+    const configuration = taskConfiguration(task.configurationJson);
+    if (configuration.preset === SESSION_DETAILS_REVIEW_PRESET) {
+      if (
+        task.targetType !== "session" ||
+        task.taskType !== "acknowledgement" ||
+        task.evidenceMode !== "checkbox"
+      )
+        throw new TaskStateError(
+          "The session-details review task has an invalid stored configuration.",
+        );
+      const details = await loadParticipantSessionDetailsReview(
+        this.env,
+        viewer,
+        task.targetId,
+      );
+      if (!details)
+        throw new TaskStateError(
+          "The session details are no longer available for review.",
+        );
+      if (
+        input.sessionDetailsRevision !== details.sessionRevision ||
+        input.sessionDetailsFingerprint !== details.fingerprint
+      )
+        throw new TaskStateError(
+          "The session details changed after this page loaded. Review the current details before confirming them.",
+        );
+      reviewedSessionDetails = details;
+      evidence.sessionDetailsReview = {
+        version: 1,
+        sessionRevision: details.sessionRevision,
+        fingerprint: details.fingerprint,
+        fields: details.fields,
+        reviewedAt: Math.floor(Date.now() / 1_000),
+      };
+    } else if (
+      input.sessionDetailsFingerprint ||
+      input.sessionDetailsRevision !== undefined
+    ) {
+      throw new TaskStateError(
+        "This task does not accept session-details review evidence.",
+      );
+    }
     if (["checklist", "acknowledgement"].includes(task.taskType)) {
       if (!input.confirmed)
         throw new TaskStateError("Confirm the task before completing it.");
@@ -108,6 +158,42 @@ export class ParticipantTaskCompletionCommands extends ParticipantTaskWorkflowFo
       nextStatus === "completed"
         ? await this.dependentRevisionSnapshot(task.id)
         : [];
+    const sessionDetailsGuardSql = reviewedSessionDetails
+      ? `AND EXISTS (
+           SELECT 1
+             FROM sessions reviewed_session
+             JOIN session_speakers reviewed_relationship
+               ON reviewed_relationship.session_id = reviewed_session.id
+              AND reviewed_relationship.event_id = reviewed_session.event_id
+             LEFT JOIN tracks reviewed_track
+               ON reviewed_track.id = reviewed_session.track_id
+              AND reviewed_track.event_id = reviewed_session.event_id
+            WHERE reviewed_session.id = task_instances.target_id
+              AND reviewed_session.event_id = task_instances.event_id
+              AND reviewed_relationship.person_id = ?
+              AND reviewed_relationship.participation_status IN ('pending','confirmed')
+              AND reviewed_session.status NOT IN ('cancelled','archived')
+              AND reviewed_session.revision = ?
+              AND reviewed_session.title = ?
+              AND reviewed_session.description IS ?
+              AND reviewed_session.format = ?
+              AND reviewed_session.duration_minutes = ?
+              AND reviewed_session.track_id IS ?
+              AND reviewed_track.name IS ?
+         )`
+      : "";
+    const sessionDetailsGuardBindings = reviewedSessionDetails
+      ? [
+          viewer.personId,
+          reviewedSessionDetails.sessionRevision,
+          reviewedSessionDetails.fields.title,
+          reviewedSessionDetails.fields.description,
+          reviewedSessionDetails.fields.format,
+          reviewedSessionDetails.fields.durationMinutes,
+          reviewedSessionDetails.fields.trackId,
+          reviewedSessionDetails.fields.trackName,
+        ]
+      : [];
     const auditEventId = crypto.randomUUID();
     const preparedWebhook = await new WebhookService(
       this.env,
@@ -152,7 +238,8 @@ export class ParticipantTaskCompletionCommands extends ParticipantTaskWorkflowFo
           completed_by_person_id = CASE WHEN ? = 'completed' THEN ? ELSE NULL END,
           revision = revision + 1, last_operation_id = ?, updated_at = unixepoch()
          WHERE id = ? AND event_id = ? AND revision = ? AND status NOT IN ('completed','waived','submitted')
-           AND ${participantTaskAccessSql("task_instances")}
+           AND ${participantTaskAccessSql("task_instances", true)}
+           ${sessionDetailsGuardSql}
            AND NOT EXISTS (
              SELECT 1 FROM task_instance_dependencies dep
              JOIN task_instances prerequisite ON prerequisite.id = dep.depends_on_task_id
@@ -175,6 +262,7 @@ export class ParticipantTaskCompletionCommands extends ParticipantTaskWorkflowFo
         viewer.personId,
         viewer.personId,
         viewer.personId,
+        ...sessionDetailsGuardBindings,
       ),
       this.env.DB.prepare(
         `
@@ -298,7 +386,9 @@ export class ParticipantTaskCompletionCommands extends ParticipantTaskWorkflowFo
     const updated = results[0];
     if ((updated.meta.changes ?? 0) !== 1)
       throw new TaskStateError(
-        "This task changed. Refresh before completing it.",
+        reviewedSessionDetails
+          ? "The session details changed after this page loaded. Review the current details before confirming them."
+          : "This task changed. Refresh before completing it.",
       );
     await this.refreshStates(viewer.eventId);
     const undoOffered = (results[3]?.meta.changes ?? 0) === 1;
@@ -410,7 +500,7 @@ export class ParticipantTaskCompletionCommands extends ParticipantTaskWorkflowFo
     const participant =
       viewer.role === "speaker" || viewer.role === "submitter";
     const undoAccessSql = participant
-      ? participantTaskAccessSql("task_instances")
+      ? participantTaskAccessSql("task_instances", true)
       : "1 = 1";
     const undoAccessBindings = participant
       ? [viewer.personId, viewer.personId, viewer.personId]

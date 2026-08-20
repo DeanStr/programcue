@@ -154,6 +154,7 @@ export function participantAudienceSql(
     OR (${versionAlias}.audience_scope = 'accepted_speakers' AND EXISTS (
       SELECT 1 FROM session_speakers ss
        WHERE ss.event_id = rp.event_id AND ss.person_id = ${personIdSql}
+         AND ss.participation_status IN ('pending','confirmed')
     ))
     OR (${versionAlias}.audience_scope = 'confirmed_speakers' AND EXISTS (
       SELECT 1 FROM session_speakers ss
@@ -168,8 +169,9 @@ export function participantAudienceSql(
            OR (ra.target_type = 'role' AND ra.target_id = 'speaker')
            OR (ra.target_type = 'session' AND EXISTS (
              SELECT 1 FROM session_speakers ss
-              WHERE ss.event_id = rp.event_id AND ss.session_id = ra.target_id
+             WHERE ss.event_id = rp.event_id AND ss.session_id = ra.target_id
                 AND ss.person_id = ${personIdSql}
+                AND ss.participation_status IN ('pending','confirmed')
            ))
          )
     ))

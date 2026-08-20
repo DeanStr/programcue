@@ -253,8 +253,13 @@ export const sessionSpeakers = sqliteTable(
     roleLabel: text("role_label"),
     participationStatus: text("participation_status")
       .notNull()
-      .$type<"pending" | "confirmed">(),
+      .$type<"pending" | "confirmed" | "declined">(),
+    participationRevision: integer("participation_revision")
+      .notNull()
+      .default(1),
     participationConfirmedAt: integer("participation_confirmed_at"),
+    participationDeclinedAt: integer("participation_declined_at"),
+    participationDeclineReason: text("participation_decline_reason"),
     visibility: text("visibility")
       .notNull()
       .default("public")
@@ -269,7 +274,11 @@ export const sessionSpeakers = sqliteTable(
     index("idx_session_speakers_person").on(table.eventId, table.personId),
     check(
       "session_speakers_participation_confirmation_check",
-      sql`(${table.participationStatus} = 'pending' AND ${table.participationConfirmedAt} IS NULL) OR (${table.participationStatus} = 'confirmed' AND ${table.participationConfirmedAt} IS NOT NULL)`,
+      sql`(${table.participationStatus} = 'pending' AND ${table.participationConfirmedAt} IS NULL AND ${table.participationDeclinedAt} IS NULL AND ${table.participationDeclineReason} IS NULL) OR (${table.participationStatus} = 'confirmed' AND ${table.participationConfirmedAt} IS NOT NULL AND ${table.participationDeclinedAt} IS NULL AND ${table.participationDeclineReason} IS NULL) OR (${table.participationStatus} = 'declined' AND ${table.participationConfirmedAt} IS NULL AND ${table.participationDeclinedAt} IS NOT NULL AND (${table.participationDeclineReason} IS NULL OR (length(${table.participationDeclineReason}) BETWEEN 1 AND 500 AND ${table.participationDeclineReason} = trim(${table.participationDeclineReason}))))`,
+    ),
+    check(
+      "session_speakers_participation_revision_check",
+      sql`${table.participationRevision} > 0`,
     ),
   ],
 );

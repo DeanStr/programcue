@@ -58,7 +58,8 @@ export async function action({ request, params, context }: Route.ActionArgs) {
   if (
     intent !== "save_speaker_profile" &&
     intent !== "save_speaker_scoped_profile" &&
-    intent !== "confirm_external_participation"
+    intent !== "confirm_external_participation" &&
+    intent !== "reset_declined_participation"
   ) {
     return data(
       { ok: false, message: "Unsupported speaker action." },
@@ -66,16 +67,28 @@ export async function action({ request, params, context }: Route.ActionArgs) {
     );
   }
   try {
-    if (intent === "confirm_external_participation") {
-      const result = await new SpeakerService(env).confirmExternalParticipation(
-        viewer,
-        params.personId,
-        {
-          sessionId: form.get("sessionId"),
-          confirmation: form.get("confirmation"),
-          externalConfirmation: form.get("externalConfirmation"),
-        },
-      );
+    if (
+      intent === "confirm_external_participation" ||
+      intent === "reset_declined_participation"
+    ) {
+      const service = new SpeakerService(env);
+      const result =
+        intent === "confirm_external_participation"
+          ? await service.confirmExternalParticipation(
+              viewer,
+              params.personId,
+              {
+                sessionId: form.get("sessionId"),
+                participationRevision: form.get("participationRevision"),
+                confirmation: form.get("confirmation"),
+                externalConfirmation: form.get("externalConfirmation"),
+              },
+            )
+          : await service.resetDeclinedParticipation(viewer, params.personId, {
+              sessionId: form.get("sessionId"),
+              participationRevision: form.get("participationRevision"),
+              resetConfirmation: form.get("resetConfirmation"),
+            });
       const realtimeFailure =
         result.changeSequence != null
           ? await notifyRouteChange(
@@ -94,9 +107,10 @@ export async function action({ request, params, context }: Route.ActionArgs) {
       if (realtimeFailure) return data(realtimeFailure, { status: 207 });
       return data({
         ok: true,
-        message: result.changed
-          ? `Recorded external participation confirmation for “${result.title}”. Portal invitation acceptance remains separate.`
-          : `Participation for “${result.title}” was already confirmed.`,
+        message:
+          intent === "confirm_external_participation"
+            ? `Recorded external participation confirmation for “${result.title}”. Portal invitation acceptance remains separate.`
+            : `Reset “${result.title}” to awaiting confirmation. No message was sent.`,
       });
     }
     const speakerService = new SpeakerService(env);

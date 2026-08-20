@@ -41,6 +41,14 @@ export class TaskService {
     return this.templates.createTravelOnboardingTemplates(...args);
   }
 
+  createSessionDetailsReviewTemplate(
+    ...args: Parameters<
+      TaskTemplateWorkflows["createSessionDetailsReviewTemplate"]
+    >
+  ) {
+    return this.templates.createSessionDetailsReviewTemplate(...args);
+  }
+
   assignTemplate(...args: Parameters<TaskTemplateWorkflows["assignTemplate"]>) {
     return this.templates.assignTemplate(...args);
   }

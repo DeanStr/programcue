@@ -628,7 +628,10 @@ export function SchedulePublicationDialog({
                     to={`/admin/speakers/${encodeURIComponent(item.speakerId)}`}
                     onClick={close}
                   >
-                    Confirm participation · {item.speakerName}
+                    {item.participationStatus === "declined"
+                      ? "Declined by participant"
+                      : "Awaiting confirmation"}{" "}
+                    · {item.speakerName}
                   </Link>
                   <span> · {item.title}</span>
                 </li>

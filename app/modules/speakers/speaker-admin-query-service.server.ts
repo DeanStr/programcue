@@ -90,12 +90,18 @@ export class SpeakerAdminQueryService {
         SELECT s.id, s.title, s.description, s.format,
                s.duration_minutes AS durationMinutes, s.status,
                ss.role_label AS roleLabel,
+               track.name AS trackName,
                ss.participation_status AS participationStatus,
+               ss.participation_revision AS participationRevision,
                ss.participation_confirmed_at AS participationConfirmedAt,
+               ss.participation_declined_at AS participationDeclinedAt,
+               ss.participation_decline_reason AS participationDeclineReason,
                se.starts_at AS startsAt,
-               se.ends_at AS endsAt, r.name AS roomName
+               se.ends_at AS endsAt, r.name AS roomName,
+               NULL AS sessionDetailsReviewTaskId
           FROM session_speakers ss
           JOIN sessions s ON s.id = ss.session_id AND s.event_id = ss.event_id
+          LEFT JOIN tracks track ON track.id = s.track_id AND track.event_id = s.event_id
           LEFT JOIN schedule_versions sv
             ON sv.event_id = s.event_id AND sv.status = 'published'
           LEFT JOIN schedule_entries se
@@ -155,6 +161,7 @@ export class SpeakerAdminQueryService {
                 WHERE relationship.event_id = task.event_id
                   AND relationship.session_id = task.target_id
                   AND relationship.person_id = ?
+                  AND relationship.participation_status IN ('pending','confirmed')
              ))
            )
       `,

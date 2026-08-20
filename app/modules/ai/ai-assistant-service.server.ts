@@ -407,7 +407,9 @@ Return: (1) a concise neutral summary, (2) a criterion-by-criterion evidence map
               GROUP_CONCAT(p.display_name, '||') AS speakerNames
          FROM sessions s
          JOIN events event ON event.id = s.event_id AND event.organisation_id = ?
-         LEFT JOIN session_speakers ss ON ss.session_id = s.id AND ss.event_id = s.event_id
+         LEFT JOIN session_speakers ss
+           ON ss.session_id = s.id AND ss.event_id = s.event_id
+          AND ss.participation_status IN ('pending','confirmed')
          LEFT JOIN people p ON p.id = ss.person_id
         WHERE s.id = ? AND s.event_id = ?
         GROUP BY s.id`,

@@ -1,4 +1,5 @@
 import { AirtableProviderBoundary } from "~/modules/airtable/airtable-provider-boundary.server";
+import { participantResourceTaskAccessSql } from "~/modules/tasks/task-service-foundation.server";
 import type { Viewer } from "~/platform/auth/authorize.server";
 import {
   groupProgrammeSetupSteps,
@@ -21,6 +22,7 @@ type TaskRow = {
   targetType: string;
   taskType: string;
   dueAt: number | null;
+  participantActionable: number;
 };
 
 export type ReadinessWorkflow = {
@@ -107,7 +109,16 @@ async function loadCommandCentreRecords(
       `
         SELECT id, impact, readiness_percent AS readinessPercent, status,
                readiness_state AS readinessState, target_type AS targetType,
-               task_type AS taskType, due_at AS dueAt
+               task_type AS taskType, due_at AS dueAt,
+               CASE WHEN (
+                 (target_type <> 'session' OR EXISTS (
+                   SELECT 1 FROM session_speakers eligible_participant
+                    WHERE eligible_participant.event_id = task_instances.event_id
+                      AND eligible_participant.session_id = task_instances.target_id
+                      AND eligible_participant.participation_status IN ('pending','confirmed')
+                 ))
+                 AND ${participantResourceTaskAccessSql("task_instances")}
+               ) THEN 1 ELSE 0 END AS participantActionable
           FROM task_instances
          WHERE event_id = ?
       `,
@@ -248,6 +259,12 @@ async function loadCommandCentreRecords(
                    AND speaker_task.target_id = s.id
                    AND speaker_task.status NOT IN ('completed','waived')
                    AND speaker_task.impact IN ('critical','high')
+                   AND EXISTS (
+                     SELECT 1 FROM session_speakers eligible_participant
+                      WHERE eligible_participant.event_id = speaker_task.event_id
+                        AND eligible_participant.session_id = speaker_task.target_id
+                        AND eligible_participant.participation_status IN ('pending','confirmed')
+                   )
                ) AS openCriticalTasks
           FROM schedule_versions v
           JOIN schedule_entries e ON e.schedule_version_id = v.id AND e.event_id = v.event_id
@@ -409,7 +426,9 @@ export class ReadinessService {
       deliveryChannels,
     ] = await loadCommandCentreRecords(this.env, viewer, now);
 
-    const tasks = taskResult.results;
+    const tasks = taskResult.results.filter(
+      (task) => task.participantActionable === 1,
+    );
     const incomplete = new Set([
       "not_started",
       "in_progress",

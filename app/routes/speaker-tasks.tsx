@@ -23,12 +23,21 @@ export async function loader({ request, context }: Route.LoaderArgs) {
     viewer,
     tasks.map((task) => task.id),
   );
+  const search = new URL(request.url).searchParams;
+  const requestedTaskId = search.get("task");
+  const composeTaskId =
+    search.get("compose") === "comment" &&
+    requestedTaskId &&
+    tasks.some((task) => task.id === requestedTaskId)
+      ? requestedTaskId
+      : null;
   return {
     tasks: tasks.map((task) => ({
       ...task,
       fileVersions: versions.filter((version) => version.taskId === task.id),
     })),
     intentId: crypto.randomUUID(),
+    composeTaskId,
   };
 }
 
@@ -53,6 +62,9 @@ export async function action({ request, context }: Route.ActionArgs) {
         confirmed: form.get("confirmed") ?? "false",
         text: form.get("text") || undefined,
         responses,
+        sessionDetailsFingerprint:
+          form.get("sessionDetailsFingerprint") || undefined,
+        sessionDetailsRevision: form.get("sessionDetailsRevision") || undefined,
       });
       const realtimeFailure = await recordRouteChange(env, viewer, {
         entityType: "task_instance",
@@ -177,6 +189,7 @@ export default function SpeakerTasks({ loaderData }: Route.ComponentProps) {
         finished={finished}
         busy={navigation.state !== "idle"}
         intentId={loaderData.intentId}
+        composeTaskId={loaderData.composeTaskId}
       />
     </>
   );

@@ -135,7 +135,7 @@ export class ParticipantTaskCommentCommands extends ParticipantTaskWorkflowFound
          WHERE EXISTS (
            SELECT 1 FROM task_instances task
             WHERE task.id = ? AND task.event_id = ?
-              AND ${participant ? participantTaskAccessSql("task") : "1 = 1"}
+              AND ${participant ? participantTaskAccessSql("task", true) : "1 = 1"}
          )
       `,
         ).bind(
