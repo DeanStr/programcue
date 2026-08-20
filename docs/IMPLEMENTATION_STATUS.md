@@ -810,6 +810,30 @@ projection, durable placement response and absence of a post-move schedule
 loader request. Production drag frame pacing and field latency remain external
 acceptance evidence.
 
+### Workspace interaction and scale performance evidence
+
+The global document smooth-scroll rule has been removed because browser
+focus/scroll handling delayed below-fold form controls before their request was
+sent. Event Setup preserves its scroll position across a successful action, and
+focused Chromium coverage verifies immediate document scrolling, same-page
+success feedback, preserved position and durable reload. The persistent admin
+shell now reads a bounded event summary, capability flags and notification
+counts instead of loading the complete editable Event Setup aggregate on every
+admin navigation.
+
+The applications grid now selects the authorised, filtered page IDs before
+computing speaker and routing projections for those rows. Migration `0048`
+indexes immutable track-name selections used by the real category filter. The
+scale fixture supplies valid form versions, immutable submitted snapshots and
+10,000 persisted track selections, is applied before its dedicated Worker
+starts, and keeps explicit event context for unsafe mutations. On 2026-08-20
+the complete local scale profile passed: applications first-use 317.4 ms,
+applications filter p95 295.7 ms, speaker first-use 280.6 ms, speaker filter p95
+335.6 ms, Event Setup mutation p95 131 ms, schedule validation p95 203.8 ms,
+event-change freshness p95 901 ms and local autosave feedback 826 ms.
+Production p75 RUM, production-like D1/DO scale and field INP remain external
+acceptance evidence.
+
 ### Deterministic auto-placement evidence
 
 The draft Schedule Planner exposes deterministic first-fit auto-placement with

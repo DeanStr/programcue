@@ -13,7 +13,7 @@ import {
   sanitizeRouteErrorMessage,
   shouldOfferErrorRetry,
 } from "~/lib/route-error-recovery";
-import { EventService } from "~/modules/events/event-service.server";
+import { AirtableProviderBoundary } from "~/modules/airtable/airtable-provider-boundary.server";
 import {
   loadCurrentEventAdminShellContext,
   requireCurrentEventRole,
@@ -74,23 +74,17 @@ export async function loader({ request, context }: Route.LoaderArgs) {
   const allowedRoles = adminLayoutAllowedRoles(pathname);
   const viewer = await requireCurrentEventRole(request, env, allowedRoles);
   const commandPalette = new CommandPaletteService(env);
-  const [
-    event,
-    shellContext,
-    savedViews,
-    recentRecords,
-    organisationSearchAllowed,
-  ] = await Promise.all([
-    new EventService(env).getSetup(viewer),
+  const [shellContext, savedViews, recentRecords] = await Promise.all([
     loadCurrentEventAdminShellContext(env, viewer, allowedRoles),
     new SavedViewService(env).list(viewer),
     commandPalette.recent(viewer),
-    commandPalette.canSearchOrganisation(viewer),
+    new AirtableProviderBoundary(env).assertReadable(viewer),
   ]);
+  const { event } = shellContext;
 
   return {
     event: {
-      id: viewer.eventId,
+      id: event.id,
       name: event.name,
       timezone: event.timezone,
       dates: formatEventDateRange(event.startDate, event.endDate),
@@ -108,7 +102,7 @@ export async function loader({ request, context }: Route.LoaderArgs) {
     commandPalette: {
       savedViews,
       recentRecords,
-      organisationSearchAllowed,
+      organisationSearchAllowed: shellContext.canSearchOrganisation,
     },
     notifications:
       viewer.role === "committee_chair"

@@ -183,6 +183,17 @@ describe("current event context", () => {
     expect(context.eventOptions.map((event) => event.eventId)).toEqual(
       expect.arrayContaining(["evt-foe-2025", "evt-current-context-two"]),
     );
+    expect(context.event).toEqual({
+      id: "evt-current-context-two",
+      name: "Second authorised event",
+      timezone: "UTC",
+      startDate: "2025-10-09",
+      endDate: "2025-10-10",
+      venue: "",
+      city: "",
+    });
+    expect(context.canCreateEvents).toBe(true);
+    expect(context.canSearchOrganisation).toBe(false);
     expect(context.notificationCounts).toEqual({
       overdueTasks: expect.any(Number),
       scheduleConflicts: expect.any(Number),
@@ -198,6 +209,19 @@ describe("current event context", () => {
     ).rejects.toThrow(
       "The authorised current event no longer belongs to its organisation.",
     );
+
+    const ownerRequest = demoRequest(
+      "program_cue_demo_identity=owner; program_cue_event=evt-current-context-two",
+    );
+    const owner = await requireCurrentEventRole(ownerRequest, workerEnv, [
+      "owner",
+    ]);
+    await expect(
+      loadCurrentEventAdminShellContext(workerEnv, owner, ["owner"]),
+    ).resolves.toMatchObject({
+      canCreateEvents: true,
+      canSearchOrganisation: true,
+    });
   });
 
   it("reuses an already-authorised viewer when loading the admin shell", async () => {

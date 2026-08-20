@@ -25,6 +25,11 @@ test("Event Setup saves through D1 and survives a reload", async ({ page }) => {
   await expect(
     page.getByRole("heading", { name: "Event settings" }),
   ).toBeVisible();
+  expect(
+    await page.evaluate(
+      () => getComputedStyle(document.documentElement).scrollBehavior,
+    ),
+  ).toBe("auto");
 
   const venue = page.getByLabel("Venue", { exact: true });
   const original = await venue.inputValue();
@@ -36,10 +41,21 @@ test("Event Setup saves through D1 and survives a reload", async ({ page }) => {
     await venue.fill("Beanfield Centre — persistence check");
     await venueAddress.fill("105 Princes' Boulevard, Toronto, ON");
     await venueMapUrl.fill("https://maps.example.test/beanfield-centre");
-    await page.getByRole("button", { name: "Save event" }).click();
+    const save = page.getByRole("button", { name: "Save event" });
+    await save.scrollIntoViewIfNeeded();
+    const scrollBeforeSave = await page.evaluate(() => window.scrollY);
+    await save.click();
     await expect(
       page.getByText("Event settings saved.", { exact: true }),
     ).toBeVisible();
+    await expect
+      .poll(async () =>
+        page.evaluate(
+          (before) => Math.abs(window.scrollY - before) <= 1,
+          scrollBeforeSave,
+        ),
+      )
+      .toBe(true);
     await page.reload();
     await expect(venue).toHaveValue("Beanfield Centre — persistence check");
     await expect(venueAddress).toHaveValue(

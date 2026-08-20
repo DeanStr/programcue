@@ -47,23 +47,149 @@ SELECT printf('perf-scale-membership-%05d', value),
        1735689600 + value
   FROM sequence;
 
+-- Submissions use the same durable form-version and track-routing invariants as
+-- production records. The scale fixture must not bypass those relationships or
+-- the operational submission list fails before it can measure useful work. It
+-- reuses the canonical event tracks so Event Setup remains a valid editable
+-- record while the scale data is present.
+
+INSERT INTO form_definitions (
+  id, event_id, name, description, kind, status, public_slug, min_speakers,
+  max_speakers, created_at, updated_at
+) VALUES (
+  'perf-scale-form',
+  'evt-foe-2025',
+  'Performance scale form',
+  'Representative local-only submission form for scale validation.',
+  'submission',
+  'published',
+  'performance-scale-form',
+  1,
+  4,
+  1735689600,
+  1735689600
+);
+
+WITH track_values(track_id, track_name, position) AS (
+  VALUES ('demo-track-leadership', 'Leadership', 0),
+         ('demo-track-ai', 'AI & Innovation', 1),
+         ('demo-track-experience', 'Experience Design', 2),
+         ('demo-track-operations', 'Event Operations', 3)
+), routing AS (
+  SELECT json_group_object(
+           track_name,
+           track_id
+         ) AS track_ids_json,
+         json_group_object(
+           track_id,
+           track_name
+         ) AS track_names_json,
+         json_group_array(track_name) AS track_options_json
+    FROM track_values
+), payload AS (
+  SELECT json_object(
+           'introduction', 'Submit a representative scale proposal.',
+           'fields', json_array(
+             json_object(
+               'id', 'title',
+               'label', 'Session title',
+               'type', 'short_text',
+               'required', json('true')
+             ),
+             json_object(
+               'id', 'category',
+               'label', 'Track',
+               'type', 'multi_select',
+               'required', json('true'),
+               'options', json(track_options_json)
+             ),
+             json_object(
+               'id', 'format',
+               'label', 'Format',
+               'type', 'select',
+               'required', json('true'),
+               'options', json_array(
+                 'keynote', 'presentation', 'panel', 'workshop'
+               )
+             )
+           )
+         ) AS schema_json,
+         json_object(
+           'categories', json('{}'),
+           'trackIds', json(track_ids_json),
+           'trackNames', json(track_names_json),
+           'teamNames', json('{}'),
+           'directSessionDurationMinutes', NULL,
+           'passwordHash', NULL
+         ) AS routing_json
+    FROM routing
+)
+INSERT INTO form_versions (
+  id, event_id, form_id, version_number, schema_json, routing_json,
+  settings_snapshot_json, status, published_at, created_at, updated_at
+)
+SELECT 'perf-scale-form-version-1',
+       'evt-foe-2025',
+       'perf-scale-form',
+       1,
+       schema_json,
+       routing_json,
+       json_object(
+         'name', 'Performance scale form',
+         'kind', 'submission',
+         'publicSlug', 'performance-scale-form',
+         'closesAt', NULL,
+         'submissionLimit', NULL,
+         'minSpeakers', 1,
+         'maxSpeakers', 4,
+         'accessMode', 'email_verified'
+       ),
+       'published',
+       1735689600,
+       1735689600,
+       1735689600
+  FROM payload;
+
+INSERT INTO form_versions (
+  id, event_id, form_id, version_number, schema_json, routing_json,
+  settings_snapshot_json, status, created_at, updated_at
+)
+SELECT 'perf-scale-form-version-2',
+       event_id,
+       form_id,
+       2,
+       schema_json,
+       routing_json,
+       settings_snapshot_json,
+       'draft',
+       1735689601,
+       1735689601
+  FROM form_versions
+ WHERE id = 'perf-scale-form-version-1';
+
 WITH RECURSIVE sequence(value) AS (
   VALUES (1)
   UNION ALL
   SELECT value + 1 FROM sequence WHERE value < 10000
 )
 INSERT INTO submissions (
-  id, event_id, submitter_person_id, submitter_email, public_reference, title,
-  category, format, status, answers_json, submitted_snapshot_json, revision,
-  submitted_at, created_at, updated_at
+  id, event_id, form_version_id, submitter_person_id, submitter_email,
+  public_reference, title, category, format, status, answers_json,
+  submitted_snapshot_json, revision, submitted_at, created_at, updated_at
 )
 SELECT printf('perf-scale-submission-%05d', value),
        'evt-foe-2025',
+       'perf-scale-form-version-1',
        printf('perf-scale-person-%05d', value),
        printf('scale-speaker-%05d@example.invalid', value),
        printf('SCALE-%05d', value),
        printf('Representative scale submission %05d', value),
-       printf('Scale Track %02d', value % 20),
+       CASE value % 4
+         WHEN 0 THEN 'Leadership'
+         WHEN 1 THEN 'AI & Innovation'
+         WHEN 2 THEN 'Experience Design'
+         ELSE 'Event Operations'
+       END,
        CASE value % 4
          WHEN 0 THEN 'keynote'
          WHEN 1 THEN 'presentation'
@@ -77,12 +203,82 @@ SELECT printf('perf-scale-submission-%05d', value),
          WHEN 3 THEN 'decision_ready'
          ELSE 'accepted'
        END,
-       json_object('abstract', printf('Deterministic representative abstract %05d', value)),
-       json_object('routing', json('{}')),
+       json_object(
+         'title', printf('Representative scale submission %05d', value),
+         'category', json_array(CASE value % 4
+           WHEN 0 THEN 'Leadership'
+           WHEN 1 THEN 'AI & Innovation'
+           WHEN 2 THEN 'Experience Design'
+           ELSE 'Event Operations'
+         END),
+         'format', CASE value % 4
+           WHEN 0 THEN 'keynote'
+           WHEN 1 THEN 'presentation'
+           WHEN 2 THEN 'panel'
+           ELSE 'workshop'
+         END,
+         'abstract', printf('Deterministic representative abstract %05d', value)
+       ),
+       json_object(
+         'formVersionId', 'perf-scale-form-version-1',
+         'versionNumber', 1,
+         'schema', json((
+           SELECT schema_json
+             FROM form_versions
+            WHERE id = 'perf-scale-form-version-1'
+         )),
+         'answers', json_object(
+           'title', printf('Representative scale submission %05d', value),
+           'category', json_array(CASE value % 4
+             WHEN 0 THEN 'Leadership'
+             WHEN 1 THEN 'AI & Innovation'
+             WHEN 2 THEN 'Experience Design'
+             ELSE 'Event Operations'
+           END),
+           'format', CASE value % 4
+             WHEN 0 THEN 'keynote'
+             WHEN 1 THEN 'presentation'
+             WHEN 2 THEN 'panel'
+             ELSE 'workshop'
+           END,
+           'abstract', printf('Deterministic representative abstract %05d', value)
+         ),
+         'speakers', json_array(json_object(
+           'name', printf('Scale Speaker %05d', value),
+           'email', printf('scale-speaker-%05d@example.invalid', value),
+           'biography', ''
+         )),
+         'uploads', json('{}')
+       ),
        1,
        1735689600 + value,
        1735689600 + value,
        1735689600 + value
+  FROM sequence;
+
+WITH RECURSIVE sequence(value) AS (
+  VALUES (1)
+  UNION ALL
+  SELECT value + 1 FROM sequence WHERE value < 10000
+)
+INSERT INTO submission_track_selections (
+  submission_id, event_id, track_id, track_name_snapshot, position
+)
+SELECT printf('perf-scale-submission-%05d', value),
+       'evt-foe-2025',
+       CASE value % 4
+         WHEN 0 THEN 'demo-track-leadership'
+         WHEN 1 THEN 'demo-track-ai'
+         WHEN 2 THEN 'demo-track-experience'
+         ELSE 'demo-track-operations'
+       END,
+       CASE value % 4
+         WHEN 0 THEN 'Leadership'
+         WHEN 1 THEN 'AI & Innovation'
+         WHEN 2 THEN 'Experience Design'
+         ELSE 'Event Operations'
+       END,
+       0
   FROM sequence;
 
 WITH RECURSIVE sequence(value) AS (

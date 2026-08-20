@@ -58,7 +58,10 @@ export default defineConfig({
     // The outer runner creates one immutable production build before it starts
     // any shards. A shard must never rebuild the shared output while another
     // Workerd instance is serving it.
-    command: "npm run serve:e2e:prepared",
+    command:
+      process.env.PROGRAM_CUE_E2E_SCALE_FIXTURE === "1"
+        ? "node scripts/serve-performance-scale-e2e-worker.mjs"
+        : "npm run serve:e2e:prepared",
     url: `${e2eOrigin}/admin/event`,
     reuseExistingServer: false,
     timeout: 120_000,

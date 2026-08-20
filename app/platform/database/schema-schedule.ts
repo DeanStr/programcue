@@ -55,6 +55,11 @@ export const submissionTrackSelections = sqliteTable(
       table.trackId,
       table.submissionId,
     ),
+    index("idx_submission_track_selections_event_name").on(
+      table.eventId,
+      table.trackNameSnapshot,
+      table.submissionId,
+    ),
     foreignKey({
       columns: [table.submissionId, table.eventId],
       foreignColumns: [submissions.id, submissions.eventId],

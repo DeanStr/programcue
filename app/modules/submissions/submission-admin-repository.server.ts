@@ -251,14 +251,23 @@ function adminSubmissionRowsStatement(
                   THEN json_extract(s.submitted_snapshot_json, '$.routing')
                 ELSE fv.routing_json
               END AS routingJson
-         FROM submissions s
-         JOIN events e ON e.id = s.event_id AND e.organisation_id = ?
+         FROM (
+           SELECT s.id
+             FROM submissions s
+             JOIN events e ON e.id = s.event_id AND e.organisation_id = ?
+             LEFT JOIN people p ON p.id = s.submitter_person_id
+             LEFT JOIN form_versions fv
+               ON fv.id = s.form_version_id AND fv.event_id = s.event_id
+            WHERE ${adminSubmissionFilterSql}
+            ORDER BY ${adminSubmissionOrder(filters)}
+            LIMIT ? OFFSET ?
+         ) page
+         JOIN submissions s ON s.id = page.id
          LEFT JOIN people p ON p.id = s.submitter_person_id
          LEFT JOIN form_versions fv
            ON fv.id = s.form_version_id AND fv.event_id = s.event_id
-        WHERE ${adminSubmissionFilterSql}
         ORDER BY ${adminSubmissionOrder(filters)}
-        LIMIT ? OFFSET ?`,
+        `,
     )
     .bind(
       organisationId,

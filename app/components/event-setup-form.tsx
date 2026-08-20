@@ -837,6 +837,7 @@ export function EventSetupForm({
       <Form
         ref={captureEventSetupForm}
         method="post"
+        preventScrollReset
         className="event-setup-form"
         onInput={(inputEvent) => {
           updateNamedFieldDirtyState(inputEvent.currentTarget);

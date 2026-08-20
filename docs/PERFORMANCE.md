@@ -6,13 +6,13 @@ Program Cue keeps timing checks separate from the deterministic correctness gate
 npm run performance:local
 ```
 
-The command is opt-in and should run on a quiescent host. Playwright first resets its isolated `.wrangler/e2e-state` database, applies the baseline migration and builds the real Worker. The normal correctness suite discovers the performance file but skips its timing assertions unless `PERFORMANCE_EVIDENCE=1`, avoiding hardware-dependent flakes and leaving demo/development data untouched.
+The command is opt-in and should run on a quiescent host. It builds once, then runs the explicitly selected baseline and scale profiles against separate freshly reset local Workers and D1 states. The scale fixture is applied while its Worker is stopped, avoiding unsupported concurrent writes to Miniflare's SQLite state. The normal correctness suite discovers the performance file but skips its timing assertions unless `PERFORMANCE_EVIDENCE=1`, avoiding hardware-dependent flakes and leaving demo/development data untouched.
 
-The first case disables the browser cache for public navigation, applies a 4 Mbps down / 1 Mbps up / 80 ms latency mobile profile with 4× CPU throttling, and uses five navigation samples plus five-to-seven warmed interaction samples. It writes `performance-local.json` beneath the ignored Playwright `test-results/` directory.
+The first case disables the browser cache for public navigation, applies a 4 Mbps down / 1 Mbps up / 80 ms latency mobile profile with 4× CPU throttling, and uses five cold public-navigation samples, twenty warmed admin-navigation samples and seven warmed interaction samples. It writes `performance-local.json` beneath the ignored Playwright `test-results/` directory.
 
-The second case applies `e2e/fixtures/performance-scale.sql` only to that freshly reset database. The deterministic fixture adds exactly 10,000 non-draft submissions, 10,000 accepted speaker memberships, selective task/file states and a 200-session/199-entry schedule draft. It then:
+The second case applies `e2e/fixtures/performance-scale.sql` only to its freshly reset database before the measurement Worker starts. The deterministic fixture adds exactly 10,000 non-draft submissions with valid immutable submitted snapshots, form-version routing and persisted track selections, 10,000 accepted speaker memberships, selective task/file states and a 200-session/199-entry schedule draft. It then:
 
-- asserts the fixture cardinality and named D1 indexes with `EXPLAIN QUERY PLAN`;
+- asserts the fixture cardinality before starting measurement;
 - visits the real, server-paged submissions and speakers routes and takes five indexed-filter samples for each;
 - performs five real Event Setup mutations, observes their post-commit WebSocket invalidations in a second page and restores the changed value;
 - performs five real schedule placements through the route action against the representative schedule; and
@@ -22,22 +22,33 @@ It writes `performance-scale-local.json` and fails on the applicable section 16.
 
 ## Latest local measurement
 
-Measured 2026-08-10 with Playwright Chromium and the repository's Miniflare D1/R2 Worker:
+Measured 2026-08-20 with Playwright Chromium and the repository's Miniflare D1/R2 Worker:
 
 | Measurement                                       | Local result |            Section 16 budget | Result       |
 | ------------------------------------------------- | -----------: | ---------------------------: | ------------ |
-| Public programme LCP, p75 of 5 cold navigations   |       496 ms |                  <= 2,500 ms | Pass locally |
+| Public programme LCP, p75 of 5 cold navigations   |       908 ms |                  <= 2,500 ms | Pass locally |
 | Public programme CLS, maximum of 5 navigations    |            0 |                       <= 0.1 | Pass locally |
-| Public programme filter feedback, p75 of 7        |      14.9 ms | <= 200 ms interaction target | Pass locally |
-| Command palette usable, p95 of 7                  |      30.5 ms |                    <= 100 ms | Pass locally |
+| Public programme filter feedback, p75 of 7        |      48.5 ms | <= 200 ms interaction target | Pass locally |
+| Command palette usable, p95 of 7                  |      37.2 ms |                    <= 100 ms | Pass locally |
 | Event search response after debounce, p95 of 7    |      13.6 ms |                    <= 300 ms | Pass locally |
-| Warmed admin route first useful heading, p95 of 5 |      78.9 ms |                    <= 100 ms | Pass locally |
+| Warmed admin route first useful heading, p95 of 20 |        68 ms |                    <= 100 ms | Pass locally |
 
 ## Scale and mutation measurement status
 
-The scale fixture, index assertions and measurements are implemented, but a completed `performance-scale-local.json` has not yet been recorded. The latest diagnostic run reached every 10,000-record list/filter navigation, then timed out because its response watcher expected `/admin/event` while React Router correctly posted the mutation to `/admin/event.data`. The watcher now targets the exact data route and fails on a response-stream error. Because that interrupted run did not reach the final report and budget assertions, this document does not claim a scale, mutation, schedule, freshness or autosave pass from it. Run `npm run performance:local` once on a quiescent host and record the emitted `PROGRAM_CUE_SCALE_PERFORMANCE` result here.
+Measured 2026-08-20 with the isolated scale Worker and migrated schema:
 
-The interrupted trace is useful only as a diagnostic: submissions navigations took 118–157 ms, speaker navigations took 146–170 ms and the single completed Event Setup mutation response took 46.9 ms. Those values are not substituted for the harness's end-to-end first-use, p95 or final assertion results.
+| Measurement                                      | Local result | Section 16 budget | Result       |
+| ------------------------------------------------ | -----------: | ----------------: | ------------ |
+| Applications first useful page, 10,000 records   |     317.4 ms |      <= 1,500 ms | Pass locally |
+| Applications indexed filter, p95 of 5            |     295.7 ms |        <= 500 ms | Pass locally |
+| Speakers first useful page, 10,000 records       |     280.6 ms |      <= 1,500 ms | Pass locally |
+| Speakers indexed filter, p95 of 5                |     335.6 ms |        <= 500 ms | Pass locally |
+| Event Setup mutation response, p95 of 5           |       131 ms |        <= 750 ms | Pass locally |
+| Schedule validation mutation, p95 of 5            |     203.8 ms |        <= 500 ms | Pass locally |
+| Event change commit to visible invalidation, p95 |       901 ms |      <= 2,000 ms | Pass locally |
+| Form-builder local autosave feedback             |       826 ms |      <= 2,000 ms | Pass locally |
+
+Migration validation proves the named indexes exist. The measurements above exercise the real route and repository statements; they do not claim that a hand-written proxy query proves the production query plan. These are local lab results, not deployed scale or field-latency acceptance.
 
 ## Production data-locality correction
 

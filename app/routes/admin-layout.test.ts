@@ -1,6 +1,24 @@
+import { env } from "cloudflare:test";
+import { RouterContextProvider } from "react-router";
 import { describe, expect, it } from "vitest";
+import { cloudflareContext } from "~/platform/cloudflare-context";
+import { ensureDemoData } from "~/platform/demo/seed.server";
+import {
+  adminErrorReturn,
+  adminLayoutAllowedRoles,
+  loader,
+} from "./admin-layout";
 
-import { adminErrorReturn, adminLayoutAllowedRoles } from "./admin-layout";
+const workerEnv = env as unknown as CloudflareEnvironment;
+
+function routeContext() {
+  const context = new RouterContextProvider();
+  context.set(cloudflareContext, {
+    env: workerEnv,
+    ctx: { waitUntil: () => undefined } as unknown as ExecutionContext,
+  });
+  return context;
+}
 
 describe("admin layout role routing", () => {
   it.each([
@@ -69,5 +87,36 @@ describe("admin layout role routing", () => {
       href: "/admin/command",
       label: "Go to Command Centre",
     });
+  });
+
+  it("fails the shell closed when an Airtable event is not synchronized", async () => {
+    await ensureDemoData(workerEnv);
+    await workerEnv.DB.prepare(
+      "UPDATE events SET repository_provider = 'airtable' WHERE id = ?",
+    )
+      .bind("evt-foe-2025")
+      .run();
+    try {
+      await expect(
+        loader({
+          request: new Request("https://programcue.test/admin/command", {
+            headers: {
+              cookie:
+                "program_cue_demo_identity=administrator; program_cue_event=evt-foe-2025",
+            },
+          }),
+          context: routeContext(),
+          params: {},
+        } as never),
+      ).rejects.toThrow(
+        "Configure and validate an Airtable repository connection before selecting Airtable.",
+      );
+    } finally {
+      await workerEnv.DB.prepare(
+        "UPDATE events SET repository_provider = 'd1' WHERE id = ?",
+      )
+        .bind("evt-foe-2025")
+        .run();
+    }
   });
 });

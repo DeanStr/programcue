@@ -369,8 +369,18 @@ export async function recordEventContextSwitch(
 }
 
 export type CurrentEventAdminShellContext = {
+  event: {
+    id: string;
+    name: string;
+    timezone: string;
+    startDate: string;
+    endDate: string;
+    venue: string;
+    city: string;
+  };
   eventOptions: AuthorisedEvent[];
   canCreateEvents: boolean;
+  canSearchOrganisation: boolean;
   notificationCounts: {
     overdueTasks: number;
     scheduleConflicts: number;
@@ -398,13 +408,23 @@ export async function loadCurrentEventAdminShellContext(
     env.DB.prepare(
       `
       WITH current_event AS (
-        SELECT id, organisation_id
+        SELECT id, organisation_id, name, timezone,
+               date(starts_at, 'unixepoch') AS startDate,
+               date(ends_at, 'unixepoch') AS endDate,
+               COALESCE(venue_name, '') AS venue,
+               COALESCE(city, '') AS city
           FROM events
          WHERE id = ? AND organisation_id = ?
            AND activation_status = 'active'
       )
       SELECT
-        EXISTS(SELECT 1 FROM current_event) AS eventExists,
+        event.id AS eventId,
+        event.name AS eventName,
+        event.timezone,
+        event.startDate,
+        event.endDate,
+        event.venue,
+        event.city,
         EXISTS(
           SELECT 1 FROM memberships membership
            WHERE membership.organisation_id = ?
@@ -414,23 +434,33 @@ export async function loadCurrentEventAdminShellContext(
              AND membership.accepted_at IS NOT NULL
              AND membership.revoked_at IS NULL
         ) AS canCreateEvents,
+        EXISTS(
+          SELECT 1 FROM memberships membership
+           WHERE membership.organisation_id = ?
+             AND membership.person_id = ?
+             AND membership.event_id IS NULL
+             AND membership.role = 'owner'
+             AND membership.accepted_at IS NOT NULL
+             AND membership.revoked_at IS NULL
+        ) AS canSearchOrganisation,
         (SELECT COUNT(*)
            FROM task_instances task
-           JOIN current_event event ON event.id = task.event_id
-          WHERE task.status NOT IN ('completed','waived')
+          WHERE task.event_id = event.id
+            AND task.status NOT IN ('completed','waived')
             AND (task.status = 'overdue'
                  OR (task.due_at IS NOT NULL AND task.due_at < unixepoch()))) AS overdueTasks,
         (SELECT COUNT(*)
            FROM schedule_conflicts conflict
-           JOIN current_event event ON event.id = conflict.event_id
-          WHERE conflict.resolved_at IS NULL
+          WHERE conflict.event_id = event.id
+            AND conflict.resolved_at IS NULL
             AND conflict.severity = 'blocking') AS scheduleConflicts,
         (SELECT COUNT(*)
            FROM operation_jobs operation
-           JOIN current_event event ON event.id = operation.event_id
-          WHERE operation.organisation_id = event.organisation_id
+          WHERE operation.event_id = event.id
+            AND operation.organisation_id = event.organisation_id
             AND operation.status IN ('queue_failed','failed','partially_failed')
             AND operation.alert_acknowledged_at IS NULL) AS failedOperations
+        FROM current_event event
     `,
     )
       .bind(
@@ -438,24 +468,43 @@ export async function loadCurrentEventAdminShellContext(
         viewer.organisationId,
         viewer.organisationId,
         viewer.personId,
+        viewer.organisationId,
+        viewer.personId,
       )
       .first<{
-        eventExists: number | boolean;
+        eventId: string;
+        eventName: string;
+        timezone: string;
+        startDate: string;
+        endDate: string;
+        venue: string;
+        city: string;
         canCreateEvents: number | boolean;
+        canSearchOrganisation: number | boolean;
         overdueTasks: number;
         scheduleConflicts: number;
         failedOperations: number;
       }>(),
   ]);
 
-  if (!row?.eventExists)
+  if (!row)
     throw new Error(
       "The authorised current event no longer belongs to its organisation.",
     );
 
   return {
+    event: {
+      id: row.eventId,
+      name: row.eventName,
+      timezone: row.timezone,
+      startDate: row.startDate,
+      endDate: row.endDate,
+      venue: row.venue,
+      city: row.city,
+    },
     eventOptions,
     canCreateEvents: Boolean(row.canCreateEvents),
+    canSearchOrganisation: Boolean(row.canSearchOrganisation),
     notificationCounts: {
       overdueTasks: Number(row.overdueTasks),
       scheduleConflicts: Number(row.scheduleConflicts),
