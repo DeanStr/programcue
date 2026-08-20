@@ -1,5 +1,6 @@
 import type {
   ScheduleEntry,
+  SchedulePlacementSessionUpdate,
   SchedulePlacementWarning,
 } from "~/modules/schedule/schedule-service.server";
 import type { SchedulePlannerWorkspaceData } from "./schedule-planner-panel-types";
@@ -16,6 +17,7 @@ export type PendingSchedulePlacement = {
 
 export type CommittedScheduleMove = {
   placement: ScheduleEntry;
+  session: SchedulePlacementSessionUpdate;
   scheduleRevision: number;
   warnings: SchedulePlacementWarning[];
 };
@@ -59,6 +61,30 @@ function isScheduleEntry(value: unknown): value is ScheduleEntry {
   );
 }
 
+const contentStatuses = new Set<
+  SchedulePlacementSessionUpdate["contentStatus"]
+>(["draft", "in_review", "approved", "changes_requested"]);
+
+function isSchedulePlacementSessionUpdate(
+  value: unknown,
+): value is SchedulePlacementSessionUpdate {
+  return (
+    isRecord(value) &&
+    typeof value.id === "string" &&
+    value.id.length > 0 &&
+    isPositiveSafeInteger(value.durationMinutes) &&
+    value.durationMinutes >= 5 &&
+    value.durationMinutes <= 480 &&
+    typeof value.contentStatus === "string" &&
+    contentStatuses.has(
+      value.contentStatus as SchedulePlacementSessionUpdate["contentStatus"],
+    ) &&
+    isPositiveSafeInteger(value.contentRevision) &&
+    (value.status === "scheduled" || value.status === "published") &&
+    isPositiveSafeInteger(value.revision)
+  );
+}
+
 export function committedScheduleMove(
   value: unknown,
 ): CommittedScheduleMove | null {
@@ -68,6 +94,10 @@ export function committedScheduleMove(
     value.committed !== true ||
     value.skipRevalidation !== true ||
     !isScheduleEntry(value.placement) ||
+    !isSchedulePlacementSessionUpdate(value.session) ||
+    value.session.id !== value.placement.sessionId ||
+    value.session.durationMinutes * 60 !==
+      value.placement.endsAt - value.placement.startsAt ||
     !isPositiveSafeInteger(value.scheduleRevision) ||
     !Array.isArray(value.warnings) ||
     !value.warnings.every(
@@ -79,6 +109,7 @@ export function committedScheduleMove(
   }
   return {
     placement: value.placement,
+    session: value.session,
     scheduleRevision: value.scheduleRevision,
     warnings: value.warnings,
   };
@@ -116,6 +147,11 @@ export function reconcileCommittedScheduleMove(
   const entries = workspace.entries.map((entry) =>
     entry.sessionId === result.placement.sessionId ? result.placement : entry,
   );
+  const sessions = workspace.sessions.map((session) =>
+    session.id === result.session.id
+      ? { ...session, ...result.session }
+      : session,
+  );
   const retainedConflicts = workspace.conflicts.filter(
     (conflict) => !conflictEntryIds(conflict).includes(movedEntryId),
   );
@@ -140,6 +176,7 @@ export function reconcileCommittedScheduleMove(
       ? { ...workspace.version, revision: result.scheduleRevision }
       : null,
     entries,
+    sessions,
     conflicts: [...retainedConflicts, ...nextConflicts],
     publicationConflicts: [...retainedPublicationConflicts, ...nextConflicts],
     calendarPreviews,

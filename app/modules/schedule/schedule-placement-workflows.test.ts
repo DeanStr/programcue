@@ -288,6 +288,23 @@ describe("schedule placement workflows", () => {
       secondService.place(viewer, input, command),
     ]);
     expect(replay).toEqual(first);
+    const { session: _session, ...legacyResult } = first;
+    await env.DB.prepare(
+      `UPDATE idempotency_records
+          SET response_json = ?
+        WHERE event_id = ? AND actor_id = ?
+          AND scope = 'schedule.entry.place' AND idempotency_key = ?`,
+    )
+      .bind(
+        JSON.stringify(legacyResult),
+        viewer.eventId,
+        command.actorId,
+        command.idempotencyKey,
+      )
+      .run();
+    await expect(firstService.place(viewer, input, command)).resolves.toEqual(
+      legacyResult,
+    );
     expect(first.scheduleRevision).toBe(input.scheduleRevision + 1);
     expect(first.warnings).toEqual([
       expect.objectContaining({
@@ -446,6 +463,9 @@ describe("schedule placement workflows", () => {
       workspace.event.timezone,
       11,
     );
+    const sessionBeforeMove = workspace.sessions.find(
+      (session) => session.id === "schedule-test-one",
+    )!;
     const move = await service.place(viewer, {
       scheduleVersionId: versionId,
       scheduleRevision: workspace.version!.revision,
@@ -463,6 +483,14 @@ describe("schedule placement workflows", () => {
         endsAt: movedStartsAt + 5_400,
         revision: 2,
       },
+      session: {
+        id: "schedule-test-one",
+        durationMinutes: 90,
+        contentStatus: "draft",
+        contentRevision: sessionBeforeMove.contentRevision + 1,
+        status: "scheduled",
+        revision: sessionBeforeMove.revision + 1,
+      },
     });
     workspace = await service.getWorkspace(viewer);
     expect(workspace.entries[0]).toMatchObject({
@@ -470,6 +498,9 @@ describe("schedule placement workflows", () => {
       startsAt: movedStartsAt,
       endsAt: movedStartsAt + 5_400,
     });
+    expect(
+      workspace.sessions.find((session) => session.id === "schedule-test-one"),
+    ).toMatchObject(move.session!);
 
     const restored = await service.undo(viewer, {
       scheduleVersionId: versionId,

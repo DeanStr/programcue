@@ -168,9 +168,19 @@ export type SchedulePlacementWarning = Omit<ScheduleConflict, "severity"> & {
   severity: "warning";
 };
 
+export type SchedulePlacementSessionUpdate = Pick<
+  ScheduleSession,
+  "id" | "durationMinutes" | "contentStatus" | "contentRevision" | "revision"
+> & {
+  status: "scheduled" | "published";
+};
+
 export type SchedulePlacementResult = {
   entryId: string;
   entry: ScheduleEntry;
+  /** Optional only for replaying deployed assistant command records that were
+   * persisted before placement responses included a session projection. */
+  session?: SchedulePlacementSessionUpdate;
   movedExistingEntry: boolean;
   scheduleRevision: number;
   warnings: SchedulePlacementWarning[];

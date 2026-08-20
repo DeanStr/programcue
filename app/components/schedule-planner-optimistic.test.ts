@@ -16,6 +16,15 @@ const originalEntry = {
   revision: 2,
 };
 
+const originalSession = {
+  id: "session-one",
+  durationMinutes: 60,
+  contentStatus: "approved",
+  contentRevision: 4,
+  status: "scheduled",
+  revision: 5,
+};
+
 function workspaceFixture() {
   return {
     version: {
@@ -26,6 +35,7 @@ function workspaceFixture() {
       notes: "",
     },
     entries: [originalEntry],
+    sessions: [originalSession],
     conflicts: [
       {
         id: "old-conflict",
@@ -77,7 +87,7 @@ describe("optimistic schedule placement", () => {
       ...originalEntry,
       roomId: "room-two",
       startsAt: originalEntry.startsAt + 900,
-      endsAt: originalEntry.endsAt + 900,
+      endsAt: originalEntry.endsAt + 1_800,
       revision: 3,
     };
     const result = committedScheduleMove({
@@ -86,6 +96,13 @@ describe("optimistic schedule placement", () => {
       intent: "place",
       skipRevalidation: true,
       placement,
+      session: {
+        ...originalSession,
+        durationMinutes: 75,
+        contentStatus: "draft",
+        contentRevision: 5,
+        revision: 6,
+      },
       scheduleRevision: 8,
       warnings: [
         {
@@ -101,6 +118,15 @@ describe("optimistic schedule placement", () => {
     expect(result).not.toBeNull();
     const reconciled = reconcileCommittedScheduleMove(workspace, result!);
     expect(reconciled.entries).toEqual([placement]);
+    expect(reconciled.sessions).toEqual([
+      {
+        ...originalSession,
+        durationMinutes: 75,
+        contentStatus: "draft",
+        contentRevision: 5,
+        revision: 6,
+      },
+    ]);
     expect(reconciled.version?.revision).toBe(8);
     expect(reconciled.conflicts).toEqual([
       expect.objectContaining({
@@ -124,11 +150,25 @@ describe("optimistic schedule placement", () => {
       intent: "place",
       skipRevalidation: true,
       placement: { ...originalEntry, roomId: "" },
+      session: originalSession,
       scheduleRevision: 8,
       warnings: [],
     };
     expect(committedScheduleMove(malformed)).toBeNull();
     expect(needsAuthoritativeScheduleMoveRefresh(malformed)).toBe(true);
+  });
+
+  it("refreshes when a committed move lacks its session projection", () => {
+    const incomplete = {
+      committed: true,
+      intent: "place",
+      skipRevalidation: true,
+      placement: originalEntry,
+      scheduleRevision: 8,
+      warnings: [],
+    };
+    expect(committedScheduleMove(incomplete)).toBeNull();
+    expect(needsAuthoritativeScheduleMoveRefresh(incomplete)).toBe(true);
   });
 
   it("requires persisted identifiers for reconciled warnings", () => {
@@ -138,6 +178,7 @@ describe("optimistic schedule placement", () => {
         intent: "place",
         skipRevalidation: true,
         placement: originalEntry,
+        session: originalSession,
         scheduleRevision: 8,
         warnings: [
           {

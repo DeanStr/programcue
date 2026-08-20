@@ -274,6 +274,8 @@ export async function action({ request, context }: Route.ActionArgs) {
           entityId: result.entryId,
           changeType: "updated",
         });
+        const skipRevalidation =
+          result.movedExistingEntry && result.session !== undefined;
         if (realtimeFailure)
           return data(
             {
@@ -283,7 +285,8 @@ export async function action({ request, context }: Route.ActionArgs) {
               warnings: result.warnings,
               scheduleRevision: result.scheduleRevision,
               placement: result.entry,
-              skipRevalidation: result.movedExistingEntry,
+              session: result.session,
+              skipRevalidation,
               undo: result.undo,
             },
             { status: 207 },
@@ -298,7 +301,8 @@ export async function action({ request, context }: Route.ActionArgs) {
           warnings: result.warnings,
           scheduleRevision: result.scheduleRevision,
           placement: result.entry,
-          skipRevalidation: result.movedExistingEntry,
+          session: result.session,
+          skipRevalidation,
           undo: result.undo,
         };
       }

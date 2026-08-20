@@ -21,6 +21,15 @@ describe("schedule planner mutation revalidation", () => {
     ).toBe(true);
   });
 
+  it("reloads a move when the server cannot provide a session projection", () => {
+    expect(
+      shouldRevalidateScheduleMutation(
+        { committed: true, intent: "place", skipRevalidation: false },
+        true,
+      ),
+    ).toBe(true);
+  });
+
   it("does not let unrelated action results suppress revalidation", () => {
     expect(
       shouldRevalidateScheduleMutation(

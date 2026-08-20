@@ -24,6 +24,7 @@ import type {
   ScheduleEventScope,
   SchedulePlacementCommand,
   SchedulePlacementResult,
+  SchedulePlacementSessionUpdate,
   SchedulePlacementWarning,
   ScheduleSession,
   ScheduleUnassignmentResult,
@@ -199,6 +200,7 @@ function parseSchedulePlacementResult(value: unknown): SchedulePlacementResult {
   const candidate = value as Record<string, unknown>;
   const undo = candidate.undo;
   const entry = candidate.entry;
+  const session = candidate.session;
   if (
     typeof candidate.entryId !== "string" ||
     candidate.entryId.length === 0 ||
@@ -215,6 +217,38 @@ function parseSchedulePlacementResult(value: unknown): SchedulePlacementResult {
     throw new Error(
       "The completed schedule placement has an invalid durable result.",
     );
+  }
+  let parsedSession: SchedulePlacementSessionUpdate | undefined;
+  if (session !== undefined) {
+    if (!session || typeof session !== "object") {
+      throw new Error(
+        "The completed schedule placement has invalid durable session data.",
+      );
+    }
+    const candidateSession = session as Record<string, unknown>;
+    if (
+      typeof candidateSession.id !== "string" ||
+      candidateSession.id.length === 0 ||
+      typeof candidateSession.durationMinutes !== "number" ||
+      !Number.isSafeInteger(candidateSession.durationMinutes) ||
+      candidateSession.durationMinutes < 5 ||
+      candidateSession.durationMinutes > 480 ||
+      typeof candidateSession.contentStatus !== "string" ||
+      !contentStatuses.has(candidateSession.contentStatus as never) ||
+      typeof candidateSession.contentRevision !== "number" ||
+      !Number.isSafeInteger(candidateSession.contentRevision) ||
+      candidateSession.contentRevision < 1 ||
+      (candidateSession.status !== "scheduled" &&
+        candidateSession.status !== "published") ||
+      typeof candidateSession.revision !== "number" ||
+      !Number.isSafeInteger(candidateSession.revision) ||
+      candidateSession.revision < 1
+    ) {
+      throw new Error(
+        "The completed schedule placement has invalid durable session data.",
+      );
+    }
+    parsedSession = candidateSession as SchedulePlacementSessionUpdate;
   }
   const parsedEntry = entry as Record<string, unknown>;
   if (
@@ -236,6 +270,16 @@ function parseSchedulePlacementResult(value: unknown): SchedulePlacementResult {
   ) {
     throw new Error(
       "The completed schedule placement has invalid durable entry data.",
+    );
+  }
+  if (
+    parsedSession &&
+    (parsedSession.id !== parsedEntry.sessionId ||
+      parsedSession.durationMinutes * 60 !==
+        (parsedEntry.endsAt as number) - (parsedEntry.startsAt as number))
+  ) {
+    throw new Error(
+      "The completed schedule placement session does not match its entry.",
     );
   }
   const parsedWarnings = candidate.warnings.map((warning) => {
@@ -285,6 +329,7 @@ function parseSchedulePlacementResult(value: unknown): SchedulePlacementResult {
   return {
     entryId: candidate.entryId,
     entry: parsedEntry as ScheduleEntrySnapshot,
+    ...(parsedSession ? { session: parsedSession } : {}),
     movedExistingEntry: candidate.movedExistingEntry,
     scheduleRevision: candidate.scheduleRevision,
     warnings: parsedWarnings,
@@ -496,9 +541,18 @@ export class SchedulePlacementWorkflow {
       endsAt: parsed.endsAt,
       revision: currentEntry ? currentEntry.revision + 1 : 1,
     };
+    const nextSession: SchedulePlacementSessionUpdate = {
+      id: session.id,
+      durationMinutes,
+      contentStatus: durationChanged ? "draft" : session.contentStatus,
+      contentRevision: session.contentRevision + (durationChanged ? 1 : 0),
+      status: session.status === "published" ? "published" : "scheduled",
+      revision: session.revision + 1,
+    };
     const result: SchedulePlacementResult = {
       entryId,
       entry: nextEntry,
+      session: nextSession,
       movedExistingEntry: currentEntry !== undefined,
       scheduleRevision: parsed.scheduleRevision + 1,
       warnings,
