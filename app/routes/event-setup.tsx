@@ -1,4 +1,5 @@
-import { data } from "react-router";
+import { useEffect, useRef, useState } from "react";
+import { data, useActionData, useNavigation } from "react-router";
 import { ZodError } from "zod";
 import { EventSetupForm } from "~/components/event-setup-form";
 import {
@@ -502,6 +503,26 @@ export async function action({ request, context }: Route.ActionArgs) {
 }
 
 export default function EventSetupRoute({ loaderData }: Route.ComponentProps) {
+  const submittedActionData = useActionData<typeof action>() as
+    | ActionResponse
+    | undefined;
+  const navigation = useNavigation();
+  const saveStartedRef = useRef(false);
+  const [actionData, setActionData] = useState<ActionResponse>();
+
+  useEffect(() => {
+    if (
+      navigation.state === "submitting" &&
+      navigation.formData?.get("_intent") === "save"
+    ) {
+      saveStartedRef.current = true;
+      return;
+    }
+    if (!saveStartedRef.current || !submittedActionData) return;
+    saveStartedRef.current = false;
+    setActionData(submittedActionData);
+  }, [navigation.formData, navigation.state, submittedActionData]);
+
   return (
     <EventSetupForm
       key={loaderData.event.revision}
@@ -512,6 +533,7 @@ export default function EventSetupRoute({ loaderData }: Route.ComponentProps) {
       canManageOrganisationAdministrators={
         loaderData.canManageOrganisationAdministrators
       }
+      actionData={actionData}
     />
   );
 }

@@ -26,17 +26,28 @@ test.afterAll(async ({ request }) => {
 });
 
 test("branding switches between editing and preview on narrow screens", async ({
+  context,
   page,
 }) => {
   await page.setViewportSize({ width: 412, height: 915 });
-  await page.goto("/admin/branding");
+  await page.goto("/admin/branding#branding-preview");
   await page.locator("body[data-hydrated='true']").waitFor();
+  await expect(
+    page.getByRole("button", { name: "Preview and publish", exact: true }),
+  ).toHaveAttribute("aria-pressed", "true");
+  await expect(page.locator(".branding-preview-stack")).toBeVisible();
+
+  await page
+    .getByRole("button", { name: "Edit branding", exact: true })
+    .click();
+  await expect.poll(() => new URL(page.url()).hash).toBe("");
   const welcome = page.getByLabel("Welcome message");
   await welcome.fill("Unsaved mobile preview copy");
 
   await page
     .getByRole("button", { name: "Preview and publish", exact: true })
     .click();
+  await expect.poll(() => new URL(page.url()).hash).toBe("#branding-preview");
   await expect(page.locator(".branding-preview-stack")).toBeVisible();
   await expect(page.locator(".branding-editor-stack")).toBeHidden();
 
@@ -45,6 +56,24 @@ test("branding switches between editing and preview on narrow screens", async ({
     .click();
   await expect(page.locator(".branding-editor-stack")).toBeVisible();
   await expect(welcome).toHaveValue("Unsaved mobile preview copy");
+
+  await page
+    .getByRole("button", { name: "Preview and publish", exact: true })
+    .click();
+  await context.grantPermissions(["clipboard-read", "clipboard-write"]);
+  await page
+    .getByRole("button", { name: "Copy a deep link to this page" })
+    .click();
+  await expect
+    .poll(() => page.evaluate(() => navigator.clipboard.readText()))
+    .toBe(`${new URL(page.url()).origin}/admin/branding#branding-preview`);
+
+  await page.reload();
+  await page.locator("body[data-hydrated='true']").waitFor();
+  await expect(
+    page.getByRole("button", { name: "Preview and publish", exact: true }),
+  ).toHaveAttribute("aria-pressed", "true");
+  await expect(page.locator(".branding-preview-stack")).toBeVisible();
 });
 
 test("branding draft previews and publishes across participant-facing surfaces", async ({

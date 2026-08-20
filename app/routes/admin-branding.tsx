@@ -17,6 +17,8 @@ import {
   data,
   Form,
   useActionData,
+  useLocation,
+  useNavigate,
   useNavigation,
   useSubmit,
 } from "react-router";
@@ -63,6 +65,21 @@ const BRANDING_WORKSPACE_PANELS = [
   { id: "edit", label: "Edit branding" },
   { id: "preview", label: "Preview and publish" },
 ] as const;
+
+type BrandingWorkspacePanel = (typeof BRANDING_WORKSPACE_PANELS)[number]["id"];
+
+const BRANDING_WORKSPACE_HASHES: Record<BrandingWorkspacePanel, string> = {
+  edit: "",
+  preview: "#branding-preview",
+};
+
+function brandingWorkspacePanelForHash(
+  hash: string,
+): BrandingWorkspacePanel | null {
+  if (hash === "") return "edit";
+  if (hash === BRANDING_WORKSPACE_HASHES.preview) return "preview";
+  return null;
+}
 
 export async function loader({ request, context }: Route.LoaderArgs) {
   const { env } = getCloudflareContext(context);
@@ -502,6 +519,8 @@ function AssetUpload({
 }
 
 export default function AdminBranding({ loaderData }: Route.ComponentProps) {
+  const location = useLocation();
+  const navigate = useNavigate();
   const actionData = useActionData<typeof action>() as
     | BrandingActionResponse
     | undefined;
@@ -515,9 +534,8 @@ export default function AdminBranding({ loaderData }: Route.ComponentProps) {
   const [logoAssetId, setLogoAssetId] = useState(draft.logoAssetId ?? "");
   const [bannerAssetId, setBannerAssetId] = useState(draft.bannerAssetId ?? "");
   const [mobilePreview, setMobilePreview] = useState(false);
-  const [workspacePanel, setWorkspacePanel] = useState<"edit" | "preview">(
-    "edit",
-  );
+  const [workspacePanel, setWorkspacePanel] =
+    useState<BrandingWorkspacePanel>("edit");
   // biome-ignore lint/correctness/useExhaustiveDependencies: Event identity and persisted revision deliberately reset local branding edits even when the saved field values match.
   useEffect(() => {
     setAccent(draft.accent);
@@ -548,6 +566,23 @@ export default function AdminBranding({ loaderData }: Route.ComponentProps) {
     logoAssetId === draft.logoAssetId ? (draft.logo?.url ?? null) : null;
   const bannerUrl =
     bannerAssetId === draft.bannerAssetId ? (draft.banner?.url ?? null) : null;
+
+  useEffect(() => {
+    const panel = brandingWorkspacePanelForHash(location.hash);
+    if (panel) setWorkspacePanel(panel);
+  }, [location.hash]);
+
+  function showWorkspacePanel(panel: BrandingWorkspacePanel) {
+    setWorkspacePanel(panel);
+    void navigate(
+      {
+        pathname: location.pathname,
+        search: location.search,
+        hash: BRANDING_WORKSPACE_HASHES[panel],
+      },
+      { replace: true, preventScrollReset: true },
+    );
+  }
 
   function publish() {
     confirm(
@@ -597,12 +632,12 @@ export default function AdminBranding({ loaderData }: Route.ComponentProps) {
         </div>
       ) : null}
 
-      <AdminWorkspaceTabs<"edit" | "preview">
+      <AdminWorkspaceTabs<BrandingWorkspacePanel>
         className="branding-mobile-surfaces"
         label="Branding workspace view"
         panels={BRANDING_WORKSPACE_PANELS}
         activePanel={workspacePanel}
-        onChange={setWorkspacePanel}
+        onChange={showWorkspacePanel}
       />
 
       <div className={`branding-workspace is-${workspacePanel}`}>
@@ -733,7 +768,7 @@ export default function AdminBranding({ loaderData }: Route.ComponentProps) {
           </section>
         </div>
 
-        <div className="branding-preview-stack">
+        <div className="branding-preview-stack" id="branding-preview">
           <BrandingPreview
             eventName={loaderData.event.name}
             accent={accent}

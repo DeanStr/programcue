@@ -3,7 +3,6 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Form,
   Link,
-  useActionData,
   useBeforeUnload,
   useBlocker,
   useFetcher,
@@ -601,26 +600,16 @@ export function EventSetupForm({
   focusedRecord,
   canManageFileRetention,
   canManageOrganisationAdministrators,
+  actionData,
 }: {
   event: EventSetup;
   incompleteEvents: IncompleteEventSummary[];
   focusedRecord: { kind: "room" | "track"; id: string } | null;
   canManageFileRetention: boolean;
   canManageOrganisationAdministrators: boolean;
+  actionData: ActionResponse | undefined;
 }) {
   const location = useLocation();
-  const submittedActionData = useActionData<typeof action>() as
-    | ActionResponse
-    | undefined;
-  const actionScope = `${location.pathname}${location.search}`;
-  const retainedAction = (
-    location.state as {
-      eventSetupAction?: { scope: string; data: ActionResponse };
-    } | null
-  )?.eventSetupAction;
-  const actionData =
-    submittedActionData ??
-    (retainedAction?.scope === actionScope ? retainedAction.data : undefined);
   const inviteFetcher = useFetcher<typeof action>();
   const repositoryFetcher = useFetcher<typeof action>();
   const roomFetcher = useFetcher<typeof action>();
@@ -657,34 +646,18 @@ export function EventSetupForm({
     navigation.state === "submitting" &&
     navigation.formData?.get("_intent") === "save";
   const showPanel = useCallback(
-    (panel: EventSetupPanel, actionToRetain?: ActionResponse) => {
+    (panel: EventSetupPanel) => {
       setActivePanel(panel);
-      const currentState =
-        location.state && typeof location.state === "object"
-          ? location.state
-          : {};
       void navigate(
         {
           pathname: location.pathname,
           search: location.search,
           hash: `#event-setup-${panel}`,
         },
-        {
-          replace: true,
-          preventScrollReset: true,
-          state: actionToRetain
-            ? {
-                ...currentState,
-                eventSetupAction: {
-                  scope: actionScope,
-                  data: actionToRetain,
-                },
-              }
-            : location.state,
-        },
+        { replace: true, preventScrollReset: true },
       );
     },
-    [actionScope, location.pathname, location.search, location.state, navigate],
+    [location.pathname, location.search, navigate],
   );
 
   // Invitation fetchers revalidate this route without changing the persisted
@@ -708,47 +681,9 @@ export function EventSetupForm({
     });
   }, [focusedRecordId, focusedRecordKind]);
   useEffect(() => {
-    if (!submittedActionData) return;
-    const panel = eventSetupPanelForErrors(submittedActionData?.errors);
-    if (panel) {
-      showPanel(panel, submittedActionData);
-      return;
-    }
-    const currentState =
-      location.state && typeof location.state === "object"
-        ? ({ ...location.state } as Record<string, unknown>)
-        : {};
-    if (submittedActionData.ok) delete currentState.eventSetupAction;
-    void navigate(
-      {
-        pathname: location.pathname,
-        search: location.search,
-        hash: `#event-setup-${activePanel}`,
-      },
-      {
-        replace: true,
-        preventScrollReset: true,
-        state: submittedActionData.ok
-          ? currentState
-          : {
-              ...currentState,
-              eventSetupAction: {
-                scope: actionScope,
-                data: submittedActionData,
-              },
-            },
-      },
-    );
-  }, [
-    actionScope,
-    activePanel,
-    location.pathname,
-    location.search,
-    location.state,
-    navigate,
-    showPanel,
-    submittedActionData,
-  ]);
+    const panel = eventSetupPanelForErrors(actionData?.errors);
+    if (panel) showPanel(panel);
+  }, [actionData, showPanel]);
   useEffect(() => {
     if (!location.hash) {
       setActivePanel(focusedRecordId ? "structure" : "identity");
@@ -937,10 +872,16 @@ export function EventSetupForm({
 
   function clearRemovedRecordFocus(kind: "room" | "track", id: string) {
     if (focusedRecordKind !== kind || focusedRecordId !== id) return;
-    void navigate("/admin/event", {
-      replace: true,
-      preventScrollReset: true,
-    });
+    void navigate(
+      {
+        pathname: location.pathname,
+        hash: "#event-setup-structure",
+      },
+      {
+        replace: true,
+        preventScrollReset: true,
+      },
+    );
   }
 
   function revealFirstInvalidField(form: HTMLFormElement) {
@@ -1019,8 +960,9 @@ export function EventSetupForm({
           if (
             pendingRecordDraftPresent ||
             revealFirstInvalidField(submitEvent.currentTarget)
-          )
+          ) {
             submitEvent.preventDefault();
+          }
         }}
       >
         <input type="hidden" name="_intent" value="save" />

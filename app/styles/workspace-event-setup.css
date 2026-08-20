@@ -323,9 +323,23 @@
   flex: 0 0 auto;
 }
 
-@media (max-width: 760px) {
+@media (max-width: 900px) {
   .event-setup-workspace-toolbar {
     position: static;
+  }
+
+  .event-setup-page > [data-event-setup-panel] > .pc-admin-page-section,
+  .event-setup-page :is(button, input, select, textarea, summary) {
+    scroll-margin-block-start: calc(
+      var(--eval-banner-offset, 0px) +
+      var(--topbar) +
+      var(--space-4)
+    );
+  }
+}
+
+@media (max-width: 760px) {
+  .event-setup-workspace-toolbar {
     align-items: stretch;
     flex-direction: column;
   }
@@ -342,15 +356,6 @@
 
   .event-setup-page .pc-admin-section-toggle {
     display: none;
-  }
-
-  .event-setup-page > [data-event-setup-panel] > .pc-admin-page-section,
-  .event-setup-page :is(button, input, select, textarea, summary) {
-    scroll-margin-block-start: calc(
-      var(--eval-banner-offset, 0px) +
-      var(--topbar) +
-      var(--space-4)
-    );
   }
 
   .event-setup-actions {

@@ -156,7 +156,7 @@ test("Event Setup error-summary links reveal their hidden panel", async ({
     .toBe("#event-setup-identity");
 });
 
-test("a successful Event Setup save clears retained validation errors", async ({
+test("Event Setup shows only the latest response across panel changes", async ({
   page,
 }) => {
   await page.goto("/admin/event");
@@ -172,21 +172,57 @@ test("a successful Event Setup save clears retained validation errors", async ({
   });
   await expect(retainedError).toBeVisible();
 
+  await page.reload();
+  await page.locator("body[data-hydrated='true']").waitFor();
+  await expect(eventName).toHaveValue(originalName);
+  await expect(retainedError).toHaveCount(0);
+
+  await eventName.fill("   ");
+  await showEventSettingsPanel(page, "Structure");
+  await page.getByRole("button", { name: "Save event" }).click();
+  await expect(retainedError).toBeVisible();
+
   await eventName.fill(originalName);
   await page.getByRole("button", { name: "Save event" }).click();
-  await expect(
-    page.getByText("Event settings saved.", { exact: true }),
-  ).toBeVisible();
+  const savedMessage = page.getByText("Event settings saved.", { exact: true });
+  await expect(savedMessage).toBeVisible();
   await expect(retainedError).toHaveCount(0);
 
   await showEventSettingsPanel(page, "Data");
+  await expect(savedMessage).toBeVisible();
   await expect(retainedError).toHaveCount(0);
   await page.reload();
   await page.locator("body[data-hydrated='true']").waitFor();
+  await expect(savedMessage).toHaveCount(0);
   await expect(retainedError).toHaveCount(0);
 });
 
-test("a non-validation save failure replaces retained validation errors", async ({
+test("Event Setup clears validation after leaving the route", async ({
+  page,
+}) => {
+  await page.goto("/admin/event");
+  await page.locator("body[data-hydrated='true']").waitFor();
+  const eventName = page.getByLabel("Event name");
+  const originalName = await eventName.inputValue();
+  await eventName.fill("   ");
+  await page.getByRole("button", { name: "Save event" }).click();
+
+  const retainedError = page.getByRole("link", {
+    name: "Event name is required.",
+  });
+  await expect(retainedError).toBeVisible();
+  await page.getByRole("link", { name: "Applications", exact: true }).click();
+  const warning = page.getByRole("dialog", { name: "Leave without saving?" });
+  await warning.getByRole("button", { name: "Leave and discard" }).click();
+  await expect(page).toHaveURL(/\/admin\/submissions/);
+
+  await page.goBack();
+  await page.locator("body[data-hydrated='true']").waitFor();
+  await expect(eventName).toHaveValue(originalName);
+  await expect(retainedError).toHaveCount(0);
+});
+
+test("a non-validation save failure replaces earlier validation errors", async ({
   context,
   page,
 }) => {
@@ -277,27 +313,48 @@ test("Event Setup sticky controls account for the evaluation banner", async ({
 });
 
 test("Event Setup panel links clear the sticky toolbar", async ({ page }) => {
-  await page.setViewportSize({ width: 1280, height: 720 });
+  for (const width of [1280, 780]) {
+    await page.setViewportSize({ width, height: 720 });
+    for (const panel of ["identity", "access"] as const) {
+      await page.goto(`/admin/event#event-setup-${panel}`);
+      await page.locator("body[data-hydrated='true']").waitFor();
+      const heading = page.locator(`#event-setup-${panel}-title`);
+      const toolbar = page.locator(".event-setup-workspace-toolbar");
 
-  for (const panel of ["identity", "access"] as const) {
-    await page.goto(`/admin/event#event-setup-${panel}`);
-    await page.locator("body[data-hydrated='true']").waitFor();
-    const heading = page.locator(`#event-setup-${panel}-title`);
-    const toolbar = page.locator(".event-setup-workspace-toolbar");
-
-    await expect(heading).toBeVisible();
-    await expect
-      .poll(async () => {
-        const headingBox = await heading.boundingBox();
-        const toolbarBox = await toolbar.boundingBox();
-        return Boolean(
-          headingBox &&
-            toolbarBox &&
-            headingBox.y >= toolbarBox.y + toolbarBox.height,
-        );
-      })
-      .toBe(true);
+      await expect(heading).toBeVisible();
+      await expect
+        .poll(async () => {
+          const headingBox = await heading.boundingBox();
+          const toolbarBox = await toolbar.boundingBox();
+          return Boolean(
+            headingBox &&
+              toolbarBox &&
+              headingBox.y >= toolbarBox.y + toolbarBox.height,
+          );
+        })
+        .toBe(true);
+    }
   }
+
+  await page.setViewportSize({ width: 861, height: 720 });
+  await page.goto("/admin/event#event-setup-identity");
+  await page.locator("body[data-hydrated='true']").waitFor();
+  const venue = page.getByLabel("Venue", { exact: true });
+  await venue.fill(`${await venue.inputValue()} unsaved`);
+  await showEventSettingsPanel(page, "Access");
+  const heading = page.locator("#event-setup-access-title");
+  const toolbar = page.locator(".event-setup-workspace-toolbar");
+  await expect
+    .poll(async () => {
+      const headingBox = await heading.boundingBox();
+      const toolbarBox = await toolbar.boundingBox();
+      return Boolean(
+        headingBox &&
+          toolbarBox &&
+          headingBox.y >= toolbarBox.y + toolbarBox.height,
+      );
+    })
+    .toBe(true);
 });
 
 test("Event Setup panel navigation stays synchronized with the admin shell", async ({
@@ -576,7 +633,11 @@ test("tracks added by keyboard and button survive reload and reach the schedule 
   await page.goto(`/admin/event?track=${encodeURIComponent(trackId)}`);
   await expect(page.locator(`#${panelId}`)).toBeFocused();
   await page.getByRole("button", { name: `Remove ${keyboardTrack}` }).click();
-  await expect(page).toHaveURL(/\/admin\/event$/);
+  await expect(page).toHaveURL(/\/admin\/event#event-setup-structure$/);
+  await expect(
+    page.getByRole("button", { name: "Structure", exact: true }),
+  ).toHaveAttribute("aria-pressed", "true");
+  await expect(page.locator(`#${panelId}`)).toHaveCount(0);
   await page.getByRole("button", { name: "Save event" }).click();
   await expect(
     page.getByText("Event settings saved.", { exact: true }),
