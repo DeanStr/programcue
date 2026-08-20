@@ -828,7 +828,7 @@ export function DecisionDialog() {
                 setNoReviewOverrideConfirmed(event.currentTarget.checked)
               }
             />
-            <span>
+            <span className="pc-validation-item-copy">
               <strong>Confirm review-evidence override</strong>
               <span>
                 No completed review is linked. Releasing now will be audited

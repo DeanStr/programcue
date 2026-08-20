@@ -336,12 +336,12 @@
   border-radius: var(--radius-xs);
   font-size: var(--text-2xs);
 }
-.validation-item > span {
+.validation-item > .pc-validation-item-copy {
   display: grid;
   gap: 2px;
   min-width: 0;
 }
-.validation-item > span > strong {
+.validation-item > .pc-validation-item-copy > strong {
   display: block;
 }
 .validation-item.error {

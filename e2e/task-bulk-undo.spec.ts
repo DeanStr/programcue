@@ -161,10 +161,43 @@ test("task status bulk actions require an exact preview and can be cancelled", a
 test("a speaker can undo a reversible task completion from its status notice", async ({
   page,
 }) => {
+  await selectAdministrator(page);
+  await waitForInterface(page, "/admin/tasks");
+  await page.getByText("Create a template", { exact: true }).click();
+  const creation = page.getByRole("region", {
+    name: "Create task template",
+  });
+  await creation.getByLabel("Name").fill("Confirm arrival details");
+  await creation
+    .getByLabel("Description")
+    .fill("Confirm the final arrival arrangements.");
+  await creation.locator('select[name="taskType"]').selectOption("checklist");
+  await creation.getByRole("button", { name: "Create template" }).click();
+  await expect(page.locator(".pc-status-notice[role='status']")).toContainText(
+    "Task template created",
+  );
+
+  await page.getByText("Plan and onboarding", { exact: true }).click();
+  const assignment = page.locator("section.tasks-plan-block").filter({
+    has: page.getByRole("heading", { name: "Assign a plan" }),
+  });
+  await assignment.locator('select[name="templateId"]').selectOption({
+    label: "Confirm arrival details",
+  });
+  await assignment.locator('select[name="targetId"]').selectOption({
+    label: "Priya Shah · priya.speaker@example.com",
+  });
+  await assignment
+    .getByRole("button", { name: "Assign with prerequisites" })
+    .click();
+  await expect(page.locator(".pc-status-notice[role='status']")).toContainText(
+    "Task plan assigned",
+  );
+
   await selectSpeaker(page);
   await waitForInterface(page, "/participant/tasks");
   const task = page.locator("article.speaker-task").filter({
-    hasText: "Read the speaker handbook",
+    hasText: "Confirm arrival details",
   });
   await task.getByRole("checkbox").check();
   await task.getByRole("button", { name: "Complete task" }).click();
