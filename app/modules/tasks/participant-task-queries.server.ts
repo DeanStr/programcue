@@ -5,6 +5,7 @@ import {
   type TaskRow,
   taskConfiguration,
   taskDestinationUrl,
+  taskResourcePageId,
 } from "./task-service-foundation.server";
 
 export class ParticipantTaskQueries extends ParticipantTaskWorkflowFoundation {
@@ -94,6 +95,10 @@ export class ParticipantTaskQueries extends ParticipantTaskWorkflowFoundation {
       fileScope:
         task.taskType === "file_upload"
           ? (taskConfiguration(task.configurationJson).fileScope ?? null)
+          : null,
+      resourcePageId:
+        task.taskType === "acknowledgement"
+          ? taskResourcePageId(task.configurationJson)
           : null,
       dependencies: dependencies.results.filter(
         (dependency) => dependency.taskId === task.id,

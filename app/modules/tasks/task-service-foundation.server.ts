@@ -226,6 +226,10 @@ export function taskDestinationUrl(configurationJson: string) {
   return destinationUrl;
 }
 
+export function taskResourcePageId(configurationJson: string) {
+  return taskConfiguration(configurationJson).resourcePageId ?? null;
+}
+
 export function structuredTaskEvidence(
   configurationJson: string,
   responses: Record<string, string | boolean>,

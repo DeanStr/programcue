@@ -93,32 +93,24 @@ export const EVALUATION_IDENTITIES = {
 
 export type EvaluationIdentityKey = keyof typeof EVALUATION_IDENTITIES;
 
+const EVALUATION_WORKSPACE_RECOVERY_LABEL = {
+  owner: "Back to Data retention",
+  organizer: "Go to Command Centre",
+  chair: "Back to Review & selection",
+  reviewer: "Back to review workbench",
+  sbek_reviewer: "Back to event access",
+  applicant: "Go to participant workspace",
+  speaker: "Go to participant workspace",
+  sbek_applicant: "Back to the application",
+} as const satisfies Record<EvaluationIdentityKey, string>;
+
 export function evaluationWorkspaceRecovery(
   identityKey: EvaluationIdentityKey,
 ) {
-  switch (identityKey) {
-    case "owner":
-      return {
-        href: "/admin/files/retention",
-        label: "Back to Data retention",
-      };
-    case "organizer":
-      return { href: "/admin/command", label: "Go to Command Centre" };
-    case "chair":
-      return { href: "/admin/review", label: "Back to Review & selection" };
-    case "reviewer":
-      return { href: "/review/workbench", label: "Back to review workbench" };
-    case "sbek_reviewer":
-      return { href: "/events/select", label: "Back to event access" };
-    case "applicant":
-    case "speaker":
-      return {
-        href: "/participant/dashboard",
-        label: "Go to participant workspace",
-      };
-    case "sbek_applicant":
-      return { href: "/apply/form", label: "Back to the application" };
-  }
+  return {
+    href: EVALUATION_IDENTITIES[identityKey].destination,
+    label: EVALUATION_WORKSPACE_RECOVERY_LABEL[identityKey],
+  };
 }
 
 export type EvaluationSessionPayload = {

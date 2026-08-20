@@ -40,9 +40,7 @@ describe("speaker next-action hero", () => {
         title: "Something else entirely",
         description: "Acknowledge the current handbook.",
         status: "not_started",
-        configurationJson: JSON.stringify({
-          resourcePageId: "resource-speaker-handbook",
-        }),
+        resourcePageId: "resource-speaker-handbook",
       } as never,
       handbook,
     );
@@ -57,7 +55,7 @@ describe("speaker next-action hero", () => {
         title: "Read the speaker handbook slides",
         description: "Attach the deck.",
         status: "not_started",
-        configurationJson: "{}",
+        resourcePageId: null,
       } as never,
       handbook,
     );
@@ -72,9 +70,7 @@ describe("speaker next-action hero", () => {
         title: "Read the speaker handbook",
         description: "Acknowledge a different page.",
         status: "not_started",
-        configurationJson: JSON.stringify({
-          resourcePageId: "resource-other-handbook",
-        }),
+        resourcePageId: "resource-other-handbook",
       } as never,
       handbook,
     );

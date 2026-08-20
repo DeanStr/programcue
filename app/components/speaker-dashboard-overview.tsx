@@ -107,25 +107,6 @@ export type SpeakerOutstandingResource = {
   href: string;
 };
 
-function taskResourcePageId(task: SpeakerTask) {
-  try {
-    const parsed: unknown = JSON.parse(task.configurationJson);
-    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
-      return null;
-    }
-    if (
-      !("resourcePageId" in parsed) ||
-      typeof parsed.resourcePageId !== "string"
-    ) {
-      return null;
-    }
-    const resourcePageId = parsed.resourcePageId.trim();
-    return resourcePageId || null;
-  } catch {
-    return null;
-  }
-}
-
 export function speakerHeroActions(
   next: SpeakerTask | undefined,
   outstandingResource: SpeakerOutstandingResource | null,
@@ -133,7 +114,7 @@ export function speakerHeroActions(
   const resourceMatchesNext = Boolean(
     next &&
       outstandingResource &&
-      taskResourcePageId(next) === outstandingResource.id,
+      next.resourcePageId === outstandingResource.id,
   );
   const resourceAction =
     outstandingResource && (!next || resourceMatchesNext)

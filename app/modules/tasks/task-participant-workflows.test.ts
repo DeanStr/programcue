@@ -9,7 +9,10 @@ import { FileService } from "~/modules/files/file-service.server";
 import { ensureDemoSpeakerData } from "~/modules/speakers/demo.server";
 import type { Viewer } from "~/platform/auth/authorize.server";
 import { TaskService } from "./task-service.server";
-import { taskDestinationUrl } from "./task-service-foundation.server";
+import {
+  taskDestinationUrl,
+  taskResourcePageId,
+} from "./task-service-foundation.server";
 
 const admin: Viewer = {
   personId: "person-demo-admin",
@@ -505,6 +508,22 @@ describe("onboarding task service", () => {
       expect(() => taskDestinationUrl("{}")).toThrow(
         "This link task has no destination",
       );
+    });
+
+    it("returns resource page ids on acknowledgement tasks", async () => {
+      const testEnv = env as unknown as CloudflareEnvironment;
+      await ensureDemoSpeakerData(testEnv);
+      expect(taskResourcePageId("{}")).toBeNull();
+      expect(
+        taskResourcePageId('{"resourcePageId":"resource-speaker-handbook"}'),
+      ).toBe("resource-speaker-handbook");
+      const handbook = (
+        await new TaskService(testEnv).listParticipantTasks(speaker)
+      ).find((task) => task.id === "task-demo-handbook");
+      expect(handbook).toMatchObject({
+        taskType: "acknowledgement",
+        resourcePageId: "resource-speaker-handbook",
+      });
     });
   });
 

@@ -5,7 +5,9 @@ import { ensureDemoData } from "~/platform/demo/seed.server";
 
 import {
   activateEvaluationApplicantAccount,
+  EVALUATION_IDENTITIES,
   EVALUATION_SESSION_COOKIE,
+  type EvaluationIdentityKey,
   evaluationAccessCodeMatches,
   evaluationPersonForSession,
   evaluationSessionCookie,
@@ -68,6 +70,16 @@ describe("evaluation workspace recovery", () => {
       href: "/review/workbench",
       label: "Back to review workbench",
     });
+  });
+
+  it("uses each persona destination as the recovery href", () => {
+    for (const identityKey of Object.keys(
+      EVALUATION_IDENTITIES,
+    ) as EvaluationIdentityKey[]) {
+      expect(evaluationWorkspaceRecovery(identityKey).href).toBe(
+        EVALUATION_IDENTITIES[identityKey].destination,
+      );
+    }
   });
 });
 
