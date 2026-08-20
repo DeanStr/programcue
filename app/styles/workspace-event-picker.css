@@ -1,0 +1,85 @@
+/*
+ * Operator surface layout. Type does the hierarchy. Cards earn their chrome.
+ * Comparable rows are lists. One primary action per region.
+ */
+
+/* --- Event picker --------------------------------------------------------
+   One panel. Comparable workspaces are rows, not stacked cards. */
+
+.pc-event-select {
+  display: grid;
+  place-items: start center;
+  min-height: 100dvh;
+  padding: var(--space-8) var(--space-5);
+  background: var(--canvas);
+}
+
+.pc-event-select-panel {
+  width: min(40rem, 100%);
+}
+
+.pc-event-select-head {
+  display: grid;
+  gap: var(--space-2);
+  margin-bottom: var(--space-5);
+}
+
+.pc-event-select-head h1 {
+  margin: 0;
+  font-size: var(--text-xl);
+  font-weight: var(--weight-semibold);
+  letter-spacing: var(--tracking-tight);
+}
+
+.pc-event-select-head p {
+  margin: 0;
+  max-width: 54ch;
+  color: var(--text-tertiary);
+  font-size: var(--text-sm);
+  line-height: var(--leading-snug);
+}
+
+.pc-event-select-list {
+  display: grid;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  border-top: 1px solid var(--line);
+}
+
+.pc-event-select-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: var(--space-3) var(--space-4);
+  align-items: center;
+  padding: var(--space-3) 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.pc-event-select-row strong {
+  display: block;
+  font-size: var(--text-sm);
+  font-weight: var(--weight-semibold);
+}
+
+.pc-event-select-row p {
+  margin: 2px 0 0;
+  color: var(--text-tertiary);
+  font-size: var(--text-xs);
+}
+
+.pc-event-select-empty {
+  padding: var(--space-4) 0;
+  color: var(--text-secondary);
+  font-size: var(--text-sm);
+}
+
+@media (max-width: 560px) {
+  .pc-event-select {
+    padding: var(--space-5) var(--space-4);
+  }
+
+  .pc-event-select-row {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}

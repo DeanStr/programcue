@@ -1,0 +1,21 @@
+/*
+ * Operator surface layout. Type does the hierarchy. Cards earn their chrome.
+ * Comparable rows are lists. One primary action per region.
+ */
+
+/* --- Event create / clone ------------------------------------------------
+   Linear settings form. Clone reuses the create language so the two pages
+   are one family. */
+
+.pc-event-create {
+  display: grid;
+  gap: var(--space-5);
+}
+
+.pc-event-create > .pc-page-header {
+  margin-bottom: 0;
+}
+
+.pc-event-create .event-setup-create-aside {
+  padding-top: var(--space-1);
+}

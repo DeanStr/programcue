@@ -1,7 +1,8 @@
 import { AirtableProviderBoundary } from "~/modules/airtable/airtable-provider-boundary.server";
 import { ParticipantTaskWorkflows } from "./participant-task-workflows.server";
 import { TaskAdministrationWorkflows } from "./task-administration-workflows.server";
-import { TaskTemplateWorkflows } from "./task-template-workflows.server";
+import type { TaskTemplateWorkflows } from "./task-template-workflows.server";
+import { TaskTravelOnboardingWorkflows } from "./task-travel-onboarding-workflows.server";
 
 export {
   fixedDateEndEpoch,
@@ -13,7 +14,7 @@ export {
 
 /** Stable task-domain façade over independent template, participant and admin workflows. */
 export class TaskService {
-  private readonly templates: TaskTemplateWorkflows;
+  private readonly templates: TaskTravelOnboardingWorkflows;
   private readonly participants: ParticipantTaskWorkflows;
   private readonly administration: TaskAdministrationWorkflows;
 
@@ -23,7 +24,7 @@ export class TaskService {
   ) {
     const airtable = dependencies.airtable ?? new AirtableProviderBoundary(env);
     const collaborators = { airtable };
-    this.templates = new TaskTemplateWorkflows(env, collaborators);
+    this.templates = new TaskTravelOnboardingWorkflows(env, collaborators);
     this.participants = new ParticipantTaskWorkflows(env, collaborators);
     this.administration = new TaskAdministrationWorkflows(env, collaborators);
   }
@@ -34,7 +35,7 @@ export class TaskService {
 
   createTravelOnboardingTemplates(
     ...args: Parameters<
-      TaskTemplateWorkflows["createTravelOnboardingTemplates"]
+      TaskTravelOnboardingWorkflows["createTravelOnboardingTemplates"]
     >
   ) {
     return this.templates.createTravelOnboardingTemplates(...args);

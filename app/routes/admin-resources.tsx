@@ -17,7 +17,7 @@ import { ensureDemoSpeakerData } from "~/modules/speakers/demo.server";
 import { requireCurrentEventRole } from "~/platform/auth/current-event.server";
 import { getCloudflareContext } from "~/platform/cloudflare-context";
 import { recordRouteChange } from "~/platform/realtime/route-realtime.server";
-import "~/styles/workspace-remaining.css";
+import "~/styles/workspace-resource-library.css";
 import type { Route } from "./+types/admin-resources";
 
 export const meta = () => [{ title: "Speaker Resources · Program Cue" }];

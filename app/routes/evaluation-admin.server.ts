@@ -2,14 +2,14 @@ import type { LoaderFunctionArgs } from "react-router";
 import { AiReviewAssessmentService } from "~/modules/ai/ai-review-assessment.server";
 import { ReviewerAiSuggestionService } from "~/modules/ai/reviewer-ai-suggestion.server";
 import { ensureDemoEvaluationData } from "~/modules/evaluations/demo.server";
+import { buildEvaluationAdminResultsModel } from "~/modules/evaluations/evaluation-admin-results-model.server";
 import { EvaluationService } from "~/modules/evaluations/evaluation-service.server";
 import { EventService } from "~/modules/events/event-service.server";
 import { requireCurrentEventRole } from "~/platform/auth/current-event.server";
 import { getCloudflareContext } from "~/platform/cloudflare-context";
 import { canReleaseEvaluationDecisions } from "./evaluation-admin-outcomes";
-import { buildEvaluationAdminResultsModel } from "./evaluation-admin-results.server";
 
-export { parseHistoricalReviewRevision } from "./evaluation-admin-results.server";
+export { parseHistoricalReviewRevision } from "~/modules/evaluations/evaluation-admin-results-model.server";
 
 export async function loader({ request, context }: LoaderFunctionArgs) {
   const { env } = getCloudflareContext(context);

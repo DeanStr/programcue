@@ -54,7 +54,7 @@ import {
   resetDemoEvent,
 } from "~/platform/demo/demo-reset.server";
 import { EventRealtimeService } from "~/platform/realtime/event-realtime.server";
-import "~/styles/workspace-remaining.css";
+import "~/styles/workspace-demo.css";
 import type { Route } from "./+types/demo-guide";
 
 type DemoWalkthroughStep = {

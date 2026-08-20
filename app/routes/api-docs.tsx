@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router";
 import { getCloudflareContext } from "~/platform/cloudflare-context";
-import "~/styles/workspace-remaining.css";
+import "~/styles/workspace-api-docs.css";
 import ApiReferenceClient from "../components/api-reference.client";
 import type { Route } from "./+types/api-docs";
 import { apiReferenceBackLink } from "./api-docs-navigation.server";

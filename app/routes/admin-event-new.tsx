@@ -21,7 +21,7 @@ import {
 import { EventRepositoryProvisioningError } from "~/modules/events/event-repository-provisioning.server";
 import { requireCurrentEventRole } from "~/platform/auth/current-event.server";
 import { getCloudflareContext } from "~/platform/cloudflare-context";
-import "~/styles/workspace-remaining.css";
+import "~/styles/workspace-event-create.css";
 import type { Route } from "./+types/admin-event-new";
 
 type ActionResponse = {

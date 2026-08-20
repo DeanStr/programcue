@@ -1,17 +1,17 @@
 import { z } from "zod";
 import { requireValue } from "~/lib/required-value";
 import type { AiReviewAssessment } from "~/modules/ai/ai-review-assessment.server";
-import { parseRecommendationChoicesJson } from "~/modules/evaluations/evaluation-recommendation-choices";
+import type { requireCurrentEventRole } from "~/platform/auth/current-event.server";
+import { parseRecommendationChoicesJson } from "./evaluation-recommendation-choices";
 import {
   createEvaluationRecommendationCounts,
   EVALUATION_RESULT_PRESETS,
   type EvaluationResultPreset,
   evaluationResultFlags,
   matchesEvaluationResultPreset,
-} from "~/modules/evaluations/evaluation-result-workbench";
-import { decisionDraftEffectPreviewSchema } from "~/modules/evaluations/evaluation-schema";
-import type { EvaluationService } from "~/modules/evaluations/evaluation-service.server";
-import type { requireCurrentEventRole } from "~/platform/auth/current-event.server";
+} from "./evaluation-result-workbench";
+import { decisionDraftEffectPreviewSchema } from "./evaluation-schema";
+import type { EvaluationService } from "./evaluation-service.server";
 
 const historicalEvidenceIdSchema = z
   .string()

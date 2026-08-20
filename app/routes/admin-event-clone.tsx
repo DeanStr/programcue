@@ -21,7 +21,7 @@ import {
   EventCloneService,
   EventCloneSlugConflictError,
 } from "~/platform/operations/event-clone-service.server";
-import "~/styles/workspace-remaining.css";
+import "~/styles/workspace-event-create.css";
 import type { Route } from "./+types/admin-event-clone";
 
 async function administrator(

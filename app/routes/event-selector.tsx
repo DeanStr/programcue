@@ -16,7 +16,7 @@ import {
 } from "~/platform/auth/current-event.server";
 import { safeReturnTo } from "~/platform/auth/return-to";
 import { getCloudflareContext } from "~/platform/cloudflare-context";
-import "~/styles/workspace-remaining.css";
+import "~/styles/workspace-event-picker.css";
 import type { Route } from "./+types/event-selector";
 
 const selectionSchema = z.object({

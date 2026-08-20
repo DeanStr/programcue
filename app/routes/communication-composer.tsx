@@ -37,7 +37,7 @@ import { RecipientLimitError } from "~/modules/communications/recipient-query.se
 import { EventService } from "~/modules/events/event-service.server";
 import { requireCurrentEventRole } from "~/platform/auth/current-event.server";
 import { getCloudflareContext } from "~/platform/cloudflare-context";
-import "~/styles/workspace-remaining.css";
+import "~/styles/workspace-communication-composer.css";
 import type { Route } from "./+types/communication-composer";
 
 export const meta = () => [{ title: "Compose Communication · Program Cue" }];

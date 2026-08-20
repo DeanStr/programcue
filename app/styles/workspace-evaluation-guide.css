@@ -1,0 +1,16 @@
+/*
+ * Operator surface layout. Type does the hierarchy. Cards earn their chrome.
+ * Comparable rows are lists. One primary action per region.
+ */
+
+/* --- Evaluate quiet wrap -------------------------------------------------
+   The gate and persona board live in EvaluationAccessSurface. This wrapper
+   only stills the unlocked board: less chrome, more list. */
+
+.pc-eval-linear .pc-eval-persona {
+  box-shadow: none;
+}
+
+.pc-eval-linear .pc-eval-persona.is-current {
+  box-shadow: none;
+}

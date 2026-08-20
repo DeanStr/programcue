@@ -46,7 +46,7 @@ import {
 } from "~/platform/http/public-abuse-protection.server";
 import { requestCorrelationId } from "~/platform/observability/request-correlation";
 import { sourceRevisionForLog } from "~/platform/observability/source-revision.server";
-import "~/styles/workspace-remaining.css";
+import "~/styles/workspace-evaluation-guide.css";
 import type { Route } from "./+types/evaluation-guide";
 
 type ActionResult =

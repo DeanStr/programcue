@@ -25,7 +25,7 @@ import { getProgramCueEventAgent } from "~/modules/ai/program-cue-agent-client.s
 import { correlationId } from "~/platform/api/api.server";
 import { requireCurrentEventRole } from "~/platform/auth/current-event.server";
 import { getCloudflareContext } from "~/platform/cloudflare-context";
-import "~/styles/workspace-remaining.css";
+import "~/styles/workspace-assistant.css";
 
 export const meta: MetaFunction = () => [
   { title: "Event Assistant · Program Cue" },

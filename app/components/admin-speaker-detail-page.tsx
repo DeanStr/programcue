@@ -1,0 +1,713 @@
+import {
+  ArrowLeft,
+  CalendarClock,
+  Download,
+  FileCheck2,
+  ListChecks,
+  LockKeyhole,
+  UserRound,
+} from "lucide-react";
+import { useEffect, useState } from "react";
+import { Form, Link, useActionData, useNavigation } from "react-router";
+import { DirectMultipartUpload } from "~/components/direct-multipart-upload";
+import { SpeakerActionNotice } from "~/components/speaker-action-notice";
+import { SpeakerProfileHistory } from "~/components/speaker-profile-history";
+import { ConfirmDialog } from "~/components/ui/confirm-dialog";
+import { DomainStatusBadge } from "~/components/ui/domain-status-badge";
+import { EmptyState } from "~/components/ui/states";
+import { useUnsavedChanges } from "~/components/ui/use-unsaved-changes";
+import { requireValue } from "~/lib/required-value";
+import { maximumMegabytes } from "~/modules/files/file-policy";
+import {
+  formatSpeakerXHandleInput,
+  normalizeSpeakerLinkedinUrl,
+} from "~/modules/speakers/speaker-schema";
+import type { SpeakerService } from "~/modules/speakers/speaker-service.server";
+import type { action } from "~/routes/admin-speaker-detail";
+
+type AdminSpeakerDetailLoaderData = {
+  detail: Awaited<ReturnType<SpeakerService["getAdminSpeakerDetail"]>>;
+};
+
+function formatTimestamp(epoch: number, timezone: string) {
+  return new Intl.DateTimeFormat("en", {
+    dateStyle: "medium",
+    timeStyle: "short",
+    timeZone: timezone,
+  }).format(new Date(epoch * 1_000));
+}
+
+function formatBytes(sizeBytes: number | null) {
+  if (sizeBytes === null) return "Size unknown";
+  return `${(sizeBytes / 1_048_576).toFixed(sizeBytes < 1_048_576 ? 2 : 1)} MB`;
+}
+
+function initials(name: string) {
+  return name
+    .split(/\s+/)
+    .map((part) => part[0])
+    .slice(0, 2)
+    .join("");
+}
+
+export function AdminSpeakerDetailPage({
+  loaderData,
+}: {
+  loaderData: AdminSpeakerDetailLoaderData;
+}) {
+  const { detail } = loaderData;
+  const {
+    profile,
+    profileShared,
+    profileScoped,
+    event,
+    sessions,
+    files,
+    tasks,
+  } = detail;
+  const headshot = files.find(
+    (file) =>
+      file.kind === "headshot" &&
+      file.targetType === "person" &&
+      file.targetId === profile.id &&
+      file.currentVersionId &&
+      file.downloadReleasedAt &&
+      file.downloadUploadedAt &&
+      file.downloadFilename &&
+      file.downloadUploaderName,
+  );
+  const actionData = useActionData<typeof action>();
+  const navigation = useNavigation();
+  const busy = navigation.state !== "idle";
+  const [profileDirty, setProfileDirty] = useState(false);
+  const blocker = useUnsavedChanges(profileDirty);
+  // biome-ignore lint/correctness/useExhaustiveDependencies: These persisted version tokens deliberately clear dirty state after either profile scope is saved, including when normalized values remain unchanged.
+  useEffect(
+    () => setProfileDirty(false),
+    [
+      profile.organisationProfileOperationId,
+      profile.revision,
+      profile.travelProfileOperationId,
+    ],
+  );
+  return (
+    <>
+      {blocker.state === "blocked" ? (
+        <ConfirmDialog
+          title="Leave without saving this speaker profile?"
+          description="The profile changes on this page have not been saved."
+          confirmLabel="Leave and discard"
+          cancelLabel="Keep editing"
+          onCancel={() => blocker.reset()}
+          onConfirm={() => blocker.proceed()}
+        />
+      ) : null}
+      <div className="crm-workspace crm-record">
+        <div className="page-head pc-page-header">
+          <div className="crm-record-hero">
+            {headshot ? (
+              <img
+                className="crm-record-avatar"
+                src={`/admin/speakers/${profile.id}/files/${headshot.id}?view=headshot`}
+                alt=""
+              />
+            ) : (
+              <span className="crm-record-avatar is-fallback">
+                {initials(profile.name)}
+              </span>
+            )}
+            <div>
+              <h1>{profile.name}</h1>
+              <p className="crm-caption">
+                {[profile.jobTitle, profile.organisationName]
+                  .filter(Boolean)
+                  .join(" · ") || "No title or organisation recorded yet"}
+              </p>
+              <p className="crm-caption">{profile.email}</p>
+              <div className="crm-status-line">
+                <DomainStatusBadge
+                  domain="content"
+                  status={profile.profileStatus}
+                />
+                <span className="status">
+                  {sessions.length}{" "}
+                  {sessions.length === 1 ? "session" : "sessions"}
+                </span>
+                <span
+                  className={`status ${tasks.outstanding ? "warning" : "success"}`}
+                >
+                  {tasks.outstanding
+                    ? `${tasks.outstanding} outstanding`
+                    : "Ready"}
+                </span>
+                <span className="status">
+                  {files.length} {files.length === 1 ? "file" : "files"}
+                </span>
+              </div>
+            </div>
+          </div>
+          <div className="page-actions">
+            <Link className="btn" to="/admin/speakers">
+              <ArrowLeft aria-hidden size={15} /> Back to roster
+            </Link>
+            <Link className="btn" to="/admin/tasks">
+              <ListChecks aria-hidden size={15} /> Manage tasks
+            </Link>
+          </div>
+        </div>
+        <SpeakerActionNotice notice={actionData} />
+        <div className="crm-record-grid">
+          <section className="crm-record-section" id="profile">
+            <h2>Profile</h2>
+            <p className="help">
+              Last saved {formatTimestamp(profile.updatedAt, event.timezone)} ·
+              revision {profile.revision}
+            </p>
+            {profileShared ? (
+              <p className="help" role="status">
+                Shared identity. Public name, social links and publication stay
+                participant-managed. Organisation and event fields below do not
+                change other events.
+              </p>
+            ) : null}
+            {profileScoped ? (
+              <Form
+                key={`${profile.revision}:${profile.organisationProfileOperationId}:${profile.travelProfileOperationId}`}
+                method="post"
+                className="stack"
+                onChange={() => setProfileDirty(true)}
+              >
+                <input
+                  type="hidden"
+                  name="_intent"
+                  value="save_speaker_scoped_profile"
+                />
+                <input
+                  type="hidden"
+                  name="profileRevision"
+                  value={profile.revision}
+                />
+                <input
+                  type="hidden"
+                  name="organisationProfileOperationId"
+                  value={profile.organisationProfileOperationId}
+                />
+                <input
+                  type="hidden"
+                  name="travelProfileOperationId"
+                  value={profile.travelProfileOperationId}
+                />
+                <fieldset className="stack pc-plain-fieldset">
+                  <p className="help">
+                    These values belong to {event.name} and its organisation.
+                    They do not overwrite the participant-owned public identity.
+                  </p>
+                  <label className="label">
+                    Organisation display name
+                    <input
+                      className="field"
+                      name="name"
+                      defaultValue={profile.name}
+                      required
+                      minLength={2}
+                      maxLength={120}
+                    />
+                  </label>
+                  <div className="form-row">
+                    <label className="label">
+                      Job title
+                      <input
+                        className="field"
+                        name="jobTitle"
+                        defaultValue={profile.jobTitle ?? ""}
+                        maxLength={160}
+                      />
+                    </label>
+                    <label className="label">
+                      Organisation
+                      <input
+                        className="field"
+                        name="organisationName"
+                        defaultValue={profile.organisationName ?? ""}
+                        maxLength={160}
+                      />
+                    </label>
+                  </div>
+                  <label className="label">
+                    Organisation biography
+                    <textarea
+                      className="textarea"
+                      name="biography"
+                      defaultValue={profile.biography ?? ""}
+                      maxLength={5_000}
+                      rows={7}
+                    />
+                  </label>
+                  <label className="label">
+                    Travel and logistics preferences
+                    <textarea
+                      className="textarea"
+                      name="travelPreferences"
+                      defaultValue={profile.travelPreferences ?? ""}
+                      maxLength={2_000}
+                      rows={4}
+                      placeholder="Arrival timing, accessibility, ground transport, dietary or other event logistics preferences"
+                    />
+                    <span className="help">
+                      Private to the participant and authorised organisers;
+                      never shown on the public programme.
+                    </span>
+                  </label>
+                  <button className="btn primary" type="submit" disabled={busy}>
+                    {busy ? "Saving…" : "Save organisation and event details"}
+                  </button>
+                </fieldset>
+              </Form>
+            ) : (
+              <Form
+                key={profile.revision}
+                method="post"
+                className="stack"
+                onChange={() => setProfileDirty(true)}
+              >
+                <input
+                  type="hidden"
+                  name="_intent"
+                  value="save_speaker_profile"
+                />
+                <input type="hidden" name="revision" value={profile.revision} />
+                <fieldset className="stack pc-plain-fieldset">
+                  <label className="label">
+                    Display name
+                    <input
+                      className="field"
+                      name="name"
+                      defaultValue={profile.name}
+                      required
+                      minLength={2}
+                      maxLength={120}
+                    />
+                  </label>
+                  <div className="form-row">
+                    <label className="label">
+                      Job title
+                      <input
+                        className="field"
+                        name="jobTitle"
+                        defaultValue={profile.jobTitle ?? ""}
+                        maxLength={160}
+                      />
+                    </label>
+                    <label className="label">
+                      Organisation
+                      <input
+                        className="field"
+                        name="organisationName"
+                        defaultValue={profile.organisationName ?? ""}
+                        maxLength={160}
+                      />
+                    </label>
+                  </div>
+                  <div className="form-row">
+                    <label className="label">
+                      LinkedIn profile URL
+                      <input
+                        className="field"
+                        name="linkedinUrl"
+                        type="url"
+                        inputMode="url"
+                        placeholder="https://www.linkedin.com/in/your-name"
+                        defaultValue={profile.linkedinUrl ?? ""}
+                        onBlur={(event) => {
+                          event.currentTarget.value =
+                            normalizeSpeakerLinkedinUrl(
+                              event.currentTarget.value,
+                            );
+                        }}
+                        maxLength={500}
+                      />
+                    </label>
+                    <label className="label">
+                      X handle
+                      <input
+                        className="field"
+                        name="xHandle"
+                        placeholder="@your_handle"
+                        defaultValue={
+                          profile.xHandle ? `@${profile.xHandle}` : ""
+                        }
+                        onBlur={(event) => {
+                          event.currentTarget.value = formatSpeakerXHandleInput(
+                            event.currentTarget.value,
+                          );
+                        }}
+                        maxLength={500}
+                      />
+                    </label>
+                  </div>
+                  <div className="form-row">
+                    <label className="label">
+                      Name pronunciation
+                      <input
+                        className="field"
+                        name="pronunciation"
+                        defaultValue={profile.pronunciation ?? ""}
+                        maxLength={160}
+                      />
+                    </label>
+                    <label className="label">
+                      Profile status
+                      <select
+                        className="select"
+                        name="profileStatus"
+                        defaultValue={profile.profileStatus}
+                      >
+                        <option value="draft">
+                          Draft — hidden from the programme
+                        </option>
+                        <option value="published">
+                          Published — visible in the public programme
+                        </option>
+                        <option value="archived">
+                          Archived — retained but not published
+                        </option>
+                      </select>
+                    </label>
+                  </div>
+                  <label className="label">
+                    Biography
+                    <textarea
+                      className="textarea"
+                      name="biography"
+                      defaultValue={profile.biography ?? ""}
+                      maxLength={5_000}
+                      rows={7}
+                    />
+                  </label>
+                  <label className="label">
+                    Travel and logistics preferences
+                    <textarea
+                      className="textarea"
+                      name="travelPreferences"
+                      defaultValue={profile.travelPreferences ?? ""}
+                      maxLength={2_000}
+                      rows={4}
+                      placeholder="Arrival timing, accessibility, ground transport, dietary or other event logistics preferences"
+                    />
+                    <span className="help">
+                      Private to the participant and authorised organisers;
+                      never shown on the public programme.
+                    </span>
+                  </label>
+                  <button className="btn primary" type="submit" disabled={busy}>
+                    {busy ? "Saving…" : "Save profile"}
+                  </button>
+                </fieldset>
+              </Form>
+            )}
+            <SpeakerProfileHistory
+              revisions={detail.profileHistory}
+              timeZone={event.timezone}
+            />
+          </section>
+          <section className="crm-record-section" id="headshot">
+            <h2>Headshot</h2>
+            <div className="speaker-headshot-card">
+              {headshot ? (
+                <img
+                  className="speaker-headshot-image"
+                  src={`/admin/speakers/${profile.id}/files/${headshot.id}?view=headshot`}
+                  alt={`${profile.name} headshot`}
+                />
+              ) : (
+                <span className="speaker-headshot-placeholder">
+                  <UserRound aria-hidden size={38} />
+                </span>
+              )}
+              <div className="stack">
+                <div>
+                  <strong>
+                    {headshot
+                      ? "Current released headshot"
+                      : "No released headshot"}
+                  </strong>
+                  {headshot ? (
+                    <p className="subtle">
+                      {headshot.downloadFilename} · uploaded by{" "}
+                      {headshot.downloadUploaderName} ·{" "}
+                      {formatTimestamp(
+                        requireValue(
+                          headshot.downloadUploadedAt,
+                          "Required headshot.downloadUploadedAt is unavailable.",
+                        ),
+                        event.timezone,
+                      )}
+                    </p>
+                  ) : (
+                    <p className="subtle">
+                      Upload a JPG, PNG or WebP replacement below. It remains
+                      private until signature validation and malware scanning
+                      pass.
+                    </p>
+                  )}
+                </div>
+                {headshot ? (
+                  <a
+                    className="btn"
+                    href={`/admin/speakers/${profile.id}/files/${headshot.id}`}
+                  >
+                    <Download aria-hidden size={14} /> Download headshot
+                  </a>
+                ) : null}
+              </div>
+            </div>
+            <DirectMultipartUpload
+              target={{ targetType: "person", targetId: profile.id }}
+              kinds={[
+                {
+                  value: "headshot",
+                  label: `Headshot (JPG, PNG, WebP · ${maximumMegabytes(event.filePolicy.headshotMaximumBytes)} MB)`,
+                  accept: "image/jpeg,image/png,image/webp",
+                  maximumBytes: event.filePolicy.headshotMaximumBytes,
+                },
+              ]}
+              heading={
+                headshot
+                  ? "Replace speaker headshot"
+                  : "Upload speaker headshot"
+              }
+              description="Uploads stay private until format and malware checks pass."
+            />
+          </section>
+        </div>
+        <section className="crm-record-section" id="sessions">
+          <h2>Linked sessions</h2>
+          {sessions.length ? (
+            <section
+              className="table-wrap pc-responsive-table-wrap"
+              aria-label="Linked speaker sessions"
+              // biome-ignore lint/a11y/noNoninteractiveTabindex: Scrollable data regions need keyboard focus so arrow keys can expose overflow content.
+              tabIndex={0}
+            >
+              <table className="data-table pc-responsive-table">
+                <thead>
+                  <tr>
+                    <th scope="col">Session</th>
+                    <th scope="col">Role</th>
+                    <th scope="col">Participation</th>
+                    <th scope="col">Status</th>
+                    <th scope="col">Placement</th>
+                    <th scope="col">Action</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {sessions.map((session) => (
+                    <tr key={session.id}>
+                      <td
+                        className="pc-record-primary-cell"
+                        data-label="Session"
+                      >
+                        <span className="pc-record-identity">
+                          <strong>{session.title}</strong>
+                          <small>
+                            {session.format} · {session.durationMinutes} minutes
+                          </small>
+                        </span>
+                      </td>
+                      <td data-label="Role">
+                        {session.roleLabel ?? "Speaker"}
+                      </td>
+                      <td data-label="Participation">
+                        <span className="pc-speaker-meta">
+                          <span
+                            className={`status ${session.participationStatus === "confirmed" ? "success" : session.status === "cancelled" ? "" : "warning"}`}
+                          >
+                            {session.participationStatus === "confirmed"
+                              ? "Confirmed"
+                              : session.status === "cancelled"
+                                ? "Not required"
+                                : "Pending"}
+                          </span>
+                          {session.participationConfirmedAt !== null ? (
+                            <small className="subtle">
+                              {formatTimestamp(
+                                session.participationConfirmedAt,
+                                event.timezone,
+                              )}
+                            </small>
+                          ) : null}
+                        </span>
+                      </td>
+                      <td data-label="Status">
+                        <DomainStatusBadge
+                          domain="session"
+                          status={session.status}
+                        />
+                      </td>
+                      <td data-label="Placement">
+                        {session.startsAt ? (
+                          <div className="pc-record-stack">
+                            <span>
+                              {formatTimestamp(
+                                session.startsAt,
+                                event.timezone,
+                              )}
+                            </span>
+                            <span className="subtle">
+                              {session.roomName ?? "Room to be assigned"}
+                            </span>
+                          </div>
+                        ) : (
+                          <span className="subtle">
+                            Not placed in the published schedule
+                          </span>
+                        )}
+                      </td>
+                      <td data-label="Action">
+                        {session.participationStatus === "pending" &&
+                        session.status !== "cancelled" ? (
+                          <Form method="post" className="stack">
+                            <input
+                              type="hidden"
+                              name="_intent"
+                              value="confirm_external_participation"
+                            />
+                            <input
+                              type="hidden"
+                              name="sessionId"
+                              value={session.id}
+                            />
+                            <input
+                              type="hidden"
+                              name="confirmation"
+                              value="confirmed"
+                            />
+                            <label className="check-row">
+                              <input
+                                type="checkbox"
+                                name="externalConfirmation"
+                                value="confirmed"
+                                required
+                              />
+                              <span>
+                                I confirm {profile.name} agreed outside Program
+                                Cue to participate in “{session.title}” and be
+                                listed according to its visibility.
+                              </span>
+                            </label>
+                            <button
+                              className="btn small"
+                              type="submit"
+                              disabled={busy}
+                              aria-label={`Record external confirmation for ${session.title}`}
+                            >
+                              Record external confirmation
+                            </button>
+                          </Form>
+                        ) : session.status === "cancelled" ? (
+                          <span className="subtle">Session cancelled</span>
+                        ) : (
+                          <span className="subtle">No action required</span>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </section>
+          ) : (
+            <EmptyState
+              icon={CalendarClock}
+              title="No linked sessions"
+              description="Link this speaker from a session in the schedule planner."
+            />
+          )}
+        </section>
+        <section className="crm-record-section" id="files">
+          <h2>Uploaded files and versions</h2>
+          <p className="subtle">
+            Speaker uploads stay private to the speaker workspace. Organisers
+            see the scan and release state of every stored version here and can
+            download only the current released version.
+          </p>
+          {files.length ? (
+            <div className="stack mt">
+              {files.map((file) => (
+                <div className="file-version-row" key={file.id}>
+                  <span className="file-kind-icon">
+                    <FileCheck2 aria-hidden size={17} />
+                  </span>
+                  <span>
+                    <strong>{file.kind.replaceAll("_", " ")}</strong>
+                    <small>
+                      {file.filename ?? "No stored version"} · version{" "}
+                      {file.versionNumber ?? "—"} ·{" "}
+                      {formatBytes(file.sizeBytes)}
+                    </small>
+                    {file.downloadFilename && file.downloadUploadedAt ? (
+                      <small>
+                        Current released file: {file.downloadFilename} ·
+                        uploaded by {file.downloadUploaderName} ·{" "}
+                        {formatTimestamp(
+                          file.downloadUploadedAt,
+                          event.timezone,
+                        )}
+                      </small>
+                    ) : null}
+                  </span>
+                  {file.scanStatus ? (
+                    <DomainStatusBadge domain="file" status={file.scanStatus} />
+                  ) : (
+                    <span className="status warning">No scan result</span>
+                  )}
+                  {file.currentVersionId && file.downloadReleasedAt ? (
+                    <a
+                      className="btn small"
+                      href={`/admin/speakers/${profile.id}/files/${file.id}`}
+                      aria-label={`Download released ${file.downloadFilename}`}
+                    >
+                      <Download aria-hidden size={14} /> Download
+                    </a>
+                  ) : (
+                    <span className="status warning">
+                      <LockKeyhole aria-hidden size={13} /> Not released
+                    </span>
+                  )}
+                  {file.versions.length ? (
+                    <details className="file-history pc-disclosure">
+                      <summary>
+                        {file.versions.length} version
+                        {file.versions.length === 1 ? "" : "s"}
+                      </summary>
+                      {file.versions.map((version) => (
+                        <small key={version.id}>
+                          v{version.versionNumber} · {version.filename} ·{" "}
+                          {formatBytes(version.sizeBytes)} · scan{" "}
+                          {version.scanStatus} ·{" "}
+                          {version.releasedAt
+                            ? `released ${formatTimestamp(version.releasedAt, event.timezone)}`
+                            : "not released"}
+                        </small>
+                      ))}
+                    </details>
+                  ) : null}
+                </div>
+              ))}
+            </div>
+          ) : (
+            <EmptyState
+              icon={FileCheck2}
+              title="No uploaded files"
+              description="Assign an upload task so this speaker can share headshots or slides."
+              action={
+                <Link className="btn" to="/admin/tasks">
+                  <ListChecks aria-hidden size={15} /> Manage tasks
+                </Link>
+              }
+            />
+          )}
+        </section>
+      </div>
+    </>
+  );
+}
