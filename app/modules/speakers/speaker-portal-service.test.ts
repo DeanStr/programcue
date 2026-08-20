@@ -54,6 +54,8 @@ describe("speaker portal file integrity", () => {
     const coSpeakerId = `portal-co-speaker-${suffix}`;
     const taskId = `shared-session-deliverable-${suffix}`;
     const sharedAssetId = `shared-session-asset-${suffix}`;
+    const firstVersionId = `shared-session-version-1-${suffix}`;
+    const secondVersionId = `shared-session-version-2-${suffix}`;
     const privateTaskId = `participant-document-${suffix}`;
     const privateAssetId = `participant-document-asset-${suffix}`;
     await testEnv.DB.batch([
@@ -120,7 +122,7 @@ describe("speaker portal file integrity", () => {
       ).bind(privateAssetId, speaker.eventId, speaker.personId, privateTaskId),
     ]);
 
-    const portal = await new SpeakerService(testEnv).getPortal({
+    const coSpeaker = {
       personId: coSpeakerId,
       name: "Portal co-speaker",
       email: `${coSpeakerId}@example.test`,
@@ -128,15 +130,138 @@ describe("speaker portal file integrity", () => {
       organisationId: speaker.organisationId,
       eventId: speaker.eventId,
       demo: true,
-    });
+    } satisfies Viewer;
+    const service = new SpeakerService(testEnv);
 
+    const beforeAttachment = await service.getPortal(coSpeaker);
     expect(
-      portal.files.find((file) => file.id === sharedAssetId),
+      beforeAttachment.files.some((file) => file.id === sharedAssetId),
+    ).toBe(false);
+    expect(
+      beforeAttachment.files.some((file) => file.id === privateAssetId),
+    ).toBe(false);
+
+    await testEnv.DB.batch([
+      testEnv.DB.prepare(
+        `INSERT INTO file_versions (
+           id, event_id, asset_id, version_number, object_key,
+           original_filename, declared_content_type, detected_content_type,
+           size_bytes, object_etag, upload_status, signature_status, scan_status,
+           created_by_person_id, uploaded_at, scanned_at, released_at
+         ) VALUES (?, ?, ?, 1, ?, 'shared-v1.pdf', 'application/pdf',
+                   'application/pdf', 10, 'etag-v1', 'uploaded', 'valid', 'clean',
+                   ?, unixepoch(), unixepoch(), unixepoch())`,
+      ).bind(
+        firstVersionId,
+        speaker.eventId,
+        sharedAssetId,
+        `tests/${firstVersionId}`,
+        speaker.personId,
+      ),
+      testEnv.DB.prepare(
+        `INSERT INTO task_evidence (
+           id, event_id, task_id, submitted_by_person_id, file_asset_id,
+           evidence_json, status
+         ) VALUES (?, ?, ?, ?, ?, ?, 'submitted')`,
+      ).bind(
+        `shared-session-evidence-1-${suffix}`,
+        speaker.eventId,
+        taskId,
+        speaker.personId,
+        sharedAssetId,
+        JSON.stringify({ fileVersionId: firstVersionId, scanStatus: "clean" }),
+      ),
+      testEnv.DB.prepare(
+        `UPDATE file_assets
+            SET current_version_id = ?, status = 'active', updated_at = unixepoch()
+          WHERE id = ? AND event_id = ?`,
+      ).bind(firstVersionId, sharedAssetId, speaker.eventId),
+    ]);
+
+    const attached = await service.getPortal(coSpeaker);
+    expect(
+      attached.files.find((file) => file.id === sharedAssetId),
     ).toMatchObject({
+      filename: "shared-v1.pdf",
+      currentVersionId: firstVersionId,
       taskTitle: "Upload the shared session handout",
       sessionTitle: "Designing inclusive event technology",
+      versions: [expect.objectContaining({ id: firstVersionId })],
     });
-    expect(portal.files.some((file) => file.id === privateAssetId)).toBe(false);
+
+    await testEnv.DB.batch([
+      testEnv.DB.prepare(
+        `INSERT INTO file_versions (
+           id, event_id, asset_id, version_number, object_key,
+           original_filename, declared_content_type, detected_content_type,
+           size_bytes, object_etag, upload_status, signature_status, scan_status,
+           created_by_person_id, uploaded_at, scanned_at, released_at
+         ) VALUES (?, ?, ?, 2, ?, 'private-unattached-v2.pdf', 'application/pdf',
+                   'application/pdf', 11, 'etag-v2', 'uploaded', 'valid', 'clean',
+                   ?, unixepoch(), unixepoch(), unixepoch())`,
+      ).bind(
+        secondVersionId,
+        speaker.eventId,
+        sharedAssetId,
+        `tests/${secondVersionId}`,
+        speaker.personId,
+      ),
+      testEnv.DB.prepare(
+        `UPDATE file_assets
+            SET current_version_id = ?, updated_at = unixepoch()
+          WHERE id = ? AND event_id = ?`,
+      ).bind(secondVersionId, sharedAssetId, speaker.eventId),
+    ]);
+
+    const replacementPendingAttachment = await service.getPortal(coSpeaker);
+    expect(
+      replacementPendingAttachment.files.find(
+        (file) => file.id === sharedAssetId,
+      ),
+    ).toMatchObject({
+      filename: "shared-v1.pdf",
+      currentVersionId: firstVersionId,
+      taskTitle: "Upload the shared session handout",
+      sessionTitle: "Designing inclusive event technology",
+      versions: [expect.objectContaining({ id: firstVersionId })],
+    });
+    expect(
+      replacementPendingAttachment.files.some((file) =>
+        file.versions.some((version) => version.id === secondVersionId),
+      ),
+    ).toBe(false);
+
+    await testEnv.DB.batch([
+      testEnv.DB.prepare(
+        `UPDATE task_evidence SET status = 'superseded'
+          WHERE event_id = ? AND task_id = ? AND file_asset_id = ?`,
+      ).bind(speaker.eventId, taskId, sharedAssetId),
+      testEnv.DB.prepare(
+        `INSERT INTO task_evidence (
+           id, event_id, task_id, submitted_by_person_id, file_asset_id,
+           evidence_json, status
+         ) VALUES (?, ?, ?, ?, ?, ?, 'submitted')`,
+      ).bind(
+        `shared-session-evidence-2-${suffix}`,
+        speaker.eventId,
+        taskId,
+        speaker.personId,
+        sharedAssetId,
+        JSON.stringify({ fileVersionId: secondVersionId, scanStatus: "clean" }),
+      ),
+    ]);
+
+    const replacementAttached = await service.getPortal(coSpeaker);
+    expect(
+      replacementAttached.files.find((file) => file.id === sharedAssetId),
+    ).toMatchObject({
+      filename: "private-unattached-v2.pdf",
+      currentVersionId: secondVersionId,
+      versions: [
+        expect.objectContaining({ id: secondVersionId }),
+        expect.objectContaining({ id: firstVersionId }),
+      ],
+    });
   });
 
   it("fails when a current file version is dangling or deleted", async () => {
@@ -203,6 +328,13 @@ describe("speaker portal file integrity", () => {
     } as unknown as CloudflareEnvironment;
     await ensureDemoSpeakerData(testEnv);
     await testEnv.DB.batch([
+      testEnv.DB.prepare(
+        `DELETE FROM task_evidence
+          WHERE event_id = ? AND file_asset_id IN (
+            SELECT id FROM file_assets
+             WHERE event_id = ? AND owner_person_id = ?
+          )`,
+      ).bind(speaker.eventId, speaker.eventId, speaker.personId),
       testEnv.DB.prepare(
         `DELETE FROM file_versions
           WHERE event_id = ? AND asset_id IN (

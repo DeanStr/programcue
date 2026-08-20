@@ -1348,6 +1348,51 @@ describe("onboarding task service", () => {
           current: false,
         }),
       ]);
+
+      const third = await completeTestDirectUpload(
+        testEnv,
+        coSpeaker,
+        target,
+        evidenceFile("shared-slides-v3.png", 3),
+      );
+      const racingEnv = withBatchRace(testEnv, async () => {
+        await testEnv.DB.prepare(
+          `DELETE FROM session_speakers
+            WHERE event_id = ? AND session_id = 'session-demo-speaker'
+              AND person_id = ?`,
+        )
+          .bind(coSpeaker.eventId, coSpeaker.personId)
+          .run();
+      });
+
+      await expect(
+        new TaskService(racingEnv).attachCompletedFileEvidence(coSpeaker, {
+          taskId: target.targetId,
+          assetId: third.assetId,
+          versionId: third.versionId,
+        }),
+      ).rejects.toThrow("changed. Refresh before submitting file evidence");
+      expect(
+        await testEnv.DB.prepare(
+          `SELECT COUNT(*) AS count FROM task_evidence
+            WHERE event_id = ? AND task_id = ?
+              AND CASE WHEN json_valid(evidence_json)
+                    THEN json_extract(evidence_json, '$.fileVersionId')
+                  END = ?`,
+        )
+          .bind(coSpeaker.eventId, target.targetId, third.versionId)
+          .first<{ count: number }>(),
+      ).toEqual({ count: 0 });
+      expect(
+        await testEnv.DB.prepare(
+          `SELECT CASE WHEN json_valid(evidence_json)
+                  THEN json_extract(evidence_json, '$.fileVersionId')
+                END AS versionId
+             FROM task_instances WHERE id = ? AND event_id = ?`,
+        )
+          .bind(target.targetId, coSpeaker.eventId)
+          .first<{ versionId: string | null }>(),
+      ).toEqual({ versionId: second.versionId });
     });
 
     it("fails fast when a submitted file task lacks canonical evidence", async () => {

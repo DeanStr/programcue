@@ -42,6 +42,17 @@ function formatUploadTimestamp(epoch: number, timezone: string) {
   }).format(new Date(epoch * 1_000));
 }
 
+export function speakerFileDownloadHref(
+  assetId: string,
+  targetType: string,
+  versionId: string,
+) {
+  const encodedAssetId = encodeURIComponent(assetId);
+  return targetType === "task"
+    ? `/participant/tasks/files/${encodedAssetId}/${encodeURIComponent(versionId)}`
+    : `/participant/files/${encodedAssetId}`;
+}
+
 export function SpeakerFilesPanel({
   portal,
   busy,
@@ -112,7 +123,11 @@ export function SpeakerFilesPanel({
                 {file.currentVersionId && file.downloadReleasedAt ? (
                   <a
                     className="icon-btn"
-                    href={`/participant/files/${file.id}`}
+                    href={speakerFileDownloadHref(
+                      file.id,
+                      file.targetType,
+                      file.currentVersionId,
+                    )}
                     aria-label={`Download ${file.downloadFilename}`}
                   >
                     <Download aria-hidden size={15} />

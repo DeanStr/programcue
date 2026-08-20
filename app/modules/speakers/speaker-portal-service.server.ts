@@ -164,11 +164,13 @@ export class SpeakerPortalService {
                fv.original_filename AS filename, fv.size_bytes AS sizeBytes,
                fv.upload_status AS uploadStatus, fv.signature_status AS signatureStatus,
                fv.scan_status AS scanStatus, fv.version_number AS versionNumber,
-               fv.released_at AS releasedAt, fa.current_version_id AS currentVersionId,
-               current.id AS resolvedCurrentVersionId,
-               current.original_filename AS downloadFilename,
-               current.released_at AS downloadReleasedAt,
-               current.uploaded_at AS downloadUploadedAt,
+               fv.released_at AS releasedAt,
+               fa.current_version_id AS assetCurrentVersionId,
+               asset_current.id AS resolvedCurrentVersionId,
+               download.id AS currentVersionId,
+               download.original_filename AS downloadFilename,
+               download.released_at AS downloadReleasedAt,
+               download.uploaded_at AS downloadUploadedAt,
                NULLIF(TRIM(uploader.display_name), '') AS downloadUploaderName,
                task.title AS taskTitle,
                task_session.title AS sessionTitle
@@ -176,14 +178,52 @@ export class SpeakerPortalService {
           LEFT JOIN file_versions fv ON fv.id = (
             SELECT id FROM file_versions candidate
              WHERE candidate.asset_id = fa.id AND candidate.deleted_at IS NULL
-	             ORDER BY candidate.version_number DESC LIMIT 1
-	          )
-          LEFT JOIN file_versions current
-            ON current.id = fa.current_version_id
-           AND current.event_id = fa.event_id
-           AND current.asset_id = fa.id
-           AND current.deleted_at IS NULL
-          LEFT JOIN people uploader ON uploader.id = current.created_by_person_id
+               AND (
+                 fa.owner_person_id = ?
+                 OR EXISTS (
+                   SELECT 1 FROM task_evidence attached
+                    WHERE attached.event_id = fa.event_id
+                      AND attached.task_id = fa.target_id
+                      AND attached.file_asset_id = fa.id
+                      AND attached.status IN ('submitted','approved','superseded')
+                      AND CASE WHEN json_valid(attached.evidence_json)
+                            THEN json_extract(attached.evidence_json, '$.fileVersionId')
+                          END = candidate.id
+                 )
+               )
+               ORDER BY candidate.version_number DESC LIMIT 1
+          )
+          LEFT JOIN file_versions asset_current
+            ON asset_current.id = fa.current_version_id
+           AND asset_current.event_id = fa.event_id
+           AND asset_current.asset_id = fa.id
+           AND asset_current.deleted_at IS NULL
+          LEFT JOIN file_versions download ON download.id = (
+            SELECT id FROM file_versions candidate
+             WHERE candidate.asset_id = fa.id AND candidate.deleted_at IS NULL
+               AND candidate.upload_status = 'uploaded'
+               AND candidate.signature_status = 'valid'
+               AND candidate.scan_status = 'clean'
+               AND candidate.released_at IS NOT NULL
+               AND (
+                 (fa.owner_person_id = ? AND candidate.id = fa.current_version_id)
+                 OR (
+                   fa.owner_person_id <> ?
+                   AND EXISTS (
+                     SELECT 1 FROM task_evidence attached
+                      WHERE attached.event_id = fa.event_id
+                        AND attached.task_id = fa.target_id
+                        AND attached.file_asset_id = fa.id
+                        AND attached.status IN ('submitted','approved','superseded')
+                        AND CASE WHEN json_valid(attached.evidence_json)
+                              THEN json_extract(attached.evidence_json, '$.fileVersionId')
+                            END = candidate.id
+                   )
+                 )
+               )
+             ORDER BY candidate.version_number DESC LIMIT 1
+          )
+          LEFT JOIN people uploader ON uploader.id = download.created_by_person_id
           LEFT JOIN task_instances task
             ON fa.target_type = 'task'
            AND task.id = fa.target_id
@@ -202,6 +242,7 @@ export class SpeakerPortalService {
                AND task.target_type = 'session'
                AND json_valid(task.configuration_json)
                AND json_extract(task.configuration_json, '$.fileScope') = 'session_deliverable'
+               AND fv.id IS NOT NULL
                AND EXISTS (
                  SELECT 1
                    FROM session_speakers relation
@@ -214,8 +255,20 @@ export class SpeakerPortalService {
          ORDER BY fa.updated_at DESC
       `,
         )
-          .bind(viewer.eventId, viewer.personId, viewer.personId)
-          .all<FileRow & { resolvedCurrentVersionId: string | null }>(),
+          .bind(
+            viewer.personId,
+            viewer.personId,
+            viewer.personId,
+            viewer.eventId,
+            viewer.personId,
+            viewer.personId,
+          )
+          .all<
+            FileRow & {
+              assetCurrentVersionId: string | null;
+              resolvedCurrentVersionId: string | null;
+            }
+          >(),
         readSpeakerProfileHistory(this.env, {
           organisationId: viewer.organisationId,
           eventId: viewer.eventId,
@@ -227,12 +280,12 @@ export class SpeakerPortalService {
       throw new Response("Speaker workspace not found.", { status: 404 });
     const fileWithUnavailableCurrentVersion = files.results.find(
       (file) =>
-        file.currentVersionId !== null &&
-        file.resolvedCurrentVersionId !== file.currentVersionId,
+        file.assetCurrentVersionId !== null &&
+        file.resolvedCurrentVersionId !== file.assetCurrentVersionId,
     );
     if (fileWithUnavailableCurrentVersion) {
       throw new Error(
-        `File asset ${fileWithUnavailableCurrentVersion.id} references unavailable current version ${fileWithUnavailableCurrentVersion.currentVersionId}.`,
+        `File asset ${fileWithUnavailableCurrentVersion.id} references unavailable current version ${fileWithUnavailableCurrentVersion.assetCurrentVersionId}.`,
       );
     }
     const releasedFileWithoutProvenance = files.results.find(
@@ -252,16 +305,53 @@ export class SpeakerPortalService {
     const versionRows = assetIds.length
       ? await this.env.DB.prepare(
           `
-          SELECT id, asset_id AS assetId, version_number AS versionNumber,
-                 original_filename AS filename, size_bytes AS sizeBytes,
-                 upload_status AS uploadStatus, signature_status AS signatureStatus,
-                 scan_status AS scanStatus, created_at AS createdAt, released_at AS releasedAt
-            FROM file_versions
-           WHERE asset_id IN (${assetIds.map(() => "?").join(",")}) AND deleted_at IS NULL
-           ORDER BY asset_id, version_number DESC
+          SELECT version.id, version.asset_id AS assetId,
+                 version.version_number AS versionNumber,
+                 version.original_filename AS filename,
+                 version.size_bytes AS sizeBytes,
+                 version.upload_status AS uploadStatus,
+                 version.signature_status AS signatureStatus,
+                 version.scan_status AS scanStatus,
+                 version.created_at AS createdAt,
+                 version.released_at AS releasedAt
+            FROM file_versions version
+            JOIN file_assets asset
+              ON asset.id = version.asset_id AND asset.event_id = version.event_id
+            LEFT JOIN task_instances task
+              ON asset.target_type = 'task'
+             AND task.id = asset.target_id AND task.event_id = asset.event_id
+           WHERE version.asset_id IN (${assetIds.map(() => "?").join(",")})
+             AND asset.event_id = ? AND version.deleted_at IS NULL
+             AND (
+               asset.owner_person_id = ?
+               OR (
+                 asset.asset_kind = 'task_evidence'
+                 AND task.task_type = 'file_upload'
+                 AND task.target_type = 'session'
+                 AND json_valid(task.configuration_json)
+                 AND json_extract(task.configuration_json, '$.fileScope') = 'session_deliverable'
+                 AND EXISTS (
+                   SELECT 1 FROM session_speakers relation
+                    WHERE relation.event_id = task.event_id
+                      AND relation.session_id = task.target_id
+                      AND relation.person_id = ?
+                 )
+                 AND EXISTS (
+                   SELECT 1 FROM task_evidence attached
+                    WHERE attached.event_id = asset.event_id
+                      AND attached.task_id = asset.target_id
+                      AND attached.file_asset_id = asset.id
+                      AND attached.status IN ('submitted','approved','superseded')
+                      AND CASE WHEN json_valid(attached.evidence_json)
+                            THEN json_extract(attached.evidence_json, '$.fileVersionId')
+                          END = version.id
+                 )
+               )
+             )
+           ORDER BY version.asset_id, version.version_number DESC
         `,
         )
-          .bind(...assetIds)
+          .bind(...assetIds, viewer.eventId, viewer.personId, viewer.personId)
           .all<{
             id: string;
             assetId: string;
@@ -301,7 +391,11 @@ export class SpeakerPortalService {
       },
       sessions: sessions.results,
       files: files.results.map(
-        ({ resolvedCurrentVersionId: _resolvedCurrentVersionId, ...file }) => ({
+        ({
+          assetCurrentVersionId: _assetCurrentVersionId,
+          resolvedCurrentVersionId: _resolvedCurrentVersionId,
+          ...file
+        }) => ({
           ...file,
           versions: versionRows.results.filter(
             (version) => version.assetId === file.id,

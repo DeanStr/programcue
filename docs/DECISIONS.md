@@ -441,9 +441,12 @@ handouts, supporting documents and session videos use assigned `file_upload`
 tasks and private `task_evidence`. Every file task explicitly declares either a
 speaker-scoped participant document or a session-scoped deliverable, and upload
 authorization rejects a missing or mismatched declaration. Files derives the
-session only through that exact task relationship. Task evidence keeps its
-existing comments, replacement, approval and due-date workflow. MP4 and WebM
-task evidence uses the event's video limit through declaration, browser
+session only through that exact task relationship. A linked session speaker
+sees only versions already attached as task evidence; an uploader's incomplete
+or unattached allocation remains private. Files downloads task evidence through
+the exact version-authorized task route. Task evidence keeps its existing
+comments, replacement, approval and due-date workflow. MP4 and WebM task
+evidence uses the event's video limit through declaration, browser
 validation and multipart completion, while other task evidence uses the
 supporting-document limit. Task evidence is not participant-erasable from the
 aggregate Files view.

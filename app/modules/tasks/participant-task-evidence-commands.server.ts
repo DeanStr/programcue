@@ -214,6 +214,21 @@ export class ParticipantTaskEvidenceCommands extends ParticipantTaskWorkflowFoun
           last_operation_id = ?, updated_at = unixepoch()
          WHERE id = ? AND event_id = ? AND revision = ? AND status NOT IN ('completed','waived')
            AND (
+             ? = 0
+             OR (
+               task_instances.task_type = 'file_upload'
+               AND task_instances.target_type = 'session'
+               AND json_valid(task_instances.configuration_json)
+               AND json_extract(task_instances.configuration_json, '$.fileScope') = 'session_deliverable'
+               AND EXISTS (
+                 SELECT 1 FROM session_speakers relation
+                  WHERE relation.event_id = task_instances.event_id
+                    AND relation.session_id = task_instances.target_id
+                    AND relation.person_id = ?
+               )
+             )
+           )
+           AND (
              ? IS NULL
              OR (
                status = 'submitted'
@@ -253,6 +268,8 @@ export class ParticipantTaskEvidenceCommands extends ParticipantTaskWorkflowFoun
         task.id,
         viewer.eventId,
         task.revision,
+        sharedSessionDeliverable ? 1 : 0,
+        viewer.personId,
         submittedEvidence?.versionId ?? null,
         submittedEvidence?.assetId ?? null,
         submittedEvidence?.versionId ?? null,
