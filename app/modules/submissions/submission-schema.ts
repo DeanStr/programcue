@@ -540,6 +540,29 @@ export const draftPayloadSchema = z.object({
     .default({}),
 });
 
+const emptyDraftSpeakerInputSchema = z.object({
+  name: z.string().trim().length(0),
+  email: z.string().trim().length(0),
+  biography: z.string().trim().length(0).optional(),
+});
+
+const draftSaveSpeakersSchema = z.union([
+  draftPayloadSchema.shape.speakers,
+  z.tuple([emptyDraftSpeakerInputSchema]).transform(() => []),
+]);
+
+/**
+ * Saving a draft may omit the primary speaker while an anonymous applicant is
+ * still filling in their identity. The editor renders one completely empty
+ * speaker row for that state; discard only that sole empty placeholder. Mixed
+ * empty and populated rows remain invalid so a co-speaker cannot be silently
+ * promoted to primary. Final submission continues to use the strict
+ * draftPayloadSchema above.
+ */
+export const draftSavePayloadSchema = draftPayloadSchema.extend({
+  speakers: draftSaveSpeakersSchema,
+});
+
 export type DraftPayload = Omit<
   z.infer<typeof draftPayloadSchema>,
   "uploads"

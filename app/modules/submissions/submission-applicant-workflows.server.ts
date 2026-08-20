@@ -10,6 +10,7 @@ import {
 } from "./submission-repository.server";
 import {
   draftPayloadSchema,
+  draftSavePayloadSchema,
   validateAnswerShapes,
   validateFinalAnswers,
   visibleAnswers,
@@ -490,7 +491,7 @@ export class SubmissionApplicantWorkflows extends SubmissionServiceFoundation {
       this.env,
       currentForm.eventId,
       applicant,
-      draftPayloadSchema.parse(rawPayload),
+      draftSavePayloadSchema.parse(rawPayload),
     );
     const payload = routed.payload;
     if (

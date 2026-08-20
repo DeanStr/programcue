@@ -245,7 +245,11 @@ production-shaped Chromium profile, run by the pull-request and complete
 release browser gates, additionally unlocks `/evaluate` without choosing a
 persona, follows the public application link, starts an anonymous draft and
 lets the browser carry the issued cookies through the redirect before asserting
-that the editor reopened. Its Siteverify fixture is explicit and loopback-only;
+that the editor reopened. The same profile covers the Accepted speaker's
+participant Applications link through starting and saving a blank anonymous
+draft; save-only validation discards the empty speaker placeholder while final
+submission continues to require a complete speaker. Its Siteverify fixture is
+explicit and loopback-only;
 it does not claim external-provider success. This is repository test evidence
 only: no deployment, production reset or fresh production-browser acceptance
 is claimed.

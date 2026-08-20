@@ -4,6 +4,8 @@ import { closeDateToEpoch } from "./submission-repository-shared";
 import {
   DEFAULT_FORM_PRESENTATION,
   DEFAULT_FORM_SCHEMA,
+  draftPayloadSchema,
+  draftSavePayloadSchema,
   formPresentationSchema,
   formSchemaSchema,
   formSectionsForAuthoring,
@@ -59,6 +61,38 @@ const chainedSchema = formSchemaSchema.parse({
 });
 
 describe("submission form rules", () => {
+  it("drops only a completely empty speaker placeholder when saving a draft", () => {
+    const payload = {
+      submissionId: "draft-1",
+      revision: 1,
+      answers: {},
+      speakers: [{ name: "", email: "", biography: "" }],
+      uploads: {},
+    };
+
+    expect(draftSavePayloadSchema.parse(payload).speakers).toEqual([]);
+    expect(draftPayloadSchema.safeParse(payload).success).toBe(false);
+    expect(
+      draftSavePayloadSchema.safeParse({
+        ...payload,
+        speakers: [{ name: "Priya Shah", email: "", biography: "" }],
+      }).success,
+    ).toBe(false);
+    expect(
+      draftSavePayloadSchema.safeParse({
+        ...payload,
+        speakers: [
+          { name: "", email: "", biography: "" },
+          {
+            name: "Co-speaker",
+            email: "co-speaker@example.com",
+            biography: "",
+          },
+        ],
+      }).success,
+    ).toBe(false);
+  });
+
   it("requires explicit valid sections in schema v2", () => {
     const unknownSection = structuredClone(DEFAULT_FORM_SCHEMA);
     unknownSection.fields[0]!.sectionId = "missing";

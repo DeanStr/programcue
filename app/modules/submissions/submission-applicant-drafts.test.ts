@@ -939,6 +939,58 @@ describe("Submissions D1 vertical slice", () => {
       ).resolves.toEqual({ count: 1 });
     });
 
+    it("saves an anonymous draft before the primary speaker is filled in", async () => {
+      const { service, id, slug } = await publishedForm();
+      const form = await service.getPublicForm(slug);
+      const started = await service.startAnonymousDraft(slug, "");
+      const anonymous = await service.applicants.get(
+        new Request(`https://example.com/apply/${slug}`, {
+          headers: { cookie: started.cookie.split(";")[0] },
+        }),
+        form,
+      );
+      expect(anonymous).not.toBeNull();
+
+      const revision = await service.saveDraft(slug, anonymous!, {
+        submissionId: started.draftId,
+        revision: 1,
+        answers: {},
+        speakers: [{ name: "", email: "", biography: "" }],
+      });
+
+      expect(revision).toBe(2);
+      const saved = (
+        await service.repository.getApplicantDrafts(id, anonymous!)
+      ).find((draft) => draft.id === started.draftId);
+      expect(saved).toMatchObject({
+        revision: 2,
+        title: "Untitled application",
+        answers: {},
+        speakers: [],
+      });
+
+      await expect(
+        service.saveDraft(slug, anonymous!, {
+          submissionId: started.draftId,
+          revision: 2,
+          answers: {},
+          speakers: [
+            { name: "", email: "", biography: "" },
+            {
+              name: "Co-speaker",
+              email: "co-speaker@example.com",
+              biography: "",
+            },
+          ],
+        }),
+      ).rejects.toThrow();
+      await expect(
+        service.repository.getApplicantDrafts(id, anonymous!),
+      ).resolves.toEqual([
+        expect.objectContaining({ revision: 2, speakers: [] }),
+      ]);
+    });
+
     it("keeps an anonymous draft browser-bound until email verification transfers ownership", async () => {
       const { service, id, slug, testEnv } = await publishedForm();
       const form = await service.getPublicForm(slug);
