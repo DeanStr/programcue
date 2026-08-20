@@ -616,6 +616,27 @@ describe("typed task API service", () => {
       service.create(
         principal,
         {
+          title: "Checklist assigned outside the session",
+          description: null,
+          targetType: "session",
+          targetId: sessionId,
+          ownerPersonId: "person-demo-submitter",
+          taskType: "checklist",
+          impact: "high",
+          dueAt: null,
+          dependencyIds: [],
+        },
+        "corr-invalid-session-checklist-owner",
+        `invalid-session-checklist-owner-${crypto.randomUUID()}`,
+      ),
+    ).rejects.toMatchObject({
+      status: 422,
+      code: "INVALID_TASK_OWNER",
+    } satisfies Partial<ApiError>);
+    await expect(
+      service.create(
+        principal,
+        {
           title: "Invalid dependency task",
           description: null,
           targetType: "event",

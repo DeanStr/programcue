@@ -450,6 +450,10 @@ evidence uses the event's video limit through declaration, browser
 validation and multipart completion, while other task evidence uses the
 supporting-document limit. Task evidence is not participant-erasable from the
 aggregate Files view.
+For every session-targeted task, the current `session_speakers` relationship is
+the participant authorization boundary across task reads, comments, completion,
+uploads, evidence history and downloads. `owner_person_id` remains accountability
+metadata and never preserves participant access after that relationship ends.
 
 Submission confirmations keep configurable message copy but always include the
 server-generated, credential-free, submission-ID-based management URL for the

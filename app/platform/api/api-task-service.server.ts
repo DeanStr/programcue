@@ -640,6 +640,19 @@ export class ApiTaskService {
     const dependencyStateBindings = input.dependencyIds.length
       ? [principal.eventId, JSON.stringify(input.dependencyIds)]
       : [];
+    const sessionOwnerGuardSql =
+      input.targetType === "session" && input.ownerPersonId
+        ? `AND EXISTS (
+             SELECT 1 FROM session_speakers owner_session
+              WHERE owner_session.event_id = ?
+                AND owner_session.session_id = ?
+                AND owner_session.person_id = ?
+           )`
+        : "";
+    const sessionOwnerGuardBindings =
+      input.targetType === "session" && input.ownerPersonId
+        ? [principal.eventId, input.targetId, input.ownerPersonId]
+        : [];
     const statements = [
       this.env.DB.prepare(
         `
@@ -700,6 +713,7 @@ export class ApiTaskService {
               AND command.idempotency_key = ?
               AND command.request_hash = ? AND command.status = 'processing'
          )
+         ${sessionOwnerGuardSql}
       `,
       ).bind(
         ...dependencyStateBindings,
@@ -728,6 +742,7 @@ export class ApiTaskService {
         actorId,
         idempotencyKey,
         requestHash,
+        ...sessionOwnerGuardBindings,
       ),
       ...(input.dependencyIds.length
         ? [
@@ -924,9 +939,8 @@ export class ApiTaskService {
       );
 
     if (input.ownerPersonId) {
-      const sessionDeliverable =
-        input.configuration.fileScope === "session_deliverable";
-      const owner = sessionDeliverable
+      const sessionTarget = input.targetType === "session";
+      const owner = sessionTarget
         ? await this.env.DB.prepare(
             `SELECT 1 FROM session_speakers
               WHERE event_id = ? AND session_id = ? AND person_id = ?
@@ -953,8 +967,8 @@ export class ApiTaskService {
         throw new ApiError(
           422,
           "INVALID_TASK_OWNER",
-          sessionDeliverable
-            ? "A session-deliverable owner must be assigned to the target session"
+          sessionTarget
+            ? "A session-targeted task owner must be assigned to the target session"
             : "The task owner is not available in the authorised event",
         );
     }

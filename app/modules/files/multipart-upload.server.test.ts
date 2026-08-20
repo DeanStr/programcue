@@ -798,6 +798,59 @@ describe("direct R2 multipart upload", () => {
     ).resolves.toEqual({ versionId: initiated.versionId, aborted: true });
   });
 
+  it("denies every multipart continuation after a named session owner leaves the session", async () => {
+    const testEnvironment = configuredMultipartEnvironment();
+    await testEnvironment.DB.prepare(
+      `UPDATE task_instances SET owner_person_id = ?
+        WHERE id = 'task-demo-slides' AND event_id = ?`,
+    )
+      .bind(speaker.personId, speaker.eventId)
+      .run();
+    const service = new MultipartUploadService(testEnvironment);
+    const input = {
+      target: {
+        targetType: "task" as const,
+        targetId: "task-demo-slides",
+        assetKind: "task_evidence" as const,
+      },
+      filename: "revoked-session-owner.pdf",
+      contentType: "application/pdf",
+      sizeBytes: 1,
+      idempotencyKey: crypto.randomUUID(),
+    };
+    const initiated = await service.initiate(speaker, input);
+
+    await testEnvironment.DB.prepare(
+      `DELETE FROM session_speakers
+        WHERE event_id = ? AND session_id = 'session-demo-speaker'
+          AND person_id = ?`,
+    )
+      .bind(speaker.eventId, speaker.personId)
+      .run();
+
+    await expect(service.resume(speaker, input)).rejects.toBeInstanceOf(
+      FileAccessError,
+    );
+    await expect(
+      service.createPartUrl(speaker, {
+        versionId: initiated.versionId,
+        partNumber: 1,
+      }),
+    ).rejects.toBeInstanceOf(FileAccessError);
+    await expect(
+      service.listParts(speaker, { versionId: initiated.versionId }),
+    ).rejects.toBeInstanceOf(FileAccessError);
+    await expect(
+      service.complete(speaker, {
+        versionId: initiated.versionId,
+        parts: [{ partNumber: 1, etag: "unused-etag" }],
+      }),
+    ).rejects.toBeInstanceOf(FileAccessError);
+    await expect(
+      service.abort(speaker, { versionId: initiated.versionId }),
+    ).resolves.toEqual({ versionId: initiated.versionId, aborted: true });
+  });
+
   it("revokes a completing upload when its target becomes ineligible", async () => {
     const baseEnvironment = configuredMultipartEnvironment();
     let failFirstCompletion = true;

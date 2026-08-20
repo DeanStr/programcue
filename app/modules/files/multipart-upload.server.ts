@@ -1,5 +1,8 @@
 import { z } from "zod";
-import { taskConfiguration } from "~/modules/tasks/task-service-foundation.server";
+import {
+  participantTaskAccessSql,
+  taskConfiguration,
+} from "~/modules/tasks/task-service-foundation.server";
 import {
   type assetKindSchema,
   DIRECT_MULTIPART_PART_SIZE_BYTES,
@@ -168,6 +171,19 @@ export class MultipartUploadService {
 
   private requireBucket() {
     return this.provider.requireBucket();
+  }
+
+  private participantTaskGuard(actor: MultipartActor) {
+    if (
+      isApplicantActor(actor) ||
+      ["owner", "administrator"].includes(actor.role)
+    ) {
+      return null;
+    }
+    return {
+      sql: participantTaskAccessSql("task"),
+      bindings: [actor.personId, actor.personId, actor.personId],
+    };
   }
 
   private async assertTarget(actor: MultipartActor, target: UploadTarget) {
@@ -372,6 +388,19 @@ export class MultipartUploadService {
     authorisedAssetId: string | null,
   ) {
     const target = input.target;
+    const participantTaskGuard = this.participantTaskGuard(actor);
+    const allocationGuardSql =
+      target.targetType === "task" && participantTaskGuard
+        ? `WHERE EXISTS (
+             SELECT 1 FROM task_instances task
+              WHERE task.id = ? AND task.event_id = ?
+                AND ${participantTaskGuard.sql}
+           )`
+        : "";
+    const allocationGuardBindings =
+      target.targetType === "task" && participantTaskGuard
+        ? [target.targetId, actor.eventId, ...participantTaskGuard.bindings]
+        : [];
     const auditProvenance = multipartAuditProvenance(actor);
     const reusable = !["task", "resource"].includes(target.targetType);
     const ownerPersonId =
@@ -463,7 +492,8 @@ export class MultipartUploadService {
         `INSERT OR IGNORE INTO file_assets (
            id, event_id, owner_person_id, target_type, target_id, asset_kind,
            status, created_at, updated_at
-         ) VALUES (?, ?, ?, ?, ?, ?, 'pending', unixepoch(), unixepoch())`,
+         ) SELECT ?, ?, ?, ?, ?, ?, 'pending', unixepoch(), unixepoch()
+           ${allocationGuardSql}`,
       ).bind(
         assetId,
         actor.eventId,
@@ -471,6 +501,7 @@ export class MultipartUploadService {
         target.targetType,
         target.targetId,
         target.assetKind,
+        ...allocationGuardBindings,
       ),
       this.env.DB.prepare(
         `INSERT INTO file_versions (
@@ -577,6 +608,18 @@ export class MultipartUploadService {
   }
 
   private async createProviderUpload(actor: MultipartActor, row: MultipartRow) {
+    const participantTaskGuard = this.participantTaskGuard(actor);
+    const assetAccessSql = participantTaskGuard
+      ? `AND (
+           asset.target_type <> 'task'
+           OR EXISTS (
+             SELECT 1 FROM task_instances task
+              WHERE task.id = asset.target_id AND task.event_id = asset.event_id
+                AND ${participantTaskGuard.sql}
+           )
+         )`
+      : "";
+    const assetAccessBindings = participantTaskGuard?.bindings ?? [];
     let multipart: R2MultipartUpload;
     try {
       multipart = await this.provider.createUpload(row);
@@ -624,8 +667,14 @@ export class MultipartUploadService {
                      SELECT 1 FROM audit_events audit
                       WHERE audit.id = 'file-erasure:' || asset.id
                    )
+                   ${assetAccessSql}
               )`,
-        ).bind(multipart.uploadId, row.versionId, actor.eventId),
+        ).bind(
+          multipart.uploadId,
+          row.versionId,
+          actor.eventId,
+          ...assetAccessBindings,
+        ),
         this.env.DB.prepare(
           `UPDATE file_versions
               SET multipart_upload_id = ?, upload_status = 'uploading'
@@ -640,8 +689,14 @@ export class MultipartUploadService {
                      SELECT 1 FROM audit_events audit
                       WHERE audit.id = 'file-erasure:' || asset.id
                    )
+                   ${assetAccessSql}
               )`,
-        ).bind(multipart.uploadId, row.versionId, actor.eventId),
+        ).bind(
+          multipart.uploadId,
+          row.versionId,
+          actor.eventId,
+          ...assetAccessBindings,
+        ),
       ]);
       if (
         (uploadUpdated.meta.changes ?? 0) !== 1 ||
@@ -805,6 +860,7 @@ export class MultipartUploadService {
     this.requireBucket();
     const input = multipartListPartsSchema.parse(rawInput);
     const row = await this.access.loadByVersion(actor, input.versionId);
+    await this.assertCurrentUploadAllowed(actor, row);
     if (["completing", "completed"].includes(row.status)) {
       if (!row.manifestJson)
         throw new FileMultipartStateError(
@@ -840,7 +896,6 @@ export class MultipartUploadService {
       throw new FileMultipartStateError(
         `Multipart upload is ${row.status}; its parts cannot be listed.`,
       );
-    await this.assertCurrentUploadAllowed(actor, row);
     if (row.expiresAt <= Math.floor(Date.now() / 1_000))
       throw new FileMultipartStateError(
         "This multipart upload has expired. Abort it and begin a new upload.",
@@ -1098,6 +1153,7 @@ export class MultipartUploadService {
       );
     }
     if (row.status === "completed") {
+      await this.assertCurrentUploadAllowed(actor, row);
       if (row.manifestHash !== manifestHash)
         throw new FileMultipartConflictError(
           "This upload was already completed with a different part manifest.",
@@ -1138,6 +1194,7 @@ export class MultipartUploadService {
         throw new FileMultipartStateError(
           "This multipart upload expired before completion. Abort it and begin a new upload.",
         );
+      const participantTaskGuard = this.participantTaskGuard(actor);
       const started = await this.env.DB.prepare(
         `UPDATE file_multipart_uploads
             SET status = 'completing', manifest_json = ?, manifest_hash = ?,
@@ -1156,15 +1213,35 @@ export class MultipartUploadService {
                  AND asset.status <> 'deleted'
                  AND NOT EXISTS (
                    SELECT 1 FROM audit_events audit
-                    WHERE audit.id = 'file-erasure:' || asset.id
+                   WHERE audit.id = 'file-erasure:' || asset.id
                  )
+                 ${
+                   participantTaskGuard
+                     ? `AND (
+                          asset.target_type <> 'task'
+                          OR EXISTS (
+                            SELECT 1 FROM task_instances task
+                             WHERE task.id = asset.target_id
+                               AND task.event_id = asset.event_id
+                               AND ${participantTaskGuard.sql}
+                          )
+                        )`
+                     : ""
+}
             )`,
       )
-        .bind(manifestJson, manifestHash, row.versionId, actor.eventId)
+        .bind(
+          manifestJson,
+          manifestHash,
+          row.versionId,
+          actor.eventId,
+          ...(participantTaskGuard?.bindings ?? []),
+        )
         .run();
-      if ((started.meta.changes ?? 0) !== 1)
+      if ((started.meta.changes ?? 0) !== 1) {
+        await this.assertCurrentUploadAllowed(actor, row);
         row = await this.access.loadByVersion(actor, row.versionId);
-      else row = { ...row, status: "completing", manifestJson, manifestHash };
+      } else row = { ...row, status: "completing", manifestJson, manifestHash };
     }
     if (row.status !== "completing" || !row.uploadId)
       throw new FileMultipartStateError(
@@ -1277,6 +1354,18 @@ export class MultipartUploadService {
     detected: string | null,
   ) {
     const auditProvenance = multipartAuditProvenance(actor);
+    const participantTaskGuard = this.participantTaskGuard(actor);
+    const assetAccessSql = participantTaskGuard
+      ? `AND (
+           asset.target_type <> 'task'
+           OR EXISTS (
+             SELECT 1 FROM task_instances task
+              WHERE task.id = asset.target_id AND task.event_id = asset.event_id
+                AND ${participantTaskGuard.sql}
+           )
+         )`
+      : "";
+    const assetAccessBindings = participantTaskGuard?.bindings ?? [];
     const [versionCommitted, uploadCommitted] = await this.env.DB.batch([
       this.env.DB.prepare(
         `UPDATE file_versions
@@ -1373,8 +1462,15 @@ export class MultipartUploadService {
                    SELECT 1 FROM audit_events audit
                     WHERE audit.id = 'file-erasure:' || asset.id
                  )
+                 ${assetAccessSql}
             )`,
-      ).bind(detected, object.httpEtag, row.versionId, actor.eventId),
+      ).bind(
+        detected,
+        object.httpEtag,
+        row.versionId,
+        actor.eventId,
+        ...assetAccessBindings,
+      ),
       this.env.DB.prepare(
         `UPDATE file_multipart_uploads
             SET status = 'completed', last_error = NULL, updated_at = unixepoch()
@@ -1398,9 +1494,16 @@ export class MultipartUploadService {
                         SELECT 1 FROM audit_events audit
                          WHERE audit.id = 'file-erasure:' || asset.id
                       )
+                      ${assetAccessSql}
                  )
             )`,
-      ).bind(row.versionId, actor.eventId, manifestHash, object.httpEtag),
+      ).bind(
+        row.versionId,
+        actor.eventId,
+        manifestHash,
+        object.httpEtag,
+        ...assetAccessBindings,
+      ),
       this.env.DB.prepare(
         `UPDATE file_assets SET updated_at = unixepoch()
           WHERE id = ? AND event_id = ? AND status <> 'deleted'

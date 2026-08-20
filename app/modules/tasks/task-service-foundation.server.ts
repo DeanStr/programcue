@@ -30,6 +30,25 @@ export class TaskEvidenceAttachmentConflictError extends TaskStateError {
   }
 }
 
+type ParticipantTaskSqlAlias = "ti" | "task" | "task_instances";
+
+export function participantTaskAccessSql(
+  alias: ParticipantTaskSqlAlias = "ti",
+) {
+  return `(
+    (${alias}.target_type = 'session' AND EXISTS (
+      SELECT 1 FROM session_speakers participant_session
+       WHERE participant_session.event_id = ${alias}.event_id
+         AND participant_session.session_id = ${alias}.target_id
+         AND participant_session.person_id = ?
+    ))
+    OR (${alias}.target_type <> 'session' AND (
+      ${alias}.owner_person_id = ?
+      OR (${alias}.target_type = 'speaker' AND ${alias}.target_id = ?)
+    ))
+  )`;
+}
+
 export function taskTemplateIdForIntent(eventId: string, intentId: string) {
   const normalizedEventId = eventId.trim();
   const normalizedIntentId = intentId.trim();
@@ -490,15 +509,6 @@ export class TaskServiceFoundation {
   }
 
   protected taskAccessClause() {
-    return `(
-      ti.owner_person_id = ?
-      OR (ti.target_type = 'speaker' AND ti.target_id = ?)
-      OR (ti.target_type = 'session' AND EXISTS (
-        SELECT 1 FROM session_speakers ss
-         WHERE ss.event_id = ti.event_id
-           AND ss.session_id = ti.target_id
-           AND ss.person_id = ?
-      ))
-    )`;
+    return participantTaskAccessSql();
   }
 }

@@ -3,7 +3,10 @@ import {
   participantAudienceSql,
   participantSpeakerAccessSql,
 } from "~/modules/resources/resource-service-shared";
-import { taskConfiguration } from "~/modules/tasks/task-service-foundation.server";
+import {
+  participantTaskAccessSql,
+  taskConfiguration,
+} from "~/modules/tasks/task-service-foundation.server";
 import type { Viewer } from "~/platform/auth/authorize.server";
 import { assetKindSchema, safeDownloadName } from "./file-policy";
 import { FileAccessError, FileScanPendingError } from "./file-service-errors";
@@ -180,15 +183,7 @@ export class FileAccessService {
                ) AS dependenciesComplete
           FROM task_instances ti
          WHERE ti.id = ? AND ti.event_id = ?
-           AND (
-             ti.owner_person_id = ?
-             OR (ti.target_type = 'speaker' AND ti.target_id = ?)
-             OR (ti.target_type = 'session' AND EXISTS (
-               SELECT 1 FROM session_speakers ss
-                WHERE ss.event_id = ti.event_id AND ss.session_id = ti.target_id
-                  AND ss.person_id = ?
-             ))
-           )
+           AND ${participantTaskAccessSql("ti")}
       `,
       )
         .bind(
@@ -624,16 +619,7 @@ export class FileAccessService {
               AND version.created_by_person_id = ?
             )
           )
-          AND (
-            task.owner_person_id = ?
-            OR (task.target_type = 'speaker' AND task.target_id = ?)
-            OR (task.target_type = 'session' AND EXISTS (
-              SELECT 1 FROM session_speakers relation
-               WHERE relation.event_id = task.event_id
-                 AND relation.session_id = task.target_id
-                 AND relation.person_id = ?
-            ))
-          )
+          AND ${participantTaskAccessSql("task")}
         LIMIT 1`,
     )
       .bind(
@@ -715,16 +701,7 @@ export class FileAccessService {
            AND asset.target_id IN (
              SELECT CAST(value AS TEXT) FROM json_each(?)
            )
-           AND (
-             task.owner_person_id = ?
-             OR (task.target_type = 'speaker' AND task.target_id = ?)
-             OR (task.target_type = 'session' AND EXISTS (
-               SELECT 1 FROM session_speakers relation
-                WHERE relation.event_id = task.event_id
-                  AND relation.session_id = task.target_id
-                  AND relation.person_id = ?
-             ))
-           )
+           AND ${participantTaskAccessSql("task")}
            AND EXISTS (
              SELECT 1 FROM task_evidence evidence
               WHERE evidence.event_id = asset.event_id

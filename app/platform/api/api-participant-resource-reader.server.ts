@@ -1,4 +1,5 @@
 import { requireValue } from "~/lib/required-value";
+import { participantTaskAccessSql } from "~/modules/tasks/task-service-foundation.server";
 import type { Viewer } from "~/platform/auth/authorize.server";
 import {
   decodePrivateCursor,
@@ -320,16 +321,7 @@ export class ApiParticipantResourceReader {
                AND event.organisation_id = ?
              LEFT JOIN people owner ON owner.id = task.owner_person_id
             WHERE task.event_id = ?
-              AND (
-                task.owner_person_id = ?
-                OR (task.target_type = 'speaker' AND task.target_id = ?)
-                OR (task.target_type = 'session' AND EXISTS (
-                  SELECT 1 FROM session_speakers speaker
-                   WHERE speaker.event_id = task.event_id
-                     AND speaker.session_id = task.target_id
-                     AND speaker.person_id = ?
-                ))
-              )
+              AND ${participantTaskAccessSql("task")}
          ) base WHERE 1 = 1${continuation.sql}
          ORDER BY base.sort DESC, base.id DESC LIMIT ?`,
       )

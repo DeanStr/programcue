@@ -200,7 +200,11 @@ deliverables are explicitly session-scoped task evidence, while reusable
 participant documents are explicitly speaker-scoped; upload authorization
 rejects absent or mismatched file-purpose configuration. The Files aggregate
 labels deliverables from the exact task/session relationship without offering
-an invalid participant erase control. Task evidence accepts MP4/WebM session
+an invalid participant erase control. Current session membership, rather than a
+stored task owner, authorizes every participant task, comment, upload, evidence
+history and download surface for session-targeted work; focused race coverage
+also rechecks that relationship at the completion, comment and upload mutation
+boundaries. Task evidence accepts MP4/WebM session
 video against the event's video limit in browser validation, declaration and
 multipart completion; other evidence retains the supporting-document limit.
 Private task API reads return the validated immutable configuration written at

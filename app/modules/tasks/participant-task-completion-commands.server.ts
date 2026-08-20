@@ -8,6 +8,7 @@ import {
   equalHash,
   hashUndoSecret,
   parseJson,
+  participantTaskAccessSql,
   randomUndoSecret,
   statusProgress,
   structuredTaskEvidence,
@@ -142,6 +143,7 @@ export class ParticipantTaskCompletionCommands extends ParticipantTaskWorkflowFo
           completed_by_person_id = CASE WHEN ? = 'completed' THEN ? ELSE NULL END,
           revision = revision + 1, last_operation_id = ?, updated_at = unixepoch()
          WHERE id = ? AND event_id = ? AND revision = ? AND status NOT IN ('completed','waived','submitted')
+           AND ${participantTaskAccessSql("task_instances")}
            AND NOT EXISTS (
              SELECT 1 FROM task_instance_dependencies dep
              JOIN task_instances prerequisite ON prerequisite.id = dep.depends_on_task_id
@@ -161,6 +163,9 @@ export class ParticipantTaskCompletionCommands extends ParticipantTaskWorkflowFo
         task.id,
         viewer.eventId,
         task.revision,
+        viewer.personId,
+        viewer.personId,
+        viewer.personId,
       ),
       this.env.DB.prepare(
         `
@@ -393,6 +398,14 @@ export class ParticipantTaskCompletionCommands extends ParticipantTaskWorkflowFo
     const evidenceBindings = result.evidenceId
       ? [result.evidenceId, result.evidenceId]
       : [];
+    const participant =
+      viewer.role === "speaker" || viewer.role === "submitter";
+    const undoAccessSql = participant
+      ? participantTaskAccessSql("task_instances")
+      : "1 = 1";
+    const undoAccessBindings = participant
+      ? [viewer.personId, viewer.personId, viewer.personId]
+      : [];
     const statements = [
       this.env.DB.prepare(
         `
@@ -403,6 +416,7 @@ export class ParticipantTaskCompletionCommands extends ParticipantTaskWorkflowFo
                revision = revision + 1, last_operation_id = ?, updated_at = unixepoch()
          WHERE id = ? AND event_id = ? AND status = 'completed'
            AND revision = ? AND last_operation_id = ?
+           AND ${undoAccessSql}
            ${evidenceGuard}
            AND NOT EXISTS (
              SELECT 1
@@ -455,6 +469,7 @@ export class ParticipantTaskCompletionCommands extends ParticipantTaskWorkflowFo
         viewer.eventId,
         result.completionRevision,
         operationId,
+        ...undoAccessBindings,
         ...evidenceBindings,
         JSON.stringify(result.dependentRevisions),
         JSON.stringify(result.dependentRevisions),

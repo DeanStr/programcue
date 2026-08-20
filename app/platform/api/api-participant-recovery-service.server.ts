@@ -1,4 +1,5 @@
 import type { Applicant } from "~/modules/submissions/submission-repository.server";
+import { participantTaskAccessSql } from "~/modules/tasks/task-service-foundation.server";
 import type { Viewer } from "~/platform/auth/authorize.server";
 import { EventRealtimeService } from "~/platform/realtime/event-realtime.server";
 import { ApiError } from "./api.server";
@@ -25,16 +26,7 @@ export class ApiParticipantRecoveryService {
         WHERE task.id = ? AND task.event_id = ?
           AND task.last_operation_id = ? AND task.revision = ?
           AND task.status IN ('completed','submitted')
-          AND (
-            task.owner_person_id = ?
-            OR (task.target_type = 'speaker' AND task.target_id = ?)
-            OR (task.target_type = 'session' AND EXISTS (
-              SELECT 1 FROM session_speakers speaker
-               WHERE speaker.event_id = task.event_id
-                 AND speaker.session_id = task.target_id
-                 AND speaker.person_id = ?
-            ))
-          )`,
+          AND ${participantTaskAccessSql("task")}`,
     )
       .bind(
         viewer.organisationId,

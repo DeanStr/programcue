@@ -1411,6 +1411,205 @@ describe("onboarding task service", () => {
       ).toEqual({ deletedAt: expect.any(Number) });
     });
 
+    it("revokes every participant task and evidence surface when a named owner leaves the session", async () => {
+      const testEnv = env as unknown as CloudflareEnvironment;
+      await ensureDemoSpeakerData(testEnv);
+      const tasks = new TaskService(testEnv);
+      const files = new FileService(testEnv);
+      const fileTaskId = await createSessionFileTask(
+        testEnv,
+        `Revoked session deliverable ${crypto.randomUUID()}`,
+      );
+      const checklistTemplateId = await tasks.createTemplate(admin, {
+        name: `Revoked session checklist ${crypto.randomUUID()}`,
+        description: "Confirm the private session requirement.",
+        targetType: "session",
+        taskType: "checklist",
+        impact: "high",
+        evidenceMode: "checkbox",
+        dueAnchor: "none",
+        dueOffsetDays: null,
+        fixedDueDate: null,
+        autoAssignOnAcceptance: false,
+        dependencyIds: [],
+      });
+      const checklistTaskId = (
+        await tasks.assignTemplate(
+          admin,
+          checklistTemplateId,
+          "session-demo-speaker",
+        )
+      ).taskId;
+      await testEnv.DB.prepare(
+        `UPDATE task_instances SET owner_person_id = ?
+          WHERE event_id = ? AND id IN (?, ?)`,
+      )
+        .bind(speaker.personId, speaker.eventId, fileTaskId, checklistTaskId)
+        .run();
+
+      const target = {
+        targetType: "task" as const,
+        targetId: fileTaskId,
+        assetKind: "task_evidence" as const,
+      };
+      const uploaded = await completeTestDirectUpload(
+        testEnv,
+        speaker,
+        target,
+        new File(
+          [
+            new Uint8Array([
+              0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x44,
+            ]),
+          ],
+          "revoked-owner-evidence.png",
+          { type: "image/png" },
+        ),
+      );
+      await tasks.attachCompletedFileEvidence(speaker, {
+        taskId: fileTaskId,
+        assetId: uploaded.assetId,
+        versionId: uploaded.versionId,
+      });
+      await files.recordScanResult({
+        ...(await acceptTestFileScanDispatch(
+          testEnv,
+          speaker.eventId,
+          uploaded.versionId,
+        )),
+        eventId: speaker.eventId,
+        versionId: uploaded.versionId,
+        provider: "test-scanner",
+        callbackId: `callback-${uploaded.versionId}`,
+        status: "clean",
+        result: { verdict: "clean" },
+      });
+      const checklist = (await tasks.listParticipantTasks(speaker)).find(
+        (task) => task.id === checklistTaskId,
+      );
+      expect(checklist).toBeDefined();
+
+      await testEnv.DB.prepare(
+        `DELETE FROM session_speakers
+          WHERE event_id = ? AND session_id = 'session-demo-speaker'
+            AND person_id = ?`,
+      )
+        .bind(speaker.eventId, speaker.personId)
+        .run();
+
+      const visibleTaskIds = (await tasks.listParticipantTasks(speaker)).map(
+        (task) => task.id,
+      );
+      expect(visibleTaskIds).not.toContain(fileTaskId);
+      expect(visibleTaskIds).not.toContain(checklistTaskId);
+      await expect(
+        tasks.completeParticipant(speaker, {
+          taskId: checklistTaskId,
+          revision: checklist!.revision,
+          confirmed: true,
+        }),
+      ).rejects.toThrow("not owned by this speaker");
+      await expect(
+        tasks.addComment(
+          speaker,
+          fileTaskId,
+          "This former speaker must not retain access.",
+          "participant",
+          `comment-intent:${crypto.randomUUID()}`,
+        ),
+      ).rejects.toThrow("not accessible to this participant");
+      await expect(
+        tasks.assertFileEvidenceUploadAllowed(speaker, fileTaskId),
+      ).rejects.toThrow("File task not found");
+      await expect(
+        files.assertParticipantTarget(speaker, target),
+      ).rejects.toThrow("does not belong to this speaker");
+      await expect(
+        files.listParticipantTaskEvidenceVersions(speaker, [fileTaskId]),
+      ).resolves.toEqual([]);
+      await expect(
+        files.participantTaskEvidenceDownload(
+          speaker,
+          uploaded.assetId,
+          uploaded.versionId,
+        ),
+      ).rejects.toThrow("outside your tasks");
+    });
+
+    it("revalidates session membership in participant completion and comment writes", async () => {
+      const testEnv = env as unknown as CloudflareEnvironment;
+      await ensureDemoSpeakerData(testEnv);
+      const tasks = new TaskService(testEnv);
+      const templateId = await tasks.createTemplate(admin, {
+        name: `Session authorization race ${crypto.randomUUID()}`,
+        description: "Confirm the private session requirement.",
+        targetType: "session",
+        taskType: "checklist",
+        impact: "high",
+        evidenceMode: "checkbox",
+        dueAnchor: "none",
+        dueOffsetDays: null,
+        fixedDueDate: null,
+        autoAssignOnAcceptance: false,
+        dependencyIds: [],
+      });
+      const taskId = (
+        await tasks.assignTemplate(admin, templateId, "session-demo-speaker")
+      ).taskId;
+      await testEnv.DB.prepare(
+        "UPDATE task_instances SET owner_person_id = ? WHERE id = ? AND event_id = ?",
+      )
+        .bind(speaker.personId, taskId, speaker.eventId)
+        .run();
+      const task = (await tasks.listParticipantTasks(speaker)).find(
+        (candidate) => candidate.id === taskId,
+      )!;
+      const removeRelationship = () =>
+        testEnv.DB.prepare(
+          `DELETE FROM session_speakers
+            WHERE event_id = ? AND session_id = 'session-demo-speaker'
+              AND person_id = ?`,
+        )
+          .bind(speaker.eventId, speaker.personId)
+          .run()
+          .then(() => undefined);
+
+      await expect(
+        new TaskService(
+          withBatchRace(testEnv, removeRelationship),
+        ).completeParticipant(speaker, {
+          taskId,
+          revision: task.revision,
+          confirmed: true,
+        }),
+      ).rejects.toThrow("changed. Refresh before completing");
+      await expect(
+        testEnv.DB.prepare(
+          "SELECT status FROM task_instances WHERE id = ? AND event_id = ?",
+        )
+          .bind(taskId, speaker.eventId)
+          .first(),
+      ).resolves.toEqual({ status: "not_started" });
+
+      await ensureDemoSpeakerData(testEnv);
+      await expect(
+        new TaskService(withBatchRace(testEnv, removeRelationship)).addComment(
+          speaker,
+          taskId,
+          "This comment must lose the authorization race.",
+          "participant",
+          `comment-intent:${crypto.randomUUID()}`,
+        ),
+      ).rejects.toThrow("Task access changed");
+      await expect(
+        testEnv.DB.prepare(
+          "SELECT COUNT(*) AS count FROM task_comments WHERE task_id = ?",
+        )
+          .bind(taskId)
+          .first(),
+      ).resolves.toEqual({ count: 0 });
+    });
+
     it("fails fast when a submitted file task lacks canonical evidence", async () => {
       const testEnv = env as unknown as CloudflareEnvironment;
       await ensureDemoSpeakerData(testEnv);

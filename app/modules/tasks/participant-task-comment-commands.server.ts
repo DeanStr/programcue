@@ -4,6 +4,7 @@ import { WebhookService } from "~/platform/operations/webhook-service.server";
 import { ParticipantTaskWorkflowFoundation } from "./participant-task-workflow-foundation.server";
 import {
   hashUndoSecret,
+  participantTaskAccessSql,
   TaskStateError,
 } from "./task-service-foundation.server";
 
@@ -33,7 +34,9 @@ export class ParticipantTaskCommentCommands extends ParticipantTaskWorkflowFound
     intentId: string,
   ) {
     const clean = z.string().trim().min(1).max(2_000).parse(body);
-    if (viewer.role === "speaker" || viewer.role === "submitter") {
+    const participant =
+      viewer.role === "speaker" || viewer.role === "submitter";
+    if (participant) {
       const task = await this.participantTask(viewer, taskId);
       if (!task)
         throw new TaskStateError(
@@ -122,12 +125,18 @@ export class ParticipantTaskCommentCommands extends ParticipantTaskWorkflowFound
     const preparedWebhook = await new WebhookService(
       this.env,
     ).prepareEventForAudit(viewer, webhookInput, auditEventId);
+    let created: D1Result | null = null;
     try {
-      await this.env.DB.batch([
+      [created] = await this.env.DB.batch([
         this.env.DB.prepare(
           `
         INSERT INTO task_comments (id, event_id, task_id, author_person_id, body, visibility, created_at)
-        VALUES (?, ?, ?, ?, ?, ?, unixepoch())
+        SELECT ?, ?, ?, ?, ?, ?, unixepoch()
+         WHERE EXISTS (
+           SELECT 1 FROM task_instances task
+            WHERE task.id = ? AND task.event_id = ?
+              AND ${participant ? participantTaskAccessSql("task") : "1 = 1"}
+         )
       `,
         ).bind(
           commentId,
@@ -136,6 +145,11 @@ export class ParticipantTaskCommentCommands extends ParticipantTaskWorkflowFound
           viewer.personId,
           clean,
           visibility,
+          taskId,
+          viewer.eventId,
+          ...(participant
+            ? [viewer.personId, viewer.personId, viewer.personId]
+            : []),
         ),
         this.env.DB.prepare(
           `INSERT INTO audit_events (
@@ -198,6 +212,11 @@ export class ParticipantTaskCommentCommands extends ParticipantTaskWorkflowFound
       ) {
         throw error;
       }
+    }
+    if (created && (created.meta.changes ?? 0) !== 1) {
+      throw new TaskStateError(
+        "Task access changed before the comment could be saved. Refresh and try again.",
+      );
     }
     const deliveries = await new WebhookService(
       this.env,
