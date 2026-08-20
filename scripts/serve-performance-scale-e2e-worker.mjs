@@ -7,7 +7,19 @@ import { repositoryRoot, resolveE2eRuntime } from "./e2e-runtime.mjs";
 import { resolvePackageExecutable } from "./package-executable.mjs";
 import { runProcess } from "./process-runner.mjs";
 
-const { origin, statePathFromRepository } = resolveE2eRuntime();
+const { port, statePathFromRepository } = resolveE2eRuntime();
+const seedPort = port === 65_535 ? port - 1 : port + 1;
+const seedRuntime = resolveE2eRuntime({
+  ...process.env,
+  PROGRAM_CUE_E2E_PORT: String(seedPort),
+  PROGRAM_CUE_E2E_INSPECTOR_PORT: "",
+});
+const seedEnvironment = {
+  ...process.env,
+  PROGRAM_CUE_E2E_PORT: String(seedRuntime.port),
+  PROGRAM_CUE_E2E_INSPECTOR_PORT: String(seedRuntime.inspectorPort),
+};
+const { origin: seedOrigin } = seedRuntime;
 const execFileAsync = promisify(execFile);
 const wrangler = resolvePackageExecutable("wrangler", "wrangler");
 
@@ -46,10 +58,10 @@ async function localD1(command) {
   return results.flatMap((result) => result.results);
 }
 
-function spawnServer() {
+function spawnServer(environment = process.env) {
   return spawn(process.execPath, ["scripts/serve-e2e-worker.mjs"], {
     cwd: repositoryRoot,
-    env: process.env,
+    env: environment,
     stdio: "inherit",
   });
 }
@@ -65,7 +77,7 @@ async function waitForSeed(child, exitPromise) {
   const deadline = Date.now() + 60_000;
   while (Date.now() < deadline) {
     const outcome = await Promise.race([
-      fetch(`${origin}/admin/event`, {
+      fetch(`${seedOrigin}/admin/event`, {
         headers: { cookie: "program_cue_demo_identity=administrator" },
         redirect: "manual",
         signal: AbortSignal.timeout(1_000),
@@ -83,7 +95,7 @@ async function waitForSeed(child, exitPromise) {
       const responseUrl = new URL(outcome.response.url);
       if (
         outcome.response.status === 200 &&
-        responseUrl.origin === origin &&
+        responseUrl.origin === seedOrigin &&
         responseUrl.pathname === "/admin/event" &&
         responseUrl.search === "" &&
         !outcome.response.headers.has("location")
@@ -148,7 +160,7 @@ const preparation = await runProcess(
 );
 if (preparation.code !== 0) process.exit(preparation.code);
 
-const seedServer = spawnServer();
+const seedServer = spawnServer(seedEnvironment);
 const seedExit = exited(seedServer);
 await waitForSeed(seedServer, seedExit);
 await stopServer(seedServer, seedExit, "SIGINT");
