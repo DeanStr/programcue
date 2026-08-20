@@ -223,6 +223,14 @@ export function AdminAssignedTasksPanel({
                             </a>
                           </p>
                         ) : null}
+                        {task.evidence
+                          .filter((item) => item.details.url)
+                          .map((item) => (
+                            <p key={item.id}>
+                              <strong>Legacy participant-submitted URL:</strong>{" "}
+                              {item.details.url}
+                            </p>
+                          ))}
                         {task.evidence[0].details.confirmed ? (
                           <small>Participant confirmed this requirement.</small>
                         ) : null}

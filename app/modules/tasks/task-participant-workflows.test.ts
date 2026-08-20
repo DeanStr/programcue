@@ -427,6 +427,20 @@ describe("onboarding task service", () => {
         destinationUrl: "https://example.test/event-information",
         acknowledgedAt: expect.any(Number),
       });
+      await testEnv.DB.prepare(
+        `UPDATE task_evidence
+            SET evidence_json = '{"url":"https://legacy.example.test/participant-entry"}'
+          WHERE task_id = ? AND event_id = ?`,
+      )
+        .bind(taskId, admin.eventId)
+        .run();
+      const historicalEvidence = (
+        await service.getAdminWorkspace(admin)
+      ).tasks.find((candidate) => candidate.id === taskId)?.evidence[0]
+        ?.details;
+      expect(historicalEvidence).toMatchObject({
+        url: "https://legacy.example.test/participant-entry",
+      });
       expect(() => taskDestinationUrl("{}")).toThrow(
         "This link task has no destination",
       );

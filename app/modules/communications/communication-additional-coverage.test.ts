@@ -561,6 +561,8 @@ describe("Communications D1 vertical slice", () => {
         eventId: viewer.eventId,
         organisationId: viewer.organisationId,
         idempotencyKey: `submission-payload-${crypto.randomUUID()}`,
+        applicationUrl:
+          "https://app.programcue.test/applications/durable-submission-a/manage",
       };
       await testEnv.DB.batch([
         testEnv.DB.prepare(
@@ -604,7 +606,12 @@ describe("Communications D1 vertical slice", () => {
       ).rejects.toThrow("does not exist in the authorised event");
       await expect(
         processSubmissionNotification(
-          { ...submissionMessage, submissionId: "substituted-submission-b" },
+          {
+            ...submissionMessage,
+            submissionId: "substituted-submission-b",
+            applicationUrl:
+              "https://app.programcue.test/applications/substituted-submission-b/manage",
+          },
           testEnv,
         ),
       ).rejects.toThrow("does not match its durable operation payload");

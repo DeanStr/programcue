@@ -53,7 +53,7 @@ function requirePreparedTaskWebhook(
 }
 
 const matchingActiveTaskDefinitionSql = `
-  duplicate.template_id <> ?
+  (duplicate.template_id IS NULL OR duplicate.template_id <> ?)
   AND duplicate.status NOT IN ('completed','waived')
   AND lower(trim(duplicate.title)) = lower(trim(?))
   AND duplicate.description IS ?
@@ -720,9 +720,6 @@ export class TaskTemplateWorkflows extends TaskServiceFoundation {
         const matchingTask = await this.env.DB.prepare(
           `SELECT duplicate.id
              FROM task_instances duplicate
-             JOIN task_templates duplicate_template
-               ON duplicate_template.id = duplicate.template_id
-              AND duplicate_template.event_id = duplicate.event_id
             WHERE duplicate.event_id = ?
               AND duplicate.target_type = ? AND duplicate.target_id = ?
               AND ${matchingActiveTaskDefinitionSql}
@@ -945,9 +942,6 @@ export class TaskTemplateWorkflows extends TaskServiceFoundation {
               AND ${targetGuard.sql}
               AND NOT EXISTS (
                 SELECT 1 FROM task_instances duplicate
-                JOIN task_templates duplicate_template
-                  ON duplicate_template.id = duplicate.template_id
-                 AND duplicate_template.event_id = duplicate.event_id
                 WHERE duplicate.event_id = ?
                    AND duplicate.target_type = ?
                    AND duplicate.target_id = ?
@@ -1184,9 +1178,6 @@ export class TaskTemplateWorkflows extends TaskServiceFoundation {
         const duplicate = await this.env.DB.prepare(
           `SELECT duplicate.id
              FROM task_instances duplicate
-             JOIN task_templates duplicate_template
-               ON duplicate_template.id = duplicate.template_id
-              AND duplicate_template.event_id = duplicate.event_id
             WHERE duplicate.event_id = ?
               AND duplicate.target_type = ? AND duplicate.target_id = ?
               AND ${matchingActiveTaskDefinitionSql}

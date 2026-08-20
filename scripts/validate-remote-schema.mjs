@@ -286,6 +286,10 @@ function credentialFreeHttpsUrl(value) {
 export function validatePendingTaskConfigurationInventory(rows) {
   const invalid = [];
   for (const row of rows) {
+    if (row.recordType === "instance") {
+      invalid.push(`instance ${row.recordId ?? "unknown"}`);
+      continue;
+    }
     let configuration;
     try {
       configuration = JSON.parse(row.configurationJson);
@@ -322,7 +326,7 @@ export function validatePendingTaskConfigurationInventory(rows) {
   }
   if (invalid.length > 0) {
     throw new Error(
-      `Remote D1 contains legacy participant tasks with invalid configuration (${invalid.slice(0, 20).join(", ")}${invalid.length > 20 ? `, and ${invalid.length - 20} more` : ""}). Add an organizer-owned credential-free HTTPS destination to every link task, explicitly classify each file task as a participant document or session deliverable with the matching target, or retire the affected records before migration ${taskInstanceConfigurationSnapshotMigrationName}. Participant-entered URLs and inferred file scope are not accepted.`,
+      `Remote D1 contains legacy participant tasks with invalid configuration (${invalid.join(", ")}). Resolve every reported ID before migration ${taskInstanceConfigurationSnapshotMigrationName}: add an organizer-owned credential-free HTTPS destination to each link template, explicitly classify each file template as a participant document or session deliverable with the matching target, and attach each direct or mismatched instance to an explicitly reviewed matching template or delete it through an approved data-remediation operation. Completing or waiving an instance does not repair its historical snapshot. Participant-entered URLs and inferred file scope are not accepted.`,
     );
   }
   return rows.length;
@@ -852,6 +856,11 @@ function run() {
             template.configuration_json AS configurationJson
        FROM task_templates template
       WHERE template.task_type IN ('link_visit', 'file_upload')
+        AND (template.status = 'active' OR EXISTS (
+          SELECT 1 FROM task_instances linked
+           WHERE linked.template_id = template.id
+             AND linked.event_id = template.event_id
+        ))
       UNION ALL
      SELECT 'instance' AS recordType, instance.id AS recordId,
             instance.task_type AS taskType, instance.target_type AS targetType,

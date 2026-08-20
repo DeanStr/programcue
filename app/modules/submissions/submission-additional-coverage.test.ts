@@ -1,10 +1,14 @@
 import { env } from "cloudflare:test";
+import { RouterContextProvider } from "react-router";
 import { describe, expect, it } from "vitest";
 import { CommunicationService } from "~/modules/communications/communication-service.server";
 import { ResendEmailProvider } from "~/modules/communications/resend.server";
 import type { Viewer } from "~/platform/auth/authorize.server";
+import { cloudflareContext } from "~/platform/cloudflare-context";
 import { ensureDemoData } from "~/platform/demo/seed.server";
 import { processSubmissionNotification } from "../../../workers/communications-queue";
+import { loader as submissionManagementLoader } from "../../routes/submission-management";
+import { isSubmissionManagementUrl } from "./submission-management-url.server";
 import {
   D1SubmissionRepository,
   SubmissionDraftSavedError,
@@ -30,11 +34,28 @@ const viewer: Viewer = {
   demo: true,
 };
 
+describe("submission management URL validation", () => {
+  const submissionId = "submission-protocol-check";
+  const httpUrl =
+    "http://app.programcue.test/applications/submission-protocol-check/manage";
+
+  it("rejects cleartext durable links in production", () => {
+    expect(isSubmissionManagementUrl(httpUrl, submissionId, "production")).toBe(
+      false,
+    );
+  });
+
+  it("allows local HTTP links outside production", () => {
+    expect(isSubmissionManagementUrl(httpUrl, submissionId, "test")).toBe(true);
+  });
+});
+
 async function publishedForm(overrides: Record<string, unknown> = {}) {
   const queued: unknown[] = [];
   const testEnv = {
     ...(env as unknown as CloudflareEnvironment),
     DB: env.DB,
+    BETTER_AUTH_URL: "https://app.programcue.test",
     RESEND_API_KEY: "submission-test-resend-key",
     OPERATIONS_QUEUE: {
       send: async (message: unknown) => {
@@ -86,6 +107,14 @@ async function verifiedApplicant(
   slug: string,
   email = `applicant-${crypto.randomUUID()}@example.com`,
 ) {
+  return (await verifiedApplicantSession(service, slug, email)).applicant;
+}
+
+async function verifiedApplicantSession(
+  service: SubmissionService,
+  slug: string,
+  email = `applicant-${crypto.randomUUID()}@example.com`,
+) {
   const form = await service.getPublicForm(slug);
   await expect(
     service.applicants.requestCode(form, email, ""),
@@ -96,7 +125,16 @@ async function verifiedApplicant(
   });
   const applicant = await service.applicants.get(request, form);
   expect(applicant?.email).toBe(email);
-  return applicant!;
+  return { applicant: applicant!, cookie: verified.cookie.split(";", 1)[0]! };
+}
+
+function routeContext(environment: CloudflareEnvironment) {
+  const provider = new RouterContextProvider();
+  provider.set(cloudflareContext, {
+    env: environment,
+    ctx: {} as ExecutionContext,
+  });
+  return provider;
 }
 
 const validAnswers = {
@@ -294,7 +332,8 @@ describe("Submissions D1 vertical slice", () => {
       )
         .bind(`sender-submission-${crypto.randomUUID()}`, viewer.eventId)
         .run();
-      const applicant = await verifiedApplicant(service, slug);
+      const { applicant, cookie: applicantCookie } =
+        await verifiedApplicantSession(service, slug);
       const firstId = await service.createDraft(slug, applicant);
       const secondId = await service.createDraft(slug, applicant);
       expect(
@@ -346,6 +385,37 @@ describe("Submissions D1 vertical slice", () => {
           message.type === "submission.notification",
       );
       expect(confirmationMessage).toBeDefined();
+      const expectedApplicationUrl = new URL(
+        `/applications/${encodeURIComponent(firstId)}/manage`,
+        testEnv.BETTER_AUTH_URL,
+      );
+      expect(confirmationMessage).toMatchObject({
+        applicationUrl: expectedApplicationUrl.toString(),
+      });
+      const pendingIntent = await testEnv.DB.prepare(
+        `SELECT operation.payload_json AS payloadJson,
+                communication.content_snapshot_json AS contentSnapshotJson
+           FROM operation_jobs operation
+           JOIN communications communication
+             ON communication.operation_id = operation.id
+          WHERE operation.idempotency_key = ?`,
+      )
+        .bind(`submission-confirmation:${firstId}`)
+        .first<{ payloadJson: string; contentSnapshotJson: string }>();
+      expect(JSON.parse(pendingIntent!.payloadJson)).toMatchObject({
+        applicationUrl: expectedApplicationUrl.toString(),
+      });
+      expect(JSON.parse(pendingIntent!.contentSnapshotJson)).toMatchObject({
+        pendingMaterialization: true,
+        applicationUrl: expectedApplicationUrl.toString(),
+      });
+      const changedSlug = `${slug}-changed`;
+      await testEnv.DB.prepare(
+        `UPDATE form_definitions SET public_slug = ?
+          WHERE id = ? AND event_id = ?`,
+      )
+        .bind(changedSlug, id, viewer.eventId)
+        .run();
       const providerRequests: Array<Record<string, unknown>> = [];
       const provider = new ResendEmailProvider(
         "submission-provider-key",
@@ -406,11 +476,6 @@ describe("Submissions D1 vertical slice", () => {
         to: [applicant.email],
         subject: `We received ${validAnswers.title}`,
       });
-      const expectedApplicationUrl = new URL(
-        `/apply/${encodeURIComponent(slug)}`,
-        deliveryEnvironment.BETTER_AUTH_URL,
-      );
-      expectedApplicationUrl.searchParams.set("draft", firstId);
       expect(String(providerRequests[0]?.text)).toContain(
         `Manage application: ${expectedApplicationUrl.toString()}`,
       );
@@ -468,7 +533,7 @@ describe("Submissions D1 vertical slice", () => {
       ).toBe(true);
       const coSpeaker = await verifiedApplicant(
         service,
-        slug,
+        changedSlug,
         "casey@example.com",
       );
       const invitations = await service.repository.getCoSpeakerInvitations(
@@ -478,7 +543,7 @@ describe("Submissions D1 vertical slice", () => {
       expect(invitations).toMatchObject([
         { submissionId: firstId, submissionTitle: validAnswers.title },
       ]);
-      await service.claimCoSpeaker(slug, coSpeaker, invitations[0].id);
+      await service.claimCoSpeaker(changedSlug, coSpeaker, invitations[0].id);
       const claimed = await env.DB.prepare(
         "SELECT person_id AS personId, invitation_status AS status FROM submission_speakers WHERE id = ?",
       )
@@ -511,6 +576,47 @@ describe("Submissions D1 vertical slice", () => {
         providerMessageId: "resend-submission-confirmation-001",
         operationStatus: "completed",
       });
+      const managed = await submissionManagementLoader({
+        request: new Request(expectedApplicationUrl, {
+          headers: { cookie: applicantCookie },
+        }),
+        params: { submissionId: firstId },
+        context: routeContext(deliveryEnvironment),
+      } as never);
+      expect(managed).toBeInstanceOf(Response);
+      expect((managed as Response).status).toBe(302);
+      expect((managed as Response).headers.get("cache-control")).toBe(
+        "private, no-store",
+      );
+      expect((managed as Response).headers.get("location")).toBe(
+        `/apply/${encodeURIComponent(changedSlug)}?draft=${encodeURIComponent(firstId)}#submitted-application`,
+      );
+      await expect(
+        submissionManagementLoader({
+          request: new Request(expectedApplicationUrl),
+          params: { submissionId: firstId },
+          context: routeContext(deliveryEnvironment),
+        } as never),
+      ).rejects.toMatchObject({ status: 404 });
+      const otherApplicant = await verifiedApplicantSession(
+        service,
+        changedSlug,
+      );
+      const denied = await submissionManagementLoader({
+        request: new Request(expectedApplicationUrl, {
+          headers: { cookie: otherApplicant.cookie },
+        }),
+        params: { submissionId: firstId },
+        context: routeContext(deliveryEnvironment),
+      } as never).then(
+        () => null,
+        (error: unknown) => error,
+      );
+      expect(denied).toBeInstanceOf(Response);
+      expect((denied as Response).status).toBe(404);
+      expect((denied as Response).headers.get("cache-control")).toBe(
+        "private, no-store",
+      );
       expect(secondId).not.toBe(firstId);
     });
 
@@ -542,6 +648,32 @@ describe("Submissions D1 vertical slice", () => {
           },
         ),
       ).rejects.toThrow("Required OPERATIONS_QUEUE binding is unavailable");
+      await expect(
+        testEnv.DB.prepare(
+          `SELECT status, revision, answers_json AS answersJson
+             FROM submissions WHERE id = ? AND event_id = ?`,
+        )
+          .bind(submissionId, viewer.eventId)
+          .first(),
+      ).resolves.toEqual(before);
+      const invalidUrlEnvironment = {
+        ...testEnv,
+        BETTER_AUTH_URL: "ftp://app.programcue.test",
+      } as unknown as CloudflareEnvironment;
+      await expect(
+        new SubmissionService(invalidUrlEnvironment).submitDraft(
+          slug,
+          applicant,
+          {
+            submissionId,
+            revision: before!.revision,
+            answers: validAnswers,
+            speakers: [{ name: "URL Test", email: applicant.email }],
+          },
+        ),
+      ).rejects.toThrow(
+        "BETTER_AUTH_URL must use HTTPS before submission confirmations can be delivered",
+      );
       await expect(
         testEnv.DB.prepare(
           `SELECT status, revision, answers_json AS answersJson
@@ -617,6 +749,7 @@ describe("Submissions D1 vertical slice", () => {
         eventId: viewer.eventId,
         organisationId: viewer.organisationId,
         idempotencyKey,
+        applicationUrl: `https://app.programcue.test/applications/${encodeURIComponent(submissionId)}/manage`,
       };
       await testEnv.DB.batch([
         testEnv.DB.prepare(
@@ -631,7 +764,11 @@ describe("Submissions D1 vertical slice", () => {
           viewer.personId,
           idempotencyKey,
           token,
-          JSON.stringify({ ...message, type: "not-a-submission-notification" }),
+          JSON.stringify({
+            ...message,
+            applicationUrl:
+              "https://app.programcue.test/applications/a-different-submission/manage",
+          }),
         ),
         testEnv.DB.prepare(
           `INSERT INTO communications (

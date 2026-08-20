@@ -9,6 +9,7 @@ import {
   buildCoSpeakerInvitationPlan,
   persistQueueFailure,
 } from "./co-speaker-invitation.server";
+import { submissionManagementUrl } from "./submission-management-url.server";
 import {
   type Applicant,
   type FormSummary,
@@ -71,6 +72,10 @@ export class SubmissionDraftFinalizer {
     if (!operationsQueue) {
       throw new Error("Required OPERATIONS_QUEUE binding is unavailable.");
     }
+    const applicationUrl = submissionManagementUrl(
+      this.env,
+      payload.submissionId,
+    );
     const operationId = options.operationId ?? crypto.randomUUID();
     const draftOperationId = options.operationId
       ? `${options.operationId}:draft`
@@ -171,6 +176,7 @@ export class SubmissionDraftFinalizer {
       eventId: form.eventId,
       organisationId: event.organisationId,
       idempotencyKey: confirmationIdempotencyKey,
+      applicationUrl,
     };
     const invitedSpeakers = await this.env.DB.prepare(
       `SELECT id, email, display_name AS displayName,
@@ -450,6 +456,7 @@ export class SubmissionDraftFinalizer {
           category: "submission_confirmation",
           pendingMaterialization: true,
           submissionId: payload.submissionId,
+          applicationUrl,
         }),
         applicant.personId,
         payload.submissionId,

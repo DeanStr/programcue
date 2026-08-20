@@ -602,6 +602,39 @@ describe("typed task API service", () => {
       code: "INVALID_TASK_DEPENDENCY",
     } satisfies Partial<ApiError>);
   });
+
+  it("returns the immutable participant configuration written by the API", async () => {
+    const service = new ApiTaskService(env as unknown as CloudflareEnvironment);
+    const destinationUrl = "https://example.test/participant-brief";
+    const created = await service.create(
+      principal,
+      {
+        title: `Visit participant brief ${crypto.randomUUID()}`,
+        description: "Review the organiser-provided participant brief.",
+        targetType: "event",
+        targetId: eventId,
+        ownerPersonId: null,
+        taskType: "link_visit",
+        configuration: { destinationUrl },
+        impact: "medium",
+        dueAt: null,
+        dependencyIds: [],
+      },
+      `corr-link-task-${crypto.randomUUID()}`,
+      `link-task-${crypto.randomUUID()}`,
+    );
+
+    expect(created.task.configuration).toEqual({ destinationUrl });
+    await expect(
+      service.get(principal, created.task.id),
+    ).resolves.toMatchObject({
+      configuration: { destinationUrl },
+    });
+    const listed = await service.list(principal, { limit: 200 });
+    expect(
+      listed.tasks.find((task) => task.id === created.task.id)?.configuration,
+    ).toEqual({ destinationUrl });
+  });
 });
 
 describe("schedule publication API actor", () => {

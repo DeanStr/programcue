@@ -218,6 +218,21 @@ test("participant-task snapshot preflight rejects ambiguous legacy configuration
     () =>
       validatePendingTaskConfigurationInventory([
         {
+          recordType: "instance",
+          recordId: "link-mismatched-but-plausible",
+          taskType: "link_visit",
+          targetType: "speaker",
+          configurationJson: JSON.stringify({
+            destinationUrl: "https://example.test/brief",
+          }),
+        },
+      ]),
+    /link-mismatched-but-plausible/u,
+  );
+  assert.throws(
+    () =>
+      validatePendingTaskConfigurationInventory([
+        {
           recordType: "template",
           recordId: "link-legacy",
           taskType: "link_visit",
@@ -234,7 +249,7 @@ test("participant-task snapshot preflight rejects ambiguous legacy configuration
           }),
         },
       ]),
-    /link-legacy.*slides-ambiguous.*inferred file scope are not accepted/u,
+    /link-legacy.*slides-ambiguous.*Completing or waiving an instance does not repair its historical snapshot.*inferred file scope are not accepted/u,
   );
   assert.throws(
     () =>
@@ -263,6 +278,17 @@ test("participant-task snapshot preflight rejects ambiguous legacy configuration
         },
       ]),
     /null-destination/u,
+  );
+  const everyReportedId = Array.from({ length: 21 }, (_, index) => ({
+    recordType: "instance",
+    recordId: `reported-instance-${index + 1}`,
+    taskType: "link_visit",
+    targetType: "speaker",
+    configurationJson: "{}",
+  }));
+  assert.throws(
+    () => validatePendingTaskConfigurationInventory(everyReportedId),
+    /reported-instance-1.*reported-instance-21/u,
   );
   assert.match(taskInstanceConfigurationSnapshotMigrationName, /^0048_/u);
 

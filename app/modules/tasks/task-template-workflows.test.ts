@@ -717,6 +717,50 @@ describe("onboarding task service", () => {
       ).resolves.toEqual({ count: 1 });
     });
 
+    it("rejects a template assignment that duplicates an active direct task", async () => {
+      const testEnv = env as unknown as CloudflareEnvironment;
+      await ensureDemoSpeakerData(testEnv);
+      const service = new TaskService(testEnv);
+      const name = `Direct task definition ${crypto.randomUUID()}`;
+      const description = "Confirm the exact direct task requirement.";
+      const templateId = await service.createTemplate(admin, {
+        name,
+        description,
+        targetType: "speaker",
+        taskType: "checklist",
+        impact: "high",
+        evidenceMode: "checkbox",
+        dueAnchor: "none",
+        dueOffsetDays: null,
+        fixedDueDate: null,
+        autoAssignOnAcceptance: false,
+        dependencyIds: [],
+      });
+      await testEnv.DB.prepare(
+        `INSERT INTO task_instances (
+           id, event_id, template_id, target_type, target_id, owner_person_id,
+           title, description, task_type, impact, evidence_mode,
+           configuration_json, status, readiness_state, readiness_percent,
+           revision, created_at, updated_at
+         ) VALUES (?, ?, NULL, 'speaker', ?, ?, ?, ?, 'checklist', 'high',
+                   'checkbox', '{}', 'not_started', 'on_track', 0, 1,
+                   unixepoch(), unixepoch())`,
+      )
+        .bind(
+          `direct-task-${crypto.randomUUID()}`,
+          admin.eventId,
+          speaker.personId,
+          speaker.personId,
+          name,
+          description,
+        )
+        .run();
+
+      await expect(
+        service.assignTemplate(admin, templateId, speaker.personId),
+      ).rejects.toThrow(/already assigned/i);
+    });
+
     it("allows the same title when participant-facing task material differs", async () => {
       const testEnv = env as unknown as CloudflareEnvironment;
       await ensureDemoSpeakerData(testEnv);

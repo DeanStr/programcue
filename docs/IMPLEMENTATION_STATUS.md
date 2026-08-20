@@ -177,12 +177,21 @@ participant acknowledgement; participant-entered evidence URLs are removed.
 The remote migration preflight blocks snapshot migration `0048` when legacy
 link or file tasks remain ambiguous, requiring explicit remediation rather
 than a compatibility fallback.
+It checks active templates, referenced historical templates and anomalous
+direct assignments; completing or waiving an instance does not clear the gate,
+and it reports every affected ID for explicit reviewed repair or removal before
+deployment.
 Public submission redirects select the exact submitted application and present
-a primary in-page management action. Confirmation delivery snapshots that exact
-absolute URL and includes a product-owned management link; confirmation
-authoring hides and rejects custom buttons and previews the fixed action. The participant
-workspace action is server-gated to a compatible ordinary session and accepted
-event role. Direct participant profile uploads are headshot-only. Session
+a primary in-page management action. Confirmation intent snapshots an absolute,
+credential-free, submission-ID-based management URL before Queue dispatch,
+requiring HTTPS under production security while retaining HTTP local
+development. Queue materialisation validates that exact durable route; the
+applicant-authorised route returns non-cacheable denials, resolves the form's
+current slug, and delivery includes the product-owned management link without
+re-reading mutable routing data. Confirmation authoring hides and rejects
+custom buttons and previews the fixed action. The participant workspace action
+is server-gated to a compatible ordinary session and accepted event role.
+Direct participant profile uploads are headshot-only. Session
 deliverables are explicitly session-scoped task evidence, while reusable
 participant documents are explicitly speaker-scoped; upload authorization
 rejects absent or mismatched file-purpose configuration. The Files aggregate
@@ -190,6 +199,11 @@ labels deliverables from the exact task/session relationship without offering
 an invalid participant erase control. Task evidence accepts MP4/WebM session
 video against the event's video limit in browser validation, declaration and
 multipart completion; other evidence retains the supporting-document limit.
+Private task API reads return the validated immutable configuration written at
+creation, and template assignment's exact-definition duplicate check includes
+active direct/API-created tasks. Administrators retain explicitly labelled,
+non-clickable visibility of legacy participant-submitted link evidence without
+reintroducing that input into current completion behavior.
 These are repository implementation and focused-test claims only; no migration
 or application release has been deployed.
 

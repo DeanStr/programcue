@@ -121,6 +121,7 @@ export default [
     "apply/:slug/import/sessionize",
     "routes/applicant-sessionize-import.ts",
   ),
+  route("applications/:submissionId/manage", "routes/submission-management.ts"),
   route("api/docs", "routes/api-docs.tsx"),
   route("api/auth/*", "routes/auth-api.ts"),
   route("oauth/calendar/:provider", "routes/calendar-oauth-start.ts"),

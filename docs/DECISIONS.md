@@ -428,6 +428,13 @@ Before migration `0048`, the release preflight inventories existing link and
 file templates plus anomalous direct assignments. Deployment stops until link
 destinations are valid and file purposes are explicit; it never promotes a
 participant-entered URL or guesses a file task's scope.
+Active templates and every template still referenced by a historical task are
+checked. Completing or waiving an ambiguous task does not make its eventual
+snapshot valid. A reported direct or mismatched assignment must be attached to
+an explicitly reviewed matching template or removed through an approved,
+ID-specific data remediation before deployment; template retirement is not a
+general remediation path. The preflight reports every affected ID rather than
+truncating the remediation inventory.
 
 Participant profile uploads are limited to headshots. Slides, posters,
 handouts, supporting documents and session videos use assigned `file_upload`
@@ -442,15 +449,28 @@ supporting-document limit. Task evidence is not participant-erasable from the
 aggregate Files view.
 
 Submission confirmations keep configurable message copy but always include the
-server-generated URL for the exact submitted application in the durable
-delivery source values and product-owned management action. The public form
-keeps the selected submission visible after submit. A participant-workspace
-action is shown only when the same ordinary authenticated identity has accepted
-speaker or submitter access to that event; applicant-cookie access alone does
-not imply workspace access. Submission-confirmation templates cannot configure
-a custom button: the editor previews the fixed action, authoring rejects custom
-button fields, and automatic delivery fails on legacy published content that
-still contains them.
+server-generated, credential-free, submission-ID-based management URL for the
+exact submitted application; production requires HTTPS while local development
+may use HTTP. That absolute URL is persisted with the original notification
+intent before Queue dispatch and is reused in durable delivery source values
+and the product-owned management action. Queue materialisation verifies that
+the durable URL still names the exact submission route. The stable route
+authorises the current applicant session, returns non-cacheable denials and
+resolves the form's current slug internally; a submission ID alone grants no
+access. The public form keeps the selected submission visible after submit. A
+participant-workspace action is shown only when the same ordinary authenticated
+identity has accepted speaker or submitter access to that event;
+applicant-cookie access alone does not imply workspace access.
+Submission-confirmation templates cannot configure a custom button: the editor
+previews the fixed action, authoring rejects custom button fields, and automatic
+delivery fails on legacy published content that still contains them.
+
+Participant task APIs return the validated immutable configuration they write.
+Exact-definition duplicate detection reads task-instance snapshots and includes
+active direct/API-created tasks rather than depending on a template join.
+Historical participant-entered link evidence remains visible to administrators
+as labelled, non-clickable legacy text; it is never accepted by the current
+participant completion contract or treated as the organiser destination.
 
 | Decision                             | Outcome                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
 | ------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |

@@ -6,7 +6,7 @@ import {
 } from "../../app/modules/communications/communication-schema";
 import { communicationDeliveryIdempotencyKey } from "../../app/modules/communications/communication-service-shared";
 import { requireEmailProviderConfiguration } from "../../app/modules/communications/email-provider.server";
-import { requiresProductionSecurity } from "../../app/platform/runtime-environment.server";
+import { isSubmissionManagementUrl } from "../../app/modules/submissions/submission-management-url.server";
 import { processCommunicationSend } from "./communication-send";
 import type { QueueProviderDependencies } from "./handler-types";
 import { markTriggerFailure } from "./notification-failure";
@@ -14,58 +14,43 @@ import { markTriggerFailure } from "./notification-failure";
 const INVALID_SUBMISSION_NOTIFICATION_FAILURE =
   "The durable submission notification snapshot is invalid and cannot be delivered safely. Ask the applicant to submit again or contact them through an explicitly reviewed communication.";
 
-function submissionApplicationUrl(
-  env: CloudflareEnvironment,
-  publicSlug: string,
-  submissionId: string,
-) {
-  const configuredOrigin = env.BETTER_AUTH_URL?.trim();
-  if (!configuredOrigin) {
-    throw new Error(
-      "BETTER_AUTH_URL is required to build submission confirmation links.",
-    );
-  }
-  let url: URL;
-  try {
-    url = new URL(configuredOrigin);
-  } catch {
-    throw new Error(
-      "BETTER_AUTH_URL must be an absolute URL before submission confirmations can be delivered.",
-    );
-  }
-  if (url.username || url.password) {
-    throw new Error("BETTER_AUTH_URL must not contain embedded credentials.");
-  }
-  if (
-    url.protocol !== "https:" &&
-    (requiresProductionSecurity(env.APP_ENV) || url.protocol !== "http:")
-  ) {
-    throw new Error(
-      "BETTER_AUTH_URL must use HTTPS before submission confirmations can be delivered.",
-    );
-  }
-  url.pathname = `/apply/${encodeURIComponent(publicSlug)}`;
-  url.search = new URLSearchParams({ draft: submissionId }).toString();
-  url.hash = "";
-  return url.toString();
+function submissionNotificationMessageSchema(appEnvironment: unknown) {
+  return z
+    .object({
+      type: z.literal("submission.notification"),
+      operationId: z.string().min(1),
+      communicationId: z.string().min(1),
+      submissionId: z.string().min(1),
+      eventId: z.string().min(1),
+      organisationId: z.string().min(1),
+      idempotencyKey: z.string().min(8),
+      applicationUrl: z.string().max(2_048),
+    })
+    .superRefine((message, context) => {
+      if (
+        !isSubmissionManagementUrl(
+          message.applicationUrl,
+          message.submissionId,
+          appEnvironment,
+        )
+      ) {
+        context.addIssue({
+          code: "custom",
+          path: ["applicationUrl"],
+          message:
+            "The application URL must use the permitted protocol, contain no credentials, and identify the exact submitted application.",
+        });
+      }
+    });
 }
-
-const submissionNotificationMessageSchema = z.object({
-  type: z.literal("submission.notification"),
-  operationId: z.string().min(1),
-  communicationId: z.string().min(1),
-  submissionId: z.string().min(1),
-  eventId: z.string().min(1),
-  organisationId: z.string().min(1),
-  idempotencyKey: z.string().min(8),
-});
 /** Materialises the durable public-submission confirmation intent. */
 export async function processSubmissionNotification(
   input: unknown,
   env: CloudflareEnvironment,
   dependencies: QueueProviderDependencies = {},
 ) {
-  const message = submissionNotificationMessageSchema.parse(input);
+  const messageSchema = submissionNotificationMessageSchema(env.APP_ENV);
+  const message = messageSchema.parse(input);
   const operation = await env.DB.prepare(
     `
     SELECT o.id, o.status, o.requested_by_person_id AS requestedByPersonId,
@@ -96,13 +81,9 @@ export async function processSubmissionNotification(
   ) {
     return;
   }
-  let savedMessage: ReturnType<
-    typeof submissionNotificationMessageSchema.parse
-  >;
+  let savedMessage: z.infer<typeof messageSchema>;
   try {
-    savedMessage = submissionNotificationMessageSchema.parse(
-      JSON.parse(operation.payloadJson),
-    );
+    savedMessage = messageSchema.parse(JSON.parse(operation.payloadJson));
   } catch {
     await markTriggerFailure(
       env,
@@ -178,15 +159,12 @@ export async function processSubmissionNotification(
     SELECT s.id AS submissionId, s.title AS submissionTitle,
            s.submitter_person_id AS personId, COALESCE(p.email, s.submitter_email) AS address,
            COALESCE(p.display_name, s.submitter_email) AS recipientName,
-           form.public_slug AS publicSlug,
            e.name AS eventName, e.brand_accent AS brandAccent,
            e.starts_at AS startsAt, e.ends_at AS endsAt
       FROM submissions s
       JOIN events e ON e.id = s.event_id AND e.organisation_id = ?
       JOIN form_versions version
         ON version.id = s.form_version_id AND version.event_id = s.event_id
-      JOIN form_definitions form
-        ON form.id = version.form_id AND form.event_id = s.event_id
       LEFT JOIN people p ON p.id = s.submitter_person_id
      WHERE s.id = ? AND s.event_id = ? AND s.status <> 'draft'
   `,
@@ -198,7 +176,6 @@ export async function processSubmissionNotification(
       personId: string | null;
       address: string | null;
       recipientName: string | null;
-      publicSlug: string;
       eventName: string;
       brandAccent: string;
       startsAt: number;
@@ -212,21 +189,6 @@ export async function processSubmissionNotification(
       message.communicationId,
     );
     return;
-  }
-
-  let applicationUrl: string | null = null;
-  let applicationUrlError: string | null = null;
-  try {
-    applicationUrl = submissionApplicationUrl(
-      env,
-      submission.publicSlug,
-      submission.submissionId,
-    );
-  } catch (error) {
-    applicationUrlError =
-      error instanceof Error
-        ? error.message
-        : "The application management URL could not be generated.";
   }
 
   let emailProvider: ReturnType<
@@ -272,7 +234,7 @@ export async function processSubmissionNotification(
       .first<{ id: string }>(),
   ]);
 
-  let configurationError: string | null = applicationUrlError;
+  let configurationError: string | null = null;
   let content: z.infer<typeof templateContentSchema> | null = null;
   if (
     !configurationError &&
@@ -301,15 +263,12 @@ export async function processSubmissionNotification(
       if (configuredContent.buttonText || configuredContent.buttonUrl) {
         configurationError =
           "The published submission confirmation template configures a custom button. Publish a version that uses the product-owned Manage application action.";
-      } else if (!applicationUrl) {
-        configurationError =
-          "The application management URL could not be generated.";
       } else {
         content = templateContentSchema.parse({
           ...configuredContent,
           body: `${configuredContent.body}${SUBMISSION_CONFIRMATION_MANAGEMENT_BODY_SUFFIX}`,
           buttonText: "Manage application",
-          buttonUrl: applicationUrl,
+          buttonUrl: message.applicationUrl,
         });
       }
     } catch {
@@ -416,7 +375,7 @@ export async function processSubmissionNotification(
         submission.submissionId,
         JSON.stringify({
           "submission.title": submission.submissionTitle,
-          "submission.url": applicationUrl,
+          "submission.url": message.applicationUrl,
         }),
         emailProvider?.provider ?? null,
         deliveryKey,

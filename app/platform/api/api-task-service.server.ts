@@ -3,6 +3,7 @@ import { requireValue } from "~/lib/required-value";
 
 import { AirtableProviderBoundary } from "~/modules/airtable/airtable-provider-boundary.server";
 import {
+  assignedTaskConfigurationSchema,
   suggestedTaskEvidenceMode,
   taskDestinationUrlSchema,
   taskFileScopeSchema,
@@ -131,6 +132,7 @@ type ApiTaskRow = {
   description: string | null;
   taskType: (typeof taskTypes)[number];
   impact: (typeof taskImpacts)[number];
+  configurationJson: string;
   status:
     | "not_started"
     | "in_progress"
@@ -153,8 +155,14 @@ type ApiTaskRow = {
 
 export type ApiTask = Omit<
   ApiTaskRow,
-  "dueAt" | "submittedAt" | "completedAt" | "createdAt" | "updatedAt"
+  | "configurationJson"
+  | "dueAt"
+  | "submittedAt"
+  | "completedAt"
+  | "createdAt"
+  | "updatedAt"
 > & {
+  configuration: z.infer<typeof assignedTaskConfigurationSchema>;
   dueAt: string | null;
   submittedAt: string | null;
   completedAt: string | null;
@@ -249,8 +257,12 @@ function apiTimestamp(value: number | null) {
 }
 
 function toApiTask(row: ApiTaskRow, dependencyIds: string[]): ApiTask {
+  const { configurationJson, ...task } = row;
   return {
-    ...row,
+    ...task,
+    configuration: assignedTaskConfigurationSchema.parse(
+      JSON.parse(configurationJson),
+    ),
     dueAt: apiTimestamp(row.dueAt),
     submittedAt: apiTimestamp(row.submittedAt),
     completedAt: apiTimestamp(row.completedAt),
@@ -416,6 +428,7 @@ export class ApiTaskService {
              ti.target_id AS targetId, ti.owner_person_id AS ownerPersonId,
              p.display_name AS ownerName, ti.title, ti.description,
              ti.task_type AS taskType, ti.impact,
+             ti.configuration_json AS configurationJson,
              CASE
                WHEN ti.status IN ('not_started','in_progress')
                  AND ti.due_at IS NOT NULL AND ti.due_at < unixepoch()
@@ -502,7 +515,8 @@ export class ApiTaskService {
       SELECT ti.id, ti.template_id AS templateId, ti.target_type AS targetType,
              ti.target_id AS targetId, ti.owner_person_id AS ownerPersonId,
              p.display_name AS ownerName, ti.title, ti.description,
-             ti.task_type AS taskType, ti.impact, ti.status,
+             ti.task_type AS taskType, ti.impact,
+             ti.configuration_json AS configurationJson, ti.status,
              ti.readiness_state AS readinessState,
              ti.readiness_percent AS readinessPercent, ti.revision,
              ti.due_at AS dueAt, ti.evidence_json AS evidenceJson,

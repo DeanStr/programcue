@@ -98,4 +98,76 @@ describe("administrator task discoverability", () => {
     expect(markup).toContain('<div class="value">5</div>');
     expect(markup).not.toContain('<div class="value">100%</div>');
   });
+
+  it("keeps retained legacy URLs visible when newer evidence has no URL", () => {
+    const markup = renderWorkspace(
+      taskData({
+        totalTaskCount: 1,
+        tasks: [
+          {
+            id: "task-legacy-link",
+            templateId: "template-legacy-link",
+            targetType: "speaker",
+            targetId: "speaker-1",
+            targetLabel: null,
+            ownerPersonId: "speaker-1",
+            ownerName: "Priya Shah",
+            title: "Review the participant handbook",
+            description: null,
+            taskType: "link_visit",
+            impact: "medium",
+            status: "completed",
+            readinessState: "on_track",
+            readinessPercent: 100,
+            isOverdue: false,
+            revision: 3,
+            dueAt: null,
+            evidenceJson: '{"confirmed":true}',
+            waiverJson: null,
+            submittedAt: 1_800_000_100,
+            completedAt: 1_800_000_100,
+            completedByPersonId: "speaker-1",
+            lastOperationId: "completion-current",
+            evidenceMode: "link",
+            configurationJson:
+              '{"destinationUrl":"https://organizer.example.test/handbook"}',
+            formFields: [],
+            evidence: [
+              {
+                id: "evidence-current",
+                taskId: "task-legacy-link",
+                fileAssetId: null,
+                evidenceJson: '{"confirmed":true}',
+                status: "approved",
+                createdAt: 1_800_000_100,
+                submittedBy: "Priya Shah",
+                downloadAvailable: false,
+                details: { confirmed: true } as never,
+              },
+              {
+                id: "evidence-legacy",
+                taskId: "task-legacy-link",
+                fileAssetId: null,
+                evidenceJson:
+                  '{"url":"https://legacy.example.test/participant-supplied"}',
+                status: "approved",
+                createdAt: 1_700_000_000,
+                submittedBy: "Priya Shah",
+                downloadAvailable: false,
+                details: {
+                  url: "https://legacy.example.test/participant-supplied",
+                } as never,
+              },
+            ],
+            comments: [],
+          },
+        ],
+      }),
+    );
+
+    expect(markup).toContain("Legacy participant-submitted URL:");
+    expect(markup).toContain(
+      "https://legacy.example.test/participant-supplied",
+    );
+  });
 });

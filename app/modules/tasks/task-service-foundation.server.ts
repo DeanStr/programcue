@@ -256,6 +256,7 @@ export const taskEvidenceDetailsSchema = z
   .object({
     confirmed: z.boolean().optional(),
     text: z.string().optional(),
+    url: z.string().trim().min(1).max(1_000).optional(),
     destinationUrl: taskDestinationUrlSchema.optional(),
     acknowledgedAt: z.number().int().positive().optional(),
     fileAssetId: z.string().optional(),
