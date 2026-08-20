@@ -31,6 +31,8 @@ describe("admin layout role routing", () => {
   });
 
   it.each([
+    "/admin",
+    "/admin.data",
     "/admin/reviewer",
     "/admin/reviewing",
     "/admin/review.data-extra",
@@ -75,6 +77,22 @@ describe("admin layout role routing", () => {
     ).toEqual({
       href: "/evaluate",
       label: "Choose an evaluation persona",
+    });
+  });
+
+  it("returns evaluation refusals to the loaded persona workspace", () => {
+    expect(
+      adminErrorReturn(403, false, {
+        pathname: "/admin/command",
+        evaluation: true,
+        evaluationWorkspace: {
+          href: "/admin/review",
+          label: "Back to Review & selection",
+        },
+      }),
+    ).toEqual({
+      href: "/admin/review",
+      label: "Back to Review & selection",
     });
   });
 

@@ -101,6 +101,50 @@ const MILESTONE_STATE_LABEL: Record<SpeakerMilestone["state"], string> = {
   not_started: "Not started",
 };
 
+export type SpeakerOutstandingResource = {
+  id: string;
+  title: string;
+  href: string;
+};
+
+function taskResourcePageId(task: SpeakerTask) {
+  try {
+    const parsed: unknown = JSON.parse(task.configurationJson);
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+      return null;
+    }
+    if (
+      !("resourcePageId" in parsed) ||
+      typeof parsed.resourcePageId !== "string"
+    ) {
+      return null;
+    }
+    const resourcePageId = parsed.resourcePageId.trim();
+    return resourcePageId || null;
+  } catch {
+    return null;
+  }
+}
+
+export function speakerHeroActions(
+  next: SpeakerTask | undefined,
+  outstandingResource: SpeakerOutstandingResource | null,
+) {
+  const resourceMatchesNext = Boolean(
+    next &&
+      outstandingResource &&
+      taskResourcePageId(next) === outstandingResource.id,
+  );
+  const resourceAction =
+    outstandingResource && (!next || resourceMatchesNext)
+      ? outstandingResource
+      : null;
+  return {
+    resourceAction,
+    taskAction: resourceAction ? null : (next ?? null),
+  };
+}
+
 export function SpeakerDashboardOverview({
   portal,
   next,
@@ -114,13 +158,10 @@ export function SpeakerDashboardOverview({
   next: SpeakerTask | undefined;
   completedCount: number;
   requirementCount: number;
-  outstandingResource?: { title: string; href: string } | null;
+  outstandingResource?: SpeakerOutstandingResource | null;
   requiredResourceCount: number;
   acknowledgedResourceCount: number;
 }) {
-  const waitingOnTeam = next
-    ? ["submitted", "blocked"].includes(next.status)
-    : false;
   const milestones = speakerMilestones({
     portal,
     completedCount,
@@ -132,8 +173,13 @@ export function SpeakerDashboardOverview({
     (milestone) => milestone.state === "complete",
   ).length;
   const preparationComplete = completedStages === milestones.length;
-  const resourceAction =
-    !next && outstandingResource ? outstandingResource : null;
+  const { resourceAction, taskAction } = speakerHeroActions(
+    next,
+    outstandingResource,
+  );
+  const waitingOnTeam = taskAction
+    ? ["submitted", "blocked"].includes(taskAction.status)
+    : false;
   return (
     <>
       <div className="speaker-portal-head">
@@ -148,9 +194,9 @@ export function SpeakerDashboardOverview({
       <section className="card next-action speaker-next-hero mt">
         <div className="speaker-next-copy">
           <span
-            className={`status ${next ? speakerStatusClass(next.status) : resourceAction ? "warning" : "success"}`}
+            className={`status ${taskAction ? speakerStatusClass(taskAction.status) : resourceAction ? "warning" : "success"}`}
           >
-            {next
+            {taskAction
               ? waitingOnTeam
                 ? "Waiting"
                 : "Next action"
@@ -161,29 +207,29 @@ export function SpeakerDashboardOverview({
                   : "Tasks complete"}
           </span>
           <h2>
-            {next?.title ??
+            {taskAction?.title ??
               resourceAction?.title ??
               (preparationComplete
                 ? "You are ready for the event"
                 : "No outstanding requirements")}
           </h2>
           <p className="subtle">
-            {next
+            {taskAction
               ? waitingOnTeam
-                ? next.status === "submitted"
+                ? taskAction.status === "submitted"
                   ? "Submitted for administrator review. No further action is required until the event team responds."
                   : "This requirement is waiting for its prerequisites to be completed."
-                : next.description
+                : taskAction.description
               : resourceAction
                 ? "Read and acknowledge the current published resource."
                 : preparationComplete
                   ? "There are no outstanding requirements right now."
                   : "Your task list is clear. Check the preparation stages below for remaining profile, session or resource status."}
           </p>
-          {next ? (
+          {taskAction ? (
             <Link
               className="btn primary"
-              to={`/participant/tasks#task-${next.id}`}
+              to={`/participant/tasks#task-${taskAction.id}`}
             >
               Open task
             </Link>

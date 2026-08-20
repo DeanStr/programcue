@@ -135,7 +135,14 @@
     grid-template-columns: 1fr;
     min-height: 0;
   }
+  .schedule-source {
+    order: 2;
+  }
+  .schedule-stage {
+    order: 1;
+  }
   .schedule-inspector {
+    order: 3;
     min-height: 22rem;
   }
   .schedule-inspector-toggle {

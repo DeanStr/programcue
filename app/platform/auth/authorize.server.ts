@@ -61,6 +61,9 @@ export function eventRoleAccessMessage(
     return "This page has no authorised roles configured.";
   }
   const roles = new Set(allowedRoles);
+  if (roles.size === 1 && roles.has("owner")) {
+    return "This page is for organisation owners. Your current role cannot open it.";
+  }
   const adminOnly = [...roles].every(
     (role) => role === "owner" || role === "administrator",
   );

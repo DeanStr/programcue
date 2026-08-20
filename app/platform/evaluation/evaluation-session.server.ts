@@ -93,6 +93,34 @@ export const EVALUATION_IDENTITIES = {
 
 export type EvaluationIdentityKey = keyof typeof EVALUATION_IDENTITIES;
 
+export function evaluationWorkspaceRecovery(
+  identityKey: EvaluationIdentityKey,
+) {
+  switch (identityKey) {
+    case "owner":
+      return {
+        href: "/admin/files/retention",
+        label: "Back to Data retention",
+      };
+    case "organizer":
+      return { href: "/admin/command", label: "Go to Command Centre" };
+    case "chair":
+      return { href: "/admin/review", label: "Back to Review & selection" };
+    case "reviewer":
+      return { href: "/review/workbench", label: "Back to review workbench" };
+    case "sbek_reviewer":
+      return { href: "/events/select", label: "Back to event access" };
+    case "applicant":
+    case "speaker":
+      return {
+        href: "/participant/dashboard",
+        label: "Go to participant workspace",
+      };
+    case "sbek_applicant":
+      return { href: "/apply/form", label: "Back to the application" };
+  }
+}
+
 export type EvaluationSessionPayload = {
   version: 1;
   identityKey: EvaluationIdentityKey | null;

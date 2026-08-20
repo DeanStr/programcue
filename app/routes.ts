@@ -133,6 +133,7 @@ export default [
   route("admin/events/:eventId/changes", "routes/event-changes.ts"),
   route("ai/context", "routes/ai-context-action.ts"),
   route("admin/exports/:resource.csv", "routes/admin-data-export.ts"),
+  route("admin", "routes/admin-index.ts"),
   layout("routes/admin-layout.tsx", [
     route("admin/command", "routes/command-centre.tsx"),
     route("admin/crm", "routes/admin-crm.tsx"),
@@ -216,6 +217,7 @@ export default [
     }),
     route("admin/:section", "routes/admin-section.tsx"),
   ]),
+  route("review", "routes/review-index.ts"),
   route("review/workbench", "routes/review-workbench.tsx"),
   route("review/discussion-page", "routes/evaluation-discussion-page.ts"),
   route("review/files/:assetId", "routes/review-file-download.ts"),

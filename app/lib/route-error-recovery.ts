@@ -8,6 +8,7 @@ export type RouteErrorRecoveryInput = {
   pathname: string;
   evaluation: boolean;
   adminContextLoaded?: boolean;
+  evaluationWorkspace?: RouteErrorRecovery | null;
 };
 
 function isPublicPath(pathname: string) {
@@ -25,6 +26,7 @@ export function routeErrorRecovery({
   pathname,
   evaluation,
   adminContextLoaded = false,
+  evaluationWorkspace = null,
 }: RouteErrorRecoveryInput): RouteErrorRecovery {
   if (status === 401) {
     if (evaluation) {
@@ -37,6 +39,10 @@ export function routeErrorRecovery({
     evaluation &&
     (status === 403 || status === 404 || status === 400 || status === 428)
   ) {
+    if (status === 404 && pathname.startsWith("/apply/")) {
+      return { href: "/evaluate", label: "Choose an evaluation persona" };
+    }
+    if (evaluationWorkspace) return evaluationWorkspace;
     return { href: "/evaluate", label: "Choose an evaluation persona" };
   }
 

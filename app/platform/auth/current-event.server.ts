@@ -1,6 +1,7 @@
 import { redirect } from "react-router";
 import { requireRuntimeMode } from "~/platform/runtime-environment.server";
 import {
+  eventRoleAccessMessage,
   requireAuthenticatedPerson,
   requireEventRole,
   type Viewer,
@@ -288,7 +289,9 @@ export async function resolveCurrentEventId(
   );
   if (events.length === 0) {
     throw new Response(
-      "You do not have access to an event for this workspace.",
+      allowedRoles.includes("evaluator")
+        ? eventRoleAccessMessage(allowedRoles)
+        : "You do not have access to an event for this workspace.",
       {
         status: 403,
         statusText: "Forbidden",

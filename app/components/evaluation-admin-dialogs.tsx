@@ -49,10 +49,48 @@ export function BulkAssignmentDialog() {
         bulkAssignPreview ? "Confirm bulk assignment" : "Bulk assign reviewers"
       }
       onClose={close}
-      footer={null}
+      size="lg"
+      footer={
+        bulkAssignPreview ? (
+          <>
+            <button
+              type="button"
+              className="btn"
+              onClick={() => setBulkAssignPreview(false)}
+            >
+              Back
+            </button>
+            <button
+              type="submit"
+              form="evaluation-bulk-assign-form"
+              className="btn primary"
+              disabled={navigation.state !== "idle"}
+            >
+              Confirm assignments
+            </button>
+          </>
+        ) : (
+          <button
+            type="button"
+            className="btn primary"
+            disabled={
+              bulkSubmissionIds.size === 0 || !bulkAssignmentTargetLabel
+            }
+            onClick={() => setBulkAssignPreview(true)}
+          >
+            Preview {bulkSubmissionIds.size} assignment target
+            {bulkSubmissionIds.size === 1 ? "" : "s"}
+          </button>
+        )
+      }
     >
       {bulkAssignPreview ? (
-        <Form method="post" className="stack" onSubmit={close}>
+        <Form
+          id="evaluation-bulk-assign-form"
+          method="post"
+          className="stack"
+          onSubmit={close}
+        >
           <input type="hidden" name="intent" value="assign" />
           <input type="hidden" name="roundId" value={activeRound.id} />
           <input type="hidden" name="targetType" value="submission" />
@@ -88,22 +126,6 @@ export function BulkAssignmentDialog() {
               </li>
             ))}
           </ul>
-          <div className="page-actions">
-            <button
-              type="button"
-              className="btn"
-              onClick={() => setBulkAssignPreview(false)}
-            >
-              Back
-            </button>
-            <button
-              type="submit"
-              className="btn primary"
-              disabled={navigation.state !== "idle"}
-            >
-              Confirm assignments
-            </button>
-          </div>
         </Form>
       ) : (
         <div className="stack">
@@ -177,7 +199,7 @@ export function BulkAssignmentDialog() {
               </button>
             </div>
             {visibleSubmissions.map((submission) => (
-              <label key={submission.id} className="validation-item">
+              <label key={submission.id} className="pc-eval-bulk-row">
                 <input
                   type="checkbox"
                   checked={bulkSubmissionIds.has(submission.id)}
@@ -206,17 +228,6 @@ export function BulkAssignmentDialog() {
               </p>
             ) : null}
           </fieldset>
-          <button
-            type="button"
-            className="btn primary"
-            disabled={
-              bulkSubmissionIds.size === 0 || !bulkAssignmentTargetLabel
-            }
-            onClick={() => setBulkAssignPreview(true)}
-          >
-            Preview {bulkSubmissionIds.size} assignment target
-            {bulkSubmissionIds.size === 1 ? "" : "s"}
-          </button>
         </div>
       )}
     </Dialog>
@@ -579,9 +590,39 @@ export function DecisionDialog() {
         setDecisionId(null);
         setNoReviewOverrideConfirmed(false);
       }}
-      footer={null}
+      size="lg"
+      footer={
+        <>
+          <button
+            type="submit"
+            form="evaluation-decision-form"
+            className="btn"
+            name="release"
+            value="false"
+            disabled={navigation.state !== "idle"}
+          >
+            Save draft
+          </button>
+          {loaderData.canReleaseDecisions ? (
+            <button
+              type="submit"
+              form="evaluation-decision-form"
+              className="btn primary"
+              name="release"
+              value="true"
+              disabled={
+                navigation.state !== "idle" ||
+                (!selectedHasCompletedReview && !noReviewOverrideConfirmed)
+              }
+            >
+              Release decision
+            </button>
+          ) : null}
+        </>
+      }
     >
       <Form
+        id="evaluation-decision-form"
         key={`${selected.id}:${selected.decisionDraft?.revisionNumber ?? "new"}`}
         method="post"
         onSubmit={() => setDecisionId(null)}
@@ -789,8 +830,10 @@ export function DecisionDialog() {
             />
             <span>
               <strong>Confirm review-evidence override</strong>
-              No completed review is linked. Releasing now will be audited
-              without round-level review evidence.
+              <span>
+                No completed review is linked. Releasing now will be audited
+                without round-level review evidence.
+              </span>
             </span>
           </label>
         )}
@@ -814,31 +857,6 @@ export function DecisionDialog() {
             </span>
           </div>
         )}
-        <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
-          <button
-            type="submit"
-            className="btn"
-            name="release"
-            value="false"
-            disabled={navigation.state !== "idle"}
-          >
-            Save draft
-          </button>
-          {loaderData.canReleaseDecisions ? (
-            <button
-              type="submit"
-              className="btn primary"
-              name="release"
-              value="true"
-              disabled={
-                navigation.state !== "idle" ||
-                (!selectedHasCompletedReview && !noReviewOverrideConfirmed)
-              }
-            >
-              Release decision
-            </button>
-          ) : null}
-        </div>
       </Form>
     </Dialog>
   ) : null;

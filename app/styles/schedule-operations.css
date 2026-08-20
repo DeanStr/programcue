@@ -20,6 +20,9 @@
 .schedule-room-board > .header {
   overflow: hidden;
 }
+.schedule-room-board > .header:not(.corner) {
+  min-width: 9rem;
+}
 .schedule-room-board > .header small {
   overflow: hidden;
   text-overflow: ellipsis;

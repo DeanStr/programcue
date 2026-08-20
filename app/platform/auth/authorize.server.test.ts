@@ -731,6 +731,7 @@ describe("event role authorization", () => {
 
 describe("event role access copy", () => {
   it("describes the authorised workspace instead of claiming the person cannot manage the event", () => {
+    expect(eventRoleAccessMessage(["owner"])).toContain("organisation owners");
     expect(eventRoleAccessMessage(["owner", "administrator"])).toContain(
       "event administrators",
     );

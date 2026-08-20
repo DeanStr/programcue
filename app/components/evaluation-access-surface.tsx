@@ -436,7 +436,7 @@ function AccessGate({
               <div className="pc-status-notice-copy">
                 <strong>{actionData.message}</strong>
                 {actionData.retryAfterSeconds !== undefined ? (
-                  <span>{retryAfterLabel(actionData.retryAfterSeconds)}</span>
+                  <div>{retryAfterLabel(actionData.retryAfterSeconds)}</div>
                 ) : null}
               </div>
             </div>
@@ -616,7 +616,7 @@ export function EvaluationAccessSurface({
           <div className="pc-status-notice-copy">
             <strong>{actionData.message}</strong>
             {!actionData.ok && actionData.retryAfterSeconds !== undefined ? (
-              <span>{retryAfterLabel(actionData.retryAfterSeconds)}</span>
+              <div>{retryAfterLabel(actionData.retryAfterSeconds)}</div>
             ) : null}
           </div>
         </div>

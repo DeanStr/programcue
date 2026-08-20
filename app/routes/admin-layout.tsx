@@ -9,6 +9,7 @@ import {
 import { AdminShell } from "~/components/admin-shell";
 import { routeErrorCopy, routeErrorMessage } from "~/lib/route-error-copy";
 import {
+  type RouteErrorRecovery,
   routeErrorRecovery,
   sanitizeRouteErrorMessage,
   shouldOfferErrorRetry,
@@ -58,13 +59,18 @@ export function adminLayoutAllowedRoles(pathname: string) {
 export function adminErrorReturn(
   status: number | null,
   adminContextLoaded: boolean,
-  options: { pathname?: string; evaluation?: boolean } = {},
+  options: {
+    pathname?: string;
+    evaluation?: boolean;
+    evaluationWorkspace?: RouteErrorRecovery | null;
+  } = {},
 ) {
   return routeErrorRecovery({
     status,
     pathname: options.pathname ?? "/admin/command",
     evaluation: Boolean(options.evaluation),
     adminContextLoaded,
+    evaluationWorkspace: options.evaluationWorkspace ?? null,
   });
 }
 
@@ -156,7 +162,12 @@ export function ErrorBoundary({ error, loaderData }: Route.ErrorBoundaryProps) {
   const revalidator = useRevalidator();
   const location = useLocation();
   const rootData = useRouteLoaderData("root") as
-    | { evaluation?: { name: string } | null }
+    | {
+        evaluation?: {
+          name: string;
+          workspace?: RouteErrorRecovery | null;
+        } | null;
+      }
     | undefined;
 
   const routeError = isRouteErrorResponse(error) ? error : null;
@@ -175,6 +186,7 @@ export function ErrorBoundary({ error, loaderData }: Route.ErrorBoundaryProps) {
     {
       pathname: location.pathname,
       evaluation: Boolean(rootData?.evaluation),
+      evaluationWorkspace: rootData?.evaluation?.workspace ?? null,
     },
   );
   const showRetry = shouldOfferErrorRetry(routeError?.status ?? null);

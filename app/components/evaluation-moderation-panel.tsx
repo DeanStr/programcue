@@ -85,7 +85,12 @@ export function EvaluationModerationPanel() {
                     ) : null}
                   </div>
                 ))}
-                {completed.length ? (
+                {completed.length > 0 &&
+                !(
+                  ["accepted", "waitlisted", "rejected"].includes(
+                    submission.status,
+                  ) && !submission.reviewableInCurrentCycle
+                ) ? (
                   <button
                     type="button"
                     className="btn"

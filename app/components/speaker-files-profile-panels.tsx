@@ -277,16 +277,22 @@ export function SpeakerProfilePanel({
             <strong>
               {headshot
                 ? "Current headshot"
-                : portal.profile.programmePortraitUrl
+                : portal.profile.programmePortraitUrl &&
+                    portal.profile.profileStatus === "published"
                   ? "Programme portrait in use"
-                  : "Add your headshot"}
+                  : portal.profile.programmePortraitUrl
+                    ? "Sample portrait"
+                    : "Add your headshot"}
             </strong>
             <p className="subtle">
               {headshot
                 ? `${headshot.downloadFilename} · uploaded ${formatUploadTimestamp(requireValue(headshot.downloadUploadedAt, "Required headshot.downloadUploadedAt is unavailable."), portal.event.timezone)}`
-                : portal.profile.programmePortraitUrl
+                : portal.profile.programmePortraitUrl &&
+                    portal.profile.profileStatus === "published"
                   ? "Attendees already see this bundled programme portrait. Upload a headshot to replace it."
-                  : "Upload a JPG, PNG or WebP file for organiser review and your published profile."}
+                  : portal.profile.programmePortraitUrl
+                    ? "This bundled portrait is for preview only. Attendees will not see it until your profile is published."
+                    : "Upload a JPG, PNG or WebP file for organiser review and your published profile."}
             </p>
           </div>
           <Link className="btn" to="/participant/files#headshot-upload">

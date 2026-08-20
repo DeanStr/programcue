@@ -83,10 +83,14 @@ export function EvaluationSessionQueue() {
                       </span>
                     </td>
                     <td data-label="Reviews">
-                      {session.completedReviewCount} / {session.assignmentCount}
+                      <span>
+                        {session.completedReviewCount} /{" "}
+                        {session.assignmentCount}
+                      </span>
                       {loaderData.resultsRoundId ? (
-                        <small>
+                        <div>
                           <Link
+                            className="pc-eval-text-action"
                             to={`/admin/review?${new URLSearchParams({
                               resultsRound: loaderData.resultsRoundId,
                               session: session.id,
@@ -99,7 +103,7 @@ export function EvaluationSessionQueue() {
                           >
                             Open discussion
                           </Link>
-                        </small>
+                        </div>
                       ) : null}
                     </td>
                     <td data-label="Average">

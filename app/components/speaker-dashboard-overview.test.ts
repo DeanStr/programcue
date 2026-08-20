@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { speakerMilestones } from "./speaker-dashboard-overview";
+import {
+  speakerHeroActions,
+  speakerMilestones,
+} from "./speaker-dashboard-overview";
 import type { SpeakerPortal } from "./speaker-dashboard-panel-shared";
 
 function portal(overrides: Partial<SpeakerPortal> = {}) {
@@ -22,6 +25,63 @@ function milestones(
     ...overrides,
   });
 }
+
+describe("speaker next-action hero", () => {
+  const handbook = {
+    id: "resource-speaker-handbook",
+    title: "Speaker handbook",
+    href: "/participant/resources?resource=speaker-handbook",
+  };
+
+  it("opens the resource when the next task is linked to that page", () => {
+    const actions = speakerHeroActions(
+      {
+        id: "task-handbook",
+        title: "Something else entirely",
+        description: "Acknowledge the current handbook.",
+        status: "not_started",
+        configurationJson: JSON.stringify({
+          resourcePageId: "resource-speaker-handbook",
+        }),
+      } as never,
+      handbook,
+    );
+    expect(actions.resourceAction?.href).toContain("speaker-handbook");
+    expect(actions.taskAction).toBeNull();
+  });
+
+  it("keeps a non-resource task ahead of an outstanding resource", () => {
+    const actions = speakerHeroActions(
+      {
+        id: "task-slides",
+        title: "Read the speaker handbook slides",
+        description: "Attach the deck.",
+        status: "not_started",
+        configurationJson: "{}",
+      } as never,
+      handbook,
+    );
+    expect(actions.taskAction?.id).toBe("task-slides");
+    expect(actions.resourceAction).toBeNull();
+  });
+
+  it("does not treat a title overlap as the same resource", () => {
+    const actions = speakerHeroActions(
+      {
+        id: "task-other-handbook",
+        title: "Read the speaker handbook",
+        description: "Acknowledge a different page.",
+        status: "not_started",
+        configurationJson: JSON.stringify({
+          resourcePageId: "resource-other-handbook",
+        }),
+      } as never,
+      handbook,
+    );
+    expect(actions.taskAction?.id).toBe("task-other-handbook");
+    expect(actions.resourceAction).toBeNull();
+  });
+});
 
 describe("speaker preparation milestones", () => {
   it("treats an empty requirement list as satisfied, not unstarted", () => {

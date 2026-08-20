@@ -139,6 +139,8 @@ describe("evaluation access gate", () => {
 
     expect(markup).toContain("Too many attempts.");
     expect(markup).toContain("Try again in about 2 minutes.");
+    expect(markup).toContain("Unlock evaluation");
+    expect(markup).not.toContain(" disabled");
   });
 
   it.each([0, -1, Number.NaN, Number.POSITIVE_INFINITY])(

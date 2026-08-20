@@ -22,6 +22,34 @@ describe("routeErrorRecovery", () => {
         evaluation: true,
       }),
     ).toEqual({ href: "/evaluate", label: "Choose an evaluation persona" });
+    expect(
+      routeErrorRecovery({
+        status: 403,
+        pathname: "/admin/command",
+        evaluation: true,
+        evaluationWorkspace: {
+          href: "/admin/review",
+          label: "Back to Review & selection",
+        },
+      }),
+    ).toEqual({
+      href: "/admin/review",
+      label: "Back to Review & selection",
+    });
+    expect(
+      routeErrorRecovery({
+        status: 404,
+        pathname: "/review/workbench",
+        evaluation: true,
+        evaluationWorkspace: {
+          href: "/review/workbench",
+          label: "Back to review workbench",
+        },
+      }),
+    ).toEqual({
+      href: "/review/workbench",
+      label: "Back to review workbench",
+    });
   });
 
   it("does not send a public 404 to Command Centre", () => {

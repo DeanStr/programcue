@@ -121,7 +121,7 @@
   }
   .pc-responsive-table td {
     display: grid;
-    grid-template-columns: minmax(92px, 0.38fr) minmax(0, 1fr);
+    grid-template-columns: minmax(8.5rem, 0.4fr) minmax(0, 1fr);
     align-items: start;
     gap: var(--space-3);
     width: 100%;
@@ -137,6 +137,8 @@
     font-weight: var(--weight-extrabold);
     letter-spacing: 0.06em;
     text-transform: uppercase;
+    overflow-wrap: normal;
+    word-break: keep-all;
   }
   .pc-responsive-table tr:hover td {
     background: var(--surface);

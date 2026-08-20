@@ -776,6 +776,7 @@ function AdminPageFrame({
   currentEventOption,
   breadcrumbs,
   event,
+  homeHref,
   copyDeepLink,
   copyState,
   children,
@@ -783,6 +784,7 @@ function AdminPageFrame({
   currentEventOption: AdminShellEventOption;
   breadcrumbs: ReturnType<typeof adminPageBreadcrumbs>;
   event: AdminShellEvent;
+  homeHref: string;
   copyDeepLink(): Promise<void>;
   copyState: CopyDeepLinkState;
   children: React.ReactNode;
@@ -799,7 +801,7 @@ function AdminPageFrame({
             </li>
             <li>
               {breadcrumbs.length ? (
-                <Link to="/admin/command">{event.name}</Link>
+                <Link to={homeHref}>{event.name}</Link>
               ) : (
                 <span aria-current="page">{event.name}</span>
               )}
@@ -1081,6 +1083,9 @@ export function AdminShell({
         currentEventOption={currentEventOption}
         breadcrumbs={breadcrumbs}
         event={event}
+        homeHref={
+          viewer.role === "committee_chair" ? "/admin/review" : "/admin/command"
+        }
         copyDeepLink={copyDeepLink}
         copyState={copyState}
       >

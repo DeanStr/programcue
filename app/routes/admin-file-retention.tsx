@@ -1,4 +1,5 @@
 import { data, Form, useActionData, useNavigation } from "react-router";
+import { RetentionHoldForm } from "~/components/retention-hold-form";
 import {
   FileAccessError,
   FileErasureConfirmationError,
@@ -213,30 +214,7 @@ export default function AdminFileRetention({
               ? `Placed ${dateTime(state.holdAt)}. No retention batch can erase files or anonymise participant data until an owner releases it.`
               : "A hold immediately blocks file erasure and participant anonymisation for this event."}
           </p>
-          <Form method="post" className="stack">
-            <input
-              type="hidden"
-              name="intent"
-              value={state.holdAt ? "release-hold" : "place-hold"}
-            />
-            <label className="label">
-              Reason
-              <textarea
-                className="textarea"
-                name="reason"
-                minLength={3}
-                maxLength={500}
-                required
-              />
-            </label>
-            <label className="speaker-confirm">
-              <input type="checkbox" name="confirm" value="yes" required /> I
-              understand this changes the event-wide retention boundary.
-            </label>
-            <button className="btn" type="submit" disabled={busy}>
-              {state.holdAt ? "Release retention hold" : "Place retention hold"}
-            </button>
-          </Form>
+          <RetentionHoldForm busy={busy} holdAt={state.holdAt} />
         </section>
         <section className="card pad">
           <div className="card-title">

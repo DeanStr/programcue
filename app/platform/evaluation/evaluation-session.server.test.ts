@@ -9,6 +9,7 @@ import {
   evaluationAccessCodeMatches,
   evaluationPersonForSession,
   evaluationSessionCookie,
+  evaluationWorkspaceRecovery,
   readEvaluationSession,
   renewedEvaluationSessionCookie,
   requireEvaluationMode,
@@ -56,6 +57,19 @@ async function recordFixtureReset(
 function cookieHeader(setCookie: string) {
   return setCookie.split(";", 1)[0]!;
 }
+
+describe("evaluation workspace recovery", () => {
+  it("sends chairs and reviewers back to their authorised workspace", () => {
+    expect(evaluationWorkspaceRecovery("chair")).toEqual({
+      href: "/admin/review",
+      label: "Back to Review & selection",
+    });
+    expect(evaluationWorkspaceRecovery("reviewer")).toEqual({
+      href: "/review/workbench",
+      label: "Back to review workbench",
+    });
+  });
+});
 
 describe.sequential("production evaluation sessions", () => {
   it("fails fast when access is attempted before the fixture has a reset generation", async () => {

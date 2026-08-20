@@ -37,6 +37,7 @@ import {
 } from "~/platform/evaluation/evaluation-guide-state.server";
 import {
   EVALUATION_IDENTITIES,
+  evaluationWorkspaceRecovery,
   readEvaluationSession,
 } from "~/platform/evaluation/evaluation-session.server";
 import { requireRuntimeMode } from "~/platform/runtime-environment.server";
@@ -99,6 +100,7 @@ export async function loader({ request, context }: Route.LoaderArgs) {
       bannerHidden: evaluationBannerHiddenFromCookieHeader(
         request.headers.get("cookie"),
       ),
+      workspace: evaluationWorkspaceRecovery(session.identityKey),
     },
   };
 }
@@ -184,6 +186,7 @@ export function ErrorBoundary({ error }: Route.ErrorBoundaryProps) {
     status,
     pathname: location.pathname,
     evaluation: Boolean(rootData?.evaluation),
+    evaluationWorkspace: rootData?.evaluation?.workspace ?? null,
   });
   const showRetry = shouldOfferErrorRetry(status);
 

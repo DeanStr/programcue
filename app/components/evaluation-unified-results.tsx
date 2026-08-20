@@ -310,15 +310,19 @@ export function EvaluationUnifiedResults() {
                             >
                               Assign
                             </Link>
-                            <button
-                              className="pc-eval-text-action"
-                              type="button"
-                              onClick={() =>
-                                setModerationSubmissionId(result.id)
-                              }
-                            >
-                              Moderate
-                            </button>
+                            {result.decisionHistory.some(
+                              (decision) => decision.status === "published",
+                            ) ? null : (
+                              <button
+                                className="pc-eval-text-action"
+                                type="button"
+                                onClick={() =>
+                                  setModerationSubmissionId(result.id)
+                                }
+                              >
+                                Moderate
+                              </button>
+                            )}
                           </div>
                         </details>
                       ) : null}

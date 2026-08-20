@@ -42,6 +42,7 @@ export async function loader({ request, context }: Route.LoaderArgs) {
     ).length,
     outstandingResource: outstandingResource
       ? {
+          id: outstandingResource.id,
           title: outstandingResource.title,
           href: `/participant/resources?resource=${encodeURIComponent(outstandingResource.slug)}`,
         }

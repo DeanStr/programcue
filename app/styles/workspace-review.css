@@ -140,6 +140,16 @@
 .review-shortcut-list > div {
   grid-template-columns: 150px minmax(0, 1fr);
 }
+.pc-eval-bulk-row {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: var(--space-2);
+  align-items: start;
+}
+/* biome-ignore lint/style/noDescendingSpecificity: The bulk-row caption is independent of the earlier score-summary small rule. */
+.pc-eval-bulk-row small {
+  display: block;
+}
 .conflict-box {
   border: 1px solid var(--state-bad-border);
   background: var(--state-bad-surface);

@@ -4,7 +4,7 @@
   background: var(--canvas);
 }
 #participant-application-detail {
-  scroll-margin-top: calc(var(--eval-banner-offset, 0px) + 88px);
+  scroll-margin-top: calc(var(--eval-banner-offset, 0px) + 120px);
 }
 .speaker-top {
   height: 68px;
