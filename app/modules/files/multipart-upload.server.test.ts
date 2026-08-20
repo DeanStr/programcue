@@ -8,7 +8,11 @@ import {
   FilePolicyError,
 } from "./file-policy";
 import { FileScanDispatchConfigurationError } from "./file-scan-dispatch.server";
-import { FileAccessError, FileService } from "./file-service.server";
+import {
+  FileAccessError,
+  FileService,
+  stableLogicalAssetId,
+} from "./file-service.server";
 import {
   FileMultipartConflictError,
   FileMultipartIncompleteError,
@@ -84,6 +88,64 @@ describe("direct R2 multipart upload", () => {
         .bind(`${speaker.personId}:${idempotencyKey}`)
         .first(),
     ).resolves.toBeNull();
+  });
+
+  it("allocates a new generation when retention removed the erased asset but kept its audit tombstone", async () => {
+    const target = {
+      targetType: "person" as const,
+      targetId: speaker.personId,
+      assetKind: "headshot" as const,
+    };
+    const erasedAssetId = await stableLogicalAssetId(speaker, target);
+    await env.DB.batch([
+      env.DB.prepare(
+        `INSERT INTO audit_events (
+           id, actor_kind, origin, metadata_version, organisation_id, event_id,
+           actor_id, action, entity_type, entity_id, metadata_json, created_at
+         ) VALUES (?, 'system', 'internal', 1, ?, ?, 'retention-test',
+                   'file.erasure.requested', 'file_asset', ?, '{}', unixepoch())`,
+      ).bind(
+        `file-erasure:${erasedAssetId}`,
+        speaker.organisationId,
+        speaker.eventId,
+        erasedAssetId,
+      ),
+      env.DB.prepare(
+        `INSERT INTO audit_events (
+           id, actor_kind, origin, metadata_version, organisation_id, event_id,
+           actor_id, action, entity_type, entity_id, metadata_json, created_at
+         ) VALUES (?, 'system', 'internal', 1, 'another-organisation', ?,
+                   'retention-test', 'file.erasure.requested', 'file_asset',
+                   ?, '{}', unixepoch())`,
+      ).bind(
+        `file-erasure:${erasedAssetId}-generation-99`,
+        speaker.eventId,
+        `${erasedAssetId}-generation-99`,
+      ),
+    ]);
+
+    const initiated = await new MultipartUploadService(
+      configuredMultipartEnvironment(),
+    ).initiate(speaker, {
+      target,
+      filename: "after-retention.png",
+      contentType: "image/png",
+      sizeBytes: 9,
+      idempotencyKey: crypto.randomUUID(),
+    });
+
+    expect(initiated.assetId).toBe(`${erasedAssetId}-generation-2`);
+    await expect(
+      env.DB.prepare(
+        `SELECT asset_id AS assetId, version_number AS versionNumber
+           FROM file_versions WHERE id = ? AND event_id = ?`,
+      )
+        .bind(initiated.versionId, speaker.eventId)
+        .first(),
+    ).resolves.toEqual({
+      assetId: initiated.assetId,
+      versionNumber: 1,
+    });
   });
 
   it("persists idempotent intent before issuing signed part URLs and supports abort", async () => {

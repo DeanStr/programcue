@@ -359,14 +359,49 @@ export class MultipartUploadService {
           { eventId: actor.eventId, personId: ownerPersonId },
           target,
         );
+        const generationPrefix = `${logicalId}-generation-`;
+        const erasureAuditPrefix = "file-erasure:";
         const prior = await this.env.DB.prepare(
-          "SELECT COUNT(*) AS count FROM file_assets WHERE id = ? OR id GLOB ?",
+          `SELECT asset.id
+             FROM file_assets asset
+             JOIN events event
+               ON event.id = asset.event_id AND event.organisation_id = ?
+            WHERE asset.event_id = ?
+              AND (asset.id = ? OR instr(asset.id, ?) = 1)
+            UNION
+           SELECT substr(id, length(?) + 1) AS id
+             FROM audit_events
+            WHERE organisation_id = ? AND event_id = ?
+              AND (id = ? OR instr(id, ?) = 1)`,
         )
-          .bind(logicalId, `${logicalId}-generation-*`)
-          .first<{ count: number }>();
-        const generation = Number(prior?.count ?? 0);
-        assetId = generation
-          ? `${logicalId}-generation-${generation + 1}`
+          .bind(
+            actor.organisationId,
+            actor.eventId,
+            logicalId,
+            generationPrefix,
+            erasureAuditPrefix,
+            actor.organisationId,
+            actor.eventId,
+            `${erasureAuditPrefix}${logicalId}`,
+            `${erasureAuditPrefix}${generationPrefix}`,
+          )
+          .all<{ id: string }>();
+        let latestGeneration = 0;
+        for (const candidate of prior.results) {
+          if (candidate.id === logicalId) {
+            latestGeneration = Math.max(latestGeneration, 1);
+            continue;
+          }
+          if (!candidate.id.startsWith(generationPrefix)) continue;
+          const generation = Number(
+            candidate.id.slice(generationPrefix.length),
+          );
+          if (Number.isSafeInteger(generation) && generation > 1) {
+            latestGeneration = Math.max(latestGeneration, generation);
+          }
+        }
+        assetId = latestGeneration
+          ? `${generationPrefix}${latestGeneration + 1}`
           : logicalId;
       }
     }

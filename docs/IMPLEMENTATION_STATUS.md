@@ -192,6 +192,13 @@ Applicant cookies now return an explicit Set-Cookie list rather than a newline
 joined header. Evidence is the focused unit and Worker files on this branch; no
 new deployment is claimed.
 
+Multipart allocation now treats retained file-erasure audit tombstones as used
+logical asset generations even when evaluation reset or retention has removed
+the corresponding `file_assets` row. Focused Worker coverage reproduces that
+production failure boundary and verifies that the next generation receives its
+own file version instead of returning an allocation HTTP 500. This is repository
+evidence only; the production fix is not deployed yet.
+
 ### Production evaluation release-candidate evidence
 
 A follow-up QA pass on the production `/evaluate` fixture tightened
