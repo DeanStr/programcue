@@ -12,8 +12,8 @@ import {
   webhookActorForAudit,
 } from "~/platform/operations/webhook-service.server";
 import {
-  taskEvidenceUrlSchema,
-  taskTemplateConfigurationSchema,
+  assignedTaskConfigurationSchema,
+  taskDestinationUrlSchema,
 } from "./task-schema";
 
 export class TaskStateError extends Error {
@@ -89,6 +89,7 @@ export type TaskRow = {
   description: string | null;
   taskType: TemplateRow["taskType"];
   impact: TemplateRow["impact"];
+  evidenceMode: TemplateRow["evidenceMode"];
   status:
     | "not_started"
     | "in_progress"
@@ -172,14 +173,27 @@ export function equalHash(left: string, right: string) {
 }
 
 export function structuredTaskForm(configurationJson: string) {
+  return taskConfiguration(configurationJson).form;
+}
+
+export function taskConfiguration(configurationJson: string) {
   try {
-    return taskTemplateConfigurationSchema.parse(JSON.parse(configurationJson))
-      .form;
+    return assignedTaskConfigurationSchema.parse(JSON.parse(configurationJson));
   } catch {
     throw new TaskStateError(
-      "This task has invalid structured-form configuration. Ask an administrator to repair the template.",
+      "This assigned task has invalid configuration. Ask an administrator to repair it.",
     );
   }
+}
+
+export function taskDestinationUrl(configurationJson: string) {
+  const destinationUrl = taskConfiguration(configurationJson).destinationUrl;
+  if (!destinationUrl) {
+    throw new TaskStateError(
+      "This link task has no destination. Ask an administrator to repair it.",
+    );
+  }
+  return destinationUrl;
 }
 
 export function structuredTaskEvidence(
@@ -242,7 +256,8 @@ export const taskEvidenceDetailsSchema = z
   .object({
     confirmed: z.boolean().optional(),
     text: z.string().optional(),
-    url: taskEvidenceUrlSchema.optional(),
+    destinationUrl: taskDestinationUrlSchema.optional(),
+    acknowledgedAt: z.number().int().positive().optional(),
     fileAssetId: z.string().optional(),
     fileVersionId: z.string().optional(),
     scanStatus: z.string().optional(),

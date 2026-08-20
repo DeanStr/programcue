@@ -520,11 +520,21 @@ describe("speaker resource service", () => {
     );
     expect(acknowledged.selected?.acknowledged).toBe(true);
     const task = await env.DB.prepare(
-      "SELECT status FROM task_instances WHERE template_id = ? AND target_id = ?",
+      `SELECT status, evidence_mode AS evidenceMode,
+              configuration_json AS configurationJson
+         FROM task_instances WHERE template_id = ? AND target_id = ?`,
     )
       .bind(`resource-ack:${pageId}`, speaker.personId)
-      .first<{ status: string }>();
-    expect(task?.status).toBe("completed");
+      .first<{
+        status: string;
+        evidenceMode: string;
+        configurationJson: string;
+      }>();
+    expect(task).toEqual({
+      status: "completed",
+      evidenceMode: "checkbox",
+      configurationJson: JSON.stringify({ resourcePageId: pageId }),
+    });
 
     const published = (await service.getAdminWorkspace(admin, pageId))
       .selected!;
@@ -1605,10 +1615,18 @@ describe("speaker resource service", () => {
       confirmation: "confirmed",
     });
     await expect(
-      testEnv.DB.prepare("SELECT status FROM task_instances WHERE id = ?")
+      testEnv.DB.prepare(
+        `SELECT status, evidence_mode AS evidenceMode,
+                configuration_json AS configurationJson
+           FROM task_instances WHERE id = ?`,
+      )
         .bind(confirmedTaskId)
         .first(),
-    ).resolves.toEqual({ status: "not_started" });
+    ).resolves.toEqual({
+      status: "not_started",
+      evidenceMode: "checkbox",
+      configurationJson: JSON.stringify({ resourcePageId: confirmedPageId }),
+    });
     await expect(
       resources.getParticipantWorkspace(speaker, confirmedDraft.slug),
     ).resolves.toHaveProperty("selected.id", confirmedPageId);

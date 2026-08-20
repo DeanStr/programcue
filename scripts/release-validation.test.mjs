@@ -23,6 +23,8 @@ import {
   requiredSpeakerRelationshipIdentityObjects,
   reviewerAiMigrationName,
   speakerRelationshipIdentityGuardMigrationName,
+  taskInstanceConfigurationSnapshotMigrationName,
+  validatePendingTaskConfigurationInventory,
   validateRemoteSchemaEvidence,
 } from "./validate-remote-schema.mjs";
 import { validateProductionHealth } from "./verify-production-health.mjs";
@@ -184,8 +186,108 @@ function remoteEvidence(appliedMigrations = migrations) {
       results: foreignKeyEvidence(),
     },
     { success: true, results: [{ invalidCount: 0 }] },
+    { success: true, results: [] },
   ];
 }
+
+test("participant-task snapshot preflight rejects ambiguous legacy configuration", () => {
+  assert.equal(
+    validatePendingTaskConfigurationInventory([
+      {
+        recordType: "template",
+        recordId: "link-valid",
+        taskType: "link_visit",
+        targetType: "speaker",
+        configurationJson: JSON.stringify({
+          destinationUrl: "https://example.test/brief",
+        }),
+      },
+      {
+        recordType: "template",
+        recordId: "slides-valid",
+        taskType: "file_upload",
+        targetType: "session",
+        configurationJson: JSON.stringify({
+          fileScope: "session_deliverable",
+        }),
+      },
+    ]),
+    2,
+  );
+  assert.throws(
+    () =>
+      validatePendingTaskConfigurationInventory([
+        {
+          recordType: "template",
+          recordId: "link-legacy",
+          taskType: "link_visit",
+          targetType: "speaker",
+          configurationJson: "{}",
+        },
+        {
+          recordType: "instance",
+          recordId: "slides-ambiguous",
+          taskType: "file_upload",
+          targetType: "speaker",
+          configurationJson: JSON.stringify({
+            fileScope: "session_deliverable",
+          }),
+        },
+      ]),
+    /link-legacy.*slides-ambiguous.*inferred file scope are not accepted/u,
+  );
+  assert.throws(
+    () =>
+      validatePendingTaskConfigurationInventory([
+        {
+          recordType: "template",
+          recordId: "credential-link",
+          taskType: "link_visit",
+          targetType: "speaker",
+          configurationJson: JSON.stringify({
+            destinationUrl: "https://user:secret@example.test/brief",
+          }),
+        },
+      ]),
+    /credential-link/u,
+  );
+  assert.throws(
+    () =>
+      validatePendingTaskConfigurationInventory([
+        {
+          recordType: "instance",
+          recordId: "null-destination",
+          taskType: "link_visit",
+          targetType: "speaker",
+          configurationJson: '{"destinationUrl":null}',
+        },
+      ]),
+    /null-destination/u,
+  );
+  assert.match(taskInstanceConfigurationSnapshotMigrationName, /^0048_/u);
+
+  const pendingMigrations = [
+    ...speakerRelationshipIdentityGuardMigrations,
+    taskInstanceConfigurationSnapshotMigrationName,
+  ];
+  const evidence = remoteEvidence(speakerRelationshipIdentityGuardMigrations);
+  evidence[11].results = [
+    {
+      recordType: "template",
+      recordId: "legacy-link",
+      taskType: "link_visit",
+      targetType: "speaker",
+      configurationJson: "{}",
+    },
+  ];
+  assert.throws(
+    () =>
+      validateRemoteSchemaEvidence(evidence, pendingMigrations, {
+        allowPendingMigrations: true,
+      }),
+    /legacy-link.*before migration 0048/u,
+  );
+});
 
 test("remote schema validation requires the exact migration ledger and deployed schema contracts", () => {
   assert.deepEqual(validateRemoteSchemaEvidence(remoteEvidence(), migrations), {

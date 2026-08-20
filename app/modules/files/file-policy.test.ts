@@ -116,4 +116,34 @@ describe("event file policy", () => {
       ),
     ).toThrow(/1 MB event limit/);
   });
+
+  it("uses the video limit only for video task evidence", () => {
+    const policy = {
+      ...CANONICAL_EVENT_FILE_POLICY,
+      supportingDocumentMaximumBytes: FILE_SIZE_MIB,
+      videoMaximumBytes: 2 * FILE_SIZE_MIB,
+    };
+    expect(() =>
+      validateDirectFileDeclaration(
+        "task_evidence",
+        {
+          name: "recording.mp4",
+          type: "video/mp4",
+          size: FILE_SIZE_MIB + 1,
+        },
+        policy,
+      ),
+    ).not.toThrow();
+    expect(() =>
+      validateDirectFileDeclaration(
+        "task_evidence",
+        {
+          name: "handout.pdf",
+          type: "application/pdf",
+          size: FILE_SIZE_MIB + 1,
+        },
+        policy,
+      ),
+    ).toThrow(/1 MB event limit/);
+  });
 });

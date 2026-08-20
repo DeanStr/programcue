@@ -103,8 +103,11 @@ export function DeliveryConfiguration({
   working: boolean;
   pendingIntent: PendingIntent;
 }) {
-  const published = loaderData.templates.filter(
+  const allPublished = loaderData.templates.filter(
     (template) => template.versionStatus === "published",
+  );
+  const published = allPublished.filter(
+    (template) => template.category !== "submission_confirmation",
   );
   const emailProviderLabel =
     loaderData.provider.name === "mailpit" ? "Mailpit" : "Resend";
@@ -114,7 +117,9 @@ export function DeliveryConfiguration({
     : !loaderData.provider.configured
       ? "Verify a sender profile first."
       : !published.length
-        ? "Publish a template version first."
+        ? allPublished.length
+          ? "Published submission confirmations are sent automatically and cannot be used for test sends."
+          : "Publish a template version first."
         : null;
   return (
     <section className="card pad">

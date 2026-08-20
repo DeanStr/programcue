@@ -745,6 +745,7 @@ describe("onboarding task service", () => {
           ...base,
           taskType: "file_upload" as const,
           evidenceMode: "file" as const,
+          configuration: { fileScope: "participant_document" as const },
         },
         {
           ...base,

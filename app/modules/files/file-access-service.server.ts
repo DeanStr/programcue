@@ -3,6 +3,7 @@ import {
   participantAudienceSql,
   participantSpeakerAccessSql,
 } from "~/modules/resources/resource-service-shared";
+import { taskConfiguration } from "~/modules/tasks/task-service-foundation.server";
 import type { Viewer } from "~/platform/auth/authorize.server";
 import { assetKindSchema, safeDownloadName } from "./file-policy";
 import { FileAccessError, FileScanPendingError } from "./file-service-errors";
@@ -125,27 +126,17 @@ export class FileAccessService {
     if (target.targetType === "person") {
       if (target.targetId !== viewer.personId)
         throw new FileAccessError("You can upload only to your own profile.");
+      if (target.assetKind !== "headshot") {
+        throw new FileAccessError(
+          "Participant profile uploads are limited to headshots.",
+        );
+      }
       return null;
     }
     if (target.targetType === "session") {
-      if (target.assetKind === "headshot") {
-        throw new FileAccessError(
-          "Headshots must be uploaded to the participant profile.",
-        );
-      }
-      const owned = await this.env.DB.prepare(
-        `
-        SELECT 1 FROM session_speakers
-         WHERE event_id = ? AND session_id = ? AND person_id = ?
-      `,
-      )
-        .bind(viewer.eventId, target.targetId, viewer.personId)
-        .first();
-      if (!owned)
-        throw new FileAccessError(
-          "The session does not belong to this speaker.",
-        );
-      return null;
+      throw new FileAccessError(
+        "Session deliverables must be uploaded through an assigned file task.",
+      );
     }
     if (target.targetType === "submission") {
       const owned = await this.env.DB.prepare(
@@ -171,6 +162,8 @@ export class FileAccessService {
       const owned = await this.env.DB.prepare(
         `
         SELECT ti.status, ti.task_type AS taskType,
+               ti.target_type AS targetType,
+               ti.configuration_json AS configurationJson,
                CASE WHEN json_valid(ti.evidence_json)
                  THEN json_extract(ti.evidence_json, '$.fileAssetId')
                END AS evidenceAssetId,
@@ -208,6 +201,8 @@ export class FileAccessService {
         .first<{
           status: string;
           taskType: string;
+          targetType: string;
+          configurationJson: string;
           dependenciesComplete: number;
           evidenceAssetId: string | null;
           evidenceVersionId: string | null;
@@ -216,6 +211,25 @@ export class FileAccessService {
         throw new FileAccessError("The task does not belong to this speaker.");
       if (owned.taskType !== "file_upload")
         throw new FileAccessError("This task does not accept file evidence.");
+      let fileScope: ReturnType<typeof taskConfiguration>["fileScope"];
+      try {
+        fileScope = taskConfiguration(owned.configurationJson).fileScope;
+      } catch {
+        throw new FileAccessError(
+          "This file task has invalid purpose or target configuration. Ask an administrator to repair it.",
+        );
+      }
+      if (
+        (fileScope === "participant_document" &&
+          owned.targetType !== "speaker") ||
+        (fileScope === "session_deliverable" &&
+          owned.targetType !== "session") ||
+        !fileScope
+      ) {
+        throw new FileAccessError(
+          "This file task has invalid purpose or target configuration. Ask an administrator to repair it.",
+        );
+      }
       if (["completed", "waived"].includes(owned.status))
         throw new FileAccessError(
           "Files cannot be uploaded to a completed or waived task.",

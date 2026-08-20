@@ -1,6 +1,26 @@
 import { describe, expect, it } from "vitest";
 
+import { directUploadMaximumBytes } from "./direct-multipart-upload";
 import { taskEvidenceVersionStatus } from "./speaker-tasks-panel";
+
+describe("speaker task upload limits", () => {
+  it("uses the video limit only for declared supported video MIME types", () => {
+    const kind = {
+      value: "task_evidence",
+      label: "Task evidence",
+      maximumBytes: 25,
+      maximumBytesByContentType: {
+        "video/mp4": 100,
+        "video/webm": 100,
+      },
+    };
+
+    expect(directUploadMaximumBytes(kind, "video/mp4")).toBe(100);
+    expect(directUploadMaximumBytes(kind, " VIDEO/WEBM ")).toBe(100);
+    expect(directUploadMaximumBytes(kind, "application/pdf")).toBe(25);
+    expect(directUploadMaximumBytes(kind, "")).toBe(25);
+  });
+});
 
 describe("speaker task evidence version status", () => {
   const status = (

@@ -13,6 +13,7 @@ import {
   structuredTaskEvidence,
   type TaskCompletionMutationResult,
   TaskStateError,
+  taskDestinationUrl,
 } from "./task-service-foundation.server";
 
 export class ParticipantTaskCompletionCommands extends ParticipantTaskWorkflowFoundation {
@@ -55,13 +56,7 @@ export class ParticipantTaskCompletionCommands extends ParticipantTaskWorkflowFo
       throw new TaskStateError("Complete the prerequisite tasks first.");
     const evidence: Record<string, unknown> = {};
     if (["checklist", "acknowledgement"].includes(task.taskType)) {
-      if (
-        !(
-          input.confirmed === true ||
-          input.confirmed === "true" ||
-          input.confirmed === "on"
-        )
-      )
+      if (!input.confirmed)
         throw new TaskStateError("Confirm the task before completing it.");
       evidence.confirmed = true;
     }
@@ -79,8 +74,14 @@ export class ParticipantTaskCompletionCommands extends ParticipantTaskWorkflowFo
       }
     }
     if (task.taskType === "link_visit") {
-      if (!input.url) throw new TaskStateError("Enter the link you visited.");
-      evidence.url = input.url;
+      if (!input.confirmed) {
+        throw new TaskStateError(
+          "Confirm that you visited the link before completing this task.",
+        );
+      }
+      evidence.confirmed = true;
+      evidence.destinationUrl = taskDestinationUrl(task.configurationJson);
+      evidence.acknowledgedAt = Math.floor(Date.now() / 1_000);
     }
     await this.requireTaskWebhookReadiness(viewer, "task.updated");
     const nextStatus =

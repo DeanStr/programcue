@@ -24,7 +24,18 @@ export type DirectUploadKind = {
   label: string;
   accept?: string;
   maximumBytes: number;
+  maximumBytesByContentType?: Readonly<Record<string, number>>;
 };
+
+export function directUploadMaximumBytes(
+  kind: DirectUploadKind,
+  contentType: string,
+) {
+  return (
+    kind.maximumBytesByContentType?.[contentType.trim().toLowerCase()] ??
+    kind.maximumBytes
+  );
+}
 
 type DirectUploadState =
   | { status: "idle"; message: null }
@@ -251,10 +262,11 @@ export function DirectMultipartUpload({
       });
       return;
     }
-    if (file.size > selectedKind.maximumBytes) {
+    const maximumBytes = directUploadMaximumBytes(selectedKind, file.type);
+    if (file.size > maximumBytes) {
       setState({
         status: "error",
-        message: `The file exceeds this event's ${maximumMegabytes(selectedKind.maximumBytes)} MB limit for ${selectedKind.label}.`,
+        message: `The file exceeds this event's ${maximumMegabytes(maximumBytes)} MB limit for ${selectedKind.label}.`,
       });
       return;
     }
@@ -376,8 +388,9 @@ export function DirectMultipartUpload({
         </span>
         {selectedKind ? (
           <span className="help">
-            Maximum {maximumMegabytes(selectedKind.maximumBytes)} MB for this
-            event.
+            {selectedKind.maximumBytesByContentType
+              ? "The selected file type determines the limit shown in this purpose."
+              : `Maximum ${maximumMegabytes(selectedKind.maximumBytes)} MB for this event.`}
           </span>
         ) : null}
       </label>

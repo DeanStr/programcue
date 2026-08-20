@@ -1,5 +1,7 @@
 import { z } from "zod";
 
+import { isCredentialFreeHttpsUrl } from "~/modules/events/https-url";
+
 export const taskCompatibleEvidenceModes = {
   checklist: ["checkbox", "admin_approval"],
   acknowledgement: ["checkbox", "admin_approval"],
@@ -54,22 +56,36 @@ export const taskTemplatePresetSchema = z.enum([
   "speaker_travel_flight_v1",
 ]);
 
-export const taskTemplateConfigurationSchema = z.object({
-  preset: taskTemplatePresetSchema.optional(),
-  form: z
-    .object({
-      fields: z.array(taskFormFieldSchema).min(1).max(20),
-    })
-    .optional(),
-});
-
-export const taskEvidenceUrlSchema = z
+export const taskDestinationUrlSchema = z
   .string()
   .trim()
-  .url()
-  .max(1_000)
-  .refine((value) => ["http:", "https:"].includes(new URL(value).protocol), {
-    message: "Evidence links must use HTTP or HTTPS.",
+  .url("Enter a valid destination URL.")
+  .max(2_048, "Destination URLs must contain at most 2,048 characters.")
+  .refine(isCredentialFreeHttpsUrl, {
+    message: "Destination URLs must use HTTPS without embedded credentials.",
+  });
+
+export const taskFileScopeSchema = z.enum([
+  "participant_document",
+  "session_deliverable",
+]);
+
+export const taskTemplateConfigurationSchema = z
+  .object({
+    preset: taskTemplatePresetSchema.optional(),
+    form: z
+      .object({
+        fields: z.array(taskFormFieldSchema).min(1).max(20),
+      })
+      .optional(),
+    destinationUrl: taskDestinationUrlSchema.optional(),
+    fileScope: taskFileScopeSchema.optional(),
+  })
+  .strict();
+
+export const assignedTaskConfigurationSchema =
+  taskTemplateConfigurationSchema.extend({
+    resourcePageId: z.string().trim().min(1).max(160).optional(),
   });
 
 const taskTargetTypeSchema = z.enum(["speaker", "session", "event"]);
@@ -118,6 +134,58 @@ export const taskTemplateInputSchema = z
         code: "custom",
         path: ["configuration", "form"],
         message: "Structured forms are only supported by short-form tasks.",
+      });
+    }
+    if (
+      input.taskType === "link_visit" &&
+      !input.configuration.destinationUrl
+    ) {
+      context.addIssue({
+        code: "custom",
+        path: ["configuration", "destinationUrl"],
+        message: "Link-visit tasks require an HTTPS destination URL.",
+      });
+    }
+    if (input.taskType !== "link_visit" && input.configuration.destinationUrl) {
+      context.addIssue({
+        code: "custom",
+        path: ["configuration", "destinationUrl"],
+        message: "Destination URLs are only supported by link-visit tasks.",
+      });
+    }
+    if (input.taskType === "file_upload" && !input.configuration.fileScope) {
+      context.addIssue({
+        code: "custom",
+        path: ["configuration", "fileScope"],
+        message:
+          "File-upload tasks must identify a participant document or session deliverable.",
+      });
+    }
+    if (input.taskType !== "file_upload" && input.configuration.fileScope) {
+      context.addIssue({
+        code: "custom",
+        path: ["configuration", "fileScope"],
+        message: "File scope is only supported by file-upload tasks.",
+      });
+    }
+    if (
+      input.configuration.fileScope === "participant_document" &&
+      input.targetType !== "speaker"
+    ) {
+      context.addIssue({
+        code: "custom",
+        path: ["configuration", "fileScope"],
+        message: "Participant documents must use speaker scope.",
+      });
+    }
+    if (
+      input.configuration.fileScope === "session_deliverable" &&
+      input.targetType !== "session"
+    ) {
+      context.addIssue({
+        code: "custom",
+        path: ["configuration", "fileScope"],
+        message: "Session deliverables must use session scope.",
       });
     }
     const fieldIds = input.configuration.form?.fields.map((field) => field.id);
@@ -218,9 +286,9 @@ export const participantEvidenceSchema = z.object({
       z.literal("false"),
       z.boolean(),
     ])
+    .transform((value) => value === true || value === "true" || value === "on")
     .optional(),
   text: z.string().trim().max(4_000).optional(),
-  url: taskEvidenceUrlSchema.optional(),
   responses: z
     .record(z.string(), z.union([z.string().max(4_000), z.boolean()]))
     .default({}),
@@ -239,6 +307,8 @@ export type TaskTemplateDraftValues = {
   dueAnchor: TaskTemplateInput["dueAnchor"];
   dueOffsetDays: string;
   fixedDueDate: string;
+  destinationUrl: string;
+  fileScope: "" | z.infer<typeof taskFileScopeSchema>;
   autoAssignOnAcceptance: boolean;
   dependencyIds: string[];
 };
@@ -253,6 +323,8 @@ const taskTemplateDraftSchema = z.object({
   dueAnchor: taskDueAnchorSchema.catch("none"),
   dueOffsetDays: z.string().catch(""),
   fixedDueDate: z.string().catch(""),
+  destinationUrl: z.string().catch(""),
+  fileScope: z.union([z.literal(""), taskFileScopeSchema]).catch(""),
   autoAssignOnAcceptance: z.boolean().catch(false),
   dependencyIds: z.array(z.string()).catch([]),
 });

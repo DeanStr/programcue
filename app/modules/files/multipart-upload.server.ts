@@ -1260,10 +1260,18 @@ export class MultipartUploadService {
                      policy_event.file_policy_json,
                      '$.supportingDocumentMaximumBytes'
                    )
-                   WHEN 'task_evidence' THEN json_extract(
-                     policy_event.file_policy_json,
-                     '$.supportingDocumentMaximumBytes'
-                   )
+                   WHEN 'task_evidence' THEN CASE
+                     WHEN file_versions.declared_content_type IN (
+                       'video/mp4', 'video/webm'
+                     ) THEN json_extract(
+                       policy_event.file_policy_json,
+                       '$.videoMaximumBytes'
+                     )
+                     ELSE json_extract(
+                       policy_event.file_policy_json,
+                       '$.supportingDocumentMaximumBytes'
+                     )
+                   END
                    WHEN 'other' THEN json_extract(
                      policy_event.file_policy_json,
                      '$.supportingDocumentMaximumBytes'

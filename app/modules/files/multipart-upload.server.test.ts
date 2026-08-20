@@ -52,6 +52,15 @@ function configuredMultipartEnvironment() {
 describe("direct R2 multipart upload", () => {
   beforeEach(async () => {
     await ensureDemoSpeakerData(env as unknown as CloudflareEnvironment);
+    await env.DB.prepare(
+      `UPDATE task_instances
+          SET status = 'not_started', evidence_json = NULL,
+              submitted_at = NULL, completed_at = NULL,
+              completed_by_person_id = NULL
+        WHERE id = 'task-demo-slides' AND event_id = ?`,
+    )
+      .bind(speaker.eventId)
+      .run();
   });
 
   afterEach(async () => {
@@ -71,12 +80,12 @@ describe("direct R2 multipart upload", () => {
     await expect(
       new MultipartUploadService(unconfigured).initiate(speaker, {
         target: {
-          targetType: "person",
-          targetId: speaker.personId,
-          assetKind: "video",
+          targetType: "task",
+          targetId: "task-demo-slides",
+          assetKind: "task_evidence",
         },
-        filename: "scanner-preflight.mp4",
-        contentType: "video/mp4",
+        filename: "scanner-preflight.pdf",
+        contentType: "application/pdf",
         sizeBytes: 1,
         idempotencyKey,
       }),
@@ -155,12 +164,12 @@ describe("direct R2 multipart upload", () => {
     const idempotencyKey = crypto.randomUUID();
     const input = {
       target: {
-        targetType: "person" as const,
-        targetId: speaker.personId,
-        assetKind: "video" as const,
+        targetType: "task" as const,
+        targetId: "task-demo-slides",
+        assetKind: "task_evidence" as const,
       },
-      filename: "pitch.mp4",
-      contentType: "video/mp4",
+      filename: "pitch.pdf",
+      contentType: "application/pdf",
       sizeBytes: 90 * 1_048_576 + 1,
       idempotencyKey,
     };
@@ -173,7 +182,7 @@ describe("direct R2 multipart upload", () => {
       duplicate: true,
     });
     await expect(
-      service.initiate(speaker, { ...input, filename: "different.mp4" }),
+      service.initiate(speaker, { ...input, filename: "different.pdf" }),
     ).rejects.toBeInstanceOf(FileMultipartConflictError);
 
     const part = await service.createPartUrl(speaker, {
@@ -279,12 +288,12 @@ describe("direct R2 multipart upload", () => {
     const service = new MultipartUploadService(testEnvironment);
     const initiated = await service.initiate(speaker, {
       target: {
-        targetType: "person",
-        targetId: speaker.personId,
-        assetKind: "video",
+        targetType: "task",
+        targetId: "task-demo-slides",
+        assetKind: "task_evidence",
       },
-      filename: "ambiguous-abort.mp4",
-      contentType: "video/mp4",
+      filename: "ambiguous-abort.pdf",
+      contentType: "application/pdf",
       sizeBytes: 1,
       idempotencyKey: crypto.randomUUID(),
     });
@@ -314,7 +323,7 @@ describe("direct R2 multipart upload", () => {
       .bind(
         JSON.stringify({
           ...CANONICAL_EVENT_FILE_POLICY,
-          videoMaximumBytes: FILE_SIZE_MIB,
+          supportingDocumentMaximumBytes: FILE_SIZE_MIB,
         }),
         speaker.eventId,
       )
@@ -322,12 +331,12 @@ describe("direct R2 multipart upload", () => {
     await expect(
       service.initiate(speaker, {
         target: {
-          targetType: "person",
-          targetId: speaker.personId,
-          assetKind: "video",
+          targetType: "task",
+          targetId: "task-demo-slides",
+          assetKind: "task_evidence",
         },
-        filename: "over-event-limit.mp4",
-        contentType: "video/mp4",
+        filename: "over-event-limit.pdf",
+        contentType: "application/pdf",
         sizeBytes: FILE_SIZE_MIB + 1,
         idempotencyKey: rejectedIdempotencyKey,
       }),
@@ -346,12 +355,12 @@ describe("direct R2 multipart upload", () => {
     const sizeBytes = FILE_SIZE_MIB + 1;
     const initiated = await service.initiate(speaker, {
       target: {
-        targetType: "person",
-        targetId: speaker.personId,
-        assetKind: "video",
+        targetType: "task",
+        targetId: "task-demo-slides",
+        assetKind: "task_evidence",
       },
-      filename: "policy-change.mp4",
-      contentType: "video/mp4",
+      filename: "policy-change.pdf",
+      contentType: "application/pdf",
       sizeBytes,
       idempotencyKey: crypto.randomUUID(),
     });
@@ -371,7 +380,7 @@ describe("direct R2 multipart upload", () => {
       .bind(
         JSON.stringify({
           ...CANONICAL_EVENT_FILE_POLICY,
-          videoMaximumBytes: FILE_SIZE_MIB,
+          supportingDocumentMaximumBytes: FILE_SIZE_MIB,
         }),
         speaker.eventId,
       )
@@ -409,12 +418,12 @@ describe("direct R2 multipart upload", () => {
     const idempotencyKey = crypto.randomUUID();
     const input = {
       target: {
-        targetType: "person" as const,
-        targetId: speaker.personId,
-        assetKind: "video" as const,
+        targetType: "task" as const,
+        targetId: "task-demo-slides",
+        assetKind: "task_evidence" as const,
       },
-      filename: "recoverable.mp4",
-      contentType: "video/mp4",
+      filename: "recoverable.pdf",
+      contentType: "application/pdf",
       sizeBytes: 12 * 1_048_576,
       idempotencyKey,
     };
@@ -454,12 +463,12 @@ describe("direct R2 multipart upload", () => {
     );
     const initiated = await service.initiate(speaker, {
       target: {
-        targetType: "person",
-        targetId: speaker.personId,
-        assetKind: "video",
+        targetType: "task",
+        targetId: "task-demo-slides",
+        assetKind: "task_evidence",
       },
-      filename: "resume-parts.mp4",
-      contentType: "video/mp4",
+      filename: "resume-parts.pdf",
+      contentType: "application/pdf",
       sizeBytes: 12 * 1_048_576,
       idempotencyKey: crypto.randomUUID(),
     });
@@ -493,12 +502,12 @@ describe("direct R2 multipart upload", () => {
     );
     const initiated = await service.initiate(speaker, {
       target: {
-        targetType: "person",
-        targetId: speaker.personId,
-        assetKind: "video",
+        targetType: "task",
+        targetId: "task-demo-slides",
+        assetKind: "task_evidence",
       },
-      filename: "wrong-part-size.mp4",
-      contentType: "video/mp4",
+      filename: "wrong-part-size.pdf",
+      contentType: "application/pdf",
       sizeBytes: 12 * 1_048_576,
       idempotencyKey: crypto.randomUUID(),
     });
@@ -521,12 +530,12 @@ describe("direct R2 multipart upload", () => {
     );
     const initiated = await service.initiate(speaker, {
       target: {
-        targetType: "person",
-        targetId: speaker.personId,
-        assetKind: "video",
+        targetType: "task",
+        targetId: "task-demo-slides",
+        assetKind: "task_evidence",
       },
-      filename: "oversized-list.mp4",
-      contentType: "video/mp4",
+      filename: "oversized-list.pdf",
+      contentType: "application/pdf",
       sizeBytes: 1,
       idempotencyKey: crypto.randomUUID(),
     });
@@ -542,12 +551,12 @@ describe("direct R2 multipart upload", () => {
     );
     const initiated = await service.initiate(speaker, {
       target: {
-        targetType: "person",
-        targetId: speaker.personId,
-        assetKind: "video",
+        targetType: "task",
+        targetId: "task-demo-slides",
+        assetKind: "task_evidence",
       },
-      filename: "small.mp4",
-      contentType: "video/mp4",
+      filename: "small.pdf",
+      contentType: "application/pdf",
       sizeBytes: 1,
       idempotencyKey: crypto.randomUUID(),
     });
@@ -555,6 +564,70 @@ describe("direct R2 multipart upload", () => {
     await expect(
       service.abort(speaker, { versionId: initiated.versionId }),
     ).resolves.toMatchObject({ aborted: true });
+  });
+
+  it("uses the video limit for video task evidence through completion", async () => {
+    const testEnvironment = configuredMultipartEnvironment();
+    const policy = {
+      ...CANONICAL_EVENT_FILE_POLICY,
+      supportingDocumentMaximumBytes: FILE_SIZE_MIB,
+      videoMaximumBytes: 2 * FILE_SIZE_MIB,
+    };
+    await testEnvironment.DB.prepare(
+      "UPDATE events SET file_policy_json = ? WHERE id = ?",
+    )
+      .bind(JSON.stringify(policy), speaker.eventId)
+      .run();
+    const service = new MultipartUploadService(testEnvironment);
+    await expect(
+      service.initiate(speaker, {
+        target: {
+          targetType: "task",
+          targetId: "task-demo-slides",
+          assetKind: "task_evidence",
+        },
+        filename: "oversized-handout.pdf",
+        contentType: "application/pdf",
+        sizeBytes: FILE_SIZE_MIB + 1,
+        idempotencyKey: crypto.randomUUID(),
+      }),
+    ).rejects.toThrow("1 MB event limit");
+
+    const bytes = new Uint8Array(FILE_SIZE_MIB + 1);
+    bytes.set([0, 0, 0, 16, 0x66, 0x74, 0x79, 0x70, 0x69, 0x73, 0x6f, 0x6d]);
+    const initiated = await service.initiate(speaker, {
+      target: {
+        targetType: "task",
+        targetId: "task-demo-slides",
+        assetKind: "task_evidence",
+      },
+      filename: "session-recording.mp4",
+      contentType: "video/mp4",
+      sizeBytes: bytes.byteLength,
+      idempotencyKey: crypto.randomUUID(),
+    });
+    const stored = await testEnvironment.DB.prepare(
+      `SELECT object_key AS objectKey, multipart_upload_id AS uploadId
+         FROM file_versions WHERE id = ? AND event_id = ?`,
+    )
+      .bind(initiated.versionId, speaker.eventId)
+      .first<{ objectKey: string; uploadId: string }>();
+    if (!stored) throw new Error("Multipart video intent was not persisted.");
+    const part = await testEnvironment.FILES.resumeMultipartUpload(
+      stored.objectKey,
+      stored.uploadId,
+    ).uploadPart(1, bytes);
+
+    await expect(
+      service.complete(speaker, {
+        versionId: initiated.versionId,
+        parts: [{ partNumber: 1, etag: part.etag }],
+      }),
+    ).resolves.toMatchObject({
+      assetId: initiated.assetId,
+      versionId: initiated.versionId,
+      scanStatus: "pending",
+    });
   });
 
   it("rejects ineligible task evidence before allocating upload metadata", async () => {
@@ -646,9 +719,11 @@ describe("direct R2 multipart upload", () => {
     await testEnvironment.DB.prepare(
       `INSERT INTO task_instances (
          id, event_id, target_type, target_id, owner_person_id, title,
-         task_type, impact, status, readiness_state, readiness_percent
+         task_type, impact, status, readiness_state, readiness_percent,
+         configuration_json
        ) VALUES (?, ?, 'speaker', ?, ?, 'Multipart race', 'file_upload',
-                 'high', 'not_started', 'on_track', 0)`,
+                 'high', 'not_started', 'on_track', 0,
+                 '{"fileScope":"participant_document"}')`,
     )
       .bind(taskId, speaker.eventId, speaker.personId, speaker.personId)
       .run();
@@ -734,9 +809,11 @@ describe("direct R2 multipart upload", () => {
     await testEnvironment.DB.prepare(
       `INSERT INTO task_instances (
          id, event_id, target_type, target_id, owner_person_id, title,
-         task_type, impact, status, readiness_state, readiness_percent
+         task_type, impact, status, readiness_state, readiness_percent,
+         configuration_json
        ) VALUES (?, ?, 'speaker', ?, ?, 'Multipart completion race', 'file_upload',
-                 'high', 'not_started', 'on_track', 0)`,
+                 'high', 'not_started', 'on_track', 0,
+                 '{"fileScope":"participant_document"}')`,
     )
       .bind(taskId, speaker.eventId, speaker.personId, speaker.personId)
       .run();
@@ -874,12 +951,12 @@ describe("direct R2 multipart upload", () => {
     await expect(
       new MultipartUploadService(testEnvironment).initiate(speaker, {
         target: {
-          targetType: "person",
-          targetId: speaker.personId,
-          assetKind: "video",
+          targetType: "task",
+          targetId: "task-demo-slides",
+          assetKind: "task_evidence",
         },
-        filename: "partial-commit.mp4",
-        contentType: "video/mp4",
+        filename: "partial-commit.pdf",
+        contentType: "application/pdf",
         sizeBytes: 90 * 1_048_576 + 1,
         idempotencyKey,
       }),
@@ -909,18 +986,18 @@ describe("direct R2 multipart upload", () => {
     const multipart = new MultipartUploadService(testEnvironment);
     const initiated = await multipart.initiate(speaker, {
       target: {
-        targetType: "person",
-        targetId: speaker.personId,
-        assetKind: "video",
+        targetType: "task",
+        targetId: "task-demo-slides",
+        assetKind: "task_evidence",
       },
-      filename: "erase-incomplete.mp4",
-      contentType: "video/mp4",
+      filename: "erase-incomplete.pdf",
+      contentType: "application/pdf",
       sizeBytes: 90 * 1_048_576 + 1,
       idempotencyKey: crypto.randomUUID(),
     });
 
     await expect(
-      new FileService(testEnvironment).eraseAsset(speaker, {
+      new FileService(testEnvironment).eraseAsset(administrator, {
         assetId: initiated.assetId,
         confirmed: true,
       }),
@@ -962,12 +1039,12 @@ describe("direct R2 multipart upload", () => {
       testEnvironment,
     ).initiate(speaker, {
       target: {
-        targetType: "person",
-        targetId: speaker.personId,
-        assetKind: "video",
+        targetType: "task",
+        targetId: "task-demo-slides",
+        assetKind: "task_evidence",
       },
-      filename: "erase-after-ambiguous-abort.mp4",
-      contentType: "video/mp4",
+      filename: "erase-after-ambiguous-abort.pdf",
+      contentType: "application/pdf",
       sizeBytes: 90 * 1_048_576 + 1,
       idempotencyKey: crypto.randomUUID(),
     });
@@ -988,7 +1065,7 @@ describe("direct R2 multipart upload", () => {
     ).abort();
 
     await expect(
-      new FileService(testEnvironment).eraseAsset(speaker, {
+      new FileService(testEnvironment).eraseAsset(administrator, {
         assetId: initiated.assetId,
         confirmed: true,
       }),
@@ -1036,8 +1113,9 @@ describe("direct R2 multipart upload", () => {
         `INSERT INTO file_assets (
            id, event_id, owner_person_id, target_type, target_id, asset_kind,
            status, created_at, updated_at
-         ) VALUES (?, ?, ?, 'person', ?, 'supporting_document', 'pending', unixepoch(), unixepoch())`,
-      ).bind(assetId, speaker.eventId, speaker.personId, speaker.personId),
+         ) VALUES (?, ?, ?, 'task', 'task-demo-slides', 'task_evidence',
+                   'pending', unixepoch(), unixepoch())`,
+      ).bind(assetId, speaker.eventId, speaker.personId),
       env.DB.prepare(
         `INSERT INTO file_versions (
            id, event_id, asset_id, version_number, object_key,

@@ -1,4 +1,10 @@
-import { CheckCircle2, Circle, Clock3, LockKeyhole } from "lucide-react";
+import {
+  CheckCircle2,
+  Circle,
+  Clock3,
+  ExternalLink,
+  LockKeyhole,
+} from "lucide-react";
 import { useState } from "react";
 import { Form } from "react-router";
 
@@ -13,6 +19,7 @@ import {
 } from "~/components/speaker-dashboard-panel-shared";
 import { DomainStatusBadge } from "~/components/ui/domain-status-badge";
 import { EventDateTime } from "~/components/ui/event-date-time";
+import { requireValue } from "~/lib/required-value";
 import { maximumMegabytes } from "~/modules/files/file-policy";
 import type { ParticipantTaskEvidenceVersion } from "~/modules/files/file-service.server";
 import { UserFacingError } from "~/platform/user-facing-error";
@@ -55,7 +62,13 @@ async function attachTaskEvidence(
   return { message: payload.message };
 }
 
-function AcknowledgementCompleteControls({ busy }: { busy: boolean }) {
+function AcknowledgementCompleteControls({
+  busy,
+  label = "I confirm this requirement",
+}: {
+  busy: boolean;
+  label?: string;
+}) {
   const [confirmed, setConfirmed] = useState(false);
   return (
     <div className="speaker-task-complete">
@@ -67,7 +80,7 @@ function AcknowledgementCompleteControls({ busy }: { busy: boolean }) {
           checked={confirmed}
           onChange={(event) => setConfirmed(event.target.checked)}
         />{" "}
-        I confirm this requirement
+        {label}
       </label>
       <button
         type="submit"
@@ -303,12 +316,18 @@ export function SpeakerTasksPanel({
                       kinds={[
                         {
                           value: "task_evidence",
-                          label: `Task evidence · PDF, PPT, PPTX, DOC, DOCX, XLS, XLSX, ZIP, JPG, PNG or WebP (${maximumMegabytes(portal.event.filePolicy.supportingDocumentMaximumBytes)} MB maximum)`,
+                          label: `Task evidence · documents and images (${maximumMegabytes(portal.event.filePolicy.supportingDocumentMaximumBytes)} MB maximum) or MP4/WebM video (${maximumMegabytes(portal.event.filePolicy.videoMaximumBytes)} MB maximum)`,
                           accept:
-                            ".pdf,.ppt,.pptx,.doc,.docx,.xls,.xlsx,.zip,.jpg,.jpeg,.png,.webp",
+                            ".pdf,.ppt,.pptx,.doc,.docx,.xls,.xlsx,.zip,.jpg,.jpeg,.png,.webp,.mp4,.webm",
                           maximumBytes:
                             portal.event.filePolicy
                               .supportingDocumentMaximumBytes,
+                          maximumBytesByContentType: {
+                            "video/mp4":
+                              portal.event.filePolicy.videoMaximumBytes,
+                            "video/webm":
+                              portal.event.filePolicy.videoMaximumBytes,
+                          },
                         },
                       ]}
                       heading={
@@ -428,20 +447,31 @@ export function SpeakerTasksPanel({
                           <textarea className="textarea" name="text" required />
                         </label>
                       ) : task.taskType === "link_visit" ? (
-                        <label className="label">
-                          Visited link
-                          <input
-                            className="field"
-                            name="url"
-                            type="url"
-                            required
+                        <div className="stack">
+                          <a
+                            className="btn"
+                            href={requireValue(
+                              task.destinationUrl,
+                              "Link task destination missing after server validation.",
+                            )}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                          >
+                            Open link <ExternalLink aria-hidden size={14} />
+                            <span className="sr-only">
+                              {" "}
+                              (opens in a new tab)
+                            </span>
+                          </a>
+                          <AcknowledgementCompleteControls
+                            busy={busy}
+                            label="I’ve visited this link"
                           />
-                        </label>
+                        </div>
                       ) : (
                         <AcknowledgementCompleteControls busy={busy} />
                       )}
-                      {task.taskType === "short_form" ||
-                      task.taskType === "link_visit" ? (
+                      {task.taskType === "short_form" ? (
                         <button
                           type="submit"
                           className="btn primary"

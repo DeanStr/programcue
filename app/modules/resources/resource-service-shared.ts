@@ -209,13 +209,15 @@ export function acknowledgementTaskStatementsForCandidates(
       INSERT OR IGNORE INTO task_instances (
         id, event_id, template_id, target_type, target_id, owner_person_id,
         title, description, task_type, impact, status, readiness_state,
-        readiness_percent, revision, created_at, updated_at
+        evidence_mode, configuration_json, readiness_percent, revision,
+        created_at, updated_at
       )
       SELECT 'resource-ack:' || rp.id || ':' || candidate.person_id,
              rp.event_id, template.id, 'speaker', candidate.person_id,
              candidate.person_id, 'Read ' || rv.title,
              'Read and acknowledge the current published version.',
-             'acknowledgement', 'medium', 'not_started', 'on_track', 0, 1,
+             'acknowledgement', 'medium', 'not_started', 'on_track',
+             template.evidence_mode, template.configuration_json, 0, 1,
              unixepoch(), unixepoch()
         FROM candidates candidate
         JOIN resource_pages rp ON rp.event_id = ? AND rp.status = 'published'
@@ -293,13 +295,15 @@ export function materializePublishedConfirmedSpeakerAcknowledgements(
       INSERT OR IGNORE INTO task_instances (
         id, event_id, template_id, target_type, target_id, owner_person_id,
         title, description, task_type, impact, status, readiness_state,
-        readiness_percent, revision, created_at, updated_at
+        evidence_mode, configuration_json, readiness_percent, revision,
+        created_at, updated_at
       )
       SELECT 'resource-ack:' || rp.id || ':' || candidate.person_id,
              rp.event_id, template.id, 'speaker', candidate.person_id,
              candidate.person_id, 'Read ' || rv.title,
              'Read and acknowledge the current published version.',
-             'acknowledgement', 'medium', 'not_started', 'on_track', 0, 1,
+             'acknowledgement', 'medium', 'not_started', 'on_track',
+             template.evidence_mode, template.configuration_json, 0, 1,
              unixepoch(), unixepoch()
         FROM candidates candidate
         JOIN resource_pages rp ON rp.event_id = ? AND rp.status = 'published'

@@ -66,6 +66,7 @@ export const AIRTABLE_TASK_TABLE_SPECS: readonly AirtableEventTableSpec[] = [
     entityType: "task_instance",
     query: `SELECT id, event_id, template_id, target_type, target_id,
                    owner_person_id, title, description, task_type, impact,
+                   evidence_mode, configuration_json,
                    status, readiness_state, readiness_percent, revision,
                    due_at, evidence_json, waiver_json, submitted_at,
                    completed_at, completed_by_person_id, created_at, updated_at
@@ -88,6 +89,15 @@ export const AIRTABLE_TASK_TABLE_SPECS: readonly AirtableEventTableSpec[] = [
           "administrator_only",
         ]),
         impact: z.enum(["critical", "high", "medium", "low"]),
+        evidence_mode: z.enum([
+          "none",
+          "checkbox",
+          "file",
+          "text",
+          "link",
+          "admin_approval",
+        ]),
+        configuration_json: jsonText,
         status: z.enum([
           "not_started",
           "in_progress",

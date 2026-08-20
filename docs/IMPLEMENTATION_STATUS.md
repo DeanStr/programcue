@@ -169,6 +169,30 @@ audit and prepared webhook; changed content under the same intent fails.
 Task-filter forms remount from their authoritative URL signature after
 navigation, including truthful empty Overdue results.
 
+Assigned tasks now persist their evidence mode and validated configuration
+snapshot instead of joining mutable template configuration at read time.
+Link-visit tasks require an organiser-configured, credential-free HTTPS
+destination, render a safe external action and complete only after a separate
+participant acknowledgement; participant-entered evidence URLs are removed.
+The remote migration preflight blocks snapshot migration `0048` when legacy
+link or file tasks remain ambiguous, requiring explicit remediation rather
+than a compatibility fallback.
+Public submission redirects select the exact submitted application and present
+a primary in-page management action. Confirmation delivery snapshots that exact
+absolute URL and includes a product-owned management link; confirmation
+authoring hides and rejects custom buttons and previews the fixed action. The participant
+workspace action is server-gated to a compatible ordinary session and accepted
+event role. Direct participant profile uploads are headshot-only. Session
+deliverables are explicitly session-scoped task evidence, while reusable
+participant documents are explicitly speaker-scoped; upload authorization
+rejects absent or mismatched file-purpose configuration. The Files aggregate
+labels deliverables from the exact task/session relationship without offering
+an invalid participant erase control. Task evidence accepts MP4/WebM session
+video against the event's video limit in browser validation, declaration and
+multipart completion; other evidence retains the supporting-document limit.
+These are repository implementation and focused-test claims only; no migration
+or application release has been deployed.
+
 Schedule placement errors identify the affected speaker and both clashing
 session titles instead of reducing a rejected overlap to a transient conflict
 count. The programme embed builder uses one labelled native output-format

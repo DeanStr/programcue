@@ -178,6 +178,8 @@ export async function action({ request, context }: Route.ActionArgs) {
           dueAnchor: form.get("dueAnchor"),
           dueOffsetDays: form.get("dueOffsetDays"),
           fixedDueDate: form.get("fixedDueDate"),
+          destinationUrl: form.get("destinationUrl"),
+          fileScope: form.get("fileScope"),
           autoAssignOnAcceptance: form.get("autoAssignOnAcceptance") === "true",
           dependencyIds: form.getAll("dependencyIds").map(String),
         }
@@ -237,7 +239,16 @@ export async function action({ request, context }: Route.ActionArgs) {
             taskTemplateInput.fixedDueDate === null
               ? null
               : taskTemplateInput.fixedDueDate,
-          configuration: {},
+          configuration:
+            taskTemplateInput.taskType === "link_visit"
+              ? {
+                  destinationUrl: String(
+                    taskTemplateInput.destinationUrl ?? "",
+                  ),
+                }
+              : taskTemplateInput.taskType === "file_upload"
+                ? { fileScope: taskTemplateInput.fileScope }
+                : {},
         },
         String(form.get("intentId") ?? ""),
       );

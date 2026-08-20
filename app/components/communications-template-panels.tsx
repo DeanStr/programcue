@@ -243,9 +243,16 @@ export function TemplateEditor({
                   className="select"
                   name="category"
                   value={draft.category}
-                  onChange={(event) =>
-                    onChange({ ...draft, category: event.target.value })
-                  }
+                  onChange={(event) => {
+                    const category = event.target.value;
+                    onChange({
+                      ...draft,
+                      category,
+                      ...(category === "submission_confirmation"
+                        ? { buttonText: "", buttonUrl: "" }
+                        : {}),
+                    });
+                  }}
                 >
                   <option value="submission_confirmation">
                     Submission confirmation
@@ -272,31 +279,39 @@ export function TemplateEditor({
               />
               <span className="help">Required in the rendered footer.</span>
             </label>
-            <div className="form-row">
-              <label className="label">
-                Optional button text
-                <input
-                  className="field"
-                  name="buttonText"
-                  value={draft.buttonText}
-                  onChange={(event) =>
-                    onChange({ ...draft, buttonText: event.target.value })
-                  }
-                />
-              </label>
-              <label className="label">
-                Optional button URL
-                <input
-                  className="field"
-                  name="buttonUrl"
-                  type="url"
-                  value={draft.buttonUrl}
-                  onChange={(event) =>
-                    onChange({ ...draft, buttonUrl: event.target.value })
-                  }
-                />
-              </label>
-            </div>
+            {draft.category === "submission_confirmation" ? (
+              <p className="help">
+                Program Cue adds a fixed <strong>Manage application</strong>
+                action using the exact submitted application URL when this
+                confirmation is sent.
+              </p>
+            ) : (
+              <div className="form-row">
+                <label className="label">
+                  Optional button text
+                  <input
+                    className="field"
+                    name="buttonText"
+                    value={draft.buttonText}
+                    onChange={(event) =>
+                      onChange({ ...draft, buttonText: event.target.value })
+                    }
+                  />
+                </label>
+                <label className="label">
+                  Optional button URL
+                  <input
+                    className="field"
+                    name="buttonUrl"
+                    type="url"
+                    value={draft.buttonUrl}
+                    onChange={(event) =>
+                      onChange({ ...draft, buttonUrl: event.target.value })
+                    }
+                  />
+                </label>
+              </div>
+            )}
           </div>
         </details>
         <div className="row-actions">
@@ -387,7 +402,12 @@ export function TemplatePreview({ draft }: { draft: TemplateDraftFields }) {
             {paragraph}
           </p>
         ))}
-        {draft.buttonText && draft.buttonUrl ? (
+        {draft.category === "submission_confirmation" ? (
+          <p className="comms-message-button">
+            Manage application
+            <small>Exact application URL generated when sent</small>
+          </p>
+        ) : draft.buttonText && draft.buttonUrl ? (
           <p className="comms-message-button">
             {draft.buttonText}
             <small>{draft.buttonUrl}</small>

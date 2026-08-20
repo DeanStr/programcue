@@ -6654,6 +6654,27 @@
           "taskType": {
             "$ref": "#/components/schemas/TaskType"
           },
+          "configuration": {
+            "type": "object",
+            "additionalProperties": false,
+            "default": {},
+            "description": "Assigned task configuration. link_visit tasks require destinationUrl; file_upload tasks require fileScope matching their target; other task types reject those fields. The server snapshots this value on creation.",
+            "properties": {
+              "destinationUrl": {
+                "type": "string",
+                "format": "uri",
+                "maxLength": 2048,
+                "pattern": "^https://"
+              },
+              "fileScope": {
+                "type": "string",
+                "enum": [
+                  "participant_document",
+                  "session_deliverable"
+                ]
+              }
+            }
+          },
           "impact": {
             "$ref": "#/components/schemas/TaskImpact"
           },
@@ -8237,8 +8258,21 @@
                 "required": [
                   "fields"
                 ]
+              },
+              "destinationUrl": {
+                "type": "string",
+                "maxLength": 2048,
+                "format": "uri"
+              },
+              "fileScope": {
+                "type": "string",
+                "enum": [
+                  "participant_document",
+                  "session_deliverable"
+                ]
               }
-            }
+            },
+            "additionalProperties": false
           }
         },
         "required": [
@@ -8661,11 +8695,6 @@
           "text": {
             "type": "string",
             "maxLength": 4000
-          },
-          "url": {
-            "type": "string",
-            "maxLength": 1000,
-            "format": "uri"
           },
           "responses": {
             "default": {},

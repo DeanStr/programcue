@@ -9,6 +9,7 @@ import { FileService } from "~/modules/files/file-service.server";
 import { ensureDemoSpeakerData } from "~/modules/speakers/demo.server";
 import type { Viewer } from "~/platform/auth/authorize.server";
 import { TaskService } from "./task-service.server";
+import { taskDestinationUrl } from "./task-service-foundation.server";
 
 const admin: Viewer = {
   personId: "person-demo-admin",
@@ -52,6 +53,7 @@ async function createFileTask(testEnv: CloudflareEnvironment, name: string) {
     fixedDueDate: null,
     autoAssignOnAcceptance: false,
     dependencyIds: [],
+    configuration: { fileScope: "participant_document" },
   });
   return (await tasks.assignTemplate(admin, templateId, speaker.personId))
     .taskId;
@@ -139,6 +141,9 @@ async function createDependencyPair(
     fixedDueDate: null,
     autoAssignOnAcceptance: false,
     dependencyIds: [prerequisiteTemplateId],
+    ...(dependent.taskType === "file_upload"
+      ? { configuration: { fileScope: "participant_document" as const } }
+      : {}),
   });
   const { taskId: dependentTaskId } = await tasks.assignTemplate(
     admin,
@@ -254,6 +259,7 @@ describe("onboarding task service", () => {
         fixedDueDate: null,
         autoAssignOnAcceptance: false,
         dependencyIds: [],
+        configuration: { fileScope: "session_deliverable" },
       });
       const { taskId } = await service.assignTemplate(
         admin,
@@ -342,7 +348,7 @@ describe("onboarding task service", () => {
       ).rejects.toThrow("File task not found");
     });
 
-    it("rejects non-web task evidence links before persisting clickable evidence", async () => {
+    it("uses the assigned link destination and records explicit acknowledgement", async () => {
       const testEnv = env as unknown as CloudflareEnvironment;
       await ensureDemoSpeakerData(testEnv);
       const service = new TaskService(testEnv);
@@ -358,6 +364,9 @@ describe("onboarding task service", () => {
         fixedDueDate: null,
         autoAssignOnAcceptance: false,
         dependencyIds: [],
+        configuration: {
+          destinationUrl: "https://example.test/event-information",
+        },
       });
       const { taskId } = await service.assignTemplate(
         admin,
@@ -365,28 +374,62 @@ describe("onboarding task service", () => {
         speaker.personId,
       );
 
+      await testEnv.DB.prepare(
+        `UPDATE task_templates
+            SET configuration_json = '{"destinationUrl":"https://example.test/changed"}'
+          WHERE id = ? AND event_id = ?`,
+      )
+        .bind(templateId, admin.eventId)
+        .run();
+      const assigned = (await service.listParticipantTasks(speaker)).find(
+        (task) => task.id === taskId,
+      );
+      expect(assigned?.destinationUrl).toBe(
+        "https://example.test/event-information",
+      );
+
       await expect(
         service.completeParticipant(speaker, {
           taskId,
           revision: 1,
-          url: "javascript:alert(document.domain)",
         }),
-      ).rejects.toBeInstanceOf(ZodError);
+      ).rejects.toThrow(/Confirm that you visited/);
+      await service.completeParticipant(speaker, {
+        taskId,
+        revision: 1,
+        confirmed: true,
+      });
 
       const task = await testEnv.DB.prepare(
-        "SELECT status, evidence_json AS evidenceJson, revision FROM task_instances WHERE id = ?",
+        `SELECT status, evidence_mode AS evidenceMode,
+                configuration_json AS configurationJson,
+                evidence_json AS evidenceJson, revision
+           FROM task_instances WHERE id = ?`,
       )
         .bind(taskId)
         .first<{
           status: string;
+          evidenceMode: string;
+          configurationJson: string;
           evidenceJson: string | null;
           revision: number;
         }>();
-      expect(task).toEqual({
-        status: "not_started",
-        evidenceJson: null,
-        revision: 1,
+      expect(task).toMatchObject({
+        status: "completed",
+        evidenceMode: "link",
+        configurationJson: JSON.stringify({
+          destinationUrl: "https://example.test/event-information",
+        }),
+        revision: 2,
       });
+      expect(JSON.parse(task?.evidenceJson ?? "{}")).toMatchObject({
+        confirmed: true,
+        destinationUrl: "https://example.test/event-information",
+        acknowledgedAt: expect.any(Number),
+      });
+      expect(() => taskDestinationUrl("{}")).toThrow(
+        "This link task has no destination",
+      );
     });
   });
 

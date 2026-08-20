@@ -262,6 +262,10 @@ test.describe
       await page.getByText("I have reviewed this application").click();
       await page.getByRole("button", { name: "Submit application" }).click();
       await expectStatus(page, "Your application has been submitted");
+      await expect(page).toHaveURL(/\/apply\/form\?draft=[^&]+&notice=/u);
+      await expect(
+        page.getByRole("link", { name: "View submitted application" }),
+      ).toHaveAttribute("href", /^\?draft=[^&]+#submitted-application$/u);
 
       await switchDemoRole(page, "administrator");
       await waitForInterface(page, "/admin/review");
@@ -495,7 +499,6 @@ test.describe
       await waitForInterface(page, "/admin/tasks");
       for (const taskTitle of [
         "Complete your speaker profile",
-        "Upload presentation slides",
         "Read the speaker handbook",
         "Hotel stay requirements",
         "Flight reimbursement",
@@ -505,6 +508,14 @@ test.describe
         });
         await expect(taskRow).toBeVisible();
       }
+      await expect(
+        page.getByRole("row", {
+          name: new RegExp(
+            `Upload presentation slides.*${SUBMISSION_TITLE}`,
+            "i",
+          ),
+        }),
+      ).toBeVisible();
     });
 
     test("places, resizes, undoes and publishes the accepted session", async ({

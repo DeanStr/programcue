@@ -150,10 +150,16 @@ export class SpeakerAdminQueryService {
            AND (
              (task.target_type = 'speaker' AND task.target_id = ?)
              OR task.owner_person_id = ?
+             OR (task.target_type = 'session' AND EXISTS (
+               SELECT 1 FROM session_speakers relationship
+                WHERE relationship.event_id = task.event_id
+                  AND relationship.session_id = task.target_id
+                  AND relationship.person_id = ?
+             ))
            )
       `,
         )
-          .bind(viewer.eventId, personId, personId)
+          .bind(viewer.eventId, personId, personId, personId)
           .first<{ outstanding: number; completed: number }>(),
         adminProfileIsShared(this.env, viewer, personId),
         readSpeakerProfileHistory(this.env, {
@@ -354,6 +360,16 @@ export class SpeakerAdminQueryService {
                       AND task.owner_person_id = p.id
                       AND task.status NOT IN ('completed','waived')
                  )
+                 OR EXISTS (
+                   SELECT 1 FROM task_instances task
+                    JOIN session_speakers relationship
+                      ON task.target_type = 'session'
+                     AND relationship.event_id = task.event_id
+                     AND relationship.session_id = task.target_id
+                     AND relationship.person_id = p.id
+                   WHERE task.event_id = ?
+                     AND task.status NOT IN ('completed','waived')
+                 )
                )
              )
              OR (
@@ -371,6 +387,16 @@ export class SpeakerAdminQueryService {
                     WHERE task.event_id = ?
                       AND task.owner_person_id = p.id
                       AND task.status NOT IN ('completed','waived')
+                 )
+                 OR EXISTS (
+                   SELECT 1 FROM task_instances task
+                    JOIN session_speakers relationship
+                      ON task.target_type = 'session'
+                     AND relationship.event_id = task.event_id
+                     AND relationship.session_id = task.target_id
+                     AND relationship.person_id = p.id
+                   WHERE task.event_id = ?
+                     AND task.status NOT IN ('completed','waived')
                  )
                )
              )
@@ -404,6 +430,12 @@ export class SpeakerAdminQueryService {
                  AND (
                    (task.target_type = 'speaker' AND task.target_id = person.id)
                    OR task.owner_person_id = person.id
+                   OR (task.target_type = 'session' AND EXISTS (
+                     SELECT 1 FROM session_speakers relationship
+                      WHERE relationship.event_id = task.event_id
+                        AND relationship.session_id = task.target_id
+                        AND relationship.person_id = person.id
+                   ))
                  )) AS outstandingTasks,
              (SELECT COUNT(*) FROM task_instances task
                WHERE task.event_id = ?
@@ -411,6 +443,12 @@ export class SpeakerAdminQueryService {
                  AND (
                    (task.target_type = 'speaker' AND task.target_id = person.id)
                    OR task.owner_person_id = person.id
+                   OR (task.target_type = 'session' AND EXISTS (
+                     SELECT 1 FROM session_speakers relationship
+                      WHERE relationship.event_id = task.event_id
+                        AND relationship.session_id = task.target_id
+                        AND relationship.person_id = person.id
+                   ))
                  )) AS completedTasks,
              (SELECT COUNT(*)
                 FROM file_assets asset
@@ -447,7 +485,9 @@ export class SpeakerAdminQueryService {
         readiness,
         viewer.eventId,
         viewer.eventId,
+        viewer.eventId,
         readiness,
+        viewer.eventId,
         viewer.eventId,
         viewer.eventId,
         pageSize + 1,
@@ -487,6 +527,16 @@ export class SpeakerAdminQueryService {
                     AND task.owner_person_id = speaker.person_id
                     AND task.status NOT IN ('completed','waived')
                )
+               OR EXISTS (
+                 SELECT 1 FROM task_instances task
+                  JOIN session_speakers relationship
+                    ON task.target_type = 'session'
+                   AND relationship.event_id = task.event_id
+                   AND relationship.session_id = task.target_id
+                   AND relationship.person_id = speaker.person_id
+                 WHERE task.event_id = ?
+                   AND task.status NOT IN ('completed','waived')
+               )
              ) THEN 1 ELSE 0 END) AS readySpeakers,
              (SELECT COUNT(DISTINCT task.id)
                 FROM task_instances task
@@ -495,6 +545,12 @@ export class SpeakerAdminQueryService {
                  AND (
                    (task.target_type = 'speaker' AND task.target_id IN (SELECT person_id FROM event_speaker_ids))
                    OR task.owner_person_id IN (SELECT person_id FROM event_speaker_ids)
+                   OR (task.target_type = 'session' AND EXISTS (
+                     SELECT 1 FROM session_speakers relationship
+                      WHERE relationship.event_id = task.event_id
+                        AND relationship.session_id = task.target_id
+                        AND relationship.person_id IN (SELECT person_id FROM event_speaker_ids)
+                   ))
                  )) AS outstandingTasks,
              (SELECT COUNT(*)
                 FROM file_assets asset
@@ -513,6 +569,7 @@ export class SpeakerAdminQueryService {
     `,
       )
         .bind(
+          viewer.eventId,
           viewer.eventId,
           viewer.eventId,
           viewer.eventId,

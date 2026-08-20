@@ -10,6 +10,7 @@ import { evaluationSessionCookie } from "~/platform/evaluation/evaluation-sessio
 import {
   acceptedParticipantManagementHref,
   action,
+  applicationAccessReturnTo,
   applicationDraftHref,
   claimApplicantVideoUploadOperation,
   evaluationApplicantContextMessage,
@@ -86,6 +87,91 @@ describe("public application mutations", () => {
       ).toBe(
         "/events/select?eventId=event-with-multiple-roles&returnTo=%2Fparticipant%2Fapplications%3Fapplication%3Dsubmitted-proposal%23participant-application-detail",
       );
+    });
+
+    it("preserves an emailed application selection through applicant authentication", () => {
+      expect(
+        applicationAccessReturnTo("speaker/form", "submitted proposal"),
+      ).toBe("/apply/speaker%2Fform?draft=submitted+proposal");
+      expect(applicationAccessReturnTo("speaker/form", null)).toBe(
+        "/apply/speaker%2Fform",
+      );
+    });
+
+    it("preserves an emailed application selection when switching applicant sessions", async () => {
+      const submissionId = "submitted proposal";
+      const requestUrl = `http://localhost/apply/form?${new URLSearchParams({
+        draft: submissionId,
+      })}`;
+      const signedOut = await action({
+        request: new Request(requestUrl, {
+          method: "POST",
+          headers: {
+            "content-type": "application/x-www-form-urlencoded",
+            origin: "http://localhost",
+          },
+          body: new URLSearchParams({ _intent: "sign_out" }),
+        }),
+        params: { slug: "form" },
+        context: context(),
+      } as never);
+
+      expect(signedOut).toBeInstanceOf(Response);
+      expect((signedOut as Response).headers.get("location")).toBe(
+        `/apply/form?${new URLSearchParams({ draft: submissionId })}`,
+      );
+    });
+
+    it("preserves an emailed application selection through account sign-out", async () => {
+      const setAccessMode = (
+        accessMode: "account_required" | "email_verified",
+      ) =>
+        env.DB.batch([
+          env.DB.prepare(
+            `UPDATE form_definitions SET access_mode = ?
+              WHERE event_id = 'evt-foe-2025' AND public_slug = 'form'`,
+          ).bind(accessMode),
+          env.DB.prepare(
+            `UPDATE form_versions
+                SET settings_snapshot_json = json_set(
+                  settings_snapshot_json, '$.accessMode', ?
+                )
+              WHERE event_id = 'evt-foe-2025'
+                AND form_id = (
+                  SELECT id FROM form_definitions
+                   WHERE event_id = 'evt-foe-2025' AND public_slug = 'form'
+                )`,
+          ).bind(accessMode),
+        ]);
+      await setAccessMode("account_required");
+      try {
+        const submissionId = "submitted proposal";
+        const requestedApplicationPath = `/apply/form?${new URLSearchParams({
+          draft: submissionId,
+        })}`;
+        const signedOut = await action({
+          request: new Request(`http://localhost${requestedApplicationPath}`, {
+            method: "POST",
+            headers: {
+              "content-type": "application/x-www-form-urlencoded",
+              origin: "http://localhost",
+            },
+            body: new URLSearchParams({ _intent: "sign_out" }),
+          }),
+          params: { slug: "form" },
+          context: context(),
+        } as never);
+
+        expect(signedOut).toBeInstanceOf(Response);
+        expect((signedOut as Response).status).toBe(303);
+        expect((signedOut as Response).headers.get("location")).toBe(
+          `/sign-in?${new URLSearchParams({
+            returnTo: requestedApplicationPath,
+          })}`,
+        );
+      } finally {
+        await setAccessMode("email_verified");
+      }
     });
 
     it("opens a closed form only for an exact co-speaker claim token", async () => {
@@ -843,23 +929,29 @@ describe("public application mutations", () => {
       });
 
       const verified = await action({
-        request: new Request("http://localhost/apply/form", {
-          method: "POST",
-          headers: {
-            "content-type": "application/x-www-form-urlencoded",
-            cookie: anonymousCookie,
-            origin: "http://localhost",
+        request: new Request(
+          `http://localhost/apply/form?${new URLSearchParams({ draft: submissionId })}`,
+          {
+            method: "POST",
+            headers: {
+              "content-type": "application/x-www-form-urlencoded",
+              cookie: anonymousCookie,
+              origin: "http://localhost",
+            },
+            body: new URLSearchParams({
+              _intent: "verify_code",
+              email,
+              code: "424242",
+            }),
           },
-          body: new URLSearchParams({
-            _intent: "verify_code",
-            email,
-            code: "424242",
-          }),
-        }),
+        ),
         params: { slug: "form" },
         context: context(testEnv),
       } as never);
       expect(verified).toBeInstanceOf(Response);
+      expect((verified as Response).headers.get("location")).toBe(
+        `/apply/form?${new URLSearchParams({ draft: submissionId })}`,
+      );
       const verifiedCookie = (verified as Response).headers
         .get("set-cookie")!
         .split(";")[0]!;

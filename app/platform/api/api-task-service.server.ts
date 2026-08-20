@@ -2,6 +2,11 @@ import { z } from "zod";
 import { requireValue } from "~/lib/required-value";
 
 import { AirtableProviderBoundary } from "~/modules/airtable/airtable-provider-boundary.server";
+import {
+  suggestedTaskEvidenceMode,
+  taskDestinationUrlSchema,
+  taskFileScopeSchema,
+} from "~/modules/tasks/task-schema";
 import { WebhookService } from "~/platform/operations/webhook-service.server";
 import { ApiError, type ApiPrincipal, apiRequestHash } from "./api.server";
 
@@ -18,6 +23,12 @@ const taskTargetTypes = ["speaker", "session", "event"] as const;
 const apiTimestampSchema = z.iso
   .datetime({ offset: true })
   .transform((value) => Math.floor(Date.parse(value) / 1_000));
+const apiTaskConfigurationSchema = z
+  .object({
+    destinationUrl: taskDestinationUrlSchema.optional(),
+    fileScope: taskFileScopeSchema.optional(),
+  })
+  .strict();
 
 export const apiTaskCreateSchema = z
   .object({
@@ -27,6 +38,7 @@ export const apiTaskCreateSchema = z
     targetId: z.string().trim().min(1).max(200),
     ownerPersonId: z.string().trim().min(1).max(200).nullable().default(null),
     taskType: z.enum(taskTypes),
+    configuration: apiTaskConfigurationSchema.default({}),
     impact: z.enum(taskImpacts),
     dueAt: apiTimestampSchema.nullable().default(null),
     dependencyIds: z
@@ -38,7 +50,61 @@ export const apiTaskCreateSchema = z
         "dependencyIds must contain unique task IDs",
       ),
   })
-  .strict();
+  .strict()
+  .superRefine((input, context) => {
+    if (
+      input.taskType === "link_visit" &&
+      !input.configuration.destinationUrl
+    ) {
+      context.addIssue({
+        code: "custom",
+        path: ["configuration", "destinationUrl"],
+        message: "Link-visit tasks require an HTTPS destination URL.",
+      });
+    }
+    if (input.taskType !== "link_visit" && input.configuration.destinationUrl) {
+      context.addIssue({
+        code: "custom",
+        path: ["configuration", "destinationUrl"],
+        message: "Destination URLs are only supported by link-visit tasks.",
+      });
+    }
+    if (input.taskType === "file_upload" && !input.configuration.fileScope) {
+      context.addIssue({
+        code: "custom",
+        path: ["configuration", "fileScope"],
+        message:
+          "File-upload tasks must identify a participant document or session deliverable.",
+      });
+    }
+    if (input.taskType !== "file_upload" && input.configuration.fileScope) {
+      context.addIssue({
+        code: "custom",
+        path: ["configuration", "fileScope"],
+        message: "File scope is only supported by file-upload tasks.",
+      });
+    }
+    if (
+      input.configuration.fileScope === "participant_document" &&
+      input.targetType !== "speaker"
+    ) {
+      context.addIssue({
+        code: "custom",
+        path: ["configuration", "fileScope"],
+        message: "Participant documents must use speaker scope.",
+      });
+    }
+    if (
+      input.configuration.fileScope === "session_deliverable" &&
+      input.targetType !== "session"
+    ) {
+      context.addIssue({
+        code: "custom",
+        path: ["configuration", "fileScope"],
+        message: "Session deliverables must use session scope.",
+      });
+    }
+  });
 
 export const apiTaskListQuerySchema = z
   .object({
@@ -595,10 +661,11 @@ export class ApiTaskService {
         WITH dependency_state(blocked) AS (SELECT ${dependencyStateSql})
         INSERT INTO task_instances (
           id, event_id, target_type, target_id, owner_person_id, title,
-          description, task_type, impact, status, readiness_state,
+          description, task_type, impact, evidence_mode, configuration_json,
+          status, readiness_state,
           readiness_percent, revision, idempotency_key, due_at, created_at, updated_at
         )
-        SELECT ?, ?, ?, ?, ?, ?, ?, ?, ?,
+        SELECT ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
                CASE
                  WHEN blocked THEN 'blocked'
                  WHEN ? IS NOT NULL AND ? < ? THEN 'overdue'
@@ -631,6 +698,8 @@ export class ApiTaskService {
         input.description,
         input.taskType,
         input.impact,
+        suggestedTaskEvidenceMode(input.taskType),
+        JSON.stringify(input.configuration),
         input.dueAt,
         input.dueAt,
         now,

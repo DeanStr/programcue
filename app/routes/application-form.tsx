@@ -66,6 +66,17 @@ export function applicationDraftHref(
   })}`;
 }
 
+export function applicationAccessReturnTo(
+  publicSlug: string,
+  requestedSubmissionId: string | null,
+) {
+  return `/apply/${encodeURIComponent(publicSlug)}${
+    requestedSubmissionId
+      ? applicationDraftHref(requestedSubmissionId, null)
+      : ""
+  }`;
+}
+
 export function acceptedParticipantManagementHref(
   eventId: string,
   submissionId: string,
@@ -120,6 +131,7 @@ function AccessPanel({
   actionData?: ActionResult;
 }) {
   const form = loaderData.form;
+  const location = useLocation();
   const navigation = useNavigation();
   const pending = navigation.state !== "idle";
   const accepting = loaderData.availability.accepting;
@@ -138,7 +150,10 @@ function AccessPanel({
   const verifySecurityReady =
     loaderData.turnstileSiteKey === null || verifySecurityStatus === "ready";
   if (form.accessMode === "account_required") {
-    const returnTo = `/apply/${encodeURIComponent(form.publicSlug)}`;
+    const returnTo = applicationAccessReturnTo(
+      form.publicSlug,
+      new URLSearchParams(location.search).get("draft"),
+    );
     return (
       <section className="card cfp-access-card">
         <span className={`status ${accepting ? "info" : "warning"}`}>
@@ -710,7 +725,31 @@ function AuthenticatedApplicationWorkspace({
           role="status"
         >
           <strong>{loaderData.noticeWarning ? "△" : "✓"}</strong>
-          <span>{loaderData.notice}</span>
+          <span>
+            {loaderData.notice}
+            {selected &&
+            ["submitted", "revised"].includes(loaderData.noticeKind ?? "") ? (
+              <span className="row-actions mt">
+                <a
+                  className="btn primary"
+                  href={`${applicationDraftHref(
+                    selected.id,
+                    claimedSpeakerId,
+                  )}#submitted-application`}
+                >
+                  View submitted application
+                </a>
+                {loaderData.participantWorkspaceHref ? (
+                  <Link
+                    className="btn"
+                    to={loaderData.participantWorkspaceHref}
+                  >
+                    Go to participant workspace
+                  </Link>
+                ) : null}
+              </span>
+            ) : null}
+          </span>
         </div>
       ) : null}
       {actionData && !actionData.ok ? (
@@ -719,7 +758,33 @@ function AuthenticatedApplicationWorkspace({
           role={actionData.committed ? "status" : "alert"}
         >
           <strong>△</strong>
-          <span>{actionData.message}</span>
+          <span>
+            {actionData.message}
+            {actionData.committed &&
+            actionData.submissionId &&
+            selected?.id === actionData.submissionId &&
+            selected.status === "submitted" ? (
+              <span className="row-actions mt">
+                <a
+                  className="btn primary"
+                  href={`${applicationDraftHref(
+                    actionData.submissionId,
+                    claimedSpeakerId,
+                  )}#submitted-application`}
+                >
+                  View submitted application
+                </a>
+                {loaderData.participantWorkspaceHref ? (
+                  <Link
+                    className="btn"
+                    to={loaderData.participantWorkspaceHref}
+                  >
+                    Go to participant workspace
+                  </Link>
+                ) : null}
+              </span>
+            ) : null}
+          </span>
         </div>
       ) : null}
       {!applicant.verified ? (
@@ -878,9 +943,8 @@ function AuthenticatedApplicationWorkspace({
               readOnlyNotice="This application belongs to a closed form and is available for reference only."
               acceptedParticipantsHref={
                 selected.status === "accepted" &&
-                applicant.verified &&
-                !applicant.claimOnly
-                  ? acceptedParticipantManagementHref(form.eventId, selected.id)
+                loaderData.participantWorkspaceHref
+                  ? loaderData.participantWorkspaceHref
                   : null
               }
               action={claimScopedAction}

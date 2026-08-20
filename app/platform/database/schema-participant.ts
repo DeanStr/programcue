@@ -123,6 +123,13 @@ export const taskInstances = sqliteTable(
     impact: text("impact")
       .notNull()
       .$type<"critical" | "high" | "medium" | "low">(),
+    evidenceMode: text("evidence_mode")
+      .notNull()
+      .default("none")
+      .$type<
+        "none" | "checkbox" | "file" | "text" | "link" | "admin_approval"
+      >(),
+    configurationJson: text("configuration_json").notNull().default("{}"),
     status: text("status")
       .notNull()
       .default("not_started")

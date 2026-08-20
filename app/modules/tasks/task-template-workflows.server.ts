@@ -60,8 +60,8 @@ const matchingActiveTaskDefinitionSql = `
   AND duplicate.task_type = ?
   AND duplicate.impact = ?
   AND duplicate.due_at IS ?
-  AND duplicate_template.evidence_mode = ?
-  AND duplicate_template.configuration_json = ?
+  AND duplicate.evidence_mode = ?
+  AND duplicate.configuration_json = ?
 `;
 
 export class TaskTemplateWorkflows extends TaskServiceFoundation {
@@ -929,11 +929,14 @@ export class TaskTemplateWorkflows extends TaskServiceFoundation {
         this.env.DB.prepare(
           `INSERT OR IGNORE INTO task_instances (
              id, event_id, template_id, target_type, target_id,
-             owner_person_id, title, description, task_type, impact,
+             owner_person_id, title, description, task_type, impact, evidence_mode,
+             configuration_json,
              status, readiness_state, readiness_percent, revision,
              last_operation_id, due_at, created_at, updated_at
            )
-           SELECT ?, ?, current_template.id, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, 1,
+           SELECT ?, ?, current_template.id, ?, ?, ?, ?, ?, ?, ?,
+                  current_template.evidence_mode, current_template.configuration_json,
+                  ?, ?, 0, 1,
                   ?, ?, unixepoch(), unixepoch()
              FROM task_templates current_template
             WHERE current_template.id = ? AND current_template.event_id = ?
@@ -1084,6 +1087,13 @@ export class TaskTemplateWorkflows extends TaskServiceFoundation {
                      AND template.fixed_due_at IS json_extract(required.value, '$.template.fixedDueAt')
                      AND template.auto_assign_on_acceptance IS json_extract(required.value, '$.template.autoAssignOnAcceptance')
                      AND template.configuration_json IS json_extract(required.value, '$.template.configurationJson')
+                     AND (
+                       json_extract(required.value, '$.existedAtPlan') = 1
+                       OR (
+                         task.evidence_mode IS json_extract(required.value, '$.template.evidenceMode')
+                         AND task.configuration_json IS json_extract(required.value, '$.template.configurationJson')
+                       )
+                     )
                      AND (
                        json_extract(required.value, '$.existedAtPlan') = 1
                        OR task.last_operation_id = json_extract(required.value, '$.operationId')

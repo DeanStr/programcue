@@ -1,8 +1,10 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  assignedTaskConfigurationSchema,
   normalizeTaskTemplateDraft,
-  taskEvidenceUrlSchema,
+  taskDestinationUrlSchema,
+  taskTemplateInputSchema,
 } from "./task-schema";
 
 describe("task template form values", () => {
@@ -17,6 +19,8 @@ describe("task template form values", () => {
       dueAnchor: "none",
       dueOffsetDays: "",
       fixedDueDate: "",
+      destinationUrl: "",
+      fileScope: "",
       autoAssignOnAcceptance: false,
       dependencyIds: [],
     });
@@ -74,15 +78,104 @@ describe("task template form values", () => {
     });
   });
 
-  it("accepts HTTP or HTTPS evidence links", () => {
-    expect(taskEvidenceUrlSchema.parse("http://intranet.test/evidence")).toBe(
-      "http://intranet.test/evidence",
-    );
-    expect(taskEvidenceUrlSchema.parse("https://example.test/evidence")).toBe(
-      "https://example.test/evidence",
+  it("accepts only credential-free HTTPS task destinations", () => {
+    expect(taskDestinationUrlSchema.parse("https://example.test/brief")).toBe(
+      "https://example.test/brief",
     );
     expect(() =>
-      taskEvidenceUrlSchema.parse("ftp://example.test/evidence"),
-    ).toThrow(/HTTP or HTTPS/);
+      taskDestinationUrlSchema.parse("http://intranet.test/brief"),
+    ).toThrow(/HTTPS/);
+    expect(() =>
+      taskDestinationUrlSchema.parse("https://user:secret@example.test/brief"),
+    ).toThrow(/credentials/);
+  });
+
+  it("requires destinations only for link-visit templates", () => {
+    const base = {
+      name: "Read the participant brief",
+      description: "Review the event requirements.",
+      targetType: "speaker" as const,
+      taskType: "link_visit" as const,
+      impact: "medium" as const,
+      evidenceMode: "link" as const,
+      dueAnchor: "none" as const,
+      dueOffsetDays: null,
+      fixedDueDate: null,
+      autoAssignOnAcceptance: false,
+      dependencyIds: [],
+    };
+    expect(() => taskTemplateInputSchema.parse(base)).toThrow(
+      /require an HTTPS destination URL/,
+    );
+    expect(
+      taskTemplateInputSchema.parse({
+        ...base,
+        configuration: { destinationUrl: "https://example.test/brief" },
+      }).configuration.destinationUrl,
+    ).toBe("https://example.test/brief");
+    expect(() =>
+      taskTemplateInputSchema.parse({
+        ...base,
+        taskType: "checklist",
+        evidenceMode: "checkbox",
+        configuration: { destinationUrl: "https://example.test/brief" },
+      }),
+    ).toThrow(/only supported by link-visit tasks/);
+  });
+
+  it("requires file tasks to declare a purpose that matches their target", () => {
+    const base = {
+      name: "Upload presentation slides",
+      description: "Upload the final presentation deck.",
+      targetType: "session" as const,
+      taskType: "file_upload" as const,
+      impact: "high" as const,
+      evidenceMode: "file" as const,
+      dueAnchor: "none" as const,
+      dueOffsetDays: null,
+      fixedDueDate: null,
+      autoAssignOnAcceptance: false,
+      dependencyIds: [],
+    };
+    expect(() => taskTemplateInputSchema.parse(base)).toThrow(
+      /must identify a participant document or session deliverable/,
+    );
+    expect(
+      taskTemplateInputSchema.parse({
+        ...base,
+        configuration: { fileScope: "session_deliverable" },
+      }).configuration.fileScope,
+    ).toBe("session_deliverable");
+    expect(() =>
+      taskTemplateInputSchema.parse({
+        ...base,
+        targetType: "speaker",
+        configuration: { fileScope: "session_deliverable" },
+      }),
+    ).toThrow(/must use session scope/);
+  });
+
+  it("keeps internal resource bindings outside organizer configuration", () => {
+    expect(
+      assignedTaskConfigurationSchema.parse({
+        resourcePageId: "resource-speaker-handbook",
+      }),
+    ).toEqual({ resourcePageId: "resource-speaker-handbook" });
+    expect(() =>
+      taskTemplateInputSchema.parse({
+        name: "Read the speaker handbook",
+        description: "Read and acknowledge the current handbook.",
+        targetType: "speaker",
+        taskType: "acknowledgement",
+        impact: "medium",
+        evidenceMode: "checkbox",
+        dueAnchor: "none",
+        dueOffsetDays: null,
+        fixedDueDate: null,
+        autoAssignOnAcceptance: false,
+        dependencyIds: [],
+        configuration: { resourcePageId: "resource-speaker-handbook" },
+      }),
+    ).toThrow(/Unrecognized key/);
   });
 });

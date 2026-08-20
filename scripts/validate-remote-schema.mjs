@@ -19,6 +19,8 @@ export const publicSpeakerConfirmationGuardMigrationName =
   "0042_confirmed_public_speaker_eligibility.sql";
 export const speakerRelationshipIdentityGuardMigrationName =
   "0043_session_speaker_identity_immutable.sql";
+export const taskInstanceConfigurationSnapshotMigrationName =
+  "0048_task_instance_configuration_snapshot.sql";
 
 export const requiredBrandAssetColumns = new Map([
   ["width_px", { type: "INTEGER", notnull: 0, defaultValue: null }],
@@ -269,6 +271,63 @@ function sameOrder(actual, expected) {
   );
 }
 
+function credentialFreeHttpsUrl(value) {
+  if (typeof value !== "string") return false;
+  try {
+    const url = new URL(value);
+    return (
+      url.protocol === "https:" && url.username === "" && url.password === ""
+    );
+  } catch {
+    return false;
+  }
+}
+
+export function validatePendingTaskConfigurationInventory(rows) {
+  const invalid = [];
+  for (const row of rows) {
+    let configuration;
+    try {
+      configuration = JSON.parse(row.configurationJson);
+    } catch {
+      configuration = null;
+    }
+    const validObject =
+      configuration !== null &&
+      typeof configuration === "object" &&
+      !Array.isArray(configuration);
+    const configurationKeys = validObject ? Object.keys(configuration) : [];
+    const validLink =
+      row.taskType !== "link_visit" ||
+      (validObject &&
+        configurationKeys.length === 1 &&
+        configurationKeys[0] === "destinationUrl" &&
+        typeof configuration.destinationUrl === "string" &&
+        configuration.destinationUrl.length <= 2_048 &&
+        credentialFreeHttpsUrl(configuration.destinationUrl));
+    const validFile =
+      row.taskType !== "file_upload" ||
+      (validObject &&
+        configurationKeys.length === 1 &&
+        configurationKeys[0] === "fileScope" &&
+        ((configuration.fileScope === "participant_document" &&
+          row.targetType === "speaker") ||
+          (configuration.fileScope === "session_deliverable" &&
+            row.targetType === "session")));
+    if (!validLink || !validFile) {
+      invalid.push(
+        `${row.recordType ?? "record"} ${row.recordId ?? "unknown"}`,
+      );
+    }
+  }
+  if (invalid.length > 0) {
+    throw new Error(
+      `Remote D1 contains legacy participant tasks with invalid configuration (${invalid.slice(0, 20).join(", ")}${invalid.length > 20 ? `, and ${invalid.length - 20} more` : ""}). Add an organizer-owned credential-free HTTPS destination to every link task, explicitly classify each file task as a participant document or session deliverable with the matching target, or retire the affected records before migration ${taskInstanceConfigurationSnapshotMigrationName}. Participant-entered URLs and inferred file scope are not accepted.`,
+    );
+  }
+  return rows.length;
+}
+
 function wranglerFailureMessage(result) {
   const stderr = result.stderr?.trim();
   if (stderr) return stderr;
@@ -287,7 +346,7 @@ export function validateRemoteSchemaEvidence(
   localMigrationNames,
   { allowPendingMigrations = false } = {},
 ) {
-  if (!Array.isArray(response) || response.length !== 11) {
+  if (!Array.isArray(response) || response.length !== 12) {
     throw new Error(
       "Remote D1 schema validation returned an unexpected result set.",
     );
@@ -324,6 +383,19 @@ export function validateRemoteSchemaEvidence(
     );
     throw new Error(
       `Remote D1 migration ledger does not match this release (missing: ${missing.join(", ") || "none"}; unexpected: ${unexpected.join(", ") || "none"}; order mismatch: ${orderMismatch ? "yes" : "no"}).`,
+    );
+  }
+
+  if (
+    localMigrationNames.includes(
+      taskInstanceConfigurationSnapshotMigrationName,
+    ) &&
+    !appliedMigrationNames.includes(
+      taskInstanceConfigurationSnapshotMigrationName,
+    )
+  ) {
+    validatePendingTaskConfigurationInventory(
+      successfulResults(response[11], "legacy participant-task configuration"),
     );
   }
 
@@ -775,6 +847,23 @@ function run() {
     `SELECT COUNT(*) AS invalidCount FROM programme_embeds
       WHERE json_extract(configuration_json, '$.theme') IS NULL
          OR json_extract(configuration_json, '$.theme') NOT IN ('light','dark','system')`,
+    `SELECT 'template' AS recordType, template.id AS recordId,
+            template.task_type AS taskType, template.target_type AS targetType,
+            template.configuration_json AS configurationJson
+       FROM task_templates template
+      WHERE template.task_type IN ('link_visit', 'file_upload')
+      UNION ALL
+     SELECT 'instance' AS recordType, instance.id AS recordId,
+            instance.task_type AS taskType, instance.target_type AS targetType,
+            template.configuration_json AS configurationJson
+       FROM task_instances instance
+       LEFT JOIN task_templates template
+         ON template.id = instance.template_id
+        AND template.event_id = instance.event_id
+      WHERE instance.task_type IN ('link_visit', 'file_upload')
+        AND (template.id IS NULL
+          OR template.task_type <> instance.task_type
+          OR template.target_type <> instance.target_type)`,
   ].join("; ");
   const result = spawnSync(
     resolvePackageExecutable("wrangler", "wrangler"),

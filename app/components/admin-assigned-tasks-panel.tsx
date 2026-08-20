@@ -101,7 +101,7 @@ export function AdminAssignedTasksPanel({
                   <div className="pc-record-stack">
                     <strong>{task.title}</strong>
                     <small className="subtle">
-                      {task.ownerName ?? task.targetId}
+                      {task.targetLabel ?? task.ownerName ?? task.targetId}
                       {" · "}
                       {task.taskType.replaceAll("_", " ")}
                       {" · "}
@@ -207,15 +207,15 @@ export function AdminAssignedTasksPanel({
                               );
                             })
                           : null}
-                        {task.evidence[0].details.url ? (
+                        {task.evidence[0].details.destinationUrl ? (
                           <p>
-                            <strong>Submitted link:</strong>{" "}
+                            <strong>Configured destination:</strong>{" "}
                             <a
-                              href={task.evidence[0].details.url}
+                              href={task.evidence[0].details.destinationUrl}
                               target="_blank"
                               rel="noopener noreferrer"
                             >
-                              {task.evidence[0].details.url}
+                              {task.evidence[0].details.destinationUrl}
                               <span className="sr-only">
                                 {" "}
                                 (opens in a new tab)

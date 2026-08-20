@@ -10,6 +10,11 @@ import {
   processSubmissionNotification,
   QUEUE_CLAIM_LEASE_SECONDS,
 } from "../../../workers/communications-queue";
+import {
+  SUBMISSION_CONFIRMATION_MANAGEMENT_BODY_SUFFIX,
+  saveTemplateSchema,
+  TEMPLATE_BODY_MAX_LENGTH,
+} from "./communication-schema";
 import { CommunicationService } from "./communication-service.server";
 import { RecipientQuery } from "./recipient-query.server";
 import { ResendEmailProvider } from "./resend.server";
@@ -25,6 +30,57 @@ const viewer: Viewer = {
 };
 
 afterEach(() => vi.restoreAllMocks());
+
+describe("communication template validation", () => {
+  const template = {
+    name: "Submission confirmation",
+    category: "submission_confirmation" as const,
+    subject: "Application received",
+    content: {
+      body: "",
+      physicalAddress: "100 Programme Way, Toronto",
+    },
+  };
+
+  it("reserves body space for the required application-management link", () => {
+    const maximumConfiguredLength =
+      TEMPLATE_BODY_MAX_LENGTH -
+      SUBMISSION_CONFIRMATION_MANAGEMENT_BODY_SUFFIX.length;
+
+    expect(
+      saveTemplateSchema.parse({
+        ...template,
+        content: {
+          ...template.content,
+          body: "a".repeat(maximumConfiguredLength),
+        },
+      }).content.body,
+    ).toHaveLength(maximumConfiguredLength);
+    expect(() =>
+      saveTemplateSchema.parse({
+        ...template,
+        content: {
+          ...template.content,
+          body: "a".repeat(maximumConfiguredLength + 1),
+        },
+      }),
+    ).toThrow(/leave room for the required application-management link/);
+  });
+
+  it("rejects custom buttons on submission confirmations", () => {
+    expect(() =>
+      saveTemplateSchema.parse({
+        ...template,
+        content: {
+          ...template.content,
+          body: "We received your application.",
+          buttonText: "Organizer action",
+          buttonUrl: "https://example.test/other",
+        },
+      }),
+    ).toThrow(/product-owned Manage application action/);
+  });
+});
 
 async function communicationEnvironment() {
   const sent: unknown[] = [];
@@ -212,6 +268,30 @@ describe("Communications D1 vertical slice", () => {
   });
 
   describe("additional workflow coverage", () => {
+    it("reserves submission confirmations for automatic delivery", async () => {
+      const { testEnv } = await communicationEnvironment();
+      const service = new CommunicationService(testEnv);
+      const saved = await service.saveTemplate(viewer, {
+        name: "Automatic application receipt",
+        category: "submission_confirmation",
+        subject: "Application received",
+        content: {
+          body: "We received your application.",
+          physicalAddress: "100 Programme Way, Toronto",
+        },
+      });
+      await service.publishTemplate(viewer, saved.versionId);
+
+      await expect(
+        service.preview(viewer, {
+          templateVersionId: saved.versionId,
+          audienceType: "manual",
+          manualRecipients: "Alex <alex@example.test>",
+          kind: "transactional",
+        }),
+      ).rejects.toThrow(/reserved for automatic delivery/);
+    });
+
     it("rejects non-HTTPS email action URLs", async () => {
       const { testEnv } = await communicationEnvironment();
       const service = new CommunicationService(testEnv);

@@ -1,14 +1,54 @@
 import { z } from "zod";
 
-import { templateContentSchema } from "../../app/modules/communications/communication-schema";
+import {
+  SUBMISSION_CONFIRMATION_MANAGEMENT_BODY_SUFFIX,
+  templateContentSchema,
+} from "../../app/modules/communications/communication-schema";
 import { communicationDeliveryIdempotencyKey } from "../../app/modules/communications/communication-service-shared";
 import { requireEmailProviderConfiguration } from "../../app/modules/communications/email-provider.server";
+import { requiresProductionSecurity } from "../../app/platform/runtime-environment.server";
 import { processCommunicationSend } from "./communication-send";
 import type { QueueProviderDependencies } from "./handler-types";
 import { markTriggerFailure } from "./notification-failure";
 
 const INVALID_SUBMISSION_NOTIFICATION_FAILURE =
   "The durable submission notification snapshot is invalid and cannot be delivered safely. Ask the applicant to submit again or contact them through an explicitly reviewed communication.";
+
+function submissionApplicationUrl(
+  env: CloudflareEnvironment,
+  publicSlug: string,
+  submissionId: string,
+) {
+  const configuredOrigin = env.BETTER_AUTH_URL?.trim();
+  if (!configuredOrigin) {
+    throw new Error(
+      "BETTER_AUTH_URL is required to build submission confirmation links.",
+    );
+  }
+  let url: URL;
+  try {
+    url = new URL(configuredOrigin);
+  } catch {
+    throw new Error(
+      "BETTER_AUTH_URL must be an absolute URL before submission confirmations can be delivered.",
+    );
+  }
+  if (url.username || url.password) {
+    throw new Error("BETTER_AUTH_URL must not contain embedded credentials.");
+  }
+  if (
+    url.protocol !== "https:" &&
+    (requiresProductionSecurity(env.APP_ENV) || url.protocol !== "http:")
+  ) {
+    throw new Error(
+      "BETTER_AUTH_URL must use HTTPS before submission confirmations can be delivered.",
+    );
+  }
+  url.pathname = `/apply/${encodeURIComponent(publicSlug)}`;
+  url.search = new URLSearchParams({ draft: submissionId }).toString();
+  url.hash = "";
+  return url.toString();
+}
 
 const submissionNotificationMessageSchema = z.object({
   type: z.literal("submission.notification"),
@@ -138,10 +178,15 @@ export async function processSubmissionNotification(
     SELECT s.id AS submissionId, s.title AS submissionTitle,
            s.submitter_person_id AS personId, COALESCE(p.email, s.submitter_email) AS address,
            COALESCE(p.display_name, s.submitter_email) AS recipientName,
+           form.public_slug AS publicSlug,
            e.name AS eventName, e.brand_accent AS brandAccent,
            e.starts_at AS startsAt, e.ends_at AS endsAt
       FROM submissions s
       JOIN events e ON e.id = s.event_id AND e.organisation_id = ?
+      JOIN form_versions version
+        ON version.id = s.form_version_id AND version.event_id = s.event_id
+      JOIN form_definitions form
+        ON form.id = version.form_id AND form.event_id = s.event_id
       LEFT JOIN people p ON p.id = s.submitter_person_id
      WHERE s.id = ? AND s.event_id = ? AND s.status <> 'draft'
   `,
@@ -153,6 +198,7 @@ export async function processSubmissionNotification(
       personId: string | null;
       address: string | null;
       recipientName: string | null;
+      publicSlug: string;
       eventName: string;
       brandAccent: string;
       startsAt: number;
@@ -166,6 +212,21 @@ export async function processSubmissionNotification(
       message.communicationId,
     );
     return;
+  }
+
+  let applicationUrl: string | null = null;
+  let applicationUrlError: string | null = null;
+  try {
+    applicationUrl = submissionApplicationUrl(
+      env,
+      submission.publicSlug,
+      submission.submissionId,
+    );
+  } catch (error) {
+    applicationUrlError =
+      error instanceof Error
+        ? error.message
+        : "The application management URL could not be generated.";
   }
 
   let emailProvider: ReturnType<
@@ -211,25 +272,46 @@ export async function processSubmissionNotification(
       .first<{ id: string }>(),
   ]);
 
-  let configurationError: string | null = null;
+  let configurationError: string | null = applicationUrlError;
   let content: z.infer<typeof templateContentSchema> | null = null;
-  if (!submission.address || !z.email().safeParse(submission.address).success) {
+  if (
+    !configurationError &&
+    (!submission.address || !z.email().safeParse(submission.address).success)
+  ) {
     configurationError =
       "The submission recipient does not have a valid verified email address.";
-  } else if (!template) {
+  } else if (!configurationError && !template) {
     configurationError =
       "Publish an active submission confirmation email template before accepting applications.";
   } else if (
-    template.subjectTemplate === null ||
-    template.subjectTemplate !== template.subjectTemplate.trim() ||
-    template.subjectTemplate.length < 1 ||
-    template.subjectTemplate.length > 200
+    !configurationError &&
+    template &&
+    (template.subjectTemplate === null ||
+      template.subjectTemplate !== template.subjectTemplate.trim() ||
+      template.subjectTemplate.length < 1 ||
+      template.subjectTemplate.length > 200)
   ) {
     configurationError =
       "The published submission confirmation email template has an invalid subject.";
-  } else {
+  } else if (!configurationError && template) {
     try {
-      content = templateContentSchema.parse(JSON.parse(template.contentJson));
+      const configuredContent = templateContentSchema.parse(
+        JSON.parse(template.contentJson),
+      );
+      if (configuredContent.buttonText || configuredContent.buttonUrl) {
+        configurationError =
+          "The published submission confirmation template configures a custom button. Publish a version that uses the product-owned Manage application action.";
+      } else if (!applicationUrl) {
+        configurationError =
+          "The application management URL could not be generated.";
+      } else {
+        content = templateContentSchema.parse({
+          ...configuredContent,
+          body: `${configuredContent.body}${SUBMISSION_CONFIRMATION_MANAGEMENT_BODY_SUFFIX}`,
+          buttonText: "Manage application",
+          buttonUrl: applicationUrl,
+        });
+      }
     } catch {
       configurationError =
         "The published submission confirmation template contains invalid content.";
@@ -332,7 +414,10 @@ export async function processSubmissionNotification(
         submission.address,
         submission.recipientName ?? submission.address,
         submission.submissionId,
-        JSON.stringify({ "submission.title": submission.submissionTitle }),
+        JSON.stringify({
+          "submission.title": submission.submissionTitle,
+          "submission.url": applicationUrl,
+        }),
         emailProvider?.provider ?? null,
         deliveryKey,
         configurationError ? "failed" : "queued",

@@ -157,6 +157,15 @@ describe("typed task API service", () => {
       entityType: "task_instance",
       changeType: "created",
     });
+    await expect(
+      env.DB.prepare(
+        `SELECT evidence_mode AS evidenceMode,
+                configuration_json AS configurationJson
+           FROM task_instances WHERE id = ? AND event_id = ?`,
+      )
+        .bind(created.task.id, eventId)
+        .first(),
+    ).resolves.toEqual({ evidenceMode: "text", configurationJson: "{}" });
     expect(
       (await service.list(principal, { limit: 200 })).tasks.some(
         (task) => task.id === created.task.id,
@@ -519,6 +528,56 @@ describe("typed task API service", () => {
       }),
     ).toThrow();
     expect(() => apiTaskListQuerySchema.parse({ limit: "201" })).toThrow();
+    expect(() =>
+      apiTaskCreateSchema.parse({
+        title: "Visit the participant brief",
+        targetType: "event",
+        targetId: eventId,
+        taskType: "link_visit",
+        impact: "medium",
+      }),
+    ).toThrow(/require an HTTPS destination URL/);
+    expect(() =>
+      apiTaskCreateSchema.parse({
+        title: "Visit the participant brief",
+        targetType: "event",
+        targetId: eventId,
+        taskType: "link_visit",
+        configuration: {
+          destinationUrl: "https://user:secret@example.test/brief",
+        },
+        impact: "medium",
+      }),
+    ).toThrow(/credentials/);
+    expect(() =>
+      apiTaskCreateSchema.parse({
+        title: "Upload session slides",
+        targetType: "session",
+        targetId: "session-demo-speaker",
+        taskType: "file_upload",
+        impact: "high",
+      }),
+    ).toThrow(/must identify a participant document or session deliverable/);
+    expect(
+      apiTaskCreateSchema.parse({
+        title: "Upload session slides",
+        targetType: "session",
+        targetId: "session-demo-speaker",
+        taskType: "file_upload",
+        configuration: { fileScope: "session_deliverable" },
+        impact: "high",
+      }).configuration.fileScope,
+    ).toBe("session_deliverable");
+    expect(() =>
+      apiTaskCreateSchema.parse({
+        title: "Ambiguous slides",
+        targetType: "speaker",
+        targetId: "person-demo-speaker",
+        taskType: "file_upload",
+        configuration: { fileScope: "session_deliverable" },
+        impact: "high",
+      }),
+    ).toThrow(/must use session scope/);
 
     const service = new ApiTaskService(env as unknown as CloudflareEnvironment);
     await expect(

@@ -52,6 +52,8 @@ export type FileRow = {
   downloadReleasedAt: number | null;
   downloadUploadedAt: number | null;
   downloadUploaderName: string | null;
+  taskTitle: string | null;
+  sessionTitle: string | null;
 };
 
 export class SpeakerPortalService {
@@ -167,7 +169,9 @@ export class SpeakerPortalService {
                current.original_filename AS downloadFilename,
                current.released_at AS downloadReleasedAt,
                current.uploaded_at AS downloadUploadedAt,
-               NULLIF(TRIM(uploader.display_name), '') AS downloadUploaderName
+               NULLIF(TRIM(uploader.display_name), '') AS downloadUploaderName,
+               task.title AS taskTitle,
+               task_session.title AS sessionTitle
           FROM file_assets fa
           LEFT JOIN file_versions fv ON fv.id = (
             SELECT id FROM file_versions candidate
@@ -180,6 +184,14 @@ export class SpeakerPortalService {
            AND current.asset_id = fa.id
            AND current.deleted_at IS NULL
           LEFT JOIN people uploader ON uploader.id = current.created_by_person_id
+          LEFT JOIN task_instances task
+            ON fa.target_type = 'task'
+           AND task.id = fa.target_id
+           AND task.event_id = fa.event_id
+          LEFT JOIN sessions task_session
+            ON task.target_type = 'session'
+           AND task_session.id = task.target_id
+           AND task_session.event_id = task.event_id
          WHERE fa.event_id = ? AND fa.owner_person_id = ? AND fa.status <> 'deleted'
          ORDER BY fa.updated_at DESC
       `,

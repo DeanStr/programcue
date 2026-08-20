@@ -139,14 +139,16 @@ export function buildAcceptanceTaskPlanStatements(input: {
       ${acceptanceTaskPlanCteSql}
       INSERT INTO task_instances (
         id, event_id, template_id, target_type, target_id, owner_person_id,
-        title, description, task_type, impact, status, readiness_state,
-        readiness_percent, revision, last_operation_id, due_at,
+        title, description, task_type, impact, evidence_mode,
+        configuration_json, status, readiness_state, readiness_percent, revision,
+        last_operation_id, due_at,
         created_at, updated_at
       )
       SELECT lower(hex(randomblob(16))), scope.event_id, template.id,
              target.target_type, target.target_id, target.owner_person_id,
              template.name, template.description, template.task_type,
-             template.impact,
+             template.impact, template.evidence_mode,
+             template.configuration_json,
              CASE WHEN EXISTS (
                SELECT 1 FROM task_template_dependencies dependency
                 WHERE dependency.template_id = template.id

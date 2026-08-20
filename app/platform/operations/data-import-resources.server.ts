@@ -580,10 +580,11 @@ export function dataImportMutationStatements(
     env.DB.prepare(
       `INSERT INTO task_instances (
          id, event_id, target_type, target_id, owner_person_id, title, description,
-         task_type, impact, status, readiness_state, readiness_percent, revision,
+         task_type, impact, evidence_mode, configuration_json,
+         status, readiness_state, readiness_percent, revision,
          last_operation_id, due_at, completed_at, completed_by_person_id,
          created_at, updated_at
-       ) SELECT ?, ?, ?, ?, ?, ?, ?, 'checklist', ?, ?, ?, ?, 1, ?, ?,
+       ) SELECT ?, ?, ?, ?, ?, ?, ?, 'checklist', ?, 'checkbox', '{}', ?, ?, ?, 1, ?, ?,
                 CASE WHEN ? IN ('completed','waived') THEN unixepoch() ELSE NULL END,
                 CASE WHEN ? IN ('completed','waived') THEN ? ELSE NULL END,
                 unixepoch(), unixepoch() WHERE ${operationGuard}

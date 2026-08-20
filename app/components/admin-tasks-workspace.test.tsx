@@ -12,8 +12,8 @@ function taskData(overrides: Partial<AdminTasksData> = {}) {
     templates: [
       {
         id: "template-1",
-        name: "Upload slides",
-        description: "Upload the final deck.",
+        name: "Upload participant consent form",
+        description: "Upload the signed participant document.",
         targetType: "speaker",
         taskType: "file_upload",
         impact: "critical",
@@ -22,7 +22,7 @@ function taskData(overrides: Partial<AdminTasksData> = {}) {
         dueOffsetMinutes: null,
         fixedDueAt: 1_800_000_000,
         autoAssignOnAcceptance: 0,
-        configurationJson: "{}",
+        configurationJson: '{"fileScope":"participant_document"}',
         status: "active",
         dependencies: [],
       },

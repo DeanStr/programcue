@@ -98,7 +98,9 @@ export async function loader({ request, context, params }: Route.LoaderArgs) {
     categoryPreset ?? (audiencePreset === null ? "task_reminder" : null);
   const defaultTemplate = defaultTemplateCategory
     ? templates.find(
-        (template) => template.category === defaultTemplateCategory,
+        (template) =>
+          template.category === defaultTemplateCategory &&
+          template.category !== "submission_confirmation",
       )
     : undefined;
   let draft = null;
@@ -346,8 +348,15 @@ function DraftFields({
             Select a published version
           </option>
           {templates.map((template) => (
-            <option key={template.id} value={template.id}>
+            <option
+              key={template.id}
+              value={template.id}
+              disabled={template.category === "submission_confirmation"}
+            >
               {template.name} · v{template.versionNumber}
+              {template.category === "submission_confirmation"
+                ? " · automatic only"
+                : ""}
             </option>
           ))}
         </select>

@@ -364,6 +364,10 @@ describe("Submissions D1 vertical slice", () => {
       const staleMaterialisationReached = new Promise<void>((resolve) => {
         staleMaterialisationReachedResolve = resolve;
       });
+      const deliveryEnvironment = {
+        ...testEnv,
+        BETTER_AUTH_URL: "https://app.programcue.test",
+      } as unknown as CloudflareEnvironment;
       let interceptedMaterialisation = false;
       const delayedDb = new Proxy(testEnv.DB, {
         get(target, property) {
@@ -383,14 +387,16 @@ describe("Submissions D1 vertical slice", () => {
       });
       const staleWorker = processSubmissionNotification(
         confirmationMessage,
-        { ...testEnv, DB: delayedDb },
+        { ...deliveryEnvironment, DB: delayedDb },
         { email: provider },
       );
       await staleMaterialisationReached;
       try {
-        await processSubmissionNotification(confirmationMessage, testEnv, {
-          email: provider,
-        });
+        await processSubmissionNotification(
+          confirmationMessage,
+          deliveryEnvironment,
+          { email: provider },
+        );
       } finally {
         releaseStaleMaterialisation();
       }
@@ -399,6 +405,43 @@ describe("Submissions D1 vertical slice", () => {
       expect(providerRequests[0]).toMatchObject({
         to: [applicant.email],
         subject: `We received ${validAnswers.title}`,
+      });
+      const expectedApplicationUrl = new URL(
+        `/apply/${encodeURIComponent(slug)}`,
+        deliveryEnvironment.BETTER_AUTH_URL,
+      );
+      expectedApplicationUrl.searchParams.set("draft", firstId);
+      expect(String(providerRequests[0]?.text)).toContain(
+        `Manage application: ${expectedApplicationUrl.toString()}`,
+      );
+      expect(String(providerRequests[0]?.html)).toContain("Manage application");
+      expect(String(providerRequests[0]?.html)).toContain(
+        expectedApplicationUrl.toString().replaceAll("&", "&amp;"),
+      );
+      const durableConfirmation = await testEnv.DB.prepare(
+        `SELECT delivery.source_values_json AS sourceValuesJson,
+                communication.content_snapshot_json AS contentSnapshotJson
+           FROM communications communication
+           JOIN communication_deliveries delivery
+             ON delivery.communication_id = communication.id
+          WHERE communication.idempotency_key = ?`,
+      )
+        .bind(`submission-confirmation:${firstId}`)
+        .first<{ sourceValuesJson: string; contentSnapshotJson: string }>();
+      expect(JSON.parse(durableConfirmation!.sourceValuesJson)).toMatchObject({
+        "submission.title": validAnswers.title,
+        "submission.url": expectedApplicationUrl.toString(),
+      });
+      expect(
+        JSON.parse(durableConfirmation!.contentSnapshotJson),
+      ).toMatchObject({
+        content: {
+          body: expect.stringContaining(
+            "Manage application: {{submission.url}}",
+          ),
+          buttonText: "Manage application",
+          buttonUrl: expectedApplicationUrl.toString(),
+        },
       });
 
       const saved = (

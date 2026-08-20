@@ -88,6 +88,20 @@ export function maximumBytesForAssetKind(
   }
 }
 
+function maximumBytesForFileDeclaration(
+  kind: AssetKind,
+  contentType: string,
+  policy: EventFilePolicy,
+) {
+  if (
+    kind === "task_evidence" &&
+    ["video/mp4", "video/webm"].includes(contentType.toLowerCase())
+  ) {
+    return policy.videoMaximumBytes;
+  }
+  return maximumBytesForAssetKind(kind, policy);
+}
+
 export function maximumMegabytes(bytes: number) {
   if (!Number.isSafeInteger(bytes) || bytes < FILE_SIZE_MIB)
     throw new FilePolicyError(
@@ -160,6 +174,8 @@ const policies: Record<AssetKind, FilePolicy> = {
       "jpeg",
       "png",
       "webp",
+      "mp4",
+      "webm",
     ]),
     contentTypes: new Set([
       pdf,
@@ -174,6 +190,8 @@ const policies: Record<AssetKind, FilePolicy> = {
       "image/jpeg",
       "image/png",
       "image/webp",
+      "video/mp4",
+      "video/webm",
     ]),
   },
   other: {
@@ -251,7 +269,11 @@ function validateDeclaredFile(
     throw new FilePolicyError(
       `The declared file type ${file.type || "unknown"} is not allowed.`,
     );
-  const maximumBytes = maximumBytesForAssetKind(kind, eventPolicy);
+  const maximumBytes = maximumBytesForFileDeclaration(
+    kind,
+    file.type,
+    eventPolicy,
+  );
   if (file.size > maximumBytes)
     throw new FilePolicyError(
       `The file exceeds the ${maximumMegabytes(maximumBytes)} MB event limit.`,

@@ -7,6 +7,7 @@ import {
   deliveryActionLabel,
 } from "./communication-draft-preview";
 import { CalendarAdministration } from "./communications-calendar-panels";
+import { TemplatePreview } from "./communications-template-panels";
 
 describe("communications presentation", () => {
   it("uses grammatically correct delivery labels", () => {
@@ -14,6 +15,27 @@ describe("communications presentation", () => {
     expect(deliveryActionLabel("Schedule", 2)).toBe("Schedule 2 deliveries");
     expect(deliveryActionLabel("Confirm", 1)).toBe("Confirm 1 delivery");
     expect(deliveryActionLabel("Confirm", 0)).toBe("Confirm 0 deliveries");
+  });
+
+  it("previews the product-owned action for submission confirmations", () => {
+    const markup = renderToStaticMarkup(
+      <TemplatePreview
+        draft={{
+          name: "Application received",
+          category: "submission_confirmation",
+          subject: "We received your application",
+          body: "Thanks for applying.",
+          physicalAddress: "100 Programme Way",
+          buttonText: "Stale organizer button",
+          buttonUrl: "https://example.test/stale",
+        }}
+      />,
+    );
+
+    expect(markup).toContain("Manage application");
+    expect(markup).toContain("Exact application URL generated when sent");
+    expect(markup).not.toContain("Stale organizer button");
+    expect(markup).not.toContain("https://example.test/stale");
   });
 
   it("isolates tenant-authored email preview HTML from the application origin", () => {

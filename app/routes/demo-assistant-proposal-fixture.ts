@@ -129,9 +129,11 @@ export async function action({ request, context }: ActionFunctionArgs) {
       env.DB.prepare(
         `INSERT INTO task_instances (
           id, event_id, target_type, target_id, owner_person_id, title,
-          task_type, impact, status, readiness_state, created_at, updated_at
-        ) VALUES (?, ?, 'speaker', ?, ?, 'Upload final slides', 'file_upload',
-                  'high', 'not_started', 'at_risk', unixepoch(), unixepoch())`,
+          task_type, impact, evidence_mode, configuration_json, status,
+          readiness_state, created_at, updated_at
+        ) VALUES (?, ?, 'speaker', ?, ?, 'Upload signed participant agreement', 'file_upload',
+                  'high', 'file', '{"fileScope":"participant_document"}', 'not_started', 'at_risk',
+                  unixepoch(), unixepoch())`,
       ).bind(
         `demo-ai-reminder-task-deliverable-${suffix}`,
         EVENT_ID,
@@ -141,9 +143,11 @@ export async function action({ request, context }: ActionFunctionArgs) {
       env.DB.prepare(
         `INSERT INTO task_instances (
           id, event_id, target_type, target_id, owner_person_id, title,
-          task_type, impact, status, readiness_state, created_at, updated_at
+          task_type, impact, evidence_mode, configuration_json, status,
+          readiness_state, created_at, updated_at
         ) VALUES (?, ?, 'speaker', ?, ?, 'Confirm biography', 'short_form',
-                  'medium', 'not_started', 'at_risk', unixepoch(), unixepoch())`,
+                  'medium', 'text', '{}', 'not_started', 'at_risk',
+                  unixepoch(), unixepoch())`,
       ).bind(
         `demo-ai-reminder-task-suppressed-${suffix}`,
         EVENT_ID,

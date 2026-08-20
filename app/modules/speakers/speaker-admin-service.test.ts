@@ -146,6 +146,59 @@ describe("speaker profile service", () => {
     ]);
   });
 
+  it("counts a session-scoped deliverable for every participant in that exact session", async () => {
+    const testEnv = env as unknown as CloudflareEnvironment;
+    await ensureDemoSpeakerData(testEnv);
+    const service = new SpeakerService(testEnv);
+    const beforeDetail = await service.getAdminSpeakerDetail(
+      admin,
+      speaker.personId,
+    );
+    const beforePage = await service.listAdminSpeakerPage(
+      admin,
+      { query: speaker.email },
+      1,
+    );
+    const beforeListItem = beforePage.speakers.find(
+      (candidate) => candidate.id === speaker.personId,
+    )!;
+    const taskId = `session-deliverable-${crypto.randomUUID()}`;
+    await testEnv.DB.prepare(
+      `INSERT INTO task_instances (
+         id, event_id, target_type, target_id, owner_person_id, title,
+         task_type, impact, evidence_mode, configuration_json,
+         status, readiness_state, readiness_percent
+       ) VALUES (?, ?, 'session', 'session-demo-speaker', NULL,
+                 'Upload the session poster', 'file_upload', 'high', 'file',
+                 '{"fileScope":"session_deliverable"}',
+                 'not_started', 'on_track', 0)`,
+    )
+      .bind(taskId, admin.eventId)
+      .run();
+
+    const afterDetail = await service.getAdminSpeakerDetail(
+      admin,
+      speaker.personId,
+    );
+    const afterPage = await service.listAdminSpeakerPage(
+      admin,
+      { query: speaker.email },
+      1,
+    );
+    const afterListItem = afterPage.speakers.find(
+      (candidate) => candidate.id === speaker.personId,
+    )!;
+    expect(afterDetail.tasks.outstanding).toBe(
+      beforeDetail.tasks.outstanding + 1,
+    );
+    expect(afterListItem.outstandingTasks).toBe(
+      beforeListItem.outstandingTasks + 1,
+    );
+    expect(afterPage.summary.outstandingTasks).toBe(
+      beforePage.summary.outstandingTasks + 1,
+    );
+  });
+
   it("returns exact current headshot filename, uploader and upload time to both profile surfaces", async () => {
     const testEnv = env as unknown as CloudflareEnvironment;
     await ensureDemoSpeakerData(testEnv);

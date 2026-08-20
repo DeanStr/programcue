@@ -4,7 +4,6 @@ import {
   type TaskRow,
   TaskServiceFoundation,
   TaskStateError,
-  type TemplateRow,
 } from "./task-service-foundation.server";
 
 export class ParticipantTaskWorkflowFoundation extends TaskServiceFoundation {
@@ -20,11 +19,10 @@ export class ParticipantTaskWorkflowFoundation extends TaskServiceFoundation {
              ti.submitted_at AS submittedAt, ti.completed_at AS completedAt,
              ti.completed_by_person_id AS completedByPersonId,
              ti.last_operation_id AS lastOperationId,
-             tt.evidence_mode AS evidenceMode,
-             COALESCE(tt.configuration_json, '{}') AS configurationJson
+             ti.evidence_mode AS evidenceMode,
+             ti.configuration_json AS configurationJson
         FROM task_instances ti
         LEFT JOIN people p ON p.id = ti.owner_person_id
-        LEFT JOIN task_templates tt ON tt.id = ti.template_id
         LEFT JOIN sessions target_session
           ON ti.target_type = 'session'
          AND target_session.id = ti.target_id
@@ -39,7 +37,7 @@ export class ParticipantTaskWorkflowFoundation extends TaskServiceFoundation {
         viewer.personId,
         viewer.personId,
       )
-      .first<TaskRow & { evidenceMode: TemplateRow["evidenceMode"] | null }>();
+      .first<TaskRow>();
   }
 
   async assertFileEvidenceUploadAllowed(viewer: Viewer, taskId: string) {

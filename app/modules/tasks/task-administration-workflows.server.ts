@@ -245,6 +245,7 @@ export class TaskAdministrationWorkflows extends TaskServiceFoundation {
       this.env.DB.prepare(
         `
         SELECT ti.id, ti.template_id AS templateId, ti.target_type AS targetType, ti.target_id AS targetId,
+               target_session.title AS targetLabel,
                ti.owner_person_id AS ownerPersonId, p.display_name AS ownerName, ti.title, ti.description,
                ti.task_type AS taskType, ti.impact, ti.status, ti.readiness_state AS readinessState,
                ti.readiness_percent AS readinessPercent, ti.revision, ti.due_at AS dueAt,
@@ -252,10 +253,14 @@ export class TaskAdministrationWorkflows extends TaskServiceFoundation {
                ti.submitted_at AS submittedAt, ti.completed_at AS completedAt,
                ti.completed_by_person_id AS completedByPersonId,
                ti.last_operation_id AS lastOperationId,
-               COALESCE(tt.configuration_json, '{}') AS configurationJson
+               ti.evidence_mode AS evidenceMode,
+               ti.configuration_json AS configurationJson
           FROM task_instances ti
           LEFT JOIN people p ON p.id = ti.owner_person_id
-          LEFT JOIN task_templates tt ON tt.id = ti.template_id AND tt.event_id = ti.event_id
+          LEFT JOIN sessions target_session
+            ON ti.target_type = 'session'
+           AND target_session.id = ti.target_id
+           AND target_session.event_id = ti.event_id
          WHERE ti.event_id = ? ORDER BY ti.status, ti.due_at IS NULL, ti.due_at, ti.title
       `,
       )
@@ -394,6 +399,8 @@ export class TaskAdministrationWorkflows extends TaskServiceFoundation {
              owner_person_id AS ownerPersonId, NULL AS ownerName, title, description,
              task_type AS taskType, impact, status, readiness_state AS readinessState,
              readiness_percent AS readinessPercent, revision, due_at AS dueAt,
+             evidence_mode AS evidenceMode,
+             configuration_json AS configurationJson,
              evidence_json AS evidenceJson, waiver_json AS waiverJson,
              submitted_at AS submittedAt, completed_at AS completedAt,
              completed_by_person_id AS completedByPersonId,

@@ -61,6 +61,8 @@ export function AdminTaskPlanPanel({
     evidenceMode,
     dueOffsetDays,
     fixedDueDate,
+    destinationUrl,
+    fileScope,
     description,
   } = templateDraft;
   const compatibleEvidenceModes =
@@ -234,9 +236,21 @@ export function AdminTaskPlanPanel({
                     )
                   }
                 >
-                  <option value="speaker">Speaker</option>
-                  <option value="session">Session</option>
-                  <option value="event">Event</option>
+                  <option
+                    value="speaker"
+                    disabled={fileScope === "session_deliverable"}
+                  >
+                    Speaker
+                  </option>
+                  <option
+                    value="session"
+                    disabled={fileScope === "participant_document"}
+                  >
+                    Session
+                  </option>
+                  <option value="event" disabled={taskType === "file_upload"}>
+                    Event
+                  </option>
                 </select>
               </label>
               <label className="label">
@@ -252,6 +266,12 @@ export function AdminTaskPlanPanel({
                       "evidenceMode",
                       suggestedTaskEvidenceMode(next),
                     );
+                    if (next !== "link_visit") {
+                      updateTemplateDraft("destinationUrl", "");
+                    }
+                    if (next !== "file_upload") {
+                      updateTemplateDraft("fileScope", "");
+                    }
                   }}
                 >
                   <option value="checklist">Checklist</option>
@@ -263,6 +283,86 @@ export function AdminTaskPlanPanel({
                 </select>
               </label>
             </div>
+            {taskType === "link_visit" ? (
+              <label className="label">
+                <span className="pc-field-label">
+                  <span>Destination URL</span>
+                  <span className="pc-required" aria-hidden="true">
+                    Required
+                  </span>
+                </span>
+                <input
+                  className="field"
+                  name="destinationUrl"
+                  type="url"
+                  inputMode="url"
+                  required
+                  maxLength={2_048}
+                  placeholder="https://example.com/participant-action"
+                  value={destinationUrl}
+                  onChange={(event) =>
+                    updateTemplateDraft(
+                      "destinationUrl",
+                      event.currentTarget.value,
+                    )
+                  }
+                  aria-invalid={Boolean(
+                    actionNotice?.errors?.configuration?.length,
+                  )}
+                />
+                <span className="help">
+                  Participants open this organizer-provided HTTPS link, then
+                  explicitly acknowledge completion.
+                </span>
+              </label>
+            ) : (
+              <input type="hidden" name="destinationUrl" value="" />
+            )}
+            {taskType === "file_upload" ? (
+              <label className="label">
+                <span className="pc-field-label">
+                  <span>File purpose</span>
+                  <span className="pc-required" aria-hidden="true">
+                    Required
+                  </span>
+                </span>
+                <select
+                  className="select"
+                  name="fileScope"
+                  required
+                  value={fileScope}
+                  onChange={(event) => {
+                    const next = event.currentTarget.value as
+                      | ""
+                      | "participant_document"
+                      | "session_deliverable";
+                    updateTemplateDraft("fileScope", next);
+                    if (next === "participant_document") {
+                      updateTemplateDraft("targetType", "speaker");
+                    } else if (next === "session_deliverable") {
+                      updateTemplateDraft("targetType", "session");
+                    }
+                  }}
+                  aria-invalid={Boolean(
+                    actionNotice?.errors?.configuration?.length,
+                  )}
+                >
+                  <option value="">Choose a file purpose</option>
+                  <option value="participant_document">
+                    Reusable participant document
+                  </option>
+                  <option value="session_deliverable">
+                    Session deliverable
+                  </option>
+                </select>
+                <span className="help">
+                  Slides, posters, handouts and session videos are session
+                  deliverables. Reusable documents belong to the participant.
+                </span>
+              </label>
+            ) : (
+              <input type="hidden" name="fileScope" value="" />
+            )}
             <div className="form-row">
               <label className="label">
                 Impact

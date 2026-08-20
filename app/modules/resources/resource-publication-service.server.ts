@@ -331,11 +331,16 @@ export class ResourcePublicationService extends ResourceServiceBase {
           `
         INSERT OR IGNORE INTO task_instances (
           id, event_id, template_id, target_type, target_id, owner_person_id, title, description,
-          task_type, impact, status, readiness_state, readiness_percent, revision, created_at, updated_at
+          task_type, impact, status, readiness_state, evidence_mode,
+          configuration_json, readiness_percent, revision, created_at, updated_at
         ) SELECT ? || CAST(audience.value AS TEXT), ?, ?, 'speaker', CAST(audience.value AS TEXT),
                  CAST(audience.value AS TEXT), ?, ?, 'acknowledgement', 'medium',
-                 'not_started', 'on_track', 0, 1, unixepoch(), unixepoch()
+                 'not_started', 'on_track', template.evidence_mode,
+                 template.configuration_json, 0, 1,
+                 unixepoch(), unixepoch()
             FROM json_each(?) audience
+            JOIN task_templates template
+              ON template.id = ? AND template.event_id = ?
            WHERE ${successfulResourcePublishAttemptSql}
       `,
         ).bind(
@@ -345,6 +350,8 @@ export class ResourcePublicationService extends ResourceServiceBase {
           `Read ${page.title}`,
           "Read and acknowledge the current published version.",
           JSON.stringify(eligibleIds),
+          templateId,
+          viewer.eventId,
           page.versionId,
           operationId,
         ),

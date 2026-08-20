@@ -131,7 +131,7 @@ export async function ensureDemoSpeakerData(env: CloudflareEnvironment) {
         configuration_json, status, created_at, updated_at
       ) VALUES (
         'task-template-profile', ?, 'Complete your speaker profile', 'Confirm your biography, role and pronunciation.',
-        'speaker', 'short_form', 'high', 'checkbox', 'fixed', NULL,
+        'speaker', 'short_form', 'high', 'text', 'fixed', NULL,
         unixepoch('2027-05-10T16:00:00Z'), 1, '{}', 'active', unixepoch(), unixepoch()
       )
     `,
@@ -144,8 +144,8 @@ export async function ensureDemoSpeakerData(env: CloudflareEnvironment) {
         configuration_json, status, created_at, updated_at
       ) VALUES (
         'task-template-slides', ?, 'Upload presentation slides', 'Upload the final PDF, PPT or PPTX deck.',
-        'speaker', 'file_upload', 'critical', 'file', 'fixed', NULL,
-        unixepoch('2027-05-10T16:00:00Z'), 1, '{}', 'active', unixepoch(), unixepoch()
+        'session', 'file_upload', 'critical', 'file', 'fixed', NULL,
+        unixepoch('2027-05-10T16:00:00Z'), 1, '{"fileScope":"session_deliverable"}', 'active', unixepoch(), unixepoch()
       )
     `,
     ).bind(EVENT_ID),
@@ -163,20 +163,17 @@ export async function ensureDemoSpeakerData(env: CloudflareEnvironment) {
       )
     `,
     ).bind(EVENT_ID),
-    env.DB.prepare(`
-      INSERT OR IGNORE INTO task_template_dependencies (template_id, depends_on_template_id, created_at)
-      VALUES ('task-template-slides', 'task-template-profile', unixepoch())
-    `),
     env.DB.prepare(
       `
       INSERT OR IGNORE INTO task_instances (
         id, event_id, template_id, target_type, target_id, owner_person_id, title, description,
         task_type, impact, status, readiness_state, readiness_percent, revision, due_at,
-        evidence_json, completed_at, completed_by_person_id, created_at, updated_at
+        evidence_mode, configuration_json, evidence_json, completed_at,
+        completed_by_person_id, created_at, updated_at
       ) VALUES (
         'task-demo-profile', ?, 'task-template-profile', 'speaker', ?, ?, 'Complete your speaker profile',
         'Confirm your biography, role and pronunciation.', 'short_form', 'high', 'completed', 'on_track', 100, 1,
-        unixepoch('2027-05-10T16:00:00Z'), '{"confirmed":true}', unixepoch(), ?, unixepoch(), unixepoch()
+        unixepoch('2027-05-10T16:00:00Z'), 'text', '{}', '{"text":"Biography, role and pronunciation confirmed."}', unixepoch(), ?, unixepoch(), unixepoch()
       )
     `,
     ).bind(EVENT_ID, SPEAKER_ID, SPEAKER_ID, SPEAKER_ID),
@@ -184,18 +181,15 @@ export async function ensureDemoSpeakerData(env: CloudflareEnvironment) {
       `
       INSERT OR IGNORE INTO task_instances (
         id, event_id, template_id, target_type, target_id, owner_person_id, title, description,
-        task_type, impact, status, readiness_state, readiness_percent, revision, due_at, created_at, updated_at
+        task_type, impact, evidence_mode, configuration_json, status,
+        readiness_state, readiness_percent, revision, due_at, created_at, updated_at
       ) VALUES (
-        'task-demo-slides', ?, 'task-template-slides', 'speaker', ?, ?, 'Upload presentation slides',
-        'Upload the final PDF, PPT or PPTX deck.', 'file_upload', 'critical', 'not_started', 'at_risk', 0, 1,
-        unixepoch('2027-05-16T16:00:00Z'), unixepoch(), unixepoch()
+        'task-demo-slides', ?, 'task-template-slides', 'session', 'session-demo-speaker', ?, 'Upload presentation slides',
+        'Upload the final PDF, PPT or PPTX deck.', 'file_upload', 'critical', 'file', '{"fileScope":"session_deliverable"}',
+        'not_started', 'at_risk', 0, 1, unixepoch('2027-05-16T16:00:00Z'), unixepoch(), unixepoch()
       )
     `,
-    ).bind(EVENT_ID, SPEAKER_ID, SPEAKER_ID),
-    env.DB.prepare(`
-      INSERT OR IGNORE INTO task_instance_dependencies (task_id, depends_on_task_id, created_at)
-      VALUES ('task-demo-slides', 'task-demo-profile', unixepoch())
-    `),
+    ).bind(EVENT_ID, SPEAKER_ID),
     env.DB.prepare(
       `
       INSERT OR IGNORE INTO resource_pages (
@@ -227,11 +221,12 @@ export async function ensureDemoSpeakerData(env: CloudflareEnvironment) {
       INSERT OR IGNORE INTO task_instances (
         id, event_id, template_id, target_type, target_id, owner_person_id, title, description,
         task_type, impact, status, readiness_state, readiness_percent, revision,
-        due_at, created_at, updated_at
+        due_at, evidence_mode, configuration_json, created_at, updated_at
       ) VALUES (
         'task-demo-handbook', ?, 'task-template-handbook', 'speaker', ?, ?, 'Read the speaker handbook',
         'Read and acknowledge the current handbook.', 'acknowledgement', 'medium', 'not_started', 'on_track', 0, 1,
-        unixepoch('2027-05-12T16:00:00Z'), unixepoch(), unixepoch()
+        unixepoch('2027-05-12T16:00:00Z'), 'checkbox',
+        '{"resourcePageId":"resource-speaker-handbook"}', unixepoch(), unixepoch()
       )
     `,
     ).bind(EVENT_ID, SPEAKER_ID, SPEAKER_ID),

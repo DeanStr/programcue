@@ -3,6 +3,7 @@ import { ParticipantTaskWorkflowFoundation } from "./participant-task-workflow-f
 import {
   structuredTaskForm,
   type TaskRow,
+  taskDestinationUrl,
 } from "./task-service-foundation.server";
 
 export class ParticipantTaskQueries extends ParticipantTaskWorkflowFoundation {
@@ -29,10 +30,10 @@ export class ParticipantTaskQueries extends ParticipantTaskWorkflowFoundation {
              ti.submitted_at AS submittedAt, ti.completed_at AS completedAt,
              ti.completed_by_person_id AS completedByPersonId,
              ti.last_operation_id AS lastOperationId,
-             COALESCE(tt.configuration_json, '{}') AS configurationJson
+             ti.evidence_mode AS evidenceMode,
+             ti.configuration_json AS configurationJson
         FROM task_instances ti
         LEFT JOIN people p ON p.id = ti.owner_person_id
-        LEFT JOIN task_templates tt ON tt.id = ti.template_id AND tt.event_id = ti.event_id
         LEFT JOIN sessions target_session
           ON ti.target_type = 'session'
          AND target_session.id = ti.target_id
@@ -85,6 +86,10 @@ export class ParticipantTaskQueries extends ParticipantTaskWorkflowFoundation {
     return tasks.results.map((task) => ({
       ...task,
       formFields: structuredTaskForm(task.configurationJson)?.fields ?? [],
+      destinationUrl:
+        task.taskType === "link_visit"
+          ? taskDestinationUrl(task.configurationJson)
+          : null,
       dependencies: dependencies.results.filter(
         (dependency) => dependency.taskId === task.id,
       ),

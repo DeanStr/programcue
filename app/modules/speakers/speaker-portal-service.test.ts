@@ -16,6 +16,37 @@ const speaker: Viewer = {
 };
 
 describe("speaker portal file integrity", () => {
+  it("derives a deliverable's session through its exact task", async () => {
+    const testEnv = env as unknown as CloudflareEnvironment;
+    await ensureDemoSpeakerData(testEnv);
+    const suffix = crypto.randomUUID();
+    const taskId = `session-deliverable-${suffix}`;
+    const assetId = `session-deliverable-asset-${suffix}`;
+    await testEnv.DB.batch([
+      testEnv.DB.prepare(
+        `INSERT INTO task_instances (
+           id, event_id, target_type, target_id, owner_person_id, title,
+           task_type, impact, evidence_mode, configuration_json,
+           status, readiness_state, readiness_percent
+         ) VALUES (?, ?, 'session', 'session-demo-speaker', ?,
+                   'Upload the session handout', 'file_upload', 'high', 'file',
+                   '{"fileScope":"session_deliverable"}', 'not_started', 'on_track', 0)`,
+      ).bind(taskId, speaker.eventId, speaker.personId),
+      testEnv.DB.prepare(
+        `INSERT INTO file_assets (
+           id, event_id, owner_person_id, target_type, target_id, asset_kind,
+           status
+         ) VALUES (?, ?, ?, 'task', ?, 'task_evidence', 'pending')`,
+      ).bind(assetId, speaker.eventId, speaker.personId, taskId),
+    ]);
+
+    const portal = await new SpeakerService(testEnv).getPortal(speaker);
+    expect(portal.files.find((file) => file.id === assetId)).toMatchObject({
+      taskTitle: "Upload the session handout",
+      sessionTitle: "Designing inclusive event technology",
+    });
+  });
+
   it("fails when a current file version is dangling or deleted", async () => {
     const testEnv = env as unknown as CloudflareEnvironment;
     await ensureDemoSpeakerData(testEnv);

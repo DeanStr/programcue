@@ -1,5 +1,9 @@
 import { z } from "zod";
 
+export const TEMPLATE_BODY_MAX_LENGTH = 100_000;
+export const SUBMISSION_CONFIRMATION_MANAGEMENT_BODY_SUFFIX =
+  "\n\nManage application: {{submission.url}}";
+
 export const communicationCategorySchema = z.enum([
   "submission_confirmation",
   "decision",
@@ -23,7 +27,11 @@ export const audienceTypeSchema = z.enum([
 
 export const templateContentSchema = z
   .object({
-    body: z.string().trim().min(1, "Message body is required.").max(100_000),
+    body: z
+      .string()
+      .trim()
+      .min(1, "Message body is required.")
+      .max(TEMPLATE_BODY_MAX_LENGTH),
     physicalAddress: z
       .string()
       .trim()
@@ -47,13 +55,40 @@ export const templateContentSchema = z
     }
   });
 
-export const saveTemplateSchema = z.object({
-  templateId: z.uuid().optional(),
-  name: z.string().trim().min(1).max(160),
-  category: communicationCategorySchema,
-  subject: z.string().trim().min(1).max(200),
-  content: templateContentSchema,
-});
+export const saveTemplateSchema = z
+  .object({
+    templateId: z.uuid().optional(),
+    name: z.string().trim().min(1).max(160),
+    category: communicationCategorySchema,
+    subject: z.string().trim().min(1).max(200),
+    content: templateContentSchema,
+  })
+  .superRefine((value, context) => {
+    if (
+      value.category === "submission_confirmation" &&
+      (value.content.buttonText || value.content.buttonUrl)
+    ) {
+      context.addIssue({
+        code: "custom",
+        path: ["content"],
+        message:
+          "Submission confirmations use the product-owned Manage application action and cannot configure a custom button.",
+      });
+    }
+    if (
+      value.category === "submission_confirmation" &&
+      value.content.body.length +
+        SUBMISSION_CONFIRMATION_MANAGEMENT_BODY_SUFFIX.length >
+        TEMPLATE_BODY_MAX_LENGTH
+    ) {
+      context.addIssue({
+        code: "custom",
+        path: ["content", "body"],
+        message:
+          "Submission confirmation bodies must leave room for the required application-management link.",
+      });
+    }
+  });
 
 export const previewCommunicationSchema = z.object({
   templateVersionId: z.uuid(),

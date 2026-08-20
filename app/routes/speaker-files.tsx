@@ -85,7 +85,9 @@ export default function SpeakerFiles(_props: Route.ComponentProps) {
         <div>
           <h1>Files</h1>
           <p>
-            Upload, inspect and manage the files shared with the event team.
+            Manage your headshot and inspect files submitted through your
+            assigned tasks. Session deliverables stay attached to the exact task
+            and session that requested them.
           </p>
         </div>
         <p className="speaker-work-count">

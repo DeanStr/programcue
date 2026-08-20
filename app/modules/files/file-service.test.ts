@@ -530,7 +530,16 @@ describe("private R2 file lifecycle", () => {
           assetKind: "headshot",
         }),
       ).rejects.toThrow(
-        /headshots must be uploaded to the participant profile/i,
+        /session deliverables must be uploaded through an assigned file task/i,
+      );
+      await expect(
+        new FileService(testEnv).assertParticipantTarget(speaker, {
+          targetType: "person",
+          targetId: speaker.personId,
+          assetKind: "slides",
+        }),
+      ).rejects.toThrow(
+        /participant profile uploads are limited to headshots/i,
       );
     });
 
@@ -984,9 +993,9 @@ describe("private R2 file lifecycle", () => {
           testEnv,
           speaker,
           {
-            targetType: "person",
-            targetId: speaker.personId,
-            assetKind: "slides",
+            targetType: "task",
+            targetId: "task-demo-slides",
+            assetKind: "task_evidence",
           },
           file,
         ),
@@ -1013,9 +1022,9 @@ describe("private R2 file lifecycle", () => {
       const testEnv = env as unknown as CloudflareEnvironment;
       await ensureDemoSpeakerData(testEnv);
       const target = {
-        targetType: "person" as const,
-        targetId: speaker.personId,
-        assetKind: "slides" as const,
+        targetType: "task" as const,
+        targetId: "task-demo-slides",
+        assetKind: "task_evidence" as const,
       };
       const valid = await completeTestDirectUpload(
         testEnv,
@@ -1537,26 +1546,48 @@ describe("private R2 file lifecycle", () => {
       const testEnv = env as unknown as CloudflareEnvironment;
       await ensureDemoSpeakerData(testEnv);
       const service = new FileService(testEnv);
+      await testEnv.DB.prepare(
+        `DELETE FROM file_assets
+          WHERE event_id = ? AND owner_person_id = ?
+            AND target_type = 'person' AND target_id = ?
+            AND asset_kind = 'headshot'`,
+      )
+        .bind(speaker.eventId, speaker.personId, speaker.personId)
+        .run();
       const target = {
         targetType: "person" as const,
         targetId: speaker.personId,
-        assetKind: "supporting_document" as const,
+        assetKind: "headshot" as const,
       };
+      const headshot = (name: string, marker: number) =>
+        new File(
+          [
+            new Uint8Array([
+              0x89,
+              0x50,
+              0x4e,
+              0x47,
+              0x0d,
+              0x0a,
+              0x1a,
+              0x0a,
+              marker,
+            ]),
+          ],
+          name,
+          { type: "image/png" },
+        );
       const first = await completeTestDirectUpload(
         testEnv,
         speaker,
         target,
-        new File(["%PDF-1.7 erase first"], "erase-first.pdf", {
-          type: "application/pdf",
-        }),
+        headshot("erase-first.png", 1),
       );
       const second = await completeTestDirectUpload(
         testEnv,
         speaker,
         target,
-        new File(["%PDF-1.7 erase second"], "erase-second.pdf", {
-          type: "application/pdf",
-        }),
+        headshot("erase-second.png", 2),
       );
       const stored = await testEnv.DB.prepare(
         "SELECT object_key AS objectKey FROM file_versions WHERE asset_id = ? ORDER BY version_number",
@@ -1565,19 +1596,19 @@ describe("private R2 file lifecycle", () => {
         .all<{ objectKey: string }>();
 
       await expect(
-        service.eraseAsset(speaker, {
+        service.eraseAsset(admin, {
           assetId: first.assetId,
           confirmed: false,
         }),
       ).rejects.toBeInstanceOf(FileErasureConfirmationError);
-      const erased = await service.eraseAsset(speaker, {
+      const erased = await service.eraseAsset(admin, {
         assetId: first.assetId,
         confirmed: true,
       });
       expect(erased).toMatchObject({
         duplicate: false,
         erasedVersions: 2,
-        affected: { latestFilename: "erase-second.pdf", versionCount: 2 },
+        affected: { latestFilename: "erase-second.png", versionCount: 2 },
       });
       for (const version of stored.results) {
         expect(await testEnv.FILES.head(version.objectKey)).toBeNull();
@@ -1599,7 +1630,7 @@ describe("private R2 file lifecycle", () => {
         releasedVersions: 0,
       });
       await expect(
-        service.eraseAsset(speaker, {
+        service.eraseAsset(admin, {
           assetId: first.assetId,
           confirmed: true,
         }),
@@ -1609,9 +1640,7 @@ describe("private R2 file lifecycle", () => {
         testEnv,
         speaker,
         target,
-        new File(["%PDF-1.7 after erasure"], "after-erasure.pdf", {
-          type: "application/pdf",
-        }),
+        headshot("after-erasure.png", 3),
       );
       expect(replacement.assetId).not.toBe(first.assetId);
       expect(replacement.versionNumber).toBe(1);

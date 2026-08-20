@@ -24,7 +24,7 @@ import {
   PublicFormUnavailableError,
   SubmissionService,
 } from "~/modules/submissions/submission-service.server";
-import { signOutSession } from "~/platform/auth/auth.server";
+import { createAuth, signOutSession } from "~/platform/auth/auth.server";
 import { getCloudflareContext } from "~/platform/cloudflare-context";
 import { EVALUATION_IDENTITIES } from "~/platform/evaluation/evaluation-session.server";
 import { rejectCrossOriginBrowserMutation } from "~/platform/http/mutation-origin.server";
@@ -103,6 +103,46 @@ async function applicationNoticeQuery(
     ...(input.submissionId ? { draft: input.submissionId } : {}),
     notice: await createApplicationNotice(env, input),
   });
+}
+
+async function compatibleParticipantWorkspaceHref(
+  env: CloudflareEnvironment,
+  request: Request,
+  portal: Awaited<ReturnType<SubmissionService["getApplicantPortal"]>>,
+) {
+  const { applicant, selected } = portal;
+  if (
+    !applicant?.verified ||
+    applicant.claimOnly ||
+    applicant.evaluation ||
+    !selected
+  ) {
+    return null;
+  }
+  const session = await createAuth(env).api.getSession({
+    headers: request.headers,
+  });
+  if (!session?.user?.emailVerified || session.user.id !== applicant.personId) {
+    return null;
+  }
+  const membership = await env.DB.prepare(
+    `SELECT 1 AS available
+       FROM memberships
+      WHERE event_id = ? AND person_id = ?
+        AND role IN ('speaker','submitter')
+        AND accepted_at IS NOT NULL AND revoked_at IS NULL
+      LIMIT 1`,
+  )
+    .bind(portal.form.eventId, applicant.personId)
+    .first<{ available: number }>();
+  if (!membership) return null;
+  const returnTo = `/participant/applications?${new URLSearchParams({
+    application: selected.id,
+  })}#participant-application-detail`;
+  return `/events/select?${new URLSearchParams({
+    eventId: portal.form.eventId,
+    returnTo,
+  })}`;
 }
 
 export async function loader({ request, context, params }: Route.LoaderArgs) {
@@ -214,6 +254,11 @@ export async function loader({ request, context, params }: Route.LoaderArgs) {
                     : applicationNotice?.kind === "created"
                       ? "Your private draft has been created."
                       : "";
+    const participantWorkspaceHref = await compatibleParticipantWorkspaceHref(
+      env,
+      request,
+      portal,
+    );
     return {
       ...portal,
       featuredSpeakers:
@@ -236,6 +281,8 @@ export async function loader({ request, context, params }: Route.LoaderArgs) {
       turnstileSiteKey,
       uploadTurnstileSiteKey,
       noticeWarning: webhookWarning,
+      noticeKind: applicationNotice?.kind ?? null,
+      participantWorkspaceHref,
       intentId: crypto.randomUUID(),
       recoverySavedDraftId:
         portal.selected &&
@@ -548,6 +595,7 @@ async function handlePublicApplicationIntent({
   formData,
   form,
   request,
+  requestedSubmissionId,
   service,
   slug,
   env,
@@ -558,12 +606,18 @@ async function handlePublicApplicationIntent({
   formData: FormData;
   form: ApplicationPublicForm;
   request: Request;
+  requestedSubmissionId: string | null;
   service: SubmissionService;
   slug: string;
   env: CloudflareEnvironment;
   claimedSignOutContext: ClaimedSignOutContext;
   claimedSpeakerId: string | null;
 }) {
+  const requestedApplicationPath = `/apply/${encodeURIComponent(slug)}${
+    requestedSubmissionId
+      ? `?${new URLSearchParams({ draft: requestedSubmissionId })}`
+      : ""
+  }`;
   if (intent === "request_code") {
     const email = String(formData.get("email") ?? "");
     await enforcePublicAbuseProtection({
@@ -606,7 +660,7 @@ async function handlePublicApplicationIntent({
       request,
     );
     return redirectWithApplicantCookies(
-      `/apply/${encodeURIComponent(slug)}`,
+      requestedApplicationPath,
       result.setCookies,
     );
   }
@@ -617,7 +671,7 @@ async function handlePublicApplicationIntent({
       if (!result.ok) return result;
       const returnTo = claimedSignOutContext
         ? `/apply/${encodeURIComponent(slug)}?${new URLSearchParams({ claimedSpeaker: requireValue(claimedSpeakerId, "Required claimedSpeakerId is unavailable.") })}`
-        : `/apply/${encodeURIComponent(slug)}`;
+        : requestedApplicationPath;
       const headers = new Headers(result.headers);
       appendApplicantCookies(headers, applicantCookie);
       return redirect(`/sign-in?${new URLSearchParams({ returnTo })}`, {
@@ -626,7 +680,7 @@ async function handlePublicApplicationIntent({
       });
     }
     return redirectWithApplicantCookies(
-      claimedSignOutContext ? "/" : `/apply/${encodeURIComponent(slug)}`,
+      claimedSignOutContext ? "/" : requestedApplicationPath,
       await service.applicants.signOut(request, form),
     );
   }
@@ -928,7 +982,7 @@ async function handleAuthenticatedApplicationIntent({
     const query = await applicationNoticeQuery(env, {
       slug,
       kind: "submitted",
-      submissionId: String(payload.submissionId),
+      submissionId: result.submissionId,
       webhookWarning: false,
     });
     return redirect(`/apply/${encodeURIComponent(slug)}?${query}`);
@@ -1012,6 +1066,7 @@ export async function action({ request, context, params }: Route.ActionArgs) {
       formData,
       form,
       request,
+      requestedSubmissionId: actionUrl.searchParams.get("draft"),
       service,
       slug,
       env,

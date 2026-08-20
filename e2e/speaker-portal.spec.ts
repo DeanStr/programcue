@@ -85,8 +85,23 @@ test("speaker profile, sessions and D1 task state render through the production 
   await expect(
     page.getByRole("link", { name: "Overview" }),
   ).not.toHaveAttribute("aria-current");
+  await expect(page.getByLabel("File purpose")).toContainText("MP4/WebM video");
+  await expect(page.getByLabel("Choose file")).toHaveAttribute(
+    "accept",
+    /\.mp4,.webm/u,
+  );
   await page.getByRole("link", { name: "Files" }).click();
   await expect(page.getByRole("link", { name: /^Download / })).toHaveCount(0);
+  await expect(
+    page.getByText("Upload a headshot", { exact: true }),
+  ).toBeVisible();
+  await expect(page.getByLabel("File purpose").locator("option")).toHaveCount(
+    1,
+  );
+  await expect(page.getByLabel("File purpose")).toContainText("Headshot");
+  await expect(
+    page.getByText(/Upload slides, handouts, posters/),
+  ).toBeVisible();
   await page.getByRole("link", { name: "Profile" }).click();
   await expect(
     page.getByRole("link", { name: "Upload headshot" }),

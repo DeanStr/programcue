@@ -1010,6 +1010,7 @@ export function DraftEditor({
 
   return (
     <Form
+      id="submitted-application"
       method="post"
       action={action}
       className="stack"

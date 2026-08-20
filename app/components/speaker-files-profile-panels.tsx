@@ -68,30 +68,9 @@ export function SpeakerFilesPanel({
               accept: "image/jpeg,image/png,image/webp",
               maximumBytes: portal.event.filePolicy.headshotMaximumBytes,
             },
-            {
-              value: "slides",
-              label: `Presentation slides (PDF, PPT, PPTX · ${maximumMegabytes(portal.event.filePolicy.slidesMaximumBytes)} MB)`,
-              accept:
-                "application/pdf,application/vnd.ms-powerpoint,application/vnd.openxmlformats-officedocument.presentationml.presentation",
-              maximumBytes: portal.event.filePolicy.slidesMaximumBytes,
-            },
-            {
-              value: "supporting_document",
-              label: `Supporting document (${maximumMegabytes(portal.event.filePolicy.supportingDocumentMaximumBytes)} MB)`,
-              accept:
-                ".pdf,.doc,.docx,.xls,.xlsx,.zip,application/pdf,application/zip",
-              maximumBytes:
-                portal.event.filePolicy.supportingDocumentMaximumBytes,
-            },
-            {
-              value: "video",
-              label: `Video (MP4, WebM · ${maximumMegabytes(portal.event.filePolicy.videoMaximumBytes)} MB)`,
-              accept: "video/mp4,video/webm",
-              maximumBytes: portal.event.filePolicy.videoMaximumBytes,
-            },
           ]}
-          heading="Upload a file"
-          description="Every upload is checked and held privately. Downloads become available once the malware scan reports a clean result."
+          heading="Upload a headshot"
+          description="Headshots are reusable profile media. Upload slides, handouts, posters and session videos from the corresponding task; completed uploads are also listed here."
         />
       </div>
       <div className="speaker-work-list">
@@ -101,11 +80,19 @@ export function SpeakerFilesPanel({
               <FileCheck2 aria-hidden className="pc-index-icon" size={16} />
               <span className="speaker-file-copy">
                 <strong className="pc-index-label">
-                  {file.kind.replaceAll("_", " ")}
+                  {file.kind === "task_evidence"
+                    ? "Task deliverable"
+                    : file.kind.replaceAll("_", " ")}
                 </strong>
                 <small>
                   {file.filename} · version {file.versionNumber ?? "—"}
                 </small>
+                {file.taskTitle ? (
+                  <small>
+                    Requested by task: {file.taskTitle}
+                    {file.sessionTitle ? ` · ${file.sessionTitle}` : ""}
+                  </small>
+                ) : null}
                 {file.downloadFilename && file.downloadUploadedAt ? (
                   <small>
                     Current released file: {file.downloadFilename} · uploaded by{" "}
@@ -137,41 +124,43 @@ export function SpeakerFilesPanel({
                     className="subtle"
                   />
                 )}
-                <Form
-                  method="post"
-                  onSubmit={(event) => {
-                    event.preventDefault();
-                    const form = event.currentTarget;
-                    confirm(
-                      {
-                        title: `Permanently erase ${file.filename}?`,
-                        description: `Every stored version of this ${file.kind.replaceAll("_", " ")} is erased from private storage. This cannot be undone.`,
-                        records: file.versions.map(
-                          (version) =>
-                            `v${version.versionNumber} · ${version.filename}`,
-                        ),
-                        confirmLabel: "Erase all versions",
-                      },
-                      () => submit(form),
-                    );
-                  }}
-                >
-                  <input type="hidden" name="intent" value="delete-file" />
-                  <input type="hidden" name="assetId" value={file.id} />
-                  <input
-                    type="hidden"
-                    name="confirm"
-                    value="erase-all-versions"
-                  />
-                  <button
-                    className="icon-btn danger"
-                    type="submit"
-                    disabled={busy}
-                    aria-label={`Permanently delete ${file.filename} and all versions`}
+                {file.targetType !== "task" ? (
+                  <Form
+                    method="post"
+                    onSubmit={(event) => {
+                      event.preventDefault();
+                      const form = event.currentTarget;
+                      confirm(
+                        {
+                          title: `Permanently erase ${file.filename}?`,
+                          description: `Every stored version of this ${file.kind.replaceAll("_", " ")} is erased from private storage. This cannot be undone.`,
+                          records: file.versions.map(
+                            (version) =>
+                              `v${version.versionNumber} · ${version.filename}`,
+                          ),
+                          confirmLabel: "Erase all versions",
+                        },
+                        () => submit(form),
+                      );
+                    }}
                   >
-                    <Trash2 aria-hidden size={15} />
-                  </button>
-                </Form>
+                    <input type="hidden" name="intent" value="delete-file" />
+                    <input type="hidden" name="assetId" value={file.id} />
+                    <input
+                      type="hidden"
+                      name="confirm"
+                      value="erase-all-versions"
+                    />
+                    <button
+                      className="icon-btn danger"
+                      type="submit"
+                      disabled={busy}
+                      aria-label={`Permanently delete ${file.filename} and all versions`}
+                    >
+                      <Trash2 aria-hidden size={15} />
+                    </button>
+                  </Form>
+                ) : null}
               </span>
               {file.versions.length > 1 ? (
                 <details className="file-history pc-disclosure">

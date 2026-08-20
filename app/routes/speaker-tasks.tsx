@@ -52,7 +52,6 @@ export async function action({ request, context }: Route.ActionArgs) {
         revision: form.get("revision"),
         confirmed: form.get("confirmed") ?? "false",
         text: form.get("text") || undefined,
-        url: form.get("url") || undefined,
         responses,
       });
       const realtimeFailure = await recordRouteChange(env, viewer, {

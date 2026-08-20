@@ -45,6 +45,11 @@ export abstract class CommunicationDeliveryPreview extends CommunicationDelivery
       this.getEvent(viewer),
       this.getVerifiedSender(viewer),
     ]);
+    if (template.category === "submission_confirmation") {
+      throw new CommunicationStateError(
+        "Submission confirmation templates are reserved for automatic delivery after an application is submitted.",
+      );
+    }
     if (!representativeTest)
       assertMergeAudienceCompatible(template, parsed.audienceType);
     const recipients = await this.recipients.preview(viewer, {

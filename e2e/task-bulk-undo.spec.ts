@@ -71,15 +71,15 @@ test("task dashboard filters visible work and keeps template creation open", asy
     templateCreation.getByRole("button", { name: "Create template" }),
   ).toBeVisible();
 
-  const slidesTask = assignedWork.getByRole("row").filter({
-    has: page.getByText("Upload presentation slides", { exact: true }),
+  const handbookTask = assignedWork.getByRole("row").filter({
+    has: page.getByText("Read the speaker handbook", { exact: true }),
   });
-  await slidesTask.getByText("Extend deadline", { exact: true }).click();
-  await slidesTask.getByLabel(/New deadline/).fill("2035-05-20");
-  await slidesTask
+  await handbookTask.getByText("Extend deadline", { exact: true }).click();
+  await handbookTask.getByLabel(/New deadline/).fill("2035-05-20");
+  await handbookTask
     .getByLabel("Reason for deadline extension")
     .fill("Speaker requested an individual extension.");
-  await slidesTask.getByRole("button", { name: "Confirm extension" }).click();
+  await handbookTask.getByRole("button", { name: "Confirm extension" }).click();
   await expect(
     page.getByRole("status").filter({ hasText: "Speaker deadline extended" }),
   ).toBeVisible();
@@ -193,6 +193,66 @@ test("a speaker can undo a reversible task completion from its status notice", a
     task.getByRole("button", { name: "Complete task" }),
   ).toBeVisible();
   await expect(task.getByText("Completed", { exact: true })).toHaveCount(0);
+});
+
+test("a link task opens the organiser destination and requires acknowledgement", async ({
+  page,
+}) => {
+  await selectAdministrator(page);
+  await waitForInterface(page, "/admin/tasks");
+  await page.getByText("Create a template", { exact: true }).click();
+  const creation = page.getByRole("region", {
+    name: "Create task template",
+  });
+  await creation.getByLabel("Name").fill("Review the arrival guide");
+  await creation.getByLabel("Description").fill("Read the arrival details.");
+  await creation.locator('select[name="taskType"]').selectOption("link_visit");
+  await creation
+    .getByLabel("Destination URL")
+    .fill("https://example.test/arrival-guide");
+  await creation.getByRole("button", { name: "Create template" }).click();
+  await expect(page.locator(".pc-status-notice[role='status']")).toContainText(
+    "Task template created",
+  );
+
+  await page.getByText("Plan and onboarding", { exact: true }).click();
+  const assignment = page.locator("section.tasks-plan-block").filter({
+    has: page.getByRole("heading", { name: "Assign a plan" }),
+  });
+  await assignment.locator('select[name="templateId"]').selectOption({
+    label: "Review the arrival guide",
+  });
+  await assignment.locator('select[name="targetId"]').selectOption({
+    label: "Priya Shah · priya.speaker@example.com",
+  });
+  await assignment
+    .getByRole("button", { name: "Assign with prerequisites" })
+    .click();
+  await expect(page.locator(".pc-status-notice[role='status']")).toContainText(
+    "Task plan assigned",
+  );
+
+  await selectSpeaker(page);
+  await waitForInterface(page, "/participant/tasks");
+  const task = page.locator("article.speaker-task").filter({
+    hasText: "Review the arrival guide",
+  });
+  const link = task.getByRole("link", { name: "Open link" });
+  await expect(link).toHaveAttribute(
+    "href",
+    "https://example.test/arrival-guide",
+  );
+  await expect(link).toHaveAttribute("target", "_blank");
+  await expect(link).toHaveAttribute("rel", "noopener noreferrer");
+  await expect(
+    task.getByRole("button", { name: "Complete task" }),
+  ).toBeDisabled();
+  await task.getByRole("checkbox", { name: "I’ve visited this link" }).check();
+  await task.getByRole("button", { name: "Complete task" }).click();
+  await expect(page.locator(".pc-status-notice[role='status']")).toContainText(
+    "Task completed",
+  );
+  await expect(task.getByText("Completed", { exact: true })).toBeVisible();
 });
 
 test("speaker task evidence uses the signed direct uploader", async ({
