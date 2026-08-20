@@ -610,6 +610,9 @@ test.describe
           surface.name === "programme-admin"
             ? // The install snippet includes the local origin and port.
               ".programme-embed-code { color: transparent !important; }"
+            : surface.name === "tasks-readiness"
+              ? // Relative-day copy changes with wall-clock time; its layout and absolute due date remain visible here while unit tests own the calculation.
+                ".task-due-distance { visibility: hidden !important; }"
             : testInfo.project.name === "mobile-chromium" &&
                 surface.name === "evaluation-admin"
               ? ".pc-admin-section-nav { position: static !important; }"
