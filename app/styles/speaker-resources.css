@@ -497,6 +497,12 @@
 .speaker-upload-form label:has(input[type="file"]) .help {
   font-size: var(--text-2xs);
 }
+.speaker-upload-form .speaker-upload-selection {
+  min-width: 0;
+  max-width: 100%;
+  color: var(--text-primary);
+  overflow-wrap: anywhere;
+}
 .speaker-upload-form .page-actions {
   margin: 0;
   justify-content: flex-start;

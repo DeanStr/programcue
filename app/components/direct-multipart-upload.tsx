@@ -86,6 +86,8 @@ export function DirectMultipartUpload({
   const [selectedKindValue, setSelectedKindValue] = useState(
     kinds[0]?.value ?? "",
   );
+  const [selectedFilename, setSelectedFilename] = useState<string | null>(null);
+  const fileInput = useRef<HTMLInputElement | null>(null);
   const session = useRef<ProgramCueMultipartSession | null>(null);
   const uploadInFlight = useRef(false);
   const completedUpload = useRef<{ assetId: string; versionId: string } | null>(
@@ -114,6 +116,8 @@ export function DirectMultipartUpload({
     completedUpload.current = null;
     session.current?.disposePreservingUpload();
     session.current = null;
+    if (fileInput.current) fileInput.current.value = "";
+    setSelectedFilename(null);
     setState({
       status: "complete",
       message:
@@ -354,13 +358,22 @@ export function DirectMultipartUpload({
       <label className="label">
         Choose file
         <input
+          ref={fileInput}
           className="field"
           name="directFile"
           type="file"
           accept={selectedKind?.accept}
           required
           disabled={disabled || operationActive}
+          onChange={(event) =>
+            setSelectedFilename(event.currentTarget.files?.[0]?.name ?? null)
+          }
         />
+        <span className="help speaker-upload-selection" aria-live="polite">
+          {selectedFilename
+            ? `Selected file: ${selectedFilename}`
+            : "No file selected."}
+        </span>
         {selectedKind ? (
           <span className="help">
             Maximum {maximumMegabytes(selectedKind.maximumBytes)} MB for this

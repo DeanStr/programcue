@@ -182,6 +182,9 @@ test("Uppy resumes an interrupted direct upload from R2's server-authoritative p
     buffer: fileBuffer,
   };
   await uploader.locator('input[type="file"]').setInputFiles(file);
+  await expect(
+    uploader.getByText("Selected file: resume-me.mp4"),
+  ).toBeVisible();
   await uploader.getByRole("button", { name: "Upload file" }).click();
   await expect
     .poll(async () =>
@@ -361,5 +364,6 @@ test("a failed direct transfer remains resumable and cancellable in place", asyn
   permitPartUrl = true;
   await uploader.getByRole("button", { name: "Resume upload" }).click();
   await expect(uploader.getByRole("status")).toContainText("Upload complete");
+  await expect(uploader.getByText("No file selected.")).toBeVisible();
   expect(completed).toBe(true);
 });
