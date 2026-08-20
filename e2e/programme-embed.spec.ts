@@ -34,7 +34,7 @@ async function showProgrammePanel(
       name === "Programme"
         ? /^Programme(?:\s+\d+)?$/
         : name === "Managed embeds"
-          ? /^Managed embeds(?:\s+\d+)?$/
+          ? /^Managed embeds\s+\d+\s+·\s+\d+\s+active$/
           : name,
     exact: name === "Embed builder",
   });
@@ -93,7 +93,7 @@ test("programme workspace restores and copies panel deep links", async ({
   );
   await expect(
     managedPage.getByRole("button", {
-      name: /^Managed embeds(?:\s+\d+)?$/,
+      name: /^Managed embeds\s+\d+\s+·\s+\d+\s+active$/,
     }),
   ).toHaveAttribute("aria-pressed", "true");
   await expect(
@@ -210,6 +210,9 @@ test("saves and controls a stable managed embed lifecycle", async ({
     .fill("Homepage below the hero");
   await page.getByRole("button", { name: "Save draft" }).click();
   await expect(page.getByText("Managed embed saved as a draft.")).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: /^Managed embeds\s+2\s+·\s+1 active$/ }),
+  ).toBeVisible();
 
   const row = page.getByRole("row").filter({ hasText: "Conference homepage" });
   await expect(row).toContainText("draft");
@@ -227,6 +230,9 @@ test("saves and controls a stable managed embed lifecycle", async ({
   await row.getByLabel("I previewed this configuration.").check();
   await row.getByRole("button", { name: "Activate" }).click();
   await expect(page.getByText("Managed embed activated.")).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: /^Managed embeds\s+2\s+·\s+2 active$/ }),
+  ).toBeVisible();
 
   const active = await page.request.get(
     "/embed/future-of-events-2027/saved/e2e-homepage",
@@ -242,6 +248,9 @@ test("saves and controls a stable managed embed lifecycle", async ({
   await expect(
     page.getByRole("row").filter({ hasText: "Conference homepage" }),
   ).toContainText("paused");
+  await expect(
+    page.getByRole("button", { name: /^Managed embeds\s+2\s+·\s+1 active$/ }),
+  ).toBeVisible();
   const paused = await page.request.get(
     "/embed/future-of-events-2027/saved/e2e-homepage",
   );

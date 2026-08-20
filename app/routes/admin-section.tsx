@@ -197,6 +197,9 @@ function programmeWorkspacePanelForHash(
 
 export default function AdminSection({ loaderData }: Route.ComponentProps) {
   const summary = summarizeProgramme(loaderData.sessions);
+  const activeManagedEmbedCount = loaderData.managedEmbeds.filter(
+    (embed) => embed.status === "active",
+  ).length;
   const [activePanel, setActivePanel] =
     useState<ProgrammeWorkspacePanel>("programme");
 
@@ -297,7 +300,7 @@ export default function AdminSection({ loaderData }: Route.ComponentProps) {
           {
             id: "managed",
             label: "Managed embeds",
-            meta: loaderData.managedEmbeds.length,
+            meta: `${loaderData.managedEmbeds.length} · ${activeManagedEmbedCount} active`,
           },
         ]}
         activePanel={activePanel}
