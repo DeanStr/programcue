@@ -12,7 +12,6 @@ import {
   ensureDemoData,
   ensureDemoProgramme,
 } from "~/platform/demo/seed.server";
-import routeConfig from "~/routes";
 import { action as administrationAction } from "~/routes/api-administration-command";
 import { action as participantTaskAction } from "~/routes/api-participant-task-completion";
 
@@ -107,15 +106,7 @@ beforeEach(async () => {
 });
 
 describe("versioned administration commands", () => {
-  it("registers the command routes and rejects cross-origin mutation before dispatch", async () => {
-    const configured = JSON.stringify(routeConfig);
-    expect(configured).toContain(
-      "api/v1/events/:eventId/administration/:family/:itemId/:command",
-    );
-    expect(configured).toContain(
-      "api/v1/events/:eventId/participant/tasks/:taskId/complete",
-    );
-
+  it("rejects cross-origin mutation before dispatch", async () => {
     const response = await administrationAction({
       request: new Request(
         `https://programcue.test/api/v1/events/${eventId}/administration/forms/new/save`,

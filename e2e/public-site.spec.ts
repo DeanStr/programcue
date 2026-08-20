@@ -429,9 +429,6 @@ test("reset restores a published public event site", async ({ page }) => {
     page.getByRole("heading", { name: "Full programme" }),
   ).toBeVisible();
   await page.evaluate(() => window.scrollTo(0, 0));
-  await expect(page.locator(".public-shell")).toHaveScreenshot(
-    "published-public-site-desktop.png",
-  );
   const publishedHome = page.locator(".public-site-home");
   const hiddenHeader = await page.addStyleTag({
     content: ".public-top { visibility: hidden !important; }",

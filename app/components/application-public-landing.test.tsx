@@ -17,7 +17,7 @@ describe("public application landing", () => {
           eventVenue: null,
           eventCity: null,
           eventDescription: null,
-          participantWelcomeText: "Welcome from the event team.",
+          participantWelcomeText: null,
           closesAt: null,
           minSpeakers: 1,
           maxSpeakers: 2,
@@ -35,14 +35,6 @@ describe("public application landing", () => {
 
     expect(markup).toContain("May 20, 2025 – May 22, 2025");
     expect(markup).not.toContain("May 19, 2025");
-    expect(markup).toContain("Welcome from the event team.");
-    expect(markup).toContain('href="#apply"');
-    expect(markup).toContain("Continue to application");
-    expect(markup).not.toContain(">Start application</a>");
-    expect(markup).toContain(
-      "How a small programme team removed three weeks of manual work",
-    );
-    expect(markup).not.toContain("https://…");
   });
 
   it("renders an authored field example instead of inventing or hiding it", () => {

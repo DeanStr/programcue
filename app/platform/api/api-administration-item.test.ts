@@ -67,7 +67,7 @@ beforeEach(async () => {
   await ensureDemoProgramme(testEnv);
 });
 
-describe("administration API item reachability", () => {
+describe("administration API route reachability", () => {
   it("matches concrete task items ahead of administration item fallbacks", () => {
     const matches = matchRoutes(
       routeConfig as unknown as RouteObject[],
@@ -79,6 +79,35 @@ describe("administration API item reachability", () => {
       path: "api/v1/events/:eventId/tasks/:taskId",
       file: "routes/api-task-item.ts",
     });
+  });
+
+  it("matches administration and participant commands to their concrete routes", () => {
+    const cases = [
+      {
+        path: `/api/v1/events/${eventId}/administration/forms/new/save`,
+        routePath:
+          "api/v1/events/:eventId/administration/:family/:itemId/:command",
+        file: "routes/api-administration-command.ts",
+      },
+      {
+        path: `/api/v1/events/${eventId}/participant/tasks/task-1/complete`,
+        routePath: "api/v1/events/:eventId/participant/tasks/:taskId/complete",
+        file: "routes/api-participant-task-completion.ts",
+      },
+    ];
+
+    for (const routeCase of cases) {
+      const matches = matchRoutes(
+        routeConfig as unknown as RouteObject[],
+        routeCase.path,
+      );
+
+      expect(matches, `${routeCase.path} should be reachable`).not.toBeNull();
+      expect(matches!.at(-1)?.route).toMatchObject({
+        path: routeCase.routePath,
+        file: routeCase.file,
+      });
+    }
   });
 
   it("reads tenant-scoped people, form, session and schedule-version items", async () => {

@@ -127,6 +127,7 @@ describe("Event Setup administrator scope route", () => {
         context: context(),
       } as never);
       expect(reloaded.event.tracks).toContainEqual(track);
+      expect(reloaded.canManageFileRetention).toBe(false);
 
       const schedule = await new ScheduleService(workerEnv).getWorkspace(
         viewer,
@@ -340,6 +341,7 @@ describe("Event Setup administrator scope route", () => {
       context: context(),
     } as never);
     expect(setup.canManageOrganisationAdministrators).toBe(true);
+    expect(setup.canManageFileRetention).toBe(true);
     expect(setup.event.administrators).toContainEqual(
       expect.objectContaining({
         id: membership?.id,

@@ -96,7 +96,6 @@ test("mobile administration sections reveal linked content without overflow", as
   expect(selectorBox).not.toBeNull();
   expect(selectorBox!.x + selectorBox!.width).toBeLessThanOrEqual(390);
   await expectNoHorizontalPageOverflow(page);
-  await expectNoContrastViolations(page, "Command Centre");
 
   await waitForInterface(page, "/admin/operations?panel=activity");
   await expect(

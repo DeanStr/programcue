@@ -16,11 +16,11 @@ describe("shortReference", () => {
     expect(first).not.toBe(second);
   });
 
-  it("is stable for prefixed operation identifiers", () => {
+  it("keeps the support reference stable for prefixed operation identifiers", () => {
     const identifier =
       "ai-review-assessment:0f1f937d-bc55-4501-b4df-1a8fccab229d";
 
-    expect(shortReference(identifier)).toBe(shortReference(identifier));
+    expect(shortReference(identifier)).toBe("DA37432358");
   });
 
   it("returns null when no usable identifier is provided", () => {

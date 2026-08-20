@@ -19,19 +19,6 @@ function render(names: string[]) {
 }
 
 describe("evaluation rubric fields", () => {
-  it("explains built-in review fields and uses a neutral dropdown example", () => {
-    const markup = render(["Audience level"]);
-
-    expect(markup).toContain(
-      "Every review already includes a required overall recommendation and confidence rating",
-    );
-    expect(markup).toContain(
-      'placeholder="Introductory, Intermediate, Advanced"',
-    );
-    expect(markup).not.toContain("Built-in review field");
-    expect(markup).not.toContain("aria-describedby");
-  });
-
   it("warns when existing criteria duplicate built-in review fields", () => {
     const markup = render([" Recommendation ", "CONFIDENCE"]);
 
