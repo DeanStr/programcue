@@ -199,6 +199,12 @@ test("schedule and programme render the event calendar date and timezone", async
       .locator(".programme-table-wrap")
       .getByText(/May 20, 2027.*9:00 AM.*(?:EDT|GMT-4)/),
   ).toBeVisible();
+  const embedBuilder = page.getByRole("button", {
+    name: "Embed builder",
+    exact: true,
+  });
+  await embedBuilder.click();
+  await expect(embedBuilder).toHaveAttribute("aria-pressed", "true");
   const iframeCode = page.getByRole("textbox", { name: "Iframe code" });
   await expect(iframeCode).toHaveValue(
     new RegExp(`<iframe src="${e2eOrigin}/embed/future-of-events-2027`),
