@@ -708,10 +708,47 @@ export function EventSetupForm({
     });
   }, [focusedRecordId, focusedRecordKind]);
   useEffect(() => {
+    if (!submittedActionData) return;
     const panel = eventSetupPanelForErrors(submittedActionData?.errors);
-    if (!panel) return;
-    showPanel(panel, submittedActionData);
-  }, [showPanel, submittedActionData]);
+    if (panel) {
+      showPanel(panel, submittedActionData);
+      return;
+    }
+    const currentState =
+      location.state && typeof location.state === "object"
+        ? ({ ...location.state } as Record<string, unknown>)
+        : {};
+    if (submittedActionData.ok) delete currentState.eventSetupAction;
+    void navigate(
+      {
+        pathname: location.pathname,
+        search: location.search,
+        hash: `#event-setup-${activePanel}`,
+      },
+      {
+        replace: true,
+        preventScrollReset: true,
+        state: submittedActionData.ok
+          ? currentState
+          : {
+              ...currentState,
+              eventSetupAction: {
+                scope: actionScope,
+                data: submittedActionData,
+              },
+            },
+      },
+    );
+  }, [
+    actionScope,
+    activePanel,
+    location.pathname,
+    location.search,
+    location.state,
+    navigate,
+    showPanel,
+    submittedActionData,
+  ]);
   useEffect(() => {
     if (!location.hash) {
       setActivePanel(focusedRecordId ? "structure" : "identity");

@@ -156,6 +156,78 @@ test("Event Setup error-summary links reveal their hidden panel", async ({
     .toBe("#event-setup-identity");
 });
 
+test("a successful Event Setup save clears retained validation errors", async ({
+  page,
+}) => {
+  await page.goto("/admin/event");
+  await page.locator("body[data-hydrated='true']").waitFor();
+  const eventName = page.getByLabel("Event name");
+  const originalName = await eventName.inputValue();
+  await eventName.fill("   ");
+  await showEventSettingsPanel(page, "Structure");
+  await page.getByRole("button", { name: "Save event" }).click();
+
+  const retainedError = page.getByRole("link", {
+    name: "Event name is required.",
+  });
+  await expect(retainedError).toBeVisible();
+
+  await eventName.fill(originalName);
+  await page.getByRole("button", { name: "Save event" }).click();
+  await expect(
+    page.getByText("Event settings saved.", { exact: true }),
+  ).toBeVisible();
+  await expect(retainedError).toHaveCount(0);
+
+  await showEventSettingsPanel(page, "Data");
+  await expect(retainedError).toHaveCount(0);
+  await page.reload();
+  await page.locator("body[data-hydrated='true']").waitFor();
+  await expect(retainedError).toHaveCount(0);
+});
+
+test("a non-validation save failure replaces retained validation errors", async ({
+  context,
+  page,
+}) => {
+  await page.goto("/admin/event");
+  await page.locator("body[data-hydrated='true']").waitFor();
+  const eventName = page.getByLabel("Event name");
+  const originalName = await eventName.inputValue();
+  await eventName.fill("   ");
+  await showEventSettingsPanel(page, "Structure");
+  await page.getByRole("button", { name: "Save event" }).click();
+
+  const retainedError = page.getByRole("link", {
+    name: "Event name is required.",
+  });
+  await expect(retainedError).toBeVisible();
+
+  const concurrentPage = await context.newPage();
+  await concurrentPage.goto("/admin/event");
+  await concurrentPage.locator("body[data-hydrated='true']").waitFor();
+  const venue = concurrentPage.getByLabel("Venue", { exact: true });
+  await venue.fill(`${await venue.inputValue()} conflict check`);
+  await concurrentPage.getByRole("button", { name: "Save event" }).click();
+  await expect(
+    concurrentPage.getByText("Event settings saved.", { exact: true }),
+  ).toBeVisible();
+  await concurrentPage.close();
+
+  await eventName.fill(originalName);
+  await page.getByRole("button", { name: "Save event" }).click();
+  const conflict = page.getByText(
+    "This event changed after the page loaded. Refresh and review the latest values before saving.",
+    { exact: true },
+  );
+  await expect(conflict).toBeVisible();
+  await expect(retainedError).toHaveCount(0);
+
+  await showEventSettingsPanel(page, "Data");
+  await expect(conflict).toBeVisible();
+  await expect(retainedError).toHaveCount(0);
+});
+
 test("Event Setup reveals a hidden panel before focusing an invalid field", async ({
   page,
 }) => {

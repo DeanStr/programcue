@@ -518,6 +518,52 @@ test.describe
       });
     }
 
+    test("mounted workspace panels retain reviewed visual baselines", async ({
+      page,
+    }, testInfo) => {
+      await selectCurrentEvent(page);
+      if (testInfo.project.name === "desktop-chromium") {
+        await openHydrated(page, "/admin/event#event-setup-data");
+        await expect(
+          page.getByRole("button", { name: "Data", exact: true }),
+        ).toHaveAttribute("aria-pressed", "true");
+        await captureState(page, page.locator("main#main"), "event-setup-data");
+
+        await openHydrated(page, "/admin/programme#managed-programme-embeds");
+        await expect(
+          page.getByRole("heading", { name: "Managed embeds", exact: true }),
+        ).toBeVisible();
+        await captureState(
+          page,
+          page.locator("main#main"),
+          "programme-managed-embeds",
+        );
+        return;
+      }
+      if (testInfo.project.name === "mobile-chromium") {
+        await openHydrated(page, "/admin/event#event-setup-structure");
+        await expect(
+          page.getByRole("button", { name: "Structure", exact: true }),
+        ).toHaveAttribute("aria-pressed", "true");
+        await captureState(
+          page,
+          page.locator("main#main"),
+          "event-setup-structure",
+        );
+
+        await openHydrated(page, "/admin/branding");
+        await page
+          .getByRole("button", { name: "Preview and publish", exact: true })
+          .click();
+        await expect(page.locator(".branding-preview-stack")).toBeVisible();
+        await captureState(page, page.locator("main#main"), "branding-preview");
+        return;
+      }
+      throw new Error(
+        `Workspace panel baselines are not configured for Playwright project "${testInfo.project.name}".`,
+      );
+    });
+
     test("distinctive high-risk surfaces retain reviewed visual baselines", async ({
       page,
     }, testInfo) => {
