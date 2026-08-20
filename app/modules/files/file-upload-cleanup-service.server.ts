@@ -272,6 +272,25 @@ export class FileUploadCleanupService {
     const cleanupOperationId = `file-upload-discard:${upload.versionId}`;
     const cleanupAuditId = `file-upload-discarded:${upload.versionId}`;
     const cleanupError = "Task changed before evidence submission.";
+    const sharedSessionDeliverable = Boolean(
+      await this.env.DB.prepare(
+        `SELECT 1
+           FROM task_instances task
+          WHERE task.id = ? AND task.event_id = ?
+            AND task.target_type = 'session'
+            AND task.task_type = 'file_upload'
+            AND json_valid(task.configuration_json)
+            AND json_extract(task.configuration_json, '$.fileScope') = 'session_deliverable'
+            AND EXISTS (
+              SELECT 1 FROM session_speakers relation
+               WHERE relation.event_id = task.event_id
+                 AND relation.session_id = task.target_id
+                 AND relation.person_id = ?
+            )`,
+      )
+        .bind(taskId, viewer.eventId, viewer.personId)
+        .first(),
+    );
     const row = await this.env.DB.prepare(
       `SELECT version.object_key AS objectKey
          FROM file_assets asset
@@ -281,7 +300,7 @@ export class FileUploadCleanupService {
         WHERE asset.id = ? AND asset.event_id = ?
           AND asset.target_type = 'task' AND asset.target_id = ?
           AND asset.asset_kind = 'task_evidence'
-          AND asset.owner_person_id = ?
+          AND (? = 1 OR asset.owner_person_id = ?)
           AND version.created_by_person_id = ?
           AND NOT EXISTS (
             SELECT 1 FROM audit_events erasure
@@ -293,6 +312,7 @@ export class FileUploadCleanupService {
         upload.assetId,
         viewer.eventId,
         taskId,
+        sharedSessionDeliverable ? 1 : 0,
         viewer.personId,
         viewer.personId,
       )
@@ -315,7 +335,7 @@ export class FileUploadCleanupService {
                WHERE asset.id = version.asset_id
                  AND asset.event_id = version.event_id
                  AND asset.target_type = 'task' AND asset.target_id = ?
-                 AND asset.owner_person_id = ?
+                 AND (? = 1 OR asset.owner_person_id = ?)
             )
             AND NOT EXISTS (
               SELECT 1 FROM task_evidence evidence
@@ -343,6 +363,7 @@ export class FileUploadCleanupService {
         upload.assetId,
         viewer.personId,
         taskId,
+        sharedSessionDeliverable ? 1 : 0,
         viewer.personId,
         taskId,
         taskId,
@@ -438,7 +459,7 @@ export class FileUploadCleanupService {
                 updated_at = unixepoch()
           WHERE asset.id = ? AND asset.event_id = ?
             AND asset.target_type = 'task' AND asset.target_id = ?
-            AND asset.owner_person_id = ?
+            AND (? = 1 OR asset.owner_person_id = ?)
             AND EXISTS (
               SELECT 1 FROM file_versions discarded
                WHERE discarded.id = ? AND discarded.event_id = asset.event_id
@@ -454,6 +475,7 @@ export class FileUploadCleanupService {
         upload.assetId,
         viewer.eventId,
         taskId,
+        sharedSessionDeliverable ? 1 : 0,
         viewer.personId,
         upload.versionId,
         cleanupError,
@@ -538,7 +560,7 @@ export class FileUploadCleanupService {
               SELECT 1 FROM file_assets asset
                WHERE asset.id = ? AND asset.event_id = ?
                  AND asset.target_type = 'task' AND asset.target_id = ?
-                 AND asset.owner_person_id = ?
+                 AND (? = 1 OR asset.owner_person_id = ?)
                  AND asset.current_version_id IS NOT ?
             ) AND NOT EXISTS (
               SELECT 1 FROM file_versions current_version
@@ -585,6 +607,7 @@ export class FileUploadCleanupService {
           upload.assetId,
           viewer.eventId,
           taskId,
+          sharedSessionDeliverable ? 1 : 0,
           viewer.personId,
           upload.versionId,
           upload.assetId,

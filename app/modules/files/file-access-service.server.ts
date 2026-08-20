@@ -250,20 +250,21 @@ export class FileAccessService {
            JOIN file_versions version
              ON version.id = ? AND version.asset_id = asset.id
             AND version.event_id = asset.event_id
-           JOIN task_evidence evidence
-             ON evidence.event_id = asset.event_id
+          JOIN task_evidence evidence
+            ON evidence.event_id = asset.event_id
             AND evidence.task_id = asset.target_id
             AND evidence.file_asset_id = asset.id
-            AND evidence.submitted_by_person_id = ?
+            AND (? = 'session_deliverable' OR evidence.submitted_by_person_id = ?)
             AND evidence.status = 'submitted'
             AND CASE WHEN json_valid(evidence.evidence_json)
                   THEN json_extract(evidence.evidence_json, '$.fileVersionId')
                 END = version.id
           WHERE asset.id = ? AND asset.event_id = ?
-            AND asset.owner_person_id = ? AND asset.target_type = 'task'
+            AND (? = 'session_deliverable' OR asset.owner_person_id = ?)
+            AND asset.target_type = 'task'
             AND asset.target_id = ? AND asset.asset_kind = 'task_evidence'
             AND asset.status <> 'deleted' AND version.deleted_at IS NULL
-            AND version.created_by_person_id = ?
+            AND (? = 'session_deliverable' OR version.created_by_person_id = ?)
             AND NOT EXISTS (
               SELECT 1 FROM audit_events audit
                WHERE audit.id = 'file-erasure:' || asset.id
@@ -271,11 +272,14 @@ export class FileAccessService {
       )
         .bind(
           owned.evidenceVersionId,
+          fileScope,
           viewer.personId,
           owned.evidenceAssetId,
           viewer.eventId,
+          fileScope,
           viewer.personId,
           target.targetId,
+          fileScope,
           viewer.personId,
         )
         .first<{ id: string }>();
@@ -580,22 +584,32 @@ export class FileAccessService {
            ON evidence.file_asset_id = asset.id
           AND evidence.event_id = asset.event_id
           AND evidence.task_id = asset.target_id
-          AND evidence.submitted_by_person_id = ?
           AND evidence.status IN ('submitted','approved','superseded')
           AND CASE WHEN json_valid(evidence.evidence_json)
                 THEN json_extract(evidence.evidence_json, '$.fileVersionId')
               END = version.id
-         JOIN task_instances task
+        JOIN task_instances task
            ON task.id = evidence.task_id AND task.event_id = evidence.event_id
         WHERE asset.id = ? AND asset.event_id = ?
-          AND asset.owner_person_id = ? AND asset.status = 'active'
+          AND asset.status = 'active'
           AND asset.target_type = 'task' AND asset.target_id = task.id
           AND asset.asset_kind = 'task_evidence'
-          AND version.created_by_person_id = ?
           AND version.upload_status = 'uploaded'
           AND version.signature_status = 'valid'
           AND version.scan_status = 'clean'
           AND version.released_at IS NOT NULL AND version.deleted_at IS NULL
+          AND (
+            (
+              task.target_type = 'session'
+              AND json_valid(task.configuration_json)
+              AND json_extract(task.configuration_json, '$.fileScope') = 'session_deliverable'
+            )
+            OR (
+              asset.owner_person_id = ?
+              AND evidence.submitted_by_person_id = ?
+              AND version.created_by_person_id = ?
+            )
+          )
           AND (
             task.owner_person_id = ?
             OR (task.target_type = 'speaker' AND task.target_id = ?)
@@ -611,9 +625,9 @@ export class FileAccessService {
       .bind(
         viewer.organisationId,
         versionId,
-        viewer.personId,
         assetId,
         viewer.eventId,
+        viewer.personId,
         viewer.personId,
         viewer.personId,
         viewer.personId,
@@ -679,18 +693,40 @@ export class FileAccessService {
           FROM file_assets asset
           JOIN file_versions version
             ON version.asset_id = asset.id AND version.event_id = asset.event_id
-         WHERE asset.event_id = ? AND asset.owner_person_id = ?
+          JOIN task_instances task
+            ON task.id = asset.target_id AND task.event_id = asset.event_id
+         WHERE asset.event_id = ?
            AND asset.target_type = 'task' AND asset.asset_kind = 'task_evidence'
            AND asset.status <> 'deleted' AND version.deleted_at IS NULL
            AND asset.target_id IN (
              SELECT CAST(value AS TEXT) FROM json_each(?)
+           )
+           AND (
+             task.owner_person_id = ?
+             OR (task.target_type = 'speaker' AND task.target_id = ?)
+             OR (task.target_type = 'session' AND EXISTS (
+               SELECT 1 FROM session_speakers relation
+                WHERE relation.event_id = task.event_id
+                  AND relation.session_id = task.target_id
+                  AND relation.person_id = ?
+             ))
            )
            AND EXISTS (
              SELECT 1 FROM task_evidence evidence
               WHERE evidence.event_id = asset.event_id
                 AND evidence.task_id = asset.target_id
                 AND evidence.file_asset_id = asset.id
-                AND evidence.submitted_by_person_id = ?
+                AND (
+                  (
+                    task.target_type = 'session'
+                    AND json_valid(task.configuration_json)
+                    AND json_extract(task.configuration_json, '$.fileScope') = 'session_deliverable'
+                  )
+                  OR (
+                    asset.owner_person_id = ?
+                    AND evidence.submitted_by_person_id = ?
+                  )
+                )
                 AND CASE WHEN json_valid(evidence.evidence_json)
                       THEN json_extract(evidence.evidence_json, '$.fileVersionId')
                     END = version.id
@@ -715,8 +751,11 @@ export class FileAccessService {
       )
         .bind(
           viewer.eventId,
-          viewer.personId,
           JSON.stringify(taskIdBatch),
+          viewer.personId,
+          viewer.personId,
+          viewer.personId,
+          viewer.personId,
           viewer.personId,
           viewer.eventId,
         )

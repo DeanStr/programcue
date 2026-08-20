@@ -15,7 +15,7 @@ import {
   returnedChangeSequence,
 } from "./claim-infrastructure";
 import {
-  communicationContentSnapshotSchema,
+  communicationContentSnapshotSchemaForEnvironment,
   deliverCommunicationBatch,
 } from "./communication-delivery-batch";
 import type { QueueProviderDependencies } from "./handler-types";
@@ -174,6 +174,7 @@ type CommunicationDelivery = {
   address: string;
   name: string;
   idempotencyKey: string;
+  sourceId: string | null;
   sourceValuesJson: string;
   renderedSubject: string | null;
   renderedBodySha256: string | null;
@@ -252,9 +253,9 @@ export async function processCommunicationSend(
       "Communication does not exist for this operation in the authorised event.",
     );
   if (communication.status === "cancelled") return;
-  const snapshot = communicationContentSnapshotSchema.parse(
-    JSON.parse(communication.contentSnapshotJson),
-  );
+  const snapshot = communicationContentSnapshotSchemaForEnvironment(
+    env.APP_ENV,
+  ).parse(JSON.parse(communication.contentSnapshotJson));
   const provider = dependencies.email ?? createEmailProvider(env);
   const durableProviders = await env.DB.prepare(
     `SELECT DISTINCT provider
@@ -418,6 +419,7 @@ export async function processCommunicationSend(
       SELECT d.id, d.person_id AS personId, d.recipient_address AS address,
              COALESCE(d.recipient_name, d.recipient_address) AS name,
              d.idempotency_key AS idempotencyKey,
+             d.source_id AS sourceId,
              d.source_values_json AS sourceValuesJson,
              d.rendered_subject AS renderedSubject,
              d.rendered_body_sha256 AS renderedBodySha256

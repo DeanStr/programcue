@@ -7,6 +7,7 @@ import {
 import { communicationDeliveryIdempotencyKey } from "../../app/modules/communications/communication-service-shared";
 import { requireEmailProviderConfiguration } from "../../app/modules/communications/email-provider.server";
 import { isSubmissionManagementUrl } from "../../app/modules/submissions/submission-management-url.server";
+import { communicationContentSnapshotSchemaForEnvironment } from "./communication-delivery-batch";
 import { processCommunicationSend } from "./communication-send";
 import type { QueueProviderDependencies } from "./handler-types";
 import { markTriggerFailure } from "./notification-failure";
@@ -264,12 +265,12 @@ export async function processSubmissionNotification(
         configurationError =
           "The published submission confirmation template configures a custom button. Publish a version that uses the product-owned Manage application action.";
       } else {
-        content = templateContentSchema.parse({
+        content = {
           ...configuredContent,
           body: `${configuredContent.body}${SUBMISSION_CONFIRMATION_MANAGEMENT_BODY_SUFFIX}`,
           buttonText: "Manage application",
           buttonUrl: message.applicationUrl,
-        });
+        };
       }
     } catch {
       configurationError =
@@ -288,7 +289,7 @@ export async function processSubmissionNotification(
   );
   const contentSnapshot =
     content && template
-      ? {
+      ? communicationContentSnapshotSchemaForEnvironment(env.APP_ENV).parse({
           schemaVersion: 1,
           category: "submission_confirmation",
           subjectTemplate: template.subjectTemplate,
@@ -299,7 +300,7 @@ export async function processSubmissionNotification(
             startsAt: submission.startsAt,
             endsAt: submission.endsAt,
           },
-        }
+        })
       : {
           schemaVersion: 1,
           category: "submission_confirmation",

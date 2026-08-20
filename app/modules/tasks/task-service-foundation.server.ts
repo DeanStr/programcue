@@ -186,6 +186,17 @@ export function taskConfiguration(configurationJson: string) {
   }
 }
 
+export function isSharedSessionDeliverableTask(
+  task: Pick<TaskRow, "targetType" | "taskType" | "configurationJson">,
+) {
+  return (
+    task.taskType === "file_upload" &&
+    task.targetType === "session" &&
+    taskConfiguration(task.configurationJson).fileScope ===
+      "session_deliverable"
+  );
+}
+
 export function taskDestinationUrl(configurationJson: string) {
   const destinationUrl = taskConfiguration(configurationJson).destinationUrl;
   if (!destinationUrl) {

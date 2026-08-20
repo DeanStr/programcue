@@ -314,8 +314,13 @@ describe("Submissions D1 vertical slice", () => {
 
   describe("additional workflow coverage", () => {
     it("keeps a submission confirmation terminal when a stale duplicate resumes materialisation", async () => {
-      const { service, id, slug, queued, testEnv } = await publishedForm();
-      const communications = new CommunicationService(testEnv);
+      const { id, slug, queued, testEnv } = await publishedForm();
+      const deliveryEnvironment = {
+        ...testEnv,
+        BETTER_AUTH_URL: "http://app.programcue.test",
+      } as unknown as CloudflareEnvironment;
+      const service = new SubmissionService(deliveryEnvironment);
+      const communications = new CommunicationService(deliveryEnvironment);
       const template = await communications.saveTemplate(viewer, {
         name: "Submission received",
         category: "submission_confirmation",
@@ -391,7 +396,7 @@ describe("Submissions D1 vertical slice", () => {
       expect(confirmationMessage).toBeDefined();
       const expectedApplicationUrl = new URL(
         `/applications/${encodeURIComponent(firstId)}/manage`,
-        testEnv.BETTER_AUTH_URL,
+        deliveryEnvironment.BETTER_AUTH_URL,
       );
       expect(confirmationMessage).toMatchObject({
         applicationUrl: expectedApplicationUrl.toString(),
@@ -438,10 +443,6 @@ describe("Submissions D1 vertical slice", () => {
       const staleMaterialisationReached = new Promise<void>((resolve) => {
         staleMaterialisationReachedResolve = resolve;
       });
-      const deliveryEnvironment = {
-        ...testEnv,
-        BETTER_AUTH_URL: "https://app.programcue.test",
-      } as unknown as CloudflareEnvironment;
       let interceptedMaterialisation = false;
       const delayedDb = new Proxy(testEnv.DB, {
         get(target, property) {

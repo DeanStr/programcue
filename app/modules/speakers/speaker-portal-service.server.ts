@@ -192,11 +192,29 @@ export class SpeakerPortalService {
             ON task.target_type = 'session'
            AND task_session.id = task.target_id
            AND task_session.event_id = task.event_id
-         WHERE fa.event_id = ? AND fa.owner_person_id = ? AND fa.status <> 'deleted'
+         WHERE fa.event_id = ? AND fa.status <> 'deleted'
+           AND (
+             fa.owner_person_id = ?
+             OR (
+               fa.target_type = 'task'
+               AND fa.asset_kind = 'task_evidence'
+               AND task.task_type = 'file_upload'
+               AND task.target_type = 'session'
+               AND json_valid(task.configuration_json)
+               AND json_extract(task.configuration_json, '$.fileScope') = 'session_deliverable'
+               AND EXISTS (
+                 SELECT 1
+                   FROM session_speakers relation
+                  WHERE relation.event_id = task.event_id
+                    AND relation.session_id = task.target_id
+                    AND relation.person_id = ?
+               )
+             )
+           )
          ORDER BY fa.updated_at DESC
       `,
         )
-          .bind(viewer.eventId, viewer.personId)
+          .bind(viewer.eventId, viewer.personId, viewer.personId)
           .all<FileRow & { resolvedCurrentVersionId: string | null }>(),
         readSpeakerProfileHistory(this.env, {
           organisationId: viewer.organisationId,

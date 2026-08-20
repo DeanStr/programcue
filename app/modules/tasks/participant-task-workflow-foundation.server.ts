@@ -1,5 +1,6 @@
 import type { Viewer } from "~/platform/auth/authorize.server";
 import {
+  isSharedSessionDeliverableTask,
   parseTaskEvidenceDetails,
   type TaskRow,
   TaskServiceFoundation,
@@ -81,6 +82,7 @@ export class ParticipantTaskWorkflowFoundation extends TaskServiceFoundation {
         "The submitted file task is missing canonical evidence metadata.",
       );
     }
+    const sharedSessionDeliverable = isSharedSessionDeliverableTask(task);
     const canonical = await this.env.DB.prepare(
       `SELECT version.version_number AS versionNumber
          FROM file_assets asset
@@ -91,16 +93,16 @@ export class ParticipantTaskWorkflowFoundation extends TaskServiceFoundation {
            ON evidence.event_id = asset.event_id
           AND evidence.task_id = asset.target_id
           AND evidence.file_asset_id = asset.id
-          AND evidence.submitted_by_person_id = ?
+          AND (? = 1 OR evidence.submitted_by_person_id = ?)
           AND evidence.status = 'submitted'
           AND CASE WHEN json_valid(evidence.evidence_json)
                 THEN json_extract(evidence.evidence_json, '$.fileVersionId')
               END = version.id
         WHERE asset.id = ? AND asset.event_id = ?
-          AND asset.owner_person_id = ? AND asset.target_type = 'task'
+          AND (? = 1 OR asset.owner_person_id = ?) AND asset.target_type = 'task'
           AND asset.target_id = ? AND asset.asset_kind = 'task_evidence'
           AND asset.status <> 'deleted' AND version.deleted_at IS NULL
-          AND version.created_by_person_id = ?
+          AND (? = 1 OR version.created_by_person_id = ?)
           AND NOT EXISTS (
             SELECT 1 FROM audit_events audit
              WHERE audit.id = 'file-erasure:' || asset.id
@@ -108,11 +110,14 @@ export class ParticipantTaskWorkflowFoundation extends TaskServiceFoundation {
     )
       .bind(
         details.fileVersionId,
+        sharedSessionDeliverable ? 1 : 0,
         viewer.personId,
         details.fileAssetId,
         viewer.eventId,
+        sharedSessionDeliverable ? 1 : 0,
         viewer.personId,
         task.id,
+        sharedSessionDeliverable ? 1 : 0,
         viewer.personId,
       )
       .first<{ versionNumber: number }>();

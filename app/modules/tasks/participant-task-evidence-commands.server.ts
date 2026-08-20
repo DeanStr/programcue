@@ -6,6 +6,7 @@ import { ParticipantTaskWorkflowFoundation } from "./participant-task-workflow-f
 import {
   type CompletedFileEvidenceAsset,
   completedFileEvidenceAttachmentSchema,
+  isSharedSessionDeliverableTask,
   parseTaskEvidenceDetails,
   TaskEvidenceAttachmentConflictError,
   type TaskRow,
@@ -16,6 +17,7 @@ export class ParticipantTaskEvidenceCommands extends ParticipantTaskWorkflowFoun
   protected async completedFileEvidenceAsset(
     viewer: Viewer,
     input: z.infer<typeof completedFileEvidenceAttachmentSchema>,
+    sharedSessionDeliverable: boolean,
   ) {
     return this.env.DB.prepare(
       `
@@ -40,7 +42,8 @@ export class ParticipantTaskEvidenceCommands extends ParticipantTaskWorkflowFoun
          AND CASE WHEN json_valid(evidence.evidence_json)
                THEN json_extract(evidence.evidence_json, '$.fileVersionId')
              END = fv.id
-       WHERE fa.id = ? AND fa.event_id = ? AND fa.owner_person_id = ?
+       WHERE fa.id = ? AND fa.event_id = ?
+         AND (? = 1 OR fa.owner_person_id = ?)
          AND fa.target_type = 'task' AND fa.target_id = ?
          AND fa.asset_kind = 'task_evidence' AND fa.status <> 'deleted'
          AND fv.created_by_person_id = ? AND fv.deleted_at IS NULL
@@ -56,6 +59,7 @@ export class ParticipantTaskEvidenceCommands extends ParticipantTaskWorkflowFoun
         viewer.personId,
         input.assetId,
         viewer.eventId,
+        sharedSessionDeliverable ? 1 : 0,
         viewer.personId,
         input.taskId,
         viewer.personId,
@@ -101,7 +105,12 @@ export class ParticipantTaskEvidenceCommands extends ParticipantTaskWorkflowFoun
       throw new TaskStateError(
         "File task not found or not owned by this speaker.",
       );
-    let asset = await this.completedFileEvidenceAsset(viewer, input);
+    const sharedSessionDeliverable = isSharedSessionDeliverableTask(ownedTask);
+    let asset = await this.completedFileEvidenceAsset(
+      viewer,
+      input,
+      sharedSessionDeliverable,
+    );
     let submittedEvidence: {
       assetId: string;
       versionId: string;
@@ -225,7 +234,8 @@ export class ParticipantTaskEvidenceCommands extends ParticipantTaskWorkflowFoun
                JOIN file_versions fv
                  ON fv.id = ? AND fv.asset_id = fa.id AND fv.event_id = fa.event_id
               WHERE fa.id = ? AND fa.event_id = task_instances.event_id
-                AND fa.owner_person_id = ? AND fa.target_type = 'task'
+                AND (? = 1 OR fa.owner_person_id = ?)
+                AND fa.target_type = 'task'
                 AND fa.target_id = task_instances.id
                 AND fa.asset_kind = 'task_evidence' AND fa.status <> 'deleted'
                 AND fv.created_by_person_id = ? AND fv.upload_status = 'uploaded'
@@ -248,6 +258,7 @@ export class ParticipantTaskEvidenceCommands extends ParticipantTaskWorkflowFoun
         submittedEvidence?.versionId ?? null,
         input.versionId,
         input.assetId,
+        sharedSessionDeliverable ? 1 : 0,
         viewer.personId,
         viewer.personId,
       ),
@@ -325,7 +336,11 @@ export class ParticipantTaskEvidenceCommands extends ParticipantTaskWorkflowFoun
     ]);
     if ((updated.meta.changes ?? 0) !== 1) {
       const currentTask = await this.participantTask(viewer, input.taskId);
-      asset = await this.completedFileEvidenceAsset(viewer, input);
+      asset = await this.completedFileEvidenceAsset(
+        viewer,
+        input,
+        sharedSessionDeliverable,
+      );
       if (
         currentTask &&
         this.exactFileEvidenceAlreadyAttached(currentTask, asset, input)

@@ -47,6 +47,98 @@ describe("speaker portal file integrity", () => {
     });
   });
 
+  it("lists a shared session deliverable for every speaker on the exact session", async () => {
+    const testEnv = env as unknown as CloudflareEnvironment;
+    await ensureDemoSpeakerData(testEnv);
+    const suffix = crypto.randomUUID();
+    const coSpeakerId = `portal-co-speaker-${suffix}`;
+    const taskId = `shared-session-deliverable-${suffix}`;
+    const sharedAssetId = `shared-session-asset-${suffix}`;
+    const privateTaskId = `participant-document-${suffix}`;
+    const privateAssetId = `participant-document-asset-${suffix}`;
+    await testEnv.DB.batch([
+      testEnv.DB.prepare(
+        `INSERT INTO people (
+           id, email, display_name, email_verified, created_at, updated_at
+         ) VALUES (?, ?, 'Portal co-speaker', 1, unixepoch(), unixepoch())`,
+      ).bind(coSpeakerId, `${coSpeakerId}@example.test`),
+      testEnv.DB.prepare(
+        `INSERT INTO memberships (
+           id, organisation_id, event_id, person_id, role, accepted_at, created_at
+         ) VALUES (?, ?, ?, ?, 'speaker', unixepoch(), unixepoch())`,
+      ).bind(
+        `portal-co-speaker-membership-${suffix}`,
+        speaker.organisationId,
+        speaker.eventId,
+        coSpeakerId,
+      ),
+      testEnv.DB.prepare(
+        `INSERT INTO session_speakers (
+           session_id, event_id, person_id, position, role_label,
+           participation_status, participation_confirmed_at, visibility
+         ) SELECT 'session-demo-speaker', ?, ?, COALESCE(MAX(position), -1) + 1,
+                  'Co-speaker', 'confirmed', unixepoch(), 'public'
+             FROM session_speakers
+            WHERE session_id = 'session-demo-speaker' AND event_id = ?`,
+      ).bind(speaker.eventId, coSpeakerId, speaker.eventId),
+      testEnv.DB.prepare(
+        `INSERT INTO task_instances (
+           id, event_id, target_type, target_id, owner_person_id, title,
+           task_type, impact, evidence_mode, configuration_json,
+           status, readiness_state, readiness_percent
+         ) VALUES (?, ?, 'session', 'session-demo-speaker', ?,
+                   'Upload the shared session handout', 'file_upload', 'high',
+                   'file', '{"fileScope":"session_deliverable"}',
+                   'not_started', 'on_track', 0)`,
+      ).bind(taskId, speaker.eventId, speaker.personId),
+      testEnv.DB.prepare(
+        `INSERT INTO file_assets (
+           id, event_id, owner_person_id, target_type, target_id, asset_kind,
+           status
+         ) VALUES (?, ?, ?, 'task', ?, 'task_evidence', 'pending')`,
+      ).bind(sharedAssetId, speaker.eventId, speaker.personId, taskId),
+      testEnv.DB.prepare(
+        `INSERT INTO task_instances (
+           id, event_id, target_type, target_id, owner_person_id, title,
+           task_type, impact, evidence_mode, configuration_json,
+           status, readiness_state, readiness_percent
+         ) VALUES (?, ?, 'speaker', ?, ?, 'Upload a private participant file',
+                   'file_upload', 'medium', 'file',
+                   '{"fileScope":"participant_document"}',
+                   'not_started', 'on_track', 0)`,
+      ).bind(
+        privateTaskId,
+        speaker.eventId,
+        speaker.personId,
+        speaker.personId,
+      ),
+      testEnv.DB.prepare(
+        `INSERT INTO file_assets (
+           id, event_id, owner_person_id, target_type, target_id, asset_kind,
+           status
+         ) VALUES (?, ?, ?, 'task', ?, 'task_evidence', 'pending')`,
+      ).bind(privateAssetId, speaker.eventId, speaker.personId, privateTaskId),
+    ]);
+
+    const portal = await new SpeakerService(testEnv).getPortal({
+      personId: coSpeakerId,
+      name: "Portal co-speaker",
+      email: `${coSpeakerId}@example.test`,
+      role: "speaker",
+      organisationId: speaker.organisationId,
+      eventId: speaker.eventId,
+      demo: true,
+    });
+
+    expect(
+      portal.files.find((file) => file.id === sharedAssetId),
+    ).toMatchObject({
+      taskTitle: "Upload the shared session handout",
+      sessionTitle: "Designing inclusive event technology",
+    });
+    expect(portal.files.some((file) => file.id === privateAssetId)).toBe(false);
+  });
+
   it("fails when a current file version is dangling or deleted", async () => {
     const testEnv = env as unknown as CloudflareEnvironment;
     await ensureDemoSpeakerData(testEnv);

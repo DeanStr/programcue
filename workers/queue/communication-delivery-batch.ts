@@ -12,6 +12,8 @@ import {
   renderMergeTemplate,
 } from "../../app/modules/communications/merge-template";
 import { createCommunicationUnsubscribeUrl } from "../../app/modules/communications/unsubscribe.server";
+import { isSubmissionManagementUrl } from "../../app/modules/submissions/submission-management-url.server";
+import { requiresProductionSecurity } from "../../app/platform/runtime-environment.server";
 import {
   assertOperationClaim,
   errorDetails,
@@ -28,30 +30,52 @@ type CommunicationSendMessage = {
   includeFailed?: boolean;
 };
 
-export const communicationContentSnapshotSchema = z.object({
-  schemaVersion: z.literal(1),
-  renderContractVersion: z.literal(1).optional(),
-  category: z.string(),
-  subjectTemplate: z.string(),
-  sender: z
-    .object({
-      id: z.string(),
-      provider: z.enum(["resend", "mailpit"]).optional(),
-      fromName: z.string(),
-      fromEmail: z.string(),
-      replyToEmail: z.string().nullable(),
-    })
-    .optional(),
-  content: templateContentSchema,
-  event: z.object({
-    eventName: z.string(),
-    brandAccent: z.string().regex(/^#[0-9a-f]{6}$/i),
-    startsAt: z.number(),
-    endsAt: z.number(),
-  }),
-});
+export function communicationContentSnapshotSchemaForEnvironment(
+  appEnvironment: unknown,
+) {
+  const contentSchema = requiresProductionSecurity(appEnvironment)
+    ? templateContentSchema
+    : templateContentSchema.safeExtend({
+        buttonUrl: z
+          .url()
+          .refine(
+            (url) => ["http:", "https:"].includes(new URL(url).protocol),
+            {
+              message: "Button URL must use HTTP or HTTPS.",
+            },
+          )
+          .optional(),
+      });
+  return z.object({
+    schemaVersion: z.literal(1),
+    renderContractVersion: z.literal(1).optional(),
+    category: z.string(),
+    subjectTemplate: z.string(),
+    sender: z
+      .object({
+        id: z.string(),
+        provider: z.enum(["resend", "mailpit"]).optional(),
+        fromName: z.string(),
+        fromEmail: z.string(),
+        replyToEmail: z.string().nullable(),
+      })
+      .optional(),
+    content: contentSchema,
+    event: z.object({
+      eventName: z.string(),
+      brandAccent: z.string().regex(/^#[0-9a-f]{6}$/i),
+      startsAt: z.number(),
+      endsAt: z.number(),
+    }),
+  });
+}
 
-type CommunicationSnapshot = z.infer<typeof communicationContentSnapshotSchema>;
+export const communicationContentSnapshotSchema =
+  communicationContentSnapshotSchemaForEnvironment("production");
+
+type CommunicationSnapshot = z.infer<
+  ReturnType<typeof communicationContentSnapshotSchemaForEnvironment>
+>;
 
 type ClaimedCommunication = {
   kind: "transactional" | "optional";
@@ -68,6 +92,7 @@ type CommunicationDelivery = {
   address: string;
   name: string;
   idempotencyKey: string;
+  sourceId: string | null;
   sourceValuesJson: string;
   renderedSubject: string | null;
   renderedBodySha256: string | null;
@@ -335,6 +360,32 @@ export async function deliverCommunicationBatch(input: {
       );
     }
     try {
+      const sourceValues = sourceMergeValuesSchema.parse(
+        JSON.parse(delivery.sourceValuesJson),
+      );
+      if (snapshot.category === "submission_confirmation") {
+        const applicationUrl = sourceValues["submission.url"];
+        if (
+          delivery.sourceId === null ||
+          typeof applicationUrl !== "string" ||
+          snapshot.content.buttonText !== "Manage application" ||
+          snapshot.content.buttonUrl !== applicationUrl ||
+          !isSubmissionManagementUrl(
+            applicationUrl,
+            delivery.sourceId,
+            env.APP_ENV,
+          )
+        ) {
+          throw new Error(
+            "The submission confirmation action does not match its durable application intent.",
+          );
+        }
+      } else if (
+        snapshot.content.buttonUrl &&
+        new URL(snapshot.content.buttonUrl).protocol !== "https:"
+      ) {
+        throw new Error("Communication button URLs must use HTTPS.");
+      }
       const values = {
         "recipient.name": delivery.name,
         "recipient.firstName":
@@ -344,7 +395,7 @@ export async function deliverCommunicationBatch(input: {
           snapshot.event.startsAt,
           snapshot.event.endsAt,
         ),
-        ...sourceMergeValuesSchema.parse(JSON.parse(delivery.sourceValuesJson)),
+        ...sourceValues,
       };
       const subject = renderMergeTemplate(snapshot.subjectTemplate, values);
       const body = renderMergeTemplate(snapshot.content.body, values);

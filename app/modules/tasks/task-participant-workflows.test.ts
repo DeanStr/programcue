@@ -39,6 +39,44 @@ const submitter: Viewer = {
   demo: true,
 };
 
+async function createSessionCoSpeaker(testEnv: CloudflareEnvironment) {
+  const suffix = crypto.randomUUID();
+  const personId = `person-session-co-speaker-${suffix}`;
+  await testEnv.DB.batch([
+    testEnv.DB.prepare(
+      `INSERT INTO people (
+         id, email, display_name, email_verified, created_at, updated_at
+       ) VALUES (?, ?, 'Session co-speaker', 1, unixepoch(), unixepoch())`,
+    ).bind(personId, `${personId}@example.test`),
+    testEnv.DB.prepare(
+      `INSERT INTO memberships (
+         id, organisation_id, event_id, person_id, role, accepted_at, created_at
+       ) VALUES (?, ?, ?, ?, 'speaker', unixepoch(), unixepoch())`,
+    ).bind(
+      `membership-session-co-speaker-${suffix}`,
+      admin.organisationId,
+      admin.eventId,
+      personId,
+    ),
+    testEnv.DB.prepare(
+      `INSERT INTO session_speakers (
+         session_id, event_id, person_id, position, role_label,
+         participation_status, participation_confirmed_at, visibility
+       ) VALUES ('session-demo-speaker', ?, ?, 1, 'Co-speaker',
+                 'confirmed', unixepoch(), 'public')`,
+    ).bind(admin.eventId, personId),
+  ]);
+  return {
+    personId,
+    name: "Session co-speaker",
+    email: `${personId}@example.test`,
+    role: "speaker",
+    organisationId: admin.organisationId,
+    eventId: admin.eventId,
+    demo: true,
+  } satisfies Viewer;
+}
+
 async function createFileTask(testEnv: CloudflareEnvironment, name: string) {
   const tasks = new TaskService(testEnv);
   const templateId = await tasks.createTemplate(admin, {
@@ -56,6 +94,29 @@ async function createFileTask(testEnv: CloudflareEnvironment, name: string) {
     configuration: { fileScope: "participant_document" },
   });
   return (await tasks.assignTemplate(admin, templateId, speaker.personId))
+    .taskId;
+}
+
+async function createSessionFileTask(
+  testEnv: CloudflareEnvironment,
+  name: string,
+) {
+  const tasks = new TaskService(testEnv);
+  const templateId = await tasks.createTemplate(admin, {
+    name,
+    description: "Upload shared session evidence.",
+    targetType: "session",
+    taskType: "file_upload",
+    impact: "high",
+    evidenceMode: "file",
+    dueAnchor: "none",
+    dueOffsetDays: null,
+    fixedDueDate: null,
+    autoAssignOnAcceptance: false,
+    dependencyIds: [],
+    configuration: { fileScope: "session_deliverable" },
+  });
+  return (await tasks.assignTemplate(admin, templateId, "session-demo-speaker"))
     .taskId;
 }
 
@@ -1165,6 +1226,128 @@ describe("onboarding task service", () => {
           first.versionId,
         ),
       ).rejects.toThrow("outside your tasks");
+    });
+
+    it("shares session-deliverable evidence and replacements with every assigned session speaker", async () => {
+      const testEnv = env as unknown as CloudflareEnvironment;
+      await ensureDemoSpeakerData(testEnv);
+      const coSpeaker = await createSessionCoSpeaker(testEnv);
+      const files = new FileService(testEnv);
+      const tasks = new TaskService(testEnv);
+      const taskId = await createSessionFileTask(
+        testEnv,
+        `Shared session slides ${crypto.randomUUID()}`,
+      );
+      const evidenceFile = (name: string, marker: number) =>
+        new File(
+          [
+            new Uint8Array([
+              0x89,
+              0x50,
+              0x4e,
+              0x47,
+              0x0d,
+              0x0a,
+              0x1a,
+              0x0a,
+              marker,
+            ]),
+          ],
+          name,
+          { type: "image/png" },
+        );
+      const target = {
+        targetType: "task" as const,
+        targetId: taskId,
+        assetKind: "task_evidence" as const,
+      };
+
+      const first = await completeTestDirectUpload(
+        testEnv,
+        speaker,
+        target,
+        evidenceFile("shared-slides-v1.png", 1),
+      );
+      await tasks.attachCompletedFileEvidence(speaker, {
+        taskId: target.targetId,
+        assetId: first.assetId,
+        versionId: first.versionId,
+      });
+      await files.recordScanResult({
+        ...(await acceptTestFileScanDispatch(
+          testEnv,
+          speaker.eventId,
+          first.versionId,
+        )),
+        eventId: speaker.eventId,
+        versionId: first.versionId,
+        provider: "test-scanner",
+        callbackId: `callback-${first.versionId}`,
+        status: "clean",
+        result: { verdict: "clean" },
+      });
+
+      await expect(
+        files.listParticipantTaskEvidenceVersions(coSpeaker, [target.targetId]),
+      ).resolves.toEqual([
+        expect.objectContaining({
+          assetId: first.assetId,
+          versionId: first.versionId,
+          versionNumber: 1,
+          downloadAvailable: true,
+        }),
+      ]);
+      await expect(
+        files.participantTaskEvidenceDownload(
+          coSpeaker,
+          first.assetId,
+          first.versionId,
+        ),
+      ).resolves.toMatchObject({ status: 200 });
+
+      const second = await completeTestDirectUpload(
+        testEnv,
+        coSpeaker,
+        target,
+        evidenceFile("shared-slides-v2.png", 2),
+      );
+      expect(second).toMatchObject({
+        assetId: first.assetId,
+        versionNumber: 2,
+      });
+      await tasks.attachCompletedFileEvidence(coSpeaker, {
+        taskId: target.targetId,
+        assetId: second.assetId,
+        versionId: second.versionId,
+      });
+      await files.recordScanResult({
+        ...(await acceptTestFileScanDispatch(
+          testEnv,
+          coSpeaker.eventId,
+          second.versionId,
+        )),
+        eventId: coSpeaker.eventId,
+        versionId: second.versionId,
+        provider: "test-scanner",
+        callbackId: `callback-${second.versionId}`,
+        status: "clean",
+        result: { verdict: "clean" },
+      });
+
+      await expect(
+        files.listParticipantTaskEvidenceVersions(speaker, [target.targetId]),
+      ).resolves.toEqual([
+        expect.objectContaining({
+          versionId: second.versionId,
+          versionNumber: 2,
+          current: true,
+        }),
+        expect.objectContaining({
+          versionId: first.versionId,
+          versionNumber: 1,
+          current: false,
+        }),
+      ]);
     });
 
     it("fails fast when a submitted file task lacks canonical evidence", async () => {
