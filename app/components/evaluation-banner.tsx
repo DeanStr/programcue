@@ -126,7 +126,10 @@ export function EvaluationBanner({
       className="pc-status-notice is-warning pc-eval-banner"
       aria-label="Evaluation session"
     >
-      <span className="pc-eval-banner-identity">
+      <span
+        className="pc-eval-banner-identity"
+        title={`${evaluation.label} · ${evaluation.name}`}
+      >
         <strong>Evaluation:</strong> {evaluation.label} · {evaluation.name}
       </span>
       <span className="pc-eval-banner-actions">

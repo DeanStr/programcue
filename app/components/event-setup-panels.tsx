@@ -250,9 +250,12 @@ export function EventRoomsPanel({
   focusedRoomId: string | null;
   onDraftStateChange: (draftKey: string, value: string) => void;
 }) {
+  const [panelOpen, setPanelOpen] = useState(true);
   const [resourceDrafts, setResourceDrafts] = useState<Record<string, string>>(
     {},
   );
+  const panelMustOpen =
+    focusedRoomId !== null || Boolean(actionData?.errors?.rooms?.length);
 
   function updateResourceDraft(roomId: string, value: string) {
     const nextDrafts = { ...resourceDrafts, [roomId]: value };
@@ -284,10 +287,14 @@ export function EventRoomsPanel({
     <details
       className="card pad event-record-panel"
       // A deep link from the command palette focuses a room by id, which cannot
-      // happen inside a closed panel.
-      open={
-        focusedRoomId !== null || Boolean(actionData?.errors?.rooms?.length)
-      }
+      // happen inside a closed panel. Rooms start open because they are the
+      // primary Structure editor; the longer tracks and formats editors remain
+      // collapsed until requested.
+      open={panelMustOpen || panelOpen}
+      onToggle={(toggleEvent) => {
+        if (panelMustOpen && toggleEvent.currentTarget.open) return;
+        setPanelOpen(toggleEvent.currentTarget.open);
+      }}
     >
       <summary>
         <RecordChevron />

@@ -436,6 +436,36 @@ test("Event Setup panel navigation stays synchronized with the admin shell", asy
   ).toHaveAttribute("aria-pressed", "true");
 });
 
+test("Event Setup opens Rooms by default without expanding every Structure editor", async ({
+  page,
+}) => {
+  await page.goto("/admin/event#event-setup-structure");
+  await page.locator("body[data-hydrated='true']").waitFor();
+
+  const recordPanel = (heading: string) =>
+    page.locator("details.event-record-panel").filter({
+      has: page.getByRole("heading", { name: heading, exact: true }),
+    });
+
+  await expect(recordPanel("Rooms and capacities")).toHaveAttribute("open", "");
+  await expect(recordPanel("Programme tracks")).not.toHaveAttribute("open", "");
+  await expect(
+    recordPanel("Session formats and durations"),
+  ).not.toHaveAttribute("open", "");
+
+  await recordPanel("Rooms and capacities").locator("summary").click();
+  await expect(recordPanel("Rooms and capacities")).not.toHaveAttribute(
+    "open",
+    "",
+  );
+  await showEventSettingsPanel(page, "Identity");
+  await showEventSettingsPanel(page, "Structure");
+  await expect(recordPanel("Rooms and capacities")).not.toHaveAttribute(
+    "open",
+    "",
+  );
+});
+
 test("Event Setup opens a collapsed record before focusing an invalid field", async ({
   page,
 }) => {

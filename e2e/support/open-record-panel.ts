@@ -1,8 +1,8 @@
 import type { Page } from "@playwright/test";
 
 /**
- * Event Setup collapses its three record editors — rooms, tracks and session
- * formats — because their height grows with the event. Opening one is a
+ * Event Setup starts its primary Rooms editor open and collapses the longer
+ * Tracks and Session formats editors. Opening a collapsed editor is a
  * precondition for touching the rows inside it. Deep links such as
  * `?room=<id>` open the relevant panel on their own.
  */
