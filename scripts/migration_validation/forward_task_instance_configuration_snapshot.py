@@ -2,7 +2,7 @@ from pathlib import Path
 import sqlite3
 
 
-MIGRATION = "0048_task_instance_configuration_snapshot.sql"
+MIGRATION = "0049_task_instance_configuration_snapshot.sql"
 
 
 def expect_integrity_error(connection: sqlite3.Connection, sql: str) -> None:
@@ -10,7 +10,7 @@ def expect_integrity_error(connection: sqlite3.Connection, sql: str) -> None:
         connection.execute(sql)
     except sqlite3.IntegrityError:
         return
-    raise SystemExit(f"Migration 0048 accepted an invalid mutation: {sql.strip()}")
+    raise SystemExit(f"Migration 0049 accepted an invalid mutation: {sql.strip()}")
 
 
 def validate_task_instance_configuration_snapshot_forward_migration(
@@ -76,7 +76,7 @@ def validate_task_instance_configuration_snapshot_forward_migration(
         ("task-snapshot-without-template", "text", "{}"),
     ]:
         raise SystemExit(
-            "Migration 0048 did not backfill exact template and fallback snapshots"
+            "Migration 0049 did not backfill exact template and fallback snapshots"
         )
 
     expect_integrity_error(

@@ -424,7 +424,7 @@ assignments. A `link_visit` template therefore requires an organiser-owned,
 credential-free HTTPS destination; participants open that configured link and
 explicitly acknowledge visiting it. The acknowledgement records the assigned
 destination and time, while navigation telemetry is not treated as proof.
-Before migration `0048`, the release preflight inventories existing link and
+Before migration `0049`, the release preflight inventories existing link and
 file templates plus anomalous direct assignments. Deployment stops until link
 destinations are valid and file purposes are explicit; it never promotes a
 participant-entered URL or guesses a file task's scope.

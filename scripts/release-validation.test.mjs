@@ -290,7 +290,7 @@ test("participant-task snapshot preflight rejects ambiguous legacy configuration
     () => validatePendingTaskConfigurationInventory(everyReportedId),
     /reported-instance-1.*reported-instance-21/u,
   );
-  assert.match(taskInstanceConfigurationSnapshotMigrationName, /^0048_/u);
+  assert.match(taskInstanceConfigurationSnapshotMigrationName, /^0049_/u);
 
   const pendingMigrations = [
     ...speakerRelationshipIdentityGuardMigrations,
@@ -311,7 +311,7 @@ test("participant-task snapshot preflight rejects ambiguous legacy configuration
       validateRemoteSchemaEvidence(evidence, pendingMigrations, {
         allowPendingMigrations: true,
       }),
-    /legacy-link.*before migration 0048/u,
+    /legacy-link.*before migration 0049/u,
   );
 });
 

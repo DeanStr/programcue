@@ -466,6 +466,7 @@ test.describe
     });
 
     test("applicant verifies email, saves a multi-speaker draft, submits it and appears in the admin queue", async ({
+      browser,
       page,
     }) => {
       const unique = Date.now();
@@ -574,6 +575,10 @@ test.describe
           hasText: "Your application has been submitted.",
         }),
       ).toBeVisible();
+      const submittedApplicationId = new URL(page.url()).searchParams.get(
+        "draft",
+      );
+      expect(submittedApplicationId).toBeTruthy();
       await expect(
         page.getByRole("button", { name: "Save revised application" }),
       ).toBeVisible();
@@ -608,6 +613,48 @@ test.describe
           `${revisionSentence.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}$`,
         ),
       );
+
+      const cleanBrowser = await browser.newContext();
+      try {
+        const recoveryPage = await cleanBrowser.newPage();
+        const applicationOrigin = new URL(page.url()).origin;
+        await recoveryPage.goto(
+          `${applicationOrigin}/applications/${encodeURIComponent(submittedApplicationId!)}/manage`,
+        );
+        await expect(recoveryPage).toHaveURL(
+          new RegExp(
+            `/apply/form\\?draft=${encodeURIComponent(submittedApplicationId!)}(?:#submitted-application)?$`,
+            "u",
+          ),
+        );
+        await expect(
+          recoveryPage.getByRole("heading", { name: "Resume an application" }),
+        ).toBeVisible();
+        await recoveryPage.getByLabel("Email address").fill(email);
+        await recoveryPage
+          .getByRole("button", { name: "Send verification code" })
+          .click();
+        await recoveryPage.getByLabel("Six-digit code").fill("424242");
+        await recoveryPage
+          .getByRole("button", { name: "Verify and open drafts" })
+          .click();
+        await expect(recoveryPage).toHaveURL(
+          new RegExp(
+            `/apply/form\\?draft=${encodeURIComponent(submittedApplicationId!)}$`,
+            "u",
+          ),
+        );
+        await expect(recoveryPage.getByLabel("Session title")).toHaveValue(
+          title,
+        );
+        await expect(
+          recoveryPage.getByRole("button", {
+            name: "Save revised application",
+          }),
+        ).toBeVisible();
+      } finally {
+        await cleanBrowser.close();
+      }
 
       await page.goto("/admin/submissions");
       const filters = page.getByRole("search");

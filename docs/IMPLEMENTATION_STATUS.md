@@ -174,7 +174,7 @@ snapshot instead of joining mutable template configuration at read time.
 Link-visit tasks require an organiser-configured, credential-free HTTPS
 destination, render a safe external action and complete only after a separate
 participant acknowledgement; participant-entered evidence URLs are removed.
-The remote migration preflight blocks snapshot migration `0048` when legacy
+The remote migration preflight blocks snapshot migration `0049` when legacy
 link or file tasks remain ambiguous, requiring explicit remediation rather
 than a compatibility fallback.
 It checks active templates, referenced historical templates and anomalous

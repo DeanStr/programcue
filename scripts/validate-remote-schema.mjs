@@ -20,7 +20,7 @@ export const publicSpeakerConfirmationGuardMigrationName =
 export const speakerRelationshipIdentityGuardMigrationName =
   "0043_session_speaker_identity_immutable.sql";
 export const taskInstanceConfigurationSnapshotMigrationName =
-  "0048_task_instance_configuration_snapshot.sql";
+  "0049_task_instance_configuration_snapshot.sql";
 
 export const requiredBrandAssetColumns = new Map([
   ["width_px", { type: "INTEGER", notnull: 0, defaultValue: null }],

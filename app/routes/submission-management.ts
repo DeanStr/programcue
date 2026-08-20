@@ -42,6 +42,9 @@ export async function loader({ request, context, params }: Route.LoaderArgs) {
   if (!currentForm) {
     throw applicationNotFound();
   }
+  const applicationPath = `/apply/${encodeURIComponent(currentForm.publicSlug)}?${new URLSearchParams(
+    { draft: submissionId },
+  )}#submitted-application`;
 
   let portal: Awaited<ReturnType<SubmissionService["getApplicantPortal"]>>;
   try {
@@ -56,16 +59,16 @@ export async function loader({ request, context, params }: Route.LoaderArgs) {
     }
     throw error;
   }
-  if (!portal.applicant || portal.selected?.id !== submissionId) {
+  if (!portal.applicant) {
+    return redirect(applicationPath, {
+      headers: { "cache-control": "private, no-store" },
+    });
+  }
+  if (portal.selected?.id !== submissionId) {
     throw applicationNotFound();
   }
 
-  return redirect(
-    `/apply/${encodeURIComponent(currentForm.publicSlug)}?${new URLSearchParams(
-      {
-        draft: submissionId,
-      },
-    )}#submitted-application`,
-    { headers: { "cache-control": "private, no-store" } },
-  );
+  return redirect(applicationPath, {
+    headers: { "cache-control": "private, no-store" },
+  });
 }

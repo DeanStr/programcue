@@ -7,6 +7,10 @@ import type { Viewer } from "~/platform/auth/authorize.server";
 import { cloudflareContext } from "~/platform/cloudflare-context";
 import { ensureDemoData } from "~/platform/demo/seed.server";
 import { processSubmissionNotification } from "../../../workers/communications-queue";
+import {
+  action as applicationFormAction,
+  loader as applicationFormLoader,
+} from "../../routes/application-form.server";
 import { loader as submissionManagementLoader } from "../../routes/submission-management";
 import { isSubmissionManagementUrl } from "./submission-management-url.server";
 import {
@@ -591,13 +595,98 @@ describe("Submissions D1 vertical slice", () => {
       expect((managed as Response).headers.get("location")).toBe(
         `/apply/${encodeURIComponent(changedSlug)}?draft=${encodeURIComponent(firstId)}#submitted-application`,
       );
-      await expect(
-        submissionManagementLoader({
-          request: new Request(expectedApplicationUrl),
-          params: { submissionId: firstId },
-          context: routeContext(deliveryEnvironment),
-        } as never),
-      ).rejects.toMatchObject({ status: 404 });
+      const cleanBrowserManaged = await submissionManagementLoader({
+        request: new Request(expectedApplicationUrl),
+        params: { submissionId: firstId },
+        context: routeContext(deliveryEnvironment),
+      } as never);
+      expect(cleanBrowserManaged).toBeInstanceOf(Response);
+      expect((cleanBrowserManaged as Response).status).toBe(302);
+      expect(
+        (cleanBrowserManaged as Response).headers.get("cache-control"),
+      ).toBe("private, no-store");
+      const recoveryLocation = (cleanBrowserManaged as Response).headers.get(
+        "location",
+      );
+      expect(recoveryLocation).toBe(
+        `/apply/${encodeURIComponent(changedSlug)}?draft=${encodeURIComponent(firstId)}#submitted-application`,
+      );
+      const recoveryUrl = new URL(
+        recoveryLocation!,
+        deliveryEnvironment.BETTER_AUTH_URL,
+      );
+      recoveryUrl.hash = "";
+      const anonymousRecovery = await applicationFormLoader({
+        request: new Request(recoveryUrl),
+        params: { slug: changedSlug },
+        context: routeContext(deliveryEnvironment),
+      } as never);
+      expect(anonymousRecovery).toMatchObject({
+        applicant: null,
+        selected: null,
+      });
+      const requestCode = await applicationFormAction({
+        request: new Request(recoveryUrl, {
+          method: "POST",
+          headers: {
+            "content-type": "application/x-www-form-urlencoded",
+            origin: deliveryEnvironment.BETTER_AUTH_URL!,
+          },
+          body: new URLSearchParams({
+            _intent: "request_code",
+            email: applicant.email,
+          }),
+        }),
+        params: { slug: changedSlug },
+        context: routeContext(deliveryEnvironment),
+      } as never);
+      expect(requestCode).not.toBeInstanceOf(Response);
+      expect((requestCode as { data: unknown }).data).toMatchObject({
+        ok: true,
+        stage: "code",
+        email: applicant.email,
+        demoCode: "424242",
+      });
+      const verifiedRecovery = await applicationFormAction({
+        request: new Request(recoveryUrl, {
+          method: "POST",
+          headers: {
+            "content-type": "application/x-www-form-urlencoded",
+            origin: deliveryEnvironment.BETTER_AUTH_URL!,
+          },
+          body: new URLSearchParams({
+            _intent: "verify_code",
+            email: applicant.email,
+            code: "424242",
+          }),
+        }),
+        params: { slug: changedSlug },
+        context: routeContext(deliveryEnvironment),
+      } as never);
+      expect(verifiedRecovery).toBeInstanceOf(Response);
+      expect((verifiedRecovery as Response).headers.get("location")).toBe(
+        `/apply/${encodeURIComponent(changedSlug)}?draft=${encodeURIComponent(firstId)}`,
+      );
+      const recoveryCookie = (verifiedRecovery as Response).headers
+        .get("set-cookie")!
+        .split(";", 1)[0]!;
+      const recoveredPortal = await applicationFormLoader({
+        request: new Request(recoveryUrl, {
+          headers: { cookie: recoveryCookie },
+        }),
+        params: { slug: changedSlug },
+        context: routeContext(deliveryEnvironment),
+      } as never);
+      if (!("applicant" in recoveredPortal)) {
+        throw new Error(
+          "Verified application recovery did not return a portal.",
+        );
+      }
+      expect(recoveredPortal.applicant?.email).toBe(applicant.email);
+      expect(recoveredPortal.selected).toMatchObject({
+        id: firstId,
+        status: "submitted",
+      });
       const otherApplicant = await verifiedApplicantSession(
         service,
         changedSlug,
