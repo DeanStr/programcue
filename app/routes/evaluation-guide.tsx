@@ -44,12 +44,42 @@ import {
   AbuseRateLimitError,
   enforcePublicRateLimit,
 } from "~/platform/http/public-abuse-protection.server";
+import { requestCorrelationId } from "~/platform/observability/request-correlation";
+import { sourceRevisionForLog } from "~/platform/observability/source-revision.server";
 import "~/styles/workspace-remaining.css";
 import type { Route } from "./+types/evaluation-guide";
 
 type ActionResult =
   | { ok: true; message: string }
   | { ok: false; message: string; retryAfterSeconds?: number };
+
+function evaluationDependencyUnavailable(
+  env: CloudflareEnvironment,
+  request: Request,
+  event: string,
+  stage: string,
+  error: unknown,
+) {
+  console.error(
+    JSON.stringify({
+      level: "error",
+      sourceRevision: sourceRevisionForLog(env),
+      subsystem: "evaluation-access",
+      event,
+      stage,
+      correlationId: requestCorrelationId(request),
+      errorName: error instanceof Error ? error.name : "UnknownError",
+      message: "An evaluation access dependency failed.",
+    }),
+  );
+  return data<ActionResult>(
+    {
+      ok: false,
+      message: "Evaluation access is temporarily unavailable. Try again.",
+    },
+    { status: 503, headers: { "cache-control": "no-store" } },
+  );
+}
 
 export const meta = () => [{ title: "Evaluation access · Program Cue" }];
 export const headers: Route.HeadersFunction = () => ({
@@ -441,7 +471,19 @@ export async function action({ request, context }: Route.ActionArgs) {
     });
   }
 
-  const session = await readEvaluationSession(request, env);
+  let session: Awaited<ReturnType<typeof readEvaluationSession>>;
+  try {
+    session = await readEvaluationSession(request, env);
+  } catch (error) {
+    if (error instanceof Response) throw error;
+    return evaluationDependencyUnavailable(
+      env,
+      request,
+      "session-read-failed",
+      "read-session",
+      error,
+    );
+  }
   if (!session) {
     return data<ActionResult>(
       {
@@ -545,65 +587,81 @@ export async function action({ request, context }: Route.ActionArgs) {
       { status: 400, headers: { "cache-control": "no-store" } },
     );
   }
-  const selected = await resolveEvaluationPerson(env, identityKey);
-  if (
-    (selected.definition.group === "scenario") !==
-    isScenarioIdentityKey(identityKey)
-  ) {
-    throw new Error(
-      `Evaluation identity ${identityKey} has no matching scenario action configuration.`,
+  let selectionStage = "resolve-person";
+  try {
+    const selected = await resolveEvaluationPerson(env, identityKey);
+    if (
+      (selected.definition.group === "scenario") !==
+      isScenarioIdentityKey(identityKey)
+    ) {
+      throw new Error(
+        `Evaluation identity ${identityKey} has no matching scenario action configuration.`,
+      );
+    }
+    selectionStage = "activate-account";
+    const accountActivation = activatesEvaluatorAccount
+      ? await activateEvaluationApplicantAccount(env, session.fixtureGeneration)
+      : null;
+    selectionStage = "record-audit";
+    if (!accountActivation?.replayed) {
+      await env.DB.prepare(
+        `INSERT INTO audit_events (
+         id, actor_kind, origin, metadata_version, organisation_id, event_id, actor_id, action, entity_type,
+         entity_id, metadata_json, created_at
+       ) VALUES (?, 'system', 'internal', 1, ?, ?, 'production-evaluation-access',
+                 ?, 'person', ?, ?, unixepoch())`,
+      )
+        .bind(
+          crypto.randomUUID(),
+          EVALUATION_ORGANISATION_ID,
+          EVALUATION_EVENT_ID,
+          "evaluation.identity.selected",
+          selected.personId,
+          JSON.stringify({
+            identityKey,
+            fixtureGeneration: session.fixtureGeneration,
+            accountActivated: activatesEvaluatorAccount,
+          }),
+        )
+        .run();
+    }
+    selectionStage = "read-scenario-state";
+    const scenarioState = isScenarioIdentityKey(identityKey)
+      ? await readEvaluationScenarioGuideState(env, session.fixtureGeneration)
+      : null;
+    const destination = choosesApplicantEvent
+      ? "/events/select"
+      : scenarioState && isScenarioIdentityKey(identityKey)
+        ? scenarioPresentation(identityKey, scenarioState).destination
+        : selected.definition.destination;
+    const stampsCurrentEvent =
+      !choosesApplicantEvent && destination !== "/events/select";
+    selectionStage = "issue-session";
+    const headers = new Headers();
+    headers.append(
+      "set-cookie",
+      await renewedEvaluationSessionCookie(env, session, identityKey),
+    );
+    headers.append(
+      "set-cookie",
+      stampsCurrentEvent
+        ? currentEventCookie(EVALUATION_EVENT_ID, env)
+        : clearCurrentEventCookie(env),
+    );
+    return redirectDocument(destination, {
+      status: 303,
+      headers,
+    });
+  } catch (error) {
+    if (error instanceof Response) throw error;
+    return evaluationDependencyUnavailable(
+      env,
+      request,
+      "identity-selection-failed",
+      selectionStage,
+      error,
     );
   }
-  const accountActivation = activatesEvaluatorAccount
-    ? await activateEvaluationApplicantAccount(env, session.fixtureGeneration)
-    : null;
-  if (!accountActivation?.replayed) {
-    await env.DB.prepare(
-      `INSERT INTO audit_events (
-       id, actor_kind, origin, metadata_version, organisation_id, event_id, actor_id, action, entity_type,
-       entity_id, metadata_json, created_at
-     ) VALUES (?, 'system', 'internal', 1, ?, ?, 'production-evaluation-access',
-               ?, 'person', ?, ?, unixepoch())`,
-    )
-      .bind(
-        crypto.randomUUID(),
-        EVALUATION_ORGANISATION_ID,
-        EVALUATION_EVENT_ID,
-        "evaluation.identity.selected",
-        selected.personId,
-        JSON.stringify({
-          identityKey,
-          fixtureGeneration: session.fixtureGeneration,
-          accountActivated: activatesEvaluatorAccount,
-        }),
-      )
-      .run();
-  }
-  const scenarioState = isScenarioIdentityKey(identityKey)
-    ? await readEvaluationScenarioGuideState(env, session.fixtureGeneration)
-    : null;
-  const destination = choosesApplicantEvent
-    ? "/events/select"
-    : scenarioState && isScenarioIdentityKey(identityKey)
-      ? scenarioPresentation(identityKey, scenarioState).destination
-      : selected.definition.destination;
-  const stampsCurrentEvent =
-    !choosesApplicantEvent && destination !== "/events/select";
-  const headers = new Headers();
-  headers.append(
-    "set-cookie",
-    await renewedEvaluationSessionCookie(env, session, identityKey),
-  );
-  headers.append(
-    "set-cookie",
-    stampsCurrentEvent
-      ? currentEventCookie(EVALUATION_EVENT_ID, env)
-      : clearCurrentEventCookie(env),
-  );
-  return redirectDocument(destination, {
-    status: 303,
-    headers,
-  });
 }
 
 export default function EvaluationGuide({ loaderData }: Route.ComponentProps) {

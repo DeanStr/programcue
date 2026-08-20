@@ -1,7 +1,7 @@
 import { env } from "cloudflare:test";
 import { serializeSignedCookie } from "better-call";
 import { RouterContextProvider } from "react-router";
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { requireAuthenticatedPerson } from "~/platform/auth/authorize.server";
 import { cloudflareContext } from "~/platform/cloudflare-context";
@@ -152,6 +152,10 @@ function withActivationBatchRace(
 }
 
 describe("production evaluation guide", () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
   it("fails instead of treating invalid guide counters as a clean baseline", () => {
     for (const value of [undefined, null, Number.NaN, -1, 1.5, "0"]) {
       expect(() =>
@@ -363,6 +367,73 @@ describe("production evaluation guide", () => {
     }
     expect(unauthorised.status).toBe(302);
     expect(unauthorised.headers.get("location")).toBe("/evaluate");
+  });
+
+  it("returns an actionable response when persona selection has a transient dependency failure", async () => {
+    await ensureDemoData(env as unknown as CloudflareEnvironment);
+    const environment = productionEnvironment();
+    await recordFixtureReset(environment);
+    const unlocked = await action({
+      request: request({
+        _intent: "unlock",
+        accessCode: "evaluation-access-code-2026",
+      }),
+      params: {},
+      context: context(environment),
+    } as never);
+    const errorLog = vi.spyOn(console, "error").mockImplementation(() => {});
+    const failingDatabase = new Proxy(environment.DB, {
+      get(target, property) {
+        if (property === "prepare") {
+          return (query: string) => {
+            if (
+              query.includes("INSERT INTO audit_events") &&
+              query.includes("production-evaluation-access")
+            ) {
+              throw new Error("simulated transient D1 failure");
+            }
+            return target.prepare(query);
+          };
+        }
+        const value = Reflect.get(target, property);
+        return typeof value === "function" ? value.bind(target) : value;
+      },
+    });
+    const failingEnvironment = new Proxy(environment, {
+      get(target, property) {
+        return property === "DB"
+          ? failingDatabase
+          : Reflect.get(target, property);
+      },
+    });
+
+    const result = await action({
+      request: request(
+        { _intent: "select_identity", identity: "applicant" },
+        { cookie: responseCookieHeader(unlocked as Response) },
+      ),
+      params: {},
+      context: context(failingEnvironment),
+    } as never);
+
+    expect(result).not.toBeInstanceOf(Response);
+    if (result instanceof Response) {
+      throw new Error("Transient selection failure returned a redirect.");
+    }
+    expect(result.init?.status).toBe(503);
+    expect(result.data).toEqual({
+      ok: false,
+      message: "Evaluation access is temporarily unavailable. Try again.",
+    });
+    expect(errorLog).toHaveBeenCalledTimes(1);
+    expect(JSON.parse(String(errorLog.mock.calls[0]?.[0]))).toMatchObject({
+      level: "error",
+      subsystem: "evaluation-access",
+      event: "identity-selection-failed",
+      stage: "record-audit",
+      errorName: "Error",
+      message: "An evaluation access dependency failed.",
+    });
   });
 
   it("resets provisioned evaluation data without reset-only secrets and returns to the unlocked role picker", async () => {
