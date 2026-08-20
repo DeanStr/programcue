@@ -1,4 +1,5 @@
 import { requireValue } from "~/lib/required-value";
+import { assignedTaskConfigurationSchema } from "~/modules/tasks/task-schema";
 import { participantTaskAccessSql } from "~/modules/tasks/task-service-foundation.server";
 import type { Viewer } from "~/platform/auth/authorize.server";
 import {
@@ -310,6 +311,7 @@ export class ApiParticipantResourceReader {
                   task.readiness_state AS readinessState,
                   task.readiness_percent AS readinessPercent,
                   task.revision, task.due_at AS dueAt,
+                  task.configuration_json AS configurationJson,
                   task.evidence_json AS evidenceJson,
                   task.waiver_json AS waiverJson,
                   task.submitted_at AS submittedAt,
@@ -405,6 +407,12 @@ export class ApiParticipantResourceReader {
       delete result.speakersJson;
     }
     if (resource === "tasks") {
+      result.configuration = assignedTaskConfigurationSchema.parse(
+        parseJson(
+          result.configurationJson,
+          `Task ${String(result.id)} configuration`,
+        ),
+      );
       result.evidence = parseJson(
         result.evidenceJson,
         `Task ${String(result.id)} evidence`,
@@ -413,6 +421,7 @@ export class ApiParticipantResourceReader {
         result.waiverJson,
         `Task ${String(result.id)} waiver`,
       );
+      delete result.configurationJson;
       delete result.evidenceJson;
       delete result.waiverJson;
     }

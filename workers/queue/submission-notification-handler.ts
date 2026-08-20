@@ -2,6 +2,7 @@ import { z } from "zod";
 
 import {
   SUBMISSION_CONFIRMATION_MANAGEMENT_BODY_SUFFIX,
+  TEMPLATE_BODY_MAX_LENGTH,
   templateContentSchema,
 } from "../../app/modules/communications/communication-schema";
 import { communicationDeliveryIdempotencyKey } from "../../app/modules/communications/communication-service-shared";
@@ -265,9 +266,15 @@ export async function processSubmissionNotification(
         configurationError =
           "The published submission confirmation template configures a custom button. Publish a version that uses the product-owned Manage application action.";
       } else {
+        const body = `${configuredContent.body}${SUBMISSION_CONFIRMATION_MANAGEMENT_BODY_SUFFIX}`;
+        if (body.length > TEMPLATE_BODY_MAX_LENGTH) {
+          throw new Error(
+            "The augmented submission confirmation body exceeds the supported limit.",
+          );
+        }
         content = {
           ...configuredContent,
-          body: `${configuredContent.body}${SUBMISSION_CONFIRMATION_MANAGEMENT_BODY_SUFFIX}`,
+          body,
           buttonText: "Manage application",
           buttonUrl: message.applicationUrl,
         };

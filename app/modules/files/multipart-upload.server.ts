@@ -391,12 +391,12 @@ export class MultipartUploadService {
     const participantTaskGuard = this.participantTaskGuard(actor);
     const allocationGuardSql =
       target.targetType === "task" && participantTaskGuard
-        ? `WHERE EXISTS (
+        ? `EXISTS (
              SELECT 1 FROM task_instances task
               WHERE task.id = ? AND task.event_id = ?
                 AND ${participantTaskGuard.sql}
            )`
-        : "";
+        : "1 = 1";
     const allocationGuardBindings =
       target.targetType === "task" && participantTaskGuard
         ? [target.targetId, actor.eventId, ...participantTaskGuard.bindings]
@@ -493,7 +493,7 @@ export class MultipartUploadService {
            id, event_id, owner_person_id, target_type, target_id, asset_kind,
            status, created_at, updated_at
          ) SELECT ?, ?, ?, ?, ?, ?, 'pending', unixepoch(), unixepoch()
-           ${allocationGuardSql}`,
+          WHERE ${allocationGuardSql}`,
       ).bind(
         assetId,
         actor.eventId,
@@ -530,6 +530,7 @@ export class MultipartUploadService {
                  WHERE audit.id = 'file-erasure:' || file_assets.id
               )
          )
+           AND ${allocationGuardSql}
          RETURNING version_number AS versionNumber`,
       ).bind(
         versionId,
@@ -545,6 +546,7 @@ export class MultipartUploadService {
         actor.eventId,
         assetId,
         actor.eventId,
+        ...allocationGuardBindings,
       ),
       this.env.DB.prepare(
         `INSERT INTO file_multipart_uploads (

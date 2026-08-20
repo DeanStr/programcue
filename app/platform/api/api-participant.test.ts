@@ -120,6 +120,8 @@ describe("participant API resources", () => {
     const ownedVersionId = `participant-owned-version-${suffix}`;
     const foreignAssetId = `participant-foreign-${suffix}`;
     const foreignVersionId = `participant-foreign-version-${suffix}`;
+    const linkTaskId = `participant-link-task-${suffix}`;
+    const destinationUrl = `https://example.test/participant-brief/${suffix}`;
     await testEnv.DB.batch([
       testEnv.DB.prepare(
         `INSERT INTO file_assets (
@@ -183,6 +185,23 @@ describe("participant API resources", () => {
         `UPDATE file_assets SET current_version_id = ?, status = 'active'
           WHERE id = ? AND event_id = ?`,
       ).bind(foreignVersionId, foreignAssetId, eventId),
+      testEnv.DB.prepare(
+        `INSERT INTO task_instances (
+           id, event_id, target_type, target_id, owner_person_id, title,
+           description, task_type, impact, evidence_mode, configuration_json,
+           status, readiness_state, readiness_percent, revision,
+           created_at, updated_at
+         ) VALUES (?, ?, 'speaker', ?, ?, 'Read the participant brief',
+                   'Open and review the organiser-provided brief.', 'link_visit',
+                   'medium', 'checkbox', ?, 'not_started', 'on_track', 0, 1,
+                   unixepoch(), unixepoch())`,
+      ).bind(
+        linkTaskId,
+        eventId,
+        DEMO_IDENTITIES.speaker.personId,
+        DEMO_IDENTITIES.speaker.personId,
+        JSON.stringify({ destinationUrl }),
+      ),
     ]);
 
     for (const resource of [
@@ -219,6 +238,26 @@ describe("participant API resources", () => {
     ).files;
     expect(files.map((file) => file.id)).toContain(ownedAssetId);
     expect(files.map((file) => file.id)).not.toContain(foreignAssetId);
+
+    const tasksResponse = await participantResourceLoader({
+      request: new Request(
+        `https://programcue.test/api/v1/events/${eventId}/participant/tasks?limit=20`,
+        { headers: participantHeaders("speaker") },
+      ),
+      params: { eventId, resource: "tasks" },
+      context: routeContext(),
+    } as never);
+    const tasks = (
+      (await tasksResponse.json()) as {
+        tasks: Array<{
+          id: string;
+          configuration: Record<string, unknown>;
+        }>;
+      }
+    ).tasks;
+    expect(tasks.find((task) => task.id === linkTaskId)?.configuration).toEqual(
+      { destinationUrl },
+    );
 
     const forbidden = await participantResourceLoader({
       request: new Request(

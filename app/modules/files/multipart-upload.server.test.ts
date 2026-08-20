@@ -851,6 +851,110 @@ describe("direct R2 multipart upload", () => {
     ).resolves.toEqual({ versionId: initiated.versionId, aborted: true });
   });
 
+  it("does not allocate a replacement version after session access is revoked", async () => {
+    const baseEnvironment = configuredMultipartEnvironment();
+    const initial = await new MultipartUploadService(baseEnvironment).initiate(
+      speaker,
+      {
+        target: {
+          targetType: "task",
+          targetId: "task-demo-slides",
+          assetKind: "task_evidence",
+        },
+        filename: "initial-session-deck.pdf",
+        contentType: "application/pdf",
+        sizeBytes: 1,
+        idempotencyKey: crypto.randomUUID(),
+      },
+    );
+    await baseEnvironment.DB.batch([
+      baseEnvironment.DB.prepare(
+        `UPDATE task_instances
+            SET status = 'submitted', evidence_json = ?, submitted_at = unixepoch()
+          WHERE id = 'task-demo-slides' AND event_id = ?`,
+      ).bind(
+        JSON.stringify({
+          fileAssetId: initial.assetId,
+          fileVersionId: initial.versionId,
+          scanStatus: "pending",
+        }),
+        speaker.eventId,
+      ),
+      baseEnvironment.DB.prepare(
+        `INSERT INTO task_evidence (
+           id, event_id, task_id, submitted_by_person_id, file_asset_id,
+           evidence_json, status, created_at
+         ) VALUES (?, ?, 'task-demo-slides', ?, ?, ?, 'submitted', unixepoch())`,
+      ).bind(
+        crypto.randomUUID(),
+        speaker.eventId,
+        speaker.personId,
+        initial.assetId,
+        JSON.stringify({
+          fileVersionId: initial.versionId,
+          scanStatus: "pending",
+        }),
+      ),
+    ]);
+
+    let relationshipRevoked = false;
+    const racingDb = new Proxy(baseEnvironment.DB, {
+      get(target, property) {
+        if (property === "batch") {
+          return async (statements: D1PreparedStatement[]) => {
+            if (!relationshipRevoked) {
+              relationshipRevoked = true;
+              await target
+                .prepare(
+                  `DELETE FROM session_speakers
+                    WHERE event_id = ? AND session_id = 'session-demo-speaker'
+                      AND person_id = ?`,
+                )
+                .bind(speaker.eventId, speaker.personId)
+                .run();
+            }
+            return target.batch(statements);
+          };
+        }
+        const value = Reflect.get(target, property);
+        return typeof value === "function" ? value.bind(target) : value;
+      },
+    });
+    const racingEnvironment = new Proxy(baseEnvironment, {
+      get(target, property) {
+        return property === "DB" ? racingDb : Reflect.get(target, property);
+      },
+    });
+
+    await expect(
+      new MultipartUploadService(racingEnvironment).initiate(speaker, {
+        target: {
+          targetType: "task",
+          targetId: "task-demo-slides",
+          assetKind: "task_evidence",
+        },
+        filename: "replacement-session-deck.pdf",
+        contentType: "application/pdf",
+        sizeBytes: 1,
+        idempotencyKey: crypto.randomUUID(),
+      }),
+    ).rejects.toThrow(
+      "The multipart file version could not be allocated atomically.",
+    );
+    expect(relationshipRevoked).toBe(true);
+    await expect(
+      baseEnvironment.DB.prepare(
+        `SELECT
+           (SELECT COUNT(*) FROM file_versions
+             WHERE asset_id = ?) AS versionCount,
+           (SELECT COUNT(*) FROM file_multipart_uploads
+             WHERE asset_id = ?) AS intentCount`,
+      )
+        .bind(initial.assetId, initial.assetId)
+        .first(),
+    ).resolves.toEqual({ versionCount: 1, intentCount: 1 });
+  });
+
   it("revokes a completing upload when its target becomes ineligible", async () => {
     const baseEnvironment = configuredMultipartEnvironment();
     let failFirstCompletion = true;

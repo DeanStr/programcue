@@ -1,6 +1,7 @@
 import { env } from "cloudflare:test";
 import { RouterContextProvider } from "react-router";
 import { describe, expect, it } from "vitest";
+import { TEMPLATE_BODY_MAX_LENGTH } from "~/modules/communications/communication-schema";
 import { CommunicationService } from "~/modules/communications/communication-service.server";
 import { ResendEmailProvider } from "~/modules/communications/resend.server";
 import type { Viewer } from "~/platform/auth/authorize.server";
@@ -1003,6 +1004,96 @@ describe("Submissions D1 vertical slice", () => {
       ).resolves.toEqual({
         status: "submitted",
         operationStatus: "queue_failed",
+      });
+    });
+
+    it("records an oversized augmented confirmation body as a terminal configuration error", async () => {
+      const { service, id, slug, queued, testEnv } = await publishedForm();
+      const communications = new CommunicationService(testEnv);
+      const template = await communications.saveTemplate(viewer, {
+        name: "Submission received",
+        category: "submission_confirmation",
+        subject: "Application received",
+        content: {
+          body: "We received your application.",
+          physicalAddress: "100 Programme Way, Toronto",
+        },
+      });
+      await communications.publishTemplate(viewer, template.versionId);
+      await testEnv.DB.prepare(
+        `UPDATE communication_templates
+            SET status = 'archived', updated_at = unixepoch()
+          WHERE event_id = ? AND id <> ?
+            AND category = 'submission_confirmation'`,
+      )
+        .bind(viewer.eventId, template.templateId)
+        .run();
+      await testEnv.DB.prepare(
+        `INSERT OR IGNORE INTO sender_profiles (
+           id, event_id, name, from_name, from_email, provider, status,
+           created_at, updated_at
+         ) VALUES (?, ?, 'Submission confirmations', 'Program Cue',
+                   'submissions@example.com', 'resend', 'verified',
+                   unixepoch(), unixepoch())`,
+      )
+        .bind(`sender-submission-${crypto.randomUUID()}`, viewer.eventId)
+        .run();
+      const applicant = await verifiedApplicant(service, slug);
+      const submissionId = await service.createDraft(slug, applicant);
+      const draft = (
+        await service.repository.getApplicantDrafts(id, applicant)
+      ).find((candidate) => candidate.id === submissionId)!;
+      const result = await service.submitDraft(slug, applicant, {
+        submissionId,
+        revision: draft.revision,
+        answers: validAnswers,
+        speakers: [{ name: applicant.name, email: applicant.email }],
+      });
+      const message = queued.find(
+        (candidate) =>
+          typeof candidate === "object" &&
+          candidate !== null &&
+          "type" in candidate &&
+          candidate.type === "submission.notification",
+      );
+      expect(message).toBeDefined();
+      await testEnv.DB.prepare(
+        `UPDATE communication_template_versions
+            SET content_json = ?
+          WHERE id = ? AND event_id = ?`,
+      )
+        .bind(
+          JSON.stringify({
+            body: "a".repeat(TEMPLATE_BODY_MAX_LENGTH),
+            physicalAddress: "100 Programme Way, Toronto",
+          }),
+          template.versionId,
+          viewer.eventId,
+        )
+        .run();
+
+      await processSubmissionNotification(message, testEnv);
+
+      await expect(
+        testEnv.DB.prepare(
+          `SELECT operation.status AS operationStatus,
+                  communication.status AS communicationStatus,
+                  delivery.failure_message AS failureMessage
+             FROM operation_jobs operation
+             JOIN communications communication
+               ON communication.operation_id = operation.id
+             JOIN communication_deliveries delivery
+               ON delivery.communication_id = communication.id
+            WHERE operation.id = ? AND operation.event_id = ?`,
+        )
+          .bind(result.confirmation.operationId, viewer.eventId)
+          .first(),
+      ).resolves.toMatchObject({
+        operationStatus: "failed",
+        failureMessage: expect.stringContaining(
+          "published submission confirmation template contains invalid content",
+        ),
+        communicationStatus: "failed",
       });
     });
 
