@@ -272,7 +272,7 @@ export class FileUploadCleanupService {
     const cleanupOperationId = `file-upload-discard:${upload.versionId}`;
     const cleanupAuditId = `file-upload-discarded:${upload.versionId}`;
     const cleanupError = "Task changed before evidence submission.";
-    const sharedSessionDeliverable = Boolean(
+    const sessionDeliverable = Boolean(
       await this.env.DB.prepare(
         `SELECT 1
            FROM task_instances task
@@ -280,15 +280,9 @@ export class FileUploadCleanupService {
             AND task.target_type = 'session'
             AND task.task_type = 'file_upload'
             AND json_valid(task.configuration_json)
-            AND json_extract(task.configuration_json, '$.fileScope') = 'session_deliverable'
-            AND EXISTS (
-              SELECT 1 FROM session_speakers relation
-               WHERE relation.event_id = task.event_id
-                 AND relation.session_id = task.target_id
-                 AND relation.person_id = ?
-            )`,
+            AND json_extract(task.configuration_json, '$.fileScope') = 'session_deliverable'`,
       )
-        .bind(taskId, viewer.eventId, viewer.personId)
+        .bind(taskId, viewer.eventId)
         .first(),
     );
     const row = await this.env.DB.prepare(
@@ -312,7 +306,7 @@ export class FileUploadCleanupService {
         upload.assetId,
         viewer.eventId,
         taskId,
-        sharedSessionDeliverable ? 1 : 0,
+        sessionDeliverable ? 1 : 0,
         viewer.personId,
         viewer.personId,
       )
@@ -363,7 +357,7 @@ export class FileUploadCleanupService {
         upload.assetId,
         viewer.personId,
         taskId,
-        sharedSessionDeliverable ? 1 : 0,
+        sessionDeliverable ? 1 : 0,
         viewer.personId,
         taskId,
         taskId,
@@ -475,7 +469,7 @@ export class FileUploadCleanupService {
         upload.assetId,
         viewer.eventId,
         taskId,
-        sharedSessionDeliverable ? 1 : 0,
+        sessionDeliverable ? 1 : 0,
         viewer.personId,
         upload.versionId,
         cleanupError,
@@ -607,7 +601,7 @@ export class FileUploadCleanupService {
           upload.assetId,
           viewer.eventId,
           taskId,
-          sharedSessionDeliverable ? 1 : 0,
+          sessionDeliverable ? 1 : 0,
           viewer.personId,
           upload.versionId,
           upload.assetId,

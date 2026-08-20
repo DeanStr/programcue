@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { taskConfiguration } from "~/modules/tasks/task-service-foundation.server";
 import {
   type assetKindSchema,
   DIRECT_MULTIPART_PART_SIZE_BYTES,
@@ -45,6 +46,8 @@ const MULTIPART_EXPIRY_SECONDS = 24 * 60 * 60;
 const REQUEST_CLAIM_SECONDS = 60;
 const REVOKED_COMPLETION_REASON =
   "Multipart completion was revoked because its target or file policy is no longer eligible.";
+
+type TaskFileScope = "participant_document" | "session_deliverable";
 
 export const multipartInitiateSchema = z.object({
   target: uploadTargetSchema,
@@ -254,12 +257,57 @@ export class MultipartUploadService {
     });
   }
 
-  private assertCurrentDeclaration(row: MultipartRow) {
+  private async taskEvidenceFileScope(
+    actor: MultipartActor,
+    target: UploadTarget,
+  ): Promise<TaskFileScope | undefined> {
+    if (target.targetType !== "task" || target.assetKind !== "task_evidence") {
+      return undefined;
+    }
+    const task = await this.env.DB.prepare(
+      `SELECT task_type AS taskType, target_type AS targetType,
+              configuration_json AS configurationJson
+         FROM task_instances
+        WHERE id = ? AND event_id = ?`,
+    )
+      .bind(target.targetId, actor.eventId)
+      .first<{
+        taskType: string;
+        targetType: string;
+        configurationJson: string;
+      }>();
+    if (task?.taskType !== "file_upload") {
+      throw new FileAccessError("This task does not accept file evidence.");
+    }
+    let fileScope: ReturnType<typeof taskConfiguration>["fileScope"];
+    try {
+      fileScope = taskConfiguration(task.configurationJson).fileScope;
+    } catch {
+      throw new FileAccessError(
+        "This file task has invalid purpose or target configuration. Ask an administrator to repair it.",
+      );
+    }
+    if (
+      (fileScope === "participant_document" && task.targetType === "speaker") ||
+      (fileScope === "session_deliverable" && task.targetType === "session")
+    ) {
+      return fileScope;
+    }
+    throw new FileAccessError(
+      "This file task has invalid purpose or target configuration. Ask an administrator to repair it.",
+    );
+  }
+
+  private assertCurrentDeclaration(
+    row: MultipartRow,
+    taskFileScope?: TaskFileScope,
+  ) {
     const target = this.uploadTarget(row);
     validateDirectFileDeclaration(
       target.assetKind,
       { name: row.filename, type: row.contentType, size: row.sizeBytes },
       parseEventFilePolicy(row.filePolicyJson),
+      { taskFileScope },
     );
   }
 
@@ -270,7 +318,10 @@ export class MultipartUploadService {
     const target = this.uploadTarget(row);
     const authorisedAssetId = await this.assertTarget(actor, target);
     this.assertAuthorisedTaskAsset(target, authorisedAssetId, row);
-    this.assertCurrentDeclaration(row);
+    this.assertCurrentDeclaration(
+      row,
+      await this.taskEvidenceFileScope(actor, target),
+    );
   }
 
   private response(row: MultipartRow, duplicate: boolean) {
@@ -671,11 +722,13 @@ export class MultipartUploadService {
       size: input.sizeBytes,
     };
     const authorisedAssetId = await this.assertTarget(actor, input.target);
+    const taskFileScope = await this.taskEvidenceFileScope(actor, input.target);
     assertFileScanDispatchConfigured(this.env);
     validateDirectFileDeclaration(
       input.target.assetKind,
       declaration,
       await this.access.loadEventFilePolicy(actor),
+      { taskFileScope },
     );
     const storedKey = multipartIdempotencyKey(actor, input.idempotencyKey);
     let row = await this.access.loadByIdempotency(actor, storedKey);
@@ -726,6 +779,7 @@ export class MultipartUploadService {
     this.requireBucket();
     const input = multipartResumeSchema.parse(rawInput);
     const authorisedAssetId = await this.assertTarget(actor, input.target);
+    const taskFileScope = await this.taskEvidenceFileScope(actor, input.target);
     validateDirectFileDeclaration(
       input.target.assetKind,
       {
@@ -734,6 +788,7 @@ export class MultipartUploadService {
         size: input.sizeBytes,
       },
       await this.access.loadEventFilePolicy(actor),
+      { taskFileScope },
     );
     const row = await this.access.loadByIdempotency(
       actor,
@@ -1263,6 +1318,17 @@ export class MultipartUploadService {
                    WHEN 'task_evidence' THEN CASE
                      WHEN file_versions.declared_content_type IN (
                        'video/mp4', 'video/webm'
+                     ) AND EXISTS (
+                       SELECT 1 FROM task_instances task
+                        WHERE task.id = asset.target_id
+                          AND task.event_id = asset.event_id
+                          AND task.task_type = 'file_upload'
+                          AND task.target_type = 'session'
+                          AND json_valid(task.configuration_json)
+                          AND json_extract(
+                            task.configuration_json,
+                            '$.fileScope'
+                          ) = 'session_deliverable'
                      ) THEN json_extract(
                        policy_event.file_policy_json,
                        '$.videoMaximumBytes'
@@ -1277,6 +1343,32 @@ export class MultipartUploadService {
                      '$.supportingDocumentMaximumBytes'
                    )
                  END
+                 AND (
+                   asset.asset_kind <> 'task_evidence'
+                   OR EXISTS (
+                     SELECT 1 FROM task_instances task
+                      WHERE task.id = asset.target_id
+                        AND task.event_id = asset.event_id
+                        AND task.task_type = 'file_upload'
+                        AND json_valid(task.configuration_json)
+                        AND (
+                          (
+                            task.target_type = 'speaker'
+                            AND json_extract(
+                              task.configuration_json,
+                              '$.fileScope'
+                            ) = 'participant_document'
+                          )
+                          OR (
+                            task.target_type = 'session'
+                            AND json_extract(
+                              task.configuration_json,
+                              '$.fileScope'
+                            ) = 'session_deliverable'
+                          )
+                        )
+                   )
+                 )
                  AND NOT EXISTS (
                    SELECT 1 FROM audit_events audit
                     WHERE audit.id = 'file-erasure:' || asset.id

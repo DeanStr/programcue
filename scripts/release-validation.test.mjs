@@ -1,12 +1,14 @@
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
+import { DatabaseSync } from "node:sqlite";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
 import { parse as parseYaml } from "yaml";
 import { validateReleaseStateEvidence } from "./validate-release-state.mjs";
 import {
   lastImmutableMigrationName,
+  pendingTaskConfigurationInventoryQuery,
   publicSiteMigrationName,
   publicSiteProgrammeMembershipGuardMigrationName,
   publicSiteRelationshipGuardMigrationName,
@@ -313,6 +315,51 @@ test("participant-task snapshot preflight rejects ambiguous legacy configuration
       }),
     /legacy-link.*before migration 0049/u,
   );
+});
+
+test("participant-task snapshot preflight inventories reverse template mismatches", () => {
+  const database = new DatabaseSync(":memory:");
+  database.exec(`
+    CREATE TABLE task_templates (
+      id TEXT PRIMARY KEY,
+      event_id TEXT NOT NULL,
+      task_type TEXT NOT NULL,
+      target_type TEXT NOT NULL,
+      configuration_json TEXT NOT NULL,
+      status TEXT NOT NULL
+    );
+    CREATE TABLE task_instances (
+      id TEXT PRIMARY KEY,
+      event_id TEXT NOT NULL,
+      template_id TEXT,
+      task_type TEXT NOT NULL,
+      target_type TEXT NOT NULL
+    );
+    INSERT INTO task_templates (
+      id, event_id, task_type, target_type, configuration_json, status
+    ) VALUES (
+      'link-template', 'event-one', 'link_visit', 'speaker',
+      '{"destinationUrl":"https://example.test/brief"}', 'active'
+    );
+    INSERT INTO task_instances (
+      id, event_id, template_id, task_type, target_type
+    ) VALUES (
+      'reverse-mismatch', 'event-one', 'link-template', 'checklist', 'speaker'
+    );
+  `);
+  const rows = database.prepare(pendingTaskConfigurationInventoryQuery).all();
+  assert.deepEqual(
+    rows.map((row) => [row.recordType, row.recordId]),
+    [
+      ["template", "link-template"],
+      ["instance", "reverse-mismatch"],
+    ],
+  );
+  assert.throws(
+    () => validatePendingTaskConfigurationInventory(rows),
+    /reverse-mismatch/u,
+  );
+  database.close();
 });
 
 test("remote schema validation requires the exact migration ledger and deployed schema contracts", () => {

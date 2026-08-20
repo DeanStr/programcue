@@ -593,6 +593,38 @@ describe("direct R2 multipart upload", () => {
       }),
     ).rejects.toThrow("1 MB event limit");
 
+    const participantDocumentTaskId = `participant-document-${crypto.randomUUID()}`;
+    await testEnvironment.DB.prepare(
+      `INSERT INTO task_instances (
+         id, event_id, target_type, target_id, owner_person_id, title,
+         task_type, impact, evidence_mode, configuration_json, status,
+         readiness_state, readiness_percent
+       ) VALUES (?, ?, 'speaker', ?, ?, 'Upload participant document',
+                 'file_upload', 'high', 'file',
+                 '{"fileScope":"participant_document"}', 'not_started',
+                 'on_track', 0)`,
+    )
+      .bind(
+        participantDocumentTaskId,
+        speaker.eventId,
+        speaker.personId,
+        speaker.personId,
+      )
+      .run();
+    await expect(
+      service.initiate(speaker, {
+        target: {
+          targetType: "task",
+          targetId: participantDocumentTaskId,
+          assetKind: "task_evidence",
+        },
+        filename: "participant-recording.mp4",
+        contentType: "video/mp4",
+        sizeBytes: FILE_SIZE_MIB + 1,
+        idempotencyKey: crypto.randomUUID(),
+      }),
+    ).rejects.toThrow("1 MB event limit");
+
     const bytes = new Uint8Array(FILE_SIZE_MIB + 1);
     bytes.set([0, 0, 0, 16, 0x66, 0x74, 0x79, 0x70, 0x69, 0x73, 0x6f, 0x6d]);
     const initiated = await service.initiate(speaker, {

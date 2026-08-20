@@ -22,6 +22,30 @@ export const speakerRelationshipIdentityGuardMigrationName =
 export const taskInstanceConfigurationSnapshotMigrationName =
   "0049_task_instance_configuration_snapshot.sql";
 
+export const pendingTaskConfigurationInventoryQuery = `SELECT 'template' AS recordType, template.id AS recordId,
+            template.task_type AS taskType, template.target_type AS targetType,
+            template.configuration_json AS configurationJson
+       FROM task_templates template
+      WHERE template.task_type IN ('link_visit', 'file_upload')
+        AND (template.status = 'active' OR EXISTS (
+          SELECT 1 FROM task_instances linked
+           WHERE linked.template_id = template.id
+             AND linked.event_id = template.event_id
+        ))
+      UNION ALL
+     SELECT 'instance' AS recordType, instance.id AS recordId,
+            instance.task_type AS taskType, instance.target_type AS targetType,
+            template.configuration_json AS configurationJson
+       FROM task_instances instance
+       LEFT JOIN task_templates template
+         ON template.id = instance.template_id
+        AND template.event_id = instance.event_id
+      WHERE (instance.task_type IN ('link_visit', 'file_upload')
+          OR template.task_type IN ('link_visit', 'file_upload'))
+        AND (template.id IS NULL
+          OR template.task_type <> instance.task_type
+          OR template.target_type <> instance.target_type)`;
+
 export const requiredBrandAssetColumns = new Map([
   ["width_px", { type: "INTEGER", notnull: 0, defaultValue: null }],
   ["height_px", { type: "INTEGER", notnull: 0, defaultValue: null }],
@@ -851,28 +875,7 @@ function run() {
     `SELECT COUNT(*) AS invalidCount FROM programme_embeds
       WHERE json_extract(configuration_json, '$.theme') IS NULL
          OR json_extract(configuration_json, '$.theme') NOT IN ('light','dark','system')`,
-    `SELECT 'template' AS recordType, template.id AS recordId,
-            template.task_type AS taskType, template.target_type AS targetType,
-            template.configuration_json AS configurationJson
-       FROM task_templates template
-      WHERE template.task_type IN ('link_visit', 'file_upload')
-        AND (template.status = 'active' OR EXISTS (
-          SELECT 1 FROM task_instances linked
-           WHERE linked.template_id = template.id
-             AND linked.event_id = template.event_id
-        ))
-      UNION ALL
-     SELECT 'instance' AS recordType, instance.id AS recordId,
-            instance.task_type AS taskType, instance.target_type AS targetType,
-            template.configuration_json AS configurationJson
-       FROM task_instances instance
-       LEFT JOIN task_templates template
-         ON template.id = instance.template_id
-        AND template.event_id = instance.event_id
-      WHERE instance.task_type IN ('link_visit', 'file_upload')
-        AND (template.id IS NULL
-          OR template.task_type <> instance.task_type
-          OR template.target_type <> instance.target_type)`,
+    pendingTaskConfigurationInventoryQuery,
   ].join("; ");
   const result = spawnSync(
     resolvePackageExecutable("wrangler", "wrangler"),

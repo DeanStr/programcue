@@ -1304,6 +1304,9 @@ describe("onboarding task service", () => {
           first.versionId,
         ),
       ).resolves.toMatchObject({ status: 200 });
+      await expect(
+        files.participantDownload(speaker, first.assetId),
+      ).rejects.toThrow();
 
       const second = await completeTestDirectUpload(
         testEnv,
@@ -1393,6 +1396,19 @@ describe("onboarding task service", () => {
           .bind(target.targetId, coSpeaker.eventId)
           .first<{ versionId: string | null }>(),
       ).toEqual({ versionId: second.versionId });
+      await files.discardUnattachedTaskUpload(
+        coSpeaker,
+        { assetId: third.assetId, versionId: third.versionId },
+        target.targetId,
+      );
+      expect(
+        await testEnv.DB.prepare(
+          `SELECT deleted_at AS deletedAt FROM file_versions
+            WHERE id = ? AND event_id = ? AND asset_id = ?`,
+        )
+          .bind(third.versionId, coSpeaker.eventId, third.assetId)
+          .first<{ deletedAt: number | null }>(),
+      ).toEqual({ deletedAt: expect.any(Number) });
     });
 
     it("fails fast when a submitted file task lacks canonical evidence", async () => {

@@ -3,6 +3,7 @@ import { ParticipantTaskWorkflowFoundation } from "./participant-task-workflow-f
 import {
   structuredTaskForm,
   type TaskRow,
+  taskConfiguration,
   taskDestinationUrl,
 } from "./task-service-foundation.server";
 
@@ -89,6 +90,10 @@ export class ParticipantTaskQueries extends ParticipantTaskWorkflowFoundation {
       destinationUrl:
         task.taskType === "link_visit"
           ? taskDestinationUrl(task.configurationJson)
+          : null,
+      fileScope:
+        task.taskType === "file_upload"
+          ? (taskConfiguration(task.configurationJson).fileScope ?? null)
           : null,
       dependencies: dependencies.results.filter(
         (dependency) => dependency.taskId === task.id,

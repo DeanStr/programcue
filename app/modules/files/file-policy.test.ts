@@ -132,8 +132,21 @@ describe("event file policy", () => {
           size: FILE_SIZE_MIB + 1,
         },
         policy,
+        { taskFileScope: "session_deliverable" },
       ),
     ).not.toThrow();
+    expect(() =>
+      validateDirectFileDeclaration(
+        "task_evidence",
+        {
+          name: "participant-video.mp4",
+          type: "video/mp4",
+          size: FILE_SIZE_MIB + 1,
+        },
+        policy,
+        { taskFileScope: "participant_document" },
+      ),
+    ).toThrow(/1 MB event limit/);
     expect(() =>
       validateDirectFileDeclaration(
         "task_evidence",

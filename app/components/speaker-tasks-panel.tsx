@@ -316,18 +316,25 @@ export function SpeakerTasksPanel({
                       kinds={[
                         {
                           value: "task_evidence",
-                          label: `Task evidence · documents and images (${maximumMegabytes(portal.event.filePolicy.supportingDocumentMaximumBytes)} MB maximum) or MP4/WebM video (${maximumMegabytes(portal.event.filePolicy.videoMaximumBytes)} MB maximum)`,
+                          label:
+                            task.fileScope === "session_deliverable"
+                              ? `Task evidence · documents and images (${maximumMegabytes(portal.event.filePolicy.supportingDocumentMaximumBytes)} MB maximum) or MP4/WebM video (${maximumMegabytes(portal.event.filePolicy.videoMaximumBytes)} MB maximum)`
+                              : `Task evidence · ${maximumMegabytes(portal.event.filePolicy.supportingDocumentMaximumBytes)} MB maximum`,
                           accept:
                             ".pdf,.ppt,.pptx,.doc,.docx,.xls,.xlsx,.zip,.jpg,.jpeg,.png,.webp,.mp4,.webm",
                           maximumBytes:
                             portal.event.filePolicy
                               .supportingDocumentMaximumBytes,
-                          maximumBytesByContentType: {
-                            "video/mp4":
-                              portal.event.filePolicy.videoMaximumBytes,
-                            "video/webm":
-                              portal.event.filePolicy.videoMaximumBytes,
-                          },
+                          ...(task.fileScope === "session_deliverable"
+                            ? {
+                                maximumBytesByContentType: {
+                                  "video/mp4":
+                                    portal.event.filePolicy.videoMaximumBytes,
+                                  "video/webm":
+                                    portal.event.filePolicy.videoMaximumBytes,
+                                },
+                              }
+                            : {}),
                         },
                       ]}
                       heading={

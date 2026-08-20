@@ -175,11 +175,29 @@ export class SpeakerPortalService {
                task.title AS taskTitle,
                task_session.title AS sessionTitle
           FROM file_assets fa
+          LEFT JOIN task_instances task
+            ON fa.target_type = 'task'
+           AND task.id = fa.target_id
+           AND task.event_id = fa.event_id
+          LEFT JOIN sessions task_session
+            ON task.target_type = 'session'
+           AND task_session.id = task.target_id
+           AND task_session.event_id = task.event_id
           LEFT JOIN file_versions fv ON fv.id = (
             SELECT id FROM file_versions candidate
-             WHERE candidate.asset_id = fa.id AND candidate.deleted_at IS NULL
+             WHERE candidate.asset_id = fa.id
+               AND candidate.event_id = fa.event_id
+               AND candidate.deleted_at IS NULL
                AND (
-                 fa.owner_person_id = ?
+                 candidate.created_by_person_id = ?
+                 OR NOT (
+                   fa.target_type = 'task'
+                   AND fa.asset_kind = 'task_evidence'
+                   AND task.task_type = 'file_upload'
+                   AND task.target_type = 'session'
+                   AND json_valid(task.configuration_json)
+                   AND json_extract(task.configuration_json, '$.fileScope') = 'session_deliverable'
+                 )
                  OR EXISTS (
                    SELECT 1 FROM task_evidence attached
                     WHERE attached.event_id = fa.event_id
@@ -200,15 +218,34 @@ export class SpeakerPortalService {
            AND asset_current.deleted_at IS NULL
           LEFT JOIN file_versions download ON download.id = (
             SELECT id FROM file_versions candidate
-             WHERE candidate.asset_id = fa.id AND candidate.deleted_at IS NULL
+             WHERE candidate.asset_id = fa.id
+               AND candidate.event_id = fa.event_id
+               AND candidate.deleted_at IS NULL
                AND candidate.upload_status = 'uploaded'
                AND candidate.signature_status = 'valid'
                AND candidate.scan_status = 'clean'
                AND candidate.released_at IS NOT NULL
                AND (
-                 (fa.owner_person_id = ? AND candidate.id = fa.current_version_id)
+                 (
+                   fa.target_type = 'person'
+                   AND fa.asset_kind = 'headshot'
+                   AND fa.owner_person_id = ?
+                   AND candidate.id = fa.current_version_id
+                 )
                  OR (
-                   fa.owner_person_id <> ?
+                   fa.target_type = 'submission'
+                   AND fa.owner_person_id = ?
+                   AND candidate.id = fa.current_version_id
+                   AND EXISTS (
+                     SELECT 1 FROM submissions submission
+                      WHERE submission.id = fa.target_id
+                        AND submission.event_id = fa.event_id
+                        AND submission.submitter_person_id = ?
+                   )
+                 )
+                 OR (
+                   fa.target_type = 'task'
+                   AND fa.asset_kind = 'task_evidence'
                    AND EXISTS (
                      SELECT 1 FROM task_evidence attached
                       WHERE attached.event_id = fa.event_id
@@ -224,17 +261,19 @@ export class SpeakerPortalService {
              ORDER BY candidate.version_number DESC LIMIT 1
           )
           LEFT JOIN people uploader ON uploader.id = download.created_by_person_id
-          LEFT JOIN task_instances task
-            ON fa.target_type = 'task'
-           AND task.id = fa.target_id
-           AND task.event_id = fa.event_id
-          LEFT JOIN sessions task_session
-            ON task.target_type = 'session'
-           AND task_session.id = task.target_id
-           AND task_session.event_id = task.event_id
          WHERE fa.event_id = ? AND fa.status <> 'deleted'
            AND (
-             fa.owner_person_id = ?
+             (
+               fa.owner_person_id = ?
+               AND NOT (
+                 fa.target_type = 'task'
+                 AND fa.asset_kind = 'task_evidence'
+                 AND task.task_type = 'file_upload'
+                 AND task.target_type = 'session'
+                 AND json_valid(task.configuration_json)
+                 AND json_extract(task.configuration_json, '$.fileScope') = 'session_deliverable'
+               )
+             )
              OR (
                fa.target_type = 'task'
                AND fa.asset_kind = 'task_evidence'
@@ -242,7 +281,7 @@ export class SpeakerPortalService {
                AND task.target_type = 'session'
                AND json_valid(task.configuration_json)
                AND json_extract(task.configuration_json, '$.fileScope') = 'session_deliverable'
-               AND fv.id IS NOT NULL
+               AND (fv.id IS NOT NULL OR fa.owner_person_id = ?)
                AND EXISTS (
                  SELECT 1
                    FROM session_speakers relation
@@ -259,7 +298,9 @@ export class SpeakerPortalService {
             viewer.personId,
             viewer.personId,
             viewer.personId,
+            viewer.personId,
             viewer.eventId,
+            viewer.personId,
             viewer.personId,
             viewer.personId,
           )
@@ -323,9 +364,20 @@ export class SpeakerPortalService {
            WHERE version.asset_id IN (${assetIds.map(() => "?").join(",")})
              AND asset.event_id = ? AND version.deleted_at IS NULL
              AND (
-               asset.owner_person_id = ?
+               (
+                 asset.owner_person_id = ?
+                 AND NOT (
+                   asset.target_type = 'task'
+                   AND asset.asset_kind = 'task_evidence'
+                   AND task.task_type = 'file_upload'
+                   AND task.target_type = 'session'
+                   AND json_valid(task.configuration_json)
+                   AND json_extract(task.configuration_json, '$.fileScope') = 'session_deliverable'
+                 )
+               )
                OR (
-                 asset.asset_kind = 'task_evidence'
+                 asset.target_type = 'task'
+                 AND asset.asset_kind = 'task_evidence'
                  AND task.task_type = 'file_upload'
                  AND task.target_type = 'session'
                  AND json_valid(task.configuration_json)
@@ -336,22 +388,31 @@ export class SpeakerPortalService {
                       AND relation.session_id = task.target_id
                       AND relation.person_id = ?
                  )
-                 AND EXISTS (
-                   SELECT 1 FROM task_evidence attached
-                    WHERE attached.event_id = asset.event_id
-                      AND attached.task_id = asset.target_id
-                      AND attached.file_asset_id = asset.id
-                      AND attached.status IN ('submitted','approved','superseded')
-                      AND CASE WHEN json_valid(attached.evidence_json)
-                            THEN json_extract(attached.evidence_json, '$.fileVersionId')
-                          END = version.id
+                 AND (
+                   version.created_by_person_id = ?
+                   OR EXISTS (
+                     SELECT 1 FROM task_evidence attached
+                      WHERE attached.event_id = asset.event_id
+                        AND attached.task_id = asset.target_id
+                        AND attached.file_asset_id = asset.id
+                        AND attached.status IN ('submitted','approved','superseded')
+                        AND CASE WHEN json_valid(attached.evidence_json)
+                              THEN json_extract(attached.evidence_json, '$.fileVersionId')
+                            END = version.id
+                   )
                  )
                )
              )
            ORDER BY version.asset_id, version.version_number DESC
         `,
         )
-          .bind(...assetIds, viewer.eventId, viewer.personId, viewer.personId)
+          .bind(
+            ...assetIds,
+            viewer.eventId,
+            viewer.personId,
+            viewer.personId,
+            viewer.personId,
+          )
           .all<{
             id: string;
             assetId: string;

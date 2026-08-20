@@ -822,15 +822,22 @@ describe("speaker profile service", () => {
     const downloadableAssetId = crypto.randomUUID();
     const releasedVersionId = crypto.randomUUID();
     const infectedVersionId = crypto.randomUUID();
-    const failedAssetId = crypto.randomUUID();
-    const failedVersionId = crypto.randomUUID();
+
+    await testEnv.DB.prepare(
+      `DELETE FROM file_assets
+        WHERE event_id = ? AND owner_person_id = ?
+          AND target_type = 'person' AND target_id = ?
+          AND asset_kind = 'headshot'`,
+    )
+      .bind(speaker.eventId, speaker.personId, speaker.personId)
+      .run();
 
     await testEnv.DB.batch([
       testEnv.DB.prepare(
         `INSERT INTO file_assets (
            id, event_id, owner_person_id, target_type, target_id, asset_kind,
            current_version_id, status
-         ) VALUES (?, ?, ?, 'person', ?, 'slides', ?, 'active')`,
+         ) VALUES (?, ?, ?, 'person', ?, 'headshot', ?, 'active')`,
       ).bind(
         downloadableAssetId,
         speaker.eventId,
@@ -844,8 +851,8 @@ describe("speaker profile service", () => {
            declared_content_type, detected_content_type, size_bytes, upload_status,
            signature_status, scan_status, created_by_person_id, uploaded_at,
            scanned_at, released_at
-         ) VALUES (?, ?, ?, 1, ?, 'released.pdf', 'application/pdf',
-                   'application/pdf', 100, 'uploaded', 'valid', 'clean',
+         ) VALUES (?, ?, ?, 1, ?, 'released.png', 'image/png',
+                   'image/png', 100, 'uploaded', 'valid', 'clean',
                    ?, unixepoch(), unixepoch(), unixepoch())`,
       ).bind(
         releasedVersionId,
@@ -859,8 +866,8 @@ describe("speaker profile service", () => {
            id, event_id, asset_id, version_number, object_key, original_filename,
            declared_content_type, detected_content_type, size_bytes, upload_status,
            signature_status, scan_status, uploaded_at, scanned_at, scan_error
-         ) VALUES (?, ?, ?, 2, ?, 'infected-replacement.pdf', 'application/pdf',
-                   'application/pdf', 101, 'uploaded', 'valid', 'infected',
+         ) VALUES (?, ?, ?, 2, ?, 'infected-replacement.png', 'image/png',
+                   'image/png', 101, 'uploaded', 'valid', 'infected',
                    unixepoch(), unixepoch(), 'Malware detected')`,
       ).bind(
         infectedVersionId,
@@ -868,39 +875,16 @@ describe("speaker profile service", () => {
         downloadableAssetId,
         `tests/${infectedVersionId}`,
       ),
-      testEnv.DB.prepare(
-        `INSERT INTO file_assets (
-           id, event_id, owner_person_id, target_type, target_id, asset_kind, status
-         ) VALUES (?, ?, ?, 'person', ?, 'supporting_document', 'rejected')`,
-      ).bind(
-        failedAssetId,
-        speaker.eventId,
-        speaker.personId,
-        speaker.personId,
-      ),
-      testEnv.DB.prepare(
-        `INSERT INTO file_versions (
-           id, event_id, asset_id, version_number, object_key, original_filename,
-           declared_content_type, size_bytes, upload_status, signature_status,
-           scan_status, scan_error
-         ) VALUES (?, ?, ?, 1, ?, 'failed.pdf', 'application/pdf', 0,
-                   'failed', 'invalid', 'pending', 'Rejected before quarantine')`,
-      ).bind(
-        failedVersionId,
-        speaker.eventId,
-        failedAssetId,
-        `tests/${failedVersionId}`,
-      ),
     ]);
 
     const portal = await service.getPortal(speaker);
     expect(
       portal.files.find((file) => file.id === downloadableAssetId),
     ).toMatchObject({
-      filename: "infected-replacement.pdf",
+      filename: "infected-replacement.png",
       scanStatus: "infected",
       currentVersionId: releasedVersionId,
-      downloadFilename: "released.pdf",
+      downloadFilename: "released.png",
       downloadReleasedAt: expect.any(Number),
     });
     const after = (await service.listAdminSpeakerPage(admin, {}, 1)).speakers;

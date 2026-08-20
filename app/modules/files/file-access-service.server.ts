@@ -399,11 +399,25 @@ export class FileAccessService {
       SELECT fv.object_key AS objectKey, fv.original_filename AS filename,
              fv.detected_content_type AS contentType,
              fv.object_etag AS objectEtag, fa.asset_kind AS assetKind
-        FROM file_assets fa
+       FROM file_assets fa
         JOIN file_versions fv ON fv.id = fa.current_version_id
          AND fv.event_id = fa.event_id AND fv.asset_id = fa.id
        WHERE fa.id = ? AND fa.event_id = ? AND fa.owner_person_id = ?
-         AND (? = 0 OR (fa.target_type = 'person' AND fa.target_id = ?))
+         AND (
+           (
+             fa.target_type = 'person' AND fa.target_id = ?
+             AND fa.asset_kind = 'headshot'
+           )
+           OR (
+             fa.target_type = 'submission'
+             AND EXISTS (
+               SELECT 1 FROM submissions submission
+                WHERE submission.id = fa.target_id
+                  AND submission.event_id = fa.event_id
+                  AND submission.submitter_person_id = ?
+             )
+           )
+         )
          AND fa.status = 'active'
          AND fv.upload_status = 'uploaded' AND fv.signature_status = 'valid'
          AND fv.scan_status = 'clean' AND fv.released_at IS NOT NULL AND fv.deleted_at IS NULL
@@ -413,7 +427,7 @@ export class FileAccessService {
         assetId,
         viewer.eventId,
         viewer.personId,
-        options.inlineHeadshot ? 1 : 0,
+        viewer.personId,
         viewer.personId,
       )
       .first<{

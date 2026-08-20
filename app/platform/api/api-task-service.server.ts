@@ -924,27 +924,38 @@ export class ApiTaskService {
       );
 
     if (input.ownerPersonId) {
-      const owner = await this.env.DB.prepare(
-        `
-        SELECT 1 FROM memberships
-         WHERE event_id = ? AND person_id = ? AND accepted_at IS NOT NULL AND revoked_at IS NULL
-        UNION
-        SELECT 1 FROM session_speakers WHERE event_id = ? AND person_id = ?
-        LIMIT 1
-      `,
-      )
-        .bind(
-          principal.eventId,
-          input.ownerPersonId,
-          principal.eventId,
-          input.ownerPersonId,
-        )
-        .first();
+      const sessionDeliverable =
+        input.configuration.fileScope === "session_deliverable";
+      const owner = sessionDeliverable
+        ? await this.env.DB.prepare(
+            `SELECT 1 FROM session_speakers
+              WHERE event_id = ? AND session_id = ? AND person_id = ?
+              LIMIT 1`,
+          )
+            .bind(principal.eventId, input.targetId, input.ownerPersonId)
+            .first()
+        : await this.env.DB.prepare(
+            `SELECT 1 FROM memberships
+              WHERE event_id = ? AND person_id = ?
+                AND accepted_at IS NOT NULL AND revoked_at IS NULL
+             UNION
+             SELECT 1 FROM session_speakers WHERE event_id = ? AND person_id = ?
+             LIMIT 1`,
+          )
+            .bind(
+              principal.eventId,
+              input.ownerPersonId,
+              principal.eventId,
+              input.ownerPersonId,
+            )
+            .first();
       if (!owner)
         throw new ApiError(
           422,
           "INVALID_TASK_OWNER",
-          "The task owner is not available in the authorised event",
+          sessionDeliverable
+            ? "A session-deliverable owner must be assigned to the target session"
+            : "The task owner is not available in the authorised event",
         );
     }
 

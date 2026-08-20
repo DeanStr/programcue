@@ -92,9 +92,11 @@ function maximumBytesForFileDeclaration(
   kind: AssetKind,
   contentType: string,
   policy: EventFilePolicy,
+  taskFileScope?: "participant_document" | "session_deliverable",
 ) {
   if (
     kind === "task_evidence" &&
+    taskFileScope === "session_deliverable" &&
     ["video/mp4", "video/webm"].includes(contentType.toLowerCase())
   ) {
     return policy.videoMaximumBytes;
@@ -256,6 +258,7 @@ function validateDeclaredFile(
   kind: AssetKind,
   file: FileDeclaration,
   eventPolicy: EventFilePolicy,
+  taskFileScope?: "participant_document" | "session_deliverable",
 ) {
   const policy = policies[kind];
   if (!file.name || file.size <= 0)
@@ -273,6 +276,7 @@ function validateDeclaredFile(
     kind,
     file.type,
     eventPolicy,
+    taskFileScope,
   );
   if (file.size > maximumBytes)
     throw new FilePolicyError(
@@ -284,8 +288,11 @@ export function validateDirectFileDeclaration(
   kind: AssetKind,
   file: FileDeclaration,
   eventPolicy: EventFilePolicy,
+  options: {
+    taskFileScope?: "participant_document" | "session_deliverable";
+  } = {},
 ) {
-  validateDeclaredFile(kind, file, eventPolicy);
+  validateDeclaredFile(kind, file, eventPolicy, options.taskFileScope);
 }
 
 export type FileInspectionSource = FileDeclaration & {

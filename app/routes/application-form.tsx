@@ -763,7 +763,7 @@ function AuthenticatedApplicationWorkspace({
             {actionData.committed &&
             actionData.submissionId &&
             selected?.id === actionData.submissionId &&
-            selected.status === "submitted" ? (
+            !["draft", "withdrawn"].includes(selected.status) ? (
               <span className="row-actions mt">
                 <a
                   className="btn primary"

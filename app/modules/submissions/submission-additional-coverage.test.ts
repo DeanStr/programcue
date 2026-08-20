@@ -738,6 +738,10 @@ describe("Submissions D1 vertical slice", () => {
           },
         ],
       });
+      const inaccessibleDraftId = await service.createDraft(
+        slug,
+        owner.applicant,
+      );
       await testEnv.DB.batch([
         testEnv.DB.prepare(
           `UPDATE submissions SET answers_json = ?
@@ -854,6 +858,25 @@ describe("Submissions D1 vertical slice", () => {
         status: "submitted",
         answers: validAnswers,
       });
+      expect(
+        recoveredPortal.drafts.map((application) => application.id),
+      ).not.toContain(inaccessibleDraftId);
+      expect(
+        recoveredPortal.drafts.every(
+          (application) => application.status !== "draft",
+        ),
+      ).toBe(true);
+
+      await expect(
+        applicationFormLoader({
+          request: new Request(
+            `https://app.programcue.test/apply/${encodeURIComponent(slug)}?draft=${encodeURIComponent(inaccessibleDraftId)}`,
+            { headers: { cookie: recoveredCookie } },
+          ),
+          params: { slug },
+          context: routeContext(testEnv),
+        } as never),
+      ).rejects.toMatchObject({ status: 404 });
 
       await expect(
         service.createDraft(slug, owner.applicant),

@@ -3,6 +3,7 @@ import { RouterContextProvider } from "react-router";
 import { describe, expect, it } from "vitest";
 import { ensureDemoSpeakerData } from "~/modules/speakers/demo.server";
 import { headshotProfileRevisionGuardStatement } from "~/modules/speakers/speaker-profile-revision.server";
+import { SpeakerService } from "~/modules/speakers/speaker-service.server";
 import type { Viewer } from "~/platform/auth/authorize.server";
 import { cloudflareContext } from "~/platform/cloudflare-context";
 import { loader as adminSpeakerFileDownload } from "~/routes/admin-speaker-file-download";
@@ -353,7 +354,7 @@ describe("private R2 file lifecycle", () => {
         .run();
       await expect(
         service.participantDownload(speaker, uploaded.assetId),
-      ).resolves.toBeInstanceOf(Response);
+      ).rejects.toBeInstanceOf(FileScanPendingError);
       await expect(
         service.participantDownload(speaker, uploaded.assetId, {
           inlineHeadshot: true,
@@ -437,6 +438,77 @@ describe("private R2 file lifecycle", () => {
             email: "jordan.evaluator@example.com",
           },
           uploaded.assetId,
+        ),
+      ).rejects.toBeInstanceOf(FileScanPendingError);
+    });
+
+    it("keeps an owned submission upload downloadable from the participant files view", async () => {
+      const testEnv = env as unknown as CloudflareEnvironment;
+      await ensureDemoSpeakerData(testEnv);
+      const submissionId = `download-submission-${crypto.randomUUID()}`;
+      const assetId = `download-submission-asset-${crypto.randomUUID()}`;
+      const versionId = `download-submission-version-${crypto.randomUUID()}`;
+      const objectKey = `private/tests/${versionId}`;
+      const bytes = new Uint8Array([0, 0, 0, 20, 0x66, 0x74, 0x79, 0x70]);
+      const stored = await testEnv.FILES.put(objectKey, bytes);
+      if (!stored) throw new Error("The test submission video was not stored.");
+      await testEnv.DB.batch([
+        testEnv.DB.prepare(
+          `INSERT INTO submissions (
+             id, event_id, submitter_person_id, public_reference, title, status
+           ) VALUES (?, ?, ?, ?, 'Application video', 'draft')`,
+        ).bind(
+          submissionId,
+          speaker.eventId,
+          speaker.personId,
+          `REF-${crypto.randomUUID()}`,
+        ),
+        testEnv.DB.prepare(
+          `INSERT INTO file_assets (
+             id, event_id, owner_person_id, target_type, target_id, asset_kind,
+             current_version_id, status
+           ) VALUES (?, ?, ?, 'submission', ?, 'video', ?, 'active')`,
+        ).bind(
+          assetId,
+          speaker.eventId,
+          speaker.personId,
+          submissionId,
+          versionId,
+        ),
+        testEnv.DB.prepare(
+          `INSERT INTO file_versions (
+             id, event_id, asset_id, version_number, object_key,
+             original_filename, declared_content_type, detected_content_type,
+             size_bytes, object_etag, upload_status, signature_status,
+             scan_status, created_by_person_id, uploaded_at, scanned_at,
+             released_at
+           ) VALUES (?, ?, ?, 1, ?, 'application-video.mp4', 'video/mp4',
+                     'video/mp4', ?, ?, 'uploaded', 'valid', 'clean', ?,
+                     unixepoch(), unixepoch(), unixepoch())`,
+        ).bind(
+          versionId,
+          speaker.eventId,
+          assetId,
+          objectKey,
+          bytes.byteLength,
+          stored.httpEtag,
+          speaker.personId,
+        ),
+      ]);
+
+      const portal = await new SpeakerService(testEnv).getPortal(speaker);
+      expect(portal.files.find((file) => file.id === assetId)).toMatchObject({
+        targetType: "submission",
+        currentVersionId: versionId,
+        downloadFilename: "application-video.mp4",
+      });
+      await expect(
+        new FileService(testEnv).participantDownload(speaker, assetId),
+      ).resolves.toMatchObject({ status: 200 });
+      await expect(
+        new FileService(testEnv).participantDownload(
+          { ...speaker, personId: admin.personId },
+          assetId,
         ),
       ).rejects.toBeInstanceOf(FileScanPendingError);
     });
@@ -867,9 +939,27 @@ describe("private R2 file lifecycle", () => {
       )
         .bind(uploaded.versionId, speaker.eventId)
         .run();
+      await testEnv.DB.prepare(
+        `INSERT INTO task_evidence (
+           id, event_id, task_id, submitted_by_person_id, file_asset_id,
+           evidence_json, status, created_at
+         ) VALUES (?, ?, 'task-demo-slides', ?, ?, ?, 'submitted', unixepoch())`,
+      )
+        .bind(
+          crypto.randomUUID(),
+          speaker.eventId,
+          speaker.personId,
+          uploaded.assetId,
+          JSON.stringify({ fileVersionId: uploaded.versionId }),
+        )
+        .run();
 
       await expect(
-        service.participantDownload(speaker, uploaded.assetId),
+        service.participantTaskEvidenceDownload(
+          speaker,
+          uploaded.assetId,
+          uploaded.versionId,
+        ),
       ).rejects.toThrow(/missing its detected content type/i);
     });
 

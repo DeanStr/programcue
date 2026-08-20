@@ -204,7 +204,7 @@ describe("speaker portal file integrity", () => {
         speaker.eventId,
         sharedAssetId,
         `tests/${secondVersionId}`,
-        speaker.personId,
+        coSpeakerId,
       ),
       testEnv.DB.prepare(
         `UPDATE file_assets
@@ -213,9 +213,9 @@ describe("speaker portal file integrity", () => {
       ).bind(secondVersionId, sharedAssetId, speaker.eventId),
     ]);
 
-    const replacementPendingAttachment = await service.getPortal(coSpeaker);
+    const replacementPendingForOwner = await service.getPortal(speaker);
     expect(
-      replacementPendingAttachment.files.find(
+      replacementPendingForOwner.files.find(
         (file) => file.id === sharedAssetId,
       ),
     ).toMatchObject({
@@ -226,10 +226,26 @@ describe("speaker portal file integrity", () => {
       versions: [expect.objectContaining({ id: firstVersionId })],
     });
     expect(
-      replacementPendingAttachment.files.some((file) =>
+      replacementPendingForOwner.files.some((file) =>
         file.versions.some((version) => version.id === secondVersionId),
       ),
     ).toBe(false);
+
+    const replacementPendingForUploader = await service.getPortal(coSpeaker);
+    expect(
+      replacementPendingForUploader.files.find(
+        (file) => file.id === sharedAssetId,
+      ),
+    ).toMatchObject({
+      filename: "private-unattached-v2.pdf",
+      currentVersionId: firstVersionId,
+      taskTitle: "Upload the shared session handout",
+      sessionTitle: "Designing inclusive event technology",
+      versions: [
+        expect.objectContaining({ id: secondVersionId }),
+        expect.objectContaining({ id: firstVersionId }),
+      ],
+    });
 
     await testEnv.DB.batch([
       testEnv.DB.prepare(

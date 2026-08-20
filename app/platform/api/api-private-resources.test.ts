@@ -580,6 +580,38 @@ describe("typed task API service", () => {
     ).toThrow(/must use session scope/);
 
     const service = new ApiTaskService(env as unknown as CloudflareEnvironment);
+    const sessionId = `api-session-owner-check-${crypto.randomUUID()}`;
+    await env.DB.prepare(
+      `INSERT INTO sessions (
+         id, event_id, title, slug, format, duration_minutes, status,
+         visibility, revision, created_at, updated_at
+       ) VALUES (?, ?, 'Session owner check', ?, 'presentation', 30,
+                 'unscheduled', 'private', 1, unixepoch(), unixepoch())`,
+    )
+      .bind(sessionId, eventId, sessionId)
+      .run();
+    await expect(
+      service.create(
+        principal,
+        {
+          title: "Slides assigned outside the session",
+          description: null,
+          targetType: "session",
+          targetId: sessionId,
+          ownerPersonId: "person-demo-submitter",
+          taskType: "file_upload",
+          configuration: { fileScope: "session_deliverable" },
+          impact: "high",
+          dueAt: null,
+          dependencyIds: [],
+        },
+        "corr-invalid-session-owner",
+        `invalid-session-owner-${crypto.randomUUID()}`,
+      ),
+    ).rejects.toMatchObject({
+      status: 422,
+      code: "INVALID_TASK_OWNER",
+    } satisfies Partial<ApiError>);
     await expect(
       service.create(
         principal,
