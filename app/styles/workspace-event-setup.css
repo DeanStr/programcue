@@ -272,9 +272,9 @@
 /* The commit instrument shares the switched workspace toolbar, so save state
    stays available without becoming a second sticky row. */
 .event-setup-actions {
-  position: relative;
+  position: static;
   bottom: auto;
-  z-index: 20;
+  z-index: auto;
   display: flex;
   align-items: center;
   flex-wrap: wrap;
@@ -284,12 +284,16 @@
   border: 1px solid var(--line);
   border-radius: var(--radius);
   background: var(--surface);
-  box-shadow: var(--elev-4);
+  box-shadow: none;
+  backdrop-filter: none;
+}
+
+.event-setup-mobile-actions {
+  display: none;
 }
 
 .event-setup-actions[data-dirty="true"] {
   border-color: var(--state-warn-border);
-  box-shadow: var(--elev-4);
 }
 
 .event-setup-actions-buttons {
@@ -328,6 +332,41 @@
     position: static;
   }
 
+  .event-setup-workspace-toolbar .event-setup-actions {
+    display: none;
+  }
+
+  .event-setup-form {
+    padding-bottom: calc(var(--space-12) + env(safe-area-inset-bottom));
+  }
+
+  .event-setup-mobile-actions {
+    position: fixed;
+    right: 0;
+    bottom: 0;
+    left: var(--sidebar);
+    z-index: 45;
+    display: flex;
+    flex-wrap: nowrap;
+    gap: var(--space-2);
+    padding: var(--space-2) var(--space-4)
+      calc(var(--space-2) + env(safe-area-inset-bottom));
+    border-width: 1px 0 0;
+    border-radius: 0;
+    box-shadow: 0 -8px 24px rgba(19, 32, 31, 0.1);
+  }
+
+  .event-setup-mobile-actions .event-setup-state {
+    flex: 1 1 auto;
+    font-size: var(--text-xs);
+  }
+
+  .event-setup-mobile-actions .event-setup-actions-buttons {
+    flex: 0 0 auto;
+    gap: var(--space-1);
+    margin-left: auto;
+  }
+
   .event-setup-page > [data-event-setup-panel] > .pc-admin-page-section,
   .event-setup-page :is(button, input, select, textarea, summary) {
     scroll-margin-block-start: calc(
@@ -339,6 +378,10 @@
 }
 
 @media (max-width: 760px) {
+  .event-setup-mobile-actions {
+    left: 0;
+  }
+
   .event-setup-workspace-toolbar {
     align-items: stretch;
     flex-direction: column;
@@ -374,6 +417,15 @@
 
   .event-setup-actions-buttons .btn {
     flex: 1 1 0;
+  }
+
+  .event-setup-mobile-actions .event-setup-state {
+    flex: 1 1 auto;
+  }
+
+  .event-setup-mobile-actions .event-setup-actions-buttons {
+    width: auto;
+    margin-left: auto;
   }
 
   .event-setup-setting {

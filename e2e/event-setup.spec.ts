@@ -312,6 +312,60 @@ test("Event Setup sticky controls account for the evaluation banner", async ({
     .toBe(baselineTop + 37);
 });
 
+test("Event Setup keeps save controls in reach on narrow screens", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 390, height: 700 });
+  await page.goto("/admin/event#event-setup-identity");
+  await page.locator("body[data-hydrated='true']").waitFor();
+
+  const desktopActions = page
+    .locator(".event-setup-workspace-toolbar")
+    .locator(".event-setup-actions");
+  const mobileActions = page.locator(".event-setup-mobile-actions");
+  await expect(desktopActions).toBeHidden();
+  await expect(mobileActions).toBeVisible();
+  await expect
+    .poll(() =>
+      mobileActions.evaluate((element) => {
+        const bounds = element.getBoundingClientRect();
+        return {
+          position: getComputedStyle(element).position,
+          bottomGap: Math.round(window.innerHeight - bounds.bottom),
+        };
+      }),
+    )
+    .toEqual({ position: "fixed", bottomGap: 0 });
+
+  const description = page.getByLabel("Programme description");
+  const original = await description.inputValue();
+  const changed = `${original}\nMobile commit bar check`;
+  try {
+    await description.fill(changed);
+    await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
+    expect(await page.evaluate(() => window.scrollY)).toBeGreaterThan(0);
+    await expect(
+      mobileActions.getByText("1 unsaved", { exact: true }),
+    ).toBeVisible();
+    await mobileActions
+      .getByRole("button", { name: "Save", exact: true })
+      .click();
+    await expect(
+      page.getByText("Event settings saved.", { exact: true }),
+    ).toBeVisible();
+    await page.reload();
+    await expect(description).toHaveValue(changed);
+  } finally {
+    await description.fill(original);
+    await mobileActions
+      .getByRole("button", { name: "Save", exact: true })
+      .click();
+    await expect(
+      page.getByText("Event settings saved.", { exact: true }),
+    ).toBeVisible();
+  }
+});
+
 test("Event Setup panel links clear the sticky toolbar", async ({ page }) => {
   for (const width of [1280, 780]) {
     await page.setViewportSize({ width, height: 720 });

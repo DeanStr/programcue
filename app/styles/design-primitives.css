@@ -956,11 +956,8 @@ button.card:active,
   }
 }
 
-/* Commit bars stay in document flow. Sticky + --elev-4 was a dialog foot
-   glued onto Event settings: it sat on Public slug at 1280 and ate the
-   timezone field at 320. Setup owns the markup; this later sheet owns the
-   shared “do not slice the form” contract. */
-.event-setup-actions,
+/* Generic commit bars stay in document flow. Workspace-specific commit
+   surfaces own any responsive positioning in their workspace stylesheet. */
 .sticky-actions {
   position: static;
   bottom: auto;
@@ -970,7 +967,6 @@ button.card:active,
 }
 
 @media (max-width: 760px) {
-  .event-setup-actions,
   .sticky-actions {
     position: static;
     bottom: auto;

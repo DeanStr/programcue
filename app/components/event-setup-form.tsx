@@ -149,6 +149,74 @@ function ResultNotice({ response }: { response: ActionResponse }) {
   );
 }
 
+function EventSetupCommitActions({
+  compact = false,
+  changeCount,
+  hasAnyUnsavedChanges,
+  pendingRecordDraftPresent,
+  saving,
+  onDiscard,
+  pendingHelpId,
+  className,
+}: {
+  compact?: boolean;
+  changeCount: number;
+  hasAnyUnsavedChanges: boolean;
+  pendingRecordDraftPresent: boolean;
+  saving: boolean;
+  onDiscard(): void;
+  pendingHelpId: string;
+  className?: string;
+}) {
+  return (
+    <div
+      className={`event-setup-actions${className ? ` ${className}` : ""}`}
+      data-dirty={hasAnyUnsavedChanges ? "true" : undefined}
+    >
+      {pendingRecordDraftPresent ? (
+        <p className="event-setup-state is-blocked" id={pendingHelpId}>
+          <CircleAlert aria-hidden size={16} />
+          {compact
+            ? "Finish the unfinished item"
+            : "Add or clear the unfinished room, resource, track or format before saving."}
+        </p>
+      ) : changeCount ? (
+        <p className="event-setup-state is-dirty">
+          <CircleAlert aria-hidden size={16} />
+          {compact
+            ? `${changeCount} unsaved`
+            : `${changeCount} unsaved ${changeCount === 1 ? "change" : "changes"}`}
+        </p>
+      ) : (
+        <p className="event-setup-state">
+          <CircleCheck aria-hidden size={16} />
+          Saved
+        </p>
+      )}
+      <div className="event-setup-actions-buttons">
+        <button
+          type="button"
+          className={`btn${compact ? " small" : ""}`}
+          onClick={onDiscard}
+          disabled={!hasAnyUnsavedChanges || saving}
+        >
+          {compact ? "Discard" : "Discard changes"}
+        </button>
+        <button
+          type="submit"
+          className={`btn primary${compact ? " small" : ""}`}
+          disabled={saving || pendingRecordDraftPresent}
+          aria-describedby={
+            pendingRecordDraftPresent ? pendingHelpId : undefined
+          }
+        >
+          {saving ? "Saving…" : compact ? "Save" : "Save event"}
+        </button>
+      </div>
+    </div>
+  );
+}
+
 type EventSetupFetcher = ReturnType<typeof useFetcher<typeof action>>;
 
 function AddRoomDialog({
@@ -1084,53 +1152,14 @@ export function EventSetupForm({
             activePanel={activePanel}
             onChange={showPanel}
           />
-          <div
-            className="event-setup-actions"
-            data-dirty={hasAnyUnsavedChanges ? "true" : undefined}
-          >
-            {pendingRecordDraftPresent ? (
-              <p
-                className="event-setup-state is-blocked"
-                id="event-setup-pending-record-help"
-              >
-                <CircleAlert aria-hidden size={16} />
-                Add or clear the unfinished room, resource, track or format
-                before saving.
-              </p>
-            ) : changeCount ? (
-              <p className="event-setup-state is-dirty">
-                <CircleAlert aria-hidden size={16} />
-                {changeCount} unsaved {changeCount === 1 ? "change" : "changes"}
-              </p>
-            ) : (
-              <p className="event-setup-state">
-                <CircleCheck aria-hidden size={16} />
-                Saved
-              </p>
-            )}
-            <div className="event-setup-actions-buttons">
-              <button
-                type="button"
-                className="btn"
-                onClick={discardChanges}
-                disabled={!hasAnyUnsavedChanges || saving}
-              >
-                Discard changes
-              </button>
-              <button
-                type="submit"
-                className="btn primary"
-                disabled={saving || pendingRecordDraftPresent}
-                aria-describedby={
-                  pendingRecordDraftPresent
-                    ? "event-setup-pending-record-help"
-                    : undefined
-                }
-              >
-                {saving ? "Saving…" : "Save event"}
-              </button>
-            </div>
-          </div>
+          <EventSetupCommitActions
+            changeCount={changeCount}
+            hasAnyUnsavedChanges={hasAnyUnsavedChanges}
+            pendingRecordDraftPresent={pendingRecordDraftPresent}
+            saving={saving}
+            onDiscard={discardChanges}
+            pendingHelpId="event-setup-pending-record-help"
+          />
         </div>
 
         {/* All four panels remain mounted inside the one canonical form, so
@@ -1244,6 +1273,16 @@ export function EventSetupForm({
             </AdminPageSection>
           </div>
         </div>
+        <EventSetupCommitActions
+          compact
+          className="event-setup-mobile-actions"
+          changeCount={changeCount}
+          hasAnyUnsavedChanges={hasAnyUnsavedChanges}
+          pendingRecordDraftPresent={pendingRecordDraftPresent}
+          saving={saving}
+          onDiscard={discardChanges}
+          pendingHelpId="event-setup-mobile-pending-record-help"
+        />
       </Form>
 
       <AddRoomDialog
