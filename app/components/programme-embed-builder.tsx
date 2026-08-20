@@ -1,5 +1,4 @@
 import { Check, Clipboard, ExternalLink, RotateCcw } from "lucide-react";
-import { useState } from "react";
 import { Form } from "react-router";
 import { DerivedSlugField } from "~/components/ui/derived-slug-field";
 import { EventDateTime } from "~/components/ui/event-date-time";
@@ -479,8 +478,10 @@ function EmbedConfigurationWorkflow({
 
 function ManagedEmbedWorkflow({
   workflow,
+  onOpenBuilder,
 }: {
   workflow: ProgrammeEmbedBuilderController["managedWorkflow"];
+  onOpenBuilder(): void;
 }) {
   const {
     actionData,
@@ -510,11 +511,12 @@ function ManagedEmbedWorkflow({
       className="programme-managed-embeds stack"
       id="managed-programme-embeds"
     >
-      <div>
+      <div className="programme-panel-heading">
         <h2>Managed embeds</h2>
         <p className="help">
           Save a named configuration behind a stable URL. Stateless snippets
-          above remain available and unchanged.
+          remain available and unchanged; new drafts use the current Embed
+          builder configuration.
         </p>
       </div>
       {actionData?.message ? (
@@ -743,9 +745,12 @@ function ManagedEmbedWorkflow({
                           <button
                             className="btn small"
                             type="button"
-                            onClick={() => loadManagedEmbed(embed)}
+                            onClick={() => {
+                              loadManagedEmbed(embed);
+                              onOpenBuilder();
+                            }}
                           >
-                            Load and preview
+                            Load in builder
                           </button>
                         ) : null}
                         {nextStatus ? (
@@ -861,6 +866,8 @@ export function ProgrammeEmbedBuilder({
   timezone,
   sessions,
   managedEmbeds,
+  activePanel,
+  onOpenBuilder,
 }: {
   publicOrigin: string;
   publicSlug: string;
@@ -869,6 +876,8 @@ export function ProgrammeEmbedBuilder({
   timezone: string;
   sessions: ProgrammeEmbedSession[];
   managedEmbeds: ManagedProgrammeEmbed[];
+  activePanel: "builder" | "managed";
+  onOpenBuilder(): void;
 }) {
   const { configurationWorkflow, managedWorkflow } = useProgrammeEmbedBuilder({
     publicOrigin,
@@ -878,36 +887,29 @@ export function ProgrammeEmbedBuilder({
     sessions,
     managedEmbeds,
   });
-  const [embedOpen, setEmbedOpen] = useState(true);
-  const activeEmbedCount = managedEmbeds.filter(
-    (embed) => embed.status === "active",
-  ).length;
-  const embedStatus =
-    managedEmbeds.length === 0
-      ? "No managed embeds yet"
-      : `${managedEmbeds.length} managed${
-          activeEmbedCount ? ` · ${activeEmbedCount} active` : ""
-        }`;
   return (
-    <section
-      className="programme-embed-builder"
-      aria-labelledby="programme-embed-title"
-    >
-      <details
-        className="programme-embed-disclosure"
-        open={embedOpen}
-        onToggle={(event) => setEmbedOpen(event.currentTarget.open)}
+    <div className="programme-embed-builder">
+      <section
+        aria-labelledby="programme-embed-title"
+        hidden={activePanel !== "builder"}
       >
-        <summary className="programme-embed-disclosure-summary">
-          <h2 id="programme-embed-title">Configure embed</h2>
-          <span className="help">{embedStatus}</span>
-        </summary>
+        <div className="programme-panel-heading">
+          <h2 id="programme-embed-title">Embed builder</h2>
+          <p className="help">
+            Configure, preview and copy a stateless published-programme embed.
+          </p>
+        </div>
         <EmbedConfigurationWorkflow
           workflow={configurationWorkflow}
           eventAccent={eventAccent}
         />
-        <ManagedEmbedWorkflow workflow={managedWorkflow} />
-      </details>
-    </section>
+      </section>
+      <div hidden={activePanel !== "managed"}>
+        <ManagedEmbedWorkflow
+          workflow={managedWorkflow}
+          onOpenBuilder={onOpenBuilder}
+        />
+      </div>
+    </div>
   );
 }

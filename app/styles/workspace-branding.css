@@ -8,6 +8,10 @@
   margin-bottom: var(--space-5);
 }
 
+.branding-mobile-surfaces {
+  display: none;
+}
+
 .branding-workspace {
   display: grid;
   grid-template-columns: minmax(300px, 26rem) minmax(0, 1fr);
@@ -504,8 +508,28 @@
 }
 
 @media (max-width: 1000px) {
+  .branding-mobile-surfaces {
+    display: block;
+    margin-bottom: var(--space-4);
+  }
+
+  .branding-mobile-surfaces.pc-workspace-tabs > ul {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .branding-mobile-surfaces li,
+  .branding-mobile-surfaces button {
+    width: 100%;
+  }
+
   .branding-workspace {
     grid-template-columns: 1fr;
+  }
+
+  .branding-workspace.is-edit > .branding-preview-stack,
+  .branding-workspace.is-preview > .branding-editor-stack {
+    display: none;
   }
 }
 

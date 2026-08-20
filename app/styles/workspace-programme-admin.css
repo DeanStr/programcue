@@ -61,6 +61,30 @@
   overflow-wrap: anywhere;
 }
 
+.programme-workspace-tabs {
+  margin-bottom: var(--space-4);
+}
+
+.programme-workspace-panel[hidden],
+.programme-embed-builder > [hidden] {
+  display: none;
+}
+
+.programme-panel-heading {
+  margin-bottom: var(--space-3);
+}
+
+.programme-panel-heading h2 {
+  margin: 0;
+  font-size: var(--text-xl);
+  font-weight: var(--weight-bold);
+  letter-spacing: var(--tracking-snug);
+}
+
+.programme-panel-heading .help {
+  margin: var(--space-1) 0 0;
+}
+
 .content-section-head {
   display: flex;
   flex-wrap: wrap;
@@ -262,9 +286,11 @@ a.content-review-title:focus-visible {
 }
 
 .programme-embed-unavailable {
-  margin-top: var(--space-6);
-  padding-top: var(--space-4);
-  border-top: 1px solid var(--border);
+  margin-top: 0;
+  padding: var(--space-4);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
 }
 
 .programme-embed-unavailable h2 {
@@ -298,53 +324,14 @@ a.content-review-title:focus-visible {
 
 /* --- Embed builder recedes ---------------------------------------------- */
 .programme-embed-builder {
-  margin-top: var(--space-6);
-  padding-top: var(--space-4);
-  border-top: 1px solid var(--border);
-}
-.programme-embed-disclosure {
   min-width: 0;
-}
-.programme-embed-disclosure-summary {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: baseline;
-  gap: var(--space-2) var(--space-3);
-  cursor: pointer;
-  list-style: none;
-}
-.programme-embed-disclosure-summary .help {
-  margin: 0;
-}
-.programme-embed-disclosure-summary::-webkit-details-marker,
-.programme-embed-disclosure-summary::marker {
-  display: none;
-}
-.programme-embed-disclosure-summary h2 {
-  margin: 0;
-  font-size: var(--text-sm);
-  font-weight: var(--weight-semibold);
-}
-.programme-embed-disclosure-summary h2::before {
-  content: "▸ ";
-  color: var(--text-tertiary);
-  font-weight: var(--weight-normal);
-}
-.programme-embed-disclosure[open]
-  .programme-embed-disclosure-summary
-  h2::before {
-  content: "▾ ";
-}
-.programme-embed-disclosure[open] .programme-embed-disclosure-summary {
-  margin-bottom: var(--space-3);
 }
 .programme-embed-builder-title {
   align-items: flex-start;
   justify-content: space-between;
   margin-bottom: var(--space-3);
 }
-.programme-embed-builder-title h2,
-.programme-managed-embeds h2 {
+.programme-embed-builder-title h2 {
   margin: 0;
   font-size: var(--text-sm);
   font-weight: var(--weight-semibold);
@@ -470,9 +457,7 @@ a.content-review-title:focus-visible {
 }
 
 .programme-managed-embeds {
-  margin-top: var(--space-5);
-  padding-top: var(--space-4);
-  border-top: 1px solid var(--border);
+  margin-top: 0;
 }
 
 .programme-managed-form {

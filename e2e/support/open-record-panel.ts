@@ -7,6 +7,11 @@ import type { Page } from "@playwright/test";
  * `?room=<id>` open the relevant panel on their own.
  */
 export async function openRecordPanel(page: Page, heading: string) {
+  const structure = page.getByRole("button", {
+    name: /^Structure$/,
+    pressed: false,
+  });
+  if (await structure.isVisible()) await structure.click();
   const panel = page
     .locator("details.event-record-panel")
     .filter({ has: page.getByRole("heading", { name: heading, exact: true }) });

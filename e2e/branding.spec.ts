@@ -25,6 +25,28 @@ test.afterAll(async ({ request }) => {
   await resetDemoEvent(request);
 });
 
+test("branding switches between editing and preview on narrow screens", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 412, height: 915 });
+  await page.goto("/admin/branding");
+  await page.locator("body[data-hydrated='true']").waitFor();
+  const welcome = page.getByLabel("Welcome message");
+  await welcome.fill("Unsaved mobile preview copy");
+
+  await page
+    .getByRole("button", { name: "Preview and publish", exact: true })
+    .click();
+  await expect(page.locator(".branding-preview-stack")).toBeVisible();
+  await expect(page.locator(".branding-editor-stack")).toBeHidden();
+
+  await page
+    .getByRole("button", { name: "Edit branding", exact: true })
+    .click();
+  await expect(page.locator(".branding-editor-stack")).toBeVisible();
+  await expect(welcome).toHaveValue("Unsaved mobile preview copy");
+});
+
 test("branding draft previews and publishes across participant-facing surfaces", async ({
   page,
 }) => {

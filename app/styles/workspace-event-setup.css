@@ -11,32 +11,22 @@
   margin-bottom: var(--space-5);
 }
 
-/* Short whole words, wrap instead of clipping mid-label. The shared mobile
-   rule is nowrap + overflow-x, which is what produced "Access a". */
-.event-setup-form .event-setup-section-nav {
-  flex-wrap: wrap;
-  align-items: flex-start;
-  overflow: visible;
+.event-setup-workspace-toolbar {
+  position: sticky;
+  top: calc(var(--topbar) + var(--space-2));
+  z-index: 20;
+  display: flex;
+  align-items: stretch;
+  gap: var(--space-2);
+  margin-bottom: var(--space-5);
 }
 
-.event-setup-section-nav > span {
+.event-setup-section-nav {
+  flex: 1 1 auto;
+}
+
+.event-setup-page > [data-event-setup-panel][hidden] {
   display: none;
-}
-
-.event-setup-section-nav ul {
-  flex-wrap: wrap;
-}
-
-@media (max-width: 760px) {
-  .event-setup-form .event-setup-section-nav,
-  .event-setup-form .event-setup-section-nav ul {
-    flex-wrap: wrap;
-    overflow: visible;
-  }
-
-  .event-setup-form .event-setup-section-nav a {
-    white-space: nowrap;
-  }
 }
 
 .event-setup-page .pc-admin-page-section + .pc-admin-page-section {
@@ -269,8 +259,8 @@
   margin: 0;
 }
 
-/* Elevated commit instrument after the form. Not sticky: a sticky bar
-   photographs as a slice through identity at every captured viewport. */
+/* The commit instrument shares the switched workspace toolbar, so save state
+   stays available without becoming a second sticky row. */
 .event-setup-actions {
   position: relative;
   bottom: auto;
@@ -279,7 +269,7 @@
   align-items: center;
   flex-wrap: wrap;
   gap: var(--space-3);
-  margin-top: var(--space-6);
+  margin-top: 0;
   padding: var(--space-3) var(--space-4);
   border: 1px solid var(--line);
   border-radius: var(--radius);
@@ -324,6 +314,25 @@
 }
 
 @media (max-width: 760px) {
+  .event-setup-workspace-toolbar {
+    position: static;
+    flex-direction: column;
+  }
+
+  .event-setup-section-nav.pc-workspace-tabs > ul {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .event-setup-section-nav li,
+  .event-setup-section-nav button {
+    width: 100%;
+  }
+
+  .event-setup-page .pc-admin-section-toggle {
+    display: none;
+  }
+
   .event-setup-actions {
     padding: var(--space-2) var(--space-3)
       calc(var(--space-2) + env(safe-area-inset-bottom));

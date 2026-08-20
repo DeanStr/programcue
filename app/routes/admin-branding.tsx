@@ -22,6 +22,7 @@ import {
 } from "react-router";
 import { ZodError } from "zod";
 import { BrandMark } from "~/components/brand-mark";
+import { AdminWorkspaceTabs } from "~/components/ui/admin-workspace-tabs";
 import { useConfirm } from "~/components/ui/confirm-dialog";
 import { DEFAULT_EVENT_BRAND_ACCENT } from "~/lib/brand";
 import {
@@ -57,6 +58,11 @@ type BrandingActionResponse = {
   message: string;
   errors?: Record<string, string[]>;
 };
+
+const BRANDING_WORKSPACE_PANELS = [
+  { id: "edit", label: "Edit branding" },
+  { id: "preview", label: "Preview and publish" },
+] as const;
 
 export async function loader({ request, context }: Route.LoaderArgs) {
   const { env } = getCloudflareContext(context);
@@ -509,6 +515,9 @@ export default function AdminBranding({ loaderData }: Route.ComponentProps) {
   const [logoAssetId, setLogoAssetId] = useState(draft.logoAssetId ?? "");
   const [bannerAssetId, setBannerAssetId] = useState(draft.bannerAssetId ?? "");
   const [mobilePreview, setMobilePreview] = useState(false);
+  const [workspacePanel, setWorkspacePanel] = useState<"edit" | "preview">(
+    "edit",
+  );
   // biome-ignore lint/correctness/useExhaustiveDependencies: Event identity and persisted revision deliberately reset local branding edits even when the saved field values match.
   useEffect(() => {
     setAccent(draft.accent);
@@ -588,7 +597,15 @@ export default function AdminBranding({ loaderData }: Route.ComponentProps) {
         </div>
       ) : null}
 
-      <div className="branding-workspace">
+      <AdminWorkspaceTabs<"edit" | "preview">
+        className="branding-mobile-surfaces"
+        label="Branding workspace view"
+        panels={BRANDING_WORKSPACE_PANELS}
+        activePanel={workspacePanel}
+        onChange={setWorkspacePanel}
+      />
+
+      <div className={`branding-workspace is-${workspacePanel}`}>
         <div className="branding-editor-stack">
           <Form method="post" className="card pad branding-identity">
             <input type="hidden" name="_intent" value="save_draft" />

@@ -1,4 +1,4 @@
-import { expect, test } from "@playwright/test";
+import { expect, type Page, test } from "@playwright/test";
 
 import { openRecordPanel } from "./support/open-record-panel";
 import { resetDemoEvent } from "./support/reset-demo-event";
@@ -19,6 +19,16 @@ test.beforeEach(async ({ context }) => {
 test.afterAll(async ({ request }) => {
   await resetDemoEvent(request);
 });
+
+async function showEventSettingsPanel(
+  page: Page,
+  name: "Identity" | "Structure" | "Access" | "Data",
+) {
+  const button = page.getByRole("button", { name, exact: true });
+  if ((await button.getAttribute("aria-pressed")) !== "true")
+    await button.click();
+  await expect(button).toHaveAttribute("aria-pressed", "true");
+}
 
 test("Event Setup saves through D1 and survives a reload", async ({ page }) => {
   await page.goto("/admin/event");
@@ -106,6 +116,72 @@ test("Event Setup rejects an invalid date range before persistence", async ({
   );
 });
 
+test("Event Setup reveals a hidden panel before focusing an invalid field", async ({
+  page,
+}) => {
+  await page.goto("/admin/event");
+  await page.locator("body[data-hydrated='true']").waitFor();
+  const eventName = page.getByLabel("Event name");
+  await eventName.fill("");
+  await showEventSettingsPanel(page, "Structure");
+
+  await page.getByRole("button", { name: "Save event" }).click();
+
+  await expect(
+    page.getByRole("button", { name: "Identity", exact: true }),
+  ).toHaveAttribute("aria-pressed", "true");
+  await expect(eventName).toBeFocused();
+  expect(
+    await eventName.evaluate(
+      (input) => (input as HTMLInputElement).validity.valid,
+    ),
+  ).toBe(false);
+});
+
+test("Event Setup opens a collapsed record before focusing an invalid field", async ({
+  page,
+}) => {
+  await page.goto("/admin/event");
+  await page.locator("body[data-hydrated='true']").waitFor();
+  await showEventSettingsPanel(page, "Structure");
+  await openRecordPanel(page, "Rooms and capacities");
+
+  const roomPanel = page.locator("details.event-record-panel").filter({
+    has: page.getByRole("heading", {
+      name: "Rooms and capacities",
+      exact: true,
+    }),
+  });
+  const capacity = roomPanel.locator('input[type="number"]').first();
+  await capacity.fill("0");
+  await roomPanel.locator("summary").click();
+  await showEventSettingsPanel(page, "Identity");
+
+  await page.getByRole("button", { name: "Save event" }).click();
+
+  await expect(
+    page.getByRole("button", { name: "Structure", exact: true }),
+  ).toHaveAttribute("aria-pressed", "true");
+  await expect(roomPanel).toHaveAttribute("open", "");
+  await expect(capacity).toBeFocused();
+  expect(
+    await capacity.evaluate(
+      (input) => (input as HTMLInputElement).validity.valid,
+    ),
+  ).toBe(false);
+
+  await capacity.fill("1");
+  await roomPanel.locator("summary").click();
+  await expect(roomPanel).not.toHaveAttribute("open", "");
+  await showEventSettingsPanel(page, "Identity");
+  const venue = page.getByLabel("Venue", { exact: true });
+  const originalVenue = await venue.inputValue();
+  await venue.fill(`${originalVenue} corrected`);
+  await venue.fill(originalVenue);
+  await showEventSettingsPanel(page, "Structure");
+  await expect(roomPanel).not.toHaveAttribute("open", "");
+});
+
 test("Event Setup rejects attempts to change Branding-owned fields", async ({
   page,
 }) => {
@@ -186,7 +262,7 @@ test("uncommitted record drafts block save and remain protected during navigatio
   await expect(warning).toBeVisible();
   await warning.getByRole("button", { name: "Stay on this page" }).click();
   await expect(warning).toBeHidden();
-  await expect(page).toHaveURL(/\/admin\/event$/);
+  await expect(page).toHaveURL(/\/admin\/event(?:#event-setup-structure)?$/);
   await expect(draft).toHaveValue("Draft that still needs adding");
 
   await draft.fill("");
@@ -199,17 +275,23 @@ test("repository workflows remain blocked until exact Event Setup edits are save
   await page.goto("/admin/event");
   await openRecordPanel(page, "Programme tracks");
 
+  await showEventSettingsPanel(page, "Identity");
   const venue = page.getByLabel("Venue", { exact: true });
   const originalVenue = await venue.inputValue();
+  await showEventSettingsPanel(page, "Structure");
   const trackName = page.getByLabel("Leadership track name");
   const originalTrackName = await trackName.inputValue();
+  await showEventSettingsPanel(page, "Data");
   const configure = page.getByRole("button", {
     name: /Configure|Revalidate/,
   });
 
+  await showEventSettingsPanel(page, "Identity");
   await venue.fill(`${originalVenue} — unsaved`);
+  await showEventSettingsPanel(page, "Structure");
   await trackName.fill(`${originalTrackName} unsaved`);
 
+  await showEventSettingsPanel(page, "Data");
   await expect(configure).toBeDisabled();
   await expect(
     page.getByText(
@@ -217,11 +299,14 @@ test("repository workflows remain blocked until exact Event Setup edits are save
     ),
   ).toBeVisible();
 
+  await showEventSettingsPanel(page, "Identity");
   await venue.fill(originalVenue);
+  await showEventSettingsPanel(page, "Structure");
   await page
     .getByLabel(`${originalTrackName} unsaved track name`)
     .fill(originalTrackName);
 
+  await showEventSettingsPanel(page, "Data");
   await expect(configure).toBeEnabled();
   await expect(
     page.getByText(
@@ -229,12 +314,16 @@ test("repository workflows remain blocked until exact Event Setup edits are save
     ),
   ).toBeHidden();
 
+  await showEventSettingsPanel(page, "Identity");
   const city = page.getByLabel("City", { exact: true });
   const originalCity = await city.inputValue();
   await city.fill("Unsaved city");
+  await showEventSettingsPanel(page, "Data");
   await expect(configure).toBeDisabled();
   await page.getByRole("button", { name: "Discard changes" }).click();
+  await showEventSettingsPanel(page, "Identity");
   await expect(city).toHaveValue(originalCity);
+  await showEventSettingsPanel(page, "Data");
   await expect(configure).toBeEnabled();
 
   await page.getByRole("link", { name: "Applications", exact: true }).click();

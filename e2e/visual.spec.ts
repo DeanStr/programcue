@@ -186,7 +186,7 @@ async function waitForSurfaceReady(page: Page, name: string) {
     await expect(
       page.getByRole("heading", { name: "Current programme records" }),
     ).toBeVisible();
-    await expect(page.locator(".programme-embed-builder")).toBeVisible();
+    await expect(page.locator(".programme-workspace-tabs")).toBeVisible();
   } else if (name === "public-speaker-gallery") {
     await expect(
       page.getByRole("heading", { name: "Speaker Gallery", exact: true }),

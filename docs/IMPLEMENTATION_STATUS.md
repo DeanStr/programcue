@@ -1,6 +1,6 @@
 # Verified implementation status
 
-Last verified: 2026-08-19.
+Last verified: 2026-08-20.
 
 This is the canonical implementation audit and requirements traceability record. The product specification remains authoritative for intended scope; this file records observed code, focused tests and local evidence only.
 
@@ -453,6 +453,18 @@ failure. Local verification passed the complete core gate and the compact
 browser command with the CI shard setting (25 application tests against one
 Worker plus 16 public-site desktop/mobile tests). A hosted CI result remains
 outstanding until these uncommitted changes are committed and pushed.
+
+An administrator workspace hierarchy pass on 20 August 2026 split Event
+Settings into mounted Identity, Structure, Access and Data panels with one
+shared save instrument; split Programme Publishing into programme records,
+stateless embed configuration and managed-embed lifecycle panels; and added a
+narrow-screen edit/preview switch to Branding while retaining its desktop split
+view. Hash targets, server validation and invalid native controls reveal the
+owning Event Settings panel before focus, and panel switches preserve unsaved
+state. Local verification passed the focused quality/type/unit gate (20 changed
+tests), 21 affected Chromium workflow tests and the four changed full-page
+desktop/mobile visual baselines; the unchanged evaluation baseline also passed
+alongside the desktop Programme capture.
 
 ## Capability status
 

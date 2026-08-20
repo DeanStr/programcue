@@ -20,10 +20,8 @@ import {
   EventRepositoryPanel,
   EventRoomsPanel,
 } from "~/components/event-setup-panels";
-import {
-  AdminPageSection,
-  AdminPageSectionNavigation,
-} from "~/components/ui/admin-page-sections";
+import { AdminPageSection } from "~/components/ui/admin-page-sections";
+import { AdminWorkspaceTabs } from "~/components/ui/admin-workspace-tabs";
 import { ConfirmDialog, useConfirm } from "~/components/ui/confirm-dialog";
 import { ErrorSummary } from "~/components/ui/error-summary";
 import type { EventSetup } from "~/modules/events/event-repository.server";
@@ -37,6 +35,47 @@ const eventSetupBaselineExcludedFields = new Set([
   "tracks",
   "sessionFormats",
 ]);
+
+const EVENT_SETUP_PANELS = [
+  { id: "identity", label: "Identity" },
+  { id: "structure", label: "Structure" },
+  { id: "access", label: "Access" },
+  { id: "data", label: "Data" },
+] as const;
+
+type EventSetupPanel = (typeof EVENT_SETUP_PANELS)[number]["id"];
+
+function eventSetupPanelForTarget(target: Element | null) {
+  const panel = target?.closest<HTMLElement>("[data-event-setup-panel]")
+    ?.dataset.eventSetupPanel;
+  return EVENT_SETUP_PANELS.some((candidate) => candidate.id === panel)
+    ? (panel as EventSetupPanel)
+    : null;
+}
+
+function eventSetupPanelForErrors(
+  errors: Record<string, string[]> | undefined,
+) {
+  if (!errors) return null;
+  const fields = new Set(Object.keys(errors));
+  if (["rooms", "tracks", "sessionFormats"].some((field) => fields.has(field)))
+    return "structure" satisfies EventSetupPanel;
+  if (
+    [
+      "submissionAccessMode",
+      "allowAnonymousDrafts",
+      "duplicatePersonWarnings",
+    ].some((field) => fields.has(field))
+  )
+    return "access" satisfies EventSetupPanel;
+  if (
+    ["filePolicy", "repositoryProvider", "retentionMonths"].some((field) =>
+      fields.has(field),
+    )
+  )
+    return "data" satisfies EventSetupPanel;
+  return "identity" satisfies EventSetupPanel;
+}
 
 function eventSetupFieldValues(form: HTMLFormElement) {
   const fields = new Map<string, string[]>();
@@ -594,6 +633,9 @@ export function EventSetupForm({
   const [recordDraftValues, setRecordDraftValues] = useState<
     Readonly<Record<string, string>>
   >({});
+  const [activePanel, setActivePanel] = useState<EventSetupPanel>(() =>
+    focusedRecord ? "structure" : "identity",
+  );
   // Discarding has to reach the drafts the record panels keep in their own
   // state — a new resource, track or format that was typed but never added.
   // Remounting them is the only reset that covers those too.
@@ -615,12 +657,40 @@ export function EventSetupForm({
   }, [event.revision]);
   useEffect(() => {
     if (!focusedRecordId || !focusedRecordKind) return;
+    setActivePanel("structure");
     const target = document.getElementById(
       `event-${focusedRecordKind}-${focusedRecordId}`,
     );
-    target?.focus();
-    target?.scrollIntoView({ block: "center" });
+    window.requestAnimationFrame(() => {
+      target?.focus();
+      target?.scrollIntoView({ block: "center" });
+    });
   }, [focusedRecordId, focusedRecordKind]);
+  useEffect(() => {
+    const panel = eventSetupPanelForErrors(actionData?.errors);
+    if (panel) setActivePanel(panel);
+  }, [actionData]);
+  useEffect(() => {
+    const revealHashTarget = () => {
+      if (!window.location.hash) return;
+      let id: string;
+      try {
+        id = decodeURIComponent(window.location.hash.slice(1));
+      } catch {
+        return;
+      }
+      const target = document.getElementById(id);
+      const panel = eventSetupPanelForTarget(target);
+      if (!target || !panel) return;
+      setActivePanel(panel);
+      window.requestAnimationFrame(() =>
+        target.scrollIntoView({ block: "start" }),
+      );
+    };
+    revealHashTarget();
+    window.addEventListener("hashchange", revealHashTarget);
+    return () => window.removeEventListener("hashchange", revealHashTarget);
+  }, []);
   useEffect(() => {
     if (inviteFetcher.data && (inviteFetcher.data as ActionResponse).ok)
       setInviteOpen(false);
@@ -796,6 +866,34 @@ export function EventSetupForm({
     });
   }
 
+  function showPanel(panel: EventSetupPanel) {
+    setActivePanel(panel);
+    const url = new URL(window.location.href);
+    url.hash = `event-setup-${panel}`;
+    window.history.replaceState(window.history.state, "", url);
+  }
+
+  function revealFirstInvalidField(form: HTMLFormElement) {
+    const invalid = form.querySelector<HTMLElement>(
+      "input:invalid, select:invalid, textarea:invalid",
+    );
+    if (!invalid) return false;
+    const panel = eventSetupPanelForTarget(invalid);
+    if (panel) setActivePanel(panel);
+    const recordPanel = invalid.closest<HTMLDetailsElement>("details");
+    window.requestAnimationFrame(() => {
+      if (recordPanel) recordPanel.open = true;
+      invalid.focus();
+      if (
+        invalid instanceof HTMLInputElement ||
+        invalid instanceof HTMLSelectElement ||
+        invalid instanceof HTMLTextAreaElement
+      )
+        invalid.reportValidity();
+    });
+    return true;
+  }
+
   function revokeAdministrator(
     membershipId: string,
     name: string,
@@ -839,6 +937,7 @@ export function EventSetupForm({
         method="post"
         preventScrollReset
         className="event-setup-form"
+        noValidate
         onInput={(inputEvent) => {
           updateNamedFieldDirtyState(inputEvent.currentTarget);
           const input = inputEvent.target as HTMLInputElement;
@@ -846,7 +945,11 @@ export function EventSetupForm({
           if (draftKey) handleRecordDraftStateChange(draftKey, input.value);
         }}
         onSubmit={(submitEvent) => {
-          if (pendingRecordDraftPresent) submitEvent.preventDefault();
+          if (
+            pendingRecordDraftPresent ||
+            revealFirstInvalidField(submitEvent.currentTarget)
+          )
+            submitEvent.preventDefault();
         }}
       >
         <input type="hidden" name="_intent" value="save" />
@@ -954,170 +1057,172 @@ export function EventSetupForm({
           <ResultNotice response={repositoryData} />
         ) : null}
 
-        <AdminPageSectionNavigation
-          className="event-setup-section-nav"
-          label="Event settings sections"
-          links={[
-            { id: "event-setup-identity", label: "Identity" },
-            { id: "event-setup-structure", label: "Structure" },
-            { id: "event-setup-access", label: "Access" },
-            { id: "event-setup-data", label: "Data" },
-          ]}
-        />
-
-        {/* Four titled sections rather than one nine-card grid. Panels are
-            paired by height as well as by subject: the three record editors are
-            full width because they grow without bound, and the fixed-size
-            settings cards sit two-up beside a comparable neighbour. A grid row
-            is as tall as its tallest card, so mixing the two shapes in one grid
-            is what left a 1,096px hole under Event identity.
-            Every section stays expanded on phones: the record editors inside
-            Programme structure are already disclosures, and nesting a second
-            one around them puts a required field somewhere the browser cannot
-            focus to report it. */}
-        <div className="event-setup-page">
-          <AdminPageSection
-            id="event-setup-identity"
-            label="Identity"
-            description="How this event is named internally and how it presents itself to participants and the public."
-            defaultExpandedOnMobile
+        <div className="event-setup-workspace-toolbar">
+          <AdminWorkspaceTabs<EventSetupPanel>
+            className="event-setup-section-nav"
+            label="Event settings sections"
+            panels={EVENT_SETUP_PANELS}
+            activePanel={activePanel}
+            onChange={showPanel}
+          />
+          <div
+            className="event-setup-actions"
+            data-dirty={hasAnyUnsavedChanges ? "true" : undefined}
           >
-            {/* Full width rather than two-up. The two cards are 336px and
-                644px, and a grid row is as tall as its tallest child, so
-                pairing them left a ~300px hole under the shorter one. Stacked,
-                each card lays its own fields out across the full measure for
-                the same total height and no gap. */}
-            <div className="grid">
-              <EventIdentityPanels
-                key={`identity-${panelGeneration}`}
-                event={event}
-                actionData={actionData}
-              />
-            </div>
-          </AdminPageSection>
-
-          <AdminPageSection
-            id="event-setup-structure"
-            label="Programme structure"
-            description="The rooms, tracks and session formats the schedule builder can draw on."
-            defaultExpandedOnMobile
-          >
-            <div className="grid">
-              <EventRoomsPanel
-                key={`rooms-${panelGeneration}`}
-                rooms={rooms}
-                setRooms={setRooms}
-                actionData={actionData}
-                addDisabled={hasPersistedSetupChanges}
-                onAdd={() => {
-                  if (!hasPersistedSetupChanges) setAddRoomOpen(true);
-                }}
-                onRemove={(roomId) => clearRemovedRecordFocus("room", roomId)}
-                focusedRoomId={
-                  focusedRecordKind === "room" ? focusedRecordId : null
+            {pendingRecordDraftPresent ? (
+              <p
+                className="event-setup-state is-blocked"
+                id="event-setup-pending-record-help"
+              >
+                <CircleAlert aria-hidden size={16} />
+                Add or clear the unfinished room, resource, track or format
+                before saving.
+              </p>
+            ) : changeCount ? (
+              <p className="event-setup-state is-dirty">
+                <CircleAlert aria-hidden size={16} />
+                {changeCount} unsaved {changeCount === 1 ? "change" : "changes"}
+              </p>
+            ) : (
+              <p className="event-setup-state">
+                <CircleCheck aria-hidden size={16} />
+                Saved
+              </p>
+            )}
+            <div className="event-setup-actions-buttons">
+              <button
+                type="button"
+                className="btn"
+                onClick={discardChanges}
+                disabled={!hasAnyUnsavedChanges || saving}
+              >
+                Discard changes
+              </button>
+              <button
+                type="submit"
+                className="btn primary"
+                disabled={saving || pendingRecordDraftPresent}
+                aria-describedby={
+                  pendingRecordDraftPresent
+                    ? "event-setup-pending-record-help"
+                    : undefined
                 }
-                onDraftStateChange={handleRecordDraftStateChange}
-              />
-              <EventScheduleConfigurationPanels
-                key={`schedule-${panelGeneration}`}
-                tracks={tracks}
-                setTracks={setTracks}
-                sessionFormats={sessionFormats}
-                setSessionFormats={setSessionFormats}
-                actionData={actionData}
-                onRemove={(trackId) =>
-                  clearRemovedRecordFocus("track", trackId)
-                }
-                focusedTrackId={
-                  focusedRecordKind === "track" ? focusedRecordId : null
-                }
-                onDraftStateChange={handleRecordDraftStateChange}
-              />
+              >
+                {saving ? "Saving…" : "Save event"}
+              </button>
             </div>
-          </AdminPageSection>
-
-          <AdminPageSection
-            id="event-setup-access"
-            label="Access and roles"
-            description="Who can administer this event, and how applicants reach the submission form."
-            defaultExpandedOnMobile
-          >
-            <EventAccessPanels
-              event={event}
-              onInvite={() => setInviteOpen(true)}
-              onRevoke={revokeAdministrator}
-              canManageAdministrators={canManageOrganisationAdministrators}
-            />
-          </AdminPageSection>
-
-          <AdminPageSection
-            id="event-setup-data"
-            label="Data and files"
-            description="Upload limits, where event data is authoritative, and how long it is kept."
-            defaultExpandedOnMobile
-          >
-            <div className="grid grid-2">
-              <EventFilePolicyPanel event={event} actionData={actionData} />
-              <EventRepositoryPanel
-                event={event}
-                onConfigureAirtable={() => {
-                  if (!hasPersistedSetupChanges) setAirtableOpen(true);
-                }}
-                onMigrateRepository={() => {
-                  if (!hasPersistedSetupChanges) setMigrationOpen(true);
-                }}
-                canManageFileRetention={canManageFileRetention}
-                hasUnsavedChanges={hasPersistedSetupChanges}
-              />
-            </div>
-          </AdminPageSection>
+          </div>
         </div>
 
-        <div
-          className="event-setup-actions"
-          data-dirty={hasAnyUnsavedChanges ? "true" : undefined}
-        >
-          {pendingRecordDraftPresent ? (
-            <p
-              className="event-setup-state is-blocked"
-              id="event-setup-pending-record-help"
+        {/* All four panels remain mounted inside the one canonical form, so
+            switching never discards uncontrolled fields or record drafts. */}
+        <div className="event-setup-page">
+          <div
+            data-event-setup-panel="identity"
+            hidden={activePanel !== "identity"}
+          >
+            <AdminPageSection
+              id="event-setup-identity"
+              label="Identity"
+              description="How this event is named internally and how it presents itself to participants and the public."
+              defaultExpandedOnMobile
             >
-              <CircleAlert aria-hidden size={16} />
-              Add or clear the unfinished room, resource, track or format before
-              saving.
-            </p>
-          ) : changeCount ? (
-            <p className="event-setup-state is-dirty">
-              <CircleAlert aria-hidden size={16} />
-              {changeCount} unsaved {changeCount === 1 ? "change" : "changes"}
-            </p>
-          ) : (
-            <p className="event-setup-state">
-              <CircleCheck aria-hidden size={16} />
-              Saved
-            </p>
-          )}
-          <div className="event-setup-actions-buttons">
-            <button
-              type="button"
-              className="btn"
-              onClick={discardChanges}
-              disabled={!hasAnyUnsavedChanges || saving}
+              <div className="grid">
+                <EventIdentityPanels
+                  key={`identity-${panelGeneration}`}
+                  event={event}
+                  actionData={actionData}
+                />
+              </div>
+            </AdminPageSection>
+          </div>
+
+          <div
+            data-event-setup-panel="structure"
+            hidden={activePanel !== "structure"}
+          >
+            <AdminPageSection
+              id="event-setup-structure"
+              label="Programme structure"
+              description="The rooms, tracks and session formats the schedule builder can draw on."
+              defaultExpandedOnMobile
             >
-              Discard changes
-            </button>
-            <button
-              type="submit"
-              className="btn primary"
-              disabled={saving || pendingRecordDraftPresent}
-              aria-describedby={
-                pendingRecordDraftPresent
-                  ? "event-setup-pending-record-help"
-                  : undefined
-              }
+              <div className="grid">
+                <EventRoomsPanel
+                  key={`rooms-${panelGeneration}`}
+                  rooms={rooms}
+                  setRooms={setRooms}
+                  actionData={actionData}
+                  addDisabled={hasPersistedSetupChanges}
+                  onAdd={() => {
+                    if (!hasPersistedSetupChanges) setAddRoomOpen(true);
+                  }}
+                  onRemove={(roomId) => clearRemovedRecordFocus("room", roomId)}
+                  focusedRoomId={
+                    focusedRecordKind === "room" ? focusedRecordId : null
+                  }
+                  onDraftStateChange={handleRecordDraftStateChange}
+                />
+                <EventScheduleConfigurationPanels
+                  key={`schedule-${panelGeneration}`}
+                  tracks={tracks}
+                  setTracks={setTracks}
+                  sessionFormats={sessionFormats}
+                  setSessionFormats={setSessionFormats}
+                  actionData={actionData}
+                  onRemove={(trackId) =>
+                    clearRemovedRecordFocus("track", trackId)
+                  }
+                  focusedTrackId={
+                    focusedRecordKind === "track" ? focusedRecordId : null
+                  }
+                  onDraftStateChange={handleRecordDraftStateChange}
+                />
+              </div>
+            </AdminPageSection>
+          </div>
+
+          <div
+            data-event-setup-panel="access"
+            hidden={activePanel !== "access"}
+          >
+            <AdminPageSection
+              id="event-setup-access"
+              label="Access and roles"
+              description="Who can administer this event, and how applicants reach the submission form."
+              defaultExpandedOnMobile
             >
-              {saving ? "Saving…" : "Save event"}
-            </button>
+              <EventAccessPanels
+                event={event}
+                onInvite={() => setInviteOpen(true)}
+                onRevoke={revokeAdministrator}
+                canManageAdministrators={canManageOrganisationAdministrators}
+              />
+            </AdminPageSection>
+          </div>
+
+          <div data-event-setup-panel="data" hidden={activePanel !== "data"}>
+            <AdminPageSection
+              id="event-setup-data"
+              label="Data and files"
+              description="Upload limits, where event data is authoritative, and how long it is kept."
+              defaultExpandedOnMobile
+            >
+              <div className="grid grid-2">
+                <EventFilePolicyPanel event={event} actionData={actionData} />
+                <EventRepositoryPanel
+                  event={event}
+                  onConfigureAirtable={() => {
+                    if (!hasPersistedSetupChanges) setAirtableOpen(true);
+                  }}
+                  onMigrateRepository={() => {
+                    if (!hasPersistedSetupChanges) setMigrationOpen(true);
+                  }}
+                  canManageFileRetention={canManageFileRetention}
+                  hasUnsavedChanges={hasPersistedSetupChanges}
+                />
+              </div>
+            </AdminPageSection>
           </div>
         </div>
       </Form>

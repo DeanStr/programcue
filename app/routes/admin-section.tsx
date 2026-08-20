@@ -1,6 +1,8 @@
 import { CalendarDays, ExternalLink } from "lucide-react";
+import { useState } from "react";
 import { data, Link } from "react-router";
 import { ProgrammeEmbedBuilder } from "~/components/programme-embed-builder";
+import { AdminWorkspaceTabs } from "~/components/ui/admin-workspace-tabs";
 import { DomainStatusBadge } from "~/components/ui/domain-status-badge";
 import { EventDateTime } from "~/components/ui/event-date-time";
 import { EmptyState } from "~/components/ui/states";
@@ -176,8 +178,12 @@ function programmePulse(
   return parts.join(" · ");
 }
 
+type ProgrammeWorkspacePanel = "programme" | "builder" | "managed";
+
 export default function AdminSection({ loaderData }: Route.ComponentProps) {
   const summary = summarizeProgramme(loaderData.sessions);
+  const [activePanel, setActivePanel] =
+    useState<ProgrammeWorkspacePanel>("programme");
   return (
     <div className="programme-publishing">
       <div className="page-head pc-page-header">
@@ -241,7 +247,25 @@ export default function AdminSection({ loaderData }: Route.ComponentProps) {
           loaderData.speakerCount,
         )}
       </p>
-      <section className="programme-records">
+      <AdminWorkspaceTabs<ProgrammeWorkspacePanel>
+        className="programme-workspace-tabs"
+        label="Programme publishing views"
+        panels={[
+          { id: "programme", label: "Programme", meta: summary.total },
+          { id: "builder", label: "Embed builder" },
+          {
+            id: "managed",
+            label: "Managed embeds",
+            meta: loaderData.managedEmbeds.length,
+          },
+        ]}
+        activePanel={activePanel}
+        onChange={setActivePanel}
+      />
+      <section
+        className="programme-records programme-workspace-panel"
+        hidden={activePanel !== "programme"}
+      >
         <div className="card-title">
           <h2>Current programme records</h2>
           <span className="help right">
@@ -344,18 +368,28 @@ export default function AdminSection({ loaderData }: Route.ComponentProps) {
         )}
       </section>
       {loaderData.version ? (
-        <ProgrammeEmbedBuilder
-          key={`${loaderData.publicSlug}:${loaderData.version.versionNumber}:${loaderData.version.publishedAt ?? "pending"}:${loaderData.brandAccent}:${loaderData.timezone}`}
-          publicOrigin={loaderData.publicOrigin}
-          publicSlug={loaderData.publicSlug}
-          eventName={loaderData.eventName}
-          eventAccent={loaderData.brandAccent}
-          timezone={loaderData.timezone}
-          sessions={loaderData.sessions}
-          managedEmbeds={loaderData.managedEmbeds}
-        />
+        <div
+          className="programme-workspace-panel"
+          hidden={activePanel === "programme"}
+        >
+          <ProgrammeEmbedBuilder
+            key={`${loaderData.publicSlug}:${loaderData.version.versionNumber}:${loaderData.version.publishedAt ?? "pending"}:${loaderData.brandAccent}:${loaderData.timezone}`}
+            publicOrigin={loaderData.publicOrigin}
+            publicSlug={loaderData.publicSlug}
+            eventName={loaderData.eventName}
+            eventAccent={loaderData.brandAccent}
+            timezone={loaderData.timezone}
+            sessions={loaderData.sessions}
+            managedEmbeds={loaderData.managedEmbeds}
+            activePanel={activePanel === "managed" ? "managed" : "builder"}
+            onOpenBuilder={() => setActivePanel("builder")}
+          />
+        </div>
       ) : (
-        <section className="programme-embed-unavailable">
+        <section
+          className="programme-embed-unavailable programme-workspace-panel"
+          hidden={activePanel === "programme"}
+        >
           <h2>Embed unavailable</h2>
           <p>
             Publish a schedule before configuring or installing its public

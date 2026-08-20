@@ -25,6 +25,19 @@ async function expectInHostViewport(page: Page, locator: Locator) {
     .toBe(true);
 }
 
+async function showProgrammePanel(
+  page: Page,
+  name: "Programme" | "Embed builder" | "Managed embeds",
+) {
+  const button = page.getByRole("button", {
+    name: name === "Managed embeds" ? /^Managed embeds(?:\s+\d+)?$/ : name,
+    exact: name !== "Managed embeds",
+  });
+  if ((await button.getAttribute("aria-pressed")) !== "true")
+    await button.click();
+  await expect(button).toHaveAttribute("aria-pressed", "true");
+}
+
 test.beforeEach(async ({ page }) => {
   await page.context().addCookies([
     {
@@ -46,8 +59,9 @@ test("configures, previews and copies a constrained programme embed", async ({
   context,
 }) => {
   await waitForInterface(page, "/admin/programme");
+  await showProgrammePanel(page, "Embed builder");
   await expect(
-    page.getByRole("heading", { name: "Configure embed" }),
+    page.getByRole("heading", { name: "Embed builder" }),
   ).toBeVisible();
 
   await page.getByLabel("Initial day").selectOption("2027-05-21");
@@ -134,6 +148,7 @@ test("saves and controls a stable managed embed lifecycle", async ({
   page,
 }) => {
   await waitForInterface(page, "/admin/programme");
+  await showProgrammePanel(page, "Managed embeds");
   await expect(
     page.getByRole("heading", { name: "Managed embeds" }),
   ).toBeVisible();
@@ -147,7 +162,12 @@ test("saves and controls a stable managed embed lifecycle", async ({
 
   const row = page.getByRole("row").filter({ hasText: "Conference homepage" });
   await expect(row).toContainText("draft");
-  await row.getByRole("button", { name: "Load and preview" }).click();
+  await row.getByRole("button", { name: "Load in builder" }).click();
+  await expect(
+    page.getByRole("button", { name: "Embed builder", exact: true }),
+  ).toHaveAttribute("aria-pressed", "true");
+  await expect(page.locator(".programme-embed-preview iframe")).toBeVisible();
+  await showProgrammePanel(page, "Managed embeds");
   await expect(page.getByText(/Current revision 1/)).toBeVisible();
   await expect(page.getByLabel("Stable slug")).toHaveValue("e2e-homepage");
   await row.getByLabel("I previewed this configuration.").check();
@@ -194,6 +214,7 @@ test("previews every public widget type and applies granular field selection", a
   page,
 }) => {
   await waitForInterface(page, "/admin/programme");
+  await showProgrammePanel(page, "Embed builder");
   const preview = page.locator(".programme-embed-preview iframe");
   const surfaceSelect = page.getByLabel("Public surface");
   await expect(
