@@ -65,7 +65,9 @@ test("authenticated application stays within the mobile viewport", async ({
   await page.getByLabel("Email address").fill(email);
   await page.getByRole("button", { name: "Send verification code" }).click();
   await page.getByLabel("Six-digit code").fill("424242");
-  await page.getByRole("button", { name: "Verify and open drafts" }).click();
+  await page
+    .getByRole("button", { name: "Verify and open applications" })
+    .click();
   await expect(
     page.getByRole("heading", { name: "Call for Speakers" }),
   ).toBeVisible();

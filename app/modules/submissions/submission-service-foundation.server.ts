@@ -216,6 +216,38 @@ export class SubmissionServiceFoundation {
     return freshness === null ? form : this.getPublicFormD1(publicSlug);
   }
 
+  async getApplicantAccessForm(
+    publicSlug: string,
+    submissionId?: string | null,
+  ) {
+    try {
+      return await this.getPublicForm(publicSlug);
+    } catch (error) {
+      if (
+        !submissionId ||
+        !(error instanceof Response) ||
+        error.status !== 404
+      ) {
+        throw error;
+      }
+    }
+    const readHistoricalForm = async () => {
+      const form = await this.repository.getSubmittedApplicationForm(
+        publicSlug,
+        submissionId,
+      );
+      if (!form) {
+        throw new Response("Application form not found", { status: 404 });
+      }
+      return form;
+    };
+    const form = await readHistoricalForm();
+    const freshness = await this.airtable.assertReadable(
+      await this.publicScope(form.eventId),
+    );
+    return freshness === null ? form : readHistoricalForm();
+  }
+
   protected applicationRevisionAvailability(
     form: Awaited<ReturnType<SubmissionServiceFoundation["getPublicForm"]>>,
   ) {

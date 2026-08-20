@@ -62,6 +62,12 @@ export class D1SubmissionRepository {
     return this.forms.getPublicForm(...args);
   }
 
+  getSubmittedApplicationForm(
+    ...args: Parameters<SubmissionFormRepository["getSubmittedApplicationForm"]>
+  ) {
+    return this.forms.getSubmittedApplicationForm(...args);
+  }
+
   getCoSpeakerClaimForm(
     ...args: Parameters<SubmissionFormRepository["getCoSpeakerClaimForm"]>
   ) {

@@ -88,6 +88,11 @@ export class SubmissionService {
   ) {
     return this.shared.getPublicForm(...args);
   }
+  getApplicantAccessForm(
+    ...args: Parameters<SubmissionServiceFoundation["getApplicantAccessForm"]>
+  ) {
+    return this.shared.getApplicantAccessForm(...args);
+  }
   requireClaimedCoSpeakerContext(
     ...args: Parameters<
       SubmissionServiceFoundation["requireClaimedCoSpeakerContext"]

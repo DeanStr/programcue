@@ -209,7 +209,7 @@ export class SubmissionApplicantWorkflows extends SubmissionServiceFoundation {
             claimAccess.speakerId,
             claimAccess.rawToken,
           )
-        : await this.getPublicForm(publicSlug);
+        : await this.getApplicantAccessForm(publicSlug, selectedId);
     const applicant =
       claimedContext?.applicant ?? (await this.applicants.get(request, form));
     const availability = this.applicationAvailability(form);

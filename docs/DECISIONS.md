@@ -455,8 +455,12 @@ may use HTTP. That absolute URL is persisted with the original notification
 intent before Queue dispatch and is reused in durable delivery source values
 and the product-owned management action. Queue materialisation verifies that
 the durable URL still names the exact submission route. The stable route
-authorises the current applicant session, returns non-cacheable denials and
-resolves the form's current slug internally; a submission ID alone grants no
+returns non-cacheable denials and resolves the form's current slug internally.
+A browser without an applicant session enters the existing verification flow.
+When the form is closed or archived, only an exact non-draft submission URL can
+load its saved form version; the ordinary public form remains unavailable, the
+verified applicant must own the submission, and answers come from the immutable
+submitted snapshot in a read-only workspace. A submission ID alone grants no
 access. The public form keeps the selected submission visible after submit. A
 participant-workspace action is shown only when the same ordinary authenticated
 identity has accepted speaker or submitter access to that event;

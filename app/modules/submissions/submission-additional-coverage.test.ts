@@ -709,6 +709,165 @@ describe("Submissions D1 vertical slice", () => {
       expect(secondId).not.toBe(firstId);
     });
 
+    it("recovers an archived submitted application without reopening the form", async () => {
+      const { service, id, slug, testEnv } = await publishedForm();
+      const owner = await verifiedApplicantSession(
+        service,
+        slug,
+        `archived-owner-${crypto.randomUUID()}@example.com`,
+      );
+      const otherApplicant = await verifiedApplicantSession(
+        service,
+        slug,
+        `archived-other-${crypto.randomUUID()}@example.com`,
+      );
+      const submissionId = await service.createDraft(slug, owner.applicant);
+      const draft = (
+        await service.repository.getApplicantDrafts(id, owner.applicant)
+      ).find((candidate) => candidate.id === submissionId)!;
+      await service.submitDraft(slug, owner.applicant, {
+        submissionId,
+        revision: draft.revision,
+        answers: validAnswers,
+        speakers: [
+          {
+            name: owner.applicant.name,
+            email: owner.applicant.email,
+            biography: "Archived application owner biography.",
+          },
+        ],
+      });
+      await testEnv.DB.batch([
+        testEnv.DB.prepare(
+          `UPDATE submissions SET answers_json = ?
+            WHERE id = ? AND event_id = ?`,
+        ).bind(
+          JSON.stringify({
+            ...validAnswers,
+            title: "Mutable row must not replace the submitted snapshot",
+          }),
+          submissionId,
+          viewer.eventId,
+        ),
+        testEnv.DB.prepare(
+          `UPDATE form_definitions SET status = 'archived'
+            WHERE id = ? AND event_id = ?`,
+        ).bind(id, viewer.eventId),
+      ]);
+
+      await expect(service.getPublicForm(slug)).rejects.toMatchObject({
+        status: 404,
+      });
+      await expect(
+        applicationFormLoader({
+          request: new Request(`https://app.programcue.test/apply/${slug}`),
+          params: { slug },
+          context: routeContext(testEnv),
+        } as never),
+      ).rejects.toMatchObject({ status: 404 });
+
+      const managementUrl = `https://app.programcue.test/applications/${encodeURIComponent(submissionId)}/manage`;
+      const managed = await submissionManagementLoader({
+        request: new Request(managementUrl),
+        params: { submissionId },
+        context: routeContext(testEnv),
+      } as never);
+      expect(managed).toBeInstanceOf(Response);
+      expect((managed as Response).headers.get("location")).toBe(
+        `/apply/${encodeURIComponent(slug)}?draft=${encodeURIComponent(submissionId)}#submitted-application`,
+      );
+      const recoveryUrl = new URL(
+        (managed as Response).headers.get("location")!,
+        testEnv.BETTER_AUTH_URL,
+      );
+      recoveryUrl.hash = "";
+      const anonymousPortal = await applicationFormLoader({
+        request: new Request(recoveryUrl),
+        params: { slug },
+        context: routeContext(testEnv),
+      } as never);
+      expect(anonymousPortal).toMatchObject({
+        applicant: null,
+        selected: null,
+        form: { status: "archived" },
+        availability: { accepting: false, state: "closed" },
+      });
+
+      const requestedCode = await applicationFormAction({
+        request: new Request(recoveryUrl, {
+          method: "POST",
+          headers: {
+            "content-type": "application/x-www-form-urlencoded",
+            origin: testEnv.BETTER_AUTH_URL,
+          },
+          body: new URLSearchParams({
+            _intent: "request_code",
+            email: owner.applicant.email,
+          }),
+        }),
+        params: { slug },
+        context: routeContext(testEnv),
+      } as never);
+      expect(requestedCode).not.toBeInstanceOf(Response);
+      expect((requestedCode as { data: unknown }).data).toMatchObject({
+        ok: true,
+        stage: "code",
+        demoCode: "424242",
+      });
+      const verified = await applicationFormAction({
+        request: new Request(recoveryUrl, {
+          method: "POST",
+          headers: {
+            "content-type": "application/x-www-form-urlencoded",
+            origin: testEnv.BETTER_AUTH_URL,
+          },
+          body: new URLSearchParams({
+            _intent: "verify_code",
+            email: owner.applicant.email,
+            code: "424242",
+          }),
+        }),
+        params: { slug },
+        context: routeContext(testEnv),
+      } as never);
+      expect(verified).toBeInstanceOf(Response);
+      const recoveredCookie = (verified as Response).headers
+        .get("set-cookie")!
+        .split(";", 1)[0]!;
+      const recoveredPortal = await applicationFormLoader({
+        request: new Request(recoveryUrl, {
+          headers: { cookie: recoveredCookie },
+        }),
+        params: { slug },
+        context: routeContext(testEnv),
+      } as never);
+      if (!("applicant" in recoveredPortal)) {
+        throw new Error(
+          "Archived application recovery did not return a portal.",
+        );
+      }
+      expect(recoveredPortal.form.status).toBe("archived");
+      expect(recoveredPortal.selectedCanRevise).toBe(false);
+      expect(recoveredPortal.selected).toMatchObject({
+        id: submissionId,
+        status: "submitted",
+        answers: validAnswers,
+      });
+
+      await expect(
+        service.createDraft(slug, owner.applicant),
+      ).rejects.toMatchObject({ status: 404 });
+      await expect(
+        submissionManagementLoader({
+          request: new Request(managementUrl, {
+            headers: { cookie: otherApplicant.cookie },
+          }),
+          params: { submissionId },
+          context: routeContext(testEnv),
+        } as never),
+      ).rejects.toMatchObject({ status: 404 });
+    });
+
     it("requires the operations Queue before saving or finalising a submission", async () => {
       const { service, slug, testEnv } = await publishedForm();
       const applicant = await verifiedApplicant(service, slug);

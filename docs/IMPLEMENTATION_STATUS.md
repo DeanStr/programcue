@@ -187,9 +187,13 @@ credential-free, submission-ID-based management URL before Queue dispatch,
 requiring HTTPS under production security while retaining HTTP local
 development. Queue materialisation validates that exact durable route; the
 applicant-authorised route returns non-cacheable denials, resolves the form's
-current slug, and delivery includes the product-owned management link without
-re-reading mutable routing data. Confirmation authoring hides and rejects
-custom buttons and previews the fixed action. The participant workspace action
+current slug and sends a clean browser through existing verification. An exact
+non-draft submission URL can load its saved form version after closure or
+archival while the ordinary public form remains unavailable; verified ownership
+is required and the immutable submitted answers render read-only. Delivery
+includes the product-owned management link without re-reading mutable routing
+data. Confirmation authoring hides and rejects custom buttons and previews the
+fixed action. The participant workspace action
 is server-gated to a compatible ordinary session and accepted event role.
 Direct participant profile uploads are headshot-only. Session
 deliverables are explicitly session-scoped task evidence, while reusable

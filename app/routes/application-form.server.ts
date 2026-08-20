@@ -1059,14 +1059,16 @@ export async function action({ request, context, params }: Route.ActionArgs) {
             request,
           )
         : null;
+    const requestedSubmissionId = actionUrl.searchParams.get("draft");
     const form =
-      claimedSignOutContext?.form ?? (await service.getPublicForm(slug));
+      claimedSignOutContext?.form ??
+      (await service.getApplicantAccessForm(slug, requestedSubmissionId));
     const publicIntentResponse = await handlePublicApplicationIntent({
       intent,
       formData,
       form,
       request,
-      requestedSubmissionId: actionUrl.searchParams.get("draft"),
+      requestedSubmissionId,
       service,
       slug,
       env,

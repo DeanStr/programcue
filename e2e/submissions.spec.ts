@@ -461,7 +461,7 @@ test.describe
         "test-verify-token",
       );
       await expect(
-        page.getByRole("button", { name: "Verify and open drafts" }),
+        page.getByRole("button", { name: "Verify and open applications" }),
       ).toBeEnabled();
     });
 
@@ -499,13 +499,13 @@ test.describe
       await expect(page.getByText("No email was sent")).toBeVisible();
       await page.getByLabel("Six-digit code").fill("000000");
       await page
-        .getByRole("button", { name: "Verify and open drafts" })
+        .getByRole("button", { name: "Verify and open applications" })
         .click();
       await expect(page.getByRole("alert")).toContainText(/verification code/i);
       await expect(page.getByLabel("Six-digit code")).toBeVisible();
       await page.getByLabel("Six-digit code").fill("424242");
       await page
-        .getByRole("button", { name: "Verify and open drafts" })
+        .getByRole("button", { name: "Verify and open applications" })
         .click();
       await expect(
         page.getByRole("heading", { name: "Call for Speakers" }),
@@ -636,7 +636,7 @@ test.describe
           .click();
         await recoveryPage.getByLabel("Six-digit code").fill("424242");
         await recoveryPage
-          .getByRole("button", { name: "Verify and open drafts" })
+          .getByRole("button", { name: "Verify and open applications" })
           .click();
         await expect(recoveryPage).toHaveURL(
           new RegExp(
@@ -900,7 +900,7 @@ test.describe
         .click();
       await page.getByLabel("Six-digit code").fill("424242");
       await page
-        .getByRole("button", { name: "Verify and open drafts" })
+        .getByRole("button", { name: "Verify and open applications" })
         .click();
       await page.getByRole("button", { name: "Start application" }).click();
 

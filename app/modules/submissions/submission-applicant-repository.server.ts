@@ -126,12 +126,24 @@ export class SubmissionApplicantRepository {
             invitationStatus: string;
             claimedBiography: string;
           }>();
-        let uploads = {};
+        let submittedSnapshot: ReturnType<
+          typeof submittedSnapshotSchema.parse
+        > | null = null;
         if (row.submittedSnapshotJson) {
-          const submittedSnapshot = submittedSnapshotSchema.parse(
-            JSON.parse(row.submittedSnapshotJson),
+          try {
+            submittedSnapshot = submittedSnapshotSchema.parse(
+              JSON.parse(row.submittedSnapshotJson),
+            );
+          } catch {
+            throw new Error(
+              `Submission ${row.id} has an invalid immutable submitted snapshot.`,
+            );
+          }
+        }
+        if (row.status !== "draft" && submittedSnapshot === null) {
+          throw new Error(
+            `Submission ${row.id} is missing its immutable submitted snapshot.`,
           );
-          uploads = submittedSnapshot.uploads;
         }
         const {
           answersJson,
@@ -141,8 +153,10 @@ export class SubmissionApplicantRepository {
         } = row;
         return {
           ...summary,
-          answers: JSON.parse(answersJson) as Record<string, string | string[]>,
-          uploads,
+          answers:
+            submittedSnapshot?.answers ??
+            (JSON.parse(answersJson) as Record<string, string | string[]>),
+          uploads: submittedSnapshot?.uploads ?? {},
           speakers: speakerRows.results.map(
             ({ claimedBiography, ...speaker }) => ({
               ...speaker,

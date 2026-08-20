@@ -224,7 +224,7 @@ test.describe
         .click();
       await page.getByLabel("Six-digit code").fill("424242");
       await page
-        .getByRole("button", { name: "Verify and open drafts" })
+        .getByRole("button", { name: "Verify and open applications" })
         .click();
       await page.getByRole("button", { name: "Start application" }).click();
       await page.getByText("I have reviewed this application").click();

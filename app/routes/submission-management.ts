@@ -34,7 +34,7 @@ export async function loader({ request, context, params }: Route.LoaderArgs) {
          ON form.id = version.form_id AND form.event_id = submission.event_id
        JOIN events event
          ON event.id = submission.event_id AND event.activation_status = 'active'
-      WHERE submission.id = ? AND form.status = 'published'
+      WHERE submission.id = ? AND submission.status <> 'draft'
       LIMIT 1`,
   )
     .bind(submissionId)

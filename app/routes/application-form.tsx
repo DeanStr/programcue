@@ -230,7 +230,7 @@ function AccessPanel({
                 ? verifySecurityStatus === "error"
                   ? "Security check unavailable"
                   : "Security check in progress…"
-                : "Verify and open drafts"}
+                : "Verify and open applications"}
           </button>
         </Form>
       </section>
@@ -292,7 +292,7 @@ function AccessPanel({
       </h2>
       <p className="subtle">
         {!accepting
-          ? "New applications are unavailable. Verify your email to recover an existing draft."
+          ? "New applications are unavailable. Verify your email to recover an existing application."
           : form.allowAnonymousDrafts
             ? "Begin now. We will ask you to verify an email only before final submission."
             : "Verify your email before saving or submitting. Your code expires after ten minutes."}
@@ -349,7 +349,7 @@ function AccessPanel({
         <div className="cfp-returning">
           <h3 className="cfp-returning-heading">Resume an application</h3>
           <p className="help">
-            Recover verified drafts on this or another device.
+            Recover verified applications on this or another device.
           </p>
           {recoverForm}
         </div>
@@ -613,8 +613,8 @@ type AuthenticatedApplicationWorkspaceProps = {
   applicant: NonNullable<AvailableApplicationLoaderData["applicant"]>;
   claimedSpeakerId: string | null;
   claimScopedAction: string | undefined;
-  claimScopedPortalPath: string;
-  historicalClaimPortal: boolean;
+  applicationPortalPath: string;
+  historicalPortal: boolean;
   navigation: ReturnType<typeof useNavigation>;
 };
 
@@ -624,8 +624,8 @@ function AuthenticatedApplicationWorkspace({
   applicant,
   claimedSpeakerId,
   claimScopedAction,
-  claimScopedPortalPath,
-  historicalClaimPortal,
+  applicationPortalPath,
+  historicalPortal,
   navigation,
 }: AuthenticatedApplicationWorkspaceProps) {
   const {
@@ -659,7 +659,7 @@ function AuthenticatedApplicationWorkspace({
           </div>
           {applicant.verified &&
           !applicant.claimOnly &&
-          !historicalClaimPortal &&
+          !historicalPortal &&
           drafts.length > 0 ? (
             <Form method="post" action={claimScopedAction}>
               <input type="hidden" name="_intent" value="create_draft" />
@@ -682,14 +682,14 @@ function AuthenticatedApplicationWorkspace({
             <Link
               className="btn primary"
               to={`/sign-in?${new URLSearchParams({
-                returnTo: claimScopedPortalPath,
+                returnTo: applicationPortalPath,
               })}`}
             >
-              {historicalClaimPortal
+              {historicalPortal
                 ? "Sign in to view applications"
                 : "Sign in to apply"}
             </Link>
-          ) : historicalClaimPortal ? (
+          ) : historicalPortal ? (
             <span className="help right">
               Application history is read-only.
             </span>
@@ -704,7 +704,7 @@ function AuthenticatedApplicationWorkspace({
             <strong>Notice</strong>
             <span>
               {availability.reason}{" "}
-              {historicalClaimPortal
+              {historicalPortal
                 ? "Existing applications remain available to view."
                 : "Existing drafts remain available to view and save."}
             </span>
@@ -799,7 +799,7 @@ function AuthenticatedApplicationWorkspace({
           action={claimScopedAction}
         />
       ) : null}
-      {invitations.length && !historicalClaimPortal ? (
+      {invitations.length && !historicalPortal ? (
         <section className="card pad mb">
           <div className="card-title">
             <div>
@@ -892,7 +892,7 @@ function AuthenticatedApplicationWorkspace({
             <p className="subtle">
               {applicant.claimOnly
                 ? "Your claim link grants access only to your speaker profile. Sign in to view or manage applications."
-                : historicalClaimPortal
+                : historicalPortal
                   ? "No applications are available for this account on the closed form."
                   : "Create a draft to begin. You can maintain more than one application."}
             </p>
@@ -939,7 +939,7 @@ function AuthenticatedApplicationWorkspace({
               errors={actionData?.errors}
               canSubmit={availability.accepting && applicant.verified}
               canRevise={loaderData.selectedCanRevise}
-              forceReadOnly={historicalClaimPortal}
+              forceReadOnly={historicalPortal}
               readOnlyNotice="This application belongs to a closed form and is available for reference only."
               acceptedParticipantsHref={
                 selected.status === "accepted" &&
@@ -958,7 +958,7 @@ function AuthenticatedApplicationWorkspace({
               <h2>
                 {applicant.claimOnly
                   ? "Sign in to manage applications"
-                  : historicalClaimPortal
+                  : historicalPortal
                     ? "No applications to show"
                     : otherEventApplications.length
                       ? "Start another application on this form"
@@ -967,20 +967,20 @@ function AuthenticatedApplicationWorkspace({
               <p className="subtle">
                 {applicant.claimOnly
                   ? "A co-speaker claim link grants access to your speaker profile only."
-                  : historicalClaimPortal
-                    ? "This closed form remains available only for claim-scoped profile and application history."
+                  : historicalPortal
+                    ? "This closed form remains available only for application history."
                     : "Drafts are private and saved against the current published form version."}
               </p>
               {applicant.claimOnly ? (
                 <Link
                   className="btn primary"
                   to={`/sign-in?${new URLSearchParams({
-                    returnTo: claimScopedPortalPath,
+                    returnTo: applicationPortalPath,
                   })}`}
                 >
                   Continue to sign in
                 </Link>
-              ) : historicalClaimPortal ? (
+              ) : historicalPortal ? (
                 <p className="help">This form is closed to new applications.</p>
               ) : (
                 <Form method="post" action={claimScopedAction}>
@@ -1036,14 +1036,19 @@ export default function ApplicationForm({ loaderData }: Route.ComponentProps) {
   const claimedSpeakerId = new URLSearchParams(location.search).get(
     "claimedSpeaker",
   );
+  const requestedSubmissionId = new URLSearchParams(location.search).get(
+    "draft",
+  );
   const claimScopedAction = claimedSpeakerId
     ? `?${new URLSearchParams({ claimedSpeaker: claimedSpeakerId })}`
     : undefined;
-  const claimScopedPortalPath = claimedSpeakerId
+  const applicationPortalPath = claimedSpeakerId
     ? `/apply/${encodeURIComponent(form.publicSlug)}?${new URLSearchParams({ claimedSpeaker: claimedSpeakerId })}`
-    : `/apply/${encodeURIComponent(form.publicSlug)}`;
-  const historicalClaimPortal = Boolean(
-    claimedSpeakerId && form.status !== "published",
+    : requestedSubmissionId
+      ? `/apply/${encodeURIComponent(form.publicSlug)}?${new URLSearchParams({ draft: requestedSubmissionId })}`
+      : `/apply/${encodeURIComponent(form.publicSlug)}`;
+  const historicalPortal = Boolean(
+    (claimedSpeakerId || requestedSubmissionId) && form.status !== "published",
   );
   const isEvaluationApplicant =
     applicant?.verified === true && applicant.evaluation === true;
@@ -1061,7 +1066,7 @@ export default function ApplicationForm({ loaderData }: Route.ComponentProps) {
           <Link
             aria-label={`${form.eventName} application home`}
             className="brand"
-            to={`/apply/${form.publicSlug}`}
+            to={applicationPortalPath}
             style={{ color: "var(--ink)", padding: 0 }}
           >
             {form.participantLogoUrl ? (
@@ -1119,7 +1124,7 @@ export default function ApplicationForm({ loaderData }: Route.ComponentProps) {
         <Link
           aria-label={`${form.eventName} application home`}
           className="brand"
-          to={claimScopedPortalPath}
+          to={applicationPortalPath}
           style={{ color: "var(--ink)", padding: 0 }}
         >
           {form.participantLogoUrl ? (
@@ -1189,8 +1194,8 @@ export default function ApplicationForm({ loaderData }: Route.ComponentProps) {
             applicant={applicant}
             claimedSpeakerId={claimedSpeakerId}
             claimScopedAction={claimScopedAction}
-            claimScopedPortalPath={claimScopedPortalPath}
-            historicalClaimPortal={historicalClaimPortal}
+            applicationPortalPath={applicationPortalPath}
+            historicalPortal={historicalPortal}
             navigation={navigation}
           />
         ) : null}
