@@ -1,17 +1,30 @@
 import { ChevronDown, ChevronUp, Plus, Search, Trash2, X } from "lucide-react";
-import { type Dispatch, type SetStateAction, useMemo, useState } from "react";
+import {
+  type Dispatch,
+  type ReactNode,
+  type SetStateAction,
+  useMemo,
+  useState,
+} from "react";
 import { Form, Link } from "react-router";
 import type { PublishedProgramme } from "~/modules/programme/public-programme-types";
 import {
   PUBLIC_SITE_PAGE_TYPES,
   type PublicSiteDraft,
   type PublicSitePageType,
+  type PublicSiteSectionType,
 } from "~/modules/public-site/public-site";
 import {
+  type PublicSiteStatisticType,
   publicSitePageDescriptions,
+  publicSiteSectionDescriptions,
   publicSiteSectionLabels,
+  publicSiteStatisticLabels,
 } from "./admin-public-site-constants";
+import { SitePanelHeading } from "./admin-public-site-panels";
 import { RestrictedMarkdownEditor } from "./restricted-markdown-editor";
+
+export type PublicSiteEditorPanel = "homepage" | "pages";
 
 type FeaturedPickerItem = {
   id: string;
@@ -20,6 +33,16 @@ type FeaturedPickerItem = {
   searchText: string;
   unavailable?: boolean;
 };
+
+const PROGRAMME_BACKED_SECTIONS: PublicSiteSectionType[] = [
+  "featured_speakers",
+  "featured_sessions",
+  "statistics",
+];
+const PROGRAMME_REFERENCE_SECTIONS: PublicSiteSectionType[] = [
+  "featured_speakers",
+  "featured_sessions",
+];
 
 function OrderedFeaturedPicker({
   label,
@@ -68,6 +91,25 @@ function OrderedFeaturedPicker({
     );
   }, [items, normalisedQuery, selectedIds]);
   const visibleAvailable = available.slice(0, 20);
+  const atCapacity = selected.length >= 12;
+
+  /* One line under the search field answers the only question it can raise:
+     what is on offer, or why nothing can be added. */
+  function availability() {
+    if (atCapacity)
+      return "Twelve records are featured, which is the maximum. Remove one to choose another.";
+    if (!available.length)
+      return normalisedQuery
+        ? "No available records match this search."
+        : "Every available record is already featured.";
+    if (available.length > visibleAvailable.length)
+      return `Showing ${visibleAvailable.length} of ${available.length} ${
+        normalisedQuery ? "matches" : "available records"
+      }. Type to search.`;
+    return `${available.length} available ${
+      available.length === 1 ? "record" : "records"
+    }${normalisedQuery ? " match" : ""}.`;
+  }
 
   function move(index: number, direction: -1 | 1) {
     setSelectedIds((current) => {
@@ -80,16 +122,16 @@ function OrderedFeaturedPicker({
   }
 
   return (
-    <fieldset className="public-site-featured-picker mt">
-      <legend>{label}</legend>
-      <div className="card-title">
-        <div>
-          <strong>Featured · {selected.length} of 12</strong>
-          <p className="help">
-            This order is the public homepage display order.
-          </p>
-        </div>
-      </div>
+    <fieldset className="public-site-featured-picker">
+      {/* The section row above already names this picker. The legend stays for
+          the group's accessible name rather than printing the title twice. */}
+      <legend className="sr-only">{label}</legend>
+      <p className="public-site-featured-count">
+        <strong>Featured · {selected.length} of 12</strong>
+        <span className="help">
+          This order is the public homepage display order.
+        </span>
+      </p>
       {selected.length ? (
         <ol className="public-site-featured-selected">
           {selected.map((item, index) => (
@@ -119,7 +161,7 @@ function OrderedFeaturedPicker({
                 </button>
                 <button
                   type="button"
-                  className="btn small"
+                  className="icon-btn danger"
                   aria-label={
                     item.unavailable ? item.title : `Remove ${item.title}`
                   }
@@ -129,7 +171,7 @@ function OrderedFeaturedPicker({
                     )
                   }
                 >
-                  <X aria-hidden size={14} /> Remove
+                  <X aria-hidden size={14} />
                 </button>
               </div>
             </li>
@@ -142,7 +184,7 @@ function OrderedFeaturedPicker({
         <p className="help">{unavailableMessage}</p>
       ) : (
         <>
-          <label className="label mt">
+          <label className="label">
             <span>
               <Search aria-hidden size={14} /> Search available
             </span>
@@ -154,45 +196,155 @@ function OrderedFeaturedPicker({
             />
           </label>
           <p className="help" role="status">
-            {available.length > visibleAvailable.length
-              ? `Showing ${visibleAvailable.length} of ${available.length} ${
-                  normalisedQuery ? "matches" : "available records"
-                }. Type to search.`
-              : `${available.length} available ${
-                  available.length === 1 ? "record" : "records"
-                }${normalisedQuery ? " match" : ""}.`}
+            {availability()}
           </p>
-          <div className="public-site-featured-available">
-            {visibleAvailable.map((item) => (
-              <div key={item.id}>
-                <span>
-                  <strong>{item.title}</strong>
-                  {item.metadata ? <small>{item.metadata}</small> : null}
-                </span>
-                <button
-                  type="button"
-                  className="btn small"
-                  disabled={selected.length >= 12}
-                  aria-label={`Add ${item.title}`}
-                  onClick={() =>
-                    setSelectedIds((current) => [...current, item.id])
-                  }
-                >
-                  <Plus aria-hidden size={14} /> Add
-                </button>
-              </div>
-            ))}
-            {!available.length ? (
-              <p className="help">
-                {normalisedQuery
-                  ? "No available records match this search."
-                  : "Every available record is already featured."}
-              </p>
-            ) : null}
-          </div>
+          {available.length ? (
+            <div className="public-site-featured-available">
+              {visibleAvailable.map((item) => (
+                <div key={item.id}>
+                  <span>
+                    <strong>{item.title}</strong>
+                    {item.metadata ? <small>{item.metadata}</small> : null}
+                  </span>
+                  <button
+                    type="button"
+                    className="btn small"
+                    disabled={atCapacity}
+                    aria-label={`Add ${item.title}`}
+                    onClick={() =>
+                      setSelectedIds((current) => [...current, item.id])
+                    }
+                  >
+                    <Plus aria-hidden size={14} /> Add
+                  </button>
+                </div>
+              ))}
+            </div>
+          ) : null}
         </>
       )}
     </fieldset>
+  );
+}
+
+function FaqEditor({
+  configuration,
+  setConfiguration,
+}: {
+  configuration: PublicSiteDraft;
+  setConfiguration: Dispatch<SetStateAction<PublicSiteDraft>>;
+}) {
+  function move(index: number, direction: -1 | 1) {
+    setConfiguration((current) => {
+      const target = index + direction;
+      if (target < 0 || target >= current.faqItems.length) return current;
+      const faqItems = [...current.faqItems];
+      [faqItems[index], faqItems[target]] = [faqItems[target], faqItems[index]];
+      return { ...current, faqItems };
+    });
+  }
+  return (
+    <>
+      <p className="help">
+        Answers support paragraphs, headings, lists, bold and HTTPS links.
+      </p>
+      <div className="public-site-faq-editor">
+        {configuration.faqItems.map((item, index) => (
+          <fieldset key={item.id}>
+            <legend className="sr-only">Question {index + 1}</legend>
+            <div className="public-site-record-head">
+              <strong>Question {index + 1}</strong>
+              <div className="public-site-order-actions">
+                <button
+                  className="icon-btn"
+                  type="button"
+                  disabled={index === 0}
+                  aria-label={`Move up FAQ item ${index + 1}`}
+                  onClick={() => move(index, -1)}
+                >
+                  <ChevronUp aria-hidden size={14} />
+                </button>
+                <button
+                  className="icon-btn"
+                  type="button"
+                  disabled={index === configuration.faqItems.length - 1}
+                  aria-label={`Move down FAQ item ${index + 1}`}
+                  onClick={() => move(index, 1)}
+                >
+                  <ChevronDown aria-hidden size={14} />
+                </button>
+                <button
+                  className="icon-btn danger"
+                  type="button"
+                  aria-label={`Remove FAQ item ${index + 1}`}
+                  onClick={() =>
+                    setConfiguration((current) => ({
+                      ...current,
+                      faqItems: current.faqItems.filter(
+                        (candidate) => candidate.id !== item.id,
+                      ),
+                    }))
+                  }
+                >
+                  <Trash2 aria-hidden size={14} />
+                </button>
+              </div>
+            </div>
+            <label className="label">
+              Question
+              <input
+                className="field"
+                maxLength={180}
+                value={item.question}
+                onChange={(event) =>
+                  setConfiguration((current) => ({
+                    ...current,
+                    faqItems: current.faqItems.map((candidate) =>
+                      candidate.id === item.id
+                        ? { ...candidate, question: event.target.value }
+                        : candidate,
+                    ),
+                  }))
+                }
+              />
+            </label>
+            <RestrictedMarkdownEditor
+              label="Answer"
+              maximumLength={2_000}
+              value={item.answer}
+              onChange={(answer) =>
+                setConfiguration((current) => ({
+                  ...current,
+                  faqItems: current.faqItems.map((candidate) =>
+                    candidate.id === item.id
+                      ? { ...candidate, answer }
+                      : candidate,
+                  ),
+                }))
+              }
+            />
+          </fieldset>
+        ))}
+      </div>
+      <div className="page-actions">
+        <button
+          className="btn small"
+          type="button"
+          disabled={configuration.faqItems.length >= 12}
+          onClick={() =>
+            setConfiguration((current) => ({
+              ...current,
+              faqItems: [
+                ...current.faqItems,
+                { id: crypto.randomUUID(), question: "", answer: "" },
+              ],
+            }))
+          }
+        >
+          <Plus aria-hidden size={14} /> Add question
+        </button>
+      </div>
+    </>
   );
 }
 
@@ -218,14 +370,14 @@ function SitePageEditor({
     }));
   }
   return (
-    <fieldset>
-      <legend>{value.title}</legend>
+    <fieldset data-enabled={value.enabled}>
+      <legend className="sr-only">{value.title}</legend>
       <div className="public-site-page-row">
         <div>
-          <strong>{value.navigationLabel}</strong>
+          <strong>{value.title}</strong>
           <p className="help">{publicSitePageDescriptions[page]}</p>
         </div>
-        <label>
+        <label className="public-site-inline-check">
           <input
             type="checkbox"
             checked={value.enabled}
@@ -233,22 +385,18 @@ function SitePageEditor({
               update({ enabled: event.target.checked });
               if (event.target.checked) setOpen(true);
             }}
-          />{" "}
-          Publish this page with the site
+          />
+          <span>Publish this page with the site</span>
         </label>
       </div>
       <details
-        className="pc-disclosure mt"
+        className="pc-disclosure public-site-page-content"
         open={open}
         onToggle={(event) => setOpen(event.currentTarget.open)}
       >
         <summary>
           <strong>Edit page content</strong>
-          <span className="help">
-            {value.enabled
-              ? "Published with the next site version"
-              : "Not enabled"}
-          </span>
+          <span className="help">Navigation: {value.navigationLabel}</span>
         </summary>
         <div className="stack mt">
           <label className="label">
@@ -283,87 +431,76 @@ function SitePageEditor({
   );
 }
 
-function SiteSectionControls({
-  configuration,
-  setConfiguration,
-  programmeAvailable,
-  programmeReferencesAvailable,
+/* The homepage is an ordered list of sections, so the editor is that same list.
+   Reordering, showing and composing a section were three controls in three
+   places on this page; venue had no editor at all and the FAQ's lived several
+   screens below the row that switched it on. */
+function HomepageSectionRow({
+  section,
+  index,
+  total,
+  visible,
+  disabled,
+  summary,
+  onToggle,
+  onMove,
+  children,
 }: {
-  configuration: PublicSiteDraft;
-  setConfiguration: Dispatch<SetStateAction<PublicSiteDraft>>;
-  programmeAvailable: boolean;
-  programmeReferencesAvailable: boolean;
+  section: PublicSiteSectionType;
+  index: number;
+  total: number;
+  visible: boolean;
+  disabled: boolean;
+  summary: string;
+  onToggle(next: boolean): void;
+  onMove(direction: -1 | 1): void;
+  children: ReactNode;
 }) {
-  function move(index: number, direction: -1 | 1) {
-    setConfiguration((current) => {
-      const next = [...current.sectionOrder];
-      const target = index + direction;
-      if (target < 0 || target >= next.length) return current;
-      [next[index], next[target]] = [next[target], next[index]];
-      return { ...current, sectionOrder: next };
-    });
-  }
+  const label = publicSiteSectionLabels[section];
   return (
-    <ol className="public-site-section-order">
-      {configuration.sectionOrder.map((section, index) => (
-        <li key={section}>
-          <label>
-            <input
-              type="checkbox"
-              checked={configuration.sectionVisibility[section]}
-              disabled={
-                !configuration.sectionVisibility[section] &&
-                ((!programmeAvailable &&
-                  [
-                    "featured_speakers",
-                    "featured_sessions",
-                    "statistics",
-                  ].includes(section)) ||
-                  (!programmeReferencesAvailable &&
-                    ["featured_speakers", "featured_sessions"].includes(
-                      section,
-                    )))
-              }
-              onChange={(event) =>
-                setConfiguration((current) => ({
-                  ...current,
-                  sectionVisibility: {
-                    ...current.sectionVisibility,
-                    [section]: event.target.checked,
-                  },
-                }))
-              }
-            />
-            <span>
-              <strong>{publicSiteSectionLabels[section]}</strong>
-              <small>
-                {configuration.sectionVisibility[section] ? "Shown" : "Hidden"}
-              </small>
-            </span>
-          </label>
-          <div className="public-site-order-actions">
-            <button
-              type="button"
-              className="icon-btn"
-              disabled={index === 0}
-              aria-label={`Move up ${publicSiteSectionLabels[section]}`}
-              onClick={() => move(index, -1)}
-            >
-              <ChevronUp aria-hidden size={14} />
-            </button>
-            <button
-              type="button"
-              className="icon-btn"
-              disabled={index === configuration.sectionOrder.length - 1}
-              aria-label={`Move down ${publicSiteSectionLabels[section]}`}
-              onClick={() => move(index, 1)}
-            >
-              <ChevronDown aria-hidden size={14} />
-            </button>
-          </div>
-        </li>
-      ))}
-    </ol>
+    <li className="public-site-section-row" data-visible={visible}>
+      <details className="public-site-section-editor">
+        <summary>
+          <span className="public-site-section-name">
+            <strong>{label}</strong>
+            <span className="help">{summary}</span>
+          </span>
+        </summary>
+        <div className="public-site-section-body">{children}</div>
+      </details>
+      <div className="public-site-section-controls">
+        <label className="public-site-section-visibility">
+          <input
+            type="checkbox"
+            checked={visible}
+            disabled={disabled}
+            aria-label={`Show ${label} on the homepage`}
+            onChange={(event) => onToggle(event.target.checked)}
+          />
+          <span aria-hidden="true">{visible ? "Shown" : "Hidden"}</span>
+        </label>
+        <div className="public-site-order-actions">
+          <button
+            type="button"
+            className="icon-btn"
+            disabled={index === 0}
+            aria-label={`Move up ${label}`}
+            onClick={() => onMove(-1)}
+          >
+            <ChevronUp aria-hidden size={14} />
+          </button>
+          <button
+            type="button"
+            className="icon-btn"
+            disabled={index === total - 1}
+            aria-label={`Move down ${label}`}
+            onClick={() => onMove(1)}
+          >
+            <ChevronDown aria-hidden size={14} />
+          </button>
+        </div>
+      </div>
+    </li>
   );
 }
 
@@ -374,9 +511,8 @@ export function AdminPublicSiteEditor({
   serializedConfiguration,
   programme,
   programmeReferencesAvailable,
-  unsaved,
-  busy,
-  saving,
+  formId,
+  activePanel,
 }: {
   configuration: PublicSiteDraft;
   setConfiguration: Dispatch<SetStateAction<PublicSiteDraft>>;
@@ -384,9 +520,8 @@ export function AdminPublicSiteEditor({
   serializedConfiguration: string;
   programme: PublishedProgramme | null;
   programmeReferencesAvailable: boolean;
-  unsaved: boolean;
-  busy: boolean;
-  saving: boolean;
+  formId: string;
+  activePanel: PublicSiteEditorPanel | null;
 }) {
   const commandId = useMemo(
     () => ({ revision: draftRevision, id: crypto.randomUUID() }),
@@ -426,11 +561,171 @@ export function AdminPublicSiteEditor({
         : null,
     [programme],
   );
-  const enabledPages = PUBLIC_SITE_PAGE_TYPES.filter(
-    (page) => configuration.pages[page].enabled,
-  );
+  const programmeAvailable = programme !== null;
+  const unavailableMessage = programmeAvailable
+    ? "Featured programme content is unavailable for this event's programme source. Existing selections can be removed."
+    : "Publish a programme before choosing speakers or sessions.";
+  const statistics = Object.entries(configuration.statisticVisibility) as [
+    PublicSiteStatisticType,
+    boolean,
+  ][];
+  const shownStatistics = statistics.filter(([, shown]) => shown);
+
+  function moveSection(index: number, direction: -1 | 1) {
+    setConfiguration((current) => {
+      const next = [...current.sectionOrder];
+      const target = index + direction;
+      if (target < 0 || target >= next.length) return current;
+      [next[index], next[target]] = [next[target], next[index]];
+      return { ...current, sectionOrder: next };
+    });
+  }
+
+  function toggleSection(section: PublicSiteSectionType, next: boolean) {
+    setConfiguration((current) => ({
+      ...current,
+      sectionVisibility: { ...current.sectionVisibility, [section]: next },
+    }));
+  }
+
+  function sectionSummary(section: PublicSiteSectionType) {
+    switch (section) {
+      case "introduction":
+        return (
+          configuration.introductionHeading.trim() ||
+          publicSiteSectionDescriptions.introduction
+        );
+      case "featured_speakers":
+        return `${configuration.featuredSpeakerIds.length} of 12 chosen`;
+      case "featured_sessions":
+        return `${configuration.featuredSessionIds.length} of 12 chosen`;
+      case "statistics":
+        return shownStatistics.length
+          ? shownStatistics
+              .map(([statistic]) => publicSiteStatisticLabels[statistic])
+              .join(" · ")
+          : "No counts shown";
+      case "faq":
+        return configuration.faqItems.length
+          ? `${configuration.faqItems.length} question${
+              configuration.faqItems.length === 1 ? "" : "s"
+            }`
+          : "No questions";
+      default:
+        return publicSiteSectionDescriptions[section];
+    }
+  }
+
+  function sectionEditor(section: PublicSiteSectionType) {
+    switch (section) {
+      case "introduction":
+        return (
+          <>
+            <label className="label">
+              Introduction heading
+              <input
+                className="field"
+                maxLength={100}
+                value={configuration.introductionHeading}
+                onChange={(event) =>
+                  setConfiguration((current) => ({
+                    ...current,
+                    introductionHeading: event.target.value,
+                  }))
+                }
+              />
+            </label>
+            <p className="help">
+              The introduction body uses the existing Event Setup description.{" "}
+              <Link to="/admin/event">Edit event details</Link>.
+            </p>
+          </>
+        );
+      case "featured_speakers":
+        return (
+          <OrderedFeaturedPicker
+            label="Featured speakers"
+            recordKind="speaker"
+            items={speakerItems}
+            canAdd={programmeReferencesAvailable}
+            selectedIds={configuration.featuredSpeakerIds}
+            setSelectedIds={(update) =>
+              setConfiguration((current) => ({
+                ...current,
+                featuredSpeakerIds: update(current.featuredSpeakerIds),
+              }))
+            }
+            unavailableMessage={unavailableMessage}
+          />
+        );
+      case "featured_sessions":
+        return (
+          <OrderedFeaturedPicker
+            label="Featured sessions"
+            recordKind="session"
+            items={sessionItems}
+            canAdd={programmeReferencesAvailable}
+            selectedIds={configuration.featuredSessionIds}
+            setSelectedIds={(update) =>
+              setConfiguration((current) => ({
+                ...current,
+                featuredSessionIds: update(current.featuredSessionIds),
+              }))
+            }
+            unavailableMessage={unavailableMessage}
+          />
+        );
+      case "statistics":
+        return (
+          <fieldset className="public-site-selection">
+            <legend className="sr-only">Programme statistics</legend>
+            <p className="help">
+              Counts are read from the published programme when the site is
+              rendered.
+            </p>
+            {statistics.map(([statistic, checked]) => (
+              <label className="public-site-inline-check" key={statistic}>
+                <input
+                  type="checkbox"
+                  checked={checked}
+                  onChange={(event) =>
+                    setConfiguration((current) => ({
+                      ...current,
+                      statisticVisibility: {
+                        ...current.statisticVisibility,
+                        [statistic]: event.target.checked,
+                      },
+                    }))
+                  }
+                />
+                <span>{publicSiteStatisticLabels[statistic]}</span>
+              </label>
+            ))}
+          </fieldset>
+        );
+      case "venue":
+        return (
+          <p className="help">
+            The venue name, address and map come from Event settings and are not
+            edited here. <Link to="/admin/event">Edit event details</Link>.
+          </p>
+        );
+      case "faq":
+        return (
+          <FaqEditor
+            configuration={configuration}
+            setConfiguration={setConfiguration}
+          />
+        );
+      default: {
+        const unhandledSection: never = section;
+        return unhandledSection;
+      }
+    }
+  }
+
   return (
-    <Form method="post" className="public-site-rail-form">
+    <Form method="post" id={formId} className="public-site-draft-form">
       <input type="hidden" name="intent" value="save-site" />
       <input type="hidden" name="commandId" value={commandId} />
       <input type="hidden" name="revision" value={draftRevision} />
@@ -439,286 +734,91 @@ export function AdminPublicSiteEditor({
         name="configurationJson"
         value={serializedConfiguration}
       />
-      <div className="card-title">
-        <div>
-          <h2 className="public-site-rail-title">Site identity and theme</h2>
-          <p className="help public-site-rail-help">
-            Draft {draftRevision || "not saved"}
-          </p>
-        </div>
-      </div>
-      <label className="label">
-        Tagline
-        <input
-          className="field"
-          maxLength={180}
-          value={configuration.tagline}
-          onChange={(event) =>
-            setConfiguration((current) => ({
-              ...current,
-              tagline: event.target.value,
-            }))
-          }
+
+      <section
+        className="public-site-editor-panel"
+        aria-label="Homepage and appearance"
+        hidden={activePanel !== "homepage"}
+      >
+        <SitePanelHeading
+          title="Site identity and theme"
+          help="The tagline and theme apply to every published page."
         />
-      </label>
-      <label className="label mt">
-        Theme
-        <select
-          className="field"
-          value={configuration.theme}
-          onChange={(event) =>
-            setConfiguration((current) => ({
-              ...current,
-              theme: event.target.value as PublicSiteDraft["theme"],
-            }))
-          }
-        >
-          <option value="system">Follow visitor system</option>
-          <option value="light">Light</option>
-          <option value="dark">Dark</option>
-        </select>
-      </label>
-
-      <div className="card-title mt">
-        <div>
-          <h2 className="public-site-rail-title">Homepage sections</h2>
-          <p className="help">Shown sections appear in this order.</p>
+        <div className="public-site-identity-grid">
+          <label className="label">
+            Tagline
+            <input
+              className="field"
+              maxLength={180}
+              value={configuration.tagline}
+              onChange={(event) =>
+                setConfiguration((current) => ({
+                  ...current,
+                  tagline: event.target.value,
+                }))
+              }
+            />
+          </label>
+          <label className="label">
+            Theme
+            <select
+              className="field"
+              value={configuration.theme}
+              onChange={(event) =>
+                setConfiguration((current) => ({
+                  ...current,
+                  theme: event.target.value as PublicSiteDraft["theme"],
+                }))
+              }
+            >
+              <option value="system">Follow visitor system</option>
+              <option value="light">Light</option>
+              <option value="dark">Dark</option>
+            </select>
+          </label>
         </div>
-      </div>
-      <SiteSectionControls
-        configuration={configuration}
-        setConfiguration={setConfiguration}
-        programmeAvailable={programme !== null}
-        programmeReferencesAvailable={programmeReferencesAvailable}
-      />
 
-      <label className="label mt">
-        Introduction heading
-        <input
-          className="field"
-          maxLength={100}
-          value={configuration.introductionHeading}
-          onChange={(event) =>
-            setConfiguration((current) => ({
-              ...current,
-              introductionHeading: event.target.value,
-            }))
-          }
+        <SitePanelHeading
+          title="Homepage sections"
+          help="Shown sections appear in this order. Open a section to compose it."
         />
-      </label>
-      <p className="help">
-        The introduction body uses the existing Event Setup description.{" "}
-        <Link to="/admin/event">Edit event details</Link>.
-      </p>
-
-      <OrderedFeaturedPicker
-        label="Featured speakers"
-        recordKind="speaker"
-        items={speakerItems}
-        canAdd={programmeReferencesAvailable}
-        selectedIds={configuration.featuredSpeakerIds}
-        setSelectedIds={(update) =>
-          setConfiguration((current) => ({
-            ...current,
-            featuredSpeakerIds: update(current.featuredSpeakerIds),
-          }))
-        }
-        unavailableMessage={
-          programme
-            ? "Featured programme content is unavailable for this event's programme source. Existing selections can be removed."
-            : "Publish a programme before choosing speakers."
-        }
-      />
-      <OrderedFeaturedPicker
-        label="Featured sessions"
-        recordKind="session"
-        items={sessionItems}
-        canAdd={programmeReferencesAvailable}
-        selectedIds={configuration.featuredSessionIds}
-        setSelectedIds={(update) =>
-          setConfiguration((current) => ({
-            ...current,
-            featuredSessionIds: update(current.featuredSessionIds),
-          }))
-        }
-        unavailableMessage={
-          programme
-            ? "Featured programme content is unavailable for this event's programme source. Existing selections can be removed."
-            : "Publish a programme before choosing sessions."
-        }
-      />
-      <fieldset className="public-site-selection mt">
-        <legend>Statistics</legend>
-        {Object.entries(configuration.statisticVisibility).map(
-          ([statistic, checked]) => (
-            <label key={statistic}>
-              <input
-                type="checkbox"
-                checked={checked}
-                onChange={(event) =>
-                  setConfiguration((current) => ({
-                    ...current,
-                    statisticVisibility: {
-                      ...current.statisticVisibility,
-                      [statistic]: event.target.checked,
-                    },
-                  }))
+        <ol className="public-site-section-order">
+          {configuration.sectionOrder.map((section, index) => {
+            const visible = configuration.sectionVisibility[section];
+            return (
+              <HomepageSectionRow
+                key={section}
+                section={section}
+                index={index}
+                total={configuration.sectionOrder.length}
+                visible={visible}
+                disabled={
+                  !visible &&
+                  ((!programmeAvailable &&
+                    PROGRAMME_BACKED_SECTIONS.includes(section)) ||
+                    (!programmeReferencesAvailable &&
+                      PROGRAMME_REFERENCE_SECTIONS.includes(section)))
                 }
-              />{" "}
-              {statistic}
-            </label>
-          ),
-        )}
-      </fieldset>
-
-      <details className="pc-disclosure public-site-form-disclosure mt">
-        <summary>
-          <strong>FAQ</strong>
-          <span className="help">
-            {configuration.faqItems.length
-              ? `${configuration.faqItems.length} question${
-                  configuration.faqItems.length === 1 ? "" : "s"
-                } · ${configuration.faqItems
-                  .slice(0, 2)
-                  .map((item) => item.question.trim() || "Untitled")
-                  .join(" · ")}`
-              : "No questions"}
-          </span>
-        </summary>
-        <p className="help">
-          Answers support paragraphs, headings, lists, bold and HTTPS links.
-        </p>
-        <div className="card-title">
-          <button
-            className="btn small"
-            type="button"
-            disabled={configuration.faqItems.length >= 12}
-            onClick={() =>
-              setConfiguration((current) => ({
-                ...current,
-                faqItems: [
-                  ...current.faqItems,
-                  { id: crypto.randomUUID(), question: "", answer: "" },
-                ],
-              }))
-            }
-          >
-            <Plus aria-hidden size={14} /> Add question
-          </button>
-        </div>
-        <div className="public-site-faq-editor">
-          {configuration.faqItems.map((item, index) => (
-            <fieldset key={item.id}>
-              <legend>Question {index + 1}</legend>
-              <label className="label">
-                Question
-                <input
-                  className="field"
-                  maxLength={180}
-                  value={item.question}
-                  onChange={(event) =>
-                    setConfiguration((current) => ({
-                      ...current,
-                      faqItems: current.faqItems.map((candidate) =>
-                        candidate.id === item.id
-                          ? { ...candidate, question: event.target.value }
-                          : candidate,
-                      ),
-                    }))
-                  }
-                />
-              </label>
-              <div className="mt">
-                <RestrictedMarkdownEditor
-                  label="Answer"
-                  maximumLength={2_000}
-                  value={item.answer}
-                  onChange={(answer) =>
-                    setConfiguration((current) => ({
-                      ...current,
-                      faqItems: current.faqItems.map((candidate) =>
-                        candidate.id === item.id
-                          ? { ...candidate, answer }
-                          : candidate,
-                      ),
-                    }))
-                  }
-                />
-              </div>
-              <button
-                className="btn small mt"
-                type="button"
-                aria-label={`Remove FAQ item ${index + 1}`}
-                onClick={() =>
-                  setConfiguration((current) => ({
-                    ...current,
-                    faqItems: current.faqItems.filter(
-                      (candidate) => candidate.id !== item.id,
-                    ),
-                  }))
-                }
+                summary={sectionSummary(section)}
+                onToggle={(next) => toggleSection(section, next)}
+                onMove={(direction) => moveSection(index, direction)}
               >
-                <Trash2 aria-hidden size={14} /> Remove
-              </button>
-              <div className="public-site-order-actions mt">
-                <button
-                  className="icon-btn"
-                  type="button"
-                  disabled={index === 0}
-                  aria-label={`Move up FAQ item ${index + 1}`}
-                  onClick={() =>
-                    setConfiguration((current) => {
-                      const faqItems = [...current.faqItems];
-                      [faqItems[index - 1], faqItems[index]] = [
-                        faqItems[index],
-                        faqItems[index - 1],
-                      ];
-                      return { ...current, faqItems };
-                    })
-                  }
-                >
-                  <ChevronUp aria-hidden size={14} />
-                </button>
-                <button
-                  className="icon-btn"
-                  type="button"
-                  disabled={index === configuration.faqItems.length - 1}
-                  aria-label={`Move down FAQ item ${index + 1}`}
-                  onClick={() =>
-                    setConfiguration((current) => {
-                      const faqItems = [...current.faqItems];
-                      [faqItems[index], faqItems[index + 1]] = [
-                        faqItems[index + 1],
-                        faqItems[index],
-                      ];
-                      return { ...current, faqItems };
-                    })
-                  }
-                >
-                  <ChevronDown aria-hidden size={14} />
-                </button>
-              </div>
-            </fieldset>
-          ))}
-        </div>
-      </details>
+                {sectionEditor(section)}
+              </HomepageSectionRow>
+            );
+          })}
+        </ol>
+      </section>
 
-      <details className="pc-disclosure public-site-form-disclosure mt">
-        <summary>
-          <strong>Event pages</strong>
-          <span className="help">
-            {enabledPages.length} of {PUBLIC_SITE_PAGE_TYPES.length} published
-            {enabledPages.length
-              ? ` · ${enabledPages
-                  .slice(0, 3)
-                  .map((page) => configuration.pages[page].navigationLabel)
-                  .join(" · ")}`
-              : ""}
-          </span>
-        </summary>
-        <p className="help">
-          Five fixed pages, no nesting or arbitrary routes.
-        </p>
+      <section
+        className="public-site-editor-panel"
+        aria-label="Event pages"
+        hidden={activePanel !== "pages"}
+      >
+        <SitePanelHeading
+          title="Event pages"
+          help="Five fixed pages, no nesting or arbitrary routes. Only published pages reach the event navigation."
+        />
         <div className="public-site-page-editor">
           {PUBLIC_SITE_PAGE_TYPES.map((page) => (
             <SitePageEditor
@@ -729,94 +829,7 @@ export function AdminPublicSiteEditor({
             />
           ))}
         </div>
-      </details>
-
-      <details className="pc-disclosure public-site-form-disclosure mt">
-        <summary>
-          <strong>Post-event mode</strong>
-          <span className="help">
-            {configuration.postEvent.enabled
-              ? "Recordings shown after the event"
-              : "Off"}
-          </span>
-        </summary>
-        <fieldset className="public-site-post-event">
-          <legend>Post-event recordings</legend>
-          <label>
-            <input
-              type="checkbox"
-              checked={configuration.postEvent.enabled}
-              disabled={
-                (!programme || !programmeReferencesAvailable) &&
-                !configuration.postEvent.enabled
-              }
-              onChange={(event) =>
-                setConfiguration((current) => ({
-                  ...current,
-                  postEvent: {
-                    ...current.postEvent,
-                    enabled: event.target.checked,
-                  },
-                }))
-              }
-            />{" "}
-            Show published recordings after the event ends
-          </label>
-          {!programmeReferencesAvailable ? (
-            <p className="help">
-              Post-event recordings are unavailable for this event's programme
-              source.
-            </p>
-          ) : null}
-          <label className="label mt">
-            Heading
-            <input
-              className="field"
-              maxLength={120}
-              value={configuration.postEvent.heading}
-              onChange={(event) =>
-                setConfiguration((current) => ({
-                  ...current,
-                  postEvent: {
-                    ...current.postEvent,
-                    heading: event.target.value,
-                  },
-                }))
-              }
-            />
-          </label>
-          <div className="mt">
-            <RestrictedMarkdownEditor
-              label="Introduction"
-              maximumLength={2_000}
-              value={configuration.postEvent.body}
-              onChange={(body) =>
-                setConfiguration((current) => ({
-                  ...current,
-                  postEvent: {
-                    ...current.postEvent,
-                    body,
-                  },
-                }))
-              }
-            />
-          </div>
-        </fieldset>
-      </details>
-
-      <div className="page-actions mt">
-        <button
-          className="btn primary"
-          type="submit"
-          disabled={!unsaved || busy}
-        >
-          {saving
-            ? "Saving…"
-            : draftRevision === 0
-              ? "Create website draft"
-              : "Save website draft"}
-        </button>
-      </div>
+      </section>
     </Form>
   );
 }

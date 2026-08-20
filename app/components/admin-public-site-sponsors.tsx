@@ -1,12 +1,16 @@
+import { Plus } from "lucide-react";
 import { useMemo } from "react";
 import { Form } from "react-router";
 
-import { SiteRailDisclosure } from "~/components/admin-public-site-disclosure";
+import {
+  SitePanelHeading,
+  SiteRecordDisclosure,
+} from "~/components/admin-public-site-panels";
 import type { PublicSiteSponsor } from "~/modules/public-site/public-site";
 
 function SponsorFields({ sponsor }: { sponsor?: PublicSiteSponsor }) {
   return (
-    <>
+    <div className="public-site-field-grid">
       <label className="label">
         {sponsor ? "Name" : "New sponsor name"}
         <input
@@ -45,13 +49,14 @@ function SponsorFields({ sponsor }: { sponsor?: PublicSiteSponsor }) {
           defaultValue={sponsor?.logoUrl ?? ""}
         />
       </label>
-      <label className="label">
+      <label className="label is-wide">
         Description
         <textarea
           className="textarea"
           name="description"
           defaultValue={sponsor?.description ?? ""}
           maxLength={1000}
+          rows={2}
         />
       </label>
       <label className="label">
@@ -65,21 +70,25 @@ function SponsorFields({ sponsor }: { sponsor?: PublicSiteSponsor }) {
           defaultValue={sponsor?.position ?? 0}
         />
       </label>
-    </>
+    </div>
   );
 }
 
 export function AdminPublicSiteSponsors({
   sponsors,
   draftCreated,
-  blocked,
+  blockedReason,
   busy,
+  hidden,
   onDelete,
 }: {
   sponsors: PublicSiteSponsor[];
   draftCreated: boolean;
-  blocked: boolean;
+  /* Why these controls are unavailable, or null when they are not. One value,
+     because the notice and the disabled state must never disagree. */
+  blockedReason: string | null;
   busy: boolean;
+  hidden: boolean;
   onDelete: (sponsor: PublicSiteSponsor) => void;
 }) {
   const commandIds = useMemo(() => {
@@ -89,67 +98,87 @@ export function AdminPublicSiteSponsors({
     ids.set("", crypto.randomUUID());
     return ids;
   }, [sponsors]);
+  const blocked = blockedReason !== null;
   return (
-    <SiteRailDisclosure
-      title="Sponsors"
-      preview={
-        sponsors.length
-          ? `${sponsors.length} sponsor${sponsors.length === 1 ? "" : "s"} · ${sponsors
-              .slice(0, 2)
-              .map((sponsor) => sponsor.name)
-              .join(" · ")}`
-          : "None yet"
-      }
-      help="Structured records are snapshotted only when the site is published."
+    <section
+      className="public-site-editor-panel"
+      aria-label="Sponsors"
+      hidden={hidden}
     >
-      {sponsors.map((sponsor) => (
-        <Form
-          method="post"
-          className="public-site-record-editor"
-          key={sponsor.id}
-        >
-          <input type="hidden" name="intent" value="save-sponsor" />
-          <input
-            type="hidden"
-            name="commandId"
-            value={commandIds.get(sponsor.id)}
-          />
-          <input type="hidden" name="id" value={sponsor.id} />
-          <input type="hidden" name="revision" value={sponsor.revision} />
-          <SponsorFields sponsor={sponsor} />
-          <div className="page-actions">
-            <button
-              className="btn small"
-              type="submit"
-              disabled={blocked || busy}
+      <SitePanelHeading
+        title="Sponsors"
+        help="Sponsor records are snapshotted onto the public site only when the site is published."
+      />
+      {blockedReason ? (
+        <p className="validation-item warn" role="status">
+          {blockedReason}
+        </p>
+      ) : null}
+      {sponsors.length ? (
+        <div className="public-site-record-list">
+          {sponsors.map((sponsor) => (
+            <SiteRecordDisclosure
+              key={sponsor.id}
+              title={sponsor.name}
+              meta={sponsor.tier}
+              state={`Order ${sponsor.position}`}
             >
-              Save sponsor
-            </button>
-            <button
-              className="btn small danger"
-              type="button"
-              disabled={blocked || busy}
-              onClick={() => onDelete(sponsor)}
-            >
-              Remove
-            </button>
-          </div>
-        </Form>
-      ))}
-      <Form method="post" className="public-site-record-editor">
+              <Form method="post" className="public-site-record-editor">
+                <input type="hidden" name="intent" value="save-sponsor" />
+                <input
+                  type="hidden"
+                  name="commandId"
+                  value={commandIds.get(sponsor.id)}
+                />
+                <input type="hidden" name="id" value={sponsor.id} />
+                <input type="hidden" name="revision" value={sponsor.revision} />
+                <SponsorFields sponsor={sponsor} />
+                <div className="page-actions">
+                  <button
+                    className="btn small"
+                    type="submit"
+                    disabled={blocked || busy}
+                  >
+                    Save sponsor
+                  </button>
+                  <button
+                    className="btn small danger"
+                    type="button"
+                    disabled={blocked || busy}
+                    onClick={() => onDelete(sponsor)}
+                  >
+                    Remove
+                  </button>
+                </div>
+              </Form>
+            </SiteRecordDisclosure>
+          ))}
+        </div>
+      ) : (
+        <p className="help">No sponsors in this draft yet.</p>
+      )}
+      <Form method="post" className="public-site-record-editor is-new">
         <input type="hidden" name="intent" value="save-sponsor" />
         <input type="hidden" name="commandId" value={commandIds.get("")} />
         <input type="hidden" name="id" value="" />
         <input type="hidden" name="revision" value="0" />
+        <h3 className="public-site-panel-title">Add a sponsor</h3>
         <SponsorFields />
-        <button
-          className="btn small"
-          type="submit"
-          disabled={!draftCreated || blocked || busy}
-        >
-          Add sponsor
-        </button>
+        <div className="page-actions">
+          <button
+            className="btn small"
+            type="submit"
+            disabled={!draftCreated || blocked || busy}
+          >
+            <Plus aria-hidden size={14} /> Add sponsor
+          </button>
+        </div>
+        {draftCreated ? null : (
+          <p className="help">
+            Save the website draft before adding sponsor records.
+          </p>
+        )}
       </Form>
-    </SiteRailDisclosure>
+    </section>
   );
 }

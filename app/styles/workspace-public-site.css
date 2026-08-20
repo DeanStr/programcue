@@ -1,97 +1,273 @@
 /* Editor chrome only. Published homepage rules start at .public-site-home. */
-.public-site-publication-grid {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr);
-  overflow: hidden;
-  border: 1px solid var(--line);
+
+/* --- Publication state ---------------------------------------------------
+   The page used to open with a card restating its own title and a run-on
+   `small` that read "Draft 1 · Published 1 · Branding published · Programme
+   published". A publication state is one sentence about what an organiser can
+   do next, with the revisions beside it as facts rather than as the headline. */
+.public-site-status {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3) var(--space-6);
+  padding: var(--space-3) var(--space-4);
+  border: 1px solid var(--border);
   border-radius: var(--radius);
   background: var(--surface);
 }
-.public-site-publication-status {
+.public-site-status-state {
   display: grid;
-  gap: 2px;
-  padding: var(--space-3) var(--space-4);
-  background: var(--surface);
+  grid-template-columns: 8px minmax(0, 1fr);
+  align-items: baseline;
+  gap: var(--space-1) var(--space-3);
+  min-width: 0;
 }
-.public-site-publication-status strong {
+.public-site-status-state::before {
+  content: "";
+  width: 8px;
+  height: 8px;
+  border-radius: var(--radius-full);
+  background: var(--state-good-solid);
+  transform: translateY(-1px);
+}
+.public-site-status-state[data-tone="behind"]::before {
+  background: var(--state-warn-solid);
+}
+.public-site-status-state[data-tone="none"]::before {
+  background: var(--border-strong);
+}
+.public-site-status-state strong {
   font-size: var(--text-sm);
 }
-.public-site-publication-status small {
-  color: var(--muted);
-  overflow-wrap: anywhere;
+.public-site-status-state .help {
+  grid-column: 2;
+  margin: 0;
 }
+.public-site-status-facts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2) var(--space-5);
+  margin: 0;
+}
+.public-site-status-facts > div {
+  display: grid;
+  gap: 2px;
+}
+.public-site-status-facts dt {
+  color: var(--text-tertiary);
+  font-size: var(--text-2xs);
+}
+.public-site-status-facts dd {
+  margin: 0;
+  font-size: var(--text-xs);
+  font-weight: var(--weight-semibold);
+  white-space: nowrap;
+}
+
+/* --- Workspace -----------------------------------------------------------
+   Two columns: the editor and what it publishes. The editor was a 26rem rail
+   carrying every field this route owns, which ran to twelve screens with its
+   disclosures open while the half of the viewport beside it stayed empty below
+   the fold. It is now a card of switched panels at a width forms can use. */
 .public-site-admin-workspace {
   display: grid;
-  grid-template-columns: minmax(280px, 26rem) minmax(0, 1fr);
+  grid-template-columns: minmax(340px, min(32rem, 46%)) minmax(0, 1fr);
   gap: var(--space-6);
   align-items: start;
 }
 .public-site-editor-stack {
   container: site-rail / inline-size;
   display: grid;
-  gap: var(--space-4);
-  min-width: 0;
-}
-/* Stick the column, not the preview card. Pinning only the card left
-   Promotion sliding up behind it. Cap the column so the 720px frame and
-   announcement tools stay reachable instead of pinning off-screen. */
-.public-site-preview-stack {
-  position: sticky;
-  top: calc(var(--topbar) + var(--space-4));
-  display: grid;
   align-content: start;
-  gap: var(--space-4);
-  min-width: 0;
-  max-height: calc(100dvh - var(--topbar) - var(--space-4) - var(--space-6));
-  overflow-y: auto;
-  overscroll-behavior: contain;
-}
-.public-site-preview {
+  gap: var(--space-3);
   min-width: 0;
 }
-.public-site-rail-form,
-.public-site-rail-section {
+
+/* The editor's own instrument: which panel is open, whether the draft is
+   saved, and the one control that saves it. Sticky, because the Save button
+   used to sit at the bottom of the column it saves. */
+.public-site-editor-toolbar {
+  position: sticky;
+  top: calc(var(--topbar) + var(--space-3));
+  z-index: 2;
   display: grid;
-  gap: var(--space-4);
+  gap: var(--space-2);
+  padding: var(--space-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  box-shadow: var(--elev-1);
+}
+/* The stack's own gap sits above a sticky toolbar, so the editor card scrolls
+   through it. The strip repaints that gap in the page ground. */
+.public-site-editor-toolbar::before {
+  content: "";
+  position: absolute;
+  right: -1px;
+  bottom: 100%;
+  left: -1px;
+  height: var(--space-4);
+  background: var(--canvas);
+}
+.public-site-editor-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px;
+  min-width: 0;
+}
+.public-site-editor-tabs button {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-height: var(--control-height-sm);
+  padding: 0 var(--space-3);
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-secondary);
+  font: inherit;
+  font-size: var(--text-xs);
+  font-weight: var(--weight-semibold);
+  white-space: nowrap;
+  cursor: pointer;
+}
+.public-site-editor-tabs button:hover {
+  background: var(--surface-sunken);
+  color: var(--text-primary);
+}
+.public-site-editor-tabs button.is-active {
+  background: var(--surface-inverse);
+  color: var(--text-inverse);
+}
+.public-site-editor-tabs button:focus-visible {
+  outline: var(--focus-width) solid var(--focus-ring);
+  outline-offset: var(--focus-halo-width);
+}
+/* The count is quieter than its label by colour, not by opacity: 12px
+   metadata faded to 65% lands at 3.13:1 on the toolbar. */
+.public-site-tab-count {
+  color: var(--text-tertiary);
+  font-size: var(--text-2xs);
+  font-weight: var(--weight-medium);
+  font-variant-numeric: tabular-nums;
+}
+.public-site-editor-tabs button.is-active .public-site-tab-count {
+  color: color-mix(in srgb, var(--text-inverse) 76%, var(--surface-inverse));
+}
+.public-site-editor-commit {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2) var(--space-3);
+  padding: 0 var(--space-1);
+}
+.public-site-draft-state {
+  color: var(--text-tertiary);
+  font-size: var(--text-2xs);
+  white-space: nowrap;
+}
+.public-site-draft-state[data-unsaved="true"] {
+  color: var(--state-warn-text);
+  font-weight: var(--weight-semibold);
+}
+
+.public-site-editor-card {
   min-width: 0;
   padding: var(--space-5);
   border: 1px solid var(--border);
   border-radius: var(--radius);
   background: var(--surface);
 }
-.public-site-rail-form > .card-title,
-.public-site-rail-section > .card-title {
-  margin: 0;
+.public-site-editor-panel {
+  display: grid;
+  gap: var(--space-4);
+  min-width: 0;
 }
-.public-site-rail-title {
+/* A panel is switched, not scrolled past: the attribute has to beat the
+   display above it or every panel renders at once. */
+.public-site-editor-panel[hidden] {
+  display: none;
+}
+.public-site-panel-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-3);
+  min-width: 0;
+}
+.public-site-panel-heading > div {
+  min-width: 0;
+}
+.public-site-panel-heading .help {
+  margin: var(--space-1) 0 0;
+}
+.public-site-panel-heading + .public-site-panel-heading,
+.public-site-editor-panel > .public-site-panel-heading:not(:first-child) {
+  padding-top: var(--space-4);
+  border-top: 1px solid var(--line);
+}
+.public-site-panel-title {
   margin: 0;
   font-size: var(--text-sm);
   font-weight: var(--weight-semibold);
   letter-spacing: var(--tracking-snug);
   line-height: var(--leading-tight);
 }
-.public-site-rail-help {
-  margin: var(--space-1) 0 0;
-  overflow: hidden;
-  display: -webkit-box;
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 2;
-}
-.public-site-rail-disclosure > summary > h2 {
+.public-site-identity-grid {
   display: grid;
-  min-width: 0;
+  grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr);
+  gap: var(--space-3);
 }
-.public-site-rail-disclosure > summary {
+
+/* --- Homepage section spine ----------------------------------------------
+   The homepage is an ordered list of sections, so the editor is that list.
+   Ordering, visibility and composition used to be three controls in three
+   places: the row switched a section on, its editor sat several screens below,
+   and the venue section had no editor at all. */
+.public-site-section-order {
+  display: grid;
+  gap: var(--space-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.public-site-section-row {
+  --section-controls: 152px;
+  position: relative;
+  min-width: 0;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--surface-sunken);
+}
+@media (pointer: coarse) {
+  .public-site-section-row {
+    --section-controls: 172px;
+  }
+}
+/* A hidden row is stated by its ground and its own label. It used to be faded
+   with opacity, which took 12px metadata to 2.65:1 on white. */
+.public-site-section-row[data-visible="false"] {
+  background: transparent;
+  border-style: dashed;
+}
+/* The summary stops short of the controls rather than running under them
+   behind padding. A full-width summary made the visibility checkbox sit on
+   top of another click target, which leaves it no safe target space. */
+.public-site-section-editor > summary {
   display: flex;
   align-items: center;
-  gap: var(--space-3);
+  gap: var(--space-2);
+  width: calc(100% - var(--section-controls) - var(--space-3) - var(--space-4));
+  padding: var(--space-3);
   cursor: pointer;
   list-style: none;
 }
-.public-site-rail-disclosure > summary::-webkit-details-marker {
+.public-site-section-editor > summary::-webkit-details-marker {
   display: none;
 }
-.public-site-rail-disclosure > summary::before {
+.public-site-section-editor > summary::before {
   content: "";
   width: 6px;
   height: 6px;
@@ -101,32 +277,348 @@
   transform: rotate(-45deg);
   transition: transform var(--dur-fast) var(--ease-out);
 }
-.public-site-rail-disclosure[open] > summary::before {
+.public-site-section-editor[open] > summary::before {
   transform: rotate(45deg);
 }
-.public-site-rail-disclosure[open] > summary {
-  padding-bottom: var(--space-4);
-  border-bottom: 1px solid var(--line);
+.public-site-section-editor > summary:focus-visible {
+  outline: var(--focus-width) solid var(--focus-ring);
+  outline-offset: -2px;
+  border-radius: var(--radius);
 }
-.public-site-form-disclosure {
-  padding-top: var(--space-4);
-  border-top: 1px solid var(--line);
-}
-.public-site-form-disclosure > summary {
-  justify-content: space-between;
-}
-.public-site-form-disclosure > summary .help {
+.public-site-section-name {
+  display: grid;
+  gap: 2px;
   min-width: 0;
+}
+.public-site-section-name strong {
+  font-size: var(--text-xs);
+}
+.public-site-section-name .help {
+  margin: 0;
   overflow: hidden;
   display: -webkit-box;
   -webkit-box-orient: vertical;
-  -webkit-line-clamp: 2;
+  -webkit-line-clamp: 1;
 }
-.public-site-form-disclosure[open] > summary {
-  margin-bottom: var(--space-3);
+.public-site-section-body {
+  display: grid;
+  gap: var(--space-3);
+  padding: var(--space-4) var(--space-3);
+  border-top: 1px solid var(--line);
+  background: var(--surface);
+  border-end-start-radius: var(--radius);
+  border-end-end-radius: var(--radius);
+}
+/* The controls sit outside the disclosure so switching a section on never
+   means opening it, and they hold the top row whether it is open or closed. */
+.public-site-section-controls {
+  position: absolute;
+  top: var(--space-2);
+  right: var(--space-3);
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--space-2);
+  width: var(--section-controls);
+}
+.public-site-section-visibility {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  /* Reserved, so "Shown" and "Hidden" do not shift the reorder controls
+     between rows or as a row is switched. */
+  min-width: 68px;
+  color: var(--text-tertiary);
+  font-size: var(--text-2xs);
+  cursor: pointer;
+}
+.public-site-section-visibility:has(input:disabled) {
+  cursor: not-allowed;
+}
+.public-site-section-row[data-visible="true"] .public-site-section-visibility {
+  color: var(--text-secondary);
+  font-weight: var(--weight-medium);
+}
+.public-site-order-actions {
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  gap: var(--space-1);
+}
+/* Removal is quiet at rest, like every other row action in the product, and
+   states itself the moment it is reached. There is no global `.icon-btn.danger`
+   and a row action is not a page primary, so this stays scoped here. */
+.public-site-order-actions .icon-btn.danger:hover:not(:disabled),
+.public-site-order-actions .icon-btn.danger:focus-visible {
+  border-color: var(--state-bad-border);
+  background: var(--state-bad-surface);
+  color: var(--state-bad-text);
+}
+
+/* --- Shared editor furniture --------------------------------------------- */
+.public-site-inline-check {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-width: 0;
+  font-size: var(--text-xs);
+}
+.public-site-field-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-3);
+  min-width: 0;
+}
+.public-site-field-grid > .label.is-wide {
+  grid-column: 1 / -1;
+}
+.public-site-selection,
+.public-site-featured-picker,
+.public-site-post-event {
+  display: grid;
+  gap: var(--space-3);
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+.public-site-featured-picker .label > span {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+}
+.public-site-featured-count {
+  display: grid;
+  gap: 2px;
+  margin: 0;
+}
+.public-site-featured-count .help {
+  margin: 0;
+}
+.public-site-featured-selected {
+  display: grid;
+  gap: var(--space-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.public-site-featured-selected > li,
+.public-site-featured-available > div {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  min-width: 0;
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--surface-sunken);
+}
+.public-site-featured-selected span,
+.public-site-featured-available span {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+.public-site-featured-selected strong,
+.public-site-featured-available strong {
+  font-size: var(--text-xs);
+}
+.public-site-featured-selected small,
+.public-site-featured-available small {
+  color: var(--muted);
+}
+.public-site-featured-available {
+  display: grid;
+  gap: var(--space-2);
+  max-height: 320px;
+  overflow: auto;
+  overscroll-behavior: contain;
+}
+
+/* --- Event pages ---------------------------------------------------------- */
+.public-site-page-editor {
+  display: grid;
+  gap: var(--space-3);
+}
+.public-site-page-editor fieldset {
+  display: grid;
+  gap: var(--space-3);
+  min-width: 0;
+  margin: 0;
+  padding: var(--space-3);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--surface);
+}
+.public-site-page-editor fieldset[data-enabled="false"] {
+  background: var(--surface-sunken);
+}
+.public-site-page-row {
+  display: grid;
+  gap: var(--space-2);
+  min-width: 0;
+}
+.public-site-page-row > div {
+  min-width: 0;
+}
+.public-site-page-row strong {
+  font-size: var(--text-xs);
+}
+.public-site-page-row .help {
+  margin: 2px 0 0;
+}
+.public-site-page-row .public-site-inline-check {
+  color: var(--text-secondary);
+}
+.public-site-page-content > summary {
+  gap: var(--space-2);
+  font-size: var(--text-xs);
+}
+.public-site-page-content > summary .help {
+  margin: 0;
+  font-weight: var(--weight-normal);
+}
+
+/* --- Records -------------------------------------------------------------
+   A saved sponsor or recording is a closed line. Seven sponsors held open as
+   seven six-field forms was most of this page's height. */
+.public-site-record-list {
+  display: grid;
+  gap: var(--space-2);
+}
+.public-site-record-disclosure {
+  min-width: 0;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--surface);
+}
+.public-site-record-disclosure > summary {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-3);
+  cursor: pointer;
+  list-style: none;
+}
+.public-site-record-disclosure > summary::-webkit-details-marker {
+  display: none;
+}
+.public-site-record-disclosure > summary::before {
+  content: "";
+  width: 6px;
+  height: 6px;
+  flex: none;
+  border-right: 1.5px solid var(--muted);
+  border-bottom: 1.5px solid var(--muted);
+  transform: rotate(-45deg);
+  transition: transform var(--dur-fast) var(--ease-out);
+}
+.public-site-record-disclosure[open] > summary::before {
+  transform: rotate(45deg);
+}
+.public-site-record-disclosure > summary:focus-visible {
+  outline: var(--focus-width) solid var(--focus-ring);
+  outline-offset: -2px;
+  border-radius: var(--radius);
+}
+.public-site-record-summary {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+.public-site-record-summary strong {
+  font-size: var(--text-xs);
+}
+.public-site-record-summary .help {
+  margin: 0;
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 1;
+}
+.public-site-record-state {
+  flex: none;
+  margin-left: auto;
+  color: var(--text-tertiary);
+  font-size: var(--text-2xs);
+  white-space: nowrap;
+}
+.public-site-record-editor {
+  display: grid;
+  gap: var(--space-3);
+  min-width: 0;
+  padding: var(--space-4) var(--space-3);
+  border-top: 1px solid var(--line);
+}
+.public-site-record-editor.is-new {
+  border: 1px dashed var(--border-strong);
+  border-radius: var(--radius);
+  background: var(--surface-sunken);
+}
+.public-site-record-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+}
+.public-site-record-head strong {
+  font-size: var(--text-xs);
+}
+.public-site-faq-editor {
+  display: grid;
+  gap: var(--space-3);
+}
+.public-site-faq-editor > fieldset {
+  display: grid;
+  gap: var(--space-3);
+  min-width: 0;
+  margin: 0;
+  padding: var(--space-3);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--surface);
+}
+
+/* --- Preview -------------------------------------------------------------
+   Stick the column, not the preview card. Pinning only the card left Promotion
+   sliding up behind it. The card is then capped to the sticky viewport so the
+   commit bar is never the part that falls off the bottom: publishing is the
+   point of this page and its button used to be clipped mid-word. */
+.public-site-preview-stack {
+  --preview-viewport: calc(
+    100dvh -
+    var(--topbar) -
+    var(--space-3) -
+    var(--space-5)
+  );
+  position: sticky;
+  top: calc(var(--topbar) + var(--space-3));
+  display: grid;
+  align-content: start;
+  gap: var(--space-4);
+  min-width: 0;
+  max-height: var(--preview-viewport);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+.public-site-preview {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  max-height: var(--preview-viewport);
 }
 .public-site-preview-stage {
+  display: grid;
+  grid-template-rows: minmax(0, 1fr);
+  flex: 1 1 auto;
+  min-height: 0;
   padding: 0 var(--space-4) var(--space-3);
+}
+.public-site-preview .branding-preview-commit .btn {
+  flex: none;
+  white-space: nowrap;
 }
 .public-site-promotion {
   display: grid;
@@ -138,114 +630,7 @@
   background: var(--surface);
 }
 
-.public-site-section-order {
-  display: grid;
-  gap: var(--space-2);
-  margin: 0;
-  padding: 0;
-  list-style: none;
-}
-.public-site-section-order > li {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--space-3);
-  padding: var(--space-3);
-  border: 1px solid var(--line);
-  border-radius: var(--radius);
-  background: var(--surface-sunken);
-}
-.public-site-section-order label {
-  display: flex;
-  gap: var(--space-3);
-  align-items: center;
-}
-.public-site-section-order small {
-  color: var(--muted);
-}
-.public-site-order-actions {
-  display: flex;
-  flex-shrink: 0;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: flex-end;
-  gap: var(--space-1);
-}
-.public-site-mobile-surfaces {
-  display: none;
-}
-.public-site-selection,
-.public-site-featured-picker,
-.public-site-faq-editor fieldset,
-.public-site-page-editor fieldset,
-.public-site-post-event,
-.public-site-record-editor {
-  margin: 0;
-  padding: var(--space-4);
-  border: 1px solid var(--line);
-  border-radius: var(--radius);
-}
-.public-site-selection {
-  display: grid;
-  gap: var(--space-2);
-  max-height: 280px;
-  overflow: auto;
-}
-.public-site-selection label {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-}
-.public-site-featured-picker {
-  display: grid;
-  gap: var(--space-3);
-}
-.public-site-featured-selected {
-  display: grid;
-  gap: var(--space-2);
-  margin: 0;
-  padding: 0;
-  list-style: none;
-}
-.public-site-featured-selected > li,
-.public-site-featured-available > div,
-.public-site-page-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--space-3);
-  padding: var(--space-3);
-  border: 1px solid var(--line);
-  border-radius: var(--radius);
-  background: var(--surface-sunken);
-}
-.public-site-featured-selected span,
-.public-site-featured-available span {
-  display: grid;
-  gap: var(--space-1);
-  min-width: 0;
-}
-.public-site-featured-selected small,
-.public-site-featured-available small {
-  color: var(--muted);
-}
-.public-site-featured-available {
-  display: grid;
-  gap: var(--space-2);
-  max-height: 320px;
-  overflow: auto;
-}
-.public-site-page-row > div {
-  min-width: 0;
-}
-.public-site-page-row .help {
-  margin-bottom: 0;
-}
-.public-site-faq-editor,
-.public-site-page-editor {
-  display: grid;
-  gap: var(--space-3);
-}
+/* --- Restricted Markdown editor ------------------------------------------ */
 .public-site-rich-text-field {
   display: grid;
   gap: var(--space-1);
@@ -345,48 +730,17 @@
   border-radius: var(--radius-sm);
   color: var(--muted);
 }
-.public-site-record-editor {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr);
-  gap: var(--space-3);
-  margin-top: var(--space-3);
-}
-.public-site-editor-stack .public-site-featured-picker,
-.public-site-editor-stack .public-site-selection,
-.public-site-editor-stack .public-site-faq-editor fieldset,
-.public-site-editor-stack .public-site-page-editor fieldset,
-.public-site-editor-stack .public-site-post-event,
-.public-site-editor-stack .public-site-record-editor {
-  padding: var(--space-3) 0 0;
-  border: 0;
-  border-top: 1px solid var(--line);
-  border-radius: 0;
-  background: transparent;
-}
-.public-site-record-editor > .page-actions,
-.public-site-record-editor > button,
-.public-site-record-editor > strong,
-.public-site-record-editor > label:has(textarea) {
-  grid-column: 1 / -1;
-}
+
+/* --- Preview frame and promotion ----------------------------------------- */
 .public-site-preview-frame {
   max-width: 100%;
-  max-height: 720px;
+  min-height: 280px;
   overflow: auto;
   border: 1px solid var(--line);
   border-radius: var(--radius-lg);
   background: var(--surface-editorial);
   color: var(--ink);
   box-shadow: var(--elev-2);
-}
-@container site-rail (max-width: 360px) {
-  .public-site-rich-text-link-editor {
-    grid-template-columns: minmax(0, 1fr);
-  }
-  .public-site-rich-text-link-editor > label,
-  .public-site-rich-text-link-editor > .pc-field-error {
-    grid-column: auto;
-  }
 }
 .public-site-preview-frame.is-mobile {
   width: min(390px, 100%);
@@ -459,6 +813,39 @@
   display: grid;
   gap: var(--space-2);
   margin-top: var(--space-3);
+}
+.public-site-mobile-surfaces {
+  display: none;
+}
+
+/* The editor card is narrower than a page, so its two-up field grids and
+   inline rows fold at the column's own width rather than the viewport's. */
+@container site-rail (max-width: 430px) {
+  .public-site-identity-grid,
+  .public-site-field-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .public-site-featured-selected > li,
+  .public-site-featured-available > div {
+    align-items: stretch;
+    flex-direction: column;
+  }
+  .public-site-section-editor > summary {
+    width: 100%;
+    padding-bottom: var(--space-2);
+  }
+  .public-site-section-controls {
+    position: static;
+    width: auto;
+    padding: 0 var(--space-3) var(--space-3);
+  }
+  .public-site-rich-text-link-editor {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .public-site-rich-text-link-editor > label,
+  .public-site-rich-text-link-editor > .pc-field-error {
+    grid-column: auto;
+  }
 }
 
 /* Public event-site content. The site controls composition, never arbitrary layout. */
@@ -697,9 +1084,6 @@ a.public-site-feature-card:focus-visible img {
   display: grid;
   min-width: 0;
   gap: var(--space-1);
-}
-.public-site-section-order label span {
-  display: grid;
 }
 .public-site-feature-card small {
   color: var(--muted-on-surface);
@@ -1521,10 +1905,25 @@ a.public-site-feature-card:focus-visible .public-site-speaker-profile-cue {
   .public-site-admin-workspace {
     grid-template-columns: 1fr;
   }
-  .public-site-preview-stack {
+  /* One column, with an explicit Preview/Edit switch above it. A two-row
+     toolbar pinned here would hold a third of a phone screen, and it would
+     cover the row a reader had just opened. */
+  .public-site-editor-toolbar {
     position: static;
-    max-height: none;
+  }
+  .public-site-editor-toolbar::before {
+    display: none;
+  }
+  .public-site-preview-stack {
+    --preview-viewport: none;
+    position: static;
     overflow: visible;
+  }
+  .public-site-preview-stage {
+    display: block;
+  }
+  .public-site-preview-frame {
+    max-height: 720px;
   }
   .public-site-admin-workspace.is-preview > .public-site-editor-stack {
     display: none;
@@ -1534,15 +1933,15 @@ a.public-site-feature-card:focus-visible .public-site-speaker-profile-cue {
   }
 }
 @media (max-width: 680px) {
-  .public-site-featured-selected > li,
-  .public-site-featured-available > div,
-  .public-site-page-row {
-    align-items: stretch;
+  .public-site-editor-card {
+    padding: var(--space-4);
+  }
+  .public-site-status {
+    align-items: flex-start;
     flex-direction: column;
   }
-  .public-site-featured-selected .public-site-order-actions,
-  .public-site-featured-available .public-site-order-actions {
-    justify-content: flex-start;
+  .public-site-editor-commit {
+    width: 100%;
   }
   .public-site-preview-content-control {
     width: 100%;
@@ -1550,21 +1949,5 @@ a.public-site-feature-card:focus-visible .public-site-speaker-profile-cue {
   .public-site-preview-content-control .field {
     flex: 1;
     min-width: 0;
-  }
-  .public-site-rail-form,
-  .public-site-rail-section {
-    padding: var(--space-4);
-  }
-}
-@container site-rail (max-width: 520px) {
-  .public-site-featured-selected > li,
-  .public-site-featured-available > div,
-  .public-site-page-row {
-    align-items: stretch;
-    flex-direction: column;
-  }
-  .public-site-featured-selected .public-site-order-actions,
-  .public-site-featured-available .public-site-order-actions {
-    justify-content: flex-start;
   }
 }

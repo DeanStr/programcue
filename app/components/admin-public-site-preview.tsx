@@ -75,7 +75,7 @@ function PromotionTools({
       <div className="card-title">
         <div>
           <span className="pc-page-eyebrow">Promotion</span>
-          <h2 className="public-site-rail-title">Announcement handoff</h2>
+          <h2 className="public-site-panel-title">Announcement handoff</h2>
         </div>
       </div>
       <label className="label">

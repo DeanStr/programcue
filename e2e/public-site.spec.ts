@@ -14,19 +14,51 @@ import { resetDemoEvent } from "./support/reset-demo-event";
    is measured where the text lands. Chromium serialises those mixes as
    `color(srgb …)`; the shared parser is what stops that looking near-black. */
 
-async function openSiteCollection(page: Page, title: string) {
-  const disclosure = page.locator("details").filter({
-    has: page
-      .locator(":scope > summary")
-      .locator(":scope > strong, :scope > h2 > span:first-child")
-      .filter({ hasText: new RegExp(`^${title}$`) }),
-  });
+/* The editor is a card of switched panels, so reaching a control is choosing
+   its panel and then opening the row that owns it. */
+const SITE_PANELS = {
+  Homepage: "Homepage and appearance",
+  Pages: "Event pages",
+  Sponsors: "Sponsors",
+  Recordings: "Session recordings",
+} as const;
+
+async function openSitePanel(page: Page, tab: keyof typeof SITE_PANELS) {
+  await page
+    .locator(".public-site-editor-tabs button")
+    .filter({ hasText: new RegExp(`^${tab}`) })
+    .click();
+  await expect(
+    page.getByRole("region", { name: SITE_PANELS[tab] }),
+  ).toBeVisible();
+}
+
+async function openDisclosure(disclosure: Locator) {
   if (!(await disclosure.evaluate((el) => el.hasAttribute("open")))) {
     await disclosure.locator(":scope > summary").click();
   }
   await expect
     .poll(async () => disclosure.evaluate((el) => el.hasAttribute("open")))
     .toBe(true);
+  return disclosure;
+}
+
+async function openHomepageSection(page: Page, label: string) {
+  await openSitePanel(page, "Homepage");
+  return openDisclosure(
+    page
+      .locator(".public-site-section-row")
+      .filter({ hasText: label })
+      .locator("details.public-site-section-editor"),
+  );
+}
+
+async function openSiteRecord(page: Page, name: string) {
+  return openDisclosure(
+    page.locator("details.public-site-record-disclosure").filter({
+      has: page.locator("summary strong", { hasText: new RegExp(`^${name}$`) }),
+    }),
+  );
 }
 
 async function ensurePageContentOpen(editor: Locator) {
@@ -139,7 +171,7 @@ test("reset restores a published public event site", async ({ page }) => {
     page.getByRole("heading", { name: "Event website" }),
   ).toBeVisible();
   await expect(page.getByLabel("Publication status")).toContainText(
-    "Event website",
+    "The public website matches the saved draft.",
   );
   await expect(page.getByLabel("Publication status")).toContainText(
     "Published",
@@ -162,21 +194,18 @@ test("reset restores a published public event site", async ({ page }) => {
       has: page.locator("legend", { hasText: "Featured sessions" }),
     }),
   ).toContainText("Featured · 2 of 12");
-  await expect(
-    page
-      .locator("details.public-site-rail-disclosure")
-      .filter({
-        has: page.locator("summary h2 > span:first-child", {
-          hasText: /^Sponsors$/,
-        }),
-      })
-      .locator(":scope > summary"),
-  ).toContainText("Northstar Events");
-  await openSiteCollection(page, "Sponsors");
+  await openSitePanel(page, "Sponsors");
+  /* Saved sponsors are closed lines until one is opened, so the panel states
+     the roster and the record states its fields. */
+  const sponsorRoster = page.locator(".public-site-record-list");
+  await expect(sponsorRoster).toContainText("Northstar Events");
+  await expect(sponsorRoster).toContainText("EventLab");
   await expect(page.getByLabel("New sponsor name")).toBeVisible();
+  await openSiteRecord(page, "Northstar Events");
   await expect(
     page.locator('input[name="name"][value="Northstar Events"]'),
   ).toBeVisible();
+  await openSiteRecord(page, "EventLab");
   await expect(
     page.locator('input[name="name"][value="EventLab"]'),
   ).toBeVisible();
@@ -534,7 +563,7 @@ test("organisers preview unpublished edits and publish a replacement", async ({
   await expect(
     page.getByRole("heading", { name: "Event website" }),
   ).toBeVisible();
-  const tagline = page.locator(".public-site-rail-form").getByLabel("Tagline");
+  const tagline = page.locator(".public-site-draft-form").getByLabel("Tagline");
   await expect(tagline).toHaveValue("One destination for the whole event.");
 
   await tagline.fill("One destination for the event and every attendee.");
@@ -555,6 +584,7 @@ test("organisers preview unpublished edits and publish a replacement", async ({
   const featuredSessions = page
     .locator("fieldset.public-site-featured-picker")
     .filter({ has: page.locator("legend", { hasText: "Featured sessions" }) });
+  await openHomepageSection(page, "Featured sessions");
   await featuredSessions
     .getByLabel("Search available")
     .fill("Designing Inclusive Hybrid Experiences");
@@ -583,7 +613,7 @@ test("organisers preview unpublished edits and publish a replacement", async ({
     .filter({ hasText: "Frequently asked questions" })
     .getByRole("checkbox")
     .check();
-  await openSiteCollection(page, "FAQ");
+  await openHomepageSection(page, "Frequently asked questions");
   /* The new question is appended, so it starts wherever the seeded baseline
      ends. Walking it to the top from there is what proves reordering works
      over a list the organiser did not just create. The count is read through
@@ -615,7 +645,7 @@ test("organisers preview unpublished edits and publish a replacement", async ({
     ).toHaveValue("Priority question");
   }
 
-  await openSiteCollection(page, "Event pages");
+  await openSitePanel(page, "Pages");
   const aboutPage = page
     .locator(".public-site-page-editor fieldset")
     .filter({ has: page.locator("legend", { hasText: "About" }) });
@@ -713,6 +743,7 @@ test("organisers preview unpublished edits and publish a replacement", async ({
   await unsavedDialog.getByRole("button", { name: "Keep editing" }).click();
   await expect(unsavedDialog).toBeHidden();
   await expect(page).toHaveURL(/\/admin\/site$/u);
+  await openSitePanel(page, "Homepage");
   await expect(tagline).toHaveValue(
     "One destination for the event and every attendee.",
   );
@@ -786,24 +817,29 @@ test("organisers preview unpublished edits and publish a replacement", async ({
     getComputedStyle(element).getPropertyValue("--event-accent").trim(),
   );
   expect(previewAccent).toMatch(/^#[0-9a-f]{6}$/iu);
-  await openSiteCollection(page, "Sponsors");
+  await openSitePanel(page, "Sponsors");
   await expect(
     page.getByRole("button", { name: "Add sponsor" }),
   ).toBeDisabled();
+  /* The warning now sits in the panel whose controls it blocks rather than
+     permanently above the whole page, so both record panels carry it. */
   await expect(
-    page.getByText(
-      "Save the homepage and page edits before changing sponsors or recording drafts. Published recordings can still be withdrawn.",
-    ),
+    page
+      .getByRole("region", { name: "Sponsors" })
+      .getByText(
+        "Save the website draft changes before changing sponsors or recording drafts. Published recordings can still be withdrawn.",
+      ),
   ).toBeVisible();
   await page.getByRole("button", { name: "Save website draft" }).click();
   await expect(
     page.getByText("Website draft saved. Public pages are unchanged."),
   ).toBeVisible();
+  await openSitePanel(page, "Homepage");
   await expect(page.getByLabel("Tagline")).toHaveValue(
     "One destination for the event and every attendee.",
   );
 
-  await openSiteCollection(page, "Sponsors");
+  await openSitePanel(page, "Sponsors");
   await page.getByLabel("New sponsor name").fill("Example Partner");
   const newSponsor = page
     .locator("form.public-site-record-editor")
@@ -1002,7 +1038,7 @@ test("organisers preview unpublished edits and publish a replacement", async ({
   await expectFixedPageOutline(page);
 
   await page.goto("/admin/site");
-  await openSiteCollection(page, "Event pages");
+  await openSitePanel(page, "Pages");
   await page
     .locator(".public-site-page-editor fieldset")
     .filter({ has: page.locator("legend", { hasText: "About" }) })
@@ -1014,7 +1050,8 @@ test("organisers preview unpublished edits and publish a replacement", async ({
     .getByLabel("Publish this page with the site")
     .uncheck();
   await page.getByRole("button", { name: "Save website draft" }).click();
-  await openSiteCollection(page, "Sponsors");
+  await openSitePanel(page, "Sponsors");
+  await openSiteRecord(page, "Example Partner");
   const sponsorEditor = page.locator("form.public-site-record-editor").filter({
     has: page.locator('input[name="name"][value="Example Partner"]'),
   });
@@ -1080,6 +1117,9 @@ test("organisers first-publish a bounded site on a blank event", async ({
   await expect(page.getByLabel("Publication status")).toContainText(
     "Not published",
   );
+  await expect(page.getByLabel("Publication status")).toContainText(
+    "This event has no public website yet. Create a draft, then publish it.",
+  );
   await expect(
     page.getByRole("button", { name: "Create website draft" }),
   ).toBeVisible();
@@ -1094,14 +1134,14 @@ test("organisers first-publish a bounded site on a blank event", async ({
     .filter({ hasText: "Frequently asked questions" })
     .getByRole("checkbox")
     .check();
-  await openSiteCollection(page, "FAQ");
+  await openHomepageSection(page, "Frequently asked questions");
   await page.getByRole("button", { name: "Add question" }).click();
   const faq = page.locator(".public-site-faq-editor > fieldset").first();
   await faq.getByLabel("Question").fill("When does registration open?");
   await faq
     .getByRole("textbox", { name: "Answer" })
     .fill("The organiser will publish dates here.");
-  await openSiteCollection(page, "Event pages");
+  await openSitePanel(page, "Pages");
   const aboutPage = page
     .locator(".public-site-page-editor fieldset")
     .filter({ has: page.locator("legend", { hasText: "About" }) });
@@ -1118,8 +1158,11 @@ test("organisers first-publish a bounded site on a blank event", async ({
   await expect(
     page.getByText("Website draft saved. Public pages are unchanged."),
   ).toBeVisible();
+  await expect(page.getByLabel("Publication status")).toContainText(
+    "The saved draft is ready to publish.",
+  );
 
-  await openSiteCollection(page, "Sponsors");
+  await openSitePanel(page, "Sponsors");
   await page.getByLabel("New sponsor name").fill("Civic Partner");
   const newSponsor = page
     .locator("form.public-site-record-editor")
@@ -1181,8 +1224,22 @@ test("draft preview stays in its column and does not cover promotion", async ({
     )
     .not.toBe("sticky");
 
-  await openSiteCollection(page, "Sponsors");
-  await openSiteCollection(page, "Session recordings");
+  /* The two commitments this page exists for stay on screen once a panel is
+     long enough to scroll: the editor toolbar carries Save rather than the foot
+     of the column it saves, and the preview card is capped to the sticky
+     viewport so its commit bar is not the part that falls off the bottom. */
+  await openSitePanel(page, "Sponsors");
+  await page
+    .getByRole("heading", { name: "Add a sponsor" })
+    .scrollIntoViewIfNeeded();
+  await expect(
+    page.getByRole("button", { name: "Save website draft" }),
+  ).toBeInViewport();
+  await expect(
+    page.getByRole("button", { name: "Publish event website" }),
+  ).toBeInViewport();
+
+  await openSitePanel(page, "Recordings");
   await page
     .locator(".public-site-editor-stack")
     .getByRole("heading", { name: "Session recordings" })
@@ -1218,4 +1275,80 @@ test("draft preview stays in its column and does not cover promotion", async ({
   await expect(
     page.getByRole("heading", { name: "Announcement handoff" }),
   ).toBeInViewport();
+});
+
+test("post-event settings save through the shared website draft form", async ({
+  page,
+}) => {
+  await page.goto("/admin/site");
+  await openSitePanel(page, "Recordings");
+  const recordingsPanel = page.getByRole("region", {
+    name: "Session recordings",
+  });
+  const enabled = recordingsPanel.getByRole("checkbox", {
+    name: "Show published recordings after the event ends",
+  });
+  const heading = recordingsPanel.getByRole("textbox", {
+    name: "Heading",
+    exact: true,
+  });
+  const introduction = recordingsPanel.getByRole("textbox", {
+    name: "Introduction",
+  });
+
+  await enabled.check();
+  await heading.fill("Watch every session on demand");
+  await introduction.fill("Recordings and transcripts are collected here.");
+  await page.getByRole("button", { name: "Save website draft" }).click();
+  await expect(
+    page.getByText("Website draft saved. Public pages are unchanged."),
+  ).toBeVisible();
+
+  await page.reload();
+  await openSitePanel(page, "Recordings");
+  await expect(enabled).toBeChecked();
+  await expect(heading).toHaveValue("Watch every session on demand");
+  await expect(introduction).toContainText(
+    "Recordings and transcripts are collected here.",
+  );
+});
+
+test("editor panels remain contained and switchable at narrow widths", async ({
+  page,
+}) => {
+  for (const viewport of [
+    { label: "phone", width: 390, height: 844 },
+    { label: "tablet", width: 1024, height: 900 },
+  ]) {
+    await page.setViewportSize(viewport);
+    await page.goto("/admin/site");
+    await page.locator("body[data-hydrated='true']").waitFor();
+
+    await expect(page.getByLabel("Editor surface")).toBeVisible();
+    await page
+      .getByLabel("Editor surface")
+      .getByRole("button", {
+        name: "Edit",
+      })
+      .click();
+    await expect(
+      page.getByRole("region", { name: "Homepage and appearance" }),
+    ).toBeVisible();
+
+    for (const panel of ["Pages", "Sponsors", "Recordings"] as const) {
+      await openSitePanel(page, panel);
+    }
+
+    const containment = await page.evaluate(() => ({
+      clientWidth: document.documentElement.clientWidth,
+      scrollWidth: document.documentElement.scrollWidth,
+    }));
+    expect(
+      containment.scrollWidth,
+      `${viewport.label} editor should not overflow the document`,
+    ).toBeLessThanOrEqual(containment.clientWidth + 1);
+    await expect(
+      page.getByRole("button", { name: "Save website draft" }),
+    ).toBeVisible();
+  }
 });

@@ -1,9 +1,16 @@
+import { Plus } from "lucide-react";
+import type { Dispatch, SetStateAction } from "react";
 import { useMemo } from "react";
 import { Form } from "react-router";
 
-import { SiteRailDisclosure } from "~/components/admin-public-site-disclosure";
+import {
+  SitePanelHeading,
+  SiteRecordDisclosure,
+} from "~/components/admin-public-site-panels";
+import { RestrictedMarkdownEditor } from "~/components/restricted-markdown-editor";
 import type { PublishedProgramme } from "~/modules/programme/public-programme-types";
 import type { PublicRecordingWorkspaceItem } from "~/modules/public-site/public-recording-service.server";
+import type { PublicSiteDraft } from "~/modules/public-site/public-site";
 
 function RecordingFields({
   recording,
@@ -13,8 +20,8 @@ function RecordingFields({
   disabled: boolean;
 }) {
   return (
-    <>
-      <label className="label">
+    <div className="public-site-field-grid">
+      <label className="label is-wide">
         {recording ? "Title" : "Recording title"}
         <input
           className="field"
@@ -25,7 +32,7 @@ function RecordingFields({
           disabled={disabled}
         />
       </label>
-      <label className="label">
+      <label className="label is-wide">
         {recording ? "Recording URL" : "External recording URL"}
         <input
           className="field"
@@ -56,7 +63,85 @@ function RecordingFields({
           disabled={disabled}
         />
       </label>
-    </>
+    </div>
+  );
+}
+
+function recordingPublicationState(recording: PublicRecordingWorkspaceItem) {
+  if (recording.publishedAt === null) return "Draft only";
+  return recording.publishedRevision === recording.draftRevision
+    ? "Published"
+    : "Changes waiting";
+}
+
+/* Post-event mode and the recordings it reveals were two disconnected controls
+   several screens apart. The switch that turns the section on now sits above
+   the records it publishes. */
+function PostEventSettings({
+  configuration,
+  setConfiguration,
+  programme,
+  programmeFeaturesAvailable,
+}: {
+  configuration: PublicSiteDraft;
+  setConfiguration: Dispatch<SetStateAction<PublicSiteDraft>>;
+  programme: PublishedProgramme | null;
+  programmeFeaturesAvailable: boolean;
+}) {
+  return (
+    <div className="public-site-post-event">
+      <label className="public-site-inline-check">
+        <input
+          type="checkbox"
+          checked={configuration.postEvent.enabled}
+          disabled={
+            (!programme || !programmeFeaturesAvailable) &&
+            !configuration.postEvent.enabled
+          }
+          onChange={(event) =>
+            setConfiguration((current) => ({
+              ...current,
+              postEvent: {
+                ...current.postEvent,
+                enabled: event.target.checked,
+              },
+            }))
+          }
+        />
+        <span>Show published recordings after the event ends</span>
+      </label>
+      {programmeFeaturesAvailable ? null : (
+        <p className="help">
+          Post-event recordings are unavailable for this event's programme
+          source.
+        </p>
+      )}
+      <label className="label">
+        Heading
+        <input
+          className="field"
+          maxLength={120}
+          value={configuration.postEvent.heading}
+          onChange={(event) =>
+            setConfiguration((current) => ({
+              ...current,
+              postEvent: { ...current.postEvent, heading: event.target.value },
+            }))
+          }
+        />
+      </label>
+      <RestrictedMarkdownEditor
+        label="Introduction"
+        maximumLength={2_000}
+        value={configuration.postEvent.body}
+        onChange={(body) =>
+          setConfiguration((current) => ({
+            ...current,
+            postEvent: { ...current.postEvent, body },
+          }))
+        }
+      />
+    </div>
   );
 }
 
@@ -64,16 +149,24 @@ export function AdminPublicSiteRecordings({
   recordings,
   programme,
   programmeFeaturesAvailable,
-  blocked,
+  configuration,
+  setConfiguration,
+  blockedReason,
   busy,
+  hidden,
   onPublish,
   onUnpublish,
 }: {
   recordings: PublicRecordingWorkspaceItem[];
   programme: PublishedProgramme | null;
   programmeFeaturesAvailable: boolean;
-  blocked: boolean;
+  configuration: PublicSiteDraft;
+  setConfiguration: Dispatch<SetStateAction<PublicSiteDraft>>;
+  /* Why these controls are unavailable, or null when they are not. Withdrawal
+     stays available regardless: a published recording is public now. */
+  blockedReason: string | null;
   busy: boolean;
+  hidden: boolean;
   onPublish: (recording: PublicRecordingWorkspaceItem) => void;
   onUnpublish: (recording: PublicRecordingWorkspaceItem) => void;
 }) {
@@ -86,127 +179,157 @@ export function AdminPublicSiteRecordings({
     ids.set("", crypto.randomUUID());
     return ids;
   }, [recordings]);
+  const blocked = blockedReason !== null;
+  const availableSessions =
+    programme?.sessions.filter(
+      (session) =>
+        !recordings.some((recording) => recording.sessionId === session.id),
+    ) ?? [];
   return (
-    <SiteRailDisclosure
-      title="Session recordings"
-      preview={
-        !programmeFeaturesAvailable
-          ? "Unavailable for this programme source"
-          : recordings.length
-            ? `${recordings.length} recording${
-                recordings.length === 1 ? "" : "s"
-              } · ${recordings
-                .slice(0, 2)
-                .map((recording) => recording.sessionTitle)
-                .join(" · ")}`
-            : "None yet"
-      }
-      help="Only external HTTPS recordings are supported in this slice. Saving never implies upload or publication."
+    <section
+      className="public-site-editor-panel"
+      aria-label="Session recordings"
+      hidden={hidden}
     >
-      {!programmeFeaturesAvailable ? (
+      <SitePanelHeading
+        title="Post-event mode"
+        help="Recordings appear on the event website only after their session and the event have ended."
+      />
+      <PostEventSettings
+        configuration={configuration}
+        setConfiguration={setConfiguration}
+        programme={programme}
+        programmeFeaturesAvailable={programmeFeaturesAvailable}
+      />
+
+      <SitePanelHeading
+        title="Session recordings"
+        help="Only external HTTPS recordings are supported in this slice. Saving never implies upload or publication."
+      />
+      {blockedReason ? (
+        <p className="validation-item warn" role="status">
+          {blockedReason}
+        </p>
+      ) : null}
+      {programmeFeaturesAvailable ? null : (
         <p className="validation-item warn" role="status">
           Recording drafts and publication are unavailable for this event's
           programme source. Published recordings can still be withdrawn.
         </p>
-      ) : null}
-      {recordings.map((recording) => (
-        <Form
-          method="post"
-          className="public-site-record-editor"
-          key={recording.id}
-        >
-          <input type="hidden" name="intent" value="save-recording" />
-          <input
-            type="hidden"
-            name="commandId"
-            value={commandIds.get(recording.id)}
-          />
-          <input type="hidden" name="id" value={recording.id} />
-          <input type="hidden" name="sessionId" value={recording.sessionId} />
-          <input
-            type="hidden"
-            name="revision"
-            value={recording.draftRevision}
-          />
-          <strong>{recording.sessionTitle}</strong>
-          <RecordingFields
-            recording={recording}
-            disabled={!programmeFeaturesAvailable}
-          />
-          <div className="page-actions">
-            <button
-              className="btn small"
-              type="submit"
-              disabled={blocked || busy || !programmeFeaturesAvailable}
+      )}
+      {recordings.length ? (
+        <div className="public-site-record-list">
+          {recordings.map((recording) => (
+            <SiteRecordDisclosure
+              key={recording.id}
+              title={recording.sessionTitle}
+              meta={recording.draftTitle}
+              state={recordingPublicationState(recording)}
             >
-              Save recording draft
-            </button>
-            <button
-              className="btn small primary"
-              type="button"
-              disabled={
-                blocked ||
-                busy ||
-                !programmeFeaturesAvailable ||
-                recording.publishedRevision === recording.draftRevision
-              }
-              onClick={() => onPublish(recording)}
-            >
-              {recording.publishedAt ? "Publish update" : "Publish recording"}
-            </button>
-            {recording.publishedAt ? (
-              <button
-                className="btn small danger"
-                type="button"
-                disabled={busy}
-                onClick={() => onUnpublish(recording)}
-              >
-                Withdraw
-              </button>
-            ) : null}
-          </div>
-        </Form>
-      ))}
+              <Form method="post" className="public-site-record-editor">
+                <input type="hidden" name="intent" value="save-recording" />
+                <input
+                  type="hidden"
+                  name="commandId"
+                  value={commandIds.get(recording.id)}
+                />
+                <input type="hidden" name="id" value={recording.id} />
+                <input
+                  type="hidden"
+                  name="sessionId"
+                  value={recording.sessionId}
+                />
+                <input
+                  type="hidden"
+                  name="revision"
+                  value={recording.draftRevision}
+                />
+                <RecordingFields
+                  recording={recording}
+                  disabled={!programmeFeaturesAvailable}
+                />
+                <div className="page-actions">
+                  <button
+                    className="btn small"
+                    type="submit"
+                    disabled={blocked || busy || !programmeFeaturesAvailable}
+                  >
+                    Save recording draft
+                  </button>
+                  <button
+                    className="btn small primary"
+                    type="button"
+                    disabled={
+                      blocked ||
+                      busy ||
+                      !programmeFeaturesAvailable ||
+                      recording.publishedRevision === recording.draftRevision
+                    }
+                    onClick={() => onPublish(recording)}
+                  >
+                    {recording.publishedAt
+                      ? "Publish update"
+                      : "Publish recording"}
+                  </button>
+                  {recording.publishedAt ? (
+                    <button
+                      className="btn small danger"
+                      type="button"
+                      disabled={busy}
+                      onClick={() => onUnpublish(recording)}
+                    >
+                      Withdraw
+                    </button>
+                  ) : null}
+                </div>
+              </Form>
+            </SiteRecordDisclosure>
+          ))}
+        </div>
+      ) : (
+        <p className="help">No recording drafts for this event yet.</p>
+      )}
       {programme && programmeFeaturesAvailable ? (
-        <Form method="post" className="public-site-record-editor">
+        <Form method="post" className="public-site-record-editor is-new">
           <input type="hidden" name="intent" value="save-recording" />
           <input type="hidden" name="commandId" value={commandIds.get("")} />
           <input type="hidden" name="id" value="" />
           <input type="hidden" name="revision" value="0" />
+          <h3 className="public-site-panel-title">Add a recording draft</h3>
           <label className="label">
             Published session
             <select className="field" name="sessionId" required defaultValue="">
               <option value="" disabled>
                 Select a session
               </option>
-              {programme.sessions
-                .filter(
-                  (session) =>
-                    !recordings.some(
-                      (recording) => recording.sessionId === session.id,
-                    ),
-                )
-                .map((session) => (
-                  <option value={session.id} key={session.id}>
-                    {session.title}
-                  </option>
-                ))}
+              {availableSessions.map((session) => (
+                <option value={session.id} key={session.id}>
+                  {session.title}
+                </option>
+              ))}
             </select>
           </label>
           <RecordingFields disabled={false} />
-          <button
-            className="btn small"
-            type="submit"
-            disabled={blocked || busy}
-          >
-            Create recording draft
-          </button>
+          <div className="page-actions">
+            <button
+              className="btn small"
+              type="submit"
+              disabled={blocked || busy || !availableSessions.length}
+            >
+              <Plus aria-hidden size={14} /> Create recording draft
+            </button>
+          </div>
+          {availableSessions.length ? null : (
+            <p className="help">
+              Every published session already has a recording draft.
+            </p>
+          )}
         </Form>
       ) : !programme ? (
         <p className="help">
           Publish a programme before creating recording drafts.
         </p>
       ) : null}
-    </SiteRailDisclosure>
+    </section>
   );
 }

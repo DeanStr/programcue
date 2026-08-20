@@ -22,9 +22,8 @@ describe("public-site editor programme authority", () => {
               serializedConfiguration={JSON.stringify(configuration)}
               programme={null}
               programmeReferencesAvailable={false}
-              unsaved={false}
-              busy={false}
-              saving={false}
+              formId="public-site-draft"
+              activePanel="homepage"
             />
           ),
         },

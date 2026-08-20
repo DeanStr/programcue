@@ -17,7 +17,11 @@ import { useUnsavedChanges } from "~/components/ui/use-unsaved-changes";
 import { requireValue } from "~/lib/required-value";
 import type { PublicRecordingWorkspaceItem } from "~/modules/public-site/public-recording-service.server";
 import { PublicRecordingService } from "~/modules/public-site/public-recording-service.server";
-import type { PublicSiteDraft } from "~/modules/public-site/public-site";
+import {
+  PUBLIC_SITE_PAGE_TYPES,
+  PUBLIC_SITE_SECTION_TYPES,
+  type PublicSiteDraft,
+} from "~/modules/public-site/public-site";
 import { publicSiteCommandIdForIntent } from "~/modules/public-site/public-site-command.server";
 import { publicationChangeSummary } from "~/modules/public-site/public-site-publication-summary";
 import {
@@ -267,10 +271,36 @@ function publicationLabel(publishedAt: number | null, current: boolean) {
   return current ? "Published" : "Changes waiting";
 }
 
-function publicationDetail(publishedAt: number | null, current: boolean) {
-  if (publishedAt === null) return "not published";
-  return current ? "published" : "changes waiting";
+function publicationTone(publishedAt: number | null, current: boolean) {
+  if (publishedAt === null) return "none";
+  return current ? "current" : "behind";
 }
+
+/* The state line says what an organiser can do next, not which internal
+   revision numbers moved. The numbers stay, as facts beside it. */
+function publicationSentence(
+  publishedAt: number | null,
+  current: boolean,
+  draftRevision: number,
+  unsaved: boolean,
+) {
+  if (publishedAt === null) {
+    if (draftRevision === 0)
+      return unsaved
+        ? "Save these changes to create the website draft, then publish it."
+        : "This event has no public website yet. Create a draft, then publish it.";
+    return unsaved
+      ? "Save these changes, then publish the website."
+      : "The saved draft is ready to publish.";
+  }
+  return current
+    ? "The public website matches the saved draft."
+    : "The saved draft holds changes the public website has not received.";
+}
+
+const DRAFT_FORM_ID = "public-site-draft";
+
+type PublicSitePanel = "homepage" | "pages" | "sponsors" | "recordings";
 
 type PublicSiteEditorCache = {
   eventId: string;
@@ -366,14 +396,52 @@ export default function AdminPublicSite({ loaderData }: Route.ComponentProps) {
   const unsaved = serialized !== savedSerialized;
   const newerDraftAvailable = loaderData.draft.revision !== draftBase.revision;
   const secondaryActionsBlocked = unsaved || newerDraftAvailable;
+  /* A stale base revision and unsaved edits both block sponsor and recording
+     mutations, but they call for opposite next steps: one has to be refreshed,
+     the other saved. Telling a conflicted editor to save is wrong advice. */
+  const secondaryBlockedReason = newerDraftAvailable
+    ? "A newer saved website draft is available. Refresh this page before changing sponsors or recording drafts. Published recordings can still be withdrawn."
+    : unsaved
+      ? "Save the website draft changes before changing sponsors or recording drafts. Published recordings can still be withdrawn."
+      : null;
   const busy = navigation.state !== "idle";
+  const saving = busy && navigation.formData?.get("intent") === "save-site";
   const blocker = useUnsavedChanges(unsaved);
   const [mobileSurface, setMobileSurface] = useState<"preview" | "edit">(
     "preview",
   );
+  const [panel, setPanel] = useState<PublicSitePanel>("homepage");
   const sitePublication = loaderData.publicationStatus.site;
   const brandingPublication = loaderData.publicationStatus.branding;
   const programmePublication = loaderData.publicationStatus.programme;
+  const shownSections = PUBLIC_SITE_SECTION_TYPES.filter(
+    (section) => configuration.sectionVisibility[section],
+  ).length;
+  const publishedPages = PUBLIC_SITE_PAGE_TYPES.filter(
+    (page) => configuration.pages[page].enabled,
+  ).length;
+  const panels: { id: PublicSitePanel; label: string; count: string }[] = [
+    {
+      id: "homepage",
+      label: "Homepage",
+      count: `${shownSections}/${PUBLIC_SITE_SECTION_TYPES.length}`,
+    },
+    {
+      id: "pages",
+      label: "Pages",
+      count: `${publishedPages}/${PUBLIC_SITE_PAGE_TYPES.length}`,
+    },
+    {
+      id: "sponsors",
+      label: "Sponsors",
+      count: String(loaderData.sponsors.length),
+    },
+    {
+      id: "recordings",
+      label: "Recordings",
+      count: String(loaderData.recordings.length),
+    },
+  ];
 
   function consequentialCommandId(key: string) {
     const id = loaderData.consequentialCommandIds[key];
@@ -530,7 +598,7 @@ export default function AdminPublicSite({ loaderData }: Route.ComponentProps) {
       {blocker.state === "blocked" ? (
         <ConfirmDialog
           title="Leave without saving the event website?"
-          description="The homepage, page, theme, ordering or featured-record changes on this page have not been saved."
+          description="The website draft has unsaved changes."
           confirmLabel="Leave and discard"
           cancelLabel="Keep editing"
           onCancel={() => blocker.reset()}
@@ -542,7 +610,6 @@ export default function AdminPublicSite({ loaderData }: Route.ComponentProps) {
       ) : null}
       <div className="page-head pc-page-header">
         <div>
-          <span className="pc-page-eyebrow">Published experience</span>
           <h1>Event website</h1>
           <p>
             Compose a bounded homepage and pages from approved event and
@@ -572,35 +639,62 @@ export default function AdminPublicSite({ loaderData }: Route.ComponentProps) {
         </div>
       ) : null}
 
-      {secondaryActionsBlocked ? (
+      {newerDraftAvailable ? (
         <div className="validation-item warn mb" role="status">
-          {newerDraftAvailable
-            ? "A newer saved website draft is available. Save will report a revision conflict; refresh before managing sponsors or recordings."
-            : "Save the homepage and page edits before changing sponsors or recording drafts. Published recordings can still be withdrawn."}
+          A newer saved website draft is available. Save will report a revision
+          conflict; refresh before managing sponsors or recordings.
         </div>
       ) : null}
 
       <section
-        className="public-site-publication-grid mb"
+        className="public-site-status mb"
         aria-label="Publication status"
       >
-        <article className="public-site-publication-status">
-          <span className="pc-page-eyebrow">Event website</span>
+        <div
+          className="public-site-status-state"
+          data-tone={publicationTone(
+            sitePublication.publishedAt,
+            sitePublication.current,
+          )}
+        >
           <strong>
             {publicationLabel(
               sitePublication.publishedAt,
               sitePublication.current,
             )}
           </strong>
-          <small>
-            {`Draft ${sitePublication.draftRevision} · `}
-            {sitePublication.publishedRevision === null
-              ? "No public revision"
-              : `Published ${sitePublication.publishedRevision}`}
-            {` · Branding ${publicationDetail(brandingPublication.publishedAt, brandingPublication.current)}`}
-            {` · Programme ${publicationDetail(programmePublication.publishedAt, programmePublication.publishedAt !== null)}`}
-          </small>
-        </article>
+          <span className="help">
+            {publicationSentence(
+              sitePublication.publishedAt,
+              sitePublication.current,
+              sitePublication.draftRevision,
+              unsaved,
+            )}
+          </span>
+        </div>
+        <dl className="public-site-status-facts">
+          <div>
+            <dt>Draft</dt>
+            <dd>{sitePublication.draftRevision || "Not created"}</dd>
+          </div>
+          <div>
+            <dt>Live</dt>
+            <dd>{sitePublication.publishedRevision ?? "None"}</dd>
+          </div>
+          <div>
+            <dt>Branding</dt>
+            <dd>
+              {publicationLabel(
+                brandingPublication.publishedAt,
+                brandingPublication.current,
+              )}
+            </dd>
+          </div>
+          <div>
+            <dt>Programme</dt>
+            <dd>{publicationLabel(programmePublication.publishedAt, true)}</dd>
+          </div>
+        </dl>
       </section>
 
       <fieldset
@@ -630,39 +724,91 @@ export default function AdminPublicSite({ loaderData }: Route.ComponentProps) {
         onSubmitCapture={blockSecondaryMutation}
       >
         <div className="public-site-editor-stack">
-          <AdminPublicSiteEditor
-            configuration={configuration}
-            setConfiguration={setConfiguration}
-            draftRevision={draftBase.revision}
-            serializedConfiguration={serialized}
-            programme={loaderData.programme}
-            programmeReferencesAvailable={
-              loaderData.event.repositoryProvider === "d1"
-            }
-            unsaved={unsaved}
-            busy={busy}
-            saving={busy && navigation.formData?.get("intent") === "save-site"}
-          />
-          <AdminPublicSiteSponsors
-            sponsors={loaderData.sponsors}
-            draftCreated={draftBase.revision > 0}
-            blocked={secondaryActionsBlocked}
-            busy={busy}
-            onDelete={(sponsor) =>
-              deleteSponsor(sponsor.id, sponsor.revision, sponsor.name)
-            }
-          />
-          <AdminPublicSiteRecordings
-            recordings={loaderData.recordings}
-            programme={loaderData.programme}
-            programmeFeaturesAvailable={
-              loaderData.event.repositoryProvider === "d1"
-            }
-            blocked={secondaryActionsBlocked}
-            busy={busy}
-            onPublish={publishRecording}
-            onUnpublish={unpublishRecording}
-          />
+          <div className="public-site-editor-toolbar">
+            <fieldset
+              className="pc-plain-fieldset public-site-editor-tabs"
+              aria-label="Website editor sections"
+            >
+              {panels.map((entry) => (
+                <button
+                  key={entry.id}
+                  type="button"
+                  className={panel === entry.id ? "is-active" : undefined}
+                  aria-pressed={panel === entry.id}
+                  onClick={() => setPanel(entry.id)}
+                >
+                  {entry.label}
+                  <span className="public-site-tab-count">{entry.count}</span>
+                </button>
+              ))}
+            </fieldset>
+            <div className="public-site-editor-commit">
+              <span
+                className="public-site-draft-state"
+                data-unsaved={unsaved}
+                role="status"
+              >
+                {unsaved
+                  ? "Unsaved changes"
+                  : draftBase.revision === 0
+                    ? "No draft yet"
+                    : `Draft ${draftBase.revision} saved`}
+              </span>
+              <button
+                className="btn primary"
+                type="submit"
+                form={DRAFT_FORM_ID}
+                disabled={!unsaved || busy}
+              >
+                {saving
+                  ? "Saving…"
+                  : draftBase.revision === 0
+                    ? "Create website draft"
+                    : "Save website draft"}
+              </button>
+            </div>
+          </div>
+
+          <div className="public-site-editor-card">
+            <AdminPublicSiteEditor
+              configuration={configuration}
+              setConfiguration={setConfiguration}
+              draftRevision={draftBase.revision}
+              serializedConfiguration={serialized}
+              programme={loaderData.programme}
+              programmeReferencesAvailable={
+                loaderData.event.repositoryProvider === "d1"
+              }
+              formId={DRAFT_FORM_ID}
+              activePanel={
+                panel === "homepage" || panel === "pages" ? panel : null
+              }
+            />
+            <AdminPublicSiteSponsors
+              sponsors={loaderData.sponsors}
+              draftCreated={draftBase.revision > 0}
+              blockedReason={secondaryBlockedReason}
+              busy={busy}
+              hidden={panel !== "sponsors"}
+              onDelete={(sponsor) =>
+                deleteSponsor(sponsor.id, sponsor.revision, sponsor.name)
+              }
+            />
+            <AdminPublicSiteRecordings
+              recordings={loaderData.recordings}
+              programme={loaderData.programme}
+              programmeFeaturesAvailable={
+                loaderData.event.repositoryProvider === "d1"
+              }
+              configuration={configuration}
+              setConfiguration={setConfiguration}
+              blockedReason={secondaryBlockedReason}
+              busy={busy}
+              hidden={panel !== "recordings"}
+              onPublish={publishRecording}
+              onUnpublish={unpublishRecording}
+            />
+          </div>
         </div>
 
         <AdminPublicSitePreview

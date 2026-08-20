@@ -1042,9 +1042,17 @@ revoked and deleted during file erasure.
   `/admin/site` is an owner/administrator-only, event-scoped editor backed by
   migration `0037_public_event_site.sql`. It has one compare-and-set draft and
   one immutable published snapshot, explicit preview and publication, and a
-  unified branding/site/programme status view. FAQ, event pages, post-event
-  mode, sponsors and recordings start collapsed, with counts in the summary,
-  so the desktop editor column no longer runs as one fully expanded form. The migration and Drizzle schema
+  unified branding/site/programme status view. The editor is a card of four
+  switched panels — Homepage, Pages, Sponsors and Recordings — under a toolbar
+  carrying the draft state and its single save control. The toolbar is sticky
+  in the wide two-column workspace and static in the narrow switched layout, so
+  it does not consume a large share of the phone viewport. The
+  homepage panel is the homepage's own ordered section list, each row holding
+  that section's visibility, position and editor. Saved sponsor and recording
+  records are collapsed by default and open individually, and in the wide
+  workspace the preview card is capped to the sticky viewport so its publish
+  control stays on screen while the editor column scrolls. The migration and
+  Drizzle schema
   add event-scoped site, published-reference, sponsor and recording tables with
   organisation/event foreign-key isolation. Audit and event-change evidence is
   conditional on the exact committed operation. The migration validates and
