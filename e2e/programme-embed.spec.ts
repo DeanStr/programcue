@@ -30,12 +30,24 @@ async function showProgrammePanel(
   name: "Programme" | "Embed builder" | "Managed embeds",
 ) {
   const button = page.getByRole("button", {
-    name: name === "Managed embeds" ? /^Managed embeds(?:\s+\d+)?$/ : name,
-    exact: name !== "Managed embeds",
+    name:
+      name === "Programme"
+        ? /^Programme(?:\s+\d+)?$/
+        : name === "Managed embeds"
+          ? /^Managed embeds(?:\s+\d+)?$/
+          : name,
+    exact: name === "Embed builder",
   });
   if ((await button.getAttribute("aria-pressed")) !== "true")
     await button.click();
   await expect(button).toHaveAttribute("aria-pressed", "true");
+  const expectedHash =
+    name === "Embed builder"
+      ? "#programme-embed-title"
+      : name === "Managed embeds"
+        ? "#managed-programme-embeds"
+        : "";
+  await expect.poll(() => new URL(page.url()).hash).toBe(expectedHash);
 }
 
 test.beforeEach(async ({ page }) => {
@@ -52,6 +64,45 @@ test.beforeEach(async ({ page }) => {
   // Opening the public route establishes the deterministic demo publication that
   // both admin views read; production mode never executes this seed path.
   await waitForInterface(page, "/public/programme/future-of-events-2027");
+});
+
+test("programme workspace restores and copies panel deep links", async ({
+  page,
+  context,
+}) => {
+  await waitForInterface(page, "/admin/programme#programme-embed-title");
+  await expect(
+    page.getByRole("button", { name: "Embed builder", exact: true }),
+  ).toHaveAttribute("aria-pressed", "true");
+  await expect(
+    page.getByRole("heading", { name: "Embed builder" }),
+  ).toBeVisible();
+
+  await context.grantPermissions(["clipboard-read", "clipboard-write"]);
+  await page
+    .getByRole("button", { name: "Copy a deep link to this page" })
+    .click();
+  await expect
+    .poll(() => page.evaluate(() => navigator.clipboard.readText()))
+    .toBe(`${e2eOrigin}/admin/programme#programme-embed-title`);
+
+  const managedPage = await context.newPage();
+  await waitForInterface(
+    managedPage,
+    "/admin/programme#managed-programme-embeds",
+  );
+  await expect(
+    managedPage.getByRole("button", {
+      name: /^Managed embeds(?:\s+\d+)?$/,
+    }),
+  ).toHaveAttribute("aria-pressed", "true");
+  await expect(
+    managedPage.getByRole("heading", { name: "Managed embeds" }),
+  ).toBeVisible();
+
+  await showProgrammePanel(managedPage, "Programme");
+  await expect(managedPage).toHaveURL(`${e2eOrigin}/admin/programme`);
+  await managedPage.close();
 });
 
 test("configures, previews and copies a constrained programme embed", async ({
@@ -166,6 +217,9 @@ test("saves and controls a stable managed embed lifecycle", async ({
   await expect(
     page.getByRole("button", { name: "Embed builder", exact: true }),
   ).toHaveAttribute("aria-pressed", "true");
+  await expect
+    .poll(() => new URL(page.url()).hash)
+    .toBe("#programme-embed-title");
   await expect(page.locator(".programme-embed-preview iframe")).toBeVisible();
   await showProgrammePanel(page, "Managed embeds");
   await expect(page.getByText(/Current revision 1/)).toBeVisible();

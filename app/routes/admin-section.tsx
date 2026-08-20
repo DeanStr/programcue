@@ -1,5 +1,5 @@
 import { CalendarDays, ExternalLink } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { data, Link } from "react-router";
 import { ProgrammeEmbedBuilder } from "~/components/programme-embed-builder";
 import { AdminWorkspaceTabs } from "~/components/ui/admin-workspace-tabs";
@@ -180,10 +180,51 @@ function programmePulse(
 
 type ProgrammeWorkspacePanel = "programme" | "builder" | "managed";
 
+const PROGRAMME_WORKSPACE_HASHES: Record<ProgrammeWorkspacePanel, string> = {
+  programme: "",
+  builder: "#programme-embed-title",
+  managed: "#managed-programme-embeds",
+};
+
+function programmeWorkspacePanelForHash(
+  hash: string,
+): ProgrammeWorkspacePanel | null {
+  if (hash === "") return "programme";
+  if (hash === PROGRAMME_WORKSPACE_HASHES.builder) return "builder";
+  if (hash === PROGRAMME_WORKSPACE_HASHES.managed) return "managed";
+  return null;
+}
+
 export default function AdminSection({ loaderData }: Route.ComponentProps) {
   const summary = summarizeProgramme(loaderData.sessions);
   const [activePanel, setActivePanel] =
     useState<ProgrammeWorkspacePanel>("programme");
+
+  useEffect(() => {
+    const revealLinkedPanel = () => {
+      const panel = programmeWorkspacePanelForHash(window.location.hash);
+      if (!panel) return;
+      setActivePanel(panel);
+      const hash = PROGRAMME_WORKSPACE_HASHES[panel];
+      if (!hash) return;
+      window.requestAnimationFrame(() =>
+        document
+          .getElementById(hash.slice(1))
+          ?.scrollIntoView({ block: "start" }),
+      );
+    };
+    revealLinkedPanel();
+    window.addEventListener("hashchange", revealLinkedPanel);
+    return () => window.removeEventListener("hashchange", revealLinkedPanel);
+  }, []);
+
+  function showProgrammePanel(panel: ProgrammeWorkspacePanel) {
+    setActivePanel(panel);
+    const url = new URL(window.location.href);
+    url.hash = PROGRAMME_WORKSPACE_HASHES[panel];
+    window.history.replaceState(window.history.state, "", url);
+  }
+
   return (
     <div className="programme-publishing">
       <div className="page-head pc-page-header">
@@ -260,7 +301,7 @@ export default function AdminSection({ loaderData }: Route.ComponentProps) {
           },
         ]}
         activePanel={activePanel}
-        onChange={setActivePanel}
+        onChange={showProgrammePanel}
       />
       <section
         className="programme-records programme-workspace-panel"
@@ -382,13 +423,18 @@ export default function AdminSection({ loaderData }: Route.ComponentProps) {
             sessions={loaderData.sessions}
             managedEmbeds={loaderData.managedEmbeds}
             activePanel={activePanel === "managed" ? "managed" : "builder"}
-            onOpenBuilder={() => setActivePanel("builder")}
+            onOpenBuilder={() => showProgrammePanel("builder")}
           />
         </div>
       ) : (
         <section
           className="programme-embed-unavailable programme-workspace-panel"
           hidden={activePanel === "programme"}
+          id={
+            activePanel === "programme"
+              ? undefined
+              : PROGRAMME_WORKSPACE_HASHES[activePanel].slice(1)
+          }
         >
           <h2>Embed unavailable</h2>
           <p>
