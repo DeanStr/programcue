@@ -917,7 +917,7 @@ test.describe
       await expect(page.getByLabel("Workshop prerequisites")).toBeHidden();
     });
 
-    test("stepped layout pages sections and keeps a speakers step", async ({
+    test("stepped layout pages sections, keeps a speakers step, and submits", async ({
       page,
     }) => {
       const unique = Date.now();
@@ -1005,6 +1005,25 @@ test.describe
       await expect(page.getByText("Your draft has been saved")).toBeVisible();
       await expect(page.getByText(/Step \d+ of \d+: Speakers/)).toBeVisible();
       await expect(confirmSubmission).not.toBeChecked();
+
+      await page.getByLabel("Speaker 1 name").fill("Avery Applicant");
+      await confirmSubmission.check();
+      await page.getByRole("button", { name: "Submit application" }).click();
+      await expect(
+        page.locator(".validation-item.ok[role='status']").filter({
+          hasText: "Your application has been submitted.",
+        }),
+      ).toBeVisible();
+      await expect(
+        page.getByRole("button", { name: "Save revised application" }),
+      ).toBeVisible();
+      await expect(page.getByText(/Step \d+ of \d+: Speakers/)).toBeVisible();
+      await page.getByRole("button", { name: "Back" }).click();
+      if (await page.getByLabel("Key takeaway").count()) {
+        await page.getByRole("button", { name: "Back" }).click();
+      }
+      await expect(sessionTitle).toBeVisible();
+      await expect(sessionTitle).toHaveValue(`Stepped session ${unique}`);
     });
 
     test("stepped error links focus grouped tracks and speakers", async ({
