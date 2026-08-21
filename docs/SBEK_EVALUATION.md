@@ -102,10 +102,14 @@ completed participant retention and cross-tenant fixed-fixture identities.
 Its destructive scope is deliberately the dedicated `org-future-events`
 fixture organisation. It restores `evt-foe-2025` and its private R2 prefix,
 clears and tombstones additional events created there by prior evaluation runs,
-clears their private R2 prefixes, and removes ordinary auxiliary people only
-when no durable reference remains. An ordinary identity with Better Auth,
-verification-token, actor-audit or other-organisation state is retained while
-its evaluation-organisation memberships and event relationships are removed.
+clears their private R2 prefixes, and removes only otherwise-unreferenced
+auxiliary people. Every address invited through the controlled-inbox journey is
+treated as a retained global identity, including when its invitation is never
+used. Reset removes its evaluation-organisation memberships and event
+relationships; it does not promise deletion of the person or matching global
+authentication state. An ordinary identity with Better Auth,
+verification-token, actor-audit or other-organisation state is likewise
+retained.
 Fixed SBEK identities remain dedicated and fail reset if linked outside the
 fixture. Event rows, global authentication state and append-only audit history
 are retained. Reset never crosses the fixture organisation boundary. Reset
@@ -289,17 +293,18 @@ and explicitly accept the pending invitation. Use this path for the
 reproducible chained scenario.
 
 **Test your own inbox:** Return to Event organiser and invite an email address
-you control. Program Cue creates or reuses the ordinary global identity for
-that address and sends its real Better Auth magic link. Before opening the
+you control. Program Cue creates or reuses a retained ordinary global identity
+for that address and sends its real Better Auth magic link. Before opening the
 message, return to `/evaluate` and select **Lock evaluation**. Then open the
 link in the same browser, continue as that email identity and explicitly accept
 its pending evaluator invitation. Do not select Sam's reviewer card for this
-invitation.
+invitation. This identity remains global even if the invitation is never used;
+reset removes its fixture access rather than promising account deletion.
 
 Receipt of the controlled-address message is the email-delivery evidence.
 Alias routing alone is not. Do not reset during an overlapping evaluation run;
 afterward, reset removes the controlled identity's fixture access while
-preserving its global account, authentication tokens and audit history.
+preserving its global identity and any authentication tokens or audit history.
 
 ## Configure the external evaluator
 

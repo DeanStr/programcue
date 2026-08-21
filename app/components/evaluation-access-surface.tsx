@@ -711,7 +711,8 @@ export function EvaluationAccessSurface({
               select Lock evaluation before opening its magic link in this
               browser. Follow the link as that address and accept its pending
               invitation explicitly. Do not select Clean reviewer for this
-              invitation.
+              invitation. Treat the address as a retained global Program Cue
+              identity: reset removes its evaluation access, not the identity.
             </div>
           </li>
         </ol>

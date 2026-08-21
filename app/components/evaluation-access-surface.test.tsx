@@ -197,6 +197,9 @@ describe("evaluation persona board", () => {
     expect(markup).toContain(
       "Do not select Clean reviewer for this invitation.",
     );
+    expect(markup).toContain(
+      "reset removes its evaluation access, not the identity.",
+    );
     expect(markup).toContain("An address you control is never mapped to Sam.");
   });
 

@@ -395,7 +395,7 @@ async function assertDedicatedFixtureIdentity(
 // number of candidates. A global person is deleted only when no durable,
 // cascading or typed-person reference remains anywhere; otherwise the person
 // is deliberately retained with its global authentication state.
-function deleteDisposableAuxiliaryPeople(
+function deleteUnreferencedAuxiliaryPeople(
   env: CloudflareEnvironment,
   people: FixtureAuxiliaryPerson[],
 ) {
@@ -1146,7 +1146,7 @@ async function resetProductionEvaluationFixtureWithAuthority(
     ];
     const auxiliaryDeleteOffset = fixtureFinalisationStatements.length;
     const auxiliaryDeletionStatements = auxiliaryDeletionCandidates.length
-      ? [deleteDisposableAuxiliaryPeople(env, auxiliaryDeletionCandidates)]
+      ? [deleteUnreferencedAuxiliaryPeople(env, auxiliaryDeletionCandidates)]
       : [];
     const finalisationResults = await env.DB.batch([
       ...fixtureFinalisationStatements,

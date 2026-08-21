@@ -364,13 +364,14 @@ profile opts into Maps explicitly with an ephemeral test key.
 The operator reset is organisation-scoped because optional evaluation scenarios
 create events and contacts. It restores the canonical event, clears and
 tombstones additional fixture-organisation events plus their private R2 data,
-removes an ordinary auxiliary person only when no durable reference remains,
-and preserves event rows and append-only audits. Fixed SBEK people still fail
-closed on cross-organisation drift. Ordinary controlled-inbox identities with
-authentication, verification-token, actor-audit or legitimate
-other-organisation state are retained while the reset removes only their
-evaluation-organisation memberships and event relationships. Creation time is
-not deletion authority. Reset audit metadata records removed and retained
+removes only otherwise-unreferenced auxiliary people, and preserves event rows
+and append-only audits. Fixed SBEK people still fail closed on
+cross-organisation drift. Every controlled-inbox invitation creates or reuses a
+retained ordinary global identity, including when the invitation is never used;
+reset removes its evaluation-organisation memberships and event relationships
+without promising deletion of the person or matching global authentication
+state. Creation time is not deletion authority. Reset audit metadata records
+removed and retained
 auxiliary-person counts plus the removed fixture-membership count without
 personal identifiers. Active in-scope external work, completed retention or a
 mutation that cannot be proved fixture-confined still fails before destructive
