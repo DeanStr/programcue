@@ -3,7 +3,7 @@ import {
   data,
   type LoaderFunctionArgs,
 } from "react-router";
-
+import { AiProviderSettingsService } from "~/modules/ai/ai-provider.server";
 import {
   assistantProposalMetadataSchema,
   prepareReminderSendProposal,
@@ -12,7 +12,10 @@ import { CommunicationService } from "~/modules/communications/communication-ser
 import { requireEmailProviderConfiguration } from "~/modules/communications/email-provider.server";
 import type { Viewer } from "~/platform/auth/authorize.server";
 import { getCloudflareContext } from "~/platform/cloudflare-context";
-import { DEMO_ASSISTANT_FIXTURE_MODEL } from "~/platform/demo/demo-identities";
+import {
+  DEMO_ASSISTANT_FIXTURE_MODEL,
+  DEMO_IDENTITIES,
+} from "~/platform/demo/demo-identities";
 import { ensureDemoData } from "~/platform/demo/seed.server";
 
 const EVENT_ID = "evt-foe-2025";
@@ -30,9 +33,30 @@ const DEMO_ADMIN: Viewer = {
   eventId: EVENT_ID,
   demo: true,
 };
+const DEMO_OWNER: Viewer = {
+  personId: DEMO_IDENTITIES.owner.personId,
+  name: DEMO_IDENTITIES.owner.name,
+  email: DEMO_IDENTITIES.owner.email,
+  role: "owner",
+  organisationId: ORGANISATION_ID,
+  eventId: EVENT_ID,
+  demo: true,
+};
 
 function requireDemo(env: CloudflareEnvironment) {
   if (String(env.DEMO_MODE) !== "true") {
+    throw new Response("Not found", { status: 404 });
+  }
+}
+
+function requireE2eFixtures(env: CloudflareEnvironment) {
+  if (
+    (
+      env as CloudflareEnvironment & {
+        PROGRAM_CUE_E2E_FIXTURES?: string;
+      }
+    ).PROGRAM_CUE_E2E_FIXTURES !== "true"
+  ) {
     throw new Response("Not found", { status: 404 });
   }
 }
@@ -66,6 +90,27 @@ export async function action({ request, context }: ActionFunctionArgs) {
     throw new Response("Explicit demo fixture confirmation is required", {
       status: 400,
     });
+  }
+  if (form.get("intent") === "configure_stream_test") {
+    requireE2eFixtures(env);
+    await ensureDemoData(env);
+    const enabled = form.get("enabled") === "yes";
+    const settings = new AiProviderSettingsService(env);
+    const current = await settings.getSelection(ORGANISATION_ID);
+    const selection = await settings.save(DEMO_OWNER, {
+      provider: enabled ? "anthropic" : "openai",
+      model: enabled ? "claude-sonnet-4-6" : "gpt-5.6-terra",
+      revision: current?.revision ?? 0,
+    });
+    return data(
+      {
+        ok: true,
+        demonstrationOnly: true,
+        providerCalled: false,
+        selection,
+      },
+      { headers: { "cache-control": "private, no-store" } },
+    );
   }
   if (form.get("intent") === "seed_reminder") {
     await ensureDemoData(env);
@@ -272,6 +317,8 @@ export async function action({ request, context }: ActionFunctionArgs) {
       demonstrationOnly: true,
       providerCalled: false,
       proposalId,
+      preview,
+      runId,
       taskTitle: TASK_TITLE,
       assistantPath: "/admin/assistant",
     },

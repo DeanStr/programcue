@@ -77,6 +77,132 @@ test("assistant streaming endpoint returns an event stream instead of the page d
   expect(response.body).not.toContain("<!DOCTYPE html>");
 });
 
+test("assistant reconciles a streamed proposal after approval", async ({
+  page,
+  request,
+}) => {
+  await resetDemoEvent(request);
+  const configure = async (enabled: boolean) => {
+    const response = await request.post("/demo/fixtures/assistant-proposal", {
+      form: {
+        intent: "configure_stream_test",
+        confirm: FIXTURE_CONFIRMATION,
+        enabled: enabled ? "yes" : "no",
+      },
+      headers: { origin: e2eOrigin },
+    });
+    expect(response.ok(), await response.text()).toBeTruthy();
+  };
+
+  await configure(true);
+  try {
+    await page.goto("/admin/assistant");
+    await page.locator("body[data-hydrated='true']").waitFor();
+    await expect(
+      page.getByRole("button", { name: "Ask assistant" }),
+    ).toBeEnabled();
+
+    const fixture = await request.post("/demo/fixtures/assistant-proposal", {
+      form: { intent: "seed", confirm: FIXTURE_CONFIRMATION },
+      headers: { origin: e2eOrigin },
+    });
+    const fixtureBody = await fixture.text();
+    expect(fixture.ok(), fixtureBody).toBeTruthy();
+    const fixtureData = JSON.parse(fixtureBody) as {
+      preview: {
+        id: string;
+        toolName: "propose_task";
+        title: string;
+        summary: string;
+        consequence: string;
+        changes: Array<{
+          field: string;
+          before: string | null;
+          after: string;
+        }>;
+        approvalRequired: true;
+      };
+      runId: string;
+      taskTitle: string;
+    };
+    const suggestedPrompt =
+      "What is blocking event readiness? Cite the exact records and rank the next three actions.";
+    let postedBody = "";
+    await page.route("**/admin/assistant/stream", async (route) => {
+      postedBody = route.request().postData() ?? "";
+      const result = {
+        runId: fixtureData.runId,
+        operationId: fixtureData.runId,
+        answer: "I prepared one exact task preview for approval.",
+        attribution: {
+          provider: "Anthropic",
+          model: "claude-sonnet-4-6",
+          responseId: "e2e-streamed-proposal",
+          generatedAt: "2026-08-21T00:00:00.000Z",
+          advisory: true,
+        },
+        evidence: [],
+        proposals: [fixtureData.preview],
+      };
+      await route.fulfill({
+        status: 200,
+        contentType: "text/event-stream; charset=utf-8",
+        headers: { "cache-control": "private, no-store" },
+        body: [
+          "event: status",
+          'data: {"phase":"started"}',
+          "",
+          "event: delta",
+          'data: {"delta":"I prepared one exact task preview for approval."}',
+          "",
+          "event: result",
+          `data: ${JSON.stringify(result)}`,
+          "",
+          "",
+        ].join("\n"),
+      });
+    });
+
+    await page.getByRole("button", { name: suggestedPrompt }).click();
+    await expect(
+      page.getByRole("heading", { name: "Assistant answer" }),
+    ).toBeVisible();
+    expect(postedBody).toContain(suggestedPrompt);
+    await expect(
+      page.getByText("1 awaiting approval", { exact: true }),
+    ).toBeVisible();
+
+    let proposal = page
+      .locator("section.card")
+      .filter({ hasText: fixtureData.taskTitle });
+    await expect(proposal).toHaveCount(1);
+    await proposal.getByRole("checkbox").check();
+    await proposal
+      .getByRole("button", { name: "Approve and create task" })
+      .click();
+
+    await expect(
+      page.getByText("The approved task was created and audited.", {
+        exact: true,
+      }),
+    ).toBeVisible();
+    proposal = page
+      .locator("section.card")
+      .filter({ hasText: fixtureData.taskTitle });
+    await expect(proposal).toHaveCount(1);
+    await expect(proposal.getByText("Executed", { exact: true })).toBeVisible();
+    await expect(
+      page.getByText("0 awaiting approval", { exact: true }),
+    ).toBeVisible();
+    await expect(
+      proposal.getByRole("button", { name: "Approve and create task" }),
+    ).toHaveCount(0);
+  } finally {
+    await configure(false);
+    await resetDemoEvent(request);
+  }
+});
+
 test("assistant task preview requires confirmation and executes through the real task command", async ({
   page,
   request,

@@ -1,5 +1,5 @@
 import { CheckCircle2, ShieldCheck, Sparkles } from "lucide-react";
-import { type FormEvent, useState } from "react";
+import { type FormEvent, useEffect, useState } from "react";
 import {
   type ActionFunctionArgs,
   data,
@@ -253,14 +253,17 @@ function StreamingAssistantWorkspace({
   defaultPrompt,
   disabled,
   eventName,
+  result,
+  setResult,
 }: {
   defaultPrompt: string;
   disabled: boolean;
   eventName: string;
+  result: AiAssistantResult | null;
+  setResult: (result: AiAssistantResult | null) => void;
 }) {
   const [pending, setPending] = useState(false);
   const [partial, setPartial] = useState("");
-  const [result, setResult] = useState<AiAssistantResult | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   async function submit(event: FormEvent<HTMLFormElement>) {
@@ -437,7 +440,9 @@ function StreamingAssistantWorkspace({
               {error}
             </p>
           ) : null}
-          {result ? <AssistantResultPanel result={result} /> : null}
+          {result ? (
+            <AssistantResultPanel result={result} showProposals={false} />
+          ) : null}
         </div>
       </section>
 
@@ -448,6 +453,7 @@ function StreamingAssistantWorkspace({
             className="pc-assist-prompt"
             type="submit"
             form="assistant-stream-form"
+            formNoValidate
             name="suggestedPrompt"
             value={prompt}
             disabled={pending || disabled}
@@ -465,8 +471,36 @@ export default function AssistantRoute() {
   const loaderData = useLoaderData<typeof loader>();
   const actionData = useActionData<typeof action>();
   const navigation = useNavigation();
+  const [streamedResult, setStreamedResult] =
+    useState<AiAssistantResult | null>(null);
   const busy = navigation.state !== "idle";
-  const recentProposals = loaderData.proposals;
+  const streamedProposals = streamedResult?.proposals ?? [];
+  const streamedProposalIds = new Set(
+    streamedProposals.map((proposal) => proposal.id),
+  );
+  const recentProposals = loaderData.proposals.filter(
+    (proposal) => !streamedProposalIds.has(proposal.id),
+  );
+  const pendingProposalCount =
+    streamedProposals.length +
+    recentProposals.filter(
+      (proposal) =>
+        !proposal.executedTaskId &&
+        !proposal.executedCommunicationId &&
+        !proposal.executedDomainEntityId &&
+        !proposal.expired,
+    ).length;
+  const hasProposalHistory =
+    streamedProposals.length > 0 || recentProposals.length > 0;
+
+  useEffect(() => {
+    if (
+      actionData?.ok &&
+      (actionData.intent === "approve" || actionData.intent === "revise")
+    ) {
+      setStreamedResult(null);
+    }
+  }, [actionData]);
   return (
     <div className="pc-assist">
       <PageHeader
@@ -584,25 +618,21 @@ export default function AssistantRoute() {
         defaultPrompt={loaderData.prompt}
         disabled={busy || !loaderData.provider.configured}
         eventName={loaderData.eventName}
+        result={streamedResult}
+        setResult={setStreamedResult}
       />
 
-      {recentProposals.length ? (
+      {hasProposalHistory ? (
         <section className="pc-assist-recent">
           <div className="card-title">
-            <h2>Recent write previews</h2>
+            <h2>Write previews</h2>
             <span className="status warning">
-              {
-                recentProposals.filter(
-                  (proposal) =>
-                    !proposal.executedTaskId &&
-                    !proposal.executedCommunicationId &&
-                    !proposal.executedDomainEntityId &&
-                    !proposal.expired,
-                ).length
-              }{" "}
-              awaiting approval
+              {pendingProposalCount} awaiting approval
             </span>
           </div>
+          {streamedProposals.map((proposal) => (
+            <ProposalApproval proposal={proposal} key={proposal.id} />
+          ))}
           {recentProposals.map((proposal) => (
             <ProposalApproval
               proposal={proposal}

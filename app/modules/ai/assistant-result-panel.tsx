@@ -458,8 +458,10 @@ export function ProposalApproval({
 
 export function AssistantResultPanel({
   result,
+  showProposals = true,
 }: {
   result: AiAssistantResult;
+  showProposals?: boolean;
 }) {
   return (
     <div className="stack" aria-live="polite">
@@ -477,9 +479,11 @@ export function AssistantResultPanel({
           Open assistant operation
         </Link>
       </section>
-      {result.proposals.map((proposal) => (
-        <ProposalApproval proposal={proposal} key={proposal.id} />
-      ))}
+      {showProposals
+        ? result.proposals.map((proposal) => (
+            <ProposalApproval proposal={proposal} key={proposal.id} />
+          ))
+        : null}
       <EvidenceList evidence={result.evidence} />
     </div>
   );
