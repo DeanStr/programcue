@@ -218,8 +218,13 @@ export async function readDemoActiveWork(
   assertDemoRuntime(env);
   const row = await env.DB.prepare(
     `SELECT
-       (SELECT COUNT(*) FROM operation_jobs
-         WHERE event_id = ? AND status IN ('queued','received','running','retrying')) AS operations,
+       ((SELECT COUNT(*) FROM operation_jobs
+          WHERE event_id = ? AND status IN ('queued','received','running','retrying'))
+        +
+        (SELECT COUNT(*) FROM assistant_proposal_executions
+          WHERE event_id = ? AND status = 'processing'
+            AND claim_token IS NOT NULL
+            AND claim_expires_at > unixepoch())) AS operations,
        (SELECT COUNT(*) FROM file_multipart_uploads
          WHERE event_id = ? AND status IN ('requested','initiated','completing')) AS multipartUploads,
        (SELECT COUNT(*)
@@ -238,6 +243,7 @@ export async function readDemoActiveWork(
          WHERE endpoint.event_id = ? AND delivery.status IN ('queued','delivering')) AS webhookDeliveries`,
   )
     .bind(
+      DEMO_EVENT_ID,
       DEMO_EVENT_ID,
       DEMO_EVENT_ID,
       DEMO_EVENT_ID,
@@ -290,7 +296,6 @@ async function supersedeDemoAssistantFixtureProposals(
           SELECT 1
             FROM audit_events superseded
            WHERE superseded.event_id = proposal.event_id
-             AND superseded.actor_person_id = proposal.actor_person_id
              AND superseded.action = 'assistant.proposal.superseded'
              AND superseded.entity_type = 'assistant_proposal'
              AND superseded.entity_id = proposal.entity_id

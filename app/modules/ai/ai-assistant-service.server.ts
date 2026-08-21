@@ -28,6 +28,7 @@ import type { AiEvidence } from "./ai-types";
 import { AiProviderError } from "./openai-responses-provider.server";
 
 export {
+  AiAssistantBusyError,
   AiContextTooLargeError,
   AiPermissionError,
   AiProposalNotFoundError,

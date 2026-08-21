@@ -1314,6 +1314,61 @@ describe("complete evaluator demo reset", () => {
   });
 
   describe("destructive-operation guards", () => {
+    it("refuses reset while an assistant proposal execution owns its lease", async () => {
+      const testEnvironment = demoEnvironment();
+      await ensureDemoData(testEnvironment);
+      const proposalId = crypto.randomUUID();
+      await testEnvironment.DB.prepare(
+        `INSERT INTO assistant_proposal_executions (
+           proposal_id, organisation_id, event_id, actor_person_id, tool_name,
+           status, claim_token, claim_expires_at, created_at, updated_at
+         ) VALUES (?, ?, ?, ?, 'propose_task', 'processing', ?,
+                   unixepoch() + 300, unixepoch(), unixepoch())`,
+      )
+        .bind(
+          proposalId,
+          DEMO_ORGANISATION_ID,
+          DEMO_EVENT_ID,
+          demoAdministrator.personId,
+          crypto.randomUUID(),
+        )
+        .run();
+
+      await expect(
+        resetDemoEvent(
+          testEnvironment,
+          demoAdministrator.personId,
+          DEMO_RESET_CONFIRMATION,
+        ),
+      ).rejects.toMatchObject({
+        name: DemoResetBusyError.name,
+        activeWork: { operations: 1 },
+      });
+      await expect(
+        testEnvironment.DB.prepare(
+          `SELECT status FROM assistant_proposal_executions
+            WHERE proposal_id = ?`,
+        )
+          .bind(proposalId)
+          .first(),
+      ).resolves.toEqual({ status: "processing" });
+
+      await testEnvironment.DB.prepare(
+        `UPDATE assistant_proposal_executions
+            SET claim_expires_at = 0
+          WHERE proposal_id = ?`,
+      )
+        .bind(proposalId)
+        .run();
+      await expect(
+        resetDemoEvent(
+          testEnvironment,
+          demoAdministrator.personId,
+          DEMO_RESET_CONFIRMATION,
+        ),
+      ).resolves.toBeTruthy();
+    });
+
     it("refuses non-terminal work before changing D1 or R2", async () => {
       const testEnvironment = demoEnvironment();
       await ensureDemoData(testEnvironment);

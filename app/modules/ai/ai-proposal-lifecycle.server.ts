@@ -1,6 +1,13 @@
 import { z } from "zod";
 import type { Viewer } from "~/platform/auth/authorize.server";
+import { DEMO_ORGANISATION_ID } from "~/platform/demo/demo-identities";
 import {
+  EVALUATION_FIXTURE_RESET_OPERATION_ID,
+  EVALUATION_FIXTURE_RESET_OPERATION_TYPE,
+} from "~/platform/evaluation/evaluation-fixture-reset-lock.server";
+import { requireRuntimeMode } from "~/platform/runtime-environment.server";
+import {
+  AiAssistantBusyError,
   AiPermissionError,
   AiProposalNotFoundError,
   AiProposalStateError,
@@ -209,6 +216,9 @@ export class AiProposalLifecycleService {
     const now = Math.floor(this.now().getTime() / 1_000);
     const claimToken = crypto.randomUUID();
     const approvalAuditId = `assistant-approval:${input.proposalId}`;
+    const guardEvaluationReset =
+      requireRuntimeMode(this.env).evaluation &&
+      viewer.organisationId === DEMO_ORGANISATION_ID;
     await this.env.DB.batch([
       this.env.DB.prepare(
         `INSERT OR IGNORE INTO assistant_proposal_executions (
@@ -219,7 +229,19 @@ export class AiProposalLifecycleService {
           WHERE EXISTS (
             SELECT 1 FROM events
              WHERE id = ? AND organisation_id = ?
-          )`,
+          )
+           AND NOT EXISTS (
+             SELECT 1 FROM audit_events superseded
+              WHERE superseded.event_id = ?
+                AND superseded.action = 'assistant.proposal.superseded'
+                AND superseded.entity_type = 'assistant_proposal'
+                AND superseded.entity_id = ?
+           )
+           AND (? = 0 OR NOT EXISTS (
+             SELECT 1 FROM operation_jobs fixture_reset
+              WHERE fixture_reset.id = ? AND fixture_reset.type = ?
+                AND fixture_reset.status = 'running'
+           ))`,
       ).bind(
         input.proposalId,
         viewer.organisationId,
@@ -232,6 +254,11 @@ export class AiProposalLifecycleService {
         now,
         viewer.eventId,
         viewer.organisationId,
+        viewer.eventId,
+        input.proposalId,
+        guardEvaluationReset ? 1 : 0,
+        EVALUATION_FIXTURE_RESET_OPERATION_ID,
+        EVALUATION_FIXTURE_RESET_OPERATION_TYPE,
       ),
       this.env.DB.prepare(
         `INSERT OR IGNORE INTO audit_events (
@@ -283,8 +310,24 @@ export class AiProposalLifecycleService {
           resultJson: string | null;
         }>();
     let row = await load();
+    if (!row) {
+      if (guardEvaluationReset) {
+        const reset = await this.env.DB.prepare(
+          `SELECT 1 FROM operation_jobs
+            WHERE id = ? AND type = ? AND status = 'running'`,
+        )
+          .bind(
+            EVALUATION_FIXTURE_RESET_OPERATION_ID,
+            EVALUATION_FIXTURE_RESET_OPERATION_TYPE,
+          )
+          .first();
+        if (reset) throw new AiAssistantBusyError();
+      }
+      throw new AiProposalStateError(
+        "This assistant preview is no longer current. Use the latest preview or generate a fresh one.",
+      );
+    }
     if (
-      !row ||
       row.organisationId !== viewer.organisationId ||
       row.eventId !== viewer.eventId ||
       row.actorPersonId !== viewer.personId ||
@@ -315,7 +358,19 @@ export class AiProposalLifecycleService {
           SET claim_token = ?, claim_expires_at = ?, updated_at = ?
         WHERE proposal_id = ? AND organisation_id = ? AND event_id = ?
           AND actor_person_id = ? AND tool_name = ? AND status = 'processing'
-          AND claim_expires_at <= ?`,
+          AND claim_expires_at <= ?
+          AND NOT EXISTS (
+            SELECT 1 FROM audit_events superseded
+             WHERE superseded.event_id = assistant_proposal_executions.event_id
+               AND superseded.action = 'assistant.proposal.superseded'
+               AND superseded.entity_type = 'assistant_proposal'
+               AND superseded.entity_id = assistant_proposal_executions.proposal_id
+          )
+          AND (? = 0 OR NOT EXISTS (
+            SELECT 1 FROM operation_jobs fixture_reset
+             WHERE fixture_reset.id = ? AND fixture_reset.type = ?
+               AND fixture_reset.status = 'running'
+          ))`,
     )
       .bind(
         claimToken,
@@ -327,6 +382,9 @@ export class AiProposalLifecycleService {
         viewer.personId,
         input.toolName,
         now,
+        guardEvaluationReset ? 1 : 0,
+        EVALUATION_FIXTURE_RESET_OPERATION_ID,
+        EVALUATION_FIXTURE_RESET_OPERATION_TYPE,
       )
       .run();
     if ((reclaimed.meta.changes ?? 0) === 1)
@@ -470,6 +528,80 @@ export class AiProposalLifecycleService {
       .run();
   }
 
+  private async startReminderRevisionOperation(
+    viewer: Viewer,
+    proposalId: string,
+  ) {
+    if (
+      !requireRuntimeMode(this.env).evaluation ||
+      viewer.organisationId !== DEMO_ORGANISATION_ID
+    ) {
+      return null;
+    }
+    const operationId = crypto.randomUUID();
+    const started = await this.env.DB.prepare(
+      `INSERT INTO operation_jobs (
+         id, organisation_id, event_id, requested_by_person_id, type,
+         idempotency_key, correlation_id, status, payload_json,
+         progress_total, progress_completed, progress_failed, attempt_count,
+         cancellable, started_at, created_at, updated_at
+       ) SELECT ?, ?, ?, ?, 'ai.proposal.revision', ?, ?, 'running', ?,
+                1, 0, 0, 1, 0, unixepoch(), unixepoch(), unixepoch()
+          WHERE NOT EXISTS (
+            SELECT 1 FROM operation_jobs fixture_reset
+             WHERE fixture_reset.id = ? AND fixture_reset.type = ?
+               AND fixture_reset.status = 'running'
+          )`,
+    )
+      .bind(
+        operationId,
+        viewer.organisationId,
+        viewer.eventId,
+        viewer.personId,
+        `ai.proposal.revision:${operationId}`,
+        operationId,
+        JSON.stringify({ proposalId }),
+        EVALUATION_FIXTURE_RESET_OPERATION_ID,
+        EVALUATION_FIXTURE_RESET_OPERATION_TYPE,
+      )
+      .run();
+    if ((started.meta.changes ?? 0) !== 1) throw new AiAssistantBusyError();
+    return operationId;
+  }
+
+  private async settleReminderRevisionOperation(
+    operationId: string,
+    outcome: { status: "completed" } | { status: "failed"; error: unknown },
+  ) {
+    const failure =
+      outcome.status === "failed" ? safeErrorMetadata(outcome.error) : null;
+    const settled = await this.env.DB.prepare(
+      `UPDATE operation_jobs
+          SET status = ?, progress_completed = ?, progress_failed = ?,
+              last_error = ?, result_json = ?, completed_at = unixepoch(),
+              updated_at = unixepoch()
+        WHERE id = ? AND status = 'running'`,
+    )
+      .bind(
+        outcome.status,
+        outcome.status === "completed" ? 1 : 0,
+        outcome.status === "failed" ? 1 : 0,
+        failure?.message ?? null,
+        JSON.stringify(
+          outcome.status === "completed"
+            ? { revised: true }
+            : { errorType: failure?.errorType ?? "UnknownError" },
+        ),
+        operationId,
+      )
+      .run();
+    if ((settled.meta.changes ?? 0) !== 1) {
+      throw new Error(
+        `Assistant reminder revision operation ${operationId} could not be settled.`,
+      );
+    }
+  }
+
   async approveProposal(
     viewer: Viewer,
     rawProposalId: unknown,
@@ -533,17 +665,17 @@ export class AiProposalLifecycleService {
     }
     const superseded = await this.env.DB.prepare(
       `SELECT 1 FROM audit_events superseded
-        WHERE superseded.event_id = ? AND superseded.actor_person_id = ?
+        WHERE superseded.event_id = ?
           AND superseded.action = 'assistant.proposal.superseded'
           AND superseded.entity_type = 'assistant_proposal'
           AND superseded.entity_id = ?
         LIMIT 1`,
     )
-      .bind(viewer.eventId, viewer.personId, proposalId)
+      .bind(viewer.eventId, proposalId)
       .first();
     if (superseded) {
       throw new AiProposalStateError(
-        "This reminder preview was replaced by an edited preview. Approve the latest version instead.",
+        "This assistant preview is no longer current. Use the latest preview or generate a fresh one.",
       );
     }
 
@@ -611,8 +743,13 @@ export class AiProposalLifecycleService {
     const proposalId = identifierSchema.parse(rawProposalId);
     const subject = z.string().trim().min(3).max(200).parse(rawSubject);
     const body = z.string().trim().min(10).max(100_000).parse(rawBody);
-    const proposal = await this.env.DB.prepare(
-      `SELECT proposal.metadata_json AS metadataJson,
+    const revisionOperationId = await this.startReminderRevisionOperation(
+      viewer,
+      proposalId,
+    );
+    try {
+      const proposal = await this.env.DB.prepare(
+        `SELECT proposal.metadata_json AS metadataJson,
               proposal.created_at AS createdAt
          FROM audit_events proposal
          JOIN events event
@@ -624,7 +761,6 @@ export class AiProposalLifecycleService {
           AND NOT EXISTS (
             SELECT 1 FROM audit_events terminal
              WHERE terminal.event_id = proposal.event_id
-               AND terminal.actor_person_id = proposal.actor_person_id
                AND (
                  (terminal.action = 'assistant.proposal.superseded'
                    AND terminal.entity_type = 'assistant_proposal'
@@ -635,56 +771,75 @@ export class AiProposalLifecycleService {
                )
           )
         ORDER BY proposal.created_at DESC, proposal.id DESC LIMIT 1`,
-    )
-      .bind(viewer.organisationId, viewer.eventId, viewer.personId, proposalId)
-      .first<{ metadataJson: string; createdAt: number }>();
-    if (!proposal) throw new AiProposalNotFoundError();
-    if (
-      proposal.createdAt <
-      Math.floor(this.now().getTime() / 1_000) - PROPOSAL_LIFETIME_SECONDS
-    ) {
-      throw new AiProposalStateError(
-        "This assistant proposal expired. Generate a fresh preview against current event data.",
+      )
+        .bind(
+          viewer.organisationId,
+          viewer.eventId,
+          viewer.personId,
+          proposalId,
+        )
+        .first<{ metadataJson: string; createdAt: number }>();
+      if (!proposal) throw new AiProposalNotFoundError();
+      if (
+        proposal.createdAt <
+        Math.floor(this.now().getTime() / 1_000) - PROPOSAL_LIFETIME_SECONDS
+      ) {
+        throw new AiProposalStateError(
+          "This assistant proposal expired. Generate a fresh preview against current event data.",
+        );
+      }
+      const metadata = assistantProposalMetadataSchema.safeParse(
+        parseJson(proposal.metadataJson, `Assistant proposal ${proposalId}`),
       );
+      if (!metadata.success) {
+        throw new Error(
+          `Assistant proposal ${proposalId} contains invalid preview metadata.`,
+        );
+      }
+      if (metadata.data.toolName !== "propose_reminder_send") {
+        throw new AiProposalStateError(
+          "Only reminder-send previews have editable communication content.",
+        );
+      }
+      const revised = await prepareReminderSendProposal(this.env, viewer, {
+        runId: correlationId,
+        model: metadata.data.model,
+        templateId: metadata.data.preview.reminder.template.templateId,
+        arguments: {
+          ...metadata.data.arguments,
+          subject,
+          body,
+        },
+      });
+      await this.audit(viewer, {
+        actorKind: "person",
+        action: "assistant.proposal.superseded",
+        entityType: "assistant_proposal",
+        entityId: proposalId,
+        correlationId,
+        metadata: {
+          proposalId,
+          replacementProposalId: revised.preview.id,
+          toolName: metadata.data.toolName,
+          subjectChanged: subject !== metadata.data.arguments.subject,
+          bodyChanged: body !== metadata.data.arguments.body,
+        },
+      });
+      if (revisionOperationId) {
+        await this.settleReminderRevisionOperation(revisionOperationId, {
+          status: "completed",
+        });
+      }
+      return revised.preview;
+    } catch (error) {
+      if (revisionOperationId) {
+        await this.settleReminderRevisionOperation(revisionOperationId, {
+          status: "failed",
+          error,
+        });
+      }
+      throw error;
     }
-    const metadata = assistantProposalMetadataSchema.safeParse(
-      parseJson(proposal.metadataJson, `Assistant proposal ${proposalId}`),
-    );
-    if (!metadata.success) {
-      throw new Error(
-        `Assistant proposal ${proposalId} contains invalid preview metadata.`,
-      );
-    }
-    if (metadata.data.toolName !== "propose_reminder_send") {
-      throw new AiProposalStateError(
-        "Only reminder-send previews have editable communication content.",
-      );
-    }
-    const revised = await prepareReminderSendProposal(this.env, viewer, {
-      runId: correlationId,
-      model: metadata.data.model,
-      templateId: metadata.data.preview.reminder.template.templateId,
-      arguments: {
-        ...metadata.data.arguments,
-        subject,
-        body,
-      },
-    });
-    await this.audit(viewer, {
-      actorKind: "person",
-      action: "assistant.proposal.superseded",
-      entityType: "assistant_proposal",
-      entityId: proposalId,
-      correlationId,
-      metadata: {
-        proposalId,
-        replacementProposalId: revised.preview.id,
-        toolName: metadata.data.toolName,
-        subjectChanged: subject !== metadata.data.arguments.subject,
-        bodyChanged: body !== metadata.data.arguments.body,
-      },
-    });
-    return revised.preview;
   }
 
   async listRecentProposals(viewer: Viewer) {
@@ -712,7 +867,6 @@ export class AiProposalLifecycleService {
           AND NOT EXISTS (
             SELECT 1 FROM audit_events superseded
              WHERE superseded.event_id = proposal.event_id
-               AND superseded.actor_person_id = proposal.actor_person_id
                AND superseded.action = 'assistant.proposal.superseded'
                AND superseded.entity_type = 'assistant_proposal'
                AND superseded.entity_id = proposal.entity_id

@@ -147,6 +147,7 @@ export class ProgramCueEventAgent extends Agent<
         send("result", result);
       } catch (error) {
         const known = new Set([
+          "AiAssistantBusyError",
           "AiConfigurationError",
           "AiContextTooLargeError",
           "AiPermissionError",

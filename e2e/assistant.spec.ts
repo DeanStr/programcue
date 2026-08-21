@@ -48,6 +48,17 @@ test("assistant fails explicitly when the OpenAI credential is unavailable", asy
     "assistant-stream-form",
   );
   await expect(suggestedRequest).toHaveAttribute("name", "suggestedPrompt");
+  await expect(suggestedRequest).toHaveAttribute(
+    "value",
+    "Call get_event_readiness exactly once, then answer without calling another tool. Cite only the returned records and rank at most three returned blockers by operational impact.",
+  );
+  const taskSuggestion = page.getByRole("button", {
+    name: /Propose one event task.*highest readiness blocker/u,
+  });
+  await expect(taskSuggestion).toHaveAttribute(
+    "value",
+    /Call get_event_readiness exactly once.*call propose_task exactly once.*without calling another tool/u,
+  );
 });
 
 test("assistant streaming endpoint returns an event stream instead of the page document", async ({
@@ -127,6 +138,8 @@ test("assistant reconciles a streamed proposal after approval", async ({
     };
     const suggestedPrompt =
       "What is blocking event readiness? Cite the exact records and rank the next three actions.";
+    const suggestedRequest =
+      "Call get_event_readiness exactly once, then answer without calling another tool. Cite only the returned records and rank at most three returned blockers by operational impact.";
     const failedPrompt =
       "Explain current schedule conflicts and distinguish recorded facts from your inference.";
     let postedBody = "";
@@ -188,7 +201,7 @@ test("assistant reconciles a streamed proposal after approval", async ({
     await expect(
       page.getByRole("heading", { name: "Assistant answer" }),
     ).toBeVisible();
-    expect(postedBody).toContain(suggestedPrompt);
+    expect(postedBody).toContain(suggestedRequest);
     await expect(
       page.getByText("1 awaiting approval", { exact: true }),
     ).toBeVisible();

@@ -16,6 +16,7 @@ import { ZodError } from "zod";
 import { PageHeader } from "~/components/ui/page-header";
 import { StatusNotice } from "~/components/ui/status-notice";
 import type { AiAssistantService } from "~/modules/ai/ai-assistant-service.server";
+import { assistantSuggestedPrompts } from "~/modules/ai/ai-assistant-suggestions";
 import { WORKERS_AI_MODEL } from "~/modules/ai/ai-provider.server";
 import type { AiAssistantResult } from "~/modules/ai/ai-types";
 import {
@@ -137,6 +138,7 @@ function knownErrorResponse(
   )
     status = 403;
   if (
+    errorName === "AiAssistantBusyError" ||
     errorName === "AiProposalStateError" ||
     errorName === "AiProviderSettingsConflictError" ||
     errorName === "AiContextTooLargeError" ||
@@ -398,18 +400,7 @@ function StreamingAssistantWorkspace({
     }
   }
 
-  const suggestedPrompts = [
-    "What is blocking event readiness? Cite the exact records and rank the next three actions.",
-    "Find speakers with incomplete tasks and draft a reminder. Do not send it.",
-    `Propose one event task for ${eventName} that addresses the highest readiness blocker. Save a preview only.`,
-    "Explain current schedule conflicts and distinguish recorded facts from your inference.",
-    "Inspect the current form configuration and propose a new application form draft. Do not publish it.",
-    "Inspect the draft evaluation round and propose an exact rubric update with valid weights. Do not activate or assign it.",
-    "Inspect the active evaluation round and propose reviewer assignments for currently unassigned targets. Preview every target and reviewer.",
-    "Prepare an editable email template draft for the next speaker briefing. Do not publish or send it.",
-    "Inspect the draft schedule and propose one conflict-free placement for an unscheduled session. Do not publish it.",
-    "Preview the exact Accelevents export plan as a dry run. Do not contact the provider until I approve.",
-  ];
+  const suggestedPrompts = assistantSuggestedPrompts(eventName);
 
   return (
     <div className="pc-assist-workspace">
@@ -477,11 +468,11 @@ function StreamingAssistantWorkspace({
             form="assistant-stream-form"
             formNoValidate
             name="suggestedPrompt"
-            value={prompt}
+            value={prompt.request}
             disabled={pending || disabled}
-            key={prompt}
+            key={prompt.label}
           >
-            <strong>{prompt}</strong>
+            <strong>{prompt.label}</strong>
           </button>
         ))}
       </aside>

@@ -2,7 +2,16 @@ import { env } from "cloudflare:test";
 import { describe, expect, it } from "vitest";
 
 import {
+  AiAssistantBusyError,
+  AiAssistantService,
+  AiProposalStateError,
+} from "~/modules/ai/ai-assistant-service.server";
+import { assistantProposalMetadataSchema } from "~/modules/ai/ai-tools.server";
+import type { Viewer } from "~/platform/auth/authorize.server";
+import {
+  DEMO_EVENT_ID,
   DEMO_IDENTITIES,
+  DEMO_ORGANISATION_ID,
   SBEK_FIXTURE_PEOPLE,
 } from "~/platform/demo/demo-identities";
 import {
@@ -50,6 +59,51 @@ const verifiedDomains = {
     },
   ],
 };
+
+const evaluationOrganizer: Viewer = {
+  personId: SBEK_FIXTURE_PEOPLE.organizer.personId,
+  name: SBEK_FIXTURE_PEOPLE.organizer.name,
+  email: "eval-organizer@programcue.com",
+  role: "administrator",
+  organisationId: DEMO_ORGANISATION_ID,
+  eventId: DEMO_EVENT_ID,
+  demo: false,
+};
+
+function taskProposalMetadata(proposalId: string) {
+  return assistantProposalMetadataSchema.parse({
+    version: 1,
+    toolName: "propose_task",
+    runId: crypto.randomUUID(),
+    model: "@cf/deepseek-ai/deepseek-v4-flash-0731",
+    arguments: {
+      title: "Evaluation reset proposal sentinel",
+      description: "Must not survive the next fixture generation.",
+      targetType: "event",
+      targetId: DEMO_EVENT_ID,
+      ownerPersonId: null,
+      taskType: "administrator_only",
+      impact: "low",
+      dueAt: null,
+      dependencyIds: [],
+    },
+    preview: {
+      id: proposalId,
+      toolName: "propose_task",
+      title: "Evaluation reset proposal sentinel",
+      summary: "Create one evaluation-only task.",
+      consequence: "Approval creates one durable event task.",
+      changes: [
+        {
+          field: "Task",
+          before: null,
+          after: "Evaluation reset proposal sentinel",
+        },
+      ],
+      approvalRequired: true,
+    },
+  });
+}
 
 describe("production evaluation fixture", () => {
   it("resets the dedicated event while preserving ordinary production runtime behavior", async () => {
@@ -153,6 +207,181 @@ describe("production evaluation fixture", () => {
     await expect(
       readEvaluationSession(sessionRequest, environment),
     ).resolves.toBeNull();
+  });
+
+  it("supersedes every assistant proposal from the prior fixture generation", async () => {
+    const environment = productionEnvironment();
+    await resetProductionEvaluationFixture(
+      environment,
+      "Future of Events 2027",
+      verifiedDomains,
+    );
+    const pendingProposalId = crypto.randomUUID();
+    const executedProposalId = crypto.randomUUID();
+    await environment.DB.batch([
+      ...[pendingProposalId, executedProposalId].map((proposalId) =>
+        environment.DB.prepare(
+          `INSERT INTO audit_events (
+             id, actor_kind, origin, metadata_version, organisation_id,
+             event_id, actor_person_id, action, entity_type, entity_id,
+             correlation_id, metadata_json, created_at
+           ) VALUES (?, 'person', 'admin_ui', 1, ?, ?, ?,
+                     'assistant.proposal.previewed', 'assistant_proposal', ?,
+                     ?, ?, unixepoch())`,
+        ).bind(
+          crypto.randomUUID(),
+          DEMO_ORGANISATION_ID,
+          DEMO_EVENT_ID,
+          evaluationOrganizer.personId,
+          proposalId,
+          crypto.randomUUID(),
+          JSON.stringify(taskProposalMetadata(proposalId)),
+        ),
+      ),
+      environment.DB.prepare(
+        `INSERT INTO audit_events (
+           id, actor_kind, origin, metadata_version, organisation_id,
+           event_id, actor_person_id, actor_id, action, entity_type, entity_id,
+           correlation_id, metadata_json, created_at
+         ) VALUES (?, 'agent', 'admin_ui', 1, ?, ?, ?, 'program_cue_agent',
+                   'assistant.action.executed', 'task_instance', ?, ?, ?,
+                   unixepoch())`,
+      ).bind(
+        crypto.randomUUID(),
+        DEMO_ORGANISATION_ID,
+        DEMO_EVENT_ID,
+        evaluationOrganizer.personId,
+        "evaluation-reset-executed-task",
+        crypto.randomUUID(),
+        JSON.stringify({
+          proposalId: executedProposalId,
+          toolName: "propose_task",
+          model: "@cf/deepseek-ai/deepseek-v4-flash-0731",
+          result: {
+            kind: "task",
+            proposalId: executedProposalId,
+            taskId: "evaluation-reset-executed-task",
+            title: "Evaluation reset proposal sentinel",
+            href: "/admin/tasks",
+            replayed: false,
+          },
+        }),
+      ),
+    ]);
+    const assistant = new AiAssistantService(environment);
+    await expect(
+      assistant.listRecentProposals(evaluationOrganizer),
+    ).resolves.toHaveLength(2);
+
+    await resetProductionEvaluationFixture(
+      environment,
+      "Future of Events 2027",
+      verifiedDomains,
+    );
+
+    const superseded = await environment.DB.prepare(
+      `SELECT actor_kind AS actorKind, actor_id AS actorId,
+              json_extract(metadata_json, '$.reason') AS reason
+         FROM audit_events
+        WHERE event_id = ? AND action = 'assistant.proposal.superseded'
+          AND entity_id IN (?, ?)
+        ORDER BY entity_id`,
+    )
+      .bind(DEMO_EVENT_ID, pendingProposalId, executedProposalId)
+      .all<{ actorKind: string; actorId: string; reason: string }>();
+    expect(superseded.results).toEqual([
+      {
+        actorKind: "system",
+        actorId: "production-evaluation-fixture-operator",
+        reason: "evaluation_fixture_reset",
+      },
+      {
+        actorKind: "system",
+        actorId: "production-evaluation-fixture-operator",
+        reason: "evaluation_fixture_reset",
+      },
+    ]);
+    await expect(
+      assistant.listRecentProposals(evaluationOrganizer),
+    ).resolves.toEqual([]);
+    await expect(
+      assistant.approveProposal(evaluationOrganizer, pendingProposalId, true),
+    ).rejects.toEqual(
+      new AiProposalStateError(
+        "This assistant preview is no longer current. Use the latest preview or generate a fresh one.",
+      ),
+    );
+  });
+
+  it("rejects proposal approval while the evaluation reset owns the fixture", async () => {
+    const environment = productionEnvironment();
+    await resetProductionEvaluationFixture(
+      environment,
+      "Future of Events 2027",
+      verifiedDomains,
+    );
+    const proposalId = crypto.randomUUID();
+    await environment.DB.prepare(
+      `INSERT INTO audit_events (
+         id, actor_kind, origin, metadata_version, organisation_id,
+         event_id, actor_person_id, action, entity_type, entity_id,
+         correlation_id, metadata_json, created_at
+       ) VALUES (?, 'person', 'admin_ui', 1, ?, ?, ?,
+                 'assistant.proposal.previewed', 'assistant_proposal', ?,
+                 ?, ?, unixepoch())`,
+    )
+      .bind(
+        crypto.randomUUID(),
+        DEMO_ORGANISATION_ID,
+        DEMO_EVENT_ID,
+        evaluationOrganizer.personId,
+        proposalId,
+        crypto.randomUUID(),
+        JSON.stringify(taskProposalMetadata(proposalId)),
+      )
+      .run();
+    const ownerToken = crypto.randomUUID();
+    await acquireEvaluationFixtureReset(environment, ownerToken);
+
+    try {
+      await expect(
+        new AiAssistantService(environment).approveProposal(
+          evaluationOrganizer,
+          proposalId,
+          true,
+        ),
+      ).rejects.toEqual(new AiAssistantBusyError());
+      await expect(
+        new AiAssistantService(environment).reviseReminderProposal(
+          evaluationOrganizer,
+          proposalId,
+          "Revised reminder subject",
+          "Revised reminder body that must not be persisted during reset.",
+        ),
+      ).rejects.toEqual(new AiAssistantBusyError());
+      await expect(
+        environment.DB.prepare(
+          `SELECT proposal_id FROM assistant_proposal_executions
+            WHERE proposal_id = ?`,
+        )
+          .bind(proposalId)
+          .first(),
+      ).resolves.toBeNull();
+      await expect(
+        environment.DB.prepare(
+          `SELECT id FROM task_instances
+            WHERE event_id = ? AND title = 'Evaluation reset proposal sentinel'`,
+        )
+          .bind(DEMO_EVENT_ID)
+          .first(),
+      ).resolves.toBeNull();
+    } finally {
+      await markEvaluationFixtureResetFailed(
+        environment,
+        ownerToken,
+        new Error("Test cleanup."),
+      );
+    }
   });
 
   it("removes an activated clean-applicant membership on the next reset", async () => {

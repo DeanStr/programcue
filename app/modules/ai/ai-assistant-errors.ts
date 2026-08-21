@@ -14,6 +14,15 @@ export class AiContextTooLargeError extends Error {
   }
 }
 
+export class AiAssistantBusyError extends Error {
+  constructor() {
+    super(
+      "The event assistant is unavailable while the evaluation fixture is resetting. Try again after the reset finishes.",
+    );
+    this.name = "AiAssistantBusyError";
+  }
+}
+
 export class AiProposalNotFoundError extends Error {
   constructor() {
     super("The assistant proposal was not found in your current event.");

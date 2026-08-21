@@ -632,7 +632,7 @@ describe("agent tool permissions and approval", () => {
     });
     await expect(
       service.approveProposal(admin, proposal.id, true),
-    ).rejects.toThrow("replaced by an edited preview");
+    ).rejects.toThrow("This assistant preview is no longer current");
     expect(queued).toHaveLength(0);
     const approved = await service.approveProposal(admin, revised.id, true);
     expect(approved).toMatchObject({

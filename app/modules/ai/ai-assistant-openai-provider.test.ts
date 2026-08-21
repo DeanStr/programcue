@@ -1,9 +1,17 @@
 import { env } from "cloudflare:test";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { ReadinessService } from "~/modules/readiness/readiness-service.server";
 import type { Viewer } from "~/platform/auth/authorize.server";
 import { ensureDemoData } from "~/platform/demo/seed.server";
+import { acquireEvaluationFixtureReset } from "~/platform/evaluation/evaluation-fixture-reset-lock.server";
 import { OperationService } from "~/platform/operations/operation-service.server";
 import { AiAssistantService } from "./ai-assistant-service.server";
+import {
+  fixedAssistantToolLimitAfterReadiness,
+  fixedAssistantToolPlan,
+  READINESS_SUGGESTED_REQUEST,
+  READINESS_TASK_SUGGESTED_REQUEST,
+} from "./ai-assistant-suggestions";
 import {
   AI_PROVIDER_RESPONSE_MAX_BYTES,
   OpenAiResponsesProvider,
@@ -114,6 +122,52 @@ beforeEach(async () => {
 });
 
 describe("OpenAI Responses provider boundary", () => {
+  it("closes the fixed task branch when readiness has no blockers", () => {
+    const plan = fixedAssistantToolPlan(READINESS_TASK_SUGGESTED_REQUEST);
+    if (!plan) throw new Error("The fixed readiness-task plan is unavailable.");
+    expect(fixedAssistantToolLimitAfterReadiness(plan, { blockers: [] })).toBe(
+      1,
+    );
+    expect(
+      fixedAssistantToolLimitAfterReadiness(plan, {
+        blockers: [{ key: "schedule" }],
+      }),
+    ).toBe(2);
+  });
+
+  it("does not start an evaluation assistant request during a fixture reset", async () => {
+    const evaluationEnv = {
+      ...(env as unknown as CloudflareEnvironment),
+      APP_ENV: "production",
+      DEMO_MODE: "false",
+      EVALUATION_MODE: "true",
+    } as unknown as CloudflareEnvironment;
+    await acquireEvaluationFixtureReset(
+      evaluationEnv,
+      "assistant-reset-race-test",
+    );
+    const fetcher = vi.fn<typeof fetch>();
+
+    await expect(
+      new AiAssistantService(evaluationEnv, {
+        fetcher,
+        providerConfiguration,
+      }).ask(admin, "What is blocking readiness?"),
+    ).rejects.toMatchObject({
+      name: "AiAssistantBusyError",
+      message:
+        "The event assistant is unavailable while the evaluation fixture is resetting. Try again after the reset finishes.",
+    });
+    expect(fetcher).not.toHaveBeenCalled();
+    const operation = await env.DB.prepare(
+      `SELECT COUNT(*) AS count FROM operation_jobs
+        WHERE event_id = ? AND type = 'ai.assistant.run'`,
+    )
+      .bind(admin.eventId)
+      .first<{ count: number }>();
+    expect(Number(operation?.count ?? 0)).toBe(0);
+  });
+
   it("rejects an oversized non-streaming provider response", async () => {
     const fetcher = vi.fn<typeof fetch>().mockResolvedValue(
       new Response("{}", {
@@ -153,7 +207,7 @@ describe("OpenAI Responses provider boundary", () => {
     const result = await new AiAssistantService(
       env as unknown as CloudflareEnvironment,
       { fetcher, providerConfiguration },
-    ).ask(admin, "What is blocking readiness?");
+    ).ask(admin, READINESS_SUGGESTED_REQUEST);
 
     expect(result.answer).toContain("Program Cue records");
     expect(result.evidence.map((item) => item.id)).toContain("event-readiness");
@@ -171,6 +225,7 @@ describe("OpenAI Responses provider boundary", () => {
       include: string[];
       safety_identifier: string;
       parallel_tool_calls: boolean;
+      max_output_tokens: number;
       tools: Array<{
         name: string;
         strict: boolean;
@@ -181,6 +236,7 @@ describe("OpenAI Responses provider boundary", () => {
     expect(firstRequest.include).toContain("reasoning.encrypted_content");
     expect(firstRequest.safety_identifier).toMatch(/^pc_[a-f0-9]{64}$/);
     expect(firstRequest.parallel_tool_calls).toBe(false);
+    expect(firstRequest.max_output_tokens).toBe(4_000);
     expect(firstRequest.tools.length).toBeGreaterThan(5);
     expect(
       firstRequest.tools.every(
@@ -321,6 +377,108 @@ describe("OpenAI Responses provider boundary", () => {
         .filter((item) => item.type === "function_call_output")
         .map((item) => item.call_id),
     ).toEqual(["call-parallel-read-0", "call-parallel-read-1"]);
+  });
+
+  it("rejects extra tool calls in a fixed suggested request before executing them", async () => {
+    const completedBefore = await env.DB.prepare(
+      `SELECT COUNT(*) AS count FROM audit_events
+        WHERE event_id = ? AND action = 'assistant.tool.completed'`,
+    )
+      .bind(admin.eventId)
+      .first<{ count: number }>();
+    const fetcher = vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce(toolResponse("get_event_readiness", {}))
+      .mockResolvedValueOnce(
+        toolResponse("find_incomplete_speakers", { limit: 10 }),
+      );
+
+    await expect(
+      new AiAssistantService(env as unknown as CloudflareEnvironment, {
+        fetcher,
+        providerConfiguration,
+      }).ask(admin, READINESS_SUGGESTED_REQUEST),
+    ).rejects.toThrow(
+      "did not follow the fixed tool sequence for this suggested request",
+    );
+    expect(fetcher).toHaveBeenCalledTimes(2);
+    const completedAfter = await env.DB.prepare(
+      `SELECT COUNT(*) AS count FROM audit_events
+        WHERE event_id = ? AND action = 'assistant.tool.completed'`,
+    )
+      .bind(admin.eventId)
+      .first<{ count: number }>();
+    expect(Number(completedAfter?.count ?? 0)).toBe(
+      Number(completedBefore?.count ?? 0) + 1,
+    );
+  });
+
+  it("requires the fixed task preview when authoritative readiness has blockers", async () => {
+    const readiness = await new ReadinessService(
+      env as unknown as CloudflareEnvironment,
+    ).getCommandCentre(admin);
+    expect(readiness.blockers.length).toBeGreaterThan(0);
+    const fetcher = vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce(toolResponse("get_event_readiness", {}))
+      .mockResolvedValueOnce(
+        textResponse("Program Cue returned a readiness blocker."),
+      );
+
+    await expect(
+      new AiAssistantService(env as unknown as CloudflareEnvironment, {
+        fetcher,
+        providerConfiguration,
+      }).ask(admin, READINESS_TASK_SUGGESTED_REQUEST),
+    ).rejects.toThrow(
+      "answered before completing the required tool sequence for this suggested request",
+    );
+    expect(fetcher).toHaveBeenCalledTimes(2);
+  });
+
+  it("rejects task arguments outside the fixed suggested-request boundary", async () => {
+    const readiness = await new ReadinessService(
+      env as unknown as CloudflareEnvironment,
+    ).getCommandCentre(admin);
+    expect(readiness.blockers.length).toBeGreaterThan(0);
+    const proposalsBefore = await env.DB.prepare(
+      `SELECT COUNT(*) AS count FROM audit_events
+        WHERE event_id = ? AND action = 'assistant.proposal.previewed'`,
+    )
+      .bind(admin.eventId)
+      .first<{ count: number }>();
+    const fetcher = vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce(toolResponse("get_event_readiness", {}))
+      .mockResolvedValueOnce(
+        toolResponse("propose_task", {
+          title: "Resolve readiness blocker",
+          description: null,
+          targetType: "speaker",
+          targetId: "person-demo-speaker",
+          ownerPersonId: admin.personId,
+          taskType: "administrator_only",
+          impact: "high",
+          dueAt: null,
+          dependencyIds: [],
+        }),
+      );
+
+    await expect(
+      new AiAssistantService(env as unknown as CloudflareEnvironment, {
+        fetcher,
+        providerConfiguration,
+      }).ask(admin, READINESS_TASK_SUGGESTED_REQUEST),
+    ).rejects.toThrow(
+      "returned task arguments outside the fixed boundary for this suggested request",
+    );
+    const proposalsAfter = await env.DB.prepare(
+      `SELECT COUNT(*) AS count FROM audit_events
+        WHERE event_id = ? AND action = 'assistant.proposal.previewed'`,
+    )
+      .bind(admin.eventId)
+      .first<{ count: number }>();
+    expect(proposalsAfter).toEqual(proposalsBefore);
   });
 
   it("rejects a mixed read and write batch before executing any tool", async () => {

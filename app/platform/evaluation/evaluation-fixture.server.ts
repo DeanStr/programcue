@@ -135,6 +135,54 @@ function demoSeedEnvironment(env: CloudflareEnvironment) {
   }) as CloudflareEnvironment;
 }
 
+async function supersedeEvaluationAssistantProposals(
+  env: CloudflareEnvironment,
+  fixtureAttemptId: string,
+  actorId: string,
+) {
+  const result = await env.DB.prepare(
+    `INSERT INTO audit_events (
+       id, actor_kind, origin, metadata_version, organisation_id, event_id,
+       actor_id, action, entity_type, entity_id, correlation_id,
+       metadata_json, created_at
+     )
+     SELECT 'evaluation-reset-assistant-superseded:' || ? || ':' || proposal.entity_id,
+            'system', 'internal', 1, proposal.organisation_id,
+            proposal.event_id, ?, 'assistant.proposal.superseded',
+            'assistant_proposal', proposal.entity_id,
+            'evaluation-reset:' || ?,
+            json_object(
+              'proposalId', proposal.entity_id,
+              'reason', 'evaluation_fixture_reset',
+              'resetAttemptId', ?
+            ),
+            unixepoch()
+       FROM audit_events proposal
+      WHERE proposal.organisation_id = ? AND proposal.event_id = ?
+        AND proposal.action = 'assistant.proposal.previewed'
+        AND proposal.entity_type = 'assistant_proposal'
+        AND proposal.entity_id IS NOT NULL
+        AND NOT EXISTS (
+          SELECT 1
+            FROM audit_events superseded
+           WHERE superseded.event_id = proposal.event_id
+             AND superseded.action = 'assistant.proposal.superseded'
+             AND superseded.entity_type = 'assistant_proposal'
+             AND superseded.entity_id = proposal.entity_id
+        )`,
+  )
+    .bind(
+      fixtureAttemptId,
+      actorId,
+      fixtureAttemptId,
+      fixtureAttemptId,
+      DEMO_ORGANISATION_ID,
+      DEMO_EVENT_ID,
+    )
+    .run();
+  return result.meta.changes ?? 0;
+}
+
 function parseSender(value: string | undefined) {
   const configured = value?.trim() ?? "";
   const bracketed = /^(.*?)\s*<([^<>]+)>$/u.exec(configured);
@@ -512,9 +560,15 @@ async function readExtraEventActiveWork(
     "SELECT id FROM events WHERE organisation_id = ? AND id <> ?";
   const row = await env.DB.prepare(
     `SELECT
-       (SELECT COUNT(*) FROM operation_jobs
-         WHERE event_id IN (${extraEvents})
-           AND status IN ('queued','received','running','retrying')) AS operations,
+       ((SELECT COUNT(*) FROM operation_jobs
+          WHERE event_id IN (${extraEvents})
+            AND status IN ('queued','received','running','retrying'))
+        +
+        (SELECT COUNT(*) FROM assistant_proposal_executions
+          WHERE event_id IN (${extraEvents})
+            AND status = 'processing'
+            AND claim_token IS NOT NULL
+            AND claim_expires_at > unixepoch())) AS operations,
        (SELECT COUNT(*) FROM file_multipart_uploads
          WHERE event_id IN (${extraEvents})
            AND status IN ('requested','initiated','completing')) AS multipartUploads,
@@ -535,7 +589,7 @@ async function readExtraEventActiveWork(
            AND delivery.status IN ('queued','delivering')) AS webhookDeliveries`,
   )
     .bind(
-      ...Array.from({ length: 6 }, () => [
+      ...Array.from({ length: 7 }, () => [
         DEMO_ORGANISATION_ID,
         DEMO_EVENT_ID,
       ]).flat(),
@@ -962,6 +1016,7 @@ async function resetProductionEvaluationFixtureWithAuthority(
   }
   const fixtureAttemptId = crypto.randomUUID();
   let retiredEventCount = 0;
+  let supersededAssistantProposalCount = 0;
 
   await acquireEvaluationFixtureReset(
     env,
@@ -1035,6 +1090,12 @@ async function resetProductionEvaluationFixtureWithAuthority(
           () => assertEvaluationFixtureResetOwner(env, fixtureAttemptId),
         );
         await assertEvaluationFixtureResetOwner(env, fixtureAttemptId);
+        supersededAssistantProposalCount =
+          await supersedeEvaluationAssistantProposals(
+            env,
+            fixtureAttemptId,
+            actorId,
+          );
       },
       () => assertEvaluationFixtureResetOwner(env, fixtureAttemptId),
     );
@@ -1210,6 +1271,7 @@ async function resetProductionEvaluationFixtureWithAuthority(
         removedAuxiliaryPersonCount,
         retainedAuxiliaryPersonCount,
         removedFixtureMembershipCount: fixtureScope.auxiliaryMembershipCount,
+        supersededAssistantProposalCount,
       },
       actorId,
     );
