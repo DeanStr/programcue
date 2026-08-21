@@ -21,6 +21,7 @@ CREATE TABLE schedule_review_links (
     AND instr(purpose, char(10)) = 0
     AND instr(purpose, char(13)) = 0
   ),
+  create_intent_id TEXT NOT NULL CHECK (length(create_intent_id) = 36),
   revoked_at INTEGER,
   revoked_by_person_id TEXT REFERENCES people(id),
   revocation_reason TEXT CHECK (
@@ -29,6 +30,7 @@ CREATE TABLE schedule_review_links (
   ),
   UNIQUE (id, event_id),
   UNIQUE (id, organisation_id, event_id),
+  UNIQUE (organisation_id, event_id, create_intent_id),
   FOREIGN KEY (event_id, organisation_id)
     REFERENCES events(id, organisation_id) ON DELETE CASCADE,
   FOREIGN KEY (schedule_version_id, event_id)
@@ -58,7 +60,7 @@ CREATE INDEX idx_schedule_review_links_event
 CREATE TRIGGER schedule_review_links_immutable_identity
 BEFORE UPDATE OF id, organisation_id, event_id, schedule_version_id,
   schedule_revision, projection_json, token_hash, expires_at,
-  created_by_person_id, created_at, purpose
+  created_by_person_id, created_at, purpose, create_intent_id
 ON schedule_review_links
 BEGIN
   SELECT RAISE(ABORT, 'schedule review links are immutable after creation');

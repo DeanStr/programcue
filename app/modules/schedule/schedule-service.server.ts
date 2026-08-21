@@ -132,6 +132,7 @@ export {
   SchedulePlacementBlockedError,
   SchedulePublicationBlockedError,
   ScheduleReviewLinkExpiredError,
+  ScheduleReviewLinkIntentReusedError,
   ScheduleReviewLinkLimitError,
   ScheduleReviewLinkNotFoundError,
   ScheduleRevisionConflictError,

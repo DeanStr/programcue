@@ -103,7 +103,7 @@ def validate_baseline(connection: sqlite3.Connection, schema_source: str) -> Non
         "schedule_review_links": {
             "organisation_id", "event_id", "schedule_version_id", "schedule_revision",
             "projection_json", "token_hash", "expires_at", "created_by_person_id",
-            "created_at", "purpose", "revoked_at", "revoked_by_person_id", "revocation_reason",
+            "created_at", "purpose", "create_intent_id", "revoked_at", "revoked_by_person_id", "revocation_reason",
         },
         "schedule_session_contents": {"schedule_version_id", "event_id", "session_id", "title", "slug", "description", "track_id", "format", "duration_minutes", "required_resources_json", "visibility", "content_status", "content_revision", "last_edited_by_person_id", "approved_by_person_id", "approved_at", "approval_source", "last_operation_id"},
         "session_content_revisions": {"event_id", "schedule_version_id", "session_id", "revision_number", "title", "description", "content_status", "change_kind", "restored_from_revision_id", "created_by_person_id"},

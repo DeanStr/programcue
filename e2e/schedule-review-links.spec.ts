@@ -45,6 +45,7 @@ test("creates a one-time confidential review URL and invalidates it on revoke an
     name: "Create a confidential draft review link?",
   });
   await expect(createDialog).toContainText("unpublished profiles");
+  await expect(createDialog.getByLabel("Expires in")).toHaveValue("7");
   await createDialog.getByLabel("Purpose").fill("Programme committee");
   await createDialog
     .getByRole("button", { name: "Create confidential link" })
@@ -57,6 +58,11 @@ test("creates a one-time confidential review URL and invalidates it on revoke an
       `^${e2eOrigin.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}/programme-preview/[A-Za-z0-9_-]{43}$`,
     ),
   );
+  await page.context().grantPermissions(["clipboard-read", "clipboard-write"]);
+  await createDialog.getByRole("button", { name: "Copy", exact: true }).click();
+  await expect
+    .poll(() => page.evaluate(() => navigator.clipboard.readText()))
+    .toBe(reviewUrl);
   const previewPath = new URL(reviewUrl).pathname;
   await createDialog.getByText("Close", { exact: true }).click();
   await expect(page.getByText("Confidential preview URL")).toHaveCount(0);

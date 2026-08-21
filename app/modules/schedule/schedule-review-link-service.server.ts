@@ -3,6 +3,7 @@ import {
   ScheduleConfigurationError,
   ScheduleNotFoundError,
   ScheduleReviewLinkExpiredError,
+  ScheduleReviewLinkIntentReusedError,
   ScheduleReviewLinkLimitError,
   ScheduleReviewLinkNotFoundError,
   ScheduleRevisionConflictError,
@@ -32,7 +33,8 @@ import type {
 } from "./schedule-service.server";
 
 export const SCHEDULE_REVIEW_LINK_ACTIVE_LIMIT = 10;
-export const SCHEDULE_REVIEW_LINK_TTL_SECONDS = 2_592_000;
+export const SCHEDULE_REVIEW_LINK_MAX_TTL_SECONDS = 2_592_000;
+export const SCHEDULE_REVIEW_LINK_DAY_SECONDS = 86_400;
 export const SCHEDULE_REVIEW_LINK_INACTIVE_LIST_LIMIT = 20;
 
 const LIST_COLUMNS = `link.id,
@@ -494,17 +496,26 @@ export class ScheduleReviewLinkService {
     const tokenHash = await hashScheduleReviewToken(token);
     const id = crypto.randomUUID();
     const createdAt = Math.floor(Date.now() / 1_000);
-    const expiresAt = createdAt + SCHEDULE_REVIEW_LINK_TTL_SECONDS;
+    const ttlSeconds = parsed.ttlDays * SCHEDULE_REVIEW_LINK_DAY_SECONDS;
+    if (ttlSeconds > SCHEDULE_REVIEW_LINK_MAX_TTL_SECONDS) {
+      throw new Error(
+        "The draft review link expiry exceeds the 30-day ceiling.",
+      );
+    }
+    const expiresAt = createdAt + ttlSeconds;
     const auditEventId = crypto.randomUUID();
-    const [inserted, audit] = await this.env.DB.batch([
-      this.env.DB.prepare(
-        `
+    let inserted: D1Result;
+    let audit: D1Result;
+    try {
+      [inserted, audit] = await this.env.DB.batch([
+        this.env.DB.prepare(
+          `
           INSERT INTO schedule_review_links (
             id, organisation_id, event_id, schedule_version_id, schedule_revision,
             projection_json, token_hash, expires_at, created_by_person_id, created_at,
-            purpose
+            purpose, create_intent_id
           )
-          SELECT ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
+          SELECT ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
            WHERE EXISTS (
              SELECT 1 FROM events
               WHERE id = ? AND organisation_id = ?
@@ -512,6 +523,12 @@ export class ScheduleReviewLinkService {
              AND EXISTS (
                SELECT 1 FROM schedule_versions
                 WHERE id = ? AND event_id = ? AND status = 'draft' AND revision = ?
+             )
+             AND NOT EXISTS (
+               SELECT 1 FROM schedule_review_links intent_link
+                WHERE intent_link.organisation_id = ?
+                  AND intent_link.event_id = ?
+                  AND intent_link.create_intent_id = ?
              )
              AND (
                SELECT COUNT(*)
@@ -522,29 +539,33 @@ export class ScheduleReviewLinkService {
                   AND active_link.expires_at > unixepoch()
              ) < ?
         `,
-      ).bind(
-        id,
-        viewer.organisationId,
-        viewer.eventId,
-        parsed.scheduleVersionId,
-        parsed.scheduleRevision,
-        serialized,
-        tokenHash,
-        expiresAt,
-        viewer.personId,
-        createdAt,
-        parsed.purpose,
-        viewer.eventId,
-        viewer.organisationId,
-        parsed.scheduleVersionId,
-        viewer.eventId,
-        parsed.scheduleRevision,
-        viewer.organisationId,
-        viewer.eventId,
-        SCHEDULE_REVIEW_LINK_ACTIVE_LIMIT,
-      ),
-      this.env.DB.prepare(
-        `
+        ).bind(
+          id,
+          viewer.organisationId,
+          viewer.eventId,
+          parsed.scheduleVersionId,
+          parsed.scheduleRevision,
+          serialized,
+          tokenHash,
+          expiresAt,
+          viewer.personId,
+          createdAt,
+          parsed.purpose,
+          parsed.createIntentId,
+          viewer.eventId,
+          viewer.organisationId,
+          parsed.scheduleVersionId,
+          viewer.eventId,
+          parsed.scheduleRevision,
+          viewer.organisationId,
+          viewer.eventId,
+          parsed.createIntentId,
+          viewer.organisationId,
+          viewer.eventId,
+          SCHEDULE_REVIEW_LINK_ACTIVE_LIMIT,
+        ),
+        this.env.DB.prepare(
+          `
           INSERT INTO audit_events (
             id, actor_kind, origin, metadata_version, organisation_id, event_id,
             actor_person_id, action, entity_type, entity_id, metadata_json, created_at
@@ -556,23 +577,36 @@ export class ScheduleReviewLinkService {
               WHERE id = ? AND organisation_id = ? AND event_id = ?
            )
         `,
-      ).bind(
-        auditEventId,
-        viewer.organisationId,
-        viewer.eventId,
-        viewer.personId,
-        id,
-        JSON.stringify({
-          versionNumber: workspace.version.versionNumber,
-          revision: parsed.scheduleRevision,
-          expiresAt,
-          entryCount: projection.entries.length,
-        }),
-        id,
-        viewer.organisationId,
-        viewer.eventId,
-      ),
-    ]);
+        ).bind(
+          auditEventId,
+          viewer.organisationId,
+          viewer.eventId,
+          viewer.personId,
+          id,
+          JSON.stringify({
+            versionNumber: workspace.version.versionNumber,
+            revision: parsed.scheduleRevision,
+            expiresAt,
+            entryCount: projection.entries.length,
+          }),
+          id,
+          viewer.organisationId,
+          viewer.eventId,
+        ),
+      ]);
+    } catch (error) {
+      const reused = await this.env.DB.prepare(
+        `
+          SELECT 1 AS present
+            FROM schedule_review_links
+           WHERE organisation_id = ? AND event_id = ? AND create_intent_id = ?
+        `,
+      )
+        .bind(viewer.organisationId, viewer.eventId, parsed.createIntentId)
+        .first();
+      if (reused) throw new ScheduleReviewLinkIntentReusedError();
+      throw error;
+    }
     if ((inserted.meta.changes ?? 0) === 1) {
       if ((audit.meta.changes ?? 0) !== 1) {
         throw new Error("The draft review snapshot was not recorded in audit.");
@@ -589,6 +623,16 @@ export class ScheduleReviewLinkService {
         ),
       };
     }
+    const reused = await this.env.DB.prepare(
+      `
+        SELECT 1 AS present
+          FROM schedule_review_links
+         WHERE organisation_id = ? AND event_id = ? AND create_intent_id = ?
+      `,
+    )
+      .bind(viewer.organisationId, viewer.eventId, parsed.createIntentId)
+      .first();
+    if (reused) throw new ScheduleReviewLinkIntentReusedError();
     const current = await this.env.DB.prepare(
       `
         SELECT status, revision

@@ -14,6 +14,7 @@ import {
   SchedulePlacementBlockedError,
   SchedulePublicationBlockedError,
   ScheduleReviewLinkExpiredError,
+  ScheduleReviewLinkIntentReusedError,
   ScheduleReviewLinkLimitError,
   ScheduleReviewLinkNotFoundError,
   ScheduleRevisionConflictError,
@@ -196,6 +197,7 @@ export async function loader({ request, context }: Route.LoaderArgs) {
     publicationPreview,
     reviewLinks: reviewLinkList.items,
     reviewLinkOmittedInactiveCount: reviewLinkList.omittedInactiveCount,
+    reviewLinkCreateIntentId: crypto.randomUUID(),
     reviewLinkSummary,
   };
 }
@@ -528,6 +530,8 @@ export async function action({ request, context }: Route.ActionArgs) {
           acknowledgement: values.get("acknowledgement"),
           projectionHash: values.get("projectionHash"),
           purpose: values.get("purpose"),
+          createIntentId: values.get("createIntentId"),
+          ttlDays: values.get("ttlDays"),
         });
         const origin = new URL(request.url).origin;
         return {
@@ -684,6 +688,8 @@ export async function action({ request, context }: Route.ActionArgs) {
     if (error instanceof ScheduleReviewLinkLimitError)
       return data({ ok: false, intent, error: error.message }, { status: 409 });
     if (error instanceof ScheduleReviewLinkExpiredError)
+      return data({ ok: false, intent, error: error.message }, { status: 409 });
+    if (error instanceof ScheduleReviewLinkIntentReusedError)
       return data({ ok: false, intent, error: error.message }, { status: 409 });
     if (error instanceof ScheduleReviewLinkNotFoundError)
       return data({ ok: false, intent, error: error.message }, { status: 404 });

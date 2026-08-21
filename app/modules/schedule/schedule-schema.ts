@@ -31,6 +31,8 @@ export const SCHEDULE_REVIEW_LINK_ACKNOWLEDGEMENT =
   "unpublished-speaker-names" as const;
 
 export const SCHEDULE_REVIEW_LINK_PURPOSE_MAX_LENGTH = 80;
+export const SCHEDULE_REVIEW_LINK_TTL_DAY_OPTIONS = [1, 3, 7, 30] as const;
+export const SCHEDULE_REVIEW_LINK_DEFAULT_TTL_DAYS = 7;
 
 export const scheduleReviewLinkCreateSchema = z
   .object({
@@ -40,6 +42,19 @@ export const scheduleReviewLinkCreateSchema = z
     projectionHash: z
       .string()
       .regex(/^[0-9a-f]{64}$/u, "The draft snapshot confirmation is invalid."),
+    createIntentId: z.string().uuid(),
+    ttlDays: z.coerce
+      .number()
+      .int()
+      .refine(
+        (
+          value,
+        ): value is (typeof SCHEDULE_REVIEW_LINK_TTL_DAY_OPTIONS)[number] =>
+          (SCHEDULE_REVIEW_LINK_TTL_DAY_OPTIONS as readonly number[]).includes(
+            value,
+          ),
+        "Choose an expiry of 1, 3, 7 or 30 days.",
+      ),
     purpose: z
       .string()
       .trim()

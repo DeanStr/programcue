@@ -6,6 +6,7 @@ import { cloudflareContext } from "~/platform/cloudflare-context";
 import { action, loader } from "~/routes/programme-preview";
 import {
   ScheduleReviewLinkExpiredError,
+  ScheduleReviewLinkIntentReusedError,
   ScheduleReviewLinkLimitError,
   ScheduleRevisionConflictError,
 } from "./schedule-errors";
@@ -43,6 +44,7 @@ const PLACEHOLDER_PROJECTION_HASH = "a".repeat(64);
 async function reviewLinkCreateInput(
   schedule: ScheduleService,
   purpose = "Programme committee",
+  extras: { createIntentId?: string; ttlDays?: number } = {},
 ) {
   const workspace = await schedule.getWorkspace(viewer);
   const summary = await schedule.summarizeReviewLinks(viewer, workspace);
@@ -55,6 +57,8 @@ async function reviewLinkCreateInput(
     acknowledgement: SCHEDULE_REVIEW_LINK_ACKNOWLEDGEMENT,
     projectionHash: summary.projectionHash,
     purpose,
+    createIntentId: extras.createIntentId ?? crypto.randomUUID(),
+    ttlDays: extras.ttlDays ?? 7,
   };
 }
 
@@ -153,6 +157,8 @@ describe("schedule review links", () => {
         acknowledgement: SCHEDULE_REVIEW_LINK_ACKNOWLEDGEMENT,
         projectionHash: PLACEHOLDER_PROJECTION_HASH,
         purpose: "Programme committee",
+        createIntentId: crypto.randomUUID(),
+        ttlDays: 7,
       }),
     ).rejects.toThrow(/draft schedule is required/i);
     await expect(
@@ -162,6 +168,8 @@ describe("schedule review links", () => {
         acknowledgement: SCHEDULE_REVIEW_LINK_ACKNOWLEDGEMENT,
         projectionHash: PLACEHOLDER_PROJECTION_HASH,
         purpose: "   ",
+        createIntentId: crypto.randomUUID(),
+        ttlDays: 7,
       }),
     ).rejects.toThrow(/short purpose/i);
 
@@ -275,6 +283,8 @@ describe("schedule review links", () => {
         acknowledgement: SCHEDULE_REVIEW_LINK_ACKNOWLEDGEMENT,
         projectionHash: PLACEHOLDER_PROJECTION_HASH,
         purpose: "Programme committee",
+        createIntentId: crypto.randomUUID(),
+        ttlDays: 7,
       }),
     ).rejects.toThrow(/draft schedule is required/i);
   });
@@ -294,6 +304,8 @@ describe("schedule review links", () => {
         acknowledgement: SCHEDULE_REVIEW_LINK_ACKNOWLEDGEMENT,
         projectionHash: PLACEHOLDER_PROJECTION_HASH,
         purpose: "Programme committee",
+        createIntentId: crypto.randomUUID(),
+        ttlDays: 7,
       }),
     ).rejects.toBeInstanceOf(ScheduleRevisionConflictError);
   });
@@ -307,9 +319,9 @@ describe("schedule review links", () => {
         `INSERT INTO schedule_review_links (
            id, organisation_id, event_id, schedule_version_id, schedule_revision,
            projection_json, token_hash, expires_at, created_by_person_id, created_at,
-           purpose
+           purpose, create_intent_id
          ) VALUES (?, ?, ?, ?, 1, '{"schemaVersion":1,"event":{"name":"X","timezone":"UTC"},"entries":[]}',
-                   ?, unixepoch() - 10, ?, unixepoch() - 1000, 'Expired snapshot')`,
+                   ?, unixepoch() - 10, ?, unixepoch() - 1000, 'Expired snapshot', ?)`,
       ).bind(
         crypto.randomUUID(),
         viewer.organisationId,
@@ -317,14 +329,15 @@ describe("schedule review links", () => {
         workspace.version!.id,
         await hashScheduleReviewToken(expiredToken),
         viewer.personId,
+        crypto.randomUUID(),
       ),
       env.DB.prepare(
         `INSERT INTO schedule_review_links (
            id, organisation_id, event_id, schedule_version_id, schedule_revision,
            projection_json, token_hash, expires_at, created_by_person_id, created_at,
-           purpose
+           purpose, create_intent_id
          ) VALUES (?, ?, ?, ?, 1, '{"schemaVersion":1}',
-                   ?, unixepoch() + 86400, ?, unixepoch(), 'Corrupt snapshot')`,
+                   ?, unixepoch() + 86400, ?, unixepoch(), 'Corrupt snapshot', ?)`,
       ).bind(
         crypto.randomUUID(),
         viewer.organisationId,
@@ -332,6 +345,7 @@ describe("schedule review links", () => {
         workspace.version!.id,
         await hashScheduleReviewToken(corruptToken),
         viewer.personId,
+        crypto.randomUUID(),
       ),
     ]);
 
@@ -418,6 +432,8 @@ describe("schedule review links", () => {
           acknowledgement: SCHEDULE_REVIEW_LINK_ACKNOWLEDGEMENT,
           projectionHash: PLACEHOLDER_PROJECTION_HASH,
           purpose: "Programme committee",
+          createIntentId: crypto.randomUUID(),
+          ttlDays: 7,
         }),
       ).rejects.toThrow(/missing a display name/i);
     } finally {
@@ -525,9 +541,9 @@ describe("schedule review links", () => {
       `INSERT INTO schedule_review_links (
          id, organisation_id, event_id, schedule_version_id, schedule_revision,
          projection_json, token_hash, expires_at, created_by_person_id, created_at,
-         purpose
+         purpose, create_intent_id
        ) VALUES (?, ?, ?, ?, 1, '{"schemaVersion":1,"event":{"name":"X","timezone":"UTC"},"entries":[]}',
-                 ?, unixepoch() - 10, ?, unixepoch() - 1000, 'Expired snapshot')`,
+                 ?, unixepoch() - 10, ?, unixepoch() - 1000, 'Expired snapshot', ?)`,
     )
       .bind(
         expiredId,
@@ -536,6 +552,7 @@ describe("schedule review links", () => {
         workspace.version!.id,
         await hashScheduleReviewToken(createScheduleReviewToken()),
         viewer.personId,
+        crypto.randomUUID(),
       )
       .run();
     await expect(
@@ -571,9 +588,9 @@ describe("schedule review links", () => {
         `INSERT INTO schedule_review_links (
            id, organisation_id, event_id, schedule_version_id, schedule_revision,
            projection_json, token_hash, expires_at, created_by_person_id, created_at,
-           purpose
+           purpose, create_intent_id
          ) VALUES (?, ?, ?, ?, 1, '{"schemaVersion":1,"event":{"name":"X","timezone":"UTC"},"entries":[]}',
-                   ?, unixepoch() - 10, ?, unixepoch() - ?, ?)`,
+                   ?, unixepoch() - 10, ?, unixepoch() - ?, ?, ?)`,
       ).bind(
         crypto.randomUUID(),
         viewer.organisationId,
@@ -583,6 +600,7 @@ describe("schedule review links", () => {
         viewer.personId,
         1_000 + index,
         `History ${index + 1}`,
+        crypto.randomUUID(),
       ),
     );
     await env.DB.batch(inserts);
@@ -600,5 +618,45 @@ describe("schedule review links", () => {
     ).toHaveLength(SCHEDULE_REVIEW_LINK_INACTIVE_LIST_LIMIT);
     expect(listed.omittedInactiveCount).toBe(5);
     expect(listed.items[0]?.purpose).toBe("Venue reviewer");
+  });
+
+  it("rejects an exact create replay without minting another secret", async () => {
+    const { schedule } = await placedDraft();
+    const input = await reviewLinkCreateInput(schedule, "Programme committee");
+    const first = await schedule.createReviewLink(viewer, input);
+    await expect(
+      schedule.createReviewLink(viewer, input),
+    ).rejects.toBeInstanceOf(ScheduleReviewLinkIntentReusedError);
+    expect(
+      await env.DB.prepare(
+        `SELECT COUNT(*) AS total FROM schedule_review_links WHERE event_id = ?`,
+      )
+        .bind(viewer.eventId)
+        .first(),
+    ).toEqual({ total: 1 });
+    const second = await schedule.createReviewLink(
+      viewer,
+      await reviewLinkCreateInput(schedule, "Venue reviewer"),
+    );
+    expect(second.id).not.toBe(first.id);
+  });
+
+  it("honours a 7-day expiry and rejects an unbounded TTL", async () => {
+    const { schedule } = await placedDraft();
+    const created = await schedule.createReviewLink(
+      viewer,
+      await reviewLinkCreateInput(schedule, "Programme committee", {
+        ttlDays: 7,
+      }),
+    );
+    const now = Math.floor(Date.now() / 1_000);
+    expect(created.expiresAt).toBeGreaterThanOrEqual(now + 7 * 86_400 - 2);
+    expect(created.expiresAt).toBeLessThanOrEqual(now + 7 * 86_400 + 2);
+    await expect(
+      schedule.createReviewLink(viewer, {
+        ...(await reviewLinkCreateInput(schedule)),
+        ttlDays: 14,
+      }),
+    ).rejects.toThrow(/1, 3, 7 or 30 days/i);
   });
 });

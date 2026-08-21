@@ -1,9 +1,12 @@
+import { Copy } from "lucide-react";
 import { useEffect, useId, useRef, useState } from "react";
 import { useFetcher } from "react-router";
 import { Dialog } from "~/components/dialog";
 import {
   SCHEDULE_REVIEW_LINK_ACKNOWLEDGEMENT,
+  SCHEDULE_REVIEW_LINK_DEFAULT_TTL_DAYS,
   SCHEDULE_REVIEW_LINK_PURPOSE_MAX_LENGTH,
+  SCHEDULE_REVIEW_LINK_TTL_DAY_OPTIONS,
 } from "~/modules/schedule/schedule-schema";
 import type { action as schedulePlannerAction } from "~/routes/schedule-planner.server";
 import type { SchedulePlannerWorkspaceData } from "./schedule-planner-panel-types";
@@ -53,6 +56,7 @@ export function ScheduleReviewLinksPanel({
   const [revokeId, setRevokeId] = useState<string | null>(null);
   const urlFieldId = useId();
   const purposeFieldId = useId();
+  const ttlFieldId = useId();
   const createFormId = useId();
   const urlInputRef = useRef<HTMLInputElement>(null);
   const created = isReviewUrlResult(createFetcher.data)
@@ -66,6 +70,9 @@ export function ScheduleReviewLinksPanel({
   const draft =
     workspace.version?.status === "draft" ? workspace.version : null;
   const [revokeSubmitted, setRevokeSubmitted] = useState(false);
+  const [copyState, setCopyState] = useState<"idle" | "copied" | "failed">(
+    "idle",
+  );
   const revokeTarget = workspace.reviewLinks.find(
     (link) => link.id === revokeId,
   );
@@ -96,6 +103,7 @@ export function ScheduleReviewLinksPanel({
   }, [createFetcher.data, createFetcher.state]);
 
   useEffect(() => {
+    setCopyState("idle");
     if (showCreatedUrl) urlInputRef.current?.select();
   }, [showCreatedUrl]);
 
@@ -234,6 +242,11 @@ export function ScheduleReviewLinksPanel({
                     name="projectionHash"
                     value={workspace.reviewLinkSummary.projectionHash ?? ""}
                   />
+                  <input
+                    type="hidden"
+                    name="createIntentId"
+                    value={workspace.reviewLinkCreateIntentId}
+                  />
                   <button
                     className="btn primary"
                     type="submit"
@@ -256,13 +269,44 @@ export function ScheduleReviewLinksPanel({
                   you close this dialog.
                 </p>
                 <label htmlFor={urlFieldId}>Confidential preview URL</label>
-                <input
-                  ref={urlInputRef}
-                  id={urlFieldId}
-                  readOnly
-                  value={created.reviewUrl}
-                  onFocus={(event) => event.currentTarget.select()}
-                />
+                <div className="schedule-review-link-copy">
+                  <input
+                    ref={urlInputRef}
+                    id={urlFieldId}
+                    readOnly
+                    value={created.reviewUrl}
+                    onFocus={(event) => event.currentTarget.select()}
+                  />
+                  <button
+                    className="btn small"
+                    type="button"
+                    onClick={() => {
+                      if (!navigator.clipboard?.writeText) {
+                        setCopyState("failed");
+                        return;
+                      }
+                      void navigator.clipboard
+                        .writeText(created.reviewUrl)
+                        .then(() => setCopyState("copied"))
+                        .catch(() => setCopyState("failed"));
+                    }}
+                  >
+                    <Copy aria-hidden size={13} />{" "}
+                    {copyState === "copied" ? "Copied" : "Copy"}
+                  </button>
+                </div>
+                <span className="sr-only" role="status" aria-live="polite">
+                  {copyState === "copied"
+                    ? "Confidential preview URL copied to the clipboard."
+                    : copyState === "failed"
+                      ? "Clipboard access failed. Select and copy the URL manually."
+                      : ""}
+                </span>
+                {copyState === "failed" ? (
+                  <span className="field-error" role="alert">
+                    Clipboard access failed. Select and copy the URL manually.
+                  </span>
+                ) : null}
                 <p className="subtle">
                   Expires{" "}
                   {expiryLabel(created.expiresAt, workspace.event.timezone)}.
@@ -301,6 +345,20 @@ export function ScheduleReviewLinksPanel({
                   Shown in the list so you can tell links apart after the URL is
                   gone.
                 </p>
+                <label htmlFor={ttlFieldId}>Expires in</label>
+                <select
+                  id={ttlFieldId}
+                  form={createFormId}
+                  name="ttlDays"
+                  defaultValue={String(SCHEDULE_REVIEW_LINK_DEFAULT_TTL_DAYS)}
+                  required
+                >
+                  {SCHEDULE_REVIEW_LINK_TTL_DAY_OPTIONS.map((days) => (
+                    <option key={days} value={days}>
+                      {days} {days === 1 ? "day" : "days"}
+                    </option>
+                  ))}
+                </select>
                 <div className="validation-item warn">
                   <strong>This URL is a secret.</strong>
                   <span>

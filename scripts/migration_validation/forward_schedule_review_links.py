@@ -2,7 +2,7 @@ from pathlib import Path
 import sqlite3
 
 
-MIGRATION = "0052_schedule_review_links.sql"
+MIGRATION = "0053_schedule_review_links.sql"
 
 
 def validate_schedule_review_links_forward_migration(root: Path) -> None:
@@ -49,6 +49,7 @@ def validate_schedule_review_links_forward_migration(root: Path) -> None:
         "created_by_person_id",
         "created_at",
         "purpose",
+        "create_intent_id",
         "revoked_at",
         "revoked_by_person_id",
         "revocation_reason",
@@ -56,7 +57,7 @@ def validate_schedule_review_links_forward_migration(root: Path) -> None:
     missing = required - columns
     if missing:
         raise SystemExit(
-            f"Migration 0052 did not create schedule_review_links columns: {sorted(missing)}"
+            f"Migration 0053 did not create schedule_review_links columns: {sorted(missing)}"
         )
 
     triggers = {
@@ -75,7 +76,7 @@ def validate_schedule_review_links_forward_migration(root: Path) -> None:
     missing_triggers = required_triggers - triggers
     if missing_triggers:
         raise SystemExit(
-            f"Migration 0052 did not install triggers: {sorted(missing_triggers)}"
+            f"Migration 0053 did not install triggers: {sorted(missing_triggers)}"
         )
 
     try:
@@ -84,31 +85,33 @@ def validate_schedule_review_links_forward_migration(root: Path) -> None:
             INSERT INTO schedule_review_links (
               id, organisation_id, event_id, schedule_version_id, schedule_revision,
               projection_json, token_hash, expires_at, created_by_person_id, created_at,
-              purpose
+              purpose, create_intent_id
             ) VALUES (
               'review-link-bad-hash', 'review-org', 'review-event', 'review-draft', 3,
               '{"schemaVersion":1}',
               'a' || replace(hex(zeroblob(31)), '0', 'z') || 'a',
-              unixepoch() + 86400, 'review-admin', unixepoch(), 'Programme committee'
+              unixepoch() + 86400, 'review-admin', unixepoch(), 'Programme committee',
+              '00000000-0000-4000-8000-000000000001'
             )
             """
         )
     except sqlite3.IntegrityError:
         pass
     else:
-        raise SystemExit("Migration 0052 accepted a non-hex token hash")
+        raise SystemExit("Migration 0053 accepted a non-hex token hash")
 
     connection.execute(
         """
         INSERT INTO schedule_review_links (
           id, organisation_id, event_id, schedule_version_id, schedule_revision,
           projection_json, token_hash, expires_at, created_by_person_id, created_at,
-          purpose
+          purpose, create_intent_id
         ) VALUES (
           'review-link', 'review-org', 'review-event', 'review-draft', 3,
           '{"schemaVersion":1}',
           'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
-          unixepoch() + 86400, 'review-admin', unixepoch(), 'Programme committee'
+          unixepoch() + 86400, 'review-admin', unixepoch(), 'Programme committee',
+          '00000000-0000-4000-8000-000000000002'
         )
         """
     )
@@ -118,13 +121,13 @@ def validate_schedule_review_links_forward_migration(root: Path) -> None:
             INSERT INTO schedule_review_links (
               id, organisation_id, event_id, schedule_version_id, schedule_revision,
               projection_json, token_hash, expires_at, created_by_person_id, created_at,
-              purpose, revoked_at
+              purpose, create_intent_id
             ) VALUES (
-              'review-link-null-reason', 'review-org', 'review-event', 'review-draft', 3,
+              'review-link-dup-intent', 'review-org', 'review-event', 'review-draft', 3,
               '{"schemaVersion":1}',
-              'bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb',
-              unixepoch() + 86400, 'review-admin', unixepoch(), 'Programme committee',
-              unixepoch()
+              'cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc',
+              unixepoch() + 86400, 'review-admin', unixepoch(), 'Venue reviewer',
+              '00000000-0000-4000-8000-000000000002'
             )
             """
         )
@@ -132,7 +135,29 @@ def validate_schedule_review_links_forward_migration(root: Path) -> None:
         pass
     else:
         raise SystemExit(
-            "Migration 0052 accepted a revoked review link without a revocation reason"
+            "Migration 0053 accepted a duplicate create intent for the same event"
+        )
+    try:
+        connection.execute(
+            """
+            INSERT INTO schedule_review_links (
+              id, organisation_id, event_id, schedule_version_id, schedule_revision,
+              projection_json, token_hash, expires_at, created_by_person_id, created_at,
+              purpose, create_intent_id, revoked_at
+            ) VALUES (
+              'review-link-null-reason', 'review-org', 'review-event', 'review-draft', 3,
+              '{"schemaVersion":1}',
+              'bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb',
+              unixepoch() + 86400, 'review-admin', unixepoch(), 'Programme committee',
+              '00000000-0000-4000-8000-000000000003', unixepoch()
+            )
+            """
+        )
+    except sqlite3.IntegrityError:
+        pass
+    else:
+        raise SystemExit(
+            "Migration 0053 accepted a revoked review link without a revocation reason"
         )
 
     try:
@@ -143,7 +168,7 @@ def validate_schedule_review_links_forward_migration(root: Path) -> None:
         pass
     else:
         raise SystemExit(
-            "Migration 0052 allowed revoke without a revocation reason"
+            "Migration 0053 allowed revoke without a revocation reason"
         )
 
     try:
@@ -153,7 +178,7 @@ def validate_schedule_review_links_forward_migration(root: Path) -> None:
     except sqlite3.IntegrityError:
         pass
     else:
-        raise SystemExit("Migration 0052 allowed mutation of an immutable review projection")
+        raise SystemExit("Migration 0053 allowed mutation of an immutable review projection")
 
     connection.execute(
         """
@@ -177,4 +202,4 @@ def validate_schedule_review_links_forward_migration(root: Path) -> None:
     except sqlite3.IntegrityError:
         pass
     else:
-        raise SystemExit("Migration 0052 allowed a second review-link revocation")
+        raise SystemExit("Migration 0053 allowed a second review-link revocation")

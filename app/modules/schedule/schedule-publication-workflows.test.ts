@@ -326,6 +326,8 @@ describe("schedule publication workflows", () => {
         acknowledgement: SCHEDULE_REVIEW_LINK_ACKNOWLEDGEMENT,
         projectionHash: summary.projectionHash,
         purpose: "Programme committee",
+        createIntentId: crypto.randomUUID(),
+        ttlDays: 7,
       };
     };
     const first = await service.createReviewLink(
@@ -410,9 +412,9 @@ describe("schedule publication workflows", () => {
       `INSERT INTO schedule_review_links (
          id, organisation_id, event_id, schedule_version_id, schedule_revision,
          projection_json, token_hash, expires_at, created_by_person_id, created_at,
-         purpose
+         purpose, create_intent_id
        ) VALUES (?, ?, ?, ?, ?, '{"schemaVersion":1,"event":{"name":"X","timezone":"UTC"},"entries":[]}',
-                 ?, unixepoch() - 10, ?, unixepoch() - 1000, 'Expired snapshot')`,
+                 ?, unixepoch() - 10, ?, unixepoch() - 1000, 'Expired snapshot', ?)`,
     )
       .bind(
         expiredId,
@@ -422,6 +424,7 @@ describe("schedule publication workflows", () => {
         workspace.version!.revision,
         await hashScheduleReviewToken(createScheduleReviewToken()),
         viewer.personId,
+        crypto.randomUUID(),
       )
       .run();
     await approveScheduledTestContent(versionId);

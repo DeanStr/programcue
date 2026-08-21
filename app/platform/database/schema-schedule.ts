@@ -585,6 +585,7 @@ export const scheduleReviewLinks = sqliteTable(
       .references(() => people.id),
     createdAt: integer("created_at").notNull().default(epochNow),
     purpose: text("purpose").notNull(),
+    createIntentId: text("create_intent_id").notNull(),
     revokedAt: integer("revoked_at"),
     revokedByPersonId: text("revoked_by_person_id").references(() => people.id),
     revocationReason: text("revocation_reason").$type<"manual" | "published">(),
@@ -599,6 +600,11 @@ export const scheduleReviewLinks = sqliteTable(
       table.id,
       table.organisationId,
       table.eventId,
+    ),
+    uniqueIndex("schedule_review_links_create_intent_unique").on(
+      table.organisationId,
+      table.eventId,
+      table.createIntentId,
     ),
     index("idx_schedule_review_links_event").on(
       table.organisationId,
@@ -633,6 +639,10 @@ export const scheduleReviewLinks = sqliteTable(
     check(
       "schedule_review_links_purpose_check",
       sql`length(trim(${table.purpose})) BETWEEN 1 AND 80 AND ${table.purpose} = trim(${table.purpose}) AND instr(${table.purpose}, char(10)) = 0 AND instr(${table.purpose}, char(13)) = 0`,
+    ),
+    check(
+      "schedule_review_links_create_intent_check",
+      sql`length(${table.createIntentId}) = 36`,
     ),
     check(
       "schedule_review_links_revocation_check",

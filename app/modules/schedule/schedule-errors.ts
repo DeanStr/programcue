@@ -79,6 +79,15 @@ export class ScheduleReviewLinkExpiredError extends Error {
   }
 }
 
+export class ScheduleReviewLinkIntentReusedError extends Error {
+  constructor(
+    message = "The link was already created and cannot be recovered. Revoke it before creating another.",
+  ) {
+    super(message);
+    this.name = "ScheduleReviewLinkIntentReusedError";
+  }
+}
+
 export class ScheduleIdempotencyConflictError extends Error {
   constructor(
     readonly code: "IDEMPOTENCY_KEY_REUSED" | "IDEMPOTENCY_REQUEST_IN_PROGRESS",
