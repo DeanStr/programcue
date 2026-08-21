@@ -4,6 +4,10 @@ import { CommunicationService } from "~/modules/communications/communication-ser
 import type { Viewer } from "~/platform/auth/authorize.server";
 import { ensureDemoData } from "~/platform/demo/seed.server";
 import {
+  acquireEvaluationFixtureReset,
+  EVALUATION_FIXTURE_RESET_OPERATION_ID,
+} from "~/platform/evaluation/evaluation-fixture-reset-lock.server";
+import {
   AiAssistantService,
   AiPermissionError,
 } from "./ai-assistant-service.server";
@@ -43,6 +47,17 @@ const providerConfiguration = {
   apiKey: "test-openai-key-with-more-than-twenty-characters",
   model: "gpt-5.6-terra",
 };
+
+function evaluationEnvironment() {
+  return new Proxy(env as unknown as CloudflareEnvironment, {
+    get(target, property, receiver) {
+      if (property === "APP_ENV") return "production";
+      if (property === "DEMO_MODE") return "false";
+      if (property === "EVALUATION_MODE") return "true";
+      return Reflect.get(target, property, receiver);
+    },
+  });
+}
 
 function providerJson(value: unknown, status = 200) {
   return new Response(JSON.stringify(value), {
@@ -98,6 +113,9 @@ function textResponse(text: string, id = crypto.randomUUID()) {
 
 beforeEach(async () => {
   await ensureDemoData(env as unknown as CloudflareEnvironment);
+  await env.DB.prepare("DELETE FROM operation_jobs WHERE id = ?")
+    .bind(EVALUATION_FIXTURE_RESET_OPERATION_ID)
+    .run();
   await env.DB.prepare(
     `UPDATE organisation_ai_settings
         SET provider = 'openai', model = ?, revision = 1,
@@ -446,6 +464,114 @@ describe("agent tool permissions and approval", () => {
       .bind(admin.eventId, title)
       .first<{ count: number }>();
     expect(count?.count).toBe(1);
+  });
+
+  it("does not settle an expired proposal execution after reset takes ownership", async () => {
+    const testEnvironment = evaluationEnvironment();
+    const title = `Expired assistant task ${crypto.randomUUID()}`;
+    const previewService = new AiAssistantService(testEnvironment, {
+      providerConfiguration,
+      fetcher: vi
+        .fn<typeof fetch>()
+        .mockResolvedValueOnce(
+          toolResponse("propose_task", {
+            title,
+            description: "Verify reset fencing at proposal settlement.",
+            targetType: "event",
+            targetId: admin.eventId,
+            ownerPersonId: null,
+            taskType: "administrator_only",
+            impact: "high",
+            dueAt: null,
+            dependencyIds: [],
+          }),
+        )
+        .mockResolvedValueOnce(textResponse("Task preview ready.")),
+    });
+    const preview = await previewService.ask(
+      admin,
+      "Prepare one reset-fenced task.",
+    );
+    const proposalId = preview.proposals[0]!.id;
+    const resetToken = crypto.randomUUID();
+    const expiringService = new AiAssistantService(testEnvironment, {
+      beforeProposalExecutionCommit: async () => {
+        await env.DB.prepare(
+          `UPDATE assistant_proposal_executions
+              SET claim_expires_at = 0
+            WHERE proposal_id = ?`,
+        )
+          .bind(proposalId)
+          .run();
+        await acquireEvaluationFixtureReset(testEnvironment, resetToken);
+      },
+    });
+
+    await expect(
+      expiringService.approveProposal(admin, proposalId, true),
+    ).rejects.toThrow("lease was lost");
+    await expect(
+      env.DB.prepare(
+        `SELECT 1 FROM audit_events
+          WHERE event_id = ? AND action = 'assistant.action.executed'
+            AND json_extract(metadata_json, '$.proposalId') = ?`,
+      )
+        .bind(admin.eventId, proposalId)
+        .first(),
+    ).resolves.toBeNull();
+  });
+
+  it("rejects an expired proposal before mutation once reset owns the fixture", async () => {
+    const testEnvironment = evaluationEnvironment();
+    const title = `Reset-fenced assistant task ${crypto.randomUUID()}`;
+    const previewService = new AiAssistantService(testEnvironment, {
+      providerConfiguration,
+      fetcher: vi
+        .fn<typeof fetch>()
+        .mockResolvedValueOnce(
+          toolResponse("propose_task", {
+            title,
+            description: "Do not cross the fixture reset boundary.",
+            targetType: "event",
+            targetId: admin.eventId,
+            ownerPersonId: null,
+            taskType: "administrator_only",
+            impact: "high",
+            dueAt: null,
+            dependencyIds: [],
+          }),
+        )
+        .mockResolvedValueOnce(textResponse("Task preview ready.")),
+    });
+    const preview = await previewService.ask(
+      admin,
+      "Prepare one mutation-fenced task.",
+    );
+    const proposalId = preview.proposals[0]!.id;
+    const resetToken = crypto.randomUUID();
+    const racingService = new AiAssistantService(testEnvironment, {
+      beforeProposalMutation: async () => {
+        await env.DB.prepare(
+          `UPDATE assistant_proposal_executions
+              SET claim_expires_at = 0
+            WHERE proposal_id = ?`,
+        )
+          .bind(proposalId)
+          .run();
+        await acquireEvaluationFixtureReset(testEnvironment, resetToken);
+      },
+    });
+
+    await expect(
+      racingService.approveProposal(admin, proposalId, true),
+    ).rejects.toThrow("lease was lost before its action could begin");
+    await expect(
+      env.DB.prepare(
+        `SELECT id FROM task_instances WHERE event_id = ? AND title = ?`,
+      )
+        .bind(admin.eventId, title)
+        .first(),
+    ).resolves.toBeNull();
   });
 
   it("rejects a concurrent approval while the exact proposal lease is active", async () => {

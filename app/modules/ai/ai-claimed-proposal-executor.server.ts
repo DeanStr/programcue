@@ -23,6 +23,7 @@ export class AiClaimedProposalExecutor {
       viewer: Viewer,
       input: ProposalCompletionInput,
     ) => Promise<AiProposalApprovalResult>,
+    private readonly beforeMutation: () => Promise<void>,
   ) {}
 
   async execute(
@@ -125,8 +126,10 @@ export class AiClaimedProposalExecutor {
           "The reminder audience no longer contains a deliverable recipient.",
         );
       }
+      await this.beforeMutation();
       await communications.publishTemplate(viewer, reminder.template.id);
     }
+    await this.beforeMutation();
     const result = await communications.confirm(viewer, {
       templateVersionId: reminder.template.id,
       audienceType: reminder.audienceType,
@@ -171,10 +174,10 @@ export class AiClaimedProposalExecutor {
   ): Promise<AiProposalApprovalResult> {
     const { proposalId, metadata, correlationId, claimToken, operationId } =
       input;
-    const executed = await new AiDomainProposalExecutor(this.env).execute(
-      viewer,
-      { proposalId, metadata, operationId },
-    );
+    const executed = await new AiDomainProposalExecutor(
+      this.env,
+      this.beforeMutation,
+    ).execute(viewer, { proposalId, metadata, operationId });
     const response: ProposalExecutionResult = {
       kind: "domain",
       proposalId,
@@ -203,6 +206,7 @@ export class AiClaimedProposalExecutor {
     input: ClaimedProposalInput<TaskProposalMetadata>,
   ): Promise<AiProposalApprovalResult> {
     const { proposalId, metadata, correlationId, claimToken } = input;
+    await this.beforeMutation();
     const result = await new ApiTaskService(this.env).create(
       {
         keyId: `assistant:${viewer.personId}`,

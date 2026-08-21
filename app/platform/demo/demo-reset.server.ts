@@ -3,7 +3,6 @@ import { requireEmailProviderConfiguration } from "~/modules/communications/emai
 import { INITIAL_EVENT_SESSION_FORMATS_JSON } from "~/modules/events/event-configuration";
 import { CANONICAL_EVENT_FILE_POLICY_JSON } from "~/modules/files/file-policy";
 import {
-  DEMO_ASSISTANT_FIXTURE_MODEL,
   DEMO_EVENT_ID,
   DEMO_IDENTITIES,
   DEMO_ORGANISATION_ID,
@@ -268,14 +267,10 @@ function activeWorkTotal(activeWork: DemoActiveWork) {
   return Object.values(activeWork).reduce((total, count) => total + count, 0);
 }
 
-// Visual/demo proposal previews are append-only audit records, so resetting
-// their mutable execution ledger cannot remove them. Append the same terminal
-// marker used by the assistant and limit it to the explicit no-provider demo
-// model; ordinary assistant proposals and their production semantics are left
-// untouched.
-async function supersedeDemoAssistantFixtureProposals(
-  env: CloudflareEnvironment,
-) {
+// Proposal previews are append-only audit records, so resetting their mutable
+// event data cannot remove them. Append the assistant's terminal marker to
+// every still-actionable proposal, regardless of which provider created it.
+async function supersedeDemoAssistantProposals(env: CloudflareEnvironment) {
   const result = await env.DB.prepare(
     `INSERT INTO audit_events (
        id, actor_kind, origin, metadata_version, organisation_id, event_id, actor_person_id, action,
@@ -288,8 +283,7 @@ async function supersedeDemoAssistantFixtureProposals(
             'demo-reset:' || proposal.entity_id,
             json_object(
               'proposalId', proposal.entity_id,
-              'reason', 'demo_fixture_reset',
-              'fixtureModel', ?
+              'reason', 'demo_event_reset'
             ),
             unixepoch()
        FROM audit_events proposal
@@ -297,22 +291,21 @@ async function supersedeDemoAssistantFixtureProposals(
         AND proposal.action = 'assistant.proposal.previewed'
         AND proposal.entity_type = 'assistant_proposal'
         AND proposal.entity_id IS NOT NULL
-        AND json_extract(proposal.metadata_json, '$.model') = ?
         AND NOT EXISTS (
-          SELECT 1
-            FROM audit_events superseded
-           WHERE superseded.event_id = proposal.event_id
-             AND superseded.action = 'assistant.proposal.superseded'
-             AND superseded.entity_type = 'assistant_proposal'
-             AND superseded.entity_id = proposal.entity_id
+          SELECT 1 FROM audit_events terminal
+           WHERE terminal.event_id = proposal.event_id
+             AND (
+               (terminal.action = 'assistant.proposal.superseded'
+                 AND terminal.entity_type = 'assistant_proposal'
+                 AND terminal.entity_id = proposal.entity_id)
+               OR
+               (terminal.action = 'assistant.action.executed'
+                 AND json_extract(terminal.metadata_json, '$.proposalId') =
+                     proposal.entity_id)
+             )
         )`,
   )
-    .bind(
-      DEMO_ASSISTANT_FIXTURE_MODEL,
-      DEMO_ORGANISATION_ID,
-      DEMO_EVENT_ID,
-      DEMO_ASSISTANT_FIXTURE_MODEL,
-    )
+    .bind(DEMO_ORGANISATION_ID, DEMO_EVENT_ID)
     .run();
   return result.meta.changes ?? 0;
 }
@@ -956,8 +949,8 @@ export async function resetDemoEvent(
   );
   await beforeDestructiveWork?.();
   await assertDestructiveWorkAllowed?.();
-  const supersededAssistantFixtureProposals =
-    await supersedeDemoAssistantFixtureProposals(env);
+  const supersededAssistantProposals =
+    await supersedeDemoAssistantProposals(env);
 
   const forms = await env.DB.prepare(
     "SELECT id FROM form_definitions WHERE event_id = ?",
@@ -1046,7 +1039,7 @@ export async function resetDemoEvent(
       JSON.stringify({
         objectCount,
         preservedAuditEvents,
-        supersededAssistantFixtureProposals,
+        supersededAssistantProposals,
         baseline,
       }),
     )
@@ -1056,7 +1049,7 @@ export async function resetDemoEvent(
   return {
     objectCount,
     preservedAuditEvents,
-    supersededAssistantFixtureProposals,
+    supersededAssistantProposals,
     baseline,
   };
 }

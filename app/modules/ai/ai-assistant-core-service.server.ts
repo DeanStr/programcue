@@ -162,6 +162,7 @@ type AiServiceDependencies = {
   fetcher?: typeof fetch;
   providerConfiguration?: { apiKey: string; model: string };
   now?: () => Date;
+  beforeProposalMutation?: () => void | Promise<void>;
   beforeProposalExecutionCommit?: (
     result: AiProposalApprovalResult,
   ) => void | Promise<void>;
@@ -241,6 +242,7 @@ export class AiAssistantCoreService {
     this.now = dependencies.now ?? (() => new Date());
     this.proposalLifecycle = new AiProposalLifecycleService(this.env, {
       now: this.now,
+      beforeProposalMutation: dependencies.beforeProposalMutation,
       beforeProposalExecutionCommit: dependencies.beforeProposalExecutionCommit,
     });
   }

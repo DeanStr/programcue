@@ -1170,7 +1170,7 @@ describe("complete evaluator demo reset", () => {
   });
 
   describe("relational cleanup ordering", () => {
-    it("tombstones only stale demo assistant fixture proposals while preserving their audits", async () => {
+    it("tombstones every pending assistant proposal while preserving its audit", async () => {
       const testEnvironment = demoEnvironment();
       await ensureJudgedDemoWorkflow(testEnvironment);
       const fixtureProposalId = crypto.randomUUID();
@@ -1219,14 +1219,14 @@ describe("complete evaluator demo reset", () => {
         DEMO_RESET_CONFIRMATION,
       );
 
-      expect(reset.supersededAssistantFixtureProposals).toBe(1);
+      expect(reset.supersededAssistantProposals).toBe(2);
       await expect(
         resetDemoEvent(
           testEnvironment,
           demoAdministrator.personId,
           DEMO_RESET_CONFIRMATION,
         ),
-      ).resolves.toMatchObject({ supersededAssistantFixtureProposals: 0 });
+      ).resolves.toMatchObject({ supersededAssistantProposals: 0 });
       const fixtureAudits = await testEnvironment.DB.prepare(
         `SELECT action, metadata_json AS metadataJson
          FROM audit_events
@@ -1248,8 +1248,7 @@ describe("complete evaluator demo reset", () => {
       );
       expect(JSON.parse(tombstone?.metadataJson ?? "{}")).toMatchObject({
         proposalId: fixtureProposalId,
-        reason: "demo_fixture_reset",
-        fixtureModel: DEMO_ASSISTANT_FIXTURE_MODEL,
+        reason: "demo_event_reset",
       });
       await expect(
         testEnvironment.DB.prepare(
@@ -1259,12 +1258,12 @@ describe("complete evaluator demo reset", () => {
         )
           .bind(DEMO_EVENT_ID, ordinaryProposalId)
           .first(),
-      ).resolves.toBeNull();
+      ).resolves.toEqual({ action: "assistant.proposal.superseded" });
       const recent = await new AiAssistantService(
         testEnvironment,
       ).listRecentProposals(demoAdministrator);
       expect(recent.map(({ id }) => id)).not.toContain(fixtureProposalId);
-      expect(recent.map(({ id }) => id)).toContain(ordinaryProposalId);
+      expect(recent.map(({ id }) => id)).not.toContain(ordinaryProposalId);
     });
 
     it("deletes routed submissions before their evaluation teams", async () => {

@@ -116,6 +116,7 @@ export type ProposalCompletionInput = {
 
 export type AiProposalLifecycleDependencies = {
   now?: () => Date;
+  beforeProposalMutation?: () => void | Promise<void>;
   beforeProposalExecutionCommit?: (
     result: AiProposalApprovalResult,
   ) => void | Promise<void>;
@@ -407,7 +408,9 @@ export class AiProposalLifecycleService {
                   claim_expires_at = NULL, completed_at = ?, updated_at = ?
             WHERE proposal_id = ? AND organisation_id = ? AND event_id = ?
               AND actor_person_id = ? AND tool_name = ?
-              AND status = 'processing' AND claim_token = ?`,
+              AND status = 'processing' AND claim_token = ?
+              AND claim_expires_at IS NOT NULL
+              AND claim_expires_at > unixepoch()`,
         ).bind(
           resultJson,
           now,
@@ -517,6 +520,50 @@ export class AiProposalLifecycleService {
         claimToken,
       )
       .run();
+  }
+
+  private async renewProposalExecution(
+    viewer: Viewer,
+    proposalId: string,
+    claimToken: string,
+  ) {
+    await this.dependencies.beforeProposalMutation?.();
+    const now = Math.floor(this.now().getTime() / 1_000);
+    const guardEvaluationReset =
+      requireRuntimeMode(this.env).evaluation &&
+      viewer.organisationId === DEMO_ORGANISATION_ID;
+    const renewed = await this.env.DB.prepare(
+      `UPDATE assistant_proposal_executions
+          SET claim_expires_at = ?, updated_at = ?
+        WHERE proposal_id = ? AND organisation_id = ? AND event_id = ?
+          AND actor_person_id = ? AND status = 'processing'
+          AND claim_token = ? AND claim_expires_at IS NOT NULL
+          AND claim_expires_at > ?
+          AND (? = 0 OR NOT EXISTS (
+            SELECT 1 FROM operation_jobs fixture_reset
+             WHERE fixture_reset.id = ? AND fixture_reset.type = ?
+               AND fixture_reset.status = 'running'
+          ))`,
+    )
+      .bind(
+        now + PROPOSAL_EXECUTION_LEASE_SECONDS,
+        now,
+        proposalId,
+        viewer.organisationId,
+        viewer.eventId,
+        viewer.personId,
+        claimToken,
+        now,
+        guardEvaluationReset ? 1 : 0,
+        EVALUATION_FIXTURE_RESET_OPERATION_ID,
+        EVALUATION_FIXTURE_RESET_OPERATION_TYPE,
+      )
+      .run();
+    if ((renewed.meta.changes ?? 0) !== 1) {
+      throw new AiProposalStateError(
+        "The assistant proposal execution lease was lost before its action could begin. Retry the proposal.",
+      );
+    }
   }
 
   async approveProposal(
@@ -645,8 +692,11 @@ export class AiProposalLifecycleService {
     viewer: Viewer,
     input: ClaimedProposalInput<AssistantProposalMetadata>,
   ): Promise<AiProposalApprovalResult> {
-    return new AiClaimedProposalExecutor(this.env, (actor, completion) =>
-      this.completeProposalExecution(actor, completion),
+    return new AiClaimedProposalExecutor(
+      this.env,
+      (actor, completion) => this.completeProposalExecution(actor, completion),
+      () =>
+        this.renewProposalExecution(viewer, input.proposalId, input.claimToken),
     ).execute(viewer, input);
   }
   async reviseReminderProposal(

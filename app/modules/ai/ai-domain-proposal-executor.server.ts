@@ -46,7 +46,10 @@ async function sha256(value: string) {
 }
 
 export class AiDomainProposalExecutor {
-  constructor(private readonly env: CloudflareEnvironment) {}
+  constructor(
+    private readonly env: CloudflareEnvironment,
+    private readonly beforeMutation: () => Promise<void>,
+  ) {}
 
   async execute(
     viewer: Viewer,
@@ -96,6 +99,7 @@ export class AiDomainProposalExecutor {
     input: DomainProposalInput<DomainProposalMetadataFor<"propose_form_draft">>,
   ): Promise<ExecutedDomainProposal> {
     const { proposalId, metadata, operationId } = input;
+    await this.beforeMutation();
     const formId = await new SubmissionService(this.env).saveForm(
       viewer,
       metadata.snapshot,
@@ -123,6 +127,7 @@ export class AiDomainProposalExecutor {
     >,
   ): Promise<ExecutedDomainProposal> {
     const { proposalId, metadata, operationId } = input;
+    await this.beforeMutation();
     await new EvaluationService(this.env).updateDraftRound(
       viewer,
       metadata.snapshot,
@@ -200,6 +205,7 @@ export class AiDomainProposalExecutor {
         "The durable reviewer-assignment operation does not match this proposal.",
       );
     }
+    await this.beforeMutation();
     const result = await evaluation.assign(viewer, assignmentInput, {
       actorId: `assistant:${viewer.personId}`,
       idempotencyKey: operationId,
@@ -231,6 +237,7 @@ export class AiDomainProposalExecutor {
     // Revalidate at approval so proposals stored before this guard was
     // deployed cannot persist unsafe AI-authored content.
     assertNoUnresolvedTemplateContent(metadata.snapshot);
+    await this.beforeMutation();
     const result = await new CommunicationService(this.env).saveTemplate(
       viewer,
       metadata.snapshot,
@@ -258,6 +265,7 @@ export class AiDomainProposalExecutor {
     >,
   ): Promise<ExecutedDomainProposal> {
     const { metadata, operationId } = input;
+    await this.beforeMutation();
     const result = await new ScheduleService(this.env).place(
       viewer,
       metadata.snapshot.input,
@@ -333,6 +341,7 @@ export class AiDomainProposalExecutor {
         );
       }
     }
+    await this.beforeMutation();
     await submissions.publishForm(
       viewer,
       metadata.snapshot.formId,
@@ -407,6 +416,7 @@ export class AiDomainProposalExecutor {
         "The durable schedule publication does not match this proposal.",
       );
     }
+    await this.beforeMutation();
     const result = await schedules.publish(
       {
         organisationId: viewer.organisationId,
@@ -474,6 +484,7 @@ export class AiDomainProposalExecutor {
         );
       }
     }
+    await this.beforeMutation();
     const result = await integrations.startRun(viewer, {
       ...metadata.arguments,
       idempotencyKey: operationId,

@@ -670,7 +670,12 @@ expired synchronous assistant claims as interrupted failures with matching
 audit evidence and does not rerun provider work. Focused failure-injection
 coverage verifies that rejected completion or supersession evidence rolls the
 associated proposal mutation back, and lease coverage verifies bounded,
-idempotent interruption recovery.
+idempotent interruption recovery. Approved proposal execution renews and
+revalidates its live claim immediately before every domain mutation and
+requires that claim again for atomic completion, so an expired Worker cannot
+cross a production-evaluation reset boundary. Local demo reset appends a
+terminal supersession marker to every still-pending proposal regardless of its
+AI provider before replacing the event data.
 Deployment and fresh live-provider acceptance remain outstanding.
 
 ## Capability status
