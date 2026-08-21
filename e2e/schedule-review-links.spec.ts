@@ -115,6 +115,11 @@ test("creates a one-time confidential review URL and invalidates it on revoke an
   await expect(revokeDialog).toContainText("Programme committee");
   await revokeDialog.getByRole("button", { name: "Revoke link" }).click();
   await expect(page.getByText("Manually revoked")).toBeVisible();
+  await expect(
+    page.locator(".schedule-review-link-list li").filter({
+      hasText: "Programme committee",
+    }),
+  ).toBeFocused();
   const revoked = await page.goto(previewPath);
   expect(revoked?.status()).toBe(404);
   await expect(

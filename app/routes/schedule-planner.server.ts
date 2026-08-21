@@ -17,6 +17,7 @@ import {
   ScheduleReviewLinkIntentReusedError,
   ScheduleReviewLinkLimitError,
   ScheduleReviewLinkNotFoundError,
+  ScheduleReviewLinkRetentionError,
   ScheduleRevisionConflictError,
   ScheduleService,
   ScheduleUndoUnavailableError,
@@ -693,6 +694,8 @@ export async function action({ request, context }: Route.ActionArgs) {
       return data({ ok: false, intent, error: error.message }, { status: 409 });
     if (error instanceof ScheduleReviewLinkNotFoundError)
       return data({ ok: false, intent, error: error.message }, { status: 404 });
+    if (error instanceof ScheduleReviewLinkRetentionError)
+      return data({ ok: false, intent, error: error.message }, { status: 409 });
     if (error instanceof ScheduleIdempotencyConflictError)
       return data(
         {

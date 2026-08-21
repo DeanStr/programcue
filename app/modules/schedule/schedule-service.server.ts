@@ -135,6 +135,7 @@ export {
   ScheduleReviewLinkIntentReusedError,
   ScheduleReviewLinkLimitError,
   ScheduleReviewLinkNotFoundError,
+  ScheduleReviewLinkRetentionError,
   ScheduleRevisionConflictError,
   ScheduleUndoUnavailableError,
 } from "./schedule-errors";

@@ -8,6 +8,7 @@ import {
   ScheduleReviewLinkExpiredError,
   ScheduleReviewLinkIntentReusedError,
   ScheduleReviewLinkLimitError,
+  ScheduleReviewLinkRetentionError,
   ScheduleRevisionConflictError,
 } from "./schedule-errors";
 import {
@@ -762,5 +763,27 @@ describe("schedule review links", () => {
         ttlDays: 14,
       }),
     ).rejects.toThrow(/1, 3, 7 or 30 days/i);
+  });
+
+  // Irreversible tombstone: keep last in this Worker file.
+  it("blocks review-link creation after participant retention completes", async () => {
+    const { schedule } = await placedDraft();
+    const input = await reviewLinkCreateInput(schedule);
+    await env.DB.prepare(
+      `UPDATE events
+          SET participant_retention_completed_at = unixepoch()
+        WHERE id = ? AND organisation_id = ?`,
+    )
+      .bind(viewer.eventId, viewer.organisationId)
+      .run();
+    const summary = await schedule.summarizeReviewLinks(viewer);
+    expect(summary.canCreate).toBe(false);
+    expect(summary.projectionHash).toBeNull();
+    expect(summary.blockedReason).toMatch(
+      /participant retention has completed/i,
+    );
+    await expect(
+      schedule.createReviewLink(viewer, input),
+    ).rejects.toBeInstanceOf(ScheduleReviewLinkRetentionError);
   });
 });

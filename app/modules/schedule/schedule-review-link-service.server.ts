@@ -6,6 +6,7 @@ import {
   ScheduleReviewLinkIntentReusedError,
   ScheduleReviewLinkLimitError,
   ScheduleReviewLinkNotFoundError,
+  ScheduleReviewLinkRetentionError,
   ScheduleRevisionConflictError,
 } from "./schedule-errors";
 import {
@@ -102,6 +103,13 @@ export type ScheduleReviewLinkCreateResult = {
   entryCount: number;
   speakerNameCount: number;
 };
+
+function isRetentionAbort(error: unknown) {
+  return (
+    error instanceof Error &&
+    /participant retention is complete/i.test(error.message)
+  );
+}
 
 function requireAdministrator(viewer: Viewer) {
   if (viewer.role !== "owner" && viewer.role !== "administrator") {
@@ -314,6 +322,19 @@ export class ScheduleReviewLinkService {
     });
   }
 
+  private async retentionCompleted(viewer: ScheduleEventScope) {
+    const row = await this.env.DB.prepare(
+      `
+        SELECT participant_retention_completed_at AS completedAt
+          FROM events
+         WHERE id = ? AND organisation_id = ?
+      `,
+    )
+      .bind(viewer.eventId, viewer.organisationId)
+      .first<{ completedAt: number | null }>();
+    return row?.completedAt != null;
+  }
+
   private async countActiveLinks(viewer: ScheduleEventScope) {
     const active = await this.env.DB.prepare(
       `
@@ -341,6 +362,16 @@ export class ScheduleReviewLinkService {
   ): Promise<ScheduleReviewLinkSummary> {
     requireAdministrator(viewer);
     const loaded = workspace ?? (await this.getWorkspace(viewer));
+    if (await this.retentionCompleted(viewer)) {
+      return {
+        canCreate: false,
+        entryCount: 0,
+        speakerNameCount: 0,
+        projectionHash: null,
+        blockedReason: new ScheduleReviewLinkRetentionError().message,
+        disclosures: [],
+      };
+    }
     if (loaded.version?.status !== "draft") {
       return {
         canCreate: false,
@@ -553,6 +584,7 @@ export class ScheduleReviewLinkService {
            WHERE EXISTS (
              SELECT 1 FROM events
               WHERE id = ? AND organisation_id = ?
+                AND participant_retention_completed_at IS NULL
            )
              AND EXISTS (
                SELECT 1 FROM schedule_versions
@@ -639,6 +671,9 @@ export class ScheduleReviewLinkService {
         .bind(viewer.organisationId, viewer.eventId, parsed.createIntentId)
         .first();
       if (reused) throw new ScheduleReviewLinkIntentReusedError();
+      if (isRetentionAbort(error) || (await this.retentionCompleted(viewer))) {
+        throw new ScheduleReviewLinkRetentionError();
+      }
       throw error;
     }
     if ((inserted.meta.changes ?? 0) === 1) {
@@ -667,6 +702,9 @@ export class ScheduleReviewLinkService {
       .bind(viewer.organisationId, viewer.eventId, parsed.createIntentId)
       .first();
     if (reused) throw new ScheduleReviewLinkIntentReusedError();
+    if (await this.retentionCompleted(viewer)) {
+      throw new ScheduleReviewLinkRetentionError();
+    }
     const current = await this.env.DB.prepare(
       `
         SELECT status, revision

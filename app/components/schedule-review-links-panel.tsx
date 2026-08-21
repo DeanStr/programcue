@@ -60,6 +60,8 @@ export function ScheduleReviewLinksPanel({
   const createFormId = useId();
   const blockedReasonId = useId();
   const urlInputRef = useRef<HTMLInputElement>(null);
+  const headingRef = useRef<HTMLHeadingElement>(null);
+  const revokeReturnFocusRef = useRef<HTMLElement | null>(null);
   const created = isReviewUrlResult(createFetcher.data)
     ? createFetcher.data
     : null;
@@ -125,7 +127,9 @@ export function ScheduleReviewLinksPanel({
     >
       <div className="schedule-review-links-head">
         <div>
-          <h2 id="draft-review-links-heading">Draft review links</h2>
+          <h2 id="draft-review-links-heading" ref={headingRef} tabIndex={-1}>
+            Draft review links
+          </h2>
           <p className="subtle">
             Share a frozen unpublished timetable. The secret URL is shown once.
             {workspace.reviewLinks.length === 0 &&
@@ -165,7 +169,7 @@ export function ScheduleReviewLinksPanel({
       {workspace.reviewLinks.length === 0 ? null : (
         <ul className="schedule-review-link-list">
           {workspace.reviewLinks.map((link) => (
-            <li key={link.id}>
+            <li key={link.id} tabIndex={-1}>
               <div>
                 <strong>{link.purpose}</strong>
                 <span>
@@ -194,7 +198,10 @@ export function ScheduleReviewLinksPanel({
                   className="btn ghost"
                   type="button"
                   aria-label={`Revoke ${link.purpose}`}
-                  onClick={() => {
+                  onClick={(event) => {
+                    const row = event.currentTarget.closest("li");
+                    revokeReturnFocusRef.current =
+                      row instanceof HTMLElement ? row : headingRef.current;
                     setRevokeSubmitted(false);
                     setRevokeErrorDismissed(true);
                     setRevokeId(link.id);
@@ -434,6 +441,12 @@ export function ScheduleReviewLinksPanel({
               : "The unpublished snapshot will immediately return a generic not-found page."
           }
           tone="danger"
+          returnFocus={{
+            get current() {
+              const row = revokeReturnFocusRef.current;
+              return row?.isConnected ? row : headingRef.current;
+            },
+          }}
           onClose={() => {
             setRevokeSubmitted(false);
             setRevokeId(null);

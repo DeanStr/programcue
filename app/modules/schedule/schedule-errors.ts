@@ -88,6 +88,15 @@ export class ScheduleReviewLinkIntentReusedError extends Error {
   }
 }
 
+export class ScheduleReviewLinkRetentionError extends Error {
+  constructor(
+    message = "Participant retention has completed for this event. Draft review links cannot be created.",
+  ) {
+    super(message);
+    this.name = "ScheduleReviewLinkRetentionError";
+  }
+}
+
 export class ScheduleIdempotencyConflictError extends Error {
   constructor(
     readonly code: "IDEMPOTENCY_KEY_REUSED" | "IDEMPOTENCY_REQUEST_IN_PROGRESS",
