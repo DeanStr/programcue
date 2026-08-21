@@ -10,6 +10,7 @@ import {
   useActionData,
   useLoaderData,
   useNavigation,
+  useRevalidator,
 } from "react-router";
 import { ZodError } from "zod";
 import { PageHeader } from "~/components/ui/page-header";
@@ -273,12 +274,14 @@ function StreamingAssistantWorkspace({
   eventName,
   result,
   setResult,
+  onAcceptedResult,
 }: {
   defaultPrompt: string;
   disabled: boolean;
   eventName: string;
   result: AiAssistantResult | null;
   setResult: (result: AiAssistantResult | null) => void;
+  onAcceptedResult: () => Promise<void>;
 }) {
   const [pending, setPending] = useState(false);
   const [partial, setPartial] = useState("");
@@ -375,6 +378,7 @@ function StreamingAssistantWorkspace({
           );
         }
         accepted = true;
+        await onAcceptedResult();
       } finally {
         if (!accepted) {
           await reader.cancel("Assistant stream rejected").catch(() => {});
@@ -489,6 +493,7 @@ export default function AssistantRoute() {
   const loaderData = useLoaderData<typeof loader>();
   const actionData = useActionData<typeof action>();
   const navigation = useNavigation();
+  const revalidator = useRevalidator();
   const actionResult =
     actionData?.ok && actionData.intent === "ask" ? actionData.result : null;
   const [streamedResult, setStreamedResult] =
@@ -642,6 +647,7 @@ export default function AssistantRoute() {
         eventName={loaderData.eventName}
         result={streamedResult}
         setResult={setStreamedResult}
+        onAcceptedResult={() => revalidator.revalidate()}
       />
 
       {hasProposalHistory ? (

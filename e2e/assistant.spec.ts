@@ -127,9 +127,30 @@ test("assistant reconciles a streamed proposal after approval", async ({
     };
     const suggestedPrompt =
       "What is blocking event readiness? Cite the exact records and rank the next three actions.";
+    const failedPrompt =
+      "Explain current schedule conflicts and distinguish recorded facts from your inference.";
     let postedBody = "";
+    let streamRequestCount = 0;
     await page.route("**/admin/assistant/stream", async (route) => {
+      streamRequestCount += 1;
       postedBody = route.request().postData() ?? "";
+      if (streamRequestCount === 2) {
+        await route.fulfill({
+          status: 200,
+          contentType: "text/event-stream; charset=utf-8",
+          headers: { "cache-control": "private, no-store" },
+          body: [
+            "event: status",
+            'data: {"phase":"started"}',
+            "",
+            "event: error",
+            'data: {"message":"The deterministic second request failed."}',
+            "",
+            "",
+          ].join("\n"),
+        });
+        return;
+      }
       const result = {
         runId: fixtureData.runId,
         operationId: fixtureData.runId,
@@ -176,6 +197,17 @@ test("assistant reconciles a streamed proposal after approval", async ({
       .locator("section.card")
       .filter({ hasText: fixtureData.taskTitle });
     await expect(proposal).toHaveCount(1);
+    await page.getByRole("button", { name: failedPrompt }).click();
+    await expect(
+      page.getByRole("alert").filter({
+        hasText: "The deterministic second request failed.",
+      }),
+    ).toBeVisible();
+    await expect(proposal).toHaveCount(1);
+    await expect(
+      page.getByText("1 awaiting approval", { exact: true }),
+    ).toBeVisible();
+
     await proposal.getByRole("checkbox").check();
     await proposal
       .getByRole("button", { name: "Approve and create task" })
