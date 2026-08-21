@@ -131,3 +131,50 @@ test("creates a one-time confidential review URL and invalidates it on revoke an
   const published = await page.goto(secondPath);
   expect(published?.status()).toBe(404);
 });
+
+test("review link history does not collapse the planner canvas", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1280, height: 720 });
+  await waitForInterface(page, "/admin/schedule");
+  await page.getByRole("button", { name: "Create next draft" }).click();
+  await page
+    .getByRole("dialog", { name: "Create the next schedule draft?" })
+    .getByRole("button", { name: "Confirm new draft" })
+    .click();
+  await expect(
+    page.getByRole("heading", { name: "Draft review links" }),
+  ).toBeVisible();
+  await page.getByRole("button", { name: "Create review link" }).click();
+  const createDialog = page.getByRole("dialog", {
+    name: "Create a confidential draft review link?",
+  });
+  await createDialog.getByLabel("Purpose").fill("Canvas height check");
+  await createDialog
+    .getByRole("button", { name: "Create confidential link" })
+    .click();
+  await createDialog.getByText("Close", { exact: true }).click();
+  const reviewList = page.locator(".schedule-review-link-list");
+  await expect(reviewList).toContainText("Canvas height check");
+  await page.evaluate(() => {
+    const list = document.querySelector(".schedule-review-link-list");
+    const item = list?.querySelector("li");
+    if (!list || !(item instanceof HTMLElement)) {
+      throw new Error("missing review link list");
+    }
+    for (let i = 0; i < 29; i += 1) {
+      list.append(item.cloneNode(true));
+    }
+  });
+  const listOverflows = await reviewList.evaluate(
+    (node) => node.scrollHeight > node.clientHeight + 1,
+  );
+  expect(listOverflows).toBe(true);
+  const panelBox = await page.locator(".schedule-review-links").boundingBox();
+  const workspaceBox = await page.locator(".schedule-workspace").boundingBox();
+  const canvasBox = await page.locator(".schedule-canvas").boundingBox();
+  expect(panelBox?.height ?? 0).toBeLessThanOrEqual(16 * 16 + 2);
+  expect(workspaceBox?.height ?? 0).toBeGreaterThan(120);
+  expect(canvasBox?.height ?? 0).toBeGreaterThan(80);
+  await expect(page.locator(".schedule-canvas")).toBeInViewport();
+});

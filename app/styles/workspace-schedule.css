@@ -231,7 +231,19 @@
   font-weight: var(--weight-semibold);
   white-space: nowrap;
 }
+/* Locked-height .schedule-page would otherwise let 10 active plus 20
+   inactive rows shrink .schedule-workspace toward zero. flex-shrink stays
+   0 so a short list is not clipped when the canvas wants space; min-height
+   0 lets max-height win over the content minimum. */
 .schedule-review-links {
+  display: flex;
+  flex: 0 0 auto;
+  flex-direction: column;
+  min-height: 0;
+  max-height: 16rem;
+  overflow: hidden;
+}
+.schedule-review-links > :not(.schedule-review-link-list) {
   flex: 0 0 auto;
 }
 .schedule-review-links-head {
@@ -246,9 +258,13 @@
 }
 .schedule-review-link-list {
   display: grid;
+  flex: 1 1 auto;
   gap: var(--space-2);
+  min-height: 0;
   margin: var(--space-3) 0 0;
   padding: 0;
+  overflow: auto;
+  overscroll-behavior: contain;
   list-style: none;
 }
 .schedule-review-link-list li {
