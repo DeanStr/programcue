@@ -1,6 +1,7 @@
 import { expect, type Page, test } from "@playwright/test";
 
 import { acceptConfirm } from "./support/confirm-dialog";
+import { resetDemoEvent } from "./support/reset-demo-event";
 
 test("speaker profile, sessions and D1 task state render through the production portal", async ({
   page,
@@ -201,6 +202,173 @@ test("speaker profile, sessions and D1 task state render through the production 
   await expect(page.getByRole("status")).toContainText(
     "Your profile was saved",
   );
+});
+
+test.describe("optional session-details review", () => {
+  test.beforeEach(async ({ page, request }) => {
+    await page.context().addCookies([
+      {
+        name: "program_cue_demo_identity",
+        value: "administrator",
+        domain: "127.0.0.1",
+        path: "/",
+        httpOnly: true,
+        sameSite: "Lax",
+      },
+      {
+        name: "program_cue_event",
+        value: "evt-foe-2025",
+        domain: "127.0.0.1",
+        path: "/",
+        httpOnly: true,
+        sameSite: "Lax",
+      },
+    ]);
+    await resetDemoEvent(request);
+  });
+
+  test.afterEach(async ({ request }) => {
+    await resetDemoEvent(request);
+  });
+
+  test("renders, corrects and revision-binds the shared session acknowledgement", async ({
+    page,
+  }) => {
+    test.slow();
+    await page.goto("/admin/tasks");
+    await page.locator("body[data-hydrated='true']").waitFor();
+    await page.getByText("Plan and onboarding", { exact: true }).click();
+    const preset = page.locator("section.tasks-plan-block").filter({
+      has: page.getByRole("heading", { name: "Session-detail review" }),
+    });
+    await preset.getByRole("checkbox").check();
+    await preset
+      .getByRole("button", { name: "Create session review task" })
+      .click();
+    const actionNotice = page.locator(".pc-status-notice[role='status']");
+    await expect(actionNotice).toContainText(
+      "The optional session-details review task is ready",
+    );
+
+    const assignment = page.locator("section.tasks-plan-block").filter({
+      has: page.getByRole("heading", { name: "Assign a plan" }),
+    });
+    await expect(assignment).toBeVisible();
+    await assignment.locator('select[name="templateId"]').selectOption({
+      label: "Review session details",
+    });
+    await assignment.locator('select[name="targetId"]').selectOption({
+      label: "Designing inclusive event technology",
+    });
+    await assignment
+      .getByRole("button", { name: "Assign with prerequisites" })
+      .click();
+    await expect(actionNotice).toContainText("Task plan assigned");
+
+    await page.context().addCookies([
+      {
+        name: "program_cue_demo_identity",
+        value: "speaker",
+        domain: "127.0.0.1",
+        path: "/",
+        httpOnly: true,
+        sameSite: "Lax",
+      },
+    ]);
+    await page.goto("/participant/sessions");
+    await page.locator("body[data-hydrated='true']").waitFor();
+    const session = page.locator(".speaker-session-card").filter({
+      hasText: "Designing inclusive event technology",
+    });
+    await session.getByRole("link", { name: "Request a correction" }).click();
+    await expect(page).toHaveURL(
+      /\/participant\/tasks\?task=[^&]+&compose=comment#task-/u,
+    );
+    await page.locator("body[data-hydrated='true']").waitFor();
+
+    const taskId = new URL(page.url()).searchParams.get("task");
+    if (!taskId) throw new Error("Session correction link omitted its task.");
+    const task = page.locator(`article[id="task-${taskId}"]`);
+    await expect(
+      task.getByRole("heading", { name: "Review session details" }),
+    ).toBeVisible();
+    await expect(task).toContainText("Designing inclusive event technology");
+    await expect(task).toContainText(
+      "Practical patterns for accessible, calm and effective attendee experiences.",
+    );
+    await expect(task).toContainText("presentation · 45 minutes");
+    await expect(task).toContainText("No track assigned");
+    await expect(task.locator("details")).toHaveAttribute("open", "");
+    await expect(task.getByLabel("Message")).toBeFocused();
+
+    const revisionInput = task.locator('input[name="sessionDetailsRevision"]');
+    const reviewedRevision = await revisionInput.getAttribute("value");
+    if (!reviewedRevision) {
+      throw new Error("Session review omitted its displayed revision.");
+    }
+    await task
+      .getByLabel(
+        "I have reviewed these shared session details and they are correct",
+      )
+      .check();
+    await task.getByRole("button", { name: "Complete task" }).click();
+    await expect(actionNotice).toContainText("Task completed");
+    await expect(task.getByText("Completed", { exact: true })).toBeVisible();
+
+    await page.reload();
+    await expect(task.getByText("Completed", { exact: true })).toBeVisible();
+    await expect(task).toContainText("Designing inclusive event technology");
+
+    await page.context().addCookies([
+      {
+        name: "program_cue_demo_identity",
+        value: "administrator",
+        domain: "127.0.0.1",
+        path: "/",
+        httpOnly: true,
+        sameSite: "Lax",
+      },
+    ]);
+    await page.goto("/admin/schedule?session=session-demo-speaker");
+    await page.locator("body[data-hydrated='true']").waitFor();
+    await page.getByRole("button", { name: "Create next draft" }).click();
+    const confirmation = page.getByRole("dialog", {
+      name: "Create the next schedule draft?",
+    });
+    await confirmation
+      .getByRole("button", { name: "Confirm new draft" })
+      .click();
+    const editor = page.getByTestId("session-content-editor");
+    await expect(editor.getByLabel("Title")).toHaveValue(
+      "Designing inclusive event technology",
+    );
+    await editor
+      .getByLabel("Public description")
+      .fill("Updated session details after participant acknowledgement.");
+    await expect(editor.getByText("Saved", { exact: true })).toBeVisible({
+      timeout: 10_000,
+    });
+
+    await page.context().addCookies([
+      {
+        name: "program_cue_demo_identity",
+        value: "speaker",
+        domain: "127.0.0.1",
+        path: "/",
+        httpOnly: true,
+        sameSite: "Lax",
+      },
+    ]);
+    await page.goto(`/participant/tasks?task=${taskId}#task-${taskId}`);
+    await page.locator("body[data-hydrated='true']").waitFor();
+    await expect(task.getByText("Completed", { exact: true })).toBeVisible();
+    await expect(task.getByRole("status")).toContainText(
+      `This task was completed for session revision ${reviewedRevision}; current revision`,
+    );
+    await expect(task.getByRole("status")).toContainText(
+      "Ask the event team to reopen this task",
+    );
+  });
 });
 
 test("a submitter enters the same participant workspace and can open applications", async ({

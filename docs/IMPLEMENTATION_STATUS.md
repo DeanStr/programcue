@@ -282,6 +282,11 @@ identifier, so cloned events retain the link. Duplicate or behaviorally drifted
 presets fail explicitly. Cancelled and archived sessions hide this review task,
 reject further participant comments or completion and remove it from participant
 readiness while leaving unrelated operational session tasks unchanged.
+Focused Playwright coverage creates and assigns the optional preset through the
+organiser interface, opens its exact correction composer from the participant
+session, completes the canonical detail review, reloads the persisted result and
+then verifies the recorded-versus-current revision warning after an organiser
+content edit.
 Participant-retention analysis, redaction and identity remapping include this
 participant-authored session evidence and the complete correction thread but
 exclude ordinary organiser session tasks. Comment audit origins distinguish
