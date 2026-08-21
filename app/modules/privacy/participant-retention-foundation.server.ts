@@ -71,6 +71,25 @@ export function participantRetentionTaskPredicateSql(alias: string) {
   )`;
 }
 
+export function participantTaskActorProvenanceSql(
+  taskAlias: string,
+  personIdExpression: string,
+) {
+  return `(
+    (${taskAlias}.target_type = 'speaker'
+      AND ${taskAlias}.target_id = ${personIdExpression})
+    OR (
+      ${taskAlias}.target_type = 'session'
+      AND EXISTS (
+        SELECT 1 FROM session_speakers participant_relationship
+         WHERE participant_relationship.event_id = ${taskAlias}.event_id
+           AND participant_relationship.session_id = ${taskAlias}.target_id
+           AND participant_relationship.person_id = ${personIdExpression}
+      )
+    )
+  )`;
+}
+
 export const participantPredicateSql = `(
   EXISTS (SELECT 1 FROM memberships candidate_membership
     WHERE candidate_membership.event_id = ?
@@ -94,13 +113,15 @@ export const participantPredicateSql = `(
     WHERE candidate_task.event_id = ?
       AND (candidate_task.owner_person_id = person.id
         OR candidate_task.completed_by_person_id = person.id)
-      AND ${participantRetentionTaskPredicateSql("candidate_task")})
+      AND ${participantRetentionTaskPredicateSql("candidate_task")}
+      AND ${participantTaskActorProvenanceSql("candidate_task", "person.id")})
   OR EXISTS (SELECT 1 FROM task_evidence candidate_evidence
     JOIN task_instances candidate_evidence_task
       ON candidate_evidence_task.id = candidate_evidence.task_id
      AND candidate_evidence_task.event_id = candidate_evidence.event_id
     WHERE candidate_evidence.event_id = ?
       AND ${participantRetentionTaskPredicateSql("candidate_evidence_task")}
+      AND ${participantTaskActorProvenanceSql("candidate_evidence_task", "person.id")}
       AND candidate_evidence.submitted_by_person_id = person.id)
   OR EXISTS (SELECT 1 FROM task_comments candidate_comment
     JOIN task_instances candidate_comment_task
@@ -108,6 +129,7 @@ export const participantPredicateSql = `(
      AND candidate_comment_task.event_id = candidate_comment.event_id
     WHERE candidate_comment.event_id = ?
       AND ${participantRetentionTaskPredicateSql("candidate_comment_task")}
+      AND ${participantTaskActorProvenanceSql("candidate_comment_task", "person.id")}
       AND candidate_comment.author_person_id = person.id)
   OR EXISTS (SELECT 1 FROM resource_acknowledgements candidate_acknowledgement
     WHERE candidate_acknowledgement.event_id = ? AND candidate_acknowledgement.person_id = person.id)

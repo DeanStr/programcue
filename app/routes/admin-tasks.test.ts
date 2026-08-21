@@ -148,6 +148,73 @@ describe("administrator task filters", () => {
     }
   });
 
+  it("keeps administrator-only session work in readiness after every participant declines", async () => {
+    const before = await load();
+    const sessionId = crypto.randomUUID();
+    const administratorTaskId = crypto.randomUUID();
+    const participantTaskId = crypto.randomUUID();
+    await workerEnv.DB.batch([
+      workerEnv.DB.prepare(
+        `INSERT INTO sessions (
+           id, event_id, title, slug, format, duration_minutes, status,
+           visibility, revision, created_at, updated_at
+         ) VALUES (?, ?, 'Declined session with organiser work', ?,
+                   'presentation', 30, 'unscheduled', 'private', 1,
+                   unixepoch(), unixepoch())`,
+      ).bind(sessionId, eventId, `declined-admin-work-${sessionId}`),
+      workerEnv.DB.prepare(
+        `INSERT INTO session_speakers (
+           session_id, event_id, person_id, position, role_label,
+           participation_status, participation_revision,
+           participation_declined_at, visibility
+         ) VALUES (?, ?, 'person-demo-speaker', 0, 'Speaker', 'declined', 1,
+                   unixepoch(), 'private')`,
+      ).bind(sessionId, eventId),
+      workerEnv.DB.prepare(
+        `INSERT INTO task_instances (
+           id, event_id, target_type, target_id, title, description,
+           task_type, impact, evidence_mode, configuration_json, status,
+           readiness_state, readiness_percent, revision, due_at,
+           created_at, updated_at
+         ) VALUES (?, ?, 'session', ?, 'Resolve organiser follow-up',
+                   'This remains operational after participant decline.',
+                   'administrator_only', 'critical', 'admin_approval', '{}',
+                   'overdue', 'overdue', 0, 1, unixepoch() - 60,
+                   unixepoch(), unixepoch())`,
+      ).bind(administratorTaskId, eventId, sessionId),
+      workerEnv.DB.prepare(
+        `INSERT INTO task_instances (
+           id, event_id, target_type, target_id, title, description,
+           task_type, impact, evidence_mode, configuration_json, status,
+           readiness_state, readiness_percent, revision, due_at,
+           created_at, updated_at
+         ) VALUES (?, ?, 'session', ?, 'Participant follow-up',
+                   'This is inactive after every participant declines.',
+                   'checklist', 'critical', 'checkbox', '{}', 'overdue',
+                   'overdue', 0, 1, unixepoch() - 60,
+                   unixepoch(), unixepoch())`,
+      ).bind(participantTaskId, eventId, sessionId),
+    ]);
+
+    const after = await load();
+    expect(after.taskSummary.outstanding).toBe(
+      before.taskSummary.outstanding + 1,
+    );
+    expect(after.taskSummary.overdue).toBe(before.taskSummary.overdue + 1);
+    expect(
+      after.tasks.find((task) => task.id === administratorTaskId),
+    ).toMatchObject({
+      participantActionable: false,
+      readinessRelevant: true,
+    });
+    expect(
+      after.tasks.find((task) => task.id === participantTaskId),
+    ).toMatchObject({
+      participantActionable: false,
+      readinessRelevant: false,
+    });
+  });
+
   it.each([
     "?state=incomplete",
     "?state=unknown",

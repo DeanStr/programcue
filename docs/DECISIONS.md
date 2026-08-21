@@ -302,13 +302,17 @@ comments, evidence, files or session-targeted resources and contributes no
 session-task recipient if that audience is added later. Existing reminder
 audiences resolve speaker-targeted tasks only, so declining one session does
 not suppress unrelated speaker reminders. Shared session work remains active
-while another pending or confirmed participant can act; it stops contributing
-participant readiness only when none remains. Declining one session does not
-alter event membership, submitter access, another active session or an
-event-wide speaker workflow. Generated resource-acknowledgement tasks recheck
-the current published resource audience, so a task cannot outlive the exact
-accepted/session audience that granted it while event-wide person, role and
-speaker audiences remain independent.
+while another pending or confirmed participant can act. Participant-facing
+session work stops contributing readiness when none remains, but
+`administrator_only` work remains readiness-relevant regardless of participant
+eligibility because organisers may still need to close the session operationally.
+The Tasks summary, Command Centre and upcoming-session risk calculation use that
+readiness rule independently from participant accessibility. Declining one
+session does not alter event membership, submitter access, another active
+session or an event-wide speaker workflow. Generated resource-acknowledgement
+tasks recheck the current published resource audience, so a task cannot outlive
+the exact accepted/session audience that granted it while event-wide person,
+role and speaker audiences remain independent.
 
 External active-participation consumers fail closed consistently. Accelevents
 exports only confirmed speaker relationships. Calendar administration offers a
@@ -330,7 +334,9 @@ fingerprint of those displayed values. Later edits are shown as a task-level
 revision mismatch and do not imply approval by every linked participant or of
 the new content; another review is an explicit organiser action. A completed
 preset without canonical review evidence is corrupt and fails explicitly rather
-than appearing to have no prior review. The session
+than appearing to have no prior review. Administrators may waive or reopen this
+task but cannot complete or approve it, because doing so would assert a
+participant review without its revision-bound evidence. The session
 page links only to that exact task's comments and focuses the message field. If
 the preset is not assigned, it uses the configured participant support URL and
 otherwise omits the correction action. Comments request a correction without
@@ -342,8 +348,11 @@ duplicates or a preset whose required behavior has drifted fail explicitly.
 Cancelled or archived sessions make this preset unavailable to participants and
 exclude it from participant readiness without changing unrelated operational
 session tasks. Participant-retention finalisation treats its descriptions,
-evidence, comments and participant actor identities as participant-authored
-data, while unrelated organiser session tasks remain operational records.
+evidence and complete comment thread as participant data. Actor identities are
+remapped only when the task target or session relationship establishes
+participant provenance, so an organiser reply is redacted without being
+misclassified as a participant; comment audits record the actual administrator
+or participant UI origin. Unrelated organiser session tasks remain operational records.
 Cross-event identity classification includes those completion, evidence and
 comment references so retention cannot anonymise an identity still used by
 another event.

@@ -24,6 +24,9 @@ describe("participant retention", () => {
     const seeded = await seedExpiredRetentionEvent();
     const sessionReviewTaskId = id("privacy-session-review-task");
     const sessionReviewCommentId = id("privacy-session-review-comment");
+    const sessionReviewAdminCommentId = id(
+      "privacy-session-review-admin-comment",
+    );
     const sessionReviewEvidenceId = id("privacy-session-review-evidence");
     const operationalSessionTaskId = id("privacy-operational-session-task");
     await seeded.testEnv.DB.batch([
@@ -71,6 +74,13 @@ describe("participant retention", () => {
         sessionReviewTaskId,
         seeded.exclusiveId,
       ),
+      seeded.testEnv.DB.prepare(
+        `INSERT INTO task_comments (
+           id, event_id, task_id, author_person_id, body, visibility
+         ) VALUES (?, ?, ?, 'person-demo-admin',
+                   'Organiser response containing participant context.',
+                   'participant')`,
+      ).bind(sessionReviewAdminCommentId, seeded.eventId, sessionReviewTaskId),
       seeded.testEnv.DB.prepare(
         `INSERT INTO task_evidence (
            id, event_id, task_id, submitted_by_person_id, evidence_json, status
@@ -362,9 +372,9 @@ describe("participant retention", () => {
            ON comment.task_id = task.id AND comment.event_id = task.event_id
          JOIN task_evidence evidence
            ON evidence.task_id = task.id AND evidence.event_id = task.event_id
-        WHERE task.id = ? AND task.event_id = ?`,
+        WHERE task.id = ? AND task.event_id = ? AND comment.id = ?`,
     )
-      .bind(sessionReviewTaskId, seeded.eventId)
+      .bind(sessionReviewTaskId, seeded.eventId, sessionReviewCommentId)
       .first<{
         title: string;
         description: string | null;
@@ -396,6 +406,17 @@ describe("participant retention", () => {
     expect(JSON.parse(retainedSessionReview!.evidenceJson)).toMatchObject({
       redacted: true,
       reason: "event_retention_period_elapsed",
+    });
+    await expect(
+      seeded.testEnv.DB.prepare(
+        `SELECT author_person_id AS authorPersonId, body
+           FROM task_comments WHERE id = ? AND event_id = ?`,
+      )
+        .bind(sessionReviewAdminCommentId, seeded.eventId)
+        .first(),
+    ).resolves.toEqual({
+      authorPersonId: "person-demo-admin",
+      body: "[redacted after event retention]",
     });
     await expect(
       seeded.testEnv.DB.prepare(

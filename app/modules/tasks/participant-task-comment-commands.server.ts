@@ -52,6 +52,7 @@ export class ParticipantTaskCommentCommands extends ParticipantTaskWorkflowFound
         .first();
       if (!task) throw new TaskStateError("Task not found.");
     }
+    const auditOrigin = participant ? "participant_ui" : "admin_ui";
     await this.requireTaskWebhookReadiness(viewer, "task.updated");
     const intentDigest = await hashUndoSecret(
       `${viewer.organisationId.length}:${viewer.organisationId}:${viewer.eventId.length}:${viewer.eventId}:${viewer.personId.length}:${viewer.personId}:${taskId.length}:${taskId}:${intentId}`,
@@ -77,13 +78,20 @@ export class ParticipantTaskCommentCommands extends ParticipantTaskWorkflowFound
                    AND audit.event_id = task_comments.event_id
                    AND audit.actor_person_id = task_comments.author_person_id
                    AND audit.action = 'task.comment.added'
+                   AND audit.origin = ?
                    AND audit.entity_type = 'task_instance'
                    AND audit.entity_id = task_comments.task_id
                    AND audit.correlation_id = ?
               ) AS auditExists
          FROM task_comments WHERE id = ?`,
     )
-      .bind(auditEventId, viewer.organisationId, operationId, commentId)
+      .bind(
+        auditEventId,
+        viewer.organisationId,
+        auditOrigin,
+        operationId,
+        commentId,
+      )
       .first<{
         id: string;
         eventId: string;
@@ -155,13 +163,14 @@ export class ParticipantTaskCommentCommands extends ParticipantTaskWorkflowFound
           `INSERT INTO audit_events (
            id, actor_kind, origin, metadata_version, organisation_id, event_id, actor_person_id, action,
            entity_type, entity_id, correlation_id, metadata_json, created_at
-         ) SELECT ?, 'person', 'participant_ui', 1, ?, ?, ?, 'task.comment.added', 'task_instance', ?, ?, ?, unixepoch()
+         ) SELECT ?, 'person', ?, 1, ?, ?, ?, 'task.comment.added', 'task_instance', ?, ?, ?, unixepoch()
             WHERE EXISTS (
               SELECT 1 FROM task_comments
                WHERE id = ? AND event_id = ? AND task_id = ?
             )`,
         ).bind(
           auditEventId,
+          auditOrigin,
           viewer.organisationId,
           viewer.eventId,
           viewer.personId,
@@ -183,6 +192,7 @@ export class ParticipantTaskCommentCommands extends ParticipantTaskWorkflowFound
                      AND audit.event_id = task_comments.event_id
                      AND audit.actor_person_id = task_comments.author_person_id
                      AND audit.action = 'task.comment.added'
+                     AND audit.origin = ?
                      AND audit.entity_type = 'task_instance'
                      AND audit.entity_id = task_comments.task_id
                      AND audit.correlation_id = ?
@@ -193,6 +203,7 @@ export class ParticipantTaskCommentCommands extends ParticipantTaskWorkflowFound
         .bind(
           auditEventId,
           viewer.organisationId,
+          auditOrigin,
           operationId,
           commentId,
           viewer.eventId,

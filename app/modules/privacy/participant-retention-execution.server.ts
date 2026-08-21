@@ -15,6 +15,7 @@ import {
   participantIdBindings,
   participantPredicateSql,
   participantRetentionTaskPredicateSql,
+  participantTaskActorProvenanceSql,
   RETAINED_PERSON_PREFIX,
   requireOwner,
 } from "./participant-retention-foundation.server";
@@ -203,7 +204,6 @@ export abstract class ParticipantRetentionExecution extends ParticipantRetention
         "saved_by_person_id",
       ),
       mapStatement(this.env, mappings, "submission_speakers", "person_id"),
-      mapStatement(this.env, mappings, "session_speakers", "person_id"),
       mapStatement(this.env, mappings, "event_speaker_workflows", "person_id"),
       mapStatement(
         this.env,
@@ -212,13 +212,16 @@ export abstract class ParticipantRetentionExecution extends ParticipantRetention
         "updated_by_person_id",
       ),
       mapStatement(this.env, mappings, "public_itineraries", "person_id"),
+      // These actor predicates use the original session relationship. Remap
+      // task attribution before remapping session_speakers later in the batch.
       mapStatement(
         this.env,
         mappings,
         "task_instances",
         "owner_person_id",
         "event_id = ?",
-        participantRetentionTaskPredicateSql("task_instances"),
+        `${participantRetentionTaskPredicateSql("task_instances")}
+         AND ${participantTaskActorProvenanceSql("task_instances", "task_instances.owner_person_id")}`,
       ),
       mapStatement(
         this.env,
@@ -226,7 +229,8 @@ export abstract class ParticipantRetentionExecution extends ParticipantRetention
         "task_instances",
         "completed_by_person_id",
         "event_id = ?",
-        participantRetentionTaskPredicateSql("task_instances"),
+        `${participantRetentionTaskPredicateSql("task_instances")}
+         AND ${participantTaskActorProvenanceSql("task_instances", "task_instances.completed_by_person_id")}`,
       ),
       mapStatement(
         this.env,
@@ -236,8 +240,9 @@ export abstract class ParticipantRetentionExecution extends ParticipantRetention
         "event_id = ?",
         `task_id IN (
           SELECT participant_task.id FROM task_instances participant_task
-           WHERE participant_task.event_id = task_comments.event_id
-             AND ${participantRetentionTaskPredicateSql("participant_task")}
+             WHERE participant_task.event_id = task_comments.event_id
+               AND ${participantRetentionTaskPredicateSql("participant_task")}
+               AND ${participantTaskActorProvenanceSql("participant_task", "task_comments.author_person_id")}
         )`,
       ),
       mapStatement(
@@ -271,10 +276,12 @@ export abstract class ParticipantRetentionExecution extends ParticipantRetention
         "event_id = ?",
         `task_id IN (
           SELECT participant_task.id FROM task_instances participant_task
-           WHERE participant_task.event_id = task_evidence.event_id
-             AND ${participantRetentionTaskPredicateSql("participant_task")}
+             WHERE participant_task.event_id = task_evidence.event_id
+               AND ${participantRetentionTaskPredicateSql("participant_task")}
+               AND ${participantTaskActorProvenanceSql("participant_task", "task_evidence.submitted_by_person_id")}
         )`,
       ),
+      mapStatement(this.env, mappings, "session_speakers", "person_id"),
       mapStatement(
         this.env,
         mappings,

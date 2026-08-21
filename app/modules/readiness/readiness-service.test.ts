@@ -601,6 +601,65 @@ describe("D1-backed command centre", () => {
     });
   });
 
+  it("keeps administrator-only session work in readiness after every participant declines", async () => {
+    const service = new ReadinessService(
+      env as unknown as CloudflareEnvironment,
+    );
+    const before = await service.getCommandCentre(viewer);
+    const blockerCounts = (snapshot: typeof before) => ({
+      overdue:
+        snapshot.blockers.find((blocker) => blocker.key === "overdue_tasks")
+          ?.count ?? 0,
+      critical:
+        snapshot.blockers.find((blocker) => blocker.key === "critical_tasks")
+          ?.count ?? 0,
+    });
+    const sessionId = crypto.randomUUID();
+    await env.DB.batch([
+      env.DB.prepare(
+        `INSERT INTO sessions (
+           id, event_id, title, slug, format, duration_minutes, status,
+           visibility, revision, created_at, updated_at
+         ) VALUES (?, ?, 'Declined session with organiser work', ?,
+                   'presentation', 30, 'unscheduled', 'private', 1,
+                   unixepoch(), unixepoch())`,
+      ).bind(sessionId, viewer.eventId, `declined-admin-work-${sessionId}`),
+      env.DB.prepare(
+        `INSERT INTO session_speakers (
+           session_id, event_id, person_id, position, role_label,
+           participation_status, participation_revision,
+           participation_declined_at, visibility
+         ) VALUES (?, ?, 'person-demo-speaker', 0, 'Speaker', 'declined', 1,
+                   unixepoch(), 'private')`,
+      ).bind(sessionId, viewer.eventId),
+      env.DB.prepare(
+        `INSERT INTO task_instances (
+           id, event_id, target_type, target_id, title, task_type, impact,
+           evidence_mode, configuration_json, status, readiness_state,
+           readiness_percent, revision, due_at, created_at, updated_at
+         ) VALUES (?, ?, 'session', ?, 'Resolve organiser follow-up',
+                   'administrator_only', 'critical', 'admin_approval', '{}',
+                   'overdue', 'overdue', 0, 1, unixepoch() - 60,
+                   unixepoch(), unixepoch())`,
+      ).bind(crypto.randomUUID(), viewer.eventId, sessionId),
+      env.DB.prepare(
+        `INSERT INTO task_instances (
+           id, event_id, target_type, target_id, title, task_type, impact,
+           evidence_mode, configuration_json, status, readiness_state,
+           readiness_percent, revision, due_at, created_at, updated_at
+         ) VALUES (?, ?, 'session', ?, 'Participant follow-up', 'checklist',
+                   'critical', 'checkbox', '{}', 'overdue', 'overdue', 0, 1,
+                   unixepoch() - 60, unixepoch(), unixepoch())`,
+      ).bind(crypto.randomUUID(), viewer.eventId, sessionId),
+    ]);
+
+    const after = await service.getCommandCentre(viewer);
+    expect(blockerCounts(after)).toEqual({
+      overdue: blockerCounts(before).overdue + 1,
+      critical: blockerCounts(before).critical + 1,
+    });
+  });
+
   it("rejects a viewer whose organisation does not own the event", async () => {
     await expect(
       new ReadinessService(

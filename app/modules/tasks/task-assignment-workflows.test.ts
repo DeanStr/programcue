@@ -114,6 +114,22 @@ describe("onboarding task service", () => {
           }),
         ]),
       );
+      await expect(
+        testEnv.DB.prepare(
+          `SELECT actor_person_id AS actorPersonId, origin
+             FROM audit_events
+            WHERE event_id = ? AND entity_id = ?
+              AND action = 'task.comment.added'
+            ORDER BY actor_person_id`,
+        )
+          .bind(admin.eventId, second.id)
+          .all(),
+      ).resolves.toMatchObject({
+        results: [
+          { actorPersonId: admin.personId, origin: "admin_ui" },
+          { actorPersonId: speaker.personId, origin: "participant_ui" },
+        ],
+      });
     });
   });
 

@@ -108,6 +108,26 @@ export function participantCurrentTaskAccessSql(
   )`;
 }
 
+export function participantActionableTaskSql(alias: ParticipantTaskSqlAlias) {
+  return `(
+    (${alias}.target_type <> 'session' OR EXISTS (
+      SELECT 1 FROM session_speakers eligible_participant
+       WHERE eligible_participant.event_id = ${alias}.event_id
+         AND eligible_participant.session_id = ${alias}.target_id
+         AND eligible_participant.participation_status IN ('pending','confirmed')
+    ))
+    AND ${participantCurrentTaskAccessSql(alias)}
+    AND ${participantResourceTaskAccessSql(alias)}
+  )`;
+}
+
+export function taskReadinessRelevantSql(alias: ParticipantTaskSqlAlias) {
+  return `(
+    ${alias}.task_type = 'administrator_only'
+    OR ${participantActionableTaskSql(alias)}
+  )`;
+}
+
 export function participantTaskAccessSql(
   alias: ParticipantTaskSqlAlias = "ti",
   requireCurrentResourceAudience = false,
@@ -224,6 +244,7 @@ export type TaskRow = {
   lastOperationId: string | null;
   configurationJson: string;
   participantActionable?: number | boolean;
+  readinessRelevant?: number | boolean;
 };
 
 export const completionUndoResultSchema = z.object({
@@ -299,6 +320,13 @@ export function taskConfiguration(configurationJson: string) {
       "This assigned task has invalid configuration. Ask an administrator to repair it.",
     );
   }
+}
+
+export function isSessionDetailsReviewConfiguration(configurationJson: string) {
+  return (
+    taskConfiguration(configurationJson).preset ===
+    SESSION_DETAILS_REVIEW_PRESET
+  );
 }
 
 export function isSharedSessionDeliverableTask(

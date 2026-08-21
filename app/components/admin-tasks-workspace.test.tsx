@@ -99,6 +99,101 @@ describe("administrator task discoverability", () => {
     expect(markup).not.toContain('<div class="value">100%</div>');
   });
 
+  it("does not offer administrator completion for participant session review", () => {
+    const markup = renderWorkspace(
+      taskData({
+        totalTaskCount: 1,
+        tasks: [
+          {
+            id: "task-session-review",
+            templateId: "template-session-review",
+            targetType: "session",
+            targetId: "session-1",
+            targetLabel: "Opening keynote",
+            ownerPersonId: null,
+            ownerName: null,
+            title: "Review session details",
+            description: "Confirm the shared session details.",
+            taskType: "acknowledgement",
+            impact: "high",
+            status: "not_started",
+            readinessState: "on_track",
+            readinessPercent: 0,
+            isOverdue: false,
+            isSessionDetailsReview: true,
+            participantActionable: true,
+            readinessRelevant: true,
+            revision: 1,
+            dueAt: null,
+            evidenceJson: null,
+            waiverJson: null,
+            submittedAt: null,
+            completedAt: null,
+            completedByPersonId: null,
+            lastOperationId: null,
+            evidenceMode: "checkbox",
+            configurationJson: '{"preset":"session_details_review_v1"}',
+            formFields: [],
+            evidence: [],
+            comments: [],
+          },
+        ],
+      }),
+    );
+
+    expect(markup).not.toContain('value="complete"');
+    expect(markup).not.toContain('value="approve"');
+    expect(markup).toContain('value="waive"');
+    expect(markup).toContain('value="comment"');
+  });
+
+  it("keeps administrator-only session work visibly active without eligible participants", () => {
+    const markup = renderWorkspace(
+      taskData({
+        totalTaskCount: 1,
+        tasks: [
+          {
+            id: "task-admin-session-closeout",
+            templateId: "template-admin-session-closeout",
+            targetType: "session",
+            targetId: "session-1",
+            targetLabel: "Opening keynote",
+            ownerPersonId: null,
+            ownerName: null,
+            title: "Close out cancelled session",
+            description: "Complete the remaining organiser work.",
+            taskType: "administrator_only",
+            impact: "critical",
+            status: "not_started",
+            readinessState: "blocked",
+            readinessPercent: 0,
+            isOverdue: false,
+            isSessionDetailsReview: false,
+            participantActionable: false,
+            readinessRelevant: true,
+            revision: 1,
+            dueAt: null,
+            evidenceJson: null,
+            waiverJson: null,
+            submittedAt: null,
+            completedAt: null,
+            completedByPersonId: null,
+            lastOperationId: null,
+            evidenceMode: "none",
+            configurationJson: "{}",
+            formFields: [],
+            evidence: [],
+            comments: [],
+          },
+        ],
+      }),
+    );
+
+    expect(markup).toContain("Close out cancelled session");
+    expect(markup).not.toContain("Inactive — no eligible participant");
+    expect(markup).toContain('value="complete"');
+  });
+
   it("keeps retained legacy URLs visible when newer evidence has no URL", () => {
     const markup = renderWorkspace(
       taskData({
@@ -120,7 +215,9 @@ describe("administrator task discoverability", () => {
             readinessState: "on_track",
             readinessPercent: 100,
             isOverdue: false,
+            isSessionDetailsReview: false,
             participantActionable: true,
+            readinessRelevant: true,
             revision: 3,
             dueAt: null,
             evidenceJson: '{"confirmed":true}',

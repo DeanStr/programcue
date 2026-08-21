@@ -105,7 +105,7 @@ export async function loader({ request, context }: Route.LoaderArgs) {
       task.readinessState === "overdue" ||
       (task.dueAt !== null && task.dueAt < now));
   const readinessTasks = workspace.tasks.filter(
-    (task) => task.participantActionable,
+    (task) => task.readinessRelevant,
   );
   const tasks = workspace.tasks
     .filter((task) => {

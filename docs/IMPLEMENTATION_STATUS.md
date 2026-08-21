@@ -235,11 +235,14 @@ boundaries. That authorization now requires pending or confirmed participation:
 a declined person loses the exact session's task, comment, evidence, file and
 resource access without losing unrelated workspace access. A shared task stays
 participant-actionable while another eligible session participant remains and
-otherwise drops out of participant readiness. Generated resource acknowledgement
-tasks revalidate the current published audience, preventing an inaccessible
-session/accepted-speaker resource from leaving behind an actionable orphan task.
-Existing reminder audiences are speaker-task scoped, so no unrelated event-wide
-reminder suppression was added.
+otherwise drops out of participant readiness. Administrator-only session work
+remains readiness-relevant even when every participant has declined, so it stays
+in the Tasks summary, Command Centre blockers and upcoming-session risk while
+remaining correctly unavailable to participants. Generated resource
+acknowledgement tasks revalidate the current published audience, preventing an
+inaccessible session/accepted-speaker resource from leaving behind an actionable
+orphan task. Existing reminder audiences are speaker-task scoped, so no
+unrelated event-wide reminder suppression was added.
 
 Confirmed participation is required when Accelevents exports speaker records or
 session-speaker associations. Calendar administration offers new invitation
@@ -256,7 +259,9 @@ the actual actor, compare-and-sets the displayed session revision and canonical
 field fingerprint, stores both as task evidence and reports later content drift
 without implying that every linked participant personally reviewed it. A
 completed preset with missing canonical evidence fails explicitly rather than
-appearing unreviewed. The
+appearing unreviewed. Administrator completion and approval are rejected at the
+shared mutation boundary and omitted from the task table; waiver, reopening and
+comments remain available. The
 session correction action targets only this preset's comment area, moves focus
 to its message field, then falls back to the configured participant support URL;
 it never guesses another task. Preset discovery uses the immutable configuration
@@ -266,9 +271,12 @@ presets fail explicitly. Cancelled and archived sessions hide this review task,
 reject further participant comments or completion and remove it from participant
 readiness while leaving unrelated operational session tasks unchanged.
 Participant-retention analysis, redaction and identity remapping include this
-participant-authored session evidence and correction thread but exclude ordinary
-organiser session tasks; cross-event completion, evidence and comment references
-also preserve the shared identity. No proposal schema, approval state or
+participant-authored session evidence and the complete correction thread but
+exclude ordinary organiser session tasks. Comment audit origins distinguish
+administrator and participant actions, and only task-target or session-linked
+participant actors are remapped; organiser replies retain their attribution
+after their content is redacted. Cross-event completion, evidence and comment
+references also preserve the shared identity. No proposal schema, approval state or
 separate notification workflow was added. Task evidence accepts MP4/WebM session
 video against the event's video limit in browser validation, declaration and
 multipart completion; other evidence retains the supporting-document limit.

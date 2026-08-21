@@ -65,6 +65,94 @@ describe("onboarding task service", () => {
       ).rejects.toThrow("Explain why");
     });
 
+    it("keeps session-details confirmation participant-only", async () => {
+      const testEnv = env as unknown as CloudflareEnvironment;
+      await ensureDemoSpeakerData(testEnv);
+      const service = new TaskService(testEnv);
+      const preset = await service.createSessionDetailsReviewTemplate(
+        admin,
+        true,
+      );
+      const { taskId } = await service.assignTemplate(
+        admin,
+        preset.templateId,
+        "session-demo-speaker",
+      );
+      const assigned = (await service.getAdminWorkspace(admin)).tasks.find(
+        (task) => task.id === taskId,
+      );
+      expect(assigned).toMatchObject({
+        status: "not_started",
+        revision: 1,
+        isSessionDetailsReview: true,
+      });
+
+      await expect(
+        service.administerTask(admin, {
+          taskId,
+          revision: 1,
+          intent: "complete",
+          reason: "",
+        }),
+      ).rejects.toThrow(/can only be confirmed by a participant/i);
+      await testEnv.DB.prepare(
+        `UPDATE task_instances SET status = 'submitted'
+          WHERE id = ? AND event_id = ?`,
+      )
+        .bind(taskId, admin.eventId)
+        .run();
+      await expect(
+        service.administerTask(admin, {
+          taskId,
+          revision: 1,
+          intent: "approve",
+          reason: "",
+        }),
+      ).rejects.toThrow(/can only be confirmed by a participant/i);
+
+      await expect(
+        testEnv.DB.prepare(
+          `SELECT status, revision, evidence_json AS evidenceJson,
+                  completed_by_person_id AS completedByPersonId,
+                  (SELECT COUNT(*) FROM audit_events audit
+                    WHERE audit.entity_id = task_instances.id
+                      AND audit.action IN ('task.complete','task.approve')) AS auditCount
+             FROM task_instances WHERE id = ? AND event_id = ?`,
+        )
+          .bind(taskId, admin.eventId)
+          .first(),
+      ).resolves.toEqual({
+        status: "submitted",
+        revision: 1,
+        evidenceJson: null,
+        completedByPersonId: null,
+        auditCount: 0,
+      });
+
+      await testEnv.DB.prepare(
+        `UPDATE task_instances SET status = 'not_started'
+          WHERE id = ? AND event_id = ?`,
+      )
+        .bind(taskId, admin.eventId)
+        .run();
+      await expect(
+        service.administerTask(admin, {
+          taskId,
+          revision: 1,
+          intent: "waive",
+          reason: "Participant review is no longer required.",
+        }),
+      ).resolves.toMatchObject({ taskId });
+      await expect(
+        service.administerTask(admin, {
+          taskId,
+          revision: 2,
+          intent: "reopen",
+          reason: "",
+        }),
+      ).resolves.toMatchObject({ taskId });
+    });
+
     it("extends one speaker task deadline with audited event-local intent", async () => {
       const testEnv = env as unknown as CloudflareEnvironment;
       await ensureDemoSpeakerData(testEnv);

@@ -148,7 +148,8 @@ export function AdminAssignedTasksPanel({
                 <td data-label="Status">
                   <div className="pc-record-stack">
                     <DomainStatusBadge domain="task" status={task.status} />
-                    {!task.participantActionable ? (
+                    {task.taskType !== "administrator_only" &&
+                    !task.participantActionable ? (
                       <small className="status warning">
                         Inactive — no eligible participant
                       </small>
@@ -283,7 +284,8 @@ export function AdminAssignedTasksPanel({
                       name="revision"
                       value={task.revision}
                     />
-                    {task.status === "submitted" ? (
+                    {task.status === "submitted" &&
+                    !task.isSessionDetailsReview ? (
                       <button
                         type="submit"
                         className="task-ghost is-action"
@@ -295,7 +297,8 @@ export function AdminAssignedTasksPanel({
                         Approve
                       </button>
                     ) : null}
-                    {!["completed", "waived", "submitted"].includes(
+                    {!task.isSessionDetailsReview &&
+                    !["completed", "waived", "submitted"].includes(
                       task.status,
                     ) ? (
                       <button

@@ -5,9 +5,9 @@ import { WebhookService } from "~/platform/operations/webhook-service.server";
 import {
   fixedDateEndEpoch,
   hashUndoSecret,
+  isSessionDetailsReviewConfiguration,
   parseTaskEvidenceDetails,
-  participantCurrentTaskAccessSql,
-  participantResourceTaskAccessSql,
+  participantActionableTaskSql,
   randomUndoSecret,
   statusProgress,
   structuredTaskForm,
@@ -17,6 +17,7 @@ import {
   TaskStateError,
   type TemplateRow,
   taskConfiguration,
+  taskReadinessRelevantSql,
 } from "./task-service-foundation.server";
 
 export class TaskAdministrationWorkflows extends TaskServiceFoundation {
@@ -258,16 +259,10 @@ export class TaskAdministrationWorkflows extends TaskServiceFoundation {
                ti.last_operation_id AS lastOperationId,
                ti.evidence_mode AS evidenceMode,
                ti.configuration_json AS configurationJson
-               , CASE WHEN (
-                   (ti.target_type <> 'session' OR EXISTS (
-                     SELECT 1 FROM session_speakers eligible_participant
-                      WHERE eligible_participant.event_id = ti.event_id
-                        AND eligible_participant.session_id = ti.target_id
-                        AND eligible_participant.participation_status IN ('pending','confirmed')
-                   ))
-                   AND ${participantCurrentTaskAccessSql("ti")}
-                   AND ${participantResourceTaskAccessSql("ti")}
-                 ) THEN 1 ELSE 0 END AS participantActionable
+               , CASE WHEN ${participantActionableTaskSql("ti")}
+                      THEN 1 ELSE 0 END AS participantActionable,
+                 CASE WHEN ${taskReadinessRelevantSql("ti")}
+                      THEN 1 ELSE 0 END AS readinessRelevant
           FROM task_instances ti
           LEFT JOIN people p ON p.id = ti.owner_person_id
           LEFT JOIN sessions target_session
@@ -373,7 +368,11 @@ export class TaskAdministrationWorkflows extends TaskServiceFoundation {
       })),
       tasks: tasks.results.map((task) => ({
         ...task,
+        isSessionDetailsReview: isSessionDetailsReviewConfiguration(
+          task.configurationJson,
+        ),
         participantActionable: task.participantActionable === 1,
+        readinessRelevant: task.readinessRelevant === 1,
         formFields: structuredTaskForm(task.configurationJson)?.fields ?? [],
         evidence: evidence.results
           .filter((item) => item.taskId === task.id)
@@ -431,6 +430,14 @@ export class TaskAdministrationWorkflows extends TaskServiceFoundation {
       throw new TaskStateError(
         "The task changed. Refresh before applying the action.",
       );
+    if (
+      isSessionDetailsReviewConfiguration(task.configurationJson) &&
+      (input.intent === "approve" || input.intent === "complete")
+    ) {
+      throw new TaskStateError(
+        "Session details can only be confirmed by a participant. Waive the task or leave it awaiting participant review.",
+      );
+    }
     if (input.intent === "waive" && input.reason.length < 5)
       throw new TaskStateError("Explain why this requirement is being waived.");
     const allowedStatuses: Record<
