@@ -31,6 +31,9 @@ export const scheduleTestEnv = new Proxy(
 export async function prepareScheduleServiceTest() {
   await ensureDemoData(env as unknown as CloudflareEnvironment);
   await env.DB.batch([
+    env.DB.prepare("DELETE FROM schedule_review_links WHERE event_id = ?").bind(
+      scheduleTestViewer.eventId,
+    ),
     env.DB.prepare("DELETE FROM schedule_versions WHERE event_id = ?").bind(
       scheduleTestViewer.eventId,
     ),
@@ -87,7 +90,9 @@ export async function prepareScheduleServiceTest() {
     env.DB.prepare(
       `UPDATE session_speakers
           SET participation_status = 'confirmed',
-              participation_confirmed_at = unixepoch()
+              participation_confirmed_at = unixepoch(),
+              participation_declined_at = NULL,
+              participation_decline_reason = NULL
         WHERE event_id = ?
           AND session_id IN ('schedule-test-one', 'schedule-test-two')`,
     ).bind(scheduleTestViewer.eventId),

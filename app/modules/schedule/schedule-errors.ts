@@ -56,6 +56,22 @@ export class ScheduleConfigurationError extends Error {
   }
 }
 
+export class ScheduleReviewLinkLimitError extends Error {
+  constructor(
+    message = "This event already has 10 active draft review links. Revoke one before creating another.",
+  ) {
+    super(message);
+    this.name = "ScheduleReviewLinkLimitError";
+  }
+}
+
+export class ScheduleReviewLinkNotFoundError extends Error {
+  constructor(message = "That draft review link was not found.") {
+    super(message);
+    this.name = "ScheduleReviewLinkNotFoundError";
+  }
+}
+
 export class ScheduleIdempotencyConflictError extends Error {
   constructor(
     readonly code: "IDEMPOTENCY_KEY_REUSED" | "IDEMPOTENCY_REQUEST_IN_PROGRESS",

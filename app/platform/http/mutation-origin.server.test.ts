@@ -59,6 +59,43 @@ describe("browser mutation origin boundary", () => {
     expect(rejectCrossOriginBrowserMutation(request)).toBeNull();
   });
 
+  it("accepts a same-origin confidential preview reveal without an Origin header", () => {
+    const request = new Request(
+      "https://programcue.example/programme-preview/token-value",
+      {
+        method: "POST",
+        headers: { "sec-fetch-site": "same-origin" },
+      },
+    );
+    expect(rejectCrossOriginBrowserMutation(request)).toBeNull();
+  });
+
+  it("rejects a cross-site confidential preview reveal even if Sec-Fetch-Site is spoofed as same-site", () => {
+    const response = rejectCrossOriginBrowserMutation(
+      new Request("https://programcue.example/programme-preview/token-value", {
+        method: "POST",
+        headers: {
+          origin: "https://attacker.example",
+          "sec-fetch-site": "same-site",
+        },
+      }),
+    );
+    expect(response?.status).toBe(403);
+  });
+
+  it("rejects a confidential preview reveal with a foreign Origin even if Sec-Fetch-Site is same-origin", () => {
+    const response = rejectCrossOriginBrowserMutation(
+      new Request("https://programcue.example/programme-preview/token-value", {
+        method: "POST",
+        headers: {
+          origin: "https://attacker.example",
+          "sec-fetch-site": "same-origin",
+        },
+      }),
+    );
+    expect(response?.status).toBe(403);
+  });
+
   it("does not require Origin for safe navigation", () => {
     const request = new Request("https://programcue.example/admin/tasks");
 

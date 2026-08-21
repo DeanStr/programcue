@@ -160,6 +160,7 @@ export abstract class ParticipantRetentionAnalysis extends ParticipantRetentionF
           + (SELECT COUNT(*) FROM schedule_conflicts record
               WHERE record.event_id IN locked
                 AND record.conflict_type = 'speaker_unavailable')
+          + (SELECT COUNT(*) FROM schedule_review_links record WHERE record.event_id IN locked)
           + (SELECT COUNT(*) FROM task_instances record WHERE record.event_id IN locked
             AND ${participantRetentionTaskPredicateSql("record")}
             AND (record.description IS NOT NULL

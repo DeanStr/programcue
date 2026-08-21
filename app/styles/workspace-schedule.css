@@ -231,6 +231,40 @@
   font-weight: var(--weight-semibold);
   white-space: nowrap;
 }
+.schedule-review-links {
+  flex: 0 0 auto;
+}
+.schedule-review-links-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-3);
+}
+.schedule-review-links-head h2 {
+  font-size: var(--text-sm);
+  margin: 0;
+}
+.schedule-review-link-list {
+  display: grid;
+  gap: var(--space-2);
+  margin: var(--space-3) 0 0;
+  padding: 0;
+  list-style: none;
+}
+.schedule-review-link-list li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+}
+.schedule-review-link-list li div {
+  display: grid;
+  gap: 2px;
+}
+.schedule-review-link-list span {
+  color: var(--text-tertiary);
+  font-size: var(--text-2xs);
+}
 .schedule-readiness {
   display: grid;
   gap: 2px;
@@ -1043,4 +1077,38 @@
    clickable, because inspecting a placement is still useful when frozen. */
 .schedule-canvas.is-readonly .session-card {
   cursor: pointer;
+}
+
+.programme-preview-page {
+  padding: var(--space-6) var(--space-4);
+}
+.programme-preview-shell {
+  max-width: 44rem;
+  margin: 8vh auto;
+}
+.programme-preview-day {
+  margin-top: var(--space-5);
+}
+.programme-preview-day h2 {
+  font-size: var(--text-sm);
+}
+.programme-preview-list {
+  display: grid;
+  gap: var(--space-3);
+  margin: var(--space-3) 0 0;
+  padding: 0;
+  list-style: none;
+}
+.programme-preview-item h3 {
+  margin: 0;
+  font-size: var(--text-base);
+}
+.programme-preview-when {
+  margin: 0 0 var(--space-1);
+  color: var(--text-tertiary);
+  font-size: var(--text-2xs);
+  font-weight: var(--weight-semibold);
+}
+.programme-preview-empty {
+  margin-top: var(--space-4);
 }

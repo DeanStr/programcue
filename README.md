@@ -74,7 +74,7 @@ state.
 See [the SBEK evaluation runbook](docs/SBEK_EVALUATION.md) for the isolated
 local harness workflow.
 
-Event slugs are globally unique. Public programme and calendar-session links always include the event slug.
+Event slugs are globally unique. Public programme and calendar-session links always include the event slug. Unpublished draft-review links use a token-only `/programme-preview/:token` route and are not published programme URLs.
 
 ## Validation
 

@@ -216,11 +216,35 @@ describe("participant retention", () => {
       .bind(webhookId, organisationId, seeded.eventId)
       .run();
 
+    await seeded.testEnv.DB.prepare(
+      `INSERT INTO schedule_review_links (
+         id, organisation_id, event_id, schedule_version_id, schedule_revision,
+         projection_json, token_hash, expires_at, created_by_person_id, created_at
+       ) VALUES (?, ?, ?, ?, 1, '{"schemaVersion":1,"speakers":["Exclusive Person"]}',
+                 ?, unixepoch() + 86400, ?, unixepoch())`,
+    )
+      .bind(
+        id("privacy-review-link"),
+        organisationId,
+        seeded.eventId,
+        seeded.scheduleVersionId,
+        "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+        seeded.owner.personId,
+      )
+      .run();
+
     const result = await service.anonymiseExpiredParticipants(seeded.owner, {
       confirmation: "Expired privacy event",
       acknowledged: true,
     });
     expect(result).toMatchObject({ complete: true, duplicate: false });
+    expect(
+      await seeded.testEnv.DB.prepare(
+        `SELECT COUNT(*) AS total FROM schedule_review_links WHERE event_id = ?`,
+      )
+        .bind(seeded.eventId)
+        .first(),
+    ).toEqual({ total: 0 });
     expect(result.state).toMatchObject({
       completed: true,
       pendingParticipants: 0,

@@ -19,6 +19,7 @@ import {
 } from "../app/platform/http/mutation-origin.server";
 import {
   applyPrivateWorkspaceCachePolicy,
+  applyScheduleReviewPreviewHeaders,
   applySecurityHeaders,
 } from "../app/platform/http/security-headers";
 import {
@@ -116,6 +117,7 @@ function secure(
     cspNonce,
   );
   applyPrivateWorkspaceCachePolicy(headers, pathname);
+  applyScheduleReviewPreviewHeaders(headers, pathname);
   for (const [name, value] of apiCorsHeaders(request, env))
     headers.set(name, value);
 

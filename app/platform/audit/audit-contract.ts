@@ -114,6 +114,23 @@ const displayMetadataByAction: Readonly<
     ["entryCount"],
     z.object({ entryCount: displayCount }),
   ),
+  "schedule.review_link.created": displayMetadataContract(
+    ["versionNumber", "revision", "expiresAt", "entryCount"],
+    z.object({
+      versionNumber: displayRevision,
+      revision: displayRevision,
+      expiresAt: displayRevision,
+      entryCount: displayCount,
+    }),
+  ),
+  "schedule.review_link.revoked": displayMetadataContract(
+    ["reason", "versionNumber", "revision"],
+    z.object({
+      reason: z.enum(["manual", "published"]),
+      versionNumber: displayRevision,
+      revision: displayRevision,
+    }),
+  ),
   "speaker.blackout.created": displayMetadataContract(
     ["windowId", "startsAt", "endsAt"],
     z.object({

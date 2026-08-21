@@ -18,6 +18,7 @@ import {
   conflictTypeLabel,
   sessionFormatLabel,
 } from "./schedule-planner-workspace-helpers";
+import { ScheduleReviewLinksPanel } from "./schedule-review-links-panel";
 
 import { useSchedulePlannerController } from "./use-schedule-planner-controller";
 
@@ -226,9 +227,6 @@ export function SchedulePlannerWorkspace({
           )}
         </div>
       </div>
-      {/* The remedy is written out rather than repeated as a button: the header
-          already carries “Create next draft” a few pixels away, and two buttons
-          of the same name on one screen help nobody. */}
       {editLock.reason ? (
         <StatusNotice
           className="schedule-read-only-notice"
@@ -628,6 +626,7 @@ export function SchedulePlannerWorkspace({
           ) : null}
         </DragOverlay>
       </DndContext>
+      <ScheduleReviewLinksPanel workspace={workspace} />
       {autoPreview ? (
         <AutoPlacementPreviewDialog
           preview={autoPreview}

@@ -1,3 +1,5 @@
+import { isScheduleReviewPreviewPath } from "~/modules/schedule/schedule-review-preview-http";
+
 const SAFE_METHODS = new Set(["GET", "HEAD", "OPTIONS"]);
 const SUPPORTED_METHODS = new Set([...SAFE_METHODS, "POST", "PATCH"]);
 
@@ -21,6 +23,18 @@ export function rejectCrossOriginBrowserMutation(request: Request) {
 
   const origin = request.headers.get("origin");
   if (origin === url.origin) return null;
+
+  // Native document POSTs on this capability URL may omit Origin. Only allow
+  // that when the browser also reports a same-origin fetch; a foreign Origin
+  // must still be rejected even if Sec-Fetch-Site is spoofed.
+  const fetchSite = request.headers.get("sec-fetch-site");
+  if (
+    origin === null &&
+    isScheduleReviewPreviewPath(url.pathname) &&
+    fetchSite === "same-origin"
+  ) {
+    return null;
+  }
 
   return new Response("A same-origin request is required.", {
     status: 403,

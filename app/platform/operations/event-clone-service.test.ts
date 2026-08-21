@@ -1240,4 +1240,64 @@ describe("event cloning", () => {
         .run();
     }
   });
+
+  it("does not copy draft review links or their projections", async () => {
+    const existing = await env.DB.prepare(
+      `SELECT id FROM schedule_versions WHERE event_id = ? LIMIT 1`,
+    )
+      .bind(viewer.eventId)
+      .first<{ id: string }>();
+    const versionId = existing?.id ?? crypto.randomUUID();
+    if (!existing) {
+      await env.DB.prepare(
+        `INSERT INTO schedule_versions (
+           id, event_id, version_number, status, revision, created_at
+         ) VALUES (?, ?, 1, 'draft', 1, unixepoch())`,
+      )
+        .bind(versionId, viewer.eventId)
+        .run();
+    }
+    const sourceLinkId = crypto.randomUUID();
+    await env.DB.prepare(
+      `INSERT INTO schedule_review_links (
+         id, organisation_id, event_id, schedule_version_id, schedule_revision,
+         projection_json, token_hash, expires_at, created_by_person_id, created_at
+       ) VALUES (?, ?, ?, ?, 1, '{"schemaVersion":1,"secret":"do-not-copy"}',
+                 ?, unixepoch() + 86400, ?, unixepoch())`,
+    )
+      .bind(
+        sourceLinkId,
+        viewer.organisationId,
+        viewer.eventId,
+        versionId,
+        "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        viewer.personId,
+      )
+      .run();
+
+    const cloned = await new EventCloneService(
+      env as unknown as CloudflareEnvironment,
+    ).clone(viewer, {
+      name: "Review link clone",
+      slug: `review-link-clone-${crypto.randomUUID().slice(0, 8)}`,
+      timezone: "UTC",
+      startDate: "2028-07-01",
+      endDate: "2028-07-02",
+      repositoryProvider: "d1",
+    });
+    expect(
+      await env.DB.prepare(
+        `SELECT COUNT(*) AS total FROM schedule_review_links WHERE event_id = ?`,
+      )
+        .bind(cloned.eventId)
+        .first(),
+    ).toEqual({ total: 0 });
+    expect(
+      await env.DB.prepare(
+        `SELECT COUNT(*) AS total FROM schedule_review_links WHERE id = ?`,
+      )
+        .bind(sourceLinkId)
+        .first(),
+    ).toEqual({ total: 1 });
+  });
 });

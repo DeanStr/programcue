@@ -274,6 +274,80 @@ export function buildSchedulePublicationStatements(input: {
     ),
     env.DB.prepare(
       `
+        UPDATE schedule_review_links
+           SET revoked_at = unixepoch(),
+               revoked_by_person_id = ?,
+               revocation_reason = 'published'
+         WHERE organisation_id = ? AND event_id = ?
+           AND revoked_at IS NULL
+           AND expires_at > unixepoch()
+           AND EXISTS (
+             SELECT 1 FROM schedule_versions
+              WHERE id = ? AND event_id = ? AND status = 'published'
+                AND publication_operation_id = ?
+           )
+      `,
+    ).bind(
+      actor.personId ?? null,
+      viewer.organisationId,
+      viewer.eventId,
+      parsed.scheduleVersionId,
+      viewer.eventId,
+      publishOperationId,
+    ),
+    env.DB.prepare(
+      `
+        INSERT INTO audit_events (
+          id, actor_kind, origin, metadata_version, organisation_id, event_id,
+          actor_person_id, actor_id, action, entity_type, entity_id,
+          metadata_json, created_at
+        )
+        SELECT lower(hex(randomblob(16))), ?, ?, 1, link.organisation_id,
+               link.event_id, ?, ?, 'schedule.review_link.revoked',
+               'schedule_review_link', link.id,
+               json_object(
+                 'reason', 'published',
+                 'versionNumber', COALESCE(
+                   version.version_number, link.schedule_revision
+                 ),
+                 'revision', link.schedule_revision
+               ),
+               unixepoch()
+          FROM schedule_review_links link
+          LEFT JOIN schedule_versions version
+            ON version.id = link.schedule_version_id
+           AND version.event_id = link.event_id
+         WHERE link.organisation_id = ? AND link.event_id = ?
+           AND link.revocation_reason = 'published'
+           AND link.revoked_at IS NOT NULL
+           AND link.expires_at > unixepoch()
+           AND EXISTS (
+             SELECT 1 FROM schedule_versions
+              WHERE id = ? AND event_id = ? AND status = 'published'
+                AND publication_operation_id = ?
+           )
+           AND NOT EXISTS (
+             SELECT 1 FROM audit_events existing
+              WHERE existing.organisation_id = link.organisation_id
+                AND existing.event_id = link.event_id
+                AND existing.action = 'schedule.review_link.revoked'
+                AND existing.entity_type = 'schedule_review_link'
+                AND existing.entity_id = link.id
+           )
+      `,
+    ).bind(
+      actor.personId ? "person" : "api_key",
+      actor.personId ? "admin_ui" : "api",
+      actor.personId ?? null,
+      actor.actorId ?? null,
+      viewer.organisationId,
+      viewer.eventId,
+      parsed.scheduleVersionId,
+      viewer.eventId,
+      publishOperationId,
+    ),
+    env.DB.prepare(
+      `
         INSERT INTO audit_events (
           id, actor_kind, origin, metadata_version, organisation_id, event_id, actor_person_id, actor_id, action, entity_type, entity_id, metadata_json, created_at
         )

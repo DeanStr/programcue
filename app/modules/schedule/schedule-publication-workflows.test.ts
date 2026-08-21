@@ -5,6 +5,11 @@ import { CANONICAL_EVENT_FILE_POLICY_JSON } from "~/modules/files/file-policy";
 import { PublicProgrammeService } from "~/modules/programme/public-programme-service.server";
 import type { Viewer } from "~/platform/auth/authorize.server";
 import { processScheduleCalendarFanout } from "../../../workers/communications-queue";
+import {
+  createScheduleReviewToken,
+  hashScheduleReviewToken,
+} from "./schedule-review-token.server";
+import { SCHEDULE_REVIEW_LINK_ACKNOWLEDGEMENT } from "./schedule-schema";
 import { ScheduleService } from "./schedule-service.server";
 import {
   approveScheduledTestContent,
@@ -290,6 +295,148 @@ describe("schedule publication workflows", () => {
       }),
     ).resolves.toMatchObject({ published: true });
   });
+
+  it("revokes every active review link only after successful publication", async () => {
+    const service = new ScheduleService(scheduleTestEnv);
+    const versionId = await service.createDraft(viewer);
+    let workspace = await service.getWorkspace(viewer);
+    const startsAt = eventLocalTimeEpoch(
+      workspace.event.startsAt,
+      workspace.event.timezone,
+      9,
+    );
+    await service.place(viewer, {
+      scheduleVersionId: versionId,
+      scheduleRevision: workspace.version!.revision,
+      sessionId: "schedule-test-one",
+      roomId: "main",
+      startsAt,
+      endsAt: startsAt + 3_600,
+    });
+    workspace = await service.getWorkspace(viewer);
+    const first = await service.createReviewLink(viewer, {
+      scheduleVersionId: versionId,
+      scheduleRevision: workspace.version!.revision,
+      acknowledgement: SCHEDULE_REVIEW_LINK_ACKNOWLEDGEMENT,
+    });
+    const second = await service.createReviewLink(viewer, {
+      scheduleVersionId: versionId,
+      scheduleRevision: workspace.version!.revision,
+      acknowledgement: SCHEDULE_REVIEW_LINK_ACKNOWLEDGEMENT,
+    });
+    await expect(
+      service.publish(viewer, {
+        scheduleVersionId: versionId,
+        scheduleRevision: workspace.version!.revision,
+      }),
+    ).rejects.toThrow(/Approved content snapshot/i);
+    expect(
+      await env.DB.prepare(
+        `SELECT COUNT(*) AS total FROM schedule_review_links
+          WHERE event_id = ? AND revoked_at IS NULL`,
+      )
+        .bind(viewer.eventId)
+        .first(),
+    ).toEqual({ total: 2 });
+
+    await approveScheduledTestContent(versionId);
+    workspace = await service.getWorkspace(viewer);
+    await service.publish(viewer, {
+      scheduleVersionId: versionId,
+      scheduleRevision: workspace.version!.revision,
+    });
+    const rows = await env.DB.prepare(
+      `SELECT id, revocation_reason AS reason
+         FROM schedule_review_links
+        WHERE event_id = ?
+        ORDER BY created_at`,
+    )
+      .bind(viewer.eventId)
+      .all<{ id: string; reason: string }>();
+    expect(rows.results).toEqual([
+      { id: first.id, reason: "published" },
+      { id: second.id, reason: "published" },
+    ]);
+    const audits = await env.DB.prepare(
+      `SELECT entity_id AS entityId, metadata_json AS metadataJson
+         FROM audit_events
+        WHERE event_id = ?
+          AND action = 'schedule.review_link.revoked'`,
+    )
+      .bind(viewer.eventId)
+      .all<{ entityId: string; metadataJson: string }>();
+    const reasons = new Map(
+      audits.results.map((row) => [
+        row.entityId,
+        (JSON.parse(row.metadataJson) as { reason: string }).reason,
+      ]),
+    );
+    expect(reasons.get(first.id)).toBe("published");
+    expect(reasons.get(second.id)).toBe("published");
+  });
+
+  it("leaves expired review links expired instead of revoking them on publication", async () => {
+    const service = new ScheduleService(scheduleTestEnv);
+    const versionId = await service.createDraft(viewer);
+    let workspace = await service.getWorkspace(viewer);
+    const startsAt = eventLocalTimeEpoch(
+      workspace.event.startsAt,
+      workspace.event.timezone,
+      9,
+    );
+    await service.place(viewer, {
+      scheduleVersionId: versionId,
+      scheduleRevision: workspace.version!.revision,
+      sessionId: "schedule-test-one",
+      roomId: "main",
+      startsAt,
+      endsAt: startsAt + 3_600,
+    });
+    workspace = await service.getWorkspace(viewer);
+    const expiredId = crypto.randomUUID();
+    await env.DB.prepare(
+      `INSERT INTO schedule_review_links (
+         id, organisation_id, event_id, schedule_version_id, schedule_revision,
+         projection_json, token_hash, expires_at, created_by_person_id, created_at
+       ) VALUES (?, ?, ?, ?, ?, '{"schemaVersion":1,"event":{"name":"X","timezone":"UTC"},"entries":[]}',
+                 ?, unixepoch() - 10, ?, unixepoch() - 1000)`,
+    )
+      .bind(
+        expiredId,
+        viewer.organisationId,
+        viewer.eventId,
+        versionId,
+        workspace.version!.revision,
+        await hashScheduleReviewToken(createScheduleReviewToken()),
+        viewer.personId,
+      )
+      .run();
+    await approveScheduledTestContent(versionId);
+    workspace = await service.getWorkspace(viewer);
+    await service.publish(viewer, {
+      scheduleVersionId: versionId,
+      scheduleRevision: workspace.version!.revision,
+    });
+    expect(
+      await env.DB.prepare(
+        `SELECT revoked_at AS revokedAt, revocation_reason AS reason
+           FROM schedule_review_links WHERE id = ?`,
+      )
+        .bind(expiredId)
+        .first(),
+    ).toEqual({ revokedAt: null, reason: null });
+    expect(
+      await env.DB.prepare(
+        `SELECT COUNT(*) AS total
+           FROM audit_events
+          WHERE entity_id = ?
+            AND action = 'schedule.review_link.revoked'`,
+      )
+        .bind(expiredId)
+        .first(),
+    ).toEqual({ total: 0 });
+  });
+
 
   it("rejects an unapproved public snapshot at the database publication boundary", async () => {
     const service = new ScheduleService(scheduleTestEnv);

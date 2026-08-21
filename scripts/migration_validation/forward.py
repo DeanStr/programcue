@@ -43,6 +43,9 @@ from .forward_session_participation import validate_session_participation_forwar
 from .forward_session_participation_decisions import (
     validate_session_participation_decisions_forward_migration,
 )
+from .forward_schedule_review_links import (
+    validate_schedule_review_links_forward_migration,
+)
 from .forward_speaker_profile_depth import validate_speaker_profile_depth_forward_migration
 from .forward_speaker_workflow import validate_speaker_workflow_forward_migration
 from .forward_task_instance_configuration_snapshot import (
@@ -74,3 +77,4 @@ def validate_forward_migrations(root: Path) -> None:
     validate_configurable_review_recommendations_forward_migration(root)
     validate_task_instance_configuration_snapshot_forward_migration(root)
     validate_session_participation_decisions_forward_migration(root)
+    validate_schedule_review_links_forward_migration(root)

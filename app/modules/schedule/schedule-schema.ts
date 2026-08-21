@@ -27,6 +27,24 @@ export const schedulePublishSchema = z.object({
   scheduleRevision: z.coerce.number().int().positive(),
 });
 
+export const SCHEDULE_REVIEW_LINK_ACKNOWLEDGEMENT =
+  "unpublished-speaker-names" as const;
+
+export const scheduleReviewLinkCreateSchema = z
+  .object({
+    scheduleVersionId: z.string().trim().min(1),
+    scheduleRevision: z.coerce.number().int().positive(),
+    acknowledgement: z.literal(SCHEDULE_REVIEW_LINK_ACKNOWLEDGEMENT),
+  })
+  .strict();
+
+export const scheduleReviewLinkRevokeSchema = z
+  .object({
+    linkId: z.string().trim().min(1).max(128),
+    confirmation: z.literal("revoke-draft-review-link"),
+  })
+  .strict();
+
 export const scheduleMutationSchema = z.object({
   scheduleVersionId: z.string().trim().min(1),
   scheduleRevision: z.coerce.number().int().positive(),

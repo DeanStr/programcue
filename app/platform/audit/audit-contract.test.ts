@@ -30,6 +30,25 @@ describe("audit display contract", () => {
       "Audit metadata for schedule.published does not satisfy version 1.",
     );
     expect(
+      auditDisplaySummary("schedule.review_link.created", 1, {
+        versionNumber: 2,
+        revision: 4,
+        expiresAt: 1_700_000_000,
+        entryCount: 3,
+        token: "must-not-display",
+      }),
+    ).toBe(
+      "Version Number: 2 · Revision: 4 · Expires At: 1700000000 · Entry Count: 3",
+    );
+    expect(
+      auditDisplaySummary("schedule.review_link.revoked", 1, {
+        reason: "published",
+        versionNumber: 2,
+        revision: 4,
+        token: "must-not-display",
+      }),
+    ).toBe("Reason: published · Version Number: 2 · Revision: 4");
+    expect(
       auditDisplaySummary("unknown.action", 1, { revision: 4 }),
     ).toBeNull();
   });

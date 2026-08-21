@@ -154,6 +154,7 @@ export const DEMO_RESET_EVENT_TABLES = [
   "event_public_sites",
   "programme_embeds",
   "public_itineraries",
+  "schedule_review_links",
   "schedule_conflicts",
   "schedule_entries",
   "session_content_revisions",

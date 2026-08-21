@@ -6,12 +6,15 @@ import {
 } from "~/modules/calendars/ics.server";
 import { getAutoPlacementReadiness } from "~/modules/schedule/schedule-auto-placement";
 import { buildSchedulePublicationPreview } from "~/modules/schedule/schedule-publication-preview.server";
+import { ScheduleReviewProjectionError } from "~/modules/schedule/schedule-review-projection";
 import {
   ScheduleConfigurationError,
   ScheduleIdempotencyConflictError,
   ScheduleNotFoundError,
   SchedulePlacementBlockedError,
   SchedulePublicationBlockedError,
+  ScheduleReviewLinkLimitError,
+  ScheduleReviewLinkNotFoundError,
   ScheduleRevisionConflictError,
   ScheduleService,
   ScheduleUndoUnavailableError,
@@ -173,6 +176,10 @@ export async function loader({ request, context }: Route.LoaderArgs) {
     throw new Response("Schedule conflict not found in this event", {
       status: 404,
     });
+  const [reviewLinks, reviewLinkSummary] = await Promise.all([
+    service.listReviewLinks(viewer),
+    service.summarizeReviewLinks(viewer, workspace),
+  ]);
   return {
     ...workspace,
     autoPlacementReadiness,
@@ -186,6 +193,8 @@ export async function loader({ request, context }: Route.LoaderArgs) {
     intentId: crypto.randomUUID(),
     calendarPreviews,
     publicationPreview,
+    reviewLinks,
+    reviewLinkSummary,
   };
 }
 
@@ -510,6 +519,35 @@ export async function action({ request, context }: Route.ActionArgs) {
           { status: realtimeFailure ? 207 : 200 },
         );
       }
+      case "create-review-link": {
+        const created = await service.createReviewLink(viewer, {
+          scheduleVersionId: values.get("scheduleVersionId"),
+          scheduleRevision: values.get("scheduleRevision"),
+          acknowledgement: values.get("acknowledgement"),
+        });
+        const origin = new URL(request.url).origin;
+        return {
+          ok: true,
+          intent,
+          message:
+            "Confidential review link created. Copy it now; it will not be shown again.",
+          reviewUrl: `${origin}${created.path}`,
+          expiresAt: created.expiresAt,
+          entryCount: created.entryCount,
+          speakerNameCount: created.speakerNameCount,
+        };
+      }
+      case "revoke-review-link": {
+        await service.revokeReviewLink(viewer, {
+          linkId: values.get("linkId"),
+          confirmation: values.get("confirmation"),
+        });
+        return {
+          ok: true,
+          intent,
+          message: "The confidential review link was revoked.",
+        };
+      }
       case "publish": {
         const publication = await service.publish(viewer, {
           scheduleVersionId: values.get("scheduleVersionId"),
@@ -639,6 +677,10 @@ export async function action({ request, context }: Route.ActionArgs) {
         { status: 409 },
       );
     }
+    if (error instanceof ScheduleReviewLinkLimitError)
+      return data({ ok: false, intent, error: error.message }, { status: 409 });
+    if (error instanceof ScheduleReviewLinkNotFoundError)
+      return data({ ok: false, intent, error: error.message }, { status: 404 });
     if (error instanceof ScheduleIdempotencyConflictError)
       return data(
         {
@@ -685,7 +727,10 @@ export async function action({ request, context }: Route.ActionArgs) {
         },
         { status: 409 },
       );
-    if (error instanceof ScheduleConfigurationError)
+    if (
+      error instanceof ScheduleConfigurationError ||
+      error instanceof ScheduleReviewProjectionError
+    )
       return data(
         {
           ok: false,

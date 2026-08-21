@@ -569,6 +569,73 @@ export const scheduleEntries = sqliteTable(
   ],
 );
 
+export const scheduleReviewLinks = sqliteTable(
+  "schedule_review_links",
+  {
+    id: text("id").primaryKey(),
+    organisationId: text("organisation_id").notNull(),
+    eventId: text("event_id").notNull(),
+    scheduleVersionId: text("schedule_version_id").notNull(),
+    scheduleRevision: integer("schedule_revision").notNull(),
+    projectionJson: text("projection_json").notNull(),
+    tokenHash: text("token_hash").notNull(),
+    expiresAt: integer("expires_at").notNull(),
+    createdByPersonId: text("created_by_person_id")
+      .notNull()
+      .references(() => people.id),
+    createdAt: integer("created_at").notNull().default(epochNow),
+    revokedAt: integer("revoked_at"),
+    revokedByPersonId: text("revoked_by_person_id").references(() => people.id),
+    revocationReason: text("revocation_reason").$type<"manual" | "published">(),
+  },
+  (table) => [
+    uniqueIndex("schedule_review_links_token_hash_unique").on(table.tokenHash),
+    uniqueIndex("schedule_review_links_id_event_unique").on(
+      table.id,
+      table.eventId,
+    ),
+    uniqueIndex("schedule_review_links_id_org_event_unique").on(
+      table.id,
+      table.organisationId,
+      table.eventId,
+    ),
+    index("idx_schedule_review_links_event").on(
+      table.organisationId,
+      table.eventId,
+      desc(table.createdAt),
+      desc(table.id),
+    ),
+    foreignKey({
+      columns: [table.eventId, table.organisationId],
+      foreignColumns: [events.id, events.organisationId],
+    }).onDelete("cascade"),
+    foreignKey({
+      columns: [table.scheduleVersionId, table.eventId],
+      foreignColumns: [scheduleVersions.id, scheduleVersions.eventId],
+    }).onDelete("cascade"),
+    check(
+      "schedule_review_links_revision_check",
+      sql`${table.scheduleRevision} > 0`,
+    ),
+    check(
+      "schedule_review_links_projection_json_check",
+      sql`json_valid(${table.projectionJson}) AND json_type(${table.projectionJson}) = 'object' AND length(${table.projectionJson}) <= 1048576`,
+    ),
+    check(
+      "schedule_review_links_token_hash_check",
+      sql`length(${table.tokenHash}) = 64 AND ${table.tokenHash} NOT GLOB '*[^0-9a-f]*'`,
+    ),
+    check(
+      "schedule_review_links_expiry_check",
+      sql`${table.expiresAt} > ${table.createdAt} AND ${table.expiresAt} <= ${table.createdAt} + 2592000`,
+    ),
+    check(
+      "schedule_review_links_revocation_check",
+      sql`(${table.revokedAt} IS NULL AND ${table.revokedByPersonId} IS NULL AND ${table.revocationReason} IS NULL) OR (${table.revokedAt} IS NOT NULL AND ${table.revocationReason} IN ('manual', 'published') AND (${table.revocationReason} <> 'manual' OR (${table.revokedByPersonId} IS NOT NULL AND trim(${table.revokedByPersonId}) <> '')))`,
+    ),
+  ],
+);
+
 export const scheduleConflicts = sqliteTable(
   "schedule_conflicts",
   {

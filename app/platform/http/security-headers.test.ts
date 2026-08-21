@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   applyPrivateWorkspaceCachePolicy,
+  applyScheduleReviewPreviewHeaders,
   applySecurityHeaders,
 } from "./security-headers";
 
@@ -110,6 +111,17 @@ describe("Worker security headers", () => {
       expect(headers.get("cache-control"), pathname).toBe("private, no-store");
     }
 
+    for (const pathname of [
+      "/programme-preview",
+      "/programme-preview.data",
+      "/programme-preview/token-value",
+      "/programme-preview/token-value.data",
+    ]) {
+      const headers = new Headers({ "cache-control": "public, max-age=300" });
+      applyPrivateWorkspaceCachePolicy(headers, pathname);
+      expect(headers.get("cache-control"), pathname).toBe("private, no-store");
+    }
+
     for (const pathname of ["/administrator", "/reviewer", "/programme"]) {
       const headers = new Headers({ "cache-control": "public, max-age=300" });
       applyPrivateWorkspaceCachePolicy(headers, pathname);
@@ -117,5 +129,23 @@ describe("Worker security headers", () => {
         "public, max-age=300",
       );
     }
+  });
+
+  it("marks confidential programme previews private, unindexed and unframeable", () => {
+    const headers = new Headers();
+    applySecurityHeaders(headers, "production", "none", cspNonce);
+    applyScheduleReviewPreviewHeaders(
+      headers,
+      "/programme-preview/secret-token",
+    );
+    expect(headers.get("cache-control")).toBe("private, no-store");
+    expect(headers.get("x-robots-tag")).toBe("noindex, nofollow");
+    expect(headers.get("referrer-policy")).toBe("no-referrer");
+    expect(headers.get("content-security-policy")).toContain(
+      "frame-ancestors 'none'",
+    );
+    expect(headers.get("content-security-policy")).not.toContain(
+      "frame-ancestors 'self'",
+    );
   });
 });

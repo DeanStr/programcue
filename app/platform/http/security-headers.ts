@@ -1,4 +1,8 @@
 import { resourceEmbedFrameOrigins } from "~/modules/resources/resource-embed-policy";
+import {
+  isScheduleReviewPreviewPath,
+  scheduleReviewPreviewHeaders,
+} from "~/modules/schedule/schedule-review-preview-http";
 import { requiresProductionSecurity } from "~/platform/runtime-environment.server";
 
 export const SECURITY_HEADERS = {
@@ -30,8 +34,28 @@ export function applyPrivateWorkspaceCachePolicy(
   headers: Headers,
   pathname: string,
 ) {
-  if (isPrivateWorkspacePath(pathname)) {
+  if (
+    isPrivateWorkspacePath(pathname) ||
+    isScheduleReviewPreviewPath(pathname)
+  ) {
     headers.set("cache-control", "private, no-store");
+  }
+}
+
+export function applyScheduleReviewPreviewHeaders(
+  headers: Headers,
+  pathname: string,
+) {
+  if (!isScheduleReviewPreviewPath(pathname)) return;
+  for (const [name, value] of Object.entries(scheduleReviewPreviewHeaders())) {
+    headers.set(name, value);
+  }
+  const csp = headers.get("content-security-policy");
+  if (csp?.includes("frame-ancestors 'self'")) {
+    headers.set(
+      "content-security-policy",
+      csp.replace("frame-ancestors 'self'", "frame-ancestors 'none'"),
+    );
   }
 }
 

@@ -168,6 +168,10 @@ export function buildParticipantRetentionFinalisationStatements(
       viewer.eventId,
     ),
     guarded(
+      `DELETE FROM schedule_review_links WHERE event_id = ?`,
+      viewer.eventId,
+    ),
+    guarded(
       `DELETE FROM event_participant_profiles
         WHERE event_id = ? AND organisation_id = ?`,
       viewer.eventId,

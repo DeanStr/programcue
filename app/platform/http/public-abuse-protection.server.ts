@@ -93,6 +93,9 @@ const policies = {
   evaluation_reset: [
     { dimension: "ip", limit: 5, windowSeconds: 3_600, blockSeconds: 3_600 },
   ],
+  programme_preview: [
+    { dimension: "ip", limit: 60, windowSeconds: 60, blockSeconds: 60 },
+  ],
 } as const satisfies Record<string, ReadonlyArray<RatePolicy>>;
 
 export type PublicAbuseAction = keyof typeof policies;

@@ -20,6 +20,7 @@ import { ScheduleDraftWorkflow } from "./schedule-draft-workflow.server";
 import { ScheduleConfigurationError } from "./schedule-errors";
 import { SchedulePlacementWorkflow } from "./schedule-placement-workflow.server";
 import { SchedulePublicationWorkflow } from "./schedule-publication-workflow.server";
+import { ScheduleReviewLinkService } from "./schedule-review-link-service.server";
 import type {
   ScheduleConflict,
   SchedulePolicies,
@@ -130,6 +131,8 @@ export {
   ScheduleNotFoundError,
   SchedulePlacementBlockedError,
   SchedulePublicationBlockedError,
+  ScheduleReviewLinkLimitError,
+  ScheduleReviewLinkNotFoundError,
   ScheduleRevisionConflictError,
   ScheduleUndoUnavailableError,
 } from "./schedule-errors";
@@ -218,6 +221,7 @@ export class ScheduleService {
   private readonly draftWorkflow: ScheduleDraftWorkflow;
   private readonly breakWorkflow: ScheduleBreakWorkflow;
   private readonly publicationWorkflow: SchedulePublicationWorkflow;
+  private readonly reviewLinkService: ScheduleReviewLinkService;
   private projectionDepth = 0;
 
   constructor(
@@ -250,6 +254,10 @@ export class ScheduleService {
       workflowDependencies,
     );
     this.publicationWorkflow = new SchedulePublicationWorkflow(
+      this.env,
+      workflowDependencies,
+    );
+    this.reviewLinkService = new ScheduleReviewLinkService(
       this.env,
       workflowDependencies,
     );
@@ -643,6 +651,22 @@ export class ScheduleService {
     return this.projectCommand(viewer, "schedule.entry.undo", input, () =>
       this.placementWorkflow.undoD1(viewer, input),
     );
+  }
+
+  summarizeReviewLinks(viewer: Viewer, workspace?: ScheduleWorkspace) {
+    return this.reviewLinkService.summarize(viewer, workspace);
+  }
+
+  listReviewLinks(viewer: Viewer) {
+    return this.reviewLinkService.list(viewer);
+  }
+
+  createReviewLink(viewer: Viewer, input: unknown) {
+    return this.reviewLinkService.create(viewer, input);
+  }
+
+  revokeReviewLink(viewer: Viewer, input: unknown) {
+    return this.reviewLinkService.revoke(viewer, input);
   }
 
   async publish(
