@@ -8,6 +8,8 @@ import {
   formFieldTypeLabel,
 } from "~/modules/submissions/form-builder-fields";
 import {
+  formLayout,
+  formLayoutSchema,
   formSectionsForDisplay,
   MAX_FORM_SECTIONS,
   type SaveFormInput,
@@ -164,6 +166,28 @@ export function FormStructurePanel({
             }
           />
           <CharacterCount value={input.schema.introduction} maximum={2_000} />
+        </label>
+        <label className="fb-intro-editor">
+          <span className="fb-kicker">Applicant layout</span>
+          <select
+            className="select"
+            value={formLayout(input.schema)}
+            onChange={(event) => {
+              const parsed = formLayoutSchema.safeParse(event.target.value);
+              if (!parsed.success) return;
+              change({
+                ...input,
+                schema: { ...input.schema, layout: parsed.data },
+              });
+            }}
+          >
+            <option value="single_page">Single page</option>
+            <option value="steps">Steps (one section per page)</option>
+          </select>
+          <span className="help">
+            Steps reuse these sections as pages and add a Speakers page at the
+            end. Speakers is not a builder section.
+          </span>
         </label>
         <div className="fb-section-list">
           <div className="fb-kicker-row">

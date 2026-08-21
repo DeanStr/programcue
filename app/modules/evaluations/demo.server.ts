@@ -18,6 +18,7 @@ const ROUND_ID = "demo-evaluation-round";
 
 const formSchema = {
   schemaVersion: 2,
+  layout: "single_page",
   introduction:
     "These archived proposals provide stable, realistic evaluation examples in demo mode.",
   presentation: DEFAULT_FORM_PRESENTATION,

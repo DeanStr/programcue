@@ -155,6 +155,7 @@ export class SubmissionManualApplicationCommands extends SubmissionAdministratio
     };
     const manualSchema = {
       schemaVersion: 2 as const,
+      layout: "single_page" as const,
       introduction: "Entered manually by an administrator.",
       presentation: DEFAULT_FORM_SCHEMA.presentation,
       sections: DEFAULT_FORM_SCHEMA.sections,

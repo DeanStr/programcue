@@ -1,4 +1,4 @@
-import type { Dispatch, SetStateAction } from "react";
+import type { Dispatch, Ref, SetStateAction } from "react";
 import { Link, type useNavigation } from "react-router";
 
 import {
@@ -123,6 +123,9 @@ type ApplicationAnswersProps = {
   currentUpload: ApplicantVideoUploadRecord | null;
   uploadTurnstileSiteKey: string | null;
   maximumVideoBytes: number;
+  sectionHeadingRef?: Ref<HTMLHeadingElement | null>;
+  onUploadTransferChange?: (blocking: boolean) => void;
+  stepped?: boolean;
 };
 
 export function ApplicationAnswers({
@@ -140,6 +143,9 @@ export function ApplicationAnswers({
   currentUpload,
   uploadTurnstileSiteKey,
   maximumVideoBytes,
+  sectionHeadingRef,
+  onUploadTransferChange,
+  stepped = false,
 }: ApplicationAnswersProps) {
   return (
     <>
@@ -153,7 +159,16 @@ export function ApplicationAnswers({
         >
           {section.title ? (
             <header>
-              <h2 id={`application-section-${section.id}`}>{section.title}</h2>
+              <h2
+                id={`application-section-${section.id}`}
+                className={
+                  stepped ? "application-form-step-heading" : undefined
+                }
+                tabIndex={stepped ? -1 : undefined}
+                ref={sectionHeadingRef}
+              >
+                {section.title}
+              </h2>
               {section.description ? (
                 <p className="subtle">{section.description}</p>
               ) : null}
@@ -179,7 +194,8 @@ export function ApplicationAnswers({
               setAnswers((current) => ({ ...current, [field.id]: value }));
               setDirty(true);
             };
-            if (field.type === "video")
+            if (field.type === "video") {
+              const attachedUpload = uploads[field.id];
               return (
                 <fieldset
                   className="application-choice-field"
@@ -215,6 +231,28 @@ export function ApplicationAnswers({
                       onChange={update}
                     />
                   </label>
+                  {attachedUpload && (readOnly || revisionMode) ? (
+                    <div className="validation-item ok mt">
+                      <strong>Private video attached</strong>
+                      <span>
+                        The immutable submission references its scanned file
+                        version.
+                      </span>
+                    </div>
+                  ) : null}
+                  {stepped &&
+                  !readOnly &&
+                  !revisionMode &&
+                  attachedUpload &&
+                  currentUpload?.fieldId !== field.id ? (
+                    <div className="validation-item ok mt">
+                      <strong>Private video attached</strong>
+                      <span>
+                        This draft references the uploaded video. You can
+                        replace it below.
+                      </span>
+                    </div>
+                  ) : null}
                   {!readOnly && !revisionMode ? (
                     <ApplicantVideoUpload
                       publicSlug={publicSlug}
@@ -223,7 +261,16 @@ export function ApplicationAnswers({
                       current={
                         currentUpload?.fieldId === field.id
                           ? currentUpload
-                          : null
+                          : stepped && attachedUpload
+                            ? {
+                                fieldId: field.id,
+                                assetId: attachedUpload.assetId,
+                                versionId: attachedUpload.versionId,
+                                filename: "Uploaded video",
+                                sizeBytes: 0,
+                                status: "scanning",
+                              }
+                            : null
                       }
                       siteKey={uploadTurnstileSiteKey}
                       disabled={readOnly}
@@ -235,15 +282,8 @@ export function ApplicationAnswers({
                         }));
                         setDirty(true);
                       }}
+                      onTransferStatusChange={onUploadTransferChange}
                     />
-                  ) : uploads[field.id] ? (
-                    <div className="validation-item ok mt">
-                      <strong>Private video attached</strong>
-                      <span>
-                        The immutable submission references its scanned file
-                        version.
-                      </span>
-                    </div>
                   ) : null}
                   {error ? (
                     <span className="field-error" id={errorId}>
@@ -252,6 +292,7 @@ export function ApplicationAnswers({
                   ) : null}
                 </fieldset>
               );
+            }
             if (field.type === "multi_select")
               return (
                 <fieldset
@@ -345,6 +386,7 @@ type ApplicationSpeakersProps = {
   effectiveMaximumSpeakers: number;
   errors?: Record<string, string[]>;
   duplicateSpeakerEmails: string[];
+  headingRef?: Ref<HTMLLegendElement | null>;
 };
 
 export function ApplicationSpeakers({
@@ -359,10 +401,15 @@ export function ApplicationSpeakers({
   effectiveMaximumSpeakers,
   errors,
   duplicateSpeakerEmails,
+  headingRef,
 }: ApplicationSpeakersProps) {
   return (
     <fieldset className="card pad" id="application-speakers">
-      <legend>
+      <legend
+        className={headingRef ? "application-form-step-heading" : undefined}
+        tabIndex={headingRef ? -1 : undefined}
+        ref={headingRef}
+      >
         <strong>Speakers</strong>
       </legend>
       <p className="subtle">
@@ -546,6 +593,10 @@ type ApplicationLifecycleProps = {
   readOnlyNotice?: string;
   timezone: string;
   acceptedParticipantsHref?: string | null;
+  persistenceOnly?: boolean;
+  transferBlocked?: boolean;
+  saveDraftButtonType?: "submit" | "button";
+  onSaveDraft?(): void;
 };
 
 export function ApplicationLifecycleActions({
@@ -563,31 +614,39 @@ export function ApplicationLifecycleActions({
   readOnlyNotice,
   timezone,
   acceptedParticipantsHref,
+  persistenceOnly = false,
+  transferBlocked = false,
+  saveDraftButtonType = "submit",
+  onSaveDraft,
 }: ApplicationLifecycleProps) {
   return (
     <>
       {!readOnly ? (
         <>
-          <div className="validation-item warn">
-            <strong>Before submitting</strong>
-            <span>
-              {revisionMode
-                ? "Saving creates a new submitted revision. The prior submitted revision stays in the audit history."
-                : "Final submission records an immutable form-version revision. While applications remain open and review has not started, you may submit a newer revision."}
-            </span>
-          </div>
-          <label className="toggle">
-            <input
-              type="checkbox"
-              name={revisionMode ? "confirmRevision" : "confirm"}
-              value="yes"
-              required
-              disabled={revisionMode ? false : !canSubmit}
-            />{" "}
-            {revisionMode
-              ? "I have reviewed these changes and am ready to replace the current submitted version."
-              : "I have reviewed this application and am ready to submit it."}
-          </label>
+          {persistenceOnly ? null : (
+            <>
+              <div className="validation-item warn">
+                <strong>Before submitting</strong>
+                <span>
+                  {revisionMode
+                    ? "Saving creates a new submitted revision. The prior submitted revision stays in the audit history."
+                    : "Final submission records an immutable form-version revision. While applications remain open and review has not started, you may submit a newer revision."}
+                </span>
+              </div>
+              <label className="toggle">
+                <input
+                  type="checkbox"
+                  name={revisionMode ? "confirmRevision" : "confirm"}
+                  value="yes"
+                  required
+                  disabled={revisionMode ? false : !canSubmit}
+                />{" "}
+                {revisionMode
+                  ? "I have reviewed these changes and am ready to replace the current submitted version."
+                  : "I have reviewed this application and am ready to submit it."}
+              </label>
+            </>
+          )}
           <div className="page-actions">
             <span className={`status ${dirty ? "warning" : "success"}`}>
               {dirty ? "Unsaved changes" : "All changes saved"}
@@ -596,34 +655,41 @@ export function ApplicationLifecycleActions({
             {!revisionMode ? (
               <button
                 className="btn"
-                type="submit"
+                type={saveDraftButtonType}
                 name="_intent"
                 value="save_draft"
-                formNoValidate
-                disabled={navigation.state !== "idle"}
+                formNoValidate={saveDraftButtonType === "submit"}
+                disabled={navigation.state !== "idle" || transferBlocked}
+                onClick={
+                  saveDraftButtonType === "button" ? onSaveDraft : undefined
+                }
               >
                 {navigation.formData?.get("_intent") === "save_draft"
                   ? "Saving…"
                   : "Save draft"}
               </button>
             ) : null}
-            <button
-              className="btn primary"
-              type="submit"
-              name="_intent"
-              value={revisionMode ? "revise_submission" : "submit"}
-              disabled={
-                navigation.state !== "idle" || (!revisionMode && !canSubmit)
-              }
-            >
-              {navigation.formData?.get("_intent") === "revise_submission"
-                ? "Saving revision…"
-                : navigation.formData?.get("_intent") === "submit"
-                  ? "Submitting…"
-                  : revisionMode
-                    ? "Save revised application"
-                    : "Submit application"}
-            </button>
+            {persistenceOnly ? null : (
+              <button
+                className="btn primary"
+                type="submit"
+                name="_intent"
+                value={revisionMode ? "revise_submission" : "submit"}
+                disabled={
+                  navigation.state !== "idle" ||
+                  transferBlocked ||
+                  (!revisionMode && !canSubmit)
+                }
+              >
+                {navigation.formData?.get("_intent") === "revise_submission"
+                  ? "Saving revision…"
+                  : navigation.formData?.get("_intent") === "submit"
+                    ? "Submitting…"
+                    : revisionMode
+                      ? "Save revised application"
+                      : "Submit application"}
+              </button>
+            )}
           </div>
           {conflict ? (
             <div className="validation-item error" role="alert">
@@ -676,7 +742,7 @@ export function ApplicationLifecycleActions({
               </span>
             </div>
           ) : null}
-          {revisionMode ? (
+          {revisionMode && !persistenceOnly ? (
             <details className="card pad pc-disclosure">
               <summary>
                 <strong>Withdraw application</strong>

@@ -2,15 +2,20 @@ import { describe, expect, it } from "vitest";
 
 import { closeDateToEpoch } from "./submission-repository-shared";
 import {
+  APPLICANT_SPEAKERS_STEP_ID,
   DEFAULT_FORM_PRESENTATION,
   DEFAULT_FORM_SCHEMA,
+  deriveInitialApplicantFormStepId,
   draftPayloadSchema,
   draftSavePayloadSchema,
+  formApplicantSteps,
+  formLayout,
   formPresentationSchema,
   formSchemaSchema,
   formSectionsForAuthoring,
   formSectionsForDisplay,
   heroImagePathSchema,
+  resolveApplicantFormStepId,
   reviewerVisibleAnswers,
   saveFormSchema,
   storedFormSchemaSchema,
@@ -150,6 +155,7 @@ describe("submission form rules", () => {
     );
     expect(upgradeStoredFormSchema(stored)).toMatchObject({
       schemaVersion: 2,
+      layout: "single_page",
       sections: [{ id: "proposal", title: "Application" }],
       fields: legacy.fields.map((field) => ({
         ...field,
@@ -422,5 +428,206 @@ describe("submission form rules", () => {
       saveFormSchema.safeParse({ ...input, publicSlug: "a".repeat(161) })
         .success,
     ).toBe(false);
+  });
+
+  it("treats missing v2 layout as single_page and writes it on save", () => {
+    const historical = {
+      schemaVersion: 2 as const,
+      introduction: DEFAULT_FORM_SCHEMA.introduction,
+      presentation: DEFAULT_FORM_SCHEMA.presentation,
+      sections: structuredClone(DEFAULT_FORM_SCHEMA.sections),
+      fields: structuredClone(DEFAULT_FORM_SCHEMA.fields),
+    };
+    expect("layout" in historical).toBe(false);
+    expect(formLayout(historical)).toBe("single_page");
+    expect(formApplicantSteps(historical, {}).map((step) => step.id)).toEqual(
+      [],
+    );
+    const parsed = storedFormSchemaSchema.parse(structuredClone(historical));
+    expect(parsed).toMatchObject({ layout: "single_page" });
+    expect("layout" in historical).toBe(false);
+    expect(upgradeStoredFormSchema(historical)).toEqual(historical);
+    expect(formSchemaSchema.parse(historical).layout).toBe("single_page");
+    expect(DEFAULT_FORM_SCHEMA.layout).toBe("single_page");
+
+    const saved = saveFormSchema.parse({
+      name: "Call for speakers",
+      kind: "submission",
+      publicSlug: "call-for-speakers",
+      closeDate: null,
+      submissionLimit: null,
+      minSpeakers: 1,
+      maxSpeakers: null,
+      accessMode: "email_verified",
+      accessPassword: "",
+      schema: historical,
+      routing: {
+        categories: {},
+        trackIds: {
+          "AI & Innovation": "track-ai",
+          "Event Operations": "track-operations",
+          "Experience Design": "track-experience",
+        },
+        trackNames: {
+          "track-ai": "AI & Innovation",
+          "track-operations": "Event Operations",
+          "track-experience": "Experience Design",
+        },
+        teamNames: {},
+        directSessionDurationMinutes: 30,
+        passwordHash: null,
+      },
+    });
+    expect(saved.schema.layout).toBe("single_page");
+  });
+
+  it("pages visible sections then an implicit speakers step", () => {
+    const schema = formSchemaSchema.parse({
+      ...structuredClone(DEFAULT_FORM_SCHEMA),
+      layout: "steps",
+      sections: [
+        ...DEFAULT_FORM_SCHEMA.sections,
+        {
+          id: "audience",
+          title: "Audience",
+          description: "Who this session is for",
+        },
+      ],
+      fields: [
+        ...DEFAULT_FORM_SCHEMA.fields,
+        {
+          sectionId: "audience",
+          id: "audience_level",
+          label: "Audience level",
+          type: "select",
+          required: true,
+          help: "",
+          example: "",
+          options: ["Beginner", "Advanced"],
+          reviewVisibility: "reviewers",
+          blindReviewVisibility: "content",
+          condition: { fieldId: "format", equals: "Workshop" },
+        },
+      ],
+    });
+
+    expect(/^[a-z][a-z0-9_]{1,39}$/.test(APPLICANT_SPEAKERS_STEP_ID)).toBe(
+      false,
+    );
+    expect(formApplicantSteps(schema, {}).map((step) => step.id)).toEqual([
+      "proposal",
+      APPLICANT_SPEAKERS_STEP_ID,
+    ]);
+    expect(
+      formApplicantSteps(schema, { format: "Workshop" }).map((step) => step.id),
+    ).toEqual(["proposal", "audience", APPLICANT_SPEAKERS_STEP_ID]);
+    expect(resolveApplicantFormStepId(schema, {}, "audience")).toBe("proposal");
+    expect(
+      resolveApplicantFormStepId(schema, { format: "Workshop" }, "audience"),
+    ).toBe("audience");
+    expect(
+      deriveInitialApplicantFormStepId({
+        schema,
+        answers: {},
+        speakers: [{ name: "", email: "" }],
+        minSpeakers: 1,
+        maxSpeakers: null,
+      }),
+    ).toBe("proposal");
+    expect(
+      deriveInitialApplicantFormStepId({
+        schema,
+        answers: {
+          title: "A useful session",
+          description: "Attendees leave with a checklist.",
+          category: ["Event Operations"],
+          format: "Presentation",
+        },
+        speakers: [{ name: "Priya Shah", email: "priya@example.com" }],
+        minSpeakers: 1,
+        maxSpeakers: null,
+      }),
+    ).toBe(APPLICANT_SPEAKERS_STEP_ID);
+    expect(
+      deriveInitialApplicantFormStepId({
+        schema,
+        answers: {
+          title: "A useful session",
+          description: "Attendees leave with a checklist.",
+          category: ["Event Operations"],
+          format: "Workshop",
+        },
+        speakers: [{ name: "Priya Shah", email: "priya@example.com" }],
+        minSpeakers: 1,
+        maxSpeakers: null,
+        errors: { audience_level: ["Audience level is required"] },
+      }),
+    ).toBe("audience");
+    expect(
+      deriveInitialApplicantFormStepId({
+        schema,
+        answers: {
+          title: "A useful session",
+          description: "Attendees leave with a checklist.",
+          category: ["Event Operations"],
+          format: "Workshop",
+        },
+        speakers: [{ name: "", email: "" }],
+        minSpeakers: 1,
+        maxSpeakers: null,
+        errors: {
+          speakers: ["Every speaker needs a name and email address"],
+          audience_level: ["Audience level is required"],
+        },
+      }),
+    ).toBe("audience");
+
+    const colliding = formSchemaSchema.parse({
+      ...schema,
+      sections: [
+        ...schema.sections,
+        { id: "speakers", title: "Speaker notes", description: "" },
+      ],
+      fields: [
+        ...schema.fields,
+        {
+          sectionId: "speakers",
+          id: "speaker_notes",
+          label: "Speaker notes",
+          type: "long_text",
+          required: false,
+          help: "",
+          example: "",
+          options: [],
+          reviewVisibility: "reviewers",
+          blindReviewVisibility: "content",
+          condition: null,
+        },
+      ],
+    });
+    const collidingSteps = formApplicantSteps(colliding, {});
+    expect(collidingSteps.map((step) => step.id)).toEqual([
+      "proposal",
+      "speakers",
+      APPLICANT_SPEAKERS_STEP_ID,
+    ]);
+    expect(new Set(collidingSteps.map((step) => step.id)).size).toBe(
+      collidingSteps.length,
+    );
+    expect(
+      deriveInitialApplicantFormStepId({
+        schema: colliding,
+        answers: {
+          title: "A useful session",
+          description: "Attendees leave with a checklist.",
+          category: ["Event Operations"],
+          format: "Presentation",
+        },
+        speakers: [{ name: "Priya Shah", email: "priya@example.com" }],
+        minSpeakers: 1,
+        maxSpeakers: null,
+        errors: { speaker_notes: ["Speaker notes is required"] },
+      }),
+    ).toBe("speakers");
   });
 });

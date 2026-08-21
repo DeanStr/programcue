@@ -76,6 +76,7 @@ describe("administrator application-record creation", () => {
       versionNumber: 1,
       schema: {
         schemaVersion: 2,
+        layout: "single_page",
         sections: [{ id: "proposal" }],
       },
     });

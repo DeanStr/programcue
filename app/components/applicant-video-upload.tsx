@@ -78,6 +78,7 @@ export function ApplicantVideoUpload({
   disabled,
   maximumBytes,
   onReferenceChange,
+  onTransferStatusChange,
 }: {
   publicSlug: string;
   submissionId: string;
@@ -87,6 +88,7 @@ export function ApplicantVideoUpload({
   disabled: boolean;
   maximumBytes: number;
   onReferenceChange(reference: { assetId: string; versionId: string }): void;
+  onTransferStatusChange?(blocking: boolean): void;
 }) {
   const fileInput = useRef<HTMLInputElement>(null);
   const uploadSession = useRef<ProgramCueMultipartSession | null>(null);
@@ -130,14 +132,24 @@ export function ApplicantVideoUpload({
     return { status: "idle", message: "" };
   });
 
+  const onTransferStatusChangeRef = useRef(onTransferStatusChange);
+  onTransferStatusChangeRef.current = onTransferStatusChange;
   useEffect(
     () => () => {
       uploadOperation.current = null;
       cancellationOperation.current = null;
       uploadSession.current?.disposePreservingUpload();
+      onTransferStatusChangeRef.current?.(false);
     },
     [],
   );
+  useEffect(() => {
+    onTransferStatusChangeRef.current?.(
+      state.status === "uploading" ||
+        state.status === "paused" ||
+        cancellationInFlight,
+    );
+  }, [cancellationInFlight, state.status]);
   useEffect(() => {
     const completed = completedUpload.current;
     const active = uploadSession.current;

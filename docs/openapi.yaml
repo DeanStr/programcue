@@ -3508,6 +3508,12 @@ components:
             schemaVersion:
               type: number
               const: 2
+            layout:
+              default: single_page
+              type: string
+              enum:
+                - single_page
+                - steps
             introduction:
               default: ""
               type: string

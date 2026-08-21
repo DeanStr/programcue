@@ -1,9 +1,18 @@
 import { type CSSProperties, type ReactNode, useEffect, useState } from "react";
+import {
+  ApplicantFormStepNav,
+  ApplicantFormStepStatus,
+} from "~/components/applicant-form-step-chrome";
 import { BrandMark } from "~/components/brand-mark";
 import { programmeAccentPalette } from "~/modules/programme/programme-presentation";
 import {
+  APPLICANT_SPEAKERS_STEP_ID,
+  applicantFormStepIdForErrors,
+  formApplicantSteps,
+  formLayout,
   formSectionsForDisplay,
   heroImagePathSchema,
+  resolveApplicantFormStepId,
   type SaveFormInput,
   type StoredFormField,
   validateAnswerShapes,
@@ -118,15 +127,33 @@ export function ApplicantPreviewPanel({
   const [errors, setErrors] = useState<Record<string, string[]>>({});
   const [validated, setValidated] = useState(false);
   const [viewport, setViewport] = useState<"mobile" | "desktop">("mobile");
+  const stepped = formLayout(input.schema) === "steps";
+  const [currentStepId, setCurrentStepId] = useState(
+    () => formApplicantSteps(input.schema, {})[0]?.id ?? "",
+  );
   // biome-ignore lint/correctness/useExhaustiveDependencies: Form identity and schema changes intentionally reset this interactive preview, including when the minimum speaker count is unchanged.
   useEffect(() => {
     setAnswers({});
     setSpeakerCount(input.minSpeakers);
     setErrors({});
     setValidated(false);
+    setCurrentStepId(formApplicantSteps(input.schema, {})[0]?.id ?? "");
   }, [input.id, input.schema, input.minSpeakers]);
   const previewFields = visibleFields(input.schema, answers);
   const previewSections = formSectionsForDisplay(input.schema, previewFields);
+  const steps = formApplicantSteps(input.schema, answers);
+  const resolvedStepId = stepped
+    ? resolveApplicantFormStepId(input.schema, answers, currentStepId)
+    : currentStepId;
+  useEffect(() => {
+    if (!stepped) return;
+    if (resolvedStepId !== currentStepId) setCurrentStepId(resolvedStepId);
+  }, [currentStepId, resolvedStepId, stepped]);
+  const visiblePreviewSections = stepped
+    ? previewSections.filter((section) => section.id === resolvedStepId)
+    : previewSections;
+  const showSpeakers =
+    !stepped || resolvedStepId === APPLICANT_SPEAKERS_STEP_ID;
 
   function updateAnswer(fieldId: string, value: string | string[]) {
     setAnswers((current) => ({ ...current, [fieldId]: value }));
@@ -134,23 +161,76 @@ export function ApplicantPreviewPanel({
     setValidated(false);
   }
 
-  function validatePreview() {
-    const speakers = Array.from({ length: speakerCount }, (_, index) => ({
+  function previewSpeakers() {
+    return Array.from({ length: speakerCount }, (_, index) => ({
       name: `Test speaker ${index + 1}`,
       email: `test-speaker-${index + 1}@example.invalid`,
     }));
+  }
+
+  function validatePreview() {
     const nextErrors = {
       ...validateAnswerShapes(input.schema, answers),
       ...validateFinalAnswers(
         input.schema,
         answers,
-        speakers,
+        previewSpeakers(),
         input.minSpeakers,
         input.maxSpeakers,
       ),
     };
     setErrors(nextErrors);
     setValidated(true);
+    if (!stepped) return;
+    const errorStepId = applicantFormStepIdForErrors(input.schema, nextErrors);
+    if (errorStepId) {
+      setCurrentStepId(
+        resolveApplicantFormStepId(input.schema, answers, errorStepId),
+      );
+    }
+  }
+
+  function continuePreview() {
+    const current = steps.find((step) => step.id === resolvedStepId);
+    if (current?.kind === "section") {
+      const fieldIds = new Set(
+        previewSections
+          .find((section) => section.id === current.id)
+          ?.fields.map((field) => field.id),
+      );
+      const sectionErrors = Object.fromEntries(
+        Object.entries({
+          ...validateAnswerShapes(input.schema, answers),
+          ...validateFinalAnswers(
+            input.schema,
+            answers,
+            previewSpeakers(),
+            input.minSpeakers,
+            input.maxSpeakers,
+          ),
+        }).filter(([fieldId]) => fieldIds.has(fieldId)),
+      );
+      if (Object.keys(sectionErrors).length) {
+        setErrors(sectionErrors);
+        setValidated(true);
+        return;
+      }
+    }
+    const index = steps.findIndex((step) => step.id === resolvedStepId);
+    const next = steps[index + 1];
+    if (!next) return;
+    setErrors({});
+    setValidated(false);
+    setCurrentStepId(next.id);
+  }
+
+  function backPreview() {
+    const index = steps.findIndex((step) => step.id === resolvedStepId);
+    const previous = steps[index - 1];
+    if (!previous) return;
+    setErrors({});
+    setValidated(false);
+    setCurrentStepId(previous.id);
   }
 
   const ground = heroGround(brandAccent);
@@ -234,7 +314,13 @@ export function ApplicantPreviewPanel({
               </div>
               <div className="fb-preview-body">
                 <p className="tiny subtle">{input.schema.introduction}</p>
-                {previewSections.map((section) => (
+                {stepped ? (
+                  <ApplicantFormStepStatus
+                    steps={steps}
+                    currentStepId={resolvedStepId}
+                  />
+                ) : null}
+                {visiblePreviewSections.map((section) => (
                   <section
                     className="application-form-section stack"
                     aria-labelledby={
@@ -311,48 +397,75 @@ export function ApplicantPreviewPanel({
                     )}
                   </section>
                 ))}
-                <label className="label">
-                  Test speaker count
-                  <input
-                    className="field"
-                    type="number"
-                    min={1}
-                    max={20}
-                    value={speakerCount}
-                    onChange={(event) => {
-                      setSpeakerCount(Number(event.target.value));
-                      setErrors({});
-                      setValidated(false);
-                    }}
-                  />
-                  {errors.speakers?.[0] ? (
-                    <span className="field-error">{errors.speakers[0]}</span>
-                  ) : null}
-                </label>
-                {validated ? (
-                  <div
-                    className={`validation-item ${Object.keys(errors).length ? "error" : "ok"}`}
-                    role={Object.keys(errors).length ? "alert" : "status"}
+                {showSpeakers ? (
+                  <section
+                    className="application-form-section stack"
+                    aria-labelledby="preview-section-speakers"
                   >
-                    <strong>{Object.keys(errors).length ? "△" : "✓"}</strong>
-                    <span>
-                      {Object.keys(errors).length
-                        ? "This test submission needs the highlighted changes."
-                        : "This test submission passes the current form rules."}
-                    </span>
-                  </div>
+                    <header>
+                      <h4 id="preview-section-speakers">Speakers</h4>
+                    </header>
+                    <label className="label">
+                      Test speaker count
+                      <input
+                        className="field"
+                        type="number"
+                        min={1}
+                        max={20}
+                        value={speakerCount}
+                        onChange={(event) => {
+                          setSpeakerCount(Number(event.target.value));
+                          setErrors({});
+                          setValidated(false);
+                        }}
+                      />
+                      {errors.speakers?.[0] ? (
+                        <span className="field-error">
+                          {errors.speakers[0]}
+                        </span>
+                      ) : null}
+                    </label>
+                  </section>
                 ) : null}
-                <button
-                  className="btn primary"
-                  type="button"
-                  onClick={validatePreview}
-                >
-                  Validate test submission
-                </button>
-                <small className="help">
-                  Test values stay in this preview. No applicant or submission
-                  record is saved.
-                </small>
+                {stepped ? (
+                  <ApplicantFormStepNav
+                    steps={steps}
+                    currentStepId={resolvedStepId}
+                    onBack={backPreview}
+                    onContinue={continuePreview}
+                    showContinue={resolvedStepId !== APPLICANT_SPEAKERS_STEP_ID}
+                  />
+                ) : null}
+                {showSpeakers ? (
+                  <>
+                    {validated ? (
+                      <div
+                        className={`validation-item ${Object.keys(errors).length ? "error" : "ok"}`}
+                        role={Object.keys(errors).length ? "alert" : "status"}
+                      >
+                        <strong>
+                          {Object.keys(errors).length ? "△" : "✓"}
+                        </strong>
+                        <span>
+                          {Object.keys(errors).length
+                            ? "This test submission needs the highlighted changes."
+                            : "This test submission passes the current form rules."}
+                        </span>
+                      </div>
+                    ) : null}
+                    <button
+                      className="btn primary"
+                      type="button"
+                      onClick={validatePreview}
+                    >
+                      Validate test submission
+                    </button>
+                    <small className="help">
+                      Test values stay in this preview. No applicant or
+                      submission record is saved.
+                    </small>
+                  </>
+                ) : null}
               </div>
             </div>
           </div>

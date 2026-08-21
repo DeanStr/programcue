@@ -15,11 +15,18 @@ function focusHashTarget(
   event: MouseEvent<HTMLAnchorElement>,
   href: string,
   onTargetReveal?: (target: HTMLElement) => void,
+  onRevealHref?: (href: string) => void,
 ) {
   if (!href.startsWith("#")) return;
 
   const target = document.getElementById(href.slice(1));
-  if (!target) return;
+  if (!target) {
+    if (onRevealHref) {
+      event.preventDefault();
+      onRevealHref(href);
+    }
+    return;
+  }
 
   event.preventDefault();
   if (onTargetReveal) {
@@ -40,12 +47,14 @@ export function ErrorSummary({
   className,
   focusOnMount = true,
   onTargetReveal,
+  onRevealHref,
 }: {
   errors: readonly SummaryError[];
   title?: string;
   className?: string;
   focusOnMount?: boolean;
   onTargetReveal?: (target: HTMLElement) => void;
+  onRevealHref?: (href: string) => void;
 }) {
   const titleId = useId();
   const summaryRef = useRef<HTMLElement>(null);
@@ -83,7 +92,7 @@ export function ErrorSummary({
                   <Link
                     to={href}
                     onClick={(event) =>
-                      focusHashTarget(event, href, onTargetReveal)
+                      focusHashTarget(event, href, onTargetReveal, onRevealHref)
                     }
                   >
                     {item.message}

@@ -241,9 +241,13 @@ export const formSectionSchema = z
 
 export type FormSection = z.infer<typeof formSectionSchema>;
 
+export const formLayoutSchema = z.enum(["single_page", "steps"]);
+export type FormLayout = z.infer<typeof formLayoutSchema>;
+
 export const formSchemaSchema = z
   .object({
     schemaVersion: z.literal(2),
+    layout: formLayoutSchema.default("single_page"),
     introduction: z.string().trim().max(2_000).default(""),
     presentation: formPresentationSchema.default(DEFAULT_FORM_PRESENTATION),
     sections: z.array(formSectionSchema).min(1).max(MAX_FORM_SECTIONS),
@@ -303,6 +307,7 @@ export function upgradeStoredFormSchema(
   };
   return formSchemaSchema.parse({
     schemaVersion: 2,
+    layout: "single_page",
     introduction: schema.introduction,
     presentation: schema.presentation,
     sections: [section],
@@ -724,6 +729,181 @@ export function formSectionsForAuthoring(schema: SubmissionFormSchema) {
   }));
 }
 
+/** Runtime-only; outside the section/field ID grammar so it cannot collide. */
+export const APPLICANT_SPEAKERS_STEP_ID = "__applicant_speakers";
+
+export type ApplicantFormStep =
+  | {
+      kind: "section";
+      id: string;
+      title: string;
+      description: string;
+    }
+  | {
+      kind: "speakers";
+      id: typeof APPLICANT_SPEAKERS_STEP_ID;
+      title: "Speakers";
+      description: string;
+    };
+
+export function formLayout(schema: StoredSubmissionFormSchema): FormLayout {
+  if (!("schemaVersion" in schema)) return "single_page";
+  return "layout" in schema && schema.layout === "steps"
+    ? "steps"
+    : "single_page";
+}
+
+export function formApplicantSteps(
+  schema: StoredSubmissionFormSchema,
+  answers: Record<string, string | string[]>,
+): ApplicantFormStep[] {
+  if (formLayout(schema) !== "steps") return [];
+  const sections = formSectionsForDisplay(
+    schema,
+    visibleFields(schema, answers),
+  );
+  return [
+    ...sections.map((section) => ({
+      kind: "section" as const,
+      id: section.id,
+      title: section.title ?? "Application",
+      description: section.description ?? "",
+    })),
+    {
+      kind: "speakers" as const,
+      id: APPLICANT_SPEAKERS_STEP_ID,
+      title: "Speakers",
+      description:
+        "The first speaker is primary. Additional speakers receive a pending claim relationship and an expiring invitation after final submission.",
+    },
+  ];
+}
+
+export function resolveApplicantFormStepId(
+  schema: StoredSubmissionFormSchema,
+  answers: Record<string, string | string[]>,
+  currentId: string,
+): string {
+  const steps = formApplicantSteps(schema, answers);
+  if (steps.length === 0) return currentId;
+  if (steps.some((step) => step.id === currentId)) return currentId;
+
+  const sectionOrder =
+    "schemaVersion" in schema
+      ? schema.sections.map((section) => section.id)
+      : [];
+  const currentIndex = sectionOrder.indexOf(currentId);
+  if (currentIndex >= 0) {
+    for (
+      let index = currentIndex + 1;
+      index < sectionOrder.length;
+      index += 1
+    ) {
+      const nextId = sectionOrder[index];
+      if (nextId && steps.some((step) => step.id === nextId)) return nextId;
+    }
+    for (let index = currentIndex - 1; index >= 0; index -= 1) {
+      const priorId = sectionOrder[index];
+      if (priorId && steps.some((step) => step.id === priorId)) return priorId;
+    }
+  }
+  const speakers = steps.find((step) => step.kind === "speakers");
+  return speakers?.id ?? steps[0]?.id ?? currentId;
+}
+
+export function applicantFormStepIdForField(
+  schema: StoredSubmissionFormSchema,
+  fieldId: string,
+): string | null {
+  if (!("schemaVersion" in schema)) return "legacy_application";
+  const field = schema.fields.find((candidate) => candidate.id === fieldId);
+  if (!field || !("sectionId" in field)) return null;
+  return field.sectionId;
+}
+
+export function applicantFormStepIdForHref(
+  schema: StoredSubmissionFormSchema,
+  href: string,
+): string | null {
+  if (href === "#application-speakers") return APPLICANT_SPEAKERS_STEP_ID;
+  if (href.startsWith("#answer-")) {
+    return applicantFormStepIdForField(schema, href.slice("#answer-".length));
+  }
+  return null;
+}
+
+export function applicantFormStepIdForErrors(
+  schema: StoredSubmissionFormSchema,
+  errors?: Record<string, string[]>,
+): string | null {
+  if (!errors) return null;
+  for (const field of formFieldsInDisplayOrder(schema)) {
+    if (errors[field.id]?.length) {
+      return applicantFormStepIdForField(schema, field.id);
+    }
+  }
+  if (errors.speakers?.length) return APPLICANT_SPEAKERS_STEP_ID;
+  const first = Object.keys(errors).find((key) => errors[key]?.length);
+  return first ? applicantFormStepIdForField(schema, first) : null;
+}
+
+export function incompleteRequiredVisibleFields(
+  schema: StoredSubmissionFormSchema,
+  answers: Record<string, string | string[]>,
+  uploads: Record<string, UploadReference> = {},
+) {
+  return visibleFields(schema, answers).filter((field) => {
+    if (!field.required) return false;
+    if (field.type === "video" && uploads[field.id]) return false;
+    const value = answers[field.id];
+    return Array.isArray(value)
+      ? value.length === 0
+      : !String(value ?? "").trim();
+  });
+}
+
+export function deriveInitialApplicantFormStepId({
+  schema,
+  answers,
+  uploads = {},
+  errors,
+}: {
+  schema: StoredSubmissionFormSchema;
+  answers: Record<string, string | string[]>;
+  speakers: Array<{ name: string; email: string }>;
+  minSpeakers: number;
+  maxSpeakers: number | null;
+  uploads?: Record<string, UploadReference>;
+  errors?: Record<string, string[]>;
+}): string {
+  const steps = formApplicantSteps(schema, answers);
+  if (steps.length === 0) return "";
+
+  const errorStepId = applicantFormStepIdForErrors(schema, errors);
+  if (errorStepId) {
+    return resolveApplicantFormStepId(schema, answers, errorStepId);
+  }
+
+  const incomplete = incompleteRequiredVisibleFields(
+    schema,
+    answers,
+    uploads,
+  )[0];
+  if (
+    incomplete &&
+    "sectionId" in incomplete &&
+    typeof incomplete.sectionId === "string"
+  ) {
+    return resolveApplicantFormStepId(schema, answers, incomplete.sectionId);
+  }
+  const fallbackStepId = steps[0]?.id;
+  if (incomplete && fallbackStepId) {
+    return resolveApplicantFormStepId(schema, answers, fallbackStepId);
+  }
+
+  return APPLICANT_SPEAKERS_STEP_ID;
+}
+
 export function visibleAnswers(
   schema: StoredSubmissionFormSchema,
   answers: Record<string, string | string[]>,
@@ -815,6 +995,7 @@ export function validateFinalAnswers(
 
 export const DEFAULT_FORM_SCHEMA: SubmissionFormSchema = {
   schemaVersion: 2,
+  layout: "single_page",
   introduction:
     "Share a practical session that gives attendees something useful to take away.",
   presentation: DEFAULT_FORM_PRESENTATION,

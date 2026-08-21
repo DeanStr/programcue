@@ -916,4 +916,84 @@ test.describe
       await audienceLevel.selectOption("Beginner");
       await expect(page.getByLabel("Workshop prerequisites")).toBeHidden();
     });
+
+    test("stepped layout pages sections and keeps a speakers step", async ({
+      page,
+    }) => {
+      const unique = Date.now();
+      await page.goto("/admin/submissions/form");
+      await expect(
+        page.getByRole("heading", { name: "Call for Speakers Form Builder" }),
+      ).toBeVisible();
+      await page.locator("body[data-hydrated='true']").waitFor();
+      await page.getByLabel("Applicant layout").selectOption("steps");
+      await expect(page.getByLabel("Applicant layout")).toHaveValue("steps");
+      await page.getByRole("button", { name: "Save draft" }).click();
+      await expect(
+        page.locator(".validation-item.ok[role='status']").filter({
+          hasText: "Draft form saved.",
+        }),
+      ).toBeVisible();
+      await expect(page.getByLabel("Applicant layout")).toHaveValue("steps");
+      await page.getByRole("button", { name: "Publish version" }).click();
+      await page.getByRole("button", { name: "Confirm publication" }).click();
+      await expect(
+        page.locator(".validation-item.ok[role='status']").filter({
+          hasText: "Published a new immutable form version",
+        }),
+      ).toBeVisible();
+
+      await page.goto("/apply/form");
+      await page.getByRole("link", { name: "Continue to application" }).click();
+      await page
+        .getByLabel("Email address")
+        .fill(`stepped-form-${unique}@example.com`);
+      await page
+        .getByRole("button", { name: "Send verification code" })
+        .click();
+      await page.getByLabel("Six-digit code").fill("424242");
+      await page
+        .getByRole("button", { name: "Verify and open applications" })
+        .click();
+      await page.getByRole("button", { name: "Start application" }).click();
+
+      await expect(page.getByText(/^Step 1 of \d+:/)).toBeVisible();
+      await expect(
+        page.getByRole("button", { name: "Continue" }),
+      ).toBeVisible();
+      await expect(
+        page.getByRole("button", { name: "Submit application" }),
+      ).toHaveCount(0);
+      await expect(page.getByLabel("Speaker 1 name")).toHaveCount(0);
+
+      await page.getByRole("button", { name: "Continue" }).click();
+      const application = page.locator("#submitted-application");
+      const sessionTitle = application.locator("#answer-title");
+      await expect(sessionTitle).toBeVisible();
+      await sessionTitle.fill(`Stepped session ${unique}`);
+      await page
+        .getByLabel("Session description")
+        .fill("A practical takeaway for programme teams.");
+      await page.getByLabel("Event Operations").check();
+      await page.getByLabel("Format").selectOption("Presentation");
+      await page.getByRole("button", { name: "Continue" }).click();
+
+      if (await page.getByLabel("Key takeaway").count()) {
+        await expect(sessionTitle).toHaveCount(0);
+        await page.getByRole("button", { name: "Back" }).click();
+        await expect(sessionTitle).toBeVisible();
+        await page.getByRole("button", { name: "Continue" }).click();
+        await page.getByLabel("Key takeaway").fill("A reusable checklist.");
+        await page.getByRole("button", { name: "Continue" }).click();
+      }
+
+      await expect(page.getByText(/Step \d+ of \d+: Speakers/)).toBeVisible();
+      await expect(page.getByLabel("Speaker 1 name")).toBeVisible();
+      await expect(
+        page.getByRole("button", { name: "Submit application" }),
+      ).toBeVisible();
+      await page.getByRole("button", { name: "Save draft" }).click();
+      await expect(page.getByText("Your draft has been saved")).toBeVisible();
+      await expect(page.getByText(/Step \d+ of \d+: Speakers/)).toBeVisible();
+    });
   });
