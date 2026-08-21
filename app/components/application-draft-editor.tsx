@@ -96,6 +96,7 @@ export function DraftEditor({
   const speakersHeadingRef = useRef<HTMLLegendElement>(null);
   const focusStepHeading = useRef(false);
   const advancingStep = useRef(false);
+  const ignoreNextImplicitContinue = useRef(false);
   const { confirm, dialog } = useConfirm();
   const effectiveMaximumSpeakers = Math.min(
     maxSpeakers ?? MAX_SUBMISSION_SPEAKERS,
@@ -356,7 +357,7 @@ export function DraftEditor({
     : [];
 
   function revealHref(href: string) {
-    if (!stepped || requestInFlight) return;
+    if (!stepped || requestInFlight || videoTransferBlocked) return;
     const stepId = applicantFormStepIdForHref(schema, href);
     if (stepId) setCurrentStepId(stepId);
     setPendingFocusHref(href);
@@ -438,18 +439,32 @@ export function DraftEditor({
         : null;
     if (intent === "save_draft" || intent === "withdraw") return;
     event.preventDefault();
-    // Enter on a closed select is native open/confirm, not "Continue".
-    if (document.activeElement instanceof HTMLSelectElement) return;
+    if (ignoreNextImplicitContinue.current) {
+      ignoreNextImplicitContinue.current = false;
+      return;
+    }
+    const active = document.activeElement;
+    if (active instanceof HTMLSelectElement) return;
+    if (active instanceof HTMLInputElement && active.type === "file") return;
     continueStep();
   }
 
   function handleFormKeyDown(event: KeyboardEvent<HTMLFormElement>) {
     if (!stepped || resolvedStepId === APPLICANT_SPEAKERS_STEP_ID) return;
     if (event.key !== "Enter") return;
+    if (event.nativeEvent.isComposing || event.nativeEvent.keyCode === 229) {
+      ignoreNextImplicitContinue.current = true;
+      queueMicrotask(() => {
+        ignoreNextImplicitContinue.current = false;
+      });
+      return;
+    }
+    ignoreNextImplicitContinue.current = false;
     const target = event.target;
     if (target instanceof HTMLTextAreaElement) return;
     if (target instanceof HTMLButtonElement) return;
     if (target instanceof HTMLSelectElement) return;
+    if (target instanceof HTMLInputElement && target.type === "file") return;
     event.preventDefault();
     continueStep();
   }

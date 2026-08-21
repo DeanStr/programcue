@@ -261,16 +261,7 @@ export function ApplicationAnswers({
                       current={
                         currentUpload?.fieldId === field.id
                           ? currentUpload
-                          : stepped && attachedUpload
-                            ? {
-                                fieldId: field.id,
-                                assetId: attachedUpload.assetId,
-                                versionId: attachedUpload.versionId,
-                                filename: "Uploaded video",
-                                sizeBytes: 0,
-                                status: "scanning",
-                              }
-                            : null
+                          : null
                       }
                       siteKey={uploadTurnstileSiteKey}
                       disabled={readOnly}
