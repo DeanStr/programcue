@@ -503,6 +503,27 @@ describe("agent tool permissions and approval", () => {
     expect(count?.count).toBe(1);
   });
 
+  it("rejects an empty reminder audience before calling the model", async () => {
+    const { testEnv, baseTemplateVersionId } = await reminderEnvironment();
+    const fetcher = vi.fn<typeof fetch>();
+
+    await expect(
+      new AiAssistantService(testEnv, {
+        fetcher,
+        providerConfiguration,
+      }).draftReminderProposal(
+        admin,
+        "overdue_speaker_tasks",
+        "Ask speakers to complete overdue tasks.",
+        baseTemplateVersionId,
+        "transactional",
+      ),
+    ).rejects.toThrow(
+      "The selected reminder audience has no deliverable recipients.",
+    );
+    expect(fetcher).not.toHaveBeenCalled();
+  });
+
   it("durably previews exact reminder recipients and content, then queues once after explicit approval", async () => {
     const {
       testEnv,

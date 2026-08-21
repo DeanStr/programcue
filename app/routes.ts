@@ -131,6 +131,7 @@ export default [
     "routes/communication-unsubscribe.tsx",
   ),
   route("admin/events/:eventId/changes", "routes/event-changes.ts"),
+  route("admin/assistant/stream", "routes/assistant-stream.ts"),
   route("ai/context", "routes/ai-context-action.ts"),
   route("admin/exports/:resource.csv", "routes/admin-data-export.ts"),
   route("admin", "routes/admin-index.ts"),

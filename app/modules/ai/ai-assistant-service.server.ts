@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { CommunicationService } from "~/modules/communications/communication-service.server";
 import {
   emailProviderConfigurationIssue,
   requireEmailProviderConfiguration,
@@ -14,6 +15,7 @@ import {
   parseJson,
 } from "./ai-assistant-core-service.server";
 import { AiPermissionError, AiProposalStateError } from "./ai-assistant-errors";
+import { assertReminderDeliveryReady } from "./ai-proposal-executor-foundation.server";
 import type { AiProposalApprovalResult } from "./ai-proposal-lifecycle.server";
 import { AiProviderSettingsService } from "./ai-provider.server";
 import {
@@ -377,7 +379,16 @@ Return: (1) a concise neutral summary, (2) a criterion-by-criterion evidence map
       rawBaseTemplateVersionId,
     );
     const kind = z.enum(["transactional", "optional"]).parse(rawKind);
-    const result = await this.draftReminder(viewer, cohort, rawObjective);
+    const objective = z.string().trim().min(3).max(500).parse(rawObjective);
+    const communications = new CommunicationService(this.env);
+    const basePreview = await communications.preview(viewer, {
+      templateVersionId: baseTemplateVersionId,
+      audienceType,
+      manualRecipients: "",
+      kind,
+    });
+    assertReminderDeliveryReady(basePreview);
+    const result = await this.draftReminder(viewer, cohort, objective);
     if (!result.draft) {
       throw new AiProviderError(
         `${result.attribution.provider} returned no structured reminder draft for preview.`,

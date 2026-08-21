@@ -60,6 +60,31 @@ function toolResponse(
   });
 }
 
+function multiToolResponse(
+  calls: Array<{ name: string; args: Record<string, unknown> }>,
+  id: string = crypto.randomUUID(),
+) {
+  return providerJson({
+    id,
+    model: providerConfiguration.model,
+    status: "completed",
+    output: [
+      {
+        type: "reasoning",
+        id: `reasoning-${id}`,
+        encrypted_content: "opaque-provider-reasoning-state",
+      },
+      ...calls.map((call, index) => ({
+        type: "function_call",
+        id: `fc-${id}-${index}`,
+        call_id: `call-${id}-${index}`,
+        name: call.name,
+        arguments: JSON.stringify(call.args),
+      })),
+    ],
+  });
+}
+
 function textResponse(text: string, id = crypto.randomUUID()) {
   return providerJson({
     id,
@@ -262,6 +287,89 @@ describe("OpenAI Responses provider boundary", () => {
       retryable: false,
       cancellable: false,
     });
+  });
+
+  it("executes a provider batch of read-only calls sequentially and returns every result", async () => {
+    const fetcher = vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce(
+        multiToolResponse(
+          [
+            { name: "get_event_readiness", args: {} },
+            { name: "find_incomplete_speakers", args: { limit: 10 } },
+          ],
+          "parallel-read",
+        ),
+      )
+      .mockResolvedValueOnce(
+        textResponse("Program Cue returned readiness and speaker evidence."),
+      );
+
+    const result = await new AiAssistantService(
+      env as unknown as CloudflareEnvironment,
+      { fetcher, providerConfiguration },
+    ).ask(admin, "Show readiness and incomplete speakers.");
+
+    expect(result.answer).toContain("readiness and speaker evidence");
+    expect(result.evidence.map((item) => item.id)).toContain("event-readiness");
+    expect(fetcher).toHaveBeenCalledTimes(2);
+    const continuation = JSON.parse(
+      String(fetcher.mock.calls[1]![1]?.body),
+    ) as { input: Array<{ type?: string; call_id?: string }> };
+    expect(
+      continuation.input
+        .filter((item) => item.type === "function_call_output")
+        .map((item) => item.call_id),
+    ).toEqual(["call-parallel-read-0", "call-parallel-read-1"]);
+  });
+
+  it("rejects a mixed read and write batch before executing any tool", async () => {
+    const completedBefore = await env.DB.prepare(
+      `SELECT COUNT(*) AS count FROM audit_events
+        WHERE event_id = ? AND action = 'assistant.tool.completed'`,
+    )
+      .bind(admin.eventId)
+      .first<{ count: number }>();
+    const fetcher = vi.fn<typeof fetch>().mockResolvedValue(
+      multiToolResponse([
+        { name: "get_event_readiness", args: {} },
+        { name: "propose_task", args: {} },
+      ]),
+    );
+
+    await expect(
+      new AiAssistantService(env as unknown as CloudflareEnvironment, {
+        fetcher,
+        providerConfiguration,
+      }).ask(admin, "Read readiness and create a task."),
+    ).rejects.toThrow("only read-only tool calls may be batched");
+    expect(fetcher).toHaveBeenCalledTimes(1);
+    const completedAfter = await env.DB.prepare(
+      `SELECT COUNT(*) AS count FROM audit_events
+        WHERE event_id = ? AND action = 'assistant.tool.completed'`,
+    )
+      .bind(admin.eventId)
+      .first<{ count: number }>();
+    expect(completedAfter).toEqual(completedBefore);
+  });
+
+  it("rejects a read-only batch that exceeds the request tool budget", async () => {
+    const fetcher = vi.fn<typeof fetch>().mockResolvedValue(
+      multiToolResponse(
+        Array.from({ length: 9 }, () => ({
+          name: "get_event_readiness",
+          args: {},
+        })),
+      ),
+    );
+
+    await expect(
+      new AiAssistantService(env as unknown as CloudflareEnvironment, {
+        fetcher,
+        providerConfiguration,
+      }).ask(admin, "Inspect readiness repeatedly."),
+    ).rejects.toThrow("exceeded the 8-tool-call limit");
+    expect(fetcher).toHaveBeenCalledTimes(1);
   });
 
   it("reports provider errors instead of manufacturing an answer", async () => {

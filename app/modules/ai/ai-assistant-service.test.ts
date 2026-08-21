@@ -287,7 +287,7 @@ describe("organisation AI provider boundary", () => {
     });
   });
 
-  it("maps DeepSeek tool calls and their results through the shared transcript", async () => {
+  it("maps batched DeepSeek tool calls and their results through the shared transcript", async () => {
     const run = vi
       .fn()
       .mockResolvedValueOnce({
@@ -307,6 +307,14 @@ describe("organisation AI provider boundary", () => {
                   function: {
                     name: "get_event_readiness",
                     arguments: "{}",
+                  },
+                },
+                {
+                  id: "call-speakers-2",
+                  type: "function",
+                  function: {
+                    name: "find_incomplete_speakers",
+                    arguments: '{"limit":10}',
                   },
                 },
               ],
@@ -345,6 +353,18 @@ describe("organisation AI provider boundary", () => {
             additionalProperties: false,
           },
         },
+        {
+          type: "function" as const,
+          name: "find_incomplete_speakers",
+          description: "Read incomplete speakers",
+          strict: true as const,
+          parameters: {
+            type: "object",
+            properties: { limit: { type: "number" } },
+            required: ["limit"],
+            additionalProperties: false,
+          },
+        },
       ],
     };
 
@@ -355,6 +375,12 @@ describe("organisation AI provider boundary", () => {
       name: "get_event_readiness",
       arguments: "{}",
     });
+    expect(toolResponse.output).toContainEqual({
+      type: "function_call",
+      call_id: "call-speakers-2",
+      name: "find_incomplete_speakers",
+      arguments: '{"limit":10}',
+    });
     const final = await provider.create({
       ...request,
       input: [
@@ -364,6 +390,11 @@ describe("organisation AI provider boundary", () => {
           type: "function_call_output",
           call_id: "call-readiness-1",
           output: '{"percentage":73,"status":"at_risk"}',
+        },
+        {
+          type: "function_call_output",
+          call_id: "call-speakers-2",
+          output: '{"count":2}',
         },
       ],
     });
@@ -387,12 +418,25 @@ describe("organisation AI provider boundary", () => {
                   arguments: "{}",
                 },
               },
+              {
+                id: "call-speakers-2",
+                type: "function",
+                function: {
+                  name: "find_incomplete_speakers",
+                  arguments: '{"limit":10}',
+                },
+              },
             ],
           },
           {
             role: "tool",
             tool_call_id: "call-readiness-1",
             content: '{"percentage":73,"status":"at_risk"}',
+          },
+          {
+            role: "tool",
+            tool_call_id: "call-speakers-2",
+            content: '{"count":2}',
           },
         ],
       }),

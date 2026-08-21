@@ -22,6 +22,7 @@ import {
   loader as applicationLoader,
 } from "./application-form";
 import { action as assistantAction } from "./assistant";
+import { action as assistantStreamAction } from "./assistant-stream";
 import {
   action as communicationComposerAction,
   loader as communicationComposerLoader,
@@ -623,6 +624,20 @@ const boundaries: readonly Boundary[] = [
     invoke: (actor) =>
       assistantAction({
         request: requestFor(actor, "/admin/assistant", {
+          method: "POST",
+          body: new URLSearchParams({ intent: "unsupported" }),
+        }),
+        params: {},
+        context: context(),
+      } as never),
+  },
+  {
+    name: "standalone assistant stream action",
+    allowed: adminActors,
+    allowedStatus: 400,
+    invoke: (actor) =>
+      assistantStreamAction({
+        request: requestFor(actor, "/admin/assistant/stream", {
           method: "POST",
           body: new URLSearchParams({ intent: "unsupported" }),
         }),

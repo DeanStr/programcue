@@ -36,6 +36,45 @@ test("assistant fails explicitly when the OpenAI credential is unavailable", asy
   await expect(
     page.getByRole("button", { name: "Ask assistant" }),
   ).toBeDisabled();
+  await expect(page.locator("form#assistant-stream-form")).toHaveAttribute(
+    "action",
+    "/admin/assistant/stream",
+  );
+  const suggestedRequest = page.getByRole("button", {
+    name: "What is blocking event readiness? Cite the exact records and rank the next three actions.",
+  });
+  await expect(suggestedRequest).toHaveAttribute(
+    "form",
+    "assistant-stream-form",
+  );
+  await expect(suggestedRequest).toHaveAttribute("name", "suggestedPrompt");
+});
+
+test("assistant streaming endpoint returns an event stream instead of the page document", async ({
+  page,
+}) => {
+  await page.goto("/admin/assistant");
+  const response = await page.evaluate(async () => {
+    const form = new FormData();
+    form.set("intent", "ask");
+    form.set("prompt", "What is blocking readiness?");
+    const result = await fetch("/admin/assistant/stream", {
+      method: "POST",
+      headers: { accept: "text/event-stream" },
+      body: form,
+    });
+    return {
+      status: result.status,
+      contentType: result.headers.get("content-type"),
+      body: await result.text(),
+    };
+  });
+
+  expect(response.status).toBe(200);
+  expect(response.contentType).toContain("text/event-stream");
+  expect(response.body).toContain("event: status");
+  expect(response.body).toContain("event: error");
+  expect(response.body).not.toContain("<!DOCTYPE html>");
 });
 
 test("assistant task preview requires confirmation and executes through the real task command", async ({

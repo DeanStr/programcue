@@ -62,37 +62,26 @@ export async function loader({ request, context }: LoaderFunctionArgs) {
 type ActionResult =
   | {
       ok: true;
-      intent: "ask";
-      message: string;
-      result: Awaited<ReturnType<AiAssistantService["ask"]>>;
-      approval: null;
-    }
-  | {
-      ok: true;
       intent: "approve";
       message: string;
-      result: null;
       approval: Awaited<ReturnType<AiAssistantService["approveProposal"]>>;
     }
   | {
       ok: true;
       intent: "configure";
       message: string;
-      result: null;
       approval: null;
     }
   | {
       ok: true;
       intent: "revise";
       message: string;
-      result: null;
       approval: null;
     }
   | {
       ok: false;
-      intent: "ask" | "approve" | "revise" | "configure";
+      intent: "approve" | "revise" | "configure" | "unknown";
       message: string;
-      result: null;
       approval: null;
     };
 
@@ -124,7 +113,7 @@ export function providerFailureMessage(error: unknown) {
 
 function knownErrorResponse(
   error: unknown,
-  intent: "ask" | "approve" | "revise" | "configure",
+  intent: "approve" | "revise" | "configure",
 ) {
   let status: number | null = null;
   const errorName = error instanceof Error ? error.name : "";
@@ -164,7 +153,6 @@ function knownErrorResponse(
       ok: false,
       intent,
       message,
-      result: null,
       approval: null,
     },
     { status },
@@ -182,7 +170,6 @@ export async function action({ request, context }: ActionFunctionArgs) {
   const form = await request.formData();
   const rawIntent = form.get("intent");
   if (
-    rawIntent !== "ask" &&
     rawIntent !== "approve" &&
     rawIntent !== "revise" &&
     rawIntent !== "configure"
@@ -190,9 +177,8 @@ export async function action({ request, context }: ActionFunctionArgs) {
     return data<ActionResult>(
       {
         ok: false,
-        intent: "ask",
+        intent: "unknown",
         message: "Unsupported assistant action.",
-        result: null,
         approval: null,
       },
       { status: 400 },
@@ -211,7 +197,6 @@ export async function action({ request, context }: ActionFunctionArgs) {
         ok: true,
         intent,
         message: `${selection.provider} ${selection.model} is selected for this organisation. Runtime credentials and bindings are checked separately; unavailable configuration will fail explicitly.`,
-        result: null,
         approval: null,
       });
     }
@@ -236,7 +221,6 @@ export async function action({ request, context }: ActionFunctionArgs) {
             : approval.kind === "task"
               ? "The approved task was created and audited."
               : "The approved domain action was executed and audited.",
-        result: null,
         approval,
       });
     }
@@ -253,31 +237,10 @@ export async function action({ request, context }: ActionFunctionArgs) {
         intent,
         message:
           "The edited content was saved as a new immutable template version and every recipient was previewed again. Nothing was queued or sent.",
-        result: null,
         approval: null,
       });
     }
-    if (request.headers.get("accept")?.includes("text/event-stream")) {
-      const stream = await agent.streamAsk(viewer, form.get("prompt"));
-      return new Response(stream, {
-        headers: {
-          "content-type": "text/event-stream; charset=utf-8",
-          "cache-control": "private, no-cache, no-store",
-          connection: "keep-alive",
-          "x-accel-buffering": "no",
-        },
-      });
-    }
-    const result = await agent.ask(viewer, form.get("prompt"));
-    return data<ActionResult>({
-      ok: true,
-      intent,
-      message: result.proposals.length
-        ? "The assistant prepared a preview. No write has executed."
-        : "The assistant completed an evidence-backed advisory response.",
-      result,
-      approval: null,
-    });
+    throw new Error("The assistant action was not handled.");
   } catch (error) {
     const response = knownErrorResponse(error, intent);
     if (response) return response;
@@ -286,12 +249,14 @@ export async function action({ request, context }: ActionFunctionArgs) {
   }
 }
 
-function StreamingAssistantForm({
+function StreamingAssistantWorkspace({
   defaultPrompt,
   disabled,
+  eventName,
 }: {
   defaultPrompt: string;
   disabled: boolean;
+  eventName: string;
 }) {
   const [pending, setPending] = useState(false);
   const [partial, setPartial] = useState("");
@@ -301,24 +266,46 @@ function StreamingAssistantForm({
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (pending || disabled) return;
+    const form = new FormData(event.currentTarget);
+    const submitter = (event.nativeEvent as SubmitEvent).submitter;
+    if (
+      submitter instanceof HTMLButtonElement &&
+      submitter.name === "suggestedPrompt"
+    ) {
+      form.set("prompt", submitter.value);
+    }
     setPending(true);
     setPartial("");
     setResult(null);
     setError(null);
     try {
-      const response = await fetch("/admin/assistant", {
+      const response = await fetch("/admin/assistant/stream", {
         method: "POST",
         headers: { accept: "text/event-stream" },
-        body: new FormData(event.currentTarget),
+        body: form,
       });
-      if (!response.ok || !response.body) {
-        const failure = (await response.json().catch(() => null)) as {
-          message?: unknown;
-        } | null;
+      const contentType = response.headers
+        .get("content-type")
+        ?.split(";", 1)[0]
+        ?.trim()
+        .toLowerCase();
+      if (
+        !response.ok ||
+        !response.body ||
+        contentType !== "text/event-stream"
+      ) {
+        const failure =
+          contentType === "application/json"
+            ? ((await response.json().catch(() => null)) as {
+                message?: unknown;
+              } | null)
+            : null;
         throw new Error(
           typeof failure?.message === "string"
             ? failure.message
-            : "The assistant request could not be completed. Try again.",
+            : contentType && contentType !== "text/event-stream"
+              ? "The assistant streaming endpoint returned an unexpected response. Report this if it keeps happening."
+              : "The assistant request could not be completed. Try again.",
         );
       }
       const reader = response.body.getReader();
@@ -386,49 +373,90 @@ function StreamingAssistantForm({
     }
   }
 
+  const suggestedPrompts = [
+    "What is blocking event readiness? Cite the exact records and rank the next three actions.",
+    "Find speakers with incomplete tasks and draft a reminder. Do not send it.",
+    `Propose one event task for ${eventName} that addresses the highest readiness blocker. Save a preview only.`,
+    "Explain current schedule conflicts and distinguish recorded facts from your inference.",
+    "Inspect the current form configuration and propose a new application form draft. Do not publish it.",
+    "Inspect the draft evaluation round and propose an exact rubric update with valid weights. Do not activate or assign it.",
+    "Inspect the active evaluation round and propose reviewer assignments for currently unassigned targets. Preview every target and reviewer.",
+    "Prepare an editable email template draft for the next speaker briefing. Do not publish or send it.",
+    "Inspect the draft schedule and propose one conflict-free placement for an unscheduled session. Do not publish it.",
+    "Preview the exact Accelevents export plan as a dry run. Do not contact the provider until I approve.",
+  ];
+
   return (
-    <div className="stack">
-      <form method="post" className="stack" onSubmit={submit}>
-        <input type="hidden" name="intent" value="ask" />
-        <label className="label">
-          Request
-          <textarea
-            className="textarea"
-            name="prompt"
-            minLength={2}
-            maxLength={4_000}
-            rows={6}
-            required
-            defaultValue={defaultPrompt}
-            placeholder="What is blocking event readiness, and what should I address first?"
-          />
-        </label>
-        <p className="help">
-          The assistant sees only records returned by event-scoped tools.
-          Provider or validation failures are reported explicitly.
-        </p>
-        <button
-          className="btn primary"
-          type="submit"
-          disabled={pending || disabled}
-        >
-          <Sparkles aria-hidden size={14} />
-          {pending ? "Streaming authorised analysis…" : "Ask assistant"}
-        </button>
-      </form>
-      {pending && partial ? (
-        <section aria-live="polite" className="pc-assist-stream">
-          <h3>Streaming answer</h3>
-          <span className="status info">Live</span>
-          <div>{partial}</div>
-        </section>
-      ) : null}
-      {error ? (
-        <p className="status danger" role="alert">
-          {error}
-        </p>
-      ) : null}
-      {result ? <AssistantResultPanel result={result} /> : null}
+    <div className="pc-assist-workspace">
+      <section className="pc-assist-compose">
+        <h2>What do you need to know or prepare?</h2>
+        <div className="stack">
+          <form
+            action="/admin/assistant/stream"
+            method="post"
+            className="stack"
+            id="assistant-stream-form"
+            onSubmit={submit}
+          >
+            <input type="hidden" name="intent" value="ask" />
+            <label className="label">
+              Request
+              <textarea
+                className="textarea"
+                name="prompt"
+                minLength={2}
+                maxLength={4_000}
+                rows={6}
+                required
+                defaultValue={defaultPrompt}
+                placeholder="What is blocking event readiness, and what should I address first?"
+              />
+            </label>
+            <p className="help">
+              The assistant sees only records returned by event-scoped tools.
+              Provider or validation failures are reported explicitly.
+            </p>
+            <button
+              className="btn primary"
+              type="submit"
+              disabled={pending || disabled}
+            >
+              <Sparkles aria-hidden size={14} />
+              {pending ? "Streaming authorised analysis…" : "Ask assistant"}
+            </button>
+          </form>
+          {pending && partial ? (
+            <section aria-live="polite" className="pc-assist-stream">
+              <h3>Streaming answer</h3>
+              <span className="status info">Live</span>
+              <div>{partial}</div>
+            </section>
+          ) : null}
+          {error ? (
+            <p className="status danger" role="alert">
+              {error}
+            </p>
+          ) : null}
+          {result ? <AssistantResultPanel result={result} /> : null}
+        </div>
+      </section>
+
+      <aside className="pc-assist-prompts">
+        <h2>Useful requests</h2>
+        {suggestedPrompts.map((prompt) => (
+          <button
+            className="pc-assist-prompt"
+            type="submit"
+            form="assistant-stream-form"
+            name="suggestedPrompt"
+            value={prompt}
+            disabled={pending || disabled}
+            key={prompt}
+          >
+            <strong>{prompt}</strong>
+          </button>
+        ))}
+      </aside>
     </div>
   );
 }
@@ -438,14 +466,7 @@ export default function AssistantRoute() {
   const actionData = useActionData<typeof action>();
   const navigation = useNavigation();
   const busy = navigation.state !== "idle";
-  const currentProposalIds = new Set(
-    actionData?.ok && actionData.result
-      ? actionData.result.proposals.map((proposal) => proposal.id)
-      : [],
-  );
-  const recentProposals = loaderData.proposals.filter(
-    (proposal) => !currentProposalIds.has(proposal.id),
-  );
+  const recentProposals = loaderData.proposals;
   return (
     <div className="pc-assist">
       <PageHeader
@@ -559,47 +580,11 @@ export default function AssistantRoute() {
         />
       ) : null}
 
-      <div className="pc-assist-workspace">
-        <section className="pc-assist-compose">
-          <h2>What do you need to know or prepare?</h2>
-          <StreamingAssistantForm
-            defaultPrompt={loaderData.prompt}
-            disabled={busy || !loaderData.provider.configured}
-          />
-        </section>
-
-        <aside className="pc-assist-prompts">
-          <h2>Useful requests</h2>
-          {[
-            "What is blocking event readiness? Cite the exact records and rank the next three actions.",
-            "Find speakers with incomplete tasks and draft a reminder. Do not send it.",
-            `Propose one event task for ${loaderData.eventName} that addresses the highest readiness blocker. Save a preview only.`,
-            "Explain current schedule conflicts and distinguish recorded facts from your inference.",
-            "Inspect the current form configuration and propose a new application form draft. Do not publish it.",
-            "Inspect the draft evaluation round and propose an exact rubric update with valid weights. Do not activate or assign it.",
-            "Inspect the active evaluation round and propose reviewer assignments for currently unassigned targets. Preview every target and reviewer.",
-            "Prepare an editable email template draft for the next speaker briefing. Do not publish or send it.",
-            "Inspect the draft schedule and propose one conflict-free placement for an unscheduled session. Do not publish it.",
-            "Preview the exact Accelevents export plan as a dry run. Do not contact the provider until I approve.",
-          ].map((prompt) => (
-            <Form method="post" key={prompt}>
-              <input type="hidden" name="intent" value="ask" />
-              <input type="hidden" name="prompt" value={prompt} />
-              <button
-                className="pc-assist-prompt"
-                type="submit"
-                disabled={busy || !loaderData.provider.configured}
-              >
-                <strong>{prompt}</strong>
-              </button>
-            </Form>
-          ))}
-        </aside>
-      </div>
-
-      {actionData?.ok && actionData.result ? (
-        <AssistantResultPanel result={actionData.result} />
-      ) : null}
+      <StreamingAssistantWorkspace
+        defaultPrompt={loaderData.prompt}
+        disabled={busy || !loaderData.provider.configured}
+        eventName={loaderData.eventName}
+      />
 
       {recentProposals.length ? (
         <section className="pc-assist-recent">
@@ -631,7 +616,7 @@ export default function AssistantRoute() {
             />
           ))}
         </section>
-      ) : currentProposalIds.size === 0 ? (
+      ) : (
         <section className="pc-assist-empty">
           <CheckCircle2 aria-hidden size={18} />
           <h2>No pending assistant writes</h2>
@@ -641,7 +626,7 @@ export default function AssistantRoute() {
             confirmation.
           </p>
         </section>
-      ) : null}
+      )}
     </div>
   );
 }

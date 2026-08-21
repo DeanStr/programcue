@@ -18,6 +18,7 @@ import { AI_TOOLS, adminRoles } from "./ai-tool-contracts.server";
 
 export {
   acceleventsRunProposalArgumentsSchema,
+  aiToolClass,
   assistantProposalMetadataSchema,
   emailTemplateDraftProposalArgumentsSchema,
   formDraftProposalArgumentsSchema,

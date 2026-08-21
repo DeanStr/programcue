@@ -679,3 +679,7 @@ export const AI_TOOLS: AiToolDefinition[] = [
     taskProposalArgumentsSchema,
   ),
 ];
+
+export function aiToolClass(name: string): AiToolDefinition["class"] | null {
+  return AI_TOOLS.find((tool) => tool.name === name)?.class ?? null;
+}
