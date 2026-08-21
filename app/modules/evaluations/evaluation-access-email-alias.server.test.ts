@@ -126,6 +126,79 @@ describe("evaluation reviewer email alias", () => {
     });
   });
 
+  it("keeps a controlled inbox as its own reusable identity and sends the real invitation boundary", async () => {
+    const delivery = vi.fn(
+      async () =>
+        new Response(JSON.stringify({ id: "controlled-inbox-email" }), {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        }),
+    );
+    vi.stubGlobal("fetch", delivery);
+    const email = "controlled-inbox@programcue.dev";
+    const service = new EvaluationService(productionEvaluationEnvironment());
+
+    const invited = await service.inviteEvaluationMember(evaluationAdmin, {
+      name: "Controlled Inbox Reviewer",
+      email,
+      role: "evaluator",
+      teamId: null,
+    });
+    const resent = await service.inviteEvaluationMember(evaluationAdmin, {
+      name: "Controlled Inbox Reviewer",
+      email,
+      role: "evaluator",
+      teamId: null,
+    });
+
+    expect(invited).toEqual({
+      membershipId: expect.any(String),
+      delivery: "sent",
+    });
+    expect(resent).toEqual({
+      membershipId: invited.membershipId,
+      delivery: "sent",
+    });
+    expect(delivery).toHaveBeenCalledTimes(2);
+    const firstBody = JSON.parse(
+      String(
+        (delivery.mock.calls[0] as unknown as [string, RequestInit])[1].body,
+      ),
+    ) as { to: string[] };
+    expect(firstBody.to).toEqual([email]);
+    await expect(
+      (env as unknown as CloudflareEnvironment).DB.prepare(
+        `SELECT person.id AS personId, person.email,
+                membership.id AS membershipId,
+                json_extract(audit.metadata_json, '$.evaluatorEmailRouting')
+                  AS evaluatorEmailRouting
+           FROM people person
+           JOIN memberships membership ON membership.person_id = person.id
+           JOIN audit_events audit ON audit.entity_id = membership.id
+          WHERE person.email = ? COLLATE NOCASE
+            AND membership.organisation_id = ?
+            AND membership.event_id = ?
+            AND membership.role = 'evaluator'
+            AND audit.action = 'membership.evaluator.invited'
+          ORDER BY audit.rowid DESC LIMIT 1`,
+      )
+        .bind(email, DEMO_ORGANISATION_ID, DEMO_EVENT_ID)
+        .first(),
+    ).resolves.toEqual({
+      personId: expect.not.stringMatching(
+        new RegExp(
+          `^(${Object.values(SBEK_FIXTURE_PEOPLE)
+            .map((person) => person.personId)
+            .join("|")})$`,
+          "u",
+        ),
+      ),
+      email,
+      membershipId: invited.membershipId,
+      evaluatorEmailRouting: null,
+    });
+  });
+
   it("rejects a reserved production destination before creating access state", async () => {
     const delivery = vi.fn();
     vi.stubGlobal("fetch", delivery);

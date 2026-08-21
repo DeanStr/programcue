@@ -27,7 +27,10 @@ import {
   EVALUATION_FIXTURE_RESET_OPERATION_TYPE,
   markEvaluationFixtureResetFailed,
 } from "~/platform/evaluation/evaluation-fixture-reset-lock.server";
-import { findPersonLinkedOutsideEvaluationOrganisation } from "~/platform/evaluation/evaluation-identity-isolation.server";
+import {
+  findPeopleLinkedOutsideEvaluationOrganisation,
+  findPersonLinkedOutsideEvaluationOrganisation,
+} from "~/platform/evaluation/evaluation-identity-isolation.server";
 import { requireRuntimeMode } from "~/platform/runtime-environment.server";
 
 const EVALUATION_SENDER_ID = "sender-production-evaluation-fixture";
@@ -83,6 +86,7 @@ export type ProductionEvaluationFixtureEvidence = {
   workersAiSettings: number;
   fixtureOrganisationAdministrators: number;
   fixtureOrganisationMemberships: number;
+  fixtureAuxiliaryMemberships: number;
   fixtureApplicantMemberships: number;
   nonDiscardedExtraEvents: number;
 };
@@ -102,6 +106,8 @@ type FixtureAuxiliaryPerson = {
 type FixtureScope = {
   extraEvents: FixtureEvent[];
   auxiliaryPeople: FixtureAuxiliaryPerson[];
+  auxiliaryMembershipCount: number;
+  outsideLinkedAuxiliaryPersonIds: string[];
   identityEmails: string[];
 };
 
@@ -279,135 +285,91 @@ async function assertDedicatedFixtureIdentity(
     );
   }
 
-  const latestReset = await env.DB.prepare(
-    `SELECT created_at AS createdAt
-       FROM audit_events
-      WHERE organisation_id = ? AND action = 'evaluation.fixture.reset'
-        AND json_extract(metadata_json, '$.status') = 'completed'
-      ORDER BY rowid DESC
-      LIMIT 1`,
-  )
-    .bind(DEMO_ORGANISATION_ID)
-    .first<{ createdAt: number }>();
-  let auxiliaryPeople: FixtureAuxiliaryPerson[] = [];
-  if (latestReset) {
-    const excludedIds = allSeedIdentities().map(
-      (identity) => identity.personId,
-    );
-    auxiliaryPeople = (
-      await env.DB.prepare(
-        `SELECT DISTINCT person.id, person.email
-           FROM people person
-          WHERE person.created_at >= ?
-            AND person.id NOT IN (${excludedIds.map(() => "?").join(",")})
-            AND (
-              EXISTS (
-                SELECT 1 FROM organisation_contacts contact
-                 WHERE contact.person_id = person.id
-                   AND contact.organisation_id = ?
-              )
-              OR EXISTS (
-                SELECT 1 FROM memberships membership
-                 WHERE membership.person_id = person.id
-                   AND membership.organisation_id = ?
-              )
-              OR EXISTS (
-                SELECT 1 FROM submissions submission
-                JOIN events event ON event.id = submission.event_id
-                 WHERE submission.submitter_person_id = person.id
-                   AND event.organisation_id = ?
-              )
-              OR EXISTS (
-                SELECT 1 FROM submission_speakers speaker
-                JOIN events event ON event.id = speaker.event_id
-                 WHERE speaker.person_id = person.id
-                   AND event.organisation_id = ?
-              )
-              OR EXISTS (
-                SELECT 1 FROM event_speaker_workflows workflow
-                JOIN events event ON event.id = workflow.event_id
-                 WHERE workflow.person_id = person.id
-                   AND event.organisation_id = ?
-              )
-              OR EXISTS (
-                SELECT 1 FROM event_participant_profiles profile
-                JOIN events event ON event.id = profile.event_id
-                 WHERE profile.person_id = person.id
-                   AND event.organisation_id = ?
-              )
-              OR EXISTS (
-                SELECT 1 FROM session_speakers speaker
-                JOIN events event ON event.id = speaker.event_id
-                 WHERE speaker.person_id = person.id
-                   AND event.organisation_id = ?
-              )
-            )`,
-      )
-        .bind(
-          latestReset.createdAt,
-          ...excludedIds,
-          DEMO_ORGANISATION_ID,
-          DEMO_ORGANISATION_ID,
-          DEMO_ORGANISATION_ID,
-          DEMO_ORGANISATION_ID,
-          DEMO_ORGANISATION_ID,
-          DEMO_ORGANISATION_ID,
-          DEMO_ORGANISATION_ID,
-        )
-        .all<FixtureAuxiliaryPerson>()
-    ).results;
-    if (auxiliaryPeople.length) {
-      const auxiliaryIds = auxiliaryPeople.map((person) => person.id);
-      const crossTenantAuxiliaryPerson =
-        await findPersonLinkedOutsideEvaluationOrganisation(env, auxiliaryIds);
-      if (crossTenantAuxiliaryPerson) {
-        throw new Error(
-          `Evaluation-created person ${crossTenantAuxiliaryPerson.id} is linked outside the dedicated evaluation organisation and cannot be removed safely.`,
-        );
-      }
-      const unsafeAuxiliaryPerson = await env.DB.prepare(
-        `SELECT person.id
-           FROM people person
-          WHERE person.id IN (${auxiliaryIds.map(() => "?").join(",")})
-            AND (
-              EXISTS (
-                SELECT 1 FROM memberships membership
-                 WHERE membership.person_id = person.id
-                   AND membership.organisation_id <> ?
-              )
-              OR EXISTS (
-                SELECT 1 FROM organisation_contacts contact
-                 WHERE contact.person_id = person.id
-                   AND contact.organisation_id <> ?
-              )
-              OR EXISTS (
-                SELECT 1 FROM calendar_connections connection
-                 WHERE connection.person_id = person.id
-              )
-              OR EXISTS (
-                SELECT 1 FROM auth_sessions session
-                 WHERE session.person_id = person.id
-              )
-              OR EXISTS (
-                SELECT 1 FROM auth_accounts account
-                 WHERE account.person_id = person.id
-              )
-              OR EXISTS (
-                SELECT 1 FROM audit_events audit
-                 WHERE audit.actor_person_id = person.id
-              )
+  const excludedIds = allSeedIdentities().map((identity) => identity.personId);
+  const auxiliaryPeople = (
+    await env.DB.prepare(
+      `SELECT DISTINCT person.id, person.email
+         FROM people person
+        WHERE person.id NOT IN (${excludedIds.map(() => "?").join(",")})
+          AND (
+            EXISTS (
+              SELECT 1 FROM organisation_contacts contact
+               WHERE contact.person_id = person.id
+                 AND contact.organisation_id = ?
             )
-          LIMIT 1`,
+            OR EXISTS (
+              SELECT 1 FROM memberships membership
+               WHERE membership.person_id = person.id
+                 AND membership.organisation_id = ?
+            )
+            OR EXISTS (
+              SELECT 1 FROM submissions submission
+              JOIN events event ON event.id = submission.event_id
+               WHERE submission.submitter_person_id = person.id
+                 AND event.organisation_id = ?
+            )
+            OR EXISTS (
+              SELECT 1 FROM submission_speakers speaker
+              JOIN events event ON event.id = speaker.event_id
+               WHERE speaker.person_id = person.id
+                 AND event.organisation_id = ?
+            )
+            OR EXISTS (
+              SELECT 1 FROM event_speaker_workflows workflow
+              JOIN events event ON event.id = workflow.event_id
+               WHERE workflow.person_id = person.id
+                 AND event.organisation_id = ?
+            )
+            OR EXISTS (
+              SELECT 1 FROM event_participant_profiles profile
+              JOIN events event ON event.id = profile.event_id
+               WHERE profile.person_id = person.id
+                 AND event.organisation_id = ?
+            )
+            OR EXISTS (
+              SELECT 1 FROM session_speakers speaker
+              JOIN events event ON event.id = speaker.event_id
+               WHERE speaker.person_id = person.id
+                 AND event.organisation_id = ?
+            )
+          )`,
+    )
+      .bind(
+        ...excludedIds,
+        DEMO_ORGANISATION_ID,
+        DEMO_ORGANISATION_ID,
+        DEMO_ORGANISATION_ID,
+        DEMO_ORGANISATION_ID,
+        DEMO_ORGANISATION_ID,
+        DEMO_ORGANISATION_ID,
+        DEMO_ORGANISATION_ID,
       )
-        .bind(...auxiliaryIds, DEMO_ORGANISATION_ID, DEMO_ORGANISATION_ID)
-        .first<{ id: string }>();
-      if (unsafeAuxiliaryPerson) {
-        throw new Error(
-          `Evaluation-created person ${unsafeAuxiliaryPerson.id} has authentication, audit, or cross-tenant state and cannot be removed safely.`,
-        );
-      }
-    }
+      .all<FixtureAuxiliaryPerson>()
+  ).results;
+  const auxiliaryMembershipCountRow = await env.DB.prepare(
+    `SELECT COUNT(*) AS count
+       FROM memberships membership
+      WHERE membership.organisation_id = ?
+        AND membership.person_id NOT IN (${excludedIds.map(() => "?").join(",")})`,
+  )
+    .bind(DEMO_ORGANISATION_ID, ...excludedIds)
+    .first<{ count: number }>();
+  if (
+    !auxiliaryMembershipCountRow ||
+    !Number.isSafeInteger(auxiliaryMembershipCountRow.count) ||
+    auxiliaryMembershipCountRow.count < 0
+  ) {
+    throw new Error(
+      "The evaluation auxiliary-membership boundary could not be verified.",
+    );
   }
+  const auxiliaryMembershipCount = auxiliaryMembershipCountRow.count;
+  const outsideLinkedAuxiliaryPersonIds = (
+    await findPeopleLinkedOutsideEvaluationOrganisation(
+      env,
+      auxiliaryPeople.map((person) => person.id),
+    )
+  ).map((person) => person.id);
 
   const senderCollision = await env.DB.prepare(
     `SELECT event_id AS eventId FROM sender_profiles WHERE id = ?`,
@@ -419,7 +381,128 @@ async function assertDedicatedFixtureIdentity(
       "The production evaluation sender ID belongs to another event.",
     );
   }
-  return { extraEvents, auxiliaryPeople, identityEmails };
+  return {
+    extraEvents,
+    auxiliaryPeople,
+    auxiliaryMembershipCount,
+    outsideLinkedAuxiliaryPersonIds,
+    identityEmails,
+  };
+}
+
+// Reset has already removed the dedicated organisation/event graph before this
+// statement runs. This remains one set-based D1 statement regardless of the
+// number of candidates. A global person is deleted only when no durable,
+// cascading or typed-person reference remains anywhere; otherwise the person
+// is deliberately retained with its global authentication state.
+function deleteDisposableAuxiliaryPeople(
+  env: CloudflareEnvironment,
+  people: FixtureAuxiliaryPerson[],
+) {
+  return env.DB.prepare(
+    `DELETE FROM people
+      WHERE EXISTS (
+          SELECT 1 FROM json_each(?) candidate
+           WHERE json_extract(candidate.value, '$.id') = people.id
+             AND json_extract(candidate.value, '$.email') = people.email COLLATE NOCASE
+        )
+        AND NOT EXISTS (
+          SELECT 1 FROM auth_sessions record
+           WHERE record.person_id = people.id
+        )
+        AND NOT EXISTS (
+          SELECT 1 FROM auth_accounts record
+           WHERE record.person_id = people.id
+        )
+        AND NOT EXISTS (
+          SELECT 1 FROM audit_events record
+           WHERE record.actor_person_id = people.id
+        )
+        AND NOT EXISTS (
+          SELECT 1 FROM calendar_connections record
+           WHERE record.person_id = people.id
+        )
+        AND NOT EXISTS (
+          SELECT 1 FROM calendar_invitations record
+           WHERE record.person_id = people.id
+        )
+        AND NOT EXISTS (
+          SELECT 1 FROM memberships record
+           WHERE record.person_id = people.id
+        )
+        AND NOT EXISTS (
+          SELECT 1 FROM organisation_contacts record
+           WHERE record.person_id = people.id
+              OR record.merged_into_person_id = people.id
+              OR record.created_by_person_id = people.id
+        )
+        AND NOT EXISTS (
+          SELECT 1 FROM event_participant_profiles record
+           WHERE record.person_id = people.id
+        )
+        AND NOT EXISTS (
+          SELECT 1 FROM event_speaker_workflows record
+           WHERE record.person_id = people.id
+              OR record.updated_by_person_id = people.id
+        )
+        AND NOT EXISTS (
+          SELECT 1 FROM speaker_profile_revisions record
+           WHERE record.person_id = people.id
+              OR record.recorded_by_person_id = people.id
+        )
+        AND NOT EXISTS (
+          SELECT 1 FROM task_instances record
+           WHERE record.owner_person_id = people.id
+              OR (record.target_type = 'speaker'
+                  AND record.target_id = people.id)
+        )
+        AND NOT EXISTS (
+          SELECT 1 FROM file_assets record
+           WHERE record.owner_person_id = people.id
+              OR (record.target_type = 'person'
+                  AND record.target_id = people.id)
+        )
+        AND NOT EXISTS (
+          SELECT 1 FROM evaluation_team_members record
+           WHERE record.person_id = people.id
+        )
+        AND NOT EXISTS (
+          SELECT 1 FROM evaluation_round_reviewers record
+           WHERE record.person_id = people.id
+              OR record.added_by_person_id = people.id
+        )
+        AND NOT EXISTS (
+          SELECT 1 FROM resource_acknowledgements record
+           WHERE record.person_id = people.id
+        )
+        AND NOT EXISTS (
+          SELECT 1 FROM resource_audiences record
+           WHERE record.target_type = 'person'
+             AND record.target_id = people.id
+        )
+        AND NOT EXISTS (
+          SELECT 1 FROM public_itineraries record
+           WHERE record.person_id = people.id
+        )
+        AND NOT EXISTS (
+          SELECT 1 FROM crm_segments record
+           WHERE record.owner_person_id = people.id
+        )
+        AND NOT EXISTS (
+          SELECT 1 FROM saved_views record
+           WHERE record.owner_person_id = people.id
+        )
+        AND NOT EXISTS (
+          SELECT 1 FROM verification_tokens token
+           WHERE token.identifier = people.email COLLATE NOCASE
+              OR CASE WHEN json_valid(token.value)
+                      THEN json_extract(token.value, '$.email') END = people.email COLLATE NOCASE
+              OR CASE WHEN json_valid(token.value)
+                      THEN json_extract(token.value, '$.link.email') END = people.email COLLATE NOCASE
+              OR CASE WHEN json_valid(token.value)
+                      THEN json_extract(token.value, '$.link.userId') END = people.id
+        )`,
+  ).bind(JSON.stringify(people));
 }
 
 async function readExtraEventActiveWork(
@@ -749,9 +832,28 @@ async function productionEvidence(
     .first<ProductionEvaluationFixtureEvidence>();
   if (!row)
     throw new Error("The production evaluation fixture could not be verified.");
-  return Object.fromEntries(
+  const evidence = Object.fromEntries(
     Object.entries(row).map(([key, value]) => [key, Number(value)]),
   ) as ProductionEvaluationFixtureEvidence;
+  const auxiliaryMembershipEvidence = await env.DB.prepare(
+    `SELECT COUNT(*) AS count
+       FROM memberships
+      WHERE organisation_id = ?
+        AND person_id NOT IN (${ids.map(() => "?").join(",")})`,
+  )
+    .bind(DEMO_ORGANISATION_ID, ...ids)
+    .first<{ count: number }>();
+  if (
+    !auxiliaryMembershipEvidence ||
+    !Number.isSafeInteger(auxiliaryMembershipEvidence.count) ||
+    auxiliaryMembershipEvidence.count < 0
+  ) {
+    throw new Error(
+      "The production evaluation auxiliary-membership evidence could not be verified.",
+    );
+  }
+  evidence.fixtureAuxiliaryMemberships = auxiliaryMembershipEvidence.count;
+  return evidence;
 }
 
 function fixtureIsComplete(evidence: ProductionEvaluationFixtureEvidence) {
@@ -766,6 +868,7 @@ function fixtureIsComplete(evidence: ProductionEvaluationFixtureEvidence) {
     evidence.workersAiSettings === 1 &&
     evidence.fixtureOrganisationAdministrators === 1 &&
     evidence.fixtureOrganisationMemberships === 2 &&
+    evidence.fixtureAuxiliaryMemberships === 0 &&
     evidence.fixtureApplicantMemberships === 0 &&
     evidence.nonDiscardedExtraEvents === 0
   );
@@ -949,8 +1052,13 @@ async function resetProductionEvaluationFixtureWithAuthority(
         ].map((email) => email.toLowerCase()),
       ),
     ];
-
-    await env.DB.batch([
+    const outsideLinkedAuxiliaryPersonIds = new Set(
+      fixtureScope.outsideLinkedAuxiliaryPersonIds,
+    );
+    const auxiliaryDeletionCandidates = fixtureScope.auxiliaryPeople.filter(
+      (person) => !outsideLinkedAuxiliaryPersonIds.has(person.id),
+    );
+    const fixtureFinalisationStatements = [
       ...fixtureEntries.map(([key, email]) =>
         env.DB.prepare(
           `UPDATE people SET email = ?, email_verified = 0, updated_at = unixepoch()
@@ -1035,37 +1143,42 @@ async function resetProductionEvaluationFixtureWithAuthority(
         SBEK_FIXTURE_PEOPLE.organizer.personId,
         `evaluation-fixture-membership:${crypto.randomUUID()}`,
       ),
-      ...(fixtureScope.auxiliaryPeople.length
-        ? [
-            env.DB.prepare(
-              `DELETE FROM verification_tokens
-              WHERE identifier COLLATE NOCASE IN (${fixtureScope.auxiliaryPeople.map(() => "?").join(",")})
-                 OR CASE WHEN json_valid(value)
-                         THEN json_extract(value, '$.email') END COLLATE NOCASE
-                    IN (${fixtureScope.auxiliaryPeople.map(() => "?").join(",")})
-                 OR CASE WHEN json_valid(value)
-                         THEN json_extract(value, '$.link.email') END COLLATE NOCASE
-                    IN (${fixtureScope.auxiliaryPeople.map(() => "?").join(",")})
-                 OR CASE WHEN json_valid(value)
-                         THEN json_extract(value, '$.link.userId') END
-                    IN (${fixtureScope.auxiliaryPeople.map(() => "?").join(",")})`,
-            ).bind(
-              ...fixtureScope.auxiliaryPeople.map((person) => person.email),
-              ...fixtureScope.auxiliaryPeople.map((person) => person.email),
-              ...fixtureScope.auxiliaryPeople.map((person) => person.email),
-              ...fixtureScope.auxiliaryPeople.map((person) => person.id),
-            ),
-          ]
-        : []),
-      ...(fixtureScope.auxiliaryPeople.length
-        ? [
-            env.DB.prepare(
-              `DELETE FROM people
-              WHERE id IN (${fixtureScope.auxiliaryPeople.map(() => "?").join(",")})`,
-            ).bind(...fixtureScope.auxiliaryPeople.map((person) => person.id)),
-          ]
-        : []),
+    ];
+    const auxiliaryDeleteOffset = fixtureFinalisationStatements.length;
+    const auxiliaryDeletionStatements = auxiliaryDeletionCandidates.length
+      ? [deleteDisposableAuxiliaryPeople(env, auxiliaryDeletionCandidates)]
+      : [];
+    const finalisationResults = await env.DB.batch([
+      ...fixtureFinalisationStatements,
+      ...auxiliaryDeletionStatements,
     ]);
+    let removedAuxiliaryPersonCount = 0;
+    const auxiliaryDeletionResults = finalisationResults.slice(
+      auxiliaryDeleteOffset,
+    );
+    if (
+      auxiliaryDeletionResults.length !== auxiliaryDeletionStatements.length
+    ) {
+      throw new Error(
+        "The evaluation auxiliary-person deletion result was not returned.",
+      );
+    }
+    if (auxiliaryDeletionResults.length === 1) {
+      const changes = auxiliaryDeletionResults[0].meta.changes;
+      if (
+        typeof changes !== "number" ||
+        !Number.isSafeInteger(changes) ||
+        changes < 0 ||
+        changes > auxiliaryDeletionCandidates.length
+      ) {
+        throw new Error(
+          "The evaluation auxiliary-person deletion result was not verifiable.",
+        );
+      }
+      removedAuxiliaryPersonCount = changes;
+    }
+    const retainedAuxiliaryPersonCount =
+      fixtureScope.auxiliaryPeople.length - removedAuxiliaryPersonCount;
 
     const evidence = await productionEvidence(
       env,
@@ -1094,7 +1207,9 @@ async function resetProductionEvaluationFixtureWithAuthority(
             ? "live_resend_domain"
             : "persisted_sender_profile",
         retiredEventCount,
-        removedAuxiliaryPersonCount: fixtureScope.auxiliaryPeople.length,
+        removedAuxiliaryPersonCount,
+        retainedAuxiliaryPersonCount,
+        removedFixtureMembershipCount: fixtureScope.auxiliaryMembershipCount,
       },
       actorId,
     );

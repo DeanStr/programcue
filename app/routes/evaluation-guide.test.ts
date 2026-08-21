@@ -369,6 +369,75 @@ describe("production evaluation guide", () => {
     expect(unauthorised.headers.get("location")).toBe("/evaluate");
   });
 
+  it("locks evaluation so the same browser can continue with its Better Auth identity", async () => {
+    await ensureDemoData(env as unknown as CloudflareEnvironment);
+    const environment = productionEnvironment();
+    await recordFixtureReset(environment);
+    const unlocked = await action({
+      request: request({
+        _intent: "unlock",
+        accessCode: "evaluation-access-code-2026",
+      }),
+      params: {},
+      context: context(environment),
+    } as never);
+    const betterAuthToken = `evaluation-lock-handoff-${crypto.randomUUID()}`;
+    await environment.DB.prepare(
+      `INSERT INTO auth_sessions (
+         id, person_id, token, expires_at, created_at, updated_at
+       ) VALUES (?, 'person-demo-owner', ?, unixepoch() + 3600,
+                 unixepoch(), unixepoch())`,
+    )
+      .bind(crypto.randomUUID(), betterAuthToken)
+      .run();
+    const betterAuthCookie = await serializeSignedCookie(
+      "__Secure-better-auth.session_token",
+      betterAuthToken,
+      String(environment.BETTER_AUTH_SECRET),
+    );
+
+    const locked = await action({
+      request: request(
+        { _intent: "lock" },
+        {
+          cookie: `${responseCookieHeader(unlocked as Response)}; ${betterAuthCookie}`,
+        },
+      ),
+      params: {},
+      context: context(environment),
+    } as never);
+
+    expect(locked).toBeInstanceOf(Response);
+    expect((locked as Response).status).toBe(303);
+    expect((locked as Response).headers.get("location")).toBe("/evaluate");
+    const setCookies = (
+      (locked as Response).headers as Headers & { getSetCookie(): string[] }
+    ).getSetCookie();
+    expect(setCookies).toEqual(
+      expect.arrayContaining([
+        expect.stringContaining("__Host-program_cue_evaluation="),
+        expect.stringContaining("__Host-program_cue_event="),
+      ]),
+    );
+    expect(setCookies.join("\n")).not.toContain("better-auth.session_token=");
+    await expect(
+      requireAuthenticatedPerson(
+        new Request("https://app.programcue.com/admin/command", {
+          headers: { cookie: betterAuthCookie },
+        }),
+        environment,
+      ),
+    ).resolves.toMatchObject({
+      personId: "person-demo-owner",
+      evaluation: false,
+    });
+    await expect(
+      environment.DB.prepare("SELECT id FROM auth_sessions WHERE token = ?")
+        .bind(betterAuthToken)
+        .first(),
+    ).resolves.toBeTruthy();
+  });
+
   it("returns an actionable response when persona selection has a transient dependency failure", async () => {
     await ensureDemoData(env as unknown as CloudflareEnvironment);
     const environment = productionEnvironment();

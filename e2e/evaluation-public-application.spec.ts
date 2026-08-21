@@ -9,6 +9,32 @@ const accessCode =
   process.env.PROGRAM_CUE_EVALUATION_E2E_ACCESS_CODE ??
   "program-cue-evaluation-e2e-access";
 
+test("locking evaluation returns the same browser to the ordinary authentication realm", async ({
+  page,
+}) => {
+  await page.goto("/evaluate");
+  await page.getByRole("textbox", { name: "Access code" }).fill(accessCode);
+  await page.getByRole("button", { name: "Unlock evaluation" }).click();
+  await expect(
+    page.getByRole("heading", { name: "Choose an evaluation persona" }),
+  ).toBeVisible();
+
+  await page.getByRole("button", { name: "Lock evaluation" }).click();
+
+  await expect(page).toHaveURL(/\/evaluate$/u);
+  await expect(
+    page.getByRole("heading", { name: "Evaluation access", exact: true }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: "Unlock evaluation" }),
+  ).toBeVisible();
+  const cookieNames = (await page.context().cookies()).map(
+    (cookie) => cookie.name,
+  );
+  expect(cookieNames).not.toContain("__Host-program_cue_evaluation");
+  expect(cookieNames).not.toContain("__Host-program_cue_event");
+});
+
 test("evaluation banner stays compact and usable on a narrow screen", async ({
   page,
 }) => {

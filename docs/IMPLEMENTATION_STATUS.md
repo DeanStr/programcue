@@ -364,16 +364,30 @@ profile opts into Maps explicitly with an ephemeral test key.
 The operator reset is organisation-scoped because optional evaluation scenarios
 create events and contacts. It restores the canonical event, clears and
 tombstones additional fixture-organisation events plus their private R2 data,
-removes only safe auxiliary people created since the last completed reset, and
-preserves event rows and append-only audits. Active external work, completed
-retention, authentication/actor-audit state and cross-tenant or identity drift
-fail before destructive cleanup. On first bootstrap, the shared seed may create
-dedicated canonical fixture rows before the remaining cleanup preflight; that
-bounded fixture-only mutation is not a completed reset. An atomic owner-token
-lease serialises resets, fences every destructive phase and publishes the new
-session generation only in the same D1 transaction that completes the owning
-operation. Live overlap is rejected; failed and expired attempts remain
-fail-closed while allowing a later operator reset to recover them.
+removes an ordinary auxiliary person only when no durable reference remains,
+and preserves event rows and append-only audits. Fixed SBEK people still fail
+closed on cross-organisation drift. Ordinary controlled-inbox identities with
+authentication, verification-token, actor-audit or legitimate
+other-organisation state are retained while the reset removes only their
+evaluation-organisation memberships and event relationships. Creation time is
+not deletion authority. Reset audit metadata records removed and retained
+auxiliary-person counts plus the removed fixture-membership count without
+personal identifiers. Active in-scope external work, completed retention or a
+mutation that cannot be proved fixture-confined still fails before destructive
+cleanup. On first bootstrap, the shared seed may create dedicated canonical
+fixture rows before the remaining cleanup preflight; that bounded fixture-only
+mutation is not a completed reset. An atomic owner-token lease serialises
+resets, fences every destructive phase and publishes the new session generation
+only in the same D1 transaction that completes the owning operation. Live
+overlap is rejected; failed and expired attempts remain fail-closed while
+allowing a later operator reset to recover them. Focused Worker coverage proves
+that a controlled-inbox identity retains its global account, session, token,
+audit and outside membership while losing fixture access, and that a second
+reset succeeds. The unlocked `/evaluate` guide labels the deterministic Sam and
+controlled-inbox paths separately, and production-shaped Chromium coverage
+proves that Lock evaluation clears the evaluation realm in the same browser.
+This revised reset contract is local repository evidence; it has not been
+deployed or exercised with a fresh controlled inbox.
 
 The deployed production application also exposes a destructive, collapsed reset on
 the unlocked `/evaluate` guide for starting a separate human or automated run.

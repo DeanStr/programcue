@@ -71,6 +71,7 @@ describe("production evaluation fixture", () => {
       workersAiSettings: 1,
       fixtureOrganisationAdministrators: 1,
       fixtureOrganisationMemberships: 2,
+      fixtureAuxiliaryMemberships: 0,
       fixtureApplicantMemberships: 0,
       nonDiscardedExtraEvents: 0,
     });
@@ -250,6 +251,19 @@ describe("production evaluation fixture", () => {
                    'import', 'active', unixepoch(), unixepoch())`,
       ),
       environment.DB.prepare(
+        `INSERT INTO people (
+           id, email, display_name, email_verified, created_at, updated_at
+         ) VALUES ('evaluation-second-imported-person',
+                   'second-imported@programcue.com', 'Second import', 0,
+                   unixepoch() + 1, unixepoch() + 1)`,
+      ),
+      environment.DB.prepare(
+        `INSERT INTO organisation_contacts (
+           organisation_id, person_id, source, status, created_at, updated_at
+         ) VALUES ('org-future-events', 'evaluation-second-imported-person',
+                   'import', 'active', unixepoch(), unixepoch())`,
+      ),
+      environment.DB.prepare(
         `INSERT INTO audit_events (
            id, actor_kind, origin, metadata_version, organisation_id, event_id, actor_person_id, action,
            entity_type, entity_id, metadata_json, created_at
@@ -337,12 +351,23 @@ describe("production evaluation fixture", () => {
     });
     await expect(
       environment.DB.prepare(
-        `SELECT json_extract(metadata_json, '$.retiredEventCount') AS retiredEventCount
+        `SELECT json_extract(metadata_json, '$.retiredEventCount') AS retiredEventCount,
+                json_extract(metadata_json, '$.removedAuxiliaryPersonCount')
+                  AS removedAuxiliaryPersonCount,
+                json_extract(metadata_json, '$.retainedAuxiliaryPersonCount')
+                  AS retainedAuxiliaryPersonCount,
+                json_extract(metadata_json, '$.removedFixtureMembershipCount')
+                  AS removedFixtureMembershipCount
            FROM audit_events
           WHERE action = 'evaluation.fixture.reset'
           ORDER BY rowid DESC LIMIT 1`,
       ).first(),
-    ).resolves.toEqual({ retiredEventCount: 2 });
+    ).resolves.toEqual({
+      retiredEventCount: 2,
+      removedAuxiliaryPersonCount: 2,
+      retainedAuxiliaryPersonCount: 0,
+      removedFixtureMembershipCount: 0,
+    });
     await expect(
       environment.DB.prepare(
         "SELECT id FROM audit_events WHERE id = 'evaluation-extra-event-audit'",
@@ -351,6 +376,11 @@ describe("production evaluation fixture", () => {
     await expect(
       environment.DB.prepare(
         "SELECT id FROM people WHERE id = 'evaluation-imported-person'",
+      ).first(),
+    ).resolves.toBeNull();
+    await expect(
+      environment.DB.prepare(
+        "SELECT id FROM people WHERE id = 'evaluation-second-imported-person'",
       ).first(),
     ).resolves.toBeNull();
     await expect(
@@ -1032,7 +1062,11 @@ describe("production evaluation fixture", () => {
     }
   });
 
-  it.each(["submission_speaker", "speaker_workflow"] as const)(
+  it.each([
+    "submission_speaker",
+    "speaker_workflow",
+    "public_site_attribution",
+  ] as const)(
     "fails before mutating a fixed identity linked by an outside %s",
     async (relationship) => {
       const environment = productionEnvironment();
@@ -1082,7 +1116,7 @@ describe("production evaluation fixture", () => {
             SBEK_FIXTURE_PEOPLE.speaker2.name,
           ),
         ]);
-      } else {
+      } else if (relationship === "speaker_workflow") {
         await environment.DB.prepare(
           `INSERT INTO event_speaker_workflows (
              event_id, person_id, status, source, last_operation_id,
@@ -1095,6 +1129,21 @@ describe("production evaluation fixture", () => {
             SBEK_FIXTURE_PEOPLE.speaker2.personId,
             `outside-workflow-${suffix}`,
             SBEK_FIXTURE_PEOPLE.organizer.personId,
+          )
+          .run();
+      } else {
+        await environment.DB.prepare(
+          `INSERT INTO event_public_sites (
+             event_id, organisation_id, draft_json, draft_revision,
+             last_updated_by_person_id, last_operation_id,
+             created_at, updated_at
+           ) VALUES (?, ?, '{}', 1, ?, ?, unixepoch(), unixepoch())`,
+        )
+          .bind(
+            eventId,
+            organisationId,
+            SBEK_FIXTURE_PEOPLE.speaker2.personId,
+            `outside-public-site-${suffix}`,
           )
           .run();
       }
@@ -1129,7 +1178,7 @@ describe("production evaluation fixture", () => {
     },
   );
 
-  it("preserves an auxiliary person when an outside saved view would cascade on deletion", async () => {
+  it("retains an ordinary auxiliary identity with legitimate outside-organisation state", async () => {
     const environment = productionEnvironment();
     await resetProductionEvaluationFixture(
       environment,
@@ -1176,40 +1225,310 @@ describe("production evaluation fixture", () => {
       ),
     ]);
 
-    try {
-      await expect(
-        resetProductionEvaluationFixture(
-          environment,
-          "Future of Events 2027",
-          verifiedDomains,
-        ),
-      ).rejects.toThrow(/linked outside/iu);
-      await expect(
-        environment.DB.prepare(
-          "SELECT id FROM people WHERE id = 'evaluation-auxiliary-saved-view'",
-        ).first(),
-      ).resolves.toBeTruthy();
-      await expect(
-        environment.DB.prepare(
-          "SELECT id FROM saved_views WHERE id = 'evaluation-outside-saved-view'",
-        ).first(),
-      ).resolves.toBeTruthy();
-    } finally {
-      await environment.DB.prepare(
-        "DELETE FROM events WHERE id = 'evaluation-saved-view-event'",
-      ).run();
-      await environment.DB.prepare(
-        "DELETE FROM organisations WHERE id = 'evaluation-saved-view-org'",
-      ).run();
-      await environment.DB.prepare(
-        `DELETE FROM organisation_contacts
+    await resetProductionEvaluationFixture(
+      environment,
+      "Future of Events 2027",
+      verifiedDomains,
+    );
+    await expect(
+      environment.DB.prepare(
+        "SELECT id FROM people WHERE id = 'evaluation-auxiliary-saved-view'",
+      ).first(),
+    ).resolves.toBeTruthy();
+    await expect(
+      environment.DB.prepare(
+        "SELECT id FROM saved_views WHERE id = 'evaluation-outside-saved-view'",
+      ).first(),
+    ).resolves.toBeTruthy();
+    await expect(
+      environment.DB.prepare(
+        `SELECT 1 FROM organisation_contacts
           WHERE organisation_id = 'org-future-events'
             AND person_id = 'evaluation-auxiliary-saved-view'`,
-      ).run();
-      await environment.DB.prepare(
-        "DELETE FROM people WHERE id = 'evaluation-auxiliary-saved-view'",
-      ).run();
+      ).first(),
+    ).resolves.toBeNull();
+    await expect(
+      environment.DB.prepare(
+        `SELECT json_extract(metadata_json, '$.removedAuxiliaryPersonCount')
+                  AS removedAuxiliaryPersonCount,
+                json_extract(metadata_json, '$.retainedAuxiliaryPersonCount')
+                  AS retainedAuxiliaryPersonCount
+           FROM audit_events
+          WHERE action = 'evaluation.fixture.reset'
+          ORDER BY rowid DESC LIMIT 1`,
+      ).first(),
+    ).resolves.toEqual({
+      removedAuxiliaryPersonCount: 0,
+      retainedAuxiliaryPersonCount: 1,
+    });
+  });
+
+  it.each([
+    ["speaker task target", "task_instances"],
+    ["person file target", "file_assets"],
+    ["speaker profile subject", "speaker_profile_revisions"],
+    ["speaker profile recorder", "speaker_profile_revisions"],
+  ] as const)(
+    "retains an auxiliary identity referenced as an outside %s",
+    async (relationship, table) => {
+      const environment = productionEnvironment();
+      await resetProductionEvaluationFixture(
+        environment,
+        "Future of Events 2027",
+        verifiedDomains,
+      );
+      const suffix = relationship.replaceAll(" ", "-");
+      const personId = `evaluation-auxiliary-${suffix}`;
+      const organisationId = `evaluation-outside-${suffix}`;
+      const eventId = `evaluation-outside-event-${suffix}`;
+      const recordId = `evaluation-outside-record-${suffix}`;
+      await environment.DB.batch([
+        environment.DB.prepare(
+          `INSERT INTO people (
+             id, email, display_name, email_verified, created_at, updated_at
+           ) VALUES (?, ?, 'Auxiliary person', 0, unixepoch(), unixepoch())`,
+        ).bind(personId, `${suffix}@programcue.com`),
+        environment.DB.prepare(
+          `INSERT INTO organisation_contacts (
+             organisation_id, person_id, source, status, created_at, updated_at
+           ) VALUES ('org-future-events', ?, 'manual', 'active',
+                     unixepoch(), unixepoch())`,
+        ).bind(personId),
+        environment.DB.prepare(
+          `INSERT INTO organisations (id, name, slug, created_at, updated_at)
+           VALUES (?, 'Outside organisation', ?, unixepoch(), unixepoch())`,
+        ).bind(organisationId, organisationId),
+        environment.DB.prepare(
+          `INSERT INTO events (
+             id, organisation_id, name, slug, timezone, starts_at, ends_at,
+             file_policy_json, activation_status
+           ) SELECT ?, ?, 'Outside event', ?, timezone, starts_at, ends_at,
+                    file_policy_json, 'active'
+               FROM events WHERE id = 'evt-foe-2025'`,
+        ).bind(eventId, organisationId, eventId),
+      ]);
+
+      if (relationship === "speaker task target") {
+        await environment.DB.prepare(
+          `INSERT INTO task_instances (
+             id, event_id, target_type, target_id, title, impact
+           ) VALUES (?, ?, 'speaker', ?, 'Outside task', 'low')`,
+        )
+          .bind(recordId, eventId, personId)
+          .run();
+      } else if (relationship === "person file target") {
+        await environment.DB.prepare(
+          `INSERT INTO file_assets (
+             id, event_id, target_type, target_id, asset_kind
+           ) VALUES (?, ?, 'person', ?, 'headshot')`,
+        )
+          .bind(recordId, eventId, personId)
+          .run();
+      } else {
+        const isRecorder = relationship === "speaker profile recorder";
+        await environment.DB.prepare(
+          `INSERT INTO speaker_profile_revisions (
+             id, organisation_id, event_id, person_id, source,
+             profile_revision, display_name, publication_status,
+             recorded_by_person_id, correlation_id
+           ) VALUES (?, ?, ?, ?, 'canonical_person', 1,
+                     'Outside speaker', 'draft', ?, ?)`,
+        )
+          .bind(
+            recordId,
+            organisationId,
+            eventId,
+            isRecorder ? `outside-profile-subject-${suffix}` : personId,
+            isRecorder ? personId : null,
+            `outside-profile-correlation-${suffix}`,
+          )
+          .run();
+      }
+
+      await resetProductionEvaluationFixture(
+        environment,
+        "Future of Events 2027",
+        verifiedDomains,
+      );
+
+      await expect(
+        environment.DB.prepare("SELECT id FROM people WHERE id = ?")
+          .bind(personId)
+          .first(),
+      ).resolves.toEqual({ id: personId });
+      await expect(
+        environment.DB.prepare(`SELECT id FROM ${table} WHERE id = ?`)
+          .bind(recordId)
+          .first(),
+      ).resolves.toEqual({ id: recordId });
+      await expect(
+        environment.DB.prepare(
+          `SELECT 1 FROM organisation_contacts
+            WHERE organisation_id = 'org-future-events'
+              AND person_id = ?`,
+        )
+          .bind(personId)
+          .first(),
+      ).resolves.toBeNull();
+    },
+  );
+
+  it("removes fixture access while preserving a durable controlled-inbox identity", async () => {
+    const environment = productionEnvironment();
+    await resetProductionEvaluationFixture(
+      environment,
+      "Future of Events 2027",
+      verifiedDomains,
+    );
+    const personId = "evaluation-controlled-inbox-person";
+    const email = "controlled-inbox@programcue.com";
+    await environment.DB.batch([
+      environment.DB.prepare(
+        `INSERT INTO people (
+           id, email, display_name, email_verified, created_at, updated_at
+         ) VALUES (?, ?, 'Controlled inbox reviewer', 1,
+                   unixepoch(), unixepoch())`,
+      ).bind(personId, email),
+      environment.DB.prepare(
+        `INSERT INTO memberships (
+           id, organisation_id, event_id, person_id, role, invited_at,
+           invitation_expires_at, accepted_at, revoked_at, created_at
+         ) VALUES ('evaluation-controlled-inbox-membership',
+                   'org-future-events', 'evt-foe-2025', ?, 'evaluator',
+                   unixepoch(), unixepoch() + 604800, unixepoch(), NULL,
+                   unixepoch())`,
+      ).bind(personId),
+      environment.DB.prepare(
+        `INSERT INTO evaluation_team_members (
+           team_id, event_id, person_id, role, joined_at, removed_at
+         )
+         SELECT id, event_id, ?, 'evaluator', unixepoch(), NULL
+           FROM evaluation_teams
+          WHERE event_id = 'evt-foe-2025'
+          ORDER BY id LIMIT 1`,
+      ).bind(personId),
+      environment.DB.prepare(
+        `INSERT INTO auth_sessions (
+           id, person_id, token, expires_at, created_at, updated_at
+         ) VALUES ('evaluation-controlled-inbox-session', ?,
+                   'evaluation-controlled-inbox-session-token',
+                   unixepoch() + 3600, unixepoch(), unixepoch())`,
+      ).bind(personId),
+      environment.DB.prepare(
+        `INSERT INTO auth_accounts (
+           id, person_id, provider_id, account_id, created_at, updated_at
+         ) VALUES ('evaluation-controlled-inbox-account', ?, 'credential', ?,
+                   unixepoch(), unixepoch())`,
+      ).bind(personId, email),
+      environment.DB.prepare(
+        `INSERT INTO verification_tokens (
+           id, identifier, value, expires_at, created_at, updated_at
+         ) VALUES ('evaluation-controlled-inbox-token',
+                   'controlled-inbox-token', ?, unixepoch() + 300,
+                   unixepoch(), unixepoch())`,
+      ).bind(JSON.stringify({ email })),
+      environment.DB.prepare(
+        `INSERT INTO audit_events (
+           id, actor_kind, origin, metadata_version, organisation_id, event_id,
+           actor_person_id, action, entity_type, entity_id, metadata_json,
+           created_at
+         ) VALUES ('evaluation-controlled-inbox-acceptance', 'person',
+                   'admin_ui', 1, 'org-future-events', 'evt-foe-2025', ?,
+                   'membership.accepted', 'membership',
+                   'evaluation-controlled-inbox-membership',
+                   '{"role":"evaluator"}', unixepoch())`,
+      ).bind(personId),
+      environment.DB.prepare(
+        `INSERT INTO organisations (id, name, slug, created_at, updated_at)
+         VALUES ('evaluation-controlled-outside-org', 'Outside organisation',
+                 'evaluation-controlled-outside-org', unixepoch(), unixepoch())`,
+      ),
+      environment.DB.prepare(
+        `INSERT INTO events (
+           id, organisation_id, name, slug, timezone, starts_at, ends_at,
+           file_policy_json, activation_status
+         ) SELECT 'evaluation-controlled-outside-event',
+                  'evaluation-controlled-outside-org', 'Outside event',
+                  'evaluation-controlled-outside-event', timezone, starts_at,
+                  ends_at, file_policy_json, 'active'
+             FROM events WHERE id = 'evt-foe-2025'`,
+      ),
+      environment.DB.prepare(
+        `INSERT INTO memberships (
+           id, organisation_id, event_id, person_id, role, accepted_at,
+           created_at
+         ) VALUES ('evaluation-controlled-outside-membership',
+                   'evaluation-controlled-outside-org',
+                   'evaluation-controlled-outside-event', ?, 'evaluator',
+                   unixepoch(), unixepoch())`,
+      ).bind(personId),
+    ]);
+
+    const reset = await resetProductionEvaluationFixture(
+      environment,
+      "Future of Events 2027",
+      verifiedDomains,
+    );
+
+    expect(reset.evidence.fixtureAuxiliaryMemberships).toBe(0);
+    await expect(
+      environment.DB.prepare("SELECT id, email FROM people WHERE id = ?")
+        .bind(personId)
+        .first(),
+    ).resolves.toEqual({ id: personId, email });
+    for (const [table, id] of [
+      ["auth_sessions", "evaluation-controlled-inbox-session"],
+      ["auth_accounts", "evaluation-controlled-inbox-account"],
+      ["verification_tokens", "evaluation-controlled-inbox-token"],
+      ["audit_events", "evaluation-controlled-inbox-acceptance"],
+      ["memberships", "evaluation-controlled-outside-membership"],
+    ] as const) {
+      await expect(
+        environment.DB.prepare(`SELECT id FROM ${table} WHERE id = ?`)
+          .bind(id)
+          .first(),
+      ).resolves.toBeTruthy();
     }
+    await expect(
+      environment.DB.prepare(
+        "SELECT id FROM memberships WHERE id = 'evaluation-controlled-inbox-membership'",
+      ).first(),
+    ).resolves.toBeNull();
+    await expect(
+      environment.DB.prepare(
+        `SELECT person_id AS personId FROM evaluation_team_members
+          WHERE event_id = 'evt-foe-2025' AND person_id = ?`,
+      )
+        .bind(personId)
+        .first(),
+    ).resolves.toBeNull();
+    const resetAudit = await environment.DB.prepare(
+      `SELECT metadata_json AS metadataJson
+         FROM audit_events
+        WHERE action = 'evaluation.fixture.reset'
+        ORDER BY rowid DESC LIMIT 1`,
+    ).first<{ metadataJson: string }>();
+    expect(resetAudit).not.toBeNull();
+    if (!resetAudit) {
+      throw new Error("The completed evaluation reset audit is missing.");
+    }
+    expect(JSON.parse(resetAudit.metadataJson)).toMatchObject({
+      removedAuxiliaryPersonCount: 0,
+      retainedAuxiliaryPersonCount: 1,
+      removedFixtureMembershipCount: 1,
+    });
+    expect(resetAudit.metadataJson).not.toContain(personId);
+    expect(resetAudit.metadataJson).not.toContain(email);
+
+    await expect(
+      resetProductionEvaluationFixture(
+        environment,
+        "Future of Events 2027",
+        verifiedDomains,
+      ),
+    ).resolves.toMatchObject({
+      evidence: { fixtureAuxiliaryMemberships: 0 },
+    });
   });
 
   it("revokes showcase authentication, calendar and account-link credentials", async () => {

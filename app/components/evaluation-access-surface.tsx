@@ -677,6 +677,46 @@ export function EvaluationAccessSurface({
         </li>
       </ol>
 
+      <section
+        aria-labelledby="reviewer-invitation-paths-title"
+        className="card pad mb"
+      >
+        <div className="pc-admin-section-head">
+          <div className="pc-admin-section-head-copy">
+            <h2 id="reviewer-invitation-paths-title">
+              Reviewer invitation: choose one path
+            </h2>
+            <p>
+              The fixed Sam scenario and a real inbox use separate identities.
+              An address you control is never mapped to Sam.
+            </p>
+          </div>
+        </div>
+        <ol className="stack">
+          <li>
+            <strong>Guided fixture journey</strong>
+            <div className="help">
+              Open as Event organiser and invite Sam using exactly{" "}
+              <code>sam.reviewer@sbek-test.example.com</code>. Program Cue saves
+              the pending invitation and calls the real email provider; you do
+              not need access to Sam&apos;s inbox. Return here, select Clean
+              reviewer and accept the invitation explicitly.
+            </div>
+          </li>
+          <li>
+            <strong>Real email-delivery journey</strong>
+            <div className="help">
+              Open as Event organiser and invite an address you control. Program
+              Cue creates or reuses its ordinary identity. Return here and
+              select Lock evaluation before opening its magic link in this
+              browser. Follow the link as that address and accept its pending
+              invitation explicitly. Do not select Clean reviewer for this
+              invitation.
+            </div>
+          </li>
+        </ol>
+      </section>
+
       <section aria-labelledby="showcase-personas-title" className="mb">
         <div className="pc-admin-section-head">
           <div className="pc-admin-section-head-copy">

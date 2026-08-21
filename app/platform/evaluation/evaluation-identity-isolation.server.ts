@@ -2,6 +2,11 @@ import { DEMO_ORGANISATION_ID } from "~/platform/demo/demo-identities";
 
 const OUTSIDE_EVENT_PERSON_ATTRIBUTIONS = [
   ["event_speaker_workflows", "updated_by_person_id"],
+  ["event_ai_review_settings", "updated_by_person_id"],
+  ["event_brand_assets", "created_by_person_id"],
+  ["event_public_sites", "last_updated_by_person_id"],
+  ["event_site_sponsors", "last_updated_by_person_id"],
+  ["event_session_recordings", "last_updated_by_person_id"],
   ["form_definitions", "created_by_person_id"],
   ["form_versions", "created_by_person_id"],
   ["submission_revisions", "saved_by_person_id"],
@@ -9,6 +14,7 @@ const OUTSIDE_EVENT_PERSON_ATTRIBUTIONS = [
   ["evaluation_teams", "chair_person_id"],
   ["evaluation_round_reviewers", "added_by_person_id"],
   ["evaluator_conflicts", "resolved_by_person_id"],
+  ["reviewer_ai_suggestions", "evaluator_person_id"],
   ["ai_review_assessments", "generated_by_person_id"],
   ["ai_review_assessments", "override_by_person_id"],
   ["review_revisions", "saved_by_person_id"],
@@ -23,6 +29,8 @@ const OUTSIDE_EVENT_PERSON_ATTRIBUTIONS = [
   ["schedule_session_contents", "approved_by_person_id"],
   ["session_content_revisions", "created_by_person_id"],
   ["schedule_conflicts", "resolved_by_person_id"],
+  ["programme_embeds", "created_by_person_id"],
+  ["programme_embeds", "updated_by_person_id"],
   ["task_instances", "completed_by_person_id"],
   ["task_comments", "author_person_id"],
   ["file_versions", "created_by_person_id"],
@@ -65,14 +73,15 @@ function outsideAttributionPredicates() {
   ].join("\n          OR ");
 }
 
-export async function findPersonLinkedOutsideEvaluationOrganisation(
+export async function findPeopleLinkedOutsideEvaluationOrganisation(
   env: CloudflareEnvironment,
   personIds: string[],
 ) {
-  if (!personIds.length) return null;
+  if (!personIds.length) return [];
   const personPlaceholders = personIds.map(() => "?").join(",");
-  return env.DB.prepare(
-    `WITH fixture_scope(organisation_id) AS (VALUES (?)),
+  return (
+    await env.DB.prepare(
+      `WITH fixture_scope(organisation_id) AS (VALUES (?)),
      outside_events AS (
        SELECT id FROM events
         WHERE organisation_id <> (SELECT organisation_id FROM fixture_scope)
@@ -102,8 +111,14 @@ export async function findPersonLinkedOutsideEvaluationOrganisation(
           OR EXISTS (SELECT 1 FROM event_participant_profiles record
                       WHERE record.person_id = person.id
                         AND record.event_id IN outside_events)
+          OR EXISTS (SELECT 1 FROM speaker_profile_revisions record
+                      WHERE (record.person_id = person.id
+                             OR record.recorded_by_person_id = person.id)
+                        AND record.event_id IN outside_events)
           OR EXISTS (SELECT 1 FROM task_instances record
-                      WHERE record.owner_person_id = person.id
+                      WHERE (record.owner_person_id = person.id
+                             OR (record.target_type = 'speaker'
+                                 AND record.target_id = person.id))
                         AND record.event_id IN outside_events)
           OR EXISTS (SELECT 1 FROM task_evidence record
                       WHERE record.submitted_by_person_id = person.id
@@ -131,7 +146,9 @@ export async function findPersonLinkedOutsideEvaluationOrganisation(
                       WHERE record.person_id = person.id
                         AND record.event_id IN outside_events)
           OR EXISTS (SELECT 1 FROM file_assets record
-                      WHERE record.owner_person_id = person.id
+                      WHERE (record.owner_person_id = person.id
+                             OR (record.target_type = 'person'
+                                 AND record.target_id = person.id))
                         AND record.event_id IN outside_events)
           OR EXISTS (SELECT 1 FROM evaluator_conflicts record
                       WHERE record.evaluator_person_id = person.id
@@ -156,24 +173,37 @@ export async function findPersonLinkedOutsideEvaluationOrganisation(
                         AND (record.organisation_id IS NULL
                              OR record.organisation_id <> ?))
           OR EXISTS (SELECT 1 FROM operation_jobs record
-                      WHERE record.requested_by_person_id = person.id
+                      WHERE (record.requested_by_person_id = person.id
+                             OR record.alert_acknowledged_by_person_id = person.id)
                         AND (record.organisation_id IS NULL
-                             OR record.organisation_id <> ?))
+                             OR record.organisation_id <> ?
+                             OR record.event_id IN outside_events))
           OR ${outsideAttributionPredicates()}
         )
-      LIMIT 1`,
-  )
-    .bind(
-      DEMO_ORGANISATION_ID,
-      ...personIds,
-      DEMO_ORGANISATION_ID,
-      DEMO_ORGANISATION_ID,
-      DEMO_ORGANISATION_ID,
-      DEMO_ORGANISATION_ID,
-      DEMO_ORGANISATION_ID,
-      DEMO_ORGANISATION_ID,
+      ORDER BY person.id`,
     )
-    .first<{ id: string }>();
+      .bind(
+        DEMO_ORGANISATION_ID,
+        ...personIds,
+        DEMO_ORGANISATION_ID,
+        DEMO_ORGANISATION_ID,
+        DEMO_ORGANISATION_ID,
+        DEMO_ORGANISATION_ID,
+        DEMO_ORGANISATION_ID,
+        DEMO_ORGANISATION_ID,
+      )
+      .all<{ id: string }>()
+  ).results;
+}
+
+export async function findPersonLinkedOutsideEvaluationOrganisation(
+  env: CloudflareEnvironment,
+  personIds: string[],
+) {
+  return (
+    (await findPeopleLinkedOutsideEvaluationOrganisation(env, personIds))[0] ??
+    null
+  );
 }
 
 export class EvaluationIdentityIsolationError extends Error {

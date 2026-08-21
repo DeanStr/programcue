@@ -184,6 +184,22 @@ describe("evaluation persona board", () => {
     );
   });
 
+  it("keeps the guided Sam and controlled-inbox reviewer journeys separate", () => {
+    const markup = render();
+
+    expect(markup).toContain("Reviewer invitation: choose one path");
+    expect(markup).toContain("Guided fixture journey");
+    expect(markup).toContain("sam.reviewer@sbek-test.example.com");
+    expect(markup).toContain("Real email-delivery journey");
+    expect(markup).toContain(
+      "select Lock evaluation before opening its magic link in this browser",
+    );
+    expect(markup).toContain(
+      "Do not select Clean reviewer for this invitation.",
+    );
+    expect(markup).toContain("An address you control is never mapped to Sam.");
+  });
+
   it("submits each persona with its own intent and identity", () => {
     const markup = render();
 

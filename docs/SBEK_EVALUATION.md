@@ -97,19 +97,21 @@ dedicated canonical fixture rows before the remaining cleanup preflight runs;
 that bounded fixture-only mutation is not a successful reset and must not be
 reported as one. The reset also refuses active operations, multipart uploads,
 integrations, communications, calendar attempts or webhook deliveries,
-completed participant retention, cross-tenant fixture identities, and
-evaluator-created people with authentication, audit or cross-tenant state.
+completed participant retention and cross-tenant fixed-fixture identities.
 
 Its destructive scope is deliberately the dedicated `org-future-events`
 fixture organisation. It restores `evt-foe-2025` and its private R2 prefix,
 clears and tombstones additional events created there by prior evaluation runs,
-clears their private R2 prefixes, and removes only safe auxiliary people linked
-to that organisation since the previous completed reset. Event rows and
-append-only audit history are retained. It never crosses the fixture
-organisation boundary. Reset attempts use one renewable owner lease: a second
-live request is rejected, while a failed or expired owner keeps evaluation
-access unavailable until a later reset completes. Immediately delete all six
-temporary Worker secrets:
+clears their private R2 prefixes, and removes ordinary auxiliary people only
+when no durable reference remains. An ordinary identity with Better Auth,
+verification-token, actor-audit or other-organisation state is retained while
+its evaluation-organisation memberships and event relationships are removed.
+Fixed SBEK identities remain dedicated and fail reset if linked outside the
+fixture. Event rows, global authentication state and append-only audit history
+are retained. Reset never crosses the fixture organisation boundary. Reset
+attempts use one renewable owner lease: a second live request is rejected,
+while a failed or expired owner keeps evaluation access unavailable until a
+later reset completes. Immediately delete all six temporary Worker secrets:
 
 ```bash
 wrangler secret delete EVALUATION_FIXTURE_SECRET -c wrangler.jsonc
@@ -275,6 +277,29 @@ mutation.
 Marcus has no selectable `/evaluate` card or saved starting state; his alias is
 only an in-scenario co-speaker input. Every alias is input compatibility for the
 public evaluation kit, not a mailbox and not evidence of email delivery.
+
+### Choose the correct reviewer invitation journey
+
+**Guided scenario:** As Event organiser, invite
+`sam.reviewer@sbek-test.example.com`. Program Cue persists Sam's pending
+membership and invokes the real email provider boundary for his seeded
+routeable address; provider failure remains visible. The evaluator does not
+need access to that inbox. Return to `/evaluate`, select Sam's reviewer card
+and explicitly accept the pending invitation. Use this path for the
+reproducible chained scenario.
+
+**Test your own inbox:** Return to Event organiser and invite an email address
+you control. Program Cue creates or reuses the ordinary global identity for
+that address and sends its real Better Auth magic link. Before opening the
+message, return to `/evaluate` and select **Lock evaluation**. Then open the
+link in the same browser, continue as that email identity and explicitly accept
+its pending evaluator invitation. Do not select Sam's reviewer card for this
+invitation.
+
+Receipt of the controlled-address message is the email-delivery evidence.
+Alias routing alone is not. Do not reset during an overlapping evaluation run;
+afterward, reset removes the controlled identity's fixture access while
+preserving its global account, authentication tokens and audit history.
 
 ## Configure the external evaluator
 
