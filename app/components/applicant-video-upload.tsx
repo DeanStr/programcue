@@ -74,6 +74,7 @@ export function ApplicantVideoUpload({
   submissionId,
   fieldId,
   current,
+  attachedReference = null,
   siteKey,
   disabled,
   maximumBytes,
@@ -84,6 +85,7 @@ export function ApplicantVideoUpload({
   submissionId: string;
   fieldId: string;
   current: ApplicantVideoUploadRecord | null;
+  attachedReference?: { assetId: string; versionId: string } | null;
   siteKey: string | null;
   disabled: boolean;
   maximumBytes: number;
@@ -106,7 +108,14 @@ export function ApplicantVideoUpload({
   const [turnstileResetKey, setTurnstileResetKey] = useState(0);
   const [progress, setProgress] = useState(0);
   const [state, setState] = useState<{
-    status: "idle" | "uploading" | "paused" | "error" | "scanning" | "ready";
+    status:
+      | "idle"
+      | "uploading"
+      | "paused"
+      | "error"
+      | "scanning"
+      | "ready"
+      | "attached";
     message: string;
   }>(() => {
     if (current?.status === "ready")
@@ -128,6 +137,12 @@ export function ApplicantVideoUpload({
       return {
         status: "error",
         message: `${current.filename} did not pass upload or security validation. Upload a replacement.`,
+      };
+    if (attachedReference)
+      return {
+        status: "attached",
+        message:
+          "This draft references the uploaded video. Scan status has not been refreshed on this page.",
       };
     return { status: "idle", message: "" };
   });
@@ -374,6 +389,12 @@ export function ApplicantVideoUpload({
     Boolean(uploadSession.current) ||
     Boolean(uploadOperation.current);
   const turnstileReady = siteKey === null || turnstileStatus === "ready";
+  const canReplace =
+    Boolean(current) ||
+    Boolean(attachedReference) ||
+    state.status === "attached" ||
+    state.status === "scanning" ||
+    state.status === "ready";
   return (
     <div className="card pad mt stack">
       <div>
@@ -416,7 +437,7 @@ export function ApplicantVideoUpload({
             ? turnstileStatus === "error"
               ? "Security check unavailable"
               : "Security check in progress…"
-            : current
+            : canReplace
               ? "Upload replacement"
               : "Upload video"}
         </button>
@@ -464,7 +485,7 @@ export function ApplicantVideoUpload({
             {cancellationInFlight ? "Cancelling…" : "Cancel upload"}
           </button>
         ) : null}
-        {state.status === "scanning" ? (
+        {state.status === "scanning" || state.status === "attached" ? (
           <button
             className="btn"
             type="button"
@@ -476,7 +497,7 @@ export function ApplicantVideoUpload({
       </div>
       {state.message ? (
         <div
-          className={`validation-item ${state.status === "error" ? "error" : state.status === "ready" ? "ok" : "warn"}`}
+          className={`validation-item ${state.status === "error" ? "error" : state.status === "ready" || state.status === "attached" ? "ok" : "warn"}`}
           role={state.status === "error" ? "alert" : "status"}
         >
           <strong>
@@ -484,7 +505,9 @@ export function ApplicantVideoUpload({
               ? "Ready"
               : state.status === "error"
                 ? "Upload issue"
-                : "Private video"}
+                : state.status === "attached"
+                  ? "Private video attached"
+                  : "Private video"}
           </strong>
           <span>{state.message}</span>
         </div>

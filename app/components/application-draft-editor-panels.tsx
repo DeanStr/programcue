@@ -240,19 +240,6 @@ export function ApplicationAnswers({
                       </span>
                     </div>
                   ) : null}
-                  {stepped &&
-                  !readOnly &&
-                  !revisionMode &&
-                  attachedUpload &&
-                  currentUpload?.fieldId !== field.id ? (
-                    <div className="validation-item ok mt">
-                      <strong>Private video attached</strong>
-                      <span>
-                        This draft references the uploaded video. You can
-                        replace it below.
-                      </span>
-                    </div>
-                  ) : null}
                   {!readOnly && !revisionMode ? (
                     <ApplicantVideoUpload
                       publicSlug={publicSlug}
@@ -261,6 +248,11 @@ export function ApplicationAnswers({
                       current={
                         currentUpload?.fieldId === field.id
                           ? currentUpload
+                          : null
+                      }
+                      attachedReference={
+                        attachedUpload && currentUpload?.fieldId !== field.id
+                          ? attachedUpload
                           : null
                       }
                       siteKey={uploadTurnstileSiteKey}
