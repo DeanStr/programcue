@@ -996,9 +996,15 @@ test.describe
       await expect(
         page.getByRole("button", { name: "Submit application" }),
       ).toBeVisible();
+      const confirmSubmission = page.getByRole("checkbox", {
+        name: "I have reviewed this application and am ready to submit it.",
+      });
+      await confirmSubmission.check();
+      await expect(confirmSubmission).toBeChecked();
       await page.getByRole("button", { name: "Save draft" }).click();
       await expect(page.getByText("Your draft has been saved")).toBeVisible();
       await expect(page.getByText(/Step \d+ of \d+: Speakers/)).toBeVisible();
+      await expect(confirmSubmission).not.toBeChecked();
     });
 
     test("stepped error links focus grouped tracks and speakers", async ({

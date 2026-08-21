@@ -782,7 +782,8 @@ export function formApplicantSteps(
 /** If the current section is hidden, keep the next visible schema section,
  *  else the nearest prior section, else Speakers. Speakers is last because it
  *  is chrome, not a schema section; the prior section usually holds the
- *  controlling field. */
+ *  controlling field. An empty current id is uninitialized, not vanished, so
+ *  it resolves to the first visible step. */
 export function resolveApplicantFormStepId(
   schema: StoredSubmissionFormSchema,
   answers: Record<string, string | string[]>,
@@ -791,6 +792,7 @@ export function resolveApplicantFormStepId(
   const steps = formApplicantSteps(schema, answers);
   if (steps.length === 0) return currentId;
   if (steps.some((step) => step.id === currentId)) return currentId;
+  if (!currentId) return steps[0]?.id ?? currentId;
 
   const sectionOrder =
     "schemaVersion" in schema

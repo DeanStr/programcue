@@ -25,6 +25,75 @@ export type ApplicantVideoUploadRecord = {
 
 type ApplicantVideoOperationRef = { current: symbol | null };
 
+export function applicantVideoUploadDisplayState(
+  current: ApplicantVideoUploadRecord | null,
+  attachedReference?: { assetId: string; versionId: string } | null,
+): {
+  status:
+    | "idle"
+    | "uploading"
+    | "paused"
+    | "error"
+    | "scanning"
+    | "ready"
+    | "attached";
+  message: string;
+} {
+  if (current?.status === "ready")
+    return {
+      status: "ready",
+      message: `${current.filename} passed security validation and is ready to submit.`,
+    };
+  if (current?.status === "scanning")
+    return {
+      status: "scanning",
+      message: `${current.filename} is quarantined while its security scan finishes.`,
+    };
+  if (current?.status === "uploading")
+    return {
+      status: "error",
+      message: `${current.filename} did not finish uploading. Re-select the same file to resume its uploaded parts, or choose a replacement.`,
+    };
+  if (current?.status === "rejected")
+    return {
+      status: "error",
+      message: `${current.filename} did not pass upload or security validation. Upload a replacement.`,
+    };
+  if (attachedReference)
+    return {
+      status: "attached",
+      message:
+        "This draft references the uploaded video. Scan status has not been refreshed on this page.",
+    };
+  return { status: "idle", message: "" };
+}
+
+export function applicantVideoFieldSources({
+  fieldId,
+  currentUpload,
+  attachedUpload,
+}: {
+  fieldId: string;
+  currentUpload: ApplicantVideoUploadRecord | null;
+  attachedUpload?: { assetId: string; versionId: string } | null;
+}): {
+  current: ApplicantVideoUploadRecord | null;
+  attachedReference: { assetId: string; versionId: string } | null;
+} {
+  const attached = attachedUpload ?? null;
+  const loaderForField =
+    currentUpload?.fieldId === fieldId ? currentUpload : null;
+  if (
+    attached &&
+    (!loaderForField ||
+      loaderForField.assetId !== attached.assetId ||
+      loaderForField.versionId !== attached.versionId)
+  ) {
+    return { current: null, attachedReference: attached };
+  }
+  return { current: loaderForField, attachedReference: null };
+}
+
 export function claimApplicantVideoUploadOperation(
   uploadOperation: ApplicantVideoOperationRef,
   cancellationOperation: ApplicantVideoOperationRef,
@@ -107,45 +176,9 @@ export function ApplicantVideoUpload({
   );
   const [turnstileResetKey, setTurnstileResetKey] = useState(0);
   const [progress, setProgress] = useState(0);
-  const [state, setState] = useState<{
-    status:
-      | "idle"
-      | "uploading"
-      | "paused"
-      | "error"
-      | "scanning"
-      | "ready"
-      | "attached";
-    message: string;
-  }>(() => {
-    if (current?.status === "ready")
-      return {
-        status: "ready",
-        message: `${current.filename} passed security validation and is ready to submit.`,
-      };
-    if (current?.status === "scanning")
-      return {
-        status: "scanning",
-        message: `${current.filename} is quarantined while its security scan finishes.`,
-      };
-    if (current?.status === "uploading")
-      return {
-        status: "error",
-        message: `${current.filename} did not finish uploading. Re-select the same file to resume its uploaded parts, or choose a replacement.`,
-      };
-    if (current?.status === "rejected")
-      return {
-        status: "error",
-        message: `${current.filename} did not pass upload or security validation. Upload a replacement.`,
-      };
-    if (attachedReference)
-      return {
-        status: "attached",
-        message:
-          "This draft references the uploaded video. Scan status has not been refreshed on this page.",
-      };
-    return { status: "idle", message: "" };
-  });
+  const [state, setState] = useState(() =>
+    applicantVideoUploadDisplayState(current, attachedReference),
+  );
 
   const onTransferStatusChangeRef = useRef(onTransferStatusChange);
   onTransferStatusChangeRef.current = onTransferStatusChange;
@@ -153,6 +186,7 @@ export function ApplicantVideoUpload({
     () => () => {
       uploadOperation.current = null;
       cancellationOperation.current = null;
+      if (completedUpload.current) uploadSession.current?.markAttached();
       uploadSession.current?.disposePreservingUpload();
       onTransferStatusChangeRef.current?.(false);
     },
@@ -180,6 +214,30 @@ export function ApplicantVideoUpload({
     completedUpload.current = null;
     uploadSession.current = null;
   }, [current?.assetId, current?.versionId]);
+  // biome-ignore lint/correctness/useExhaustiveDependencies: Synchronize only when the loader/attached source changes, so local transfer errors stay visible.
+  useEffect(() => {
+    if (uploadOperation.current || cancellationOperation.current) return;
+    const next = applicantVideoUploadDisplayState(current, attachedReference);
+    setState((currentState) => {
+      if (
+        currentState.status === "uploading" ||
+        currentState.status === "paused"
+      ) {
+        return currentState;
+      }
+      return currentState.status === next.status &&
+        currentState.message === next.message
+        ? currentState
+        : next;
+    });
+  }, [
+    attachedReference?.assetId,
+    attachedReference?.versionId,
+    current?.assetId,
+    current?.filename,
+    current?.status,
+    current?.versionId,
+  ]);
 
   async function cancel() {
     const active = uploadSession.current;
@@ -230,7 +288,9 @@ export function ApplicantVideoUpload({
       return;
     }
     completedUpload.current = completed;
+    active.markAttached();
     active.disposePreservingUpload();
+    if (uploadSession.current === active) uploadSession.current = null;
     onReferenceChange({
       assetId: completed.assetId,
       versionId: completed.versionId,

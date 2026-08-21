@@ -4,6 +4,7 @@ import { Link, type useNavigation } from "react-router";
 import {
   ApplicantVideoUpload,
   type ApplicantVideoUploadRecord,
+  applicantVideoFieldSources,
 } from "~/components/applicant-video-upload";
 import { DraftRecoveryStatus } from "~/components/draft-recovery-feedback";
 import { SessionizeProfileImport } from "~/components/sessionize-profile-import";
@@ -196,6 +197,11 @@ export function ApplicationAnswers({
             };
             if (field.type === "video") {
               const attachedUpload = uploads[field.id];
+              const videoSources = applicantVideoFieldSources({
+                fieldId: field.id,
+                currentUpload,
+                attachedUpload,
+              });
               return (
                 <fieldset
                   className="application-choice-field"
@@ -245,16 +251,8 @@ export function ApplicationAnswers({
                       publicSlug={publicSlug}
                       submissionId={draft.id}
                       fieldId={field.id}
-                      current={
-                        currentUpload?.fieldId === field.id
-                          ? currentUpload
-                          : null
-                      }
-                      attachedReference={
-                        attachedUpload && currentUpload?.fieldId !== field.id
-                          ? attachedUpload
-                          : null
-                      }
+                      current={videoSources.current}
+                      attachedReference={videoSources.attachedReference}
                       siteKey={uploadTurnstileSiteKey}
                       disabled={readOnly}
                       maximumBytes={maximumVideoBytes}
@@ -620,6 +618,7 @@ export function ApplicationLifecycleActions({
               </div>
               <label className="toggle">
                 <input
+                  key={`${draft.id}:${draft.revision}:${draft.status}:confirm`}
                   type="checkbox"
                   name={revisionMode ? "confirmRevision" : "confirm"}
                   value="yes"
@@ -737,8 +736,13 @@ export function ApplicationLifecycleActions({
                 queue. The submitted revisions and audit history are retained.
               </p>
               <label className="toggle">
-                <input type="checkbox" name="confirmWithdrawal" value="yes" /> I
-                understand this application will be withdrawn.
+                <input
+                  key={`${draft.id}:${draft.revision}:${draft.status}:withdraw`}
+                  type="checkbox"
+                  name="confirmWithdrawal"
+                  value="yes"
+                />{" "}
+                I understand this application will be withdrawn.
               </label>
               <button
                 className="btn danger mt"

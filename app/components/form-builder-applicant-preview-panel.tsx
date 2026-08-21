@@ -1,4 +1,10 @@
-import { type CSSProperties, type ReactNode, useEffect, useState } from "react";
+import {
+  type CSSProperties,
+  type ReactNode,
+  useEffect,
+  useRef,
+  useState,
+} from "react";
 import {
   ApplicantFormStepNav,
   ApplicantFormStepStatus,
@@ -8,6 +14,7 @@ import { programmeAccentPalette } from "~/modules/programme/programme-presentati
 import {
   APPLICANT_SPEAKERS_STEP_ID,
   applicantFormStepIdForErrors,
+  deriveInitialApplicantFormStepId,
   formApplicantSteps,
   formLayout,
   formSectionsForDisplay,
@@ -128,16 +135,26 @@ export function ApplicantPreviewPanel({
   const [validated, setValidated] = useState(false);
   const [viewport, setViewport] = useState<"mobile" | "desktop">("mobile");
   const stepped = formLayout(input.schema) === "steps";
-  const [currentStepId, setCurrentStepId] = useState(
-    () => formApplicantSteps(input.schema, {})[0]?.id ?? "",
+  const [currentStepId, setCurrentStepId] = useState(() =>
+    deriveInitialApplicantFormStepId({
+      schema: input.schema,
+      answers: {},
+    }),
   );
+  const ignoreStepResolution = useRef(false);
   // biome-ignore lint/correctness/useExhaustiveDependencies: Form identity and schema changes intentionally reset this interactive preview, including when the minimum speaker count is unchanged.
   useEffect(() => {
+    ignoreStepResolution.current = true;
     setAnswers({});
     setSpeakerCount(input.minSpeakers);
     setErrors({});
     setValidated(false);
-    setCurrentStepId(formApplicantSteps(input.schema, {})[0]?.id ?? "");
+    setCurrentStepId(
+      deriveInitialApplicantFormStepId({
+        schema: input.schema,
+        answers: {},
+      }),
+    );
   }, [input.id, input.schema, input.minSpeakers]);
   const previewFields = visibleFields(input.schema, answers);
   const previewSections = formSectionsForDisplay(input.schema, previewFields);
@@ -146,6 +163,10 @@ export function ApplicantPreviewPanel({
     ? resolveApplicantFormStepId(input.schema, answers, currentStepId)
     : currentStepId;
   useEffect(() => {
+    if (ignoreStepResolution.current) {
+      ignoreStepResolution.current = false;
+      return;
+    }
     if (!stepped) return;
     if (resolvedStepId !== currentStepId) setCurrentStepId(resolvedStepId);
   }, [currentStepId, resolvedStepId, stepped]);

@@ -223,10 +223,21 @@ export function DraftEditor({
     );
     setDirty(false);
   }, [draft.id, draft.revision]);
+  // biome-ignore lint/correctness/useExhaustiveDependencies: serverSaved stays true after the first save; each committed revision must still clear the previous recovery snapshot.
   useEffect(() => {
-    if (!serverSaved && !readOnly) return;
-    void clearDraftRecoveryScope(recoveryScope);
-  }, [readOnly, recoveryScope, serverSaved]);
+    if (readOnly) {
+      void clearDraftRecoveryScope(recoveryScope);
+      return;
+    }
+    if (!serverSaved) return;
+    void recovery.markServerSaved();
+  }, [
+    draft.revision,
+    readOnly,
+    recovery.markServerSaved,
+    recoveryScope,
+    serverSaved,
+  ]);
   useEffect(() => {
     if (stepped) return;
     const firstInvalidField = Object.keys(errors ?? {}).find(
@@ -238,12 +249,7 @@ export function DraftEditor({
     });
     return () => window.cancelAnimationFrame(frame);
   }, [errors, stepped]);
-  const errorSignature = Object.entries(errors ?? {})
-    .flatMap(([field, messages]) =>
-      messages.map((message) => `${field}:${message}`),
-    )
-    .join("|");
-  // biome-ignore lint/correctness/useExhaustiveDependencies: A new server error signature is the only reason to move to the invalid step.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: Each new action error object returns to the first invalid step, including a repeated failure with the same messages.
   useEffect(() => {
     if (!stepped || !errors || Object.keys(errors).length === 0) return;
     setCurrentStepId(
@@ -253,7 +259,7 @@ export function DraftEditor({
         errors,
       }),
     );
-  }, [errorSignature, stepped]);
+  }, [errors, stepped]);
   const fields = visibleFields(schema, answers);
   const sections = formSectionsForDisplay(schema, fields);
   const steps = formApplicantSteps(schema, answers);
@@ -431,6 +437,7 @@ export function DraftEditor({
     const active = document.activeElement;
     if (active instanceof HTMLSelectElement) return;
     if (active instanceof HTMLInputElement && active.type === "file") return;
+    if (active instanceof Element && active.closest("a")) return;
     continueStep();
   }
 
@@ -450,6 +457,7 @@ export function DraftEditor({
     if (target instanceof HTMLButtonElement) return;
     if (target instanceof HTMLSelectElement) return;
     if (target instanceof HTMLInputElement && target.type === "file") return;
+    if (target instanceof Element && target.closest("a")) return;
     event.preventDefault();
     continueStep();
   }

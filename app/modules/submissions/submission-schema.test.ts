@@ -523,6 +523,7 @@ describe("submission form rules", () => {
     ).toEqual(["proposal", "audience", APPLICANT_SPEAKERS_STEP_ID]);
     // A hidden last section stays on the prior visible section, not Speakers.
     expect(resolveApplicantFormStepId(schema, {}, "audience")).toBe("proposal");
+    expect(resolveApplicantFormStepId(schema, {}, "")).toBe("proposal");
     expect(
       resolveApplicantFormStepId(schema, { format: "Workshop" }, "audience"),
     ).toBe("audience");
