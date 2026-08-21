@@ -233,6 +233,64 @@ describe("schedule publication workflows", () => {
     });
   });
 
+  it("revalidates a blackout added after placement at publication", async () => {
+    const service = new ScheduleService(scheduleTestEnv);
+    const versionId = await service.createDraft(viewer);
+    let workspace = await service.getWorkspace(viewer);
+    const startsAt = eventLocalTimeEpoch(
+      workspace.event.startsAt,
+      workspace.event.timezone,
+      9,
+    );
+    await service.place(viewer, {
+      scheduleVersionId: versionId,
+      scheduleRevision: workspace.version!.revision,
+      sessionId: "schedule-test-one",
+      roomId: "main",
+      startsAt,
+      endsAt: startsAt + 3_600,
+    });
+    await approveScheduledTestContent(versionId);
+    await env.DB.prepare(
+      `INSERT INTO speaker_blackout_windows (
+         id, event_id, person_id, starts_at, ends_at
+       ) VALUES ('window-test-publish-blackout', ?, 'person-demo-speaker', ?, ?)`,
+    )
+      .bind(viewer.eventId, startsAt, startsAt + 3_600)
+      .run();
+    workspace = await service.getWorkspace(viewer);
+    await expect(
+      service.publish(viewer, {
+        scheduleVersionId: versionId,
+        scheduleRevision: workspace.version!.revision,
+      }),
+    ).rejects.toMatchObject({
+      name: "SchedulePublicationBlockedError",
+      conflicts: [
+        expect.objectContaining({
+          type: "speaker_unavailable",
+          severity: "blocking",
+          speakerId: "person-demo-speaker",
+          blackoutWindowId: "window-test-publish-blackout",
+        }),
+      ],
+    });
+    await env.DB.prepare(
+      `UPDATE schedule_policies
+          SET speaker_unavailable_action = 'warn'
+        WHERE event_id = ?`,
+    )
+      .bind(viewer.eventId)
+      .run();
+    workspace = await service.getWorkspace(viewer);
+    await expect(
+      service.publish(viewer, {
+        scheduleVersionId: versionId,
+        scheduleRevision: workspace.version!.revision,
+      }),
+    ).resolves.toMatchObject({ published: true });
+  });
+
   it("rejects an unapproved public snapshot at the database publication boundary", async () => {
     const service = new ScheduleService(scheduleTestEnv);
     const versionId = await service.createDraft(viewer);

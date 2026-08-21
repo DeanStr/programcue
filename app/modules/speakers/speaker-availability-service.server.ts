@@ -576,10 +576,10 @@ export class SpeakerAvailabilityService {
       ? this.env.DB.prepare(
           `
         INSERT INTO speaker_blackout_windows (
-          id, event_id, person_id, starts_at, ends_at, note, revision,
+          id, event_id, person_id, starts_at, ends_at, note,
           created_at, updated_at
         )
-        SELECT ?, events.id, ?, ?, ?, ?, 1, unixepoch(), unixepoch()
+        SELECT ?, events.id, ?, ?, ?, ?, unixepoch(), unixepoch()
           FROM events
          WHERE events.id = ? AND events.organisation_id = ?
            AND events.last_operation_id = ?

@@ -140,7 +140,6 @@ export const speakerBlackoutWindows = sqliteTable(
     startsAt: integer("starts_at").notNull(),
     endsAt: integer("ends_at").notNull(),
     note: text("note"),
-    revision: integer("revision").notNull().default(1),
     createdAt: integer("created_at").notNull().default(epochNow),
     updatedAt: integer("updated_at").notNull().default(epochNow),
   },
@@ -158,6 +157,14 @@ export const speakerBlackoutWindows = sqliteTable(
       table.eventId,
       table.startsAt,
       table.endsAt,
+    ),
+    check(
+      "speaker_blackout_windows_range_check",
+      sql`${table.endsAt} > ${table.startsAt}`,
+    ),
+    check(
+      "speaker_blackout_windows_note_check",
+      sql`${table.note} IS NULL OR (length(${table.note}) BETWEEN 1 AND 500 AND ${table.note} = trim(${table.note}))`,
     ),
   ],
 );

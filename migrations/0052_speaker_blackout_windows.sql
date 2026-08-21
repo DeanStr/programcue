@@ -15,7 +15,6 @@ CREATE TABLE speaker_blackout_windows (
       AND note = trim(note)
     )
   ),
-  revision INTEGER NOT NULL DEFAULT 1 CHECK (revision > 0),
   created_at INTEGER NOT NULL DEFAULT (unixepoch()),
   updated_at INTEGER NOT NULL DEFAULT (unixepoch()),
   UNIQUE(id, event_id)

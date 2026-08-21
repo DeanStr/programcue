@@ -93,7 +93,7 @@ def validate_baseline(connection: sqlite3.Connection, schema_source: str) -> Non
         "file_versions": {"object_key", "upload_status", "signature_status", "scan_status", "released_at"},
         "file_multipart_uploads": {"version_id", "asset_id", "upload_id", "idempotency_key", "status", "manifest_json", "expires_at"},
         "schedule_policies": {"room_overlap_action", "speaker_overlap_action", "required_resource_overlap_action", "speaker_unavailable_action"},
-        "speaker_blackout_windows": {"event_id", "person_id", "starts_at", "ends_at", "note", "revision"},
+        "speaker_blackout_windows": {"event_id", "person_id", "starts_at", "ends_at", "note"},
         "session_speakers": {"participation_status", "participation_revision", "participation_confirmed_at", "participation_declined_at", "participation_decline_reason"},
         "rooms": {"status"},
         "tags": {"event_id", "name", "colour_token"},
@@ -231,6 +231,18 @@ def validate_baseline(connection: sqlite3.Connection, schema_source: str) -> Non
         "INSERT INTO rooms (id,event_id,name,capacity) "
         "VALUES ('room-without-capacity','event-a','Unknown capacity',NULL)",
         "A room without an explicit capacity was accepted",
+    )
+    must_fail(
+        "INSERT INTO speaker_blackout_windows "
+        "(id,event_id,person_id,starts_at,ends_at) "
+        "VALUES ('window-inverted','event-a','person-a',200,100)",
+        "A blackout window ending before it starts was accepted",
+    )
+    must_fail(
+        "INSERT INTO speaker_blackout_windows "
+        "(id,event_id,person_id,starts_at,ends_at,note) "
+        "VALUES ('window-padded-note','event-a','person-a',100,200,' padded ')",
+        "A padded blackout note was accepted",
     )
     must_fail(
         "INSERT INTO submissions "
