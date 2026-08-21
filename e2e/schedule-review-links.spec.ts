@@ -215,7 +215,7 @@ test("review link history does not collapse the planner canvas", async ({
   const workspaceBox = await page.locator(".schedule-workspace").boundingBox();
   const canvasBox = await page.locator(".schedule-canvas").boundingBox();
   expect(panelBox?.height ?? 0).toBeLessThanOrEqual(16 * 16 + 2);
-  expect(workspaceBox?.height ?? 0).toBeGreaterThan(120);
-  expect(canvasBox?.height ?? 0).toBeGreaterThan(80);
+  expect(workspaceBox?.height ?? 0).toBeGreaterThanOrEqual(22.5 * 16);
+  expect(canvasBox?.height ?? 0).toBeGreaterThan(295);
   await expect(page.locator(".schedule-canvas")).toBeInViewport();
 });

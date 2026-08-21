@@ -329,8 +329,8 @@
   grid-template-columns: 232px minmax(0, 1fr) auto;
   gap: var(--space-3);
   align-items: stretch;
-  flex: 1 1 auto;
-  min-height: 0;
+  flex: 1 0 22.5rem;
+  min-height: 22.5rem;
 }
 .schedule-workspace.is-inspecting {
   grid-template-columns: 232px minmax(0, 1fr) minmax(20rem, 24rem);

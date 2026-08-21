@@ -450,7 +450,23 @@ export function useSchedulePlannerController(
     );
     if (!target) return;
     target.focus({ preventScroll: true });
-    target.scrollIntoView({ block: "center", inline: "center" });
+    const roomScroll = target.closest<HTMLElement>(".schedule-room-scroll");
+    if (roomScroll) {
+      const targetBounds = target.getBoundingClientRect();
+      const scrollBounds = roomScroll.getBoundingClientRect();
+      roomScroll.scrollBy({
+        top:
+          targetBounds.top -
+          scrollBounds.top -
+          (roomScroll.clientHeight - targetBounds.height) / 2,
+        left:
+          targetBounds.left -
+          scrollBounds.left -
+          (roomScroll.clientWidth - targetBounds.width) / 2,
+      });
+      return;
+    }
+    target.scrollIntoView({ block: "nearest", inline: "nearest" });
   }, [selectedDay, workspace.focusedSessionId, workspace.entries]);
 
   function sessionLabel(active: {
