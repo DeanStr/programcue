@@ -209,6 +209,12 @@ export async function seedExpiredRetentionEvent() {
        ) VALUES (?, ?, 1, 'draft', 1, unixepoch())`,
     ).bind(scheduleVersionId, eventId),
     testEnv.DB.prepare(
+      `INSERT INTO speaker_blackout_windows (
+         id, event_id, person_id, starts_at, ends_at, note
+       ) VALUES (?, ?, ?, unixepoch('2020-01-01T09:00:00Z'),
+                 unixepoch('2020-01-01T10:00:00Z'), 'Private travel hold')`,
+    ).bind(id("privacy-blackout"), eventId, exclusiveId),
+    testEnv.DB.prepare(
       `INSERT INTO session_speakers (
          session_id, event_id, person_id, position, role_label,
          participation_status, participation_confirmed_at, visibility

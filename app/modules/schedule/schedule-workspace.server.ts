@@ -29,6 +29,28 @@ const scheduleSpeakerProjectionSchema = z
   )
   .max(50);
 
+export function withAddedSessionSpeaker(
+  workspace: ScheduleWorkspace,
+  input: { sessionId: string; personId: string; name: string },
+): ScheduleWorkspace {
+  return {
+    ...workspace,
+    sessions: workspace.sessions.map((session) => {
+      if (
+        session.id !== input.sessionId ||
+        session.speakerIds.includes(input.personId)
+      ) {
+        return session;
+      }
+      return {
+        ...session,
+        speakerIds: [...session.speakerIds, input.personId],
+        speakerNames: [...session.speakerNames, input.name],
+      };
+    }),
+  };
+}
+
 export function detectWorkspaceConflicts(workspace: ScheduleWorkspace) {
   const sessionById = new Map(
     workspace.sessions.map((session) => [session.id, session]),

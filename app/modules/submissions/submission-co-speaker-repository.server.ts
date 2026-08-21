@@ -6,6 +6,14 @@ import {
   buildAcceptanceTaskPlanStatements,
 } from "~/modules/evaluations/evaluation-decision-statements.server";
 import { materializePublishedResourceAcknowledgementsForClaimedSpeaker } from "~/modules/resources/resource-service-shared";
+import { scheduleDraftConflictRebuildStatements } from "~/modules/schedule/schedule-conflict-statement.server";
+import { ScheduleConfigurationError } from "~/modules/schedule/schedule-errors";
+import type { ScheduleWorkspace } from "~/modules/schedule/schedule-service.server";
+import {
+  detectWorkspaceConflicts,
+  loadScheduleWorkspaceD1,
+  withAddedSessionSpeaker,
+} from "~/modules/schedule/schedule-workspace.server";
 import type { PreparedApplicantSession } from "./applicant-session.server";
 import {
   type Applicant,
@@ -353,6 +361,17 @@ export class SubmissionCoSpeakerRepository {
       );
     }
     const operationId = crypto.randomUUID();
+    const draftRebuild = await this.draftConflictRebuildForClaim({
+      organisationId: invitation.organisationId,
+      eventId: invitation.eventId,
+      sessionId: acceptedClaim ? invitation.sessionId : null,
+      personId: requireValue(
+        applicant.personId,
+        "A verified co-speaker identity is required to claim this invitation.",
+      ),
+      personName: applicant.name,
+      operationId,
+    });
     const statements: D1PreparedStatement[] = [
       this.env.DB.prepare(
         `
@@ -436,6 +455,7 @@ export class SubmissionCoSpeakerRepository {
                   )
                 )
            )
+           ${draftRebuild.versionGuardSql}
       `,
       ).bind(
         operationId,
@@ -447,6 +467,7 @@ export class SubmissionCoSpeakerRepository {
         invitationId,
         invitationId,
         applicant.personId,
+        ...draftRebuild.versionGuardBindings,
       ),
       this.env.DB.prepare(
         `
@@ -471,6 +492,7 @@ export class SubmissionCoSpeakerRepository {
                 AND event_id = submission_speakers.event_id
                 AND status = 'published'
            )
+           ${draftRebuild.speakerGuardSql}
       `,
       ).bind(
         applicant.personId,
@@ -480,6 +502,7 @@ export class SubmissionCoSpeakerRepository {
         expectedClaimTokenHash,
         formId,
         operationId,
+        ...draftRebuild.speakerGuardBindings,
       ),
       this.env.DB.prepare(
         `
@@ -572,8 +595,14 @@ export class SubmissionCoSpeakerRepository {
               WHERE existing.session_id = session.id
                 AND existing.person_id = speaker.person_id
            )
+           ${draftRebuild.speakerGuardSql}
       `,
-      ).bind(invitationId, applicant.personId, operationId),
+      ).bind(
+        invitationId,
+        applicant.personId,
+        operationId,
+        ...draftRebuild.speakerGuardBindings,
+      ),
       this.env.DB.prepare(
         `INSERT INTO memberships (
            id, organisation_id, event_id, person_id, role,
@@ -671,6 +700,9 @@ export class SubmissionCoSpeakerRepository {
             ]
         : []),
     ];
+    if (draftRebuild.statements.length) {
+      statements.splice(1, 0, ...draftRebuild.statements);
+    }
     const acceptedPropagationIndex = acceptedClaim
       ? statements.length - 1
       : null;
@@ -735,10 +767,13 @@ export class SubmissionCoSpeakerRepository {
       );
     }
     const results = await this.env.DB.batch(statements);
-    const [eventClaimed, speakerClaimed] = results;
+    const eventClaimed = results[0];
+    const draftUpdated = draftRebuild.statements.length ? results[1] : null;
+    const speakerClaimed = results[1 + draftRebuild.statements.length];
     if (
-      (eventClaimed.meta.changes ?? 0) !== 1 ||
-      (speakerClaimed.meta.changes ?? 0) !== 1 ||
+      (eventClaimed?.meta.changes ?? 0) !== 1 ||
+      (draftUpdated && (draftUpdated.meta.changes ?? 0) !== 1) ||
+      (speakerClaimed?.meta.changes ?? 0) !== 1 ||
       (acceptedPropagationIndex !== null &&
         (results[acceptedPropagationIndex]?.meta.changes ?? 0) !== 1) ||
       (sessionCreatedIndex !== null &&
@@ -773,5 +808,75 @@ export class SubmissionCoSpeakerRepository {
         "This co-speaker invitation is no longer available.",
       );
     }
+  }
+
+  private async draftConflictRebuildForClaim(input: {
+    organisationId: string;
+    eventId: string;
+    sessionId: string | null;
+    personId: string;
+    personName: string;
+    operationId: string;
+  }) {
+    const empty = {
+      versionGuardSql: "",
+      versionGuardBindings: [] as Array<string | number>,
+      speakerGuardSql: "",
+      speakerGuardBindings: [] as Array<string | number>,
+      statements: [] as D1PreparedStatement[],
+    };
+    if (!input.sessionId) return empty;
+    let workspace: ScheduleWorkspace;
+    try {
+      workspace = await loadScheduleWorkspaceD1(
+        this.env,
+        {
+          organisationId: input.organisationId,
+          eventId: input.eventId,
+        },
+        { includePublicationConflicts: false },
+      );
+    } catch (error) {
+      if (error instanceof ScheduleConfigurationError) {
+        throw new SubmissionStateError(error.message);
+      }
+      throw error;
+    }
+    const draft =
+      workspace.version?.status === "draft" ? workspace.version : null;
+    if (!draft) return empty;
+    if (
+      !workspace.entries.some((entry) => entry.sessionId === input.sessionId)
+    ) {
+      return empty;
+    }
+    return {
+      versionGuardSql: `AND EXISTS (
+           SELECT 1 FROM schedule_versions current_version
+            WHERE current_version.id = ? AND current_version.event_id = events.id
+              AND current_version.status = 'draft' AND current_version.revision = ?
+         )`,
+      versionGuardBindings: [draft.id, draft.revision],
+      speakerGuardSql: `AND EXISTS (
+           SELECT 1 FROM schedule_versions current_version
+            WHERE current_version.event_id = ?
+              AND current_version.status = 'draft'
+              AND current_version.publication_operation_id = ?
+         )`,
+      speakerGuardBindings: [input.eventId, input.operationId],
+      statements: scheduleDraftConflictRebuildStatements(this.env, {
+        organisationId: input.organisationId,
+        eventId: input.eventId,
+        operationId: input.operationId,
+        draft,
+        conflicts: detectWorkspaceConflicts(
+          withAddedSessionSpeaker(workspace, {
+            sessionId: input.sessionId,
+            personId: input.personId,
+            name: input.personName,
+          }),
+        ),
+      }),
+    };
   }
 }

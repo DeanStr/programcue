@@ -1,5 +1,5 @@
-import { requireValue } from "~/lib/required-value";
 import type { Viewer } from "~/platform/auth/authorize.server";
+import { scheduleDraftConflictRebuildStatements } from "./schedule-conflict-statement.server";
 import { ScheduleRevisionConflictError } from "./schedule-errors";
 import { ScheduleNotesWorkflow } from "./schedule-notes-workflow.server";
 import type { SchedulePolicies } from "./schedule-rules";
@@ -105,51 +105,13 @@ export abstract class SchedulePolicyWorkflow extends ScheduleNotesWorkflow {
     ];
     if (workspace.version?.status === "draft") {
       statements.push(
-        this.env.DB.prepare(
-          `
-          UPDATE schedule_versions
-             SET revision = revision + 1, publication_operation_id = ?
-           WHERE id = ? AND event_id = ? AND status = 'draft' AND revision = ?
-             AND EXISTS (
-               SELECT 1 FROM events
-                WHERE id = ? AND organisation_id = ? AND last_operation_id = ?
-             )
-        `,
-        ).bind(
+        ...scheduleDraftConflictRebuildStatements(this.env, {
+          organisationId: viewer.organisationId,
+          eventId: viewer.eventId,
           operationId,
-          workspace.version.id,
-          viewer.eventId,
-          workspace.version.revision,
-          viewer.eventId,
-          viewer.organisationId,
-          operationId,
-        ),
-        this.env.DB.prepare(
-          `DELETE FROM schedule_conflicts
-            WHERE event_id = ? AND schedule_version_id = ?
-              AND EXISTS (
-                SELECT 1 FROM schedule_versions
-                 WHERE id = ? AND event_id = ? AND publication_operation_id = ?
-              )`,
-        ).bind(
-          viewer.eventId,
-          workspace.version.id,
-          workspace.version.id,
-          viewer.eventId,
-          operationId,
-        ),
-        ...conflicts.map(({ entryId, conflict }) =>
-          this.conflictInsert(
-            viewer.eventId,
-            requireValue(
-              workspace.version,
-              "Required workspace.version is unavailable.",
-            ).id,
-            entryId,
-            conflict,
-            operationId,
-          ),
-        ),
+          draft: workspace.version,
+          conflicts,
+        }),
       );
     }
     const auditIndex = statements.length;

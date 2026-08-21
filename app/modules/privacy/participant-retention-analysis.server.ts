@@ -155,6 +155,11 @@ export abstract class ParticipantRetentionAnalysis extends ParticipantRetentionF
                AND session.source_submission_id IS NOT NULL
                AND record.description IS NOT NULL)
           + (SELECT COUNT(*) FROM public_itineraries record WHERE record.event_id IN locked)
+          + (SELECT COUNT(*) FROM speaker_blackout_windows record
+              WHERE record.event_id IN locked)
+          + (SELECT COUNT(*) FROM schedule_conflicts record
+              WHERE record.event_id IN locked
+                AND record.conflict_type = 'speaker_unavailable')
           + (SELECT COUNT(*) FROM task_instances record WHERE record.event_id IN locked
             AND ${participantRetentionTaskPredicateSql("record")}
             AND (record.description IS NOT NULL

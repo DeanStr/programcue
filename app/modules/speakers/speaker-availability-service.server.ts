@@ -3,7 +3,7 @@ import {
   AirtableProviderBoundary,
   airtableCommandKey,
 } from "~/modules/airtable/airtable-provider-boundary.server";
-import { scheduleConflictInsert } from "~/modules/schedule/schedule-conflict-statement.server";
+import { scheduleDraftConflictRebuildStatements } from "~/modules/schedule/schedule-conflict-statement.server";
 import {
   ScheduleConfigurationError,
   ScheduleRevisionConflictError,
@@ -630,43 +630,13 @@ export class SpeakerAvailabilityService {
     const statements: D1PreparedStatement[] = [eventUpdate, windowMutation];
     if (draft) {
       statements.push(
-        this.env.DB.prepare(
-          `
-          UPDATE schedule_versions
-             SET revision = revision + 1, publication_operation_id = ?
-           WHERE id = ? AND event_id = ? AND status = 'draft' AND revision = ?
-             AND EXISTS (
-               SELECT 1 FROM events
-                WHERE id = ? AND organisation_id = ? AND last_operation_id = ?
-             )
-        `,
-        ).bind(
+        ...scheduleDraftConflictRebuildStatements(this.env, {
+          organisationId: viewer.organisationId,
+          eventId: viewer.eventId,
           operationId,
-          draft.id,
-          viewer.eventId,
-          draft.revision,
-          viewer.eventId,
-          viewer.organisationId,
-          operationId,
-        ),
-        this.env.DB.prepare(
-          `DELETE FROM schedule_conflicts
-            WHERE event_id = ? AND schedule_version_id = ?
-              AND EXISTS (
-                SELECT 1 FROM schedule_versions
-                 WHERE id = ? AND event_id = ? AND publication_operation_id = ?
-              )`,
-        ).bind(viewer.eventId, draft.id, draft.id, viewer.eventId, operationId),
-        ...conflicts.map(({ entryId, conflict }) =>
-          scheduleConflictInsert(
-            this.env,
-            viewer.eventId,
-            draft.id,
-            entryId,
-            conflict,
-            operationId,
-          ),
-        ),
+          draft,
+          conflicts,
+        }),
       );
     }
     statements.push(

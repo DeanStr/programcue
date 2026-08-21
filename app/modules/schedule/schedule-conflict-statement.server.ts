@@ -36,3 +36,60 @@ export function scheduleConflictInsert(
     operationId,
   );
 }
+
+export function scheduleDraftConflictRebuildStatements(
+  env: CloudflareEnvironment,
+  input: {
+    organisationId: string;
+    eventId: string;
+    operationId: string;
+    draft: { id: string; revision: number };
+    conflicts: ReadonlyArray<{ entryId: string; conflict: ScheduleConflict }>;
+  },
+): D1PreparedStatement[] {
+  return [
+    env.DB.prepare(
+      `
+      UPDATE schedule_versions
+         SET revision = revision + 1, publication_operation_id = ?
+       WHERE id = ? AND event_id = ? AND status = 'draft' AND revision = ?
+         AND EXISTS (
+           SELECT 1 FROM events
+            WHERE id = ? AND organisation_id = ? AND last_operation_id = ?
+         )
+    `,
+    ).bind(
+      input.operationId,
+      input.draft.id,
+      input.eventId,
+      input.draft.revision,
+      input.eventId,
+      input.organisationId,
+      input.operationId,
+    ),
+    env.DB.prepare(
+      `DELETE FROM schedule_conflicts
+        WHERE event_id = ? AND schedule_version_id = ?
+          AND EXISTS (
+            SELECT 1 FROM schedule_versions
+             WHERE id = ? AND event_id = ? AND publication_operation_id = ?
+          )`,
+    ).bind(
+      input.eventId,
+      input.draft.id,
+      input.draft.id,
+      input.eventId,
+      input.operationId,
+    ),
+    ...input.conflicts.map(({ entryId, conflict }) =>
+      scheduleConflictInsert(
+        env,
+        input.eventId,
+        input.draft.id,
+        entryId,
+        conflict,
+        input.operationId,
+      ),
+    ),
+  ];
+}

@@ -894,6 +894,40 @@ describe("participant retention", () => {
       redacted: true,
       reason: "event_retention_period_elapsed",
     });
+    await expect(
+      seeded.testEnv.DB.prepare(
+        `SELECT COUNT(*) AS total FROM speaker_blackout_windows WHERE event_id = ?`,
+      )
+        .bind(seeded.eventId)
+        .first(),
+    ).resolves.toEqual({ total: 0 });
+  });
+
+  it("reports leftover speaker unavailability and blocks later window updates", async () => {
+    const leftover = await seedExpiredRetentionEvent();
+    await leftover.testEnv.DB.prepare(
+      `UPDATE events SET participant_retention_completed_at = unixepoch()
+        WHERE id = ?`,
+    )
+      .bind(leftover.eventId)
+      .run();
+    const preview = await new ParticipantRetentionService(
+      leftover.testEnv,
+    ).preview(leftover.owner);
+    expect(preview.integrityViolations).toEqual(
+      expect.arrayContaining([
+        expect.stringMatching(/participant workspace or private-file/u),
+      ]),
+    );
+    await expect(
+      leftover.testEnv.DB.prepare(
+        `UPDATE speaker_blackout_windows
+            SET starts_at = starts_at + 60
+          WHERE event_id = ?`,
+      )
+        .bind(leftover.eventId)
+        .run(),
+    ).rejects.toThrow(/participant retention is complete/i);
   });
 
   it("redacts committee discussion content and blocks later discussion writes", async () => {

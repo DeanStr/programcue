@@ -38,8 +38,7 @@ BEGIN
 END;
 
 CREATE TRIGGER speaker_blackout_windows_participant_retention_no_pii_update
-BEFORE UPDATE OF event_id, person_id, note
-ON speaker_blackout_windows
+BEFORE UPDATE ON speaker_blackout_windows
 WHEN EXISTS (
   SELECT 1 FROM participant_retention_locked_events locked
   WHERE locked.event_id IN (OLD.event_id, NEW.event_id)
