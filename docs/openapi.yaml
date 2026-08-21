@@ -2003,7 +2003,12 @@ components:
         files:
           { type: array, items: { $ref: "#/components/schemas/ApiRecord" } }
         tasks:
-          { type: array, items: { $ref: "#/components/schemas/ApiRecord" } }
+          type: array
+          description: >-
+            Participant-accessible tasks. A session_details_review_v1 task
+            includes sessionDetailsReview with the canonical fields,
+            sessionRevision and fingerprint required by the completion command.
+          items: { $ref: "#/components/schemas/ApiRecord" }
         nextCursor: { type: [string, "null"] }
         correlationId: { type: string }
     ParticipantResourceResponse:
@@ -3073,7 +3078,12 @@ components:
       properties:
         preset:
           type: string
-          enum: [speaker_travel_hotel_v1, speaker_travel_flight_v1]
+          enum:
+            [
+              speaker_travel_hotel_v1,
+              speaker_travel_flight_v1,
+              session_details_review_v1,
+            ]
         form:
           type: object
           additionalProperties: false

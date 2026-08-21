@@ -8,6 +8,7 @@ import {
   completedFileEvidenceAttachmentSchema,
   isSharedSessionDeliverableTask,
   parseTaskEvidenceDetails,
+  participantPrerequisitesAccessibleSql,
   TaskEvidenceAttachmentConflictError,
   type TaskRow,
   TaskStateError,
@@ -238,6 +239,7 @@ export class ParticipantTaskEvidenceCommands extends ParticipantTaskWorkflowFoun
                AND json_extract(evidence_json, '$.fileVersionId') = ?
              )
            )
+           AND ${participantPrerequisitesAccessibleSql("task_instances")}
            AND NOT EXISTS (
              SELECT 1 FROM task_instance_dependencies dep
              JOIN task_instances prerequisite ON prerequisite.id = dep.depends_on_task_id
@@ -274,6 +276,9 @@ export class ParticipantTaskEvidenceCommands extends ParticipantTaskWorkflowFoun
         submittedEvidence?.versionId ?? null,
         submittedEvidence?.assetId ?? null,
         submittedEvidence?.versionId ?? null,
+        viewer.personId,
+        viewer.personId,
+        viewer.personId,
         input.versionId,
         input.assetId,
         sharedSessionDeliverable ? 1 : 0,

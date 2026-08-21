@@ -25,11 +25,131 @@ const principal = {
   scopes: new Set(["tasks:read", "tasks:write", "schedule:publish"]),
 } satisfies ApiPrincipal & { eventId: string };
 
+function withBatchRace(
+  testEnv: CloudflareEnvironment,
+  race: () => Promise<void>,
+) {
+  let injectRace = true;
+  const racingDb = new Proxy(testEnv.DB, {
+    get(target, property) {
+      if (property === "batch") {
+        return async (statements: D1PreparedStatement[]) => {
+          if (injectRace) {
+            injectRace = false;
+            await race();
+          }
+          return target.batch(statements);
+        };
+      }
+      const value = Reflect.get(target, property);
+      return typeof value === "function" ? value.bind(target) : value;
+    },
+  });
+  return new Proxy(testEnv, {
+    get(target, property) {
+      return property === "DB" ? racingDb : Reflect.get(target, property);
+    },
+  });
+}
+
 beforeEach(async () => {
   await ensureDemoData(env as unknown as CloudflareEnvironment);
 });
 
 describe("typed task API service", () => {
+  it.each(["session-owner", "speaker-target"] as const)(
+    "rejects a %s task when participation declines before the atomic insert",
+    async (scenario) => {
+      const testEnv = env as unknown as CloudflareEnvironment;
+      const token = crypto.randomUUID();
+      const sessionId = `api-task-race-session-${token}`;
+      const personId = `api-task-race-person-${token}`;
+      const idempotencyKey = `api-task-race-${scenario}-${token}`;
+      await testEnv.DB.batch([
+        testEnv.DB.prepare(
+          `INSERT INTO people (
+             id, email, display_name, email_verified, profile_status,
+             created_at, updated_at
+           ) VALUES (?, ?, 'API task race participant', 1, 'draft',
+                     unixepoch(), unixepoch())`,
+        ).bind(personId, `${personId}@example.com`),
+        testEnv.DB.prepare(
+          `INSERT INTO sessions (
+             id, event_id, title, slug, format, duration_minutes, status,
+             visibility, revision, created_at, updated_at
+           ) VALUES (?, ?, 'API task race session', ?, 'presentation', 30,
+                     'unscheduled', 'private', 1, unixepoch(), unixepoch())`,
+        ).bind(sessionId, eventId, sessionId),
+        testEnv.DB.prepare(
+          `INSERT INTO session_speakers (
+             session_id, event_id, person_id, position, role_label,
+             participation_status, participation_revision, visibility
+           ) VALUES (?, ?, ?, 0, 'Speaker', 'pending', 1, 'private')`,
+        ).bind(sessionId, eventId, personId),
+      ]);
+      const racingEnv = withBatchRace(testEnv, async () => {
+        await testEnv.DB.prepare(
+          `UPDATE session_speakers
+              SET participation_status = 'declined',
+                  participation_revision = participation_revision + 1,
+                  participation_confirmed_at = NULL,
+                  participation_declined_at = unixepoch(),
+                  participation_decline_reason = NULL
+            WHERE event_id = ? AND session_id = ? AND person_id = ?`,
+        )
+          .bind(eventId, sessionId, personId)
+          .run();
+      });
+      const airtable = {
+        executeIdempotent: async <T>(
+          _scope: unknown,
+          _command: unknown,
+          execute: () => Promise<T>,
+        ) => execute(),
+      } as unknown as AirtableProviderBoundary;
+      const service = new ApiTaskService(racingEnv, { airtable });
+      const title = `Participation race ${scenario} ${token}`;
+
+      await expect(
+        service.create(
+          principal,
+          {
+            title,
+            description: null,
+            targetType: scenario === "session-owner" ? "session" : "speaker",
+            targetId: scenario === "session-owner" ? sessionId : personId,
+            ownerPersonId: scenario === "session-owner" ? personId : null,
+            taskType: "checklist",
+            impact: "high",
+            dueAt: null,
+            dependencyIds: [],
+          },
+          `correlation-${token}`,
+          idempotencyKey,
+        ),
+      ).rejects.toMatchObject({
+        status: 409,
+        code: "TASK_REFERENCE_CONFLICT",
+      } satisfies Partial<ApiError>);
+      await expect(
+        testEnv.DB.prepare(
+          "SELECT 1 FROM task_instances WHERE event_id = ? AND title = ?",
+        )
+          .bind(eventId, title)
+          .first(),
+      ).resolves.toBeNull();
+      await expect(
+        testEnv.DB.prepare(
+          `SELECT 1 FROM idempotency_records
+            WHERE event_id = ? AND scope = 'task.create'
+              AND idempotency_key = ?`,
+        )
+          .bind(eventId, idempotencyKey)
+          .first(),
+      ).resolves.toBeNull();
+    },
+  );
+
   it("checks repository authority for reads and projects task creation", async () => {
     const reads: string[] = [];
     const commands: Array<{ operation: string; eventId: string }> = [];

@@ -16,6 +16,9 @@ import {
   participantPredicateSql,
   participantRetentionTaskPredicateSql,
   participantTaskActorProvenanceSql,
+  participantTaskCommentAuditSql,
+  participantTaskCompletionAuditSql,
+  participantTaskEvidenceAuditSql,
   RETAINED_PERSON_PREFIX,
   requireOwner,
 } from "./participant-retention-foundation.server";
@@ -230,7 +233,8 @@ export abstract class ParticipantRetentionExecution extends ParticipantRetention
         "completed_by_person_id",
         "event_id = ?",
         `${participantRetentionTaskPredicateSql("task_instances")}
-         AND ${participantTaskActorProvenanceSql("task_instances", "task_instances.completed_by_person_id")}`,
+         AND ${participantTaskActorProvenanceSql("task_instances", "task_instances.completed_by_person_id")}
+         AND ${participantTaskCompletionAuditSql("task_instances", "task_instances.completed_by_person_id")}`,
       ),
       mapStatement(
         this.env,
@@ -243,6 +247,7 @@ export abstract class ParticipantRetentionExecution extends ParticipantRetention
              WHERE participant_task.event_id = task_comments.event_id
                AND ${participantRetentionTaskPredicateSql("participant_task")}
                AND ${participantTaskActorProvenanceSql("participant_task", "task_comments.author_person_id")}
+               AND ${participantTaskCommentAuditSql("participant_task", "task_comments")}
         )`,
       ),
       mapStatement(
@@ -279,6 +284,7 @@ export abstract class ParticipantRetentionExecution extends ParticipantRetention
              WHERE participant_task.event_id = task_evidence.event_id
                AND ${participantRetentionTaskPredicateSql("participant_task")}
                AND ${participantTaskActorProvenanceSql("participant_task", "task_evidence.submitted_by_person_id")}
+               AND ${participantTaskEvidenceAuditSql("participant_task", "task_evidence")}
         )`,
       ),
       mapStatement(this.env, mappings, "session_speakers", "person_id"),

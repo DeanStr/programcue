@@ -25,7 +25,20 @@ export class ApiParticipantRecoveryService {
         WHERE task.id = ? AND task.event_id = ?
           AND task.last_operation_id = ? AND task.revision = ?
           AND task.status IN ('completed','submitted')
-          AND task.completed_by_person_id = ?`,
+          AND (
+            (task.status = 'completed' AND task.completed_by_person_id = ?)
+            OR (
+              task.status = 'submitted'
+              AND EXISTS (
+                SELECT 1 FROM task_evidence evidence
+                 WHERE evidence.id = 'task-evidence:' || task.last_operation_id
+                   AND evidence.task_id = task.id
+                   AND evidence.event_id = task.event_id
+                   AND evidence.status = 'submitted'
+                   AND evidence.submitted_by_person_id = ?
+              )
+            )
+          )`,
     )
       .bind(
         viewer.organisationId,
@@ -33,6 +46,7 @@ export class ApiParticipantRecoveryService {
         viewer.eventId,
         operationId,
         previousRevision + 1,
+        viewer.personId,
         viewer.personId,
       )
       .first<{

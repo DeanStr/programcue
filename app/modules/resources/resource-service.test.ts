@@ -201,6 +201,61 @@ describe("speaker resource service", () => {
     ).rejects.toMatchObject({ status: 404 });
   });
 
+  it("preserves event-wide resources and acknowledgements when a submitter declines their only session", async () => {
+    const testEnv = env as unknown as CloudflareEnvironment;
+    await ensureDemoSpeakerData(testEnv);
+    const participant = { ...speaker, role: "submitter" as const };
+    await testEnv.DB.batch([
+      testEnv.DB.prepare(
+        `UPDATE memberships SET role = 'submitter'
+          WHERE event_id = ? AND person_id = ? AND role = 'speaker'`,
+      ).bind(admin.eventId, participant.personId),
+      testEnv.DB.prepare(
+        `UPDATE session_speakers
+            SET participation_status = 'pending', participation_revision = 1,
+                participation_confirmed_at = NULL,
+                participation_declined_at = NULL,
+                participation_decline_reason = NULL
+          WHERE event_id = ? AND session_id = 'session-demo-speaker'
+            AND person_id = ?`,
+      ).bind(admin.eventId, participant.personId),
+    ]);
+    const resources = new ResourceService(testEnv);
+    const tasks = new TaskService(testEnv);
+    const pageId = await resources.save(admin, {
+      title: "Event-wide speaker briefing",
+      slug: `event-wide-after-decline-${crypto.randomUUID().slice(0, 8)}`,
+      category: "Preparation",
+      audienceScope: "all_speakers",
+      acknowledgementRequired: true,
+      document: { type: "doc", content: [{ type: "paragraph" }] },
+    });
+    const draft = (await resources.getAdminWorkspace(admin, pageId)).selected!;
+    await resources.publish(admin, pageId, draft.revision);
+    const taskId = `resource-ack:${pageId}:${participant.personId}`;
+
+    await new SpeakerService(testEnv).declineOwnParticipation(participant, {
+      sessionId: "session-demo-speaker",
+      participationRevision: 1,
+      declineConfirmation: "declined",
+      reason: "Unavailable for this session.",
+    });
+
+    await expect(
+      resources.getParticipantWorkspace(participant, draft.slug),
+    ).resolves.toHaveProperty("selected.id", pageId);
+    expect(
+      (await tasks.listParticipantTasks(participant)).some(
+        (task) => task.id === taskId,
+      ),
+    ).toBe(true);
+    expect(
+      (await tasks.getAdminWorkspace(admin)).tasks.find(
+        (task) => task.id === taskId,
+      )?.participantActionable,
+    ).toBe(true);
+  });
+
   it("rejects publication when a custom-audience person stops being a speaker during commit", async () => {
     const testEnv = env as unknown as CloudflareEnvironment;
     await ensureDemoSpeakerData(testEnv);
@@ -1702,6 +1757,37 @@ describe("speaker resource service", () => {
       )?.participantActionable,
     ).toBe(false);
 
+    const duringDeclinePageId = await resources.save(admin, {
+      title: "Briefing published during a decline",
+      slug: `declined-interval-briefing-${crypto.randomUUID().slice(0, 8)}`,
+      category: "Preparation",
+      audienceScope: "accepted_speakers",
+      acknowledgementRequired: true,
+      document: {
+        type: "doc",
+        content: [
+          {
+            type: "paragraph",
+            content: [{ type: "text", text: "Published while unavailable." }],
+          },
+        ],
+      },
+    });
+    const duringDeclineDraft = (
+      await resources.getAdminWorkspace(admin, duringDeclinePageId)
+    ).selected!;
+    await resources.publish(
+      admin,
+      duringDeclinePageId,
+      duringDeclineDraft.revision,
+    );
+    const duringDeclineTaskId = `resource-ack:${duringDeclinePageId}:${speaker.personId}`;
+    await expect(
+      testEnv.DB.prepare("SELECT id FROM task_instances WHERE id = ?")
+        .bind(duringDeclineTaskId)
+        .first(),
+    ).resolves.toBeNull();
+
     await new SpeakerService(testEnv).resetDeclinedParticipation(
       admin,
       speaker.personId,
@@ -1717,6 +1803,11 @@ describe("speaker resource service", () => {
     expect(
       (await tasks.listParticipantTasks(speaker)).some(
         (task) => task.id === taskId,
+      ),
+    ).toBe(true);
+    expect(
+      (await tasks.listParticipantTasks(speaker)).some(
+        (task) => task.id === duringDeclineTaskId,
       ),
     ).toBe(true);
     expect(

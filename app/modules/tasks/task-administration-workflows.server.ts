@@ -366,23 +366,38 @@ export class TaskAdministrationWorkflows extends TaskServiceFoundation {
           .filter((row) => row.templateId === template.id)
           .map((row) => row.dependsOnTemplateId),
       })),
-      tasks: tasks.results.map((task) => ({
-        ...task,
-        isSessionDetailsReview: isSessionDetailsReviewConfiguration(
+      tasks: tasks.results.map((task) => {
+        const isSessionDetailsReview = isSessionDetailsReviewConfiguration(
           task.configurationJson,
-        ),
-        participantActionable: task.participantActionable === 1,
-        readinessRelevant: task.readinessRelevant === 1,
-        formFields: structuredTaskForm(task.configurationJson)?.fields ?? [],
-        evidence: evidence.results
-          .filter((item) => item.taskId === task.id)
-          .map((item) => ({
-            ...item,
-            downloadAvailable: item.downloadAvailable === 1,
-            details: parseTaskEvidenceDetails(task.id, item.evidenceJson),
-          })),
-        comments: comments.results.filter((item) => item.taskId === task.id),
-      })),
+        );
+        const taskEvidence = task.evidenceJson
+          ? parseTaskEvidenceDetails(task.id, task.evidenceJson)
+          : null;
+        if (
+          isSessionDetailsReview &&
+          task.status === "completed" &&
+          !taskEvidence?.sessionDetailsReview
+        ) {
+          throw new Error(
+            `Completed session-details review task ${task.id} is missing its canonical review evidence.`,
+          );
+        }
+        return {
+          ...task,
+          isSessionDetailsReview,
+          participantActionable: task.participantActionable === 1,
+          readinessRelevant: task.readinessRelevant === 1,
+          formFields: structuredTaskForm(task.configurationJson)?.fields ?? [],
+          evidence: evidence.results
+            .filter((item) => item.taskId === task.id)
+            .map((item) => ({
+              ...item,
+              downloadAvailable: item.downloadAvailable === 1,
+              details: parseTaskEvidenceDetails(task.id, item.evidenceJson),
+            })),
+          comments: comments.results.filter((item) => item.taskId === task.id),
+        };
+      }),
       speakers: speakers.results,
       sessions: sessions.results,
     };

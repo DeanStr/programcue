@@ -1,6 +1,7 @@
 import { env } from "cloudflare:test";
 import { describe, expect, it } from "vitest";
 
+import { ResourceService } from "~/modules/resources/resource-service.server";
 import type { Viewer } from "~/platform/auth/authorize.server";
 import { WebhookService } from "~/platform/operations/webhook-service.server";
 import { ensureDemoSpeakerData } from "./demo.server";
@@ -146,9 +147,20 @@ describe("speaker profile service", () => {
     ]);
   });
 
-  it("counts a session-scoped deliverable for every participant in that exact session", async () => {
+  it("counts a session-scoped deliverable only while the participant remains active", async () => {
     const testEnv = env as unknown as CloudflareEnvironment;
     await ensureDemoSpeakerData(testEnv);
+    await testEnv.DB.prepare(
+      `UPDATE session_speakers
+          SET participation_status = 'pending', participation_revision = 1,
+              participation_confirmed_at = NULL,
+              participation_declined_at = NULL,
+              participation_decline_reason = NULL
+        WHERE event_id = ? AND session_id = 'session-demo-speaker'
+          AND person_id = ?`,
+    )
+      .bind(admin.eventId, speaker.personId)
+      .run();
     const service = new SpeakerService(testEnv);
     const beforeDetail = await service.getAdminSpeakerDetail(
       admin,
@@ -168,12 +180,12 @@ describe("speaker profile service", () => {
          id, event_id, target_type, target_id, owner_person_id, title,
          task_type, impact, evidence_mode, configuration_json,
          status, readiness_state, readiness_percent
-       ) VALUES (?, ?, 'session', 'session-demo-speaker', NULL,
+       ) VALUES (?, ?, 'session', 'session-demo-speaker', ?,
                  'Upload the session poster', 'file_upload', 'high', 'file',
                  '{"fileScope":"session_deliverable"}',
                  'not_started', 'on_track', 0)`,
     )
-      .bind(taskId, admin.eventId)
+      .bind(taskId, admin.eventId, speaker.personId)
       .run();
 
     const afterDetail = await service.getAdminSpeakerDetail(
@@ -197,6 +209,204 @@ describe("speaker profile service", () => {
     expect(afterPage.summary.outstandingTasks).toBe(
       beforePage.summary.outstandingTasks + 1,
     );
+
+    await testEnv.DB.prepare(
+      `UPDATE session_speakers
+          SET participation_status = 'declined', participation_revision = 2,
+              participation_confirmed_at = NULL,
+              participation_declined_at = unixepoch(),
+              participation_decline_reason = NULL
+        WHERE event_id = ? AND session_id = 'session-demo-speaker'
+          AND person_id = ?`,
+    )
+      .bind(admin.eventId, speaker.personId)
+      .run();
+    const declinedDetail = await service.getAdminSpeakerDetail(
+      admin,
+      speaker.personId,
+    );
+    const declinedPage = await service.listAdminSpeakerPage(
+      admin,
+      { query: speaker.email },
+      1,
+    );
+    const declinedListItem = declinedPage.speakers.find(
+      (candidate) => candidate.id === speaker.personId,
+    )!;
+    await testEnv.DB.prepare(
+      "DELETE FROM task_instances WHERE id = ? AND event_id = ?",
+    )
+      .bind(taskId, admin.eventId)
+      .run();
+    const withoutDeclinedTaskDetail = await service.getAdminSpeakerDetail(
+      admin,
+      speaker.personId,
+    );
+    const withoutDeclinedTaskPage = await service.listAdminSpeakerPage(
+      admin,
+      { query: speaker.email },
+      1,
+    );
+    const withoutDeclinedTaskListItem = withoutDeclinedTaskPage.speakers.find(
+      (candidate) => candidate.id === speaker.personId,
+    )!;
+    expect(declinedDetail.tasks.outstanding).toBe(
+      withoutDeclinedTaskDetail.tasks.outstanding,
+    );
+    expect(declinedListItem.outstandingTasks).toBe(
+      withoutDeclinedTaskListItem.outstandingTasks,
+    );
+    expect(declinedPage.summary.outstandingTasks).toBe(
+      withoutDeclinedTaskPage.summary.outstandingTasks,
+    );
+  });
+
+  it("excludes resource acknowledgements outside the speaker's current audience from readiness", async () => {
+    const testEnv = env as unknown as CloudflareEnvironment;
+    await ensureDemoSpeakerData(testEnv);
+    await testEnv.DB.batch([
+      testEnv.DB.prepare(
+        `UPDATE session_speakers
+            SET participation_status = 'pending', participation_revision = 1,
+                participation_confirmed_at = NULL,
+                participation_declined_at = NULL,
+                participation_decline_reason = NULL
+          WHERE event_id = ? AND session_id = 'session-demo-speaker'
+            AND person_id = ?`,
+      ).bind(admin.eventId, speaker.personId),
+      testEnv.DB.prepare(
+        `UPDATE task_instances
+            SET status = 'waived', readiness_state = 'on_track',
+                readiness_percent = 100, revision = revision + 1
+          WHERE event_id = ?
+            AND (
+              (target_type = 'speaker' AND target_id = ?)
+              OR (target_type <> 'session' AND owner_person_id = ?)
+              OR (target_type = 'session' AND EXISTS (
+                SELECT 1 FROM session_speakers relationship
+                 WHERE relationship.event_id = task_instances.event_id
+                   AND relationship.session_id = task_instances.target_id
+                   AND relationship.person_id = ?
+              ))
+            )`,
+      ).bind(
+        admin.eventId,
+        speaker.personId,
+        speaker.personId,
+        speaker.personId,
+      ),
+    ]);
+    const service = new SpeakerService(testEnv);
+    const beforeDetail = await service.getAdminSpeakerDetail(
+      admin,
+      speaker.personId,
+    );
+    const beforePage = await service.listAdminSpeakerPage(
+      admin,
+      { query: speaker.email },
+      1,
+    );
+    expect(beforeDetail.tasks.outstanding).toBe(0);
+    expect(
+      beforePage.speakers.find((candidate) => candidate.id === speaker.personId)
+        ?.outstandingTasks,
+    ).toBe(0);
+
+    const resources = new ResourceService(testEnv);
+    const pageId = await resources.save(admin, {
+      title: "Accepted speaker readiness briefing",
+      slug: `speaker-readiness-briefing-${crypto.randomUUID().slice(0, 8)}`,
+      category: "Preparation",
+      audienceScope: "accepted_speakers",
+      acknowledgementRequired: true,
+      document: {
+        type: "doc",
+        content: [
+          {
+            type: "paragraph",
+            content: [{ type: "text", text: "A current-audience task." }],
+          },
+        ],
+      },
+    });
+    const draft = (await resources.getAdminWorkspace(admin, pageId)).selected!;
+    await resources.publish(admin, pageId, draft.revision);
+
+    const activeDetail = await service.getAdminSpeakerDetail(
+      admin,
+      speaker.personId,
+    );
+    const activePage = await service.listAdminSpeakerPage(
+      admin,
+      { query: speaker.email },
+      1,
+    );
+    expect(activeDetail.tasks.outstanding).toBe(1);
+    expect(
+      activePage.speakers.find((candidate) => candidate.id === speaker.personId)
+        ?.outstandingTasks,
+    ).toBe(1);
+    expect(activePage.summary.outstandingTasks).toBe(
+      beforePage.summary.outstandingTasks + 1,
+    );
+    expect(
+      (
+        await service.listAdminSpeakerPage(
+          admin,
+          { query: speaker.email, readiness: "needs_attention" },
+          1,
+        )
+      ).speakers.some((candidate) => candidate.id === speaker.personId),
+    ).toBe(true);
+
+    await testEnv.DB.prepare(
+      `UPDATE session_speakers
+          SET participation_status = 'declined', participation_revision = 2,
+              participation_confirmed_at = NULL,
+              participation_declined_at = unixepoch(),
+              participation_decline_reason = NULL
+        WHERE event_id = ? AND session_id = 'session-demo-speaker'
+          AND person_id = ?`,
+    )
+      .bind(admin.eventId, speaker.personId)
+      .run();
+
+    const declinedDetail = await service.getAdminSpeakerDetail(
+      admin,
+      speaker.personId,
+    );
+    const declinedPage = await service.listAdminSpeakerPage(
+      admin,
+      { query: speaker.email },
+      1,
+    );
+    expect(declinedDetail.tasks.outstanding).toBe(0);
+    expect(
+      declinedPage.speakers.find(
+        (candidate) => candidate.id === speaker.personId,
+      )?.outstandingTasks,
+    ).toBe(0);
+    expect(declinedPage.summary.outstandingTasks).toBe(
+      beforePage.summary.outstandingTasks,
+    );
+    expect(
+      (
+        await service.listAdminSpeakerPage(
+          admin,
+          { query: speaker.email, readiness: "needs_attention" },
+          1,
+        )
+      ).speakers.some((candidate) => candidate.id === speaker.personId),
+    ).toBe(false);
+    expect(
+      (
+        await service.listAdminSpeakerPage(
+          admin,
+          { query: speaker.email, readiness: "ready" },
+          1,
+        )
+      ).speakers.some((candidate) => candidate.id === speaker.personId),
+    ).toBe(true);
   });
 
   it("returns exact current headshot filename, uploader and upload time to both profile surfaces", async () => {

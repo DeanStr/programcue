@@ -333,6 +333,23 @@ describe("calendar administration", () => {
       administration.reconcileAttendance(viewer, invitationId),
     ).resolves.toEqual({ response: "declined" });
 
+    await testEnv.DB.prepare(
+      `UPDATE session_speakers
+          SET participation_status = 'declined',
+              participation_revision = participation_revision + 1,
+              participation_confirmed_at = NULL,
+              participation_declined_at = unixepoch(),
+              participation_decline_reason = NULL
+        WHERE event_id = ? AND session_id = ? AND person_id = ?`,
+    )
+      .bind(viewer.eventId, session!.id, "person-demo-speaker")
+      .run();
+    await expect(
+      administration.reconcileAttendance(viewer, invitationId),
+    ).rejects.toThrow(
+      "RSVP reconciliation requires a delivered direct-calendar invitation.",
+    );
+
     await expect(
       testEnv.DB.prepare(
         `SELECT invitation.status,

@@ -1,3 +1,4 @@
+import { participantResourceTaskAccessSql } from "~/modules/tasks/task-service-foundation.server";
 import type { Viewer } from "~/platform/auth/authorize.server";
 import type {
   AudienceType,
@@ -289,6 +290,7 @@ export class RecipientQuery {
                WHERE t.event_id = ?
                  AND t.target_type = 'speaker'
                  AND t.status NOT IN ('completed','waived')
+                 AND ${participantResourceTaskAccessSql("t")}
                  AND trim(p.email) <> ''
             ) recipients
            WHERE recipientRank = 1
@@ -318,6 +320,7 @@ export class RecipientQuery {
                  AND workflow.status IN ('prospect','invited','confirmed')
                WHERE t.event_id = ? AND t.target_type = 'speaker'
                  AND t.status NOT IN ('submitted','completed','waived','overdue')
+                 AND ${participantResourceTaskAccessSql("t")}
                  AND t.due_at >= unixepoch()
                  AND t.due_at < unixepoch() + 86400
                  AND trim(p.email) <> ''
@@ -349,6 +352,7 @@ export class RecipientQuery {
                  AND workflow.status IN ('prospect','invited','confirmed')
                WHERE t.event_id = ? AND t.target_type = 'speaker'
                  AND t.status NOT IN ('submitted','completed','waived')
+                 AND ${participantResourceTaskAccessSql("t")}
                  AND t.due_at < unixepoch()
                  AND trim(p.email) <> ''
             ) recipients

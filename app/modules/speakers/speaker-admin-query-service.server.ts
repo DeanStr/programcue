@@ -1,5 +1,6 @@
 import type { AirtableProviderBoundary } from "~/modules/airtable/airtable-provider-boundary.server";
 import { parseEventFilePolicy } from "~/modules/files/file-policy";
+import { participantResourceTaskAccessSql } from "~/modules/tasks/task-service-foundation.server";
 import type { Viewer } from "~/platform/auth/authorize.server";
 import {
   adminProfileIsShared,
@@ -151,11 +152,12 @@ export class SpeakerAdminQueryService {
         SELECT
           SUM(CASE WHEN task.status NOT IN ('completed','waived') THEN 1 ELSE 0 END) AS outstanding,
           SUM(CASE WHEN task.status IN ('completed','waived') THEN 1 ELSE 0 END) AS completed
-          FROM task_instances task
+         FROM task_instances task
          WHERE task.event_id = ?
+           AND ${participantResourceTaskAccessSql("task")}
            AND (
              (task.target_type = 'speaker' AND task.target_id = ?)
-             OR task.owner_person_id = ?
+             OR (task.target_type <> 'session' AND task.owner_person_id = ?)
              OR (task.target_type = 'session' AND EXISTS (
                SELECT 1 FROM session_speakers relationship
                 WHERE relationship.event_id = task.event_id
@@ -356,14 +358,17 @@ export class SpeakerAdminQueryService {
                AND NOT (
                  EXISTS (
                    SELECT 1 FROM task_instances task
-                    WHERE task.event_id = ?
+                   WHERE task.event_id = ?
+                      AND ${participantResourceTaskAccessSql("task")}
                       AND task.target_type = 'speaker'
                       AND task.target_id = p.id
                       AND task.status NOT IN ('completed','waived')
                  )
                  OR EXISTS (
                    SELECT 1 FROM task_instances task
-                    WHERE task.event_id = ?
+                   WHERE task.event_id = ?
+                      AND ${participantResourceTaskAccessSql("task")}
+                      AND task.target_type <> 'session'
                       AND task.owner_person_id = p.id
                       AND task.status NOT IN ('completed','waived')
                  )
@@ -375,6 +380,8 @@ export class SpeakerAdminQueryService {
                      AND relationship.session_id = task.target_id
                      AND relationship.person_id = p.id
                    WHERE task.event_id = ?
+                     AND ${participantResourceTaskAccessSql("task")}
+                     AND relationship.participation_status IN ('pending','confirmed')
                      AND task.status NOT IN ('completed','waived')
                  )
                )
@@ -384,14 +391,17 @@ export class SpeakerAdminQueryService {
                AND (
                  EXISTS (
                    SELECT 1 FROM task_instances task
-                    WHERE task.event_id = ?
+                   WHERE task.event_id = ?
+                      AND ${participantResourceTaskAccessSql("task")}
                       AND task.target_type = 'speaker'
                       AND task.target_id = p.id
                       AND task.status NOT IN ('completed','waived')
                  )
                  OR EXISTS (
                    SELECT 1 FROM task_instances task
-                    WHERE task.event_id = ?
+                   WHERE task.event_id = ?
+                      AND ${participantResourceTaskAccessSql("task")}
+                      AND task.target_type <> 'session'
                       AND task.owner_person_id = p.id
                       AND task.status NOT IN ('completed','waived')
                  )
@@ -403,6 +413,8 @@ export class SpeakerAdminQueryService {
                      AND relationship.session_id = task.target_id
                      AND relationship.person_id = p.id
                    WHERE task.event_id = ?
+                     AND ${participantResourceTaskAccessSql("task")}
+                     AND relationship.participation_status IN ('pending','confirmed')
                      AND task.status NOT IN ('completed','waived')
                  )
                )
@@ -434,27 +446,31 @@ export class SpeakerAdminQueryService {
              (SELECT COUNT(*) FROM task_instances task
                WHERE task.event_id = ?
                  AND task.status NOT IN ('completed','waived')
+                 AND ${participantResourceTaskAccessSql("task")}
                  AND (
                    (task.target_type = 'speaker' AND task.target_id = person.id)
-                   OR task.owner_person_id = person.id
+                   OR (task.target_type <> 'session' AND task.owner_person_id = person.id)
                    OR (task.target_type = 'session' AND EXISTS (
                      SELECT 1 FROM session_speakers relationship
                       WHERE relationship.event_id = task.event_id
                         AND relationship.session_id = task.target_id
                         AND relationship.person_id = person.id
+                        AND relationship.participation_status IN ('pending','confirmed')
                    ))
                  )) AS outstandingTasks,
              (SELECT COUNT(*) FROM task_instances task
                WHERE task.event_id = ?
                  AND task.status IN ('completed','waived')
+                 AND ${participantResourceTaskAccessSql("task")}
                  AND (
                    (task.target_type = 'speaker' AND task.target_id = person.id)
-                   OR task.owner_person_id = person.id
+                   OR (task.target_type <> 'session' AND task.owner_person_id = person.id)
                    OR (task.target_type = 'session' AND EXISTS (
                      SELECT 1 FROM session_speakers relationship
                       WHERE relationship.event_id = task.event_id
                         AND relationship.session_id = task.target_id
                         AND relationship.person_id = person.id
+                        AND relationship.participation_status IN ('pending','confirmed')
                    ))
                  )) AS completedTasks,
              (SELECT COUNT(*)
@@ -524,6 +540,7 @@ export class SpeakerAdminQueryService {
                EXISTS (
                  SELECT 1 FROM task_instances task
                   WHERE task.event_id = ?
+                    AND ${participantResourceTaskAccessSql("task")}
                     AND task.target_type = 'speaker'
                     AND task.target_id = speaker.person_id
                     AND task.status NOT IN ('completed','waived')
@@ -531,6 +548,8 @@ export class SpeakerAdminQueryService {
                OR EXISTS (
                  SELECT 1 FROM task_instances task
                   WHERE task.event_id = ?
+                    AND ${participantResourceTaskAccessSql("task")}
+                    AND task.target_type <> 'session'
                     AND task.owner_person_id = speaker.person_id
                     AND task.status NOT IN ('completed','waived')
                )
@@ -542,6 +561,8 @@ export class SpeakerAdminQueryService {
                    AND relationship.session_id = task.target_id
                    AND relationship.person_id = speaker.person_id
                  WHERE task.event_id = ?
+                   AND ${participantResourceTaskAccessSql("task")}
+                   AND relationship.participation_status IN ('pending','confirmed')
                    AND task.status NOT IN ('completed','waived')
                )
              ) THEN 1 ELSE 0 END) AS readySpeakers,
@@ -549,14 +570,16 @@ export class SpeakerAdminQueryService {
                 FROM task_instances task
                WHERE task.event_id = ?
                  AND task.status NOT IN ('completed','waived')
+                 AND ${participantResourceTaskAccessSql("task")}
                  AND (
                    (task.target_type = 'speaker' AND task.target_id IN (SELECT person_id FROM event_speaker_ids))
-                   OR task.owner_person_id IN (SELECT person_id FROM event_speaker_ids)
+                   OR (task.target_type <> 'session' AND task.owner_person_id IN (SELECT person_id FROM event_speaker_ids))
                    OR (task.target_type = 'session' AND EXISTS (
                      SELECT 1 FROM session_speakers relationship
                       WHERE relationship.event_id = task.event_id
                         AND relationship.session_id = task.target_id
                         AND relationship.person_id IN (SELECT person_id FROM event_speaker_ids)
+                        AND relationship.participation_status IN ('pending','confirmed')
                    ))
                  )) AS outstandingTasks,
              (SELECT COUNT(*)

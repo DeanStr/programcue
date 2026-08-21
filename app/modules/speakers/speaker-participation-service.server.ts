@@ -4,7 +4,10 @@ import {
   type AirtableProviderBoundary,
   airtableCommandKey,
 } from "~/modules/airtable/airtable-provider-boundary.server";
-import { materializePublishedConfirmedSpeakerAcknowledgements } from "~/modules/resources/resource-service-shared";
+import {
+  materializePublishedConfirmedSpeakerAcknowledgements,
+  materializePublishedResourceAcknowledgementsForParticipationReset,
+} from "~/modules/resources/resource-service-shared";
 import type { Viewer } from "~/platform/auth/authorize.server";
 import {
   atomicBatchGuardStatement,
@@ -81,6 +84,20 @@ const participationResetSchema = z
   })
   .strict();
 
+type ParticipationTransitionExpectation = {
+  status: "pending" | "confirmed" | "declined";
+  revision: number;
+  declineReason: string | null;
+  action:
+    | "speaker.participation.confirmed"
+    | "speaker.participation.declined"
+    | "speaker.participation.reset";
+  source: "speaker" | "administrator" | "administrator_external";
+  from: "pending" | "declined";
+  to: "pending" | "confirmed" | "declined";
+  inputRevision: number;
+};
+
 function requireParticipationBatchResult(
   result: D1Result | undefined,
   message: string,
@@ -124,7 +141,7 @@ export class SpeakerParticipationService {
       viewer,
       input,
     );
-    return this.airtable.executeIdempotent(
+    return this.executeParticipationIdempotent(
       viewer,
       { idempotencyKey, operation: "speaker.participation.confirm" },
       () =>
@@ -134,6 +151,22 @@ export class SpeakerParticipationService {
           input.sessionId,
           input.participationRevision,
           "speaker",
+        ),
+      () =>
+        this.replayParticipationTransition(
+          viewer,
+          viewer.personId,
+          input.sessionId,
+          {
+            status: "confirmed",
+            revision: input.participationRevision + 1,
+            declineReason: null,
+            action: "speaker.participation.confirmed",
+            source: "speaker",
+            from: "pending",
+            to: "confirmed",
+            inputRevision: input.participationRevision,
+          },
         ),
     );
   }
@@ -145,7 +178,7 @@ export class SpeakerParticipationService {
       viewer,
       input,
     );
-    return this.airtable.executeIdempotent(
+    return this.executeParticipationIdempotent(
       viewer,
       { idempotencyKey, operation: "speaker.participation.decline" },
       () =>
@@ -154,6 +187,22 @@ export class SpeakerParticipationService {
           input.sessionId,
           input.participationRevision,
           input.reason,
+        ),
+      () =>
+        this.replayParticipationTransition(
+          viewer,
+          viewer.personId,
+          input.sessionId,
+          {
+            status: "declined",
+            revision: input.participationRevision + 1,
+            declineReason: input.reason,
+            action: "speaker.participation.declined",
+            source: "speaker",
+            from: "pending",
+            to: "declined",
+            inputRevision: input.participationRevision,
+          },
         ),
     );
   }
@@ -178,7 +227,7 @@ export class SpeakerParticipationService {
       viewer,
       { personId, ...input },
     );
-    return this.airtable.executeIdempotent(
+    return this.executeParticipationIdempotent(
       viewer,
       {
         idempotencyKey,
@@ -192,6 +241,17 @@ export class SpeakerParticipationService {
           input.participationRevision,
           "administrator_external",
         ),
+      () =>
+        this.replayParticipationTransition(viewer, personId, input.sessionId, {
+          status: "confirmed",
+          revision: input.participationRevision + 1,
+          declineReason: null,
+          action: "speaker.participation.confirmed",
+          source: "administrator_external",
+          from: "pending",
+          to: "confirmed",
+          inputRevision: input.participationRevision,
+        }),
     );
   }
 
@@ -215,7 +275,7 @@ export class SpeakerParticipationService {
       viewer,
       { personId, ...input },
     );
-    return this.airtable.executeIdempotent(
+    return this.executeParticipationIdempotent(
       viewer,
       { idempotencyKey, operation: "speaker.participation.reset" },
       () =>
@@ -225,7 +285,71 @@ export class SpeakerParticipationService {
           input.sessionId,
           input.participationRevision,
         ),
+      () =>
+        this.replayParticipationTransition(viewer, personId, input.sessionId, {
+          status: "pending",
+          revision: input.participationRevision + 1,
+          declineReason: null,
+          action: "speaker.participation.reset",
+          source: "administrator",
+          from: "declined",
+          to: "pending",
+          inputRevision: input.participationRevision,
+        }),
     );
+  }
+
+  private async executeParticipationIdempotent<T>(
+    viewer: Viewer,
+    commandIdentity: { idempotencyKey: string; operation: string },
+    command: () => Promise<T>,
+    replay: () => Promise<T>,
+  ) {
+    let executed = false;
+    const result = await this.airtable.executeIdempotent(
+      viewer,
+      commandIdentity,
+      () => {
+        executed = true;
+        return command();
+      },
+    );
+    return executed ? result : replay();
+  }
+
+  private async replayParticipationTransition<
+    Status extends ParticipationTransitionExpectation["status"],
+  >(
+    viewer: Viewer,
+    personId: string,
+    sessionId: string,
+    expected: ParticipationTransitionExpectation & { status: Status },
+  ) {
+    const target = await this.participationTarget(viewer, personId, sessionId);
+    if (
+      target.participationStatus !== expected.status ||
+      target.participationRevision !== expected.revision ||
+      target.participationDeclineReason !== expected.declineReason ||
+      !(await this.participationTransitionConverged(
+        viewer,
+        personId,
+        sessionId,
+        expected,
+      ))
+    ) {
+      throw new SpeakerAdminStateError(
+        "Participation changed after this request was first recorded. Refresh before responding.",
+        409,
+      );
+    }
+    return {
+      sessionId,
+      title: target.title,
+      participationStatus: expected.status,
+      participationRevision: expected.revision,
+      changed: false,
+      changeSequence: null,
+    };
   }
 
   private async confirmParticipationD1(
@@ -235,28 +359,7 @@ export class SpeakerParticipationService {
     participationRevision: number,
     source: "speaker" | "administrator_external",
   ) {
-    const target = await this.env.DB.prepare(
-      `SELECT session.title, relationship.participation_status AS participationStatus,
-              relationship.participation_revision AS participationRevision
-         FROM session_speakers relationship
-         JOIN sessions session
-           ON session.id = relationship.session_id
-          AND session.event_id = relationship.event_id
-         JOIN events event ON event.id = relationship.event_id
-        WHERE relationship.event_id = ? AND relationship.session_id = ?
-          AND relationship.person_id = ? AND event.organisation_id = ?
-          AND session.status NOT IN ('cancelled','archived')`,
-    )
-      .bind(viewer.eventId, sessionId, personId, viewer.organisationId)
-      .first<{
-        title: string;
-        participationStatus: "pending" | "confirmed" | "declined";
-        participationRevision: number;
-      }>();
-    if (!target)
-      throw new Response("Active speaker session not found in this event.", {
-        status: 404,
-      });
+    const target = await this.participationTarget(viewer, personId, sessionId);
     if (
       target.participationStatus === "confirmed" &&
       target.participationRevision === participationRevision + 1 &&
@@ -284,6 +387,13 @@ export class SpeakerParticipationService {
         changed: false,
         changeSequence: null,
       };
+    if (
+      target.sessionStatus === "cancelled" ||
+      target.sessionStatus === "archived"
+    )
+      throw new Response("Active speaker session not found in this event.", {
+        status: 404,
+      });
     if (
       target.participationStatus !== "pending" ||
       target.participationRevision !== participationRevision
@@ -568,6 +678,13 @@ export class SpeakerParticipationService {
         changeSequence: null,
       };
     if (
+      target.sessionStatus === "cancelled" ||
+      target.sessionStatus === "archived"
+    )
+      throw new Response("Active speaker session not found in this event.", {
+        status: 404,
+      });
+    if (
       target.participationStatus !== "pending" ||
       target.participationRevision !== participationRevision
     )
@@ -775,6 +892,13 @@ export class SpeakerParticipationService {
         changeSequence: null,
       };
     if (
+      target.sessionStatus === "cancelled" ||
+      target.sessionStatus === "archived"
+    )
+      throw new Response("Active speaker session not found in this event.", {
+        status: 404,
+      });
+    if (
       target.participationStatus !== "declined" ||
       target.participationRevision !== participationRevision
     )
@@ -850,6 +974,14 @@ export class SpeakerParticipationService {
           participationRevision,
           auditEventId,
           viewer.organisationId,
+        ),
+        ...materializePublishedResourceAcknowledgementsForParticipationReset(
+          this.env,
+          viewer.eventId,
+          sessionId,
+          personId,
+          participationRevision + 1,
+          auditEventId,
         ),
         atomicBatchGuardStatement(
           this.env,
@@ -952,6 +1084,7 @@ export class SpeakerParticipationService {
   ) {
     const target = await this.env.DB.prepare(
       `SELECT session.title,
+              session.status AS sessionStatus,
               relationship.participation_status AS participationStatus,
               relationship.participation_revision AS participationRevision,
               relationship.participation_decline_reason AS participationDeclineReason
@@ -961,18 +1094,18 @@ export class SpeakerParticipationService {
           AND session.event_id = relationship.event_id
          JOIN events event ON event.id = relationship.event_id
         WHERE relationship.event_id = ? AND relationship.session_id = ?
-          AND relationship.person_id = ? AND event.organisation_id = ?
-          AND session.status NOT IN ('cancelled','archived')`,
+          AND relationship.person_id = ? AND event.organisation_id = ?`,
     )
       .bind(viewer.eventId, sessionId, personId, viewer.organisationId)
       .first<{
         title: string;
+        sessionStatus: string;
         participationStatus: "pending" | "confirmed" | "declined";
         participationRevision: number;
         participationDeclineReason: string | null;
       }>();
     if (!target)
-      throw new Response("Active speaker session not found in this event.", {
+      throw new Response("Speaker session not found in this event.", {
         status: 404,
       });
     return target;
@@ -982,19 +1115,7 @@ export class SpeakerParticipationService {
     viewer: Viewer,
     personId: string,
     sessionId: string,
-    expected: {
-      status: "pending" | "confirmed" | "declined";
-      revision: number;
-      declineReason: string | null;
-      action:
-        | "speaker.participation.confirmed"
-        | "speaker.participation.declined"
-        | "speaker.participation.reset";
-      source: "speaker" | "administrator" | "administrator_external";
-      from: "pending" | "declined";
-      to: "pending" | "confirmed" | "declined";
-      inputRevision: number;
-    },
+    expected: ParticipationTransitionExpectation,
   ) {
     const match = await this.env.DB.prepare(
       `SELECT 1 AS matched

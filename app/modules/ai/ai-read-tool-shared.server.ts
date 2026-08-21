@@ -1,4 +1,5 @@
 import type { z } from "zod";
+import { participantResourceTaskAccessSql } from "~/modules/tasks/task-service-foundation.server";
 import type { Viewer } from "~/platform/auth/authorize.server";
 import {
   adminRoles,
@@ -67,7 +68,8 @@ export async function loadReminderCohort(
       from: `people p JOIN task_instances ti
                ON ti.target_id = p.id AND ti.event_id = ?
               AND ti.target_type = 'speaker'`,
-      where: "ti.status NOT IN ('completed','waived')",
+      where: `ti.status NOT IN ('completed','waived')
+        AND ${participantResourceTaskAccessSql("ti")}`,
       reason: "incomplete speaker tasks",
       href: "/admin/tasks?target=speaker&state=open",
     },
@@ -75,8 +77,8 @@ export async function loadReminderCohort(
       from: `people p JOIN task_instances ti
                ON ti.target_id = p.id AND ti.event_id = ?
               AND ti.target_type = 'speaker'`,
-      where:
-        "ti.status = 'overdue' OR (ti.status NOT IN ('completed','waived') AND ti.due_at IS NOT NULL AND ti.due_at < unixepoch())",
+      where: `(ti.status = 'overdue' OR (ti.status NOT IN ('completed','waived') AND ti.due_at IS NOT NULL AND ti.due_at < unixepoch()))
+         AND ${participantResourceTaskAccessSql("ti")}`,
       reason: "overdue speaker tasks",
       href: "/admin/tasks?target=speaker&state=overdue",
     },

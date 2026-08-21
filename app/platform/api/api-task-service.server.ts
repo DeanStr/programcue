@@ -8,6 +8,10 @@ import {
   taskDestinationUrlSchema,
   taskFileScopeSchema,
 } from "~/modules/tasks/task-schema";
+import {
+  atomicBatchGuardStatement,
+  isAtomicBatchGuardError,
+} from "~/platform/database/atomic-batch-guard.server";
 import { WebhookService } from "~/platform/operations/webhook-service.server";
 import { ApiError, type ApiPrincipal, apiRequestHash } from "./api.server";
 
@@ -640,19 +644,76 @@ export class ApiTaskService {
     const dependencyStateBindings = input.dependencyIds.length
       ? [principal.eventId, JSON.stringify(input.dependencyIds)]
       : [];
-    const sessionOwnerGuardSql =
-      input.targetType === "session" && input.ownerPersonId
+    const targetGuardSql =
+      input.targetType === "session"
         ? `AND EXISTS (
-             SELECT 1 FROM session_speakers owner_session
-              WHERE owner_session.event_id = ?
-                AND owner_session.session_id = ?
-                AND owner_session.person_id = ?
+             SELECT 1 FROM sessions current_target
+              WHERE current_target.event_id = ? AND current_target.id = ?
            )`
-        : "";
-    const sessionOwnerGuardBindings =
-      input.targetType === "session" && input.ownerPersonId
+        : input.targetType === "speaker"
+          ? `AND (
+               EXISTS (
+                 SELECT 1 FROM memberships current_target_membership
+                  WHERE current_target_membership.event_id = ?
+                    AND current_target_membership.person_id = ?
+                    AND current_target_membership.role = 'speaker'
+                    AND current_target_membership.accepted_at IS NOT NULL
+                    AND current_target_membership.revoked_at IS NULL
+               )
+               OR EXISTS (
+                 SELECT 1 FROM session_speakers current_target_relationship
+                  WHERE current_target_relationship.event_id = ?
+                    AND current_target_relationship.person_id = ?
+                    AND current_target_relationship.participation_status IN ('pending','confirmed')
+               )
+             )`
+          : "";
+    const targetGuardBindings =
+      input.targetType === "session"
+        ? [principal.eventId, input.targetId]
+        : input.targetType === "speaker"
+          ? [
+              principal.eventId,
+              input.targetId,
+              principal.eventId,
+              input.targetId,
+            ]
+          : [];
+    const ownerGuardSql = input.ownerPersonId
+      ? input.targetType === "session"
+        ? `AND EXISTS (
+             SELECT 1 FROM session_speakers current_owner_relationship
+              WHERE current_owner_relationship.event_id = ?
+                AND current_owner_relationship.session_id = ?
+                AND current_owner_relationship.person_id = ?
+                AND current_owner_relationship.participation_status IN ('pending','confirmed')
+           )`
+        : `AND (
+             EXISTS (
+               SELECT 1 FROM memberships current_owner_membership
+                WHERE current_owner_membership.event_id = ?
+                  AND current_owner_membership.person_id = ?
+                  AND current_owner_membership.accepted_at IS NOT NULL
+                  AND current_owner_membership.revoked_at IS NULL
+             )
+             OR EXISTS (
+               SELECT 1 FROM session_speakers current_owner_relationship
+                WHERE current_owner_relationship.event_id = ?
+                  AND current_owner_relationship.person_id = ?
+                  AND current_owner_relationship.participation_status IN ('pending','confirmed')
+             )
+           )`
+      : "";
+    const ownerGuardBindings = input.ownerPersonId
+      ? input.targetType === "session"
         ? [principal.eventId, input.targetId, input.ownerPersonId]
-        : [];
+        : [
+            principal.eventId,
+            input.ownerPersonId,
+            principal.eventId,
+            input.ownerPersonId,
+          ]
+      : [];
     const statements = [
       this.env.DB.prepare(
         `
@@ -713,7 +774,8 @@ export class ApiTaskService {
               AND command.idempotency_key = ?
               AND command.request_hash = ? AND command.status = 'processing'
          )
-         ${sessionOwnerGuardSql}
+         ${targetGuardSql}
+         ${ownerGuardSql}
       `,
       ).bind(
         ...dependencyStateBindings,
@@ -742,7 +804,34 @@ export class ApiTaskService {
         actorId,
         idempotencyKey,
         requestHash,
-        ...sessionOwnerGuardBindings,
+        ...targetGuardBindings,
+        ...ownerGuardBindings,
+      ),
+      atomicBatchGuardStatement(
+        this.env,
+        `EXISTS (
+           SELECT 1 FROM idempotency_records command
+            WHERE command.id = ? AND command.organisation_id = ?
+              AND command.event_id = ? AND command.actor_id = ?
+              AND command.scope = 'task.create'
+              AND command.idempotency_key = ?
+              AND command.request_hash = ? AND command.status = 'processing'
+         ) AND NOT EXISTS (
+           SELECT 1 FROM task_instances task
+            WHERE task.id = ? AND task.event_id = ?
+              AND task.idempotency_key = ?
+         )`,
+        [
+          commandId,
+          principal.organisationId,
+          principal.eventId,
+          actorId,
+          idempotencyKey,
+          requestHash,
+          id,
+          principal.eventId,
+          commandId,
+        ],
       ),
       ...(input.dependencyIds.length
         ? [
@@ -867,7 +956,18 @@ export class ApiTaskService {
       ),
     ];
     statements.push(...preparedWebhook.statements);
-    await this.env.DB.batch(statements);
+    try {
+      await this.env.DB.batch(statements);
+    } catch (error) {
+      if (isAtomicBatchGuardError(error)) {
+        throw new ApiError(
+          409,
+          "TASK_REFERENCE_CONFLICT",
+          "The task target or owner changed while the task was being created. Refresh and try again.",
+        );
+      }
+      throw error;
+    }
     const committed = await this.replayTaskCreation(
       principal,
       idempotencyKey,

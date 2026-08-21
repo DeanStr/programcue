@@ -320,6 +320,13 @@ export class CalendarAdministrationService {
         WHERE invitation.id = ? AND invitation.event_id = ?
           AND invitation.method = 'REQUEST'
           AND invitation.status IN ('sent','confirmed')
+          AND EXISTS (
+            SELECT 1 FROM session_speakers speaker
+             WHERE speaker.event_id = invitation.event_id
+               AND speaker.session_id = invitation.session_id
+               AND speaker.person_id = invitation.person_id
+               AND speaker.participation_status = 'confirmed'
+          )
           AND connection.status IN ('connected','needs_attention')`,
     )
       .bind(viewer.organisationId, invitationId, viewer.eventId)
@@ -361,6 +368,13 @@ export class CalendarAdministrationService {
             AND connection.organisation_id = event.organisation_id
             AND (connection.event_id IS NULL OR connection.event_id = event.id)
           WHERE invitation.id = ? AND invitation.event_id = ?
+            AND EXISTS (
+              SELECT 1 FROM session_speakers speaker
+               WHERE speaker.event_id = invitation.event_id
+                 AND speaker.session_id = invitation.session_id
+                 AND speaker.person_id = invitation.person_id
+                 AND speaker.participation_status = 'confirmed'
+            )
             AND connection.status = 'connected'`,
       )
         .bind(viewer.organisationId, invitationId, viewer.eventId)
@@ -404,7 +418,14 @@ export class CalendarAdministrationService {
             SET status = CASE WHEN ? = 'accepted' THEN 'confirmed' ELSE 'sent' END,
                 updated_at = unixepoch()
           WHERE id = ? AND event_id = ? AND method = 'REQUEST'
-            AND provider_event_id = ? AND status IN ('sent','confirmed')`,
+            AND provider_event_id = ? AND status IN ('sent','confirmed')
+            AND EXISTS (
+              SELECT 1 FROM session_speakers speaker
+               WHERE speaker.event_id = calendar_invitations.event_id
+                 AND speaker.session_id = calendar_invitations.session_id
+                 AND speaker.person_id = calendar_invitations.person_id
+                 AND speaker.participation_status = 'confirmed'
+            )`,
       ).bind(
         response,
         invitation.id,

@@ -1,4 +1,10 @@
 import { requireValue } from "~/lib/required-value";
+import {
+  isCanonicalSessionDetailsReviewTask,
+  loadParticipantSessionDetailsReview,
+  SESSION_DETAILS_REVIEW_PRESET,
+  sessionDetailsReviewEvidenceSchema,
+} from "~/modules/tasks/session-details-review.server";
 import { assignedTaskConfigurationSchema } from "~/modules/tasks/task-schema";
 import { participantTaskAccessSql } from "~/modules/tasks/task-service-foundation.server";
 import type { Viewer } from "~/platform/auth/authorize.server";
@@ -50,17 +56,37 @@ export class ApiParticipantResourceReader {
       const ids = records.map((record) => String(record.id));
       const [dependencies, comments] = await Promise.all([
         this.env.DB.prepare(
-          `SELECT dependency.task_id AS taskId,
-                  prerequisite.id, prerequisite.title, prerequisite.status
-             FROM task_instance_dependencies dependency
-             JOIN task_instances prerequisite
-               ON prerequisite.id = dependency.depends_on_task_id
-            WHERE dependency.task_id IN (
-              SELECT CAST(value AS TEXT) FROM json_each(?)
-            )
-            ORDER BY dependency.task_id, prerequisite.title`,
+          `WITH requested_tasks(id) AS (
+             SELECT CAST(value AS TEXT) FROM json_each(?)
+           ), scoped_dependencies AS (
+             SELECT dependency.task_id AS taskId, prerequisite.id,
+                    prerequisite.title, prerequisite.status,
+                    CASE WHEN prerequisite.event_id = ?
+                               AND ${participantTaskAccessSql("prerequisite", true)}
+                         THEN 1 ELSE 0 END AS participantAccessible
+               FROM task_instance_dependencies dependency
+               JOIN requested_tasks requested ON requested.id = dependency.task_id
+               JOIN task_instances prerequisite
+                 ON prerequisite.id = dependency.depends_on_task_id
+           )
+           SELECT taskId, id, title, status
+             FROM scoped_dependencies
+            WHERE participantAccessible = 1
+           UNION ALL
+           SELECT taskId, 'restricted-prerequisite:' || taskId,
+                  'a prerequisite managed by the event team', 'blocked'
+             FROM scoped_dependencies
+            WHERE participantAccessible = 0
+            GROUP BY taskId
+            ORDER BY taskId, title`,
         )
-          .bind(JSON.stringify(ids))
+          .bind(
+            JSON.stringify(ids),
+            viewer.eventId,
+            viewer.personId,
+            viewer.personId,
+            viewer.personId,
+          )
           .all<Record<string, unknown> & { taskId: string }>(),
         this.env.DB.prepare(
           `SELECT comment.id, comment.task_id AS taskId, comment.body,
@@ -79,15 +105,70 @@ export class ApiParticipantResourceReader {
           >(),
       ]);
       for (const record of records) {
-        record.dependencies = dependencies.results.filter(
+        const taskDependencies = dependencies.results.filter(
           (item) => item.taskId === record.id,
         );
+        record.dependencies = taskDependencies;
+        if (
+          !["completed", "waived", "submitted"].includes(
+            String(record.status),
+          ) &&
+          taskDependencies.some((item) =>
+            String(item.id).startsWith("restricted-prerequisite:"),
+          )
+        ) {
+          record.status = "blocked";
+          record.readinessState = "blocked";
+          record.readinessPercent = 0;
+        }
         record.comments = comments.results
           .filter((item) => item.taskId === record.id)
           .map((item) => ({
             ...item,
             createdAt: isoTimestamp(item.createdAt),
           }));
+        const configuration = assignedTaskConfigurationSchema.parse(
+          record.configuration,
+        );
+        if (configuration.preset === SESSION_DETAILS_REVIEW_PRESET) {
+          const taskId = String(record.id);
+          if (
+            !(await isCanonicalSessionDetailsReviewTask(
+              this.env,
+              viewer.eventId,
+              taskId,
+            ))
+          ) {
+            throw new Error(
+              `Session-details review task ${taskId} differs from the required shared acknowledgement.`,
+            );
+          }
+          const review = await loadParticipantSessionDetailsReview(
+            this.env,
+            viewer,
+            String(record.targetId),
+          );
+          if (!review) {
+            throw new Error(
+              `Session-details review task ${taskId} is no longer available to this participant.`,
+            );
+          }
+          const evidence = record.evidence;
+          const historicalReview =
+            evidence && typeof evidence === "object" && !Array.isArray(evidence)
+              ? (evidence as Record<string, unknown>).sessionDetailsReview
+              : undefined;
+          if (
+            record.status === "completed" &&
+            !sessionDetailsReviewEvidenceSchema.safeParse(historicalReview)
+              .success
+          ) {
+            throw new Error(
+              `Completed session-details review task ${taskId} is missing its canonical review evidence.`,
+            );
+          }
+          record.sessionDetailsReview = review;
+        }
       }
     }
     return {
@@ -274,18 +355,32 @@ export class ApiParticipantResourceReader {
                FROM file_assets asset
                JOIN events event ON event.id = asset.event_id
                  AND event.organisation_id = ?
+               LEFT JOIN task_instances task
+                 ON asset.target_type = 'task'
+                AND task.id = asset.target_id
+                AND task.event_id = asset.event_id
                LEFT JOIN file_versions version
                  ON version.id = asset.current_version_id
                 AND version.event_id = asset.event_id
                 AND version.deleted_at IS NULL
               WHERE asset.event_id = ? AND asset.owner_person_id = ?
                 AND asset.status <> 'deleted'
+                AND (
+                  asset.target_type <> 'task'
+                  OR (
+                    task.id IS NOT NULL
+                    AND ${participantTaskAccessSql("task", true)}
+                  )
+                )
            ) base WHERE 1 = 1${continuation.sql}
            ORDER BY base.sort DESC, base.id DESC LIMIT ?`,
         )
           .bind(
             viewer.organisationId,
             viewer.eventId,
+            viewer.personId,
+            viewer.personId,
+            viewer.personId,
             viewer.personId,
             ...continuation.bindings,
             limit,
@@ -323,7 +418,7 @@ export class ApiParticipantResourceReader {
                AND event.organisation_id = ?
              LEFT JOIN people owner ON owner.id = task.owner_person_id
             WHERE task.event_id = ?
-              AND ${participantTaskAccessSql("task")}
+              AND ${participantTaskAccessSql("task", true)}
          ) base WHERE 1 = 1${continuation.sql}
          ORDER BY base.sort DESC, base.id DESC LIMIT ?`,
       )

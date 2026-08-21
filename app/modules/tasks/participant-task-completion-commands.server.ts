@@ -12,6 +12,7 @@ import {
   equalHash,
   hashUndoSecret,
   parseJson,
+  participantPrerequisitesAccessibleSql,
   participantTaskAccessSql,
   randomUndoSecret,
   statusProgress,
@@ -67,7 +68,7 @@ export class ParticipantTaskCompletionCommands extends ParticipantTaskWorkflowFo
         "Open and acknowledge the published resource to complete this task.",
       );
     }
-    if (!(await this.dependenciesComplete(task.id)))
+    if (!(await this.participantDependenciesComplete(viewer, task.id)))
       throw new TaskStateError("Complete the prerequisite tasks first.");
     const evidence: Record<string, unknown> = {};
     let reviewedSessionDetails: Awaited<
@@ -240,6 +241,7 @@ export class ParticipantTaskCompletionCommands extends ParticipantTaskWorkflowFo
          WHERE id = ? AND event_id = ? AND revision = ? AND status NOT IN ('completed','waived','submitted')
            AND ${participantTaskAccessSql("task_instances", true)}
            ${sessionDetailsGuardSql}
+           AND ${participantPrerequisitesAccessibleSql("task_instances")}
            AND NOT EXISTS (
              SELECT 1 FROM task_instance_dependencies dep
              JOIN task_instances prerequisite ON prerequisite.id = dep.depends_on_task_id
@@ -263,6 +265,9 @@ export class ParticipantTaskCompletionCommands extends ParticipantTaskWorkflowFo
         viewer.personId,
         viewer.personId,
         ...sessionDetailsGuardBindings,
+        viewer.personId,
+        viewer.personId,
+        viewer.personId,
       ),
       this.env.DB.prepare(
         `

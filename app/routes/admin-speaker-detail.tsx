@@ -1,4 +1,4 @@
-import { data, useLoaderData } from "react-router";
+import { data } from "react-router";
 import { ZodError } from "zod";
 import { AdminSpeakerDetailPage } from "~/components/admin-speaker-detail-page";
 import { statusPresentation } from "~/components/ui/domain-status-badge";
@@ -204,6 +204,8 @@ export async function action({ request, params, context }: Route.ActionArgs) {
   }
 }
 
-export default function AdminSpeakerDetailRoute() {
-  return <AdminSpeakerDetailPage loaderData={useLoaderData<typeof loader>()} />;
+export default function AdminSpeakerDetailRoute({
+  loaderData,
+}: Route.ComponentProps) {
+  return <AdminSpeakerDetailPage loaderData={loaderData} />;
 }

@@ -153,6 +153,33 @@ describe("onboarding task service", () => {
       ).resolves.toMatchObject({ taskId });
     });
 
+    it("rejects completed session-details review tasks without canonical evidence", async () => {
+      const testEnv = env as unknown as CloudflareEnvironment;
+      await ensureDemoSpeakerData(testEnv);
+      const service = new TaskService(testEnv);
+      const preset = await service.createSessionDetailsReviewTemplate(
+        admin,
+        true,
+      );
+      const { taskId } = await service.assignTemplate(
+        admin,
+        preset.templateId,
+        "session-demo-speaker",
+      );
+      await testEnv.DB.prepare(
+        `UPDATE task_instances
+            SET status = 'completed', readiness_state = 'on_track',
+                readiness_percent = 100, evidence_json = '{"confirmed":true}'
+          WHERE id = ? AND event_id = ?`,
+      )
+        .bind(taskId, admin.eventId)
+        .run();
+
+      await expect(service.getAdminWorkspace(admin)).rejects.toThrow(
+        /missing its canonical review evidence/i,
+      );
+    });
+
     it("extends one speaker task deadline with audited event-local intent", async () => {
       const testEnv = env as unknown as CloudflareEnvironment;
       await ensureDemoSpeakerData(testEnv);

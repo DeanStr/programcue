@@ -121,6 +121,9 @@ describe("participant API resources", () => {
     const foreignAssetId = `participant-foreign-${suffix}`;
     const foreignVersionId = `participant-foreign-version-${suffix}`;
     const linkTaskId = `participant-link-task-${suffix}`;
+    const unavailableResourcePageId = `unavailable-resource-${suffix}`;
+    const unavailableResourceTemplateId = `resource-ack:${unavailableResourcePageId}`;
+    const unavailableResourceTaskId = `${unavailableResourceTemplateId}:${DEMO_IDENTITIES.speaker.personId}`;
     const destinationUrl = `https://example.test/participant-brief/${suffix}`;
     await testEnv.DB.batch([
       testEnv.DB.prepare(
@@ -186,6 +189,35 @@ describe("participant API resources", () => {
           WHERE id = ? AND event_id = ?`,
       ).bind(foreignVersionId, foreignAssetId, eventId),
       testEnv.DB.prepare(
+        `INSERT INTO task_templates (
+           id, event_id, name, target_type, task_type, impact, evidence_mode,
+           due_anchor, auto_assign_on_acceptance, configuration_json, status,
+           created_at, updated_at
+         ) VALUES (?, ?, 'Unavailable resource acknowledgement', 'speaker',
+                   'acknowledgement', 'medium', 'checkbox', 'none', 0, ?,
+                   'active', unixepoch(), unixepoch())`,
+      ).bind(
+        unavailableResourceTemplateId,
+        eventId,
+        JSON.stringify({ resourcePageId: unavailableResourcePageId }),
+      ),
+      testEnv.DB.prepare(
+        `INSERT INTO task_instances (
+           id, event_id, template_id, target_type, target_id, owner_person_id,
+           title, task_type, impact, evidence_mode, configuration_json, status,
+           readiness_state, readiness_percent, revision, created_at, updated_at
+         ) VALUES (?, ?, ?, 'speaker', ?, ?, 'Read unavailable resource',
+                   'acknowledgement', 'medium', 'checkbox', ?, 'not_started',
+                   'on_track', 0, 1, unixepoch(), unixepoch())`,
+      ).bind(
+        unavailableResourceTaskId,
+        eventId,
+        unavailableResourceTemplateId,
+        DEMO_IDENTITIES.speaker.personId,
+        DEMO_IDENTITIES.speaker.personId,
+        JSON.stringify({ resourcePageId: unavailableResourcePageId }),
+      ),
+      testEnv.DB.prepare(
         `INSERT INTO task_instances (
            id, event_id, target_type, target_id, owner_person_id, title,
            description, task_type, impact, evidence_mode, configuration_json,
@@ -202,6 +234,11 @@ describe("participant API resources", () => {
         DEMO_IDENTITIES.speaker.personId,
         JSON.stringify({ destinationUrl }),
       ),
+      testEnv.DB.prepare(
+        `INSERT INTO task_instance_dependencies (
+           task_id, depends_on_task_id, created_at
+         ) VALUES (?, ?, unixepoch())`,
+      ).bind(linkTaskId, unavailableResourceTaskId),
     ]);
 
     for (const resource of [
@@ -251,12 +288,30 @@ describe("participant API resources", () => {
       (await tasksResponse.json()) as {
         tasks: Array<{
           id: string;
+          status: string;
+          readinessState: string;
           configuration: Record<string, unknown>;
+          dependencies: Array<{ id: string; title: string }>;
         }>;
       }
     ).tasks;
     expect(tasks.find((task) => task.id === linkTaskId)?.configuration).toEqual(
       { destinationUrl },
+    );
+    expect(tasks.find((task) => task.id === linkTaskId)?.dependencies).toEqual([
+      {
+        id: `restricted-prerequisite:${linkTaskId}`,
+        taskId: linkTaskId,
+        title: "a prerequisite managed by the event team",
+        status: "blocked",
+      },
+    ]);
+    expect(tasks.find((task) => task.id === linkTaskId)).toMatchObject({
+      status: "blocked",
+      readinessState: "blocked",
+    });
+    expect(tasks.map((task) => task.id)).not.toContain(
+      unavailableResourceTaskId,
     );
 
     const forbidden = await participantResourceLoader({
@@ -272,6 +327,208 @@ describe("participant API resources", () => {
       context: routeContext(),
     } as never);
     expect(forbidden.status).toBe(403);
+  });
+
+  it("returns the canonical session-review evidence required for completion", async () => {
+    await ensureDemoSpeakerData(testEnv);
+    await ensureDemoProgramme(testEnv);
+    const viewer = participantViewer("speaker");
+    const suffix = crypto.randomUUID();
+    const templateId = `session-review-api-template-${suffix}`;
+    const taskId = `session-review-api-task-${suffix}`;
+    const relationship = await testEnv.DB.prepare(
+      `SELECT relationship.session_id AS sessionId
+         FROM session_speakers relationship
+         JOIN sessions session
+           ON session.id = relationship.session_id
+          AND session.event_id = relationship.event_id
+        WHERE relationship.event_id = ? AND relationship.person_id = ?
+          AND relationship.participation_status IN ('pending','confirmed')
+          AND session.status NOT IN ('cancelled','archived')
+        LIMIT 1`,
+    )
+      .bind(eventId, viewer.personId)
+      .first<{ sessionId: string }>();
+    if (!relationship) throw new Error("Active demo session is missing.");
+    await testEnv.DB.batch([
+      testEnv.DB.prepare(
+        `INSERT INTO task_templates (
+           id, event_id, name, description, target_type, task_type, impact,
+           evidence_mode, due_anchor, due_offset_minutes, fixed_due_at,
+           auto_assign_on_acceptance, configuration_json, status,
+           created_at, updated_at
+         ) VALUES (?, ?, 'Review session details', 'Review shared details.',
+                   'session', 'acknowledgement', 'high', 'checkbox', 'none',
+                   NULL, NULL, 1, '{"preset":"session_details_review_v1"}',
+                   'active', unixepoch(), unixepoch())`,
+      ).bind(templateId, eventId),
+      testEnv.DB.prepare(
+        `INSERT INTO task_instances (
+           id, event_id, template_id, target_type, target_id, owner_person_id,
+           title, description, task_type, impact, evidence_mode,
+           configuration_json, status, readiness_state, readiness_percent,
+           revision, created_at, updated_at
+         ) VALUES (?, ?, ?, 'session', ?, NULL, 'Review session details',
+                   'Review shared details.', 'acknowledgement', 'high',
+                   'checkbox', '{"preset":"session_details_review_v1"}',
+                   'not_started', 'on_track', 0, 1, unixepoch(), unixepoch())`,
+      ).bind(taskId, eventId, templateId, relationship.sessionId),
+    ]);
+
+    const taskPage = await new ApiParticipantService(testEnv).list(
+      viewer,
+      "tasks",
+      { limit: 100 },
+    );
+    if (!Array.isArray(taskPage.tasks))
+      throw new Error("Participant task page is invalid.");
+    const task = taskPage.tasks.find((candidate) => candidate.id === taskId) as
+      | {
+          sessionDetailsReview?: {
+            fields: {
+              title: string;
+              description: string | null;
+              format: string;
+              durationMinutes: number;
+              trackId: string | null;
+              trackName: string | null;
+            };
+            sessionRevision: number;
+            fingerprint: string;
+          };
+        }
+      | undefined;
+    expect(task?.sessionDetailsReview).toEqual({
+      fields: {
+        title: expect.any(String),
+        description: expect.toSatisfy(
+          (value: unknown) => value === null || typeof value === "string",
+        ),
+        format: expect.any(String),
+        durationMinutes: expect.any(Number),
+        trackId: expect.toSatisfy(
+          (value: unknown) => value === null || typeof value === "string",
+        ),
+        trackName: expect.toSatisfy(
+          (value: unknown) => value === null || typeof value === "string",
+        ),
+      },
+      sessionRevision: expect.any(Number),
+      fingerprint: expect.stringMatching(/^[a-f0-9]{64}$/u),
+    });
+
+    await testEnv.DB.prepare(
+      `UPDATE task_instances
+          SET status = 'completed', readiness_state = 'on_track',
+              readiness_percent = 100, evidence_json = '{"confirmed":true}',
+              completed_at = unixepoch(), completed_by_person_id = ?,
+              revision = revision + 1, updated_at = unixepoch()
+        WHERE id = ? AND event_id = ?`,
+    )
+      .bind(viewer.personId, taskId, eventId)
+      .run();
+    await expect(
+      new ApiParticipantService(testEnv).list(viewer, "tasks", { limit: 100 }),
+    ).rejects.toThrow(/missing its canonical review evidence/i);
+  });
+
+  it("hides task-evidence file metadata after exact-session participation is declined", async () => {
+    await ensureDemoSpeakerData(testEnv);
+    const viewer = participantViewer("speaker");
+    const suffix = crypto.randomUUID();
+    const sessionId = `declined-file-session-${suffix}`;
+    const taskId = `declined-file-task-${suffix}`;
+    const assetId = `declined-file-asset-${suffix}`;
+    const versionId = `declined-file-version-${suffix}`;
+    await testEnv.DB.batch([
+      testEnv.DB.prepare(
+        `INSERT INTO sessions (
+           id, event_id, title, slug, format, duration_minutes, status,
+           visibility, revision, created_at, updated_at
+         ) VALUES (?, ?, 'Declined file session', ?, 'presentation', 30,
+                   'unscheduled', 'private', 1, unixepoch(), unixepoch())`,
+      ).bind(sessionId, eventId, sessionId),
+      testEnv.DB.prepare(
+        `INSERT INTO session_speakers (
+           session_id, event_id, person_id, position, role_label,
+           participation_status, participation_revision, visibility
+         ) VALUES (?, ?, ?, 0, 'Speaker', 'pending', 1, 'private')`,
+      ).bind(sessionId, eventId, viewer.personId),
+      testEnv.DB.prepare(
+        `INSERT INTO task_instances (
+           id, event_id, target_type, target_id, owner_person_id, title,
+           task_type, impact, evidence_mode, configuration_json, status,
+           readiness_state, readiness_percent, revision, created_at, updated_at
+         ) VALUES (?, ?, 'session', ?, ?, 'Upload session evidence',
+                   'file_upload', 'high', 'admin_approval',
+                   '{"fileScope":"session_deliverable"}', 'submitted',
+                   'at_risk', 75, 1, unixepoch(), unixepoch())`,
+      ).bind(taskId, eventId, sessionId, viewer.personId),
+      testEnv.DB.prepare(
+        `INSERT INTO file_assets (
+           id, event_id, owner_person_id, target_type, target_id, asset_kind,
+           status, created_at, updated_at
+         ) VALUES (?, ?, ?, 'task', ?, 'task_evidence', 'pending',
+                   unixepoch(), unixepoch())`,
+      ).bind(assetId, eventId, viewer.personId, taskId),
+      testEnv.DB.prepare(
+        `INSERT INTO file_versions (
+           id, event_id, asset_id, version_number, object_key,
+           original_filename, declared_content_type, detected_content_type,
+           size_bytes, upload_status, signature_status, scan_status,
+           created_by_person_id, released_at
+         ) VALUES (?, ?, ?, 1, ?, 'session-evidence.pdf', 'application/pdf',
+                   'application/pdf', 2048, 'uploaded', 'valid', 'clean', ?,
+                   unixepoch())`,
+      ).bind(
+        versionId,
+        eventId,
+        assetId,
+        `private/test/${versionId}`,
+        viewer.personId,
+      ),
+      testEnv.DB.prepare(
+        `UPDATE file_assets SET current_version_id = ?, status = 'active'
+          WHERE id = ? AND event_id = ?`,
+      ).bind(versionId, assetId, eventId),
+      testEnv.DB.prepare(
+        `INSERT INTO task_evidence (
+           id, event_id, task_id, submitted_by_person_id, file_asset_id,
+           evidence_json, status, created_at
+         ) VALUES (?, ?, ?, ?, ?, '{}', 'submitted', unixepoch())`,
+      ).bind(
+        `declined-file-evidence-${suffix}`,
+        eventId,
+        taskId,
+        viewer.personId,
+        assetId,
+      ),
+    ]);
+    const service = new ApiParticipantService(testEnv);
+    const visibleFiles = await service.list(viewer, "files", {
+      limit: 100,
+    });
+    if (!Array.isArray(visibleFiles.files))
+      throw new Error("Participant file page is invalid.");
+    expect(visibleFiles.files.map((file) => file.id)).toContain(assetId);
+
+    await testEnv.DB.prepare(
+      `UPDATE session_speakers
+          SET participation_status = 'declined', participation_revision = 2,
+              participation_confirmed_at = NULL,
+              participation_declined_at = unixepoch(),
+              participation_decline_reason = NULL
+        WHERE event_id = ? AND session_id = ? AND person_id = ?`,
+    )
+      .bind(eventId, sessionId, viewer.personId)
+      .run();
+
+    const declinedFiles = await service.list(viewer, "files", {
+      limit: 100,
+    });
+    if (!Array.isArray(declinedFiles.files))
+      throw new Error("Participant file page is invalid.");
+    expect(declinedFiles.files.map((file) => file.id)).not.toContain(assetId);
   });
 
   it("updates an own profile once and rejects cross-origin browser mutation", async () => {

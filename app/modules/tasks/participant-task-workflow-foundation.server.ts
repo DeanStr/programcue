@@ -6,12 +6,42 @@ import {
 import {
   isSharedSessionDeliverableTask,
   parseTaskEvidenceDetails,
+  participantPrerequisitesAccessibleSql,
   type TaskRow,
   TaskServiceFoundation,
   TaskStateError,
 } from "./task-service-foundation.server";
 
 export class ParticipantTaskWorkflowFoundation extends TaskServiceFoundation {
+  protected async participantDependenciesComplete(
+    viewer: Viewer,
+    taskId: string,
+  ) {
+    const state = await this.env.DB.prepare(
+      `SELECT
+         NOT EXISTS (
+           SELECT 1 FROM task_instance_dependencies dependency
+           JOIN task_instances prerequisite
+             ON prerequisite.id = dependency.depends_on_task_id
+            AND prerequisite.event_id = task.event_id
+          WHERE dependency.task_id = task.id
+            AND prerequisite.status NOT IN ('completed','waived')
+         )
+         AND ${participantPrerequisitesAccessibleSql("task")} AS ready
+        FROM task_instances task
+       WHERE task.id = ? AND task.event_id = ?`,
+    )
+      .bind(
+        viewer.personId,
+        viewer.personId,
+        viewer.personId,
+        taskId,
+        viewer.eventId,
+      )
+      .first<{ ready: number }>();
+    return state?.ready === 1;
+  }
+
   protected async participantTask(viewer: Viewer, taskId: string) {
     const task = await this.env.DB.prepare(
       `
@@ -69,7 +99,7 @@ export class ParticipantTaskWorkflowFoundation extends TaskServiceFoundation {
       );
     if (["completed", "waived"].includes(task.status))
       throw new TaskStateError("This task is already completed or waived.");
-    if (!(await this.dependenciesComplete(task.id)))
+    if (!(await this.participantDependenciesComplete(viewer, task.id)))
       throw new TaskStateError("Complete the prerequisite tasks first.");
     return task;
   }

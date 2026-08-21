@@ -957,6 +957,104 @@ describe("onboarding task service", () => {
         comments: [expect.objectContaining({ body: "Large-list comment" })],
       });
     });
+
+    it("does not expose prerequisite metadata from an inaccessible resource task", async () => {
+      const testEnv = env as unknown as CloudflareEnvironment;
+      await ensureDemoSpeakerData(testEnv);
+      const suffix = crypto.randomUUID();
+      const resourcePageId = `inaccessible-prerequisite-resource-${suffix}`;
+      const templateId = `resource-ack:${resourcePageId}`;
+      const prerequisiteId = `${templateId}:${speaker.personId}`;
+      const dependentId = `accessible-dependent-${suffix}`;
+      await testEnv.DB.batch([
+        testEnv.DB.prepare(
+          `INSERT INTO task_templates (
+             id, event_id, name, target_type, task_type, impact, evidence_mode,
+             due_anchor, auto_assign_on_acceptance, configuration_json, status,
+             created_at, updated_at
+           ) VALUES (?, ?, 'Private prerequisite resource', 'speaker',
+                     'acknowledgement', 'medium', 'checkbox', 'none', 0, ?,
+                     'active', unixepoch(), unixepoch())`,
+        ).bind(templateId, speaker.eventId, JSON.stringify({ resourcePageId })),
+        testEnv.DB.prepare(
+          `INSERT INTO task_instances (
+             id, event_id, template_id, target_type, target_id,
+             owner_person_id, title, task_type, impact, evidence_mode,
+             configuration_json, status, readiness_state, readiness_percent,
+             revision, created_at, updated_at
+           ) VALUES (?, ?, ?, 'speaker', ?, ?, 'Secret prerequisite title',
+                     'acknowledgement', 'medium', 'checkbox', ?, 'not_started',
+                     'on_track', 0, 1, unixepoch(), unixepoch())`,
+        ).bind(
+          prerequisiteId,
+          speaker.eventId,
+          templateId,
+          speaker.personId,
+          speaker.personId,
+          JSON.stringify({ resourcePageId }),
+        ),
+        testEnv.DB.prepare(
+          `INSERT INTO task_instances (
+             id, event_id, target_type, target_id, owner_person_id, title,
+             task_type, impact, status, readiness_state, readiness_percent,
+             revision, created_at, updated_at
+           ) VALUES (?, ?, 'speaker', ?, ?, 'Accessible dependent task',
+                     'checklist', 'medium', 'not_started', 'on_track', 0, 1,
+                     unixepoch(), unixepoch())`,
+        ).bind(
+          dependentId,
+          speaker.eventId,
+          speaker.personId,
+          speaker.personId,
+        ),
+        testEnv.DB.prepare(
+          `INSERT INTO task_instance_dependencies (
+             task_id, depends_on_task_id, created_at
+           ) VALUES (?, ?, unixepoch())`,
+        ).bind(dependentId, prerequisiteId),
+      ]);
+
+      const tasks = await new TaskService(testEnv).listParticipantTasks(
+        speaker,
+      );
+      expect(tasks.map((task) => task.id)).not.toContain(prerequisiteId);
+      expect(tasks.find((task) => task.id === dependentId)).toMatchObject({
+        status: "blocked",
+        readinessState: "blocked",
+        readinessPercent: 0,
+        dependencies: [
+          {
+            id: `restricted-prerequisite:${dependentId}`,
+            title: "a prerequisite managed by the event team",
+            status: "blocked",
+          },
+        ],
+      });
+      expect(JSON.stringify(tasks)).not.toContain("Secret prerequisite title");
+
+      await testEnv.DB.prepare(
+        `UPDATE task_instances
+            SET status = 'completed', readiness_state = 'on_track',
+                readiness_percent = 100, completed_at = unixepoch(),
+                revision = revision + 1, updated_at = unixepoch()
+          WHERE id = ? AND event_id = ?`,
+      )
+        .bind(prerequisiteId, speaker.eventId)
+        .run();
+      const afterHiddenCompletion = await new TaskService(
+        testEnv,
+      ).listParticipantTasks(speaker);
+      expect(
+        afterHiddenCompletion.find((task) => task.id === dependentId),
+      ).toMatchObject({ status: "blocked", readinessState: "blocked" });
+      await expect(
+        new TaskService(testEnv).completeParticipant(speaker, {
+          taskId: dependentId,
+          revision: 1,
+          confirmed: true,
+        }),
+      ).rejects.toThrow("Complete the prerequisite tasks first.");
+    });
   });
 
   describe("participant workflows", () => {

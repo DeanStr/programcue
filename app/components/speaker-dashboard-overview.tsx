@@ -37,6 +37,10 @@ export function speakerMilestones({
   const confirmedSessions = liveSessions.filter(
     (session) => session.participationStatus === "confirmed",
   ).length;
+  const declinedSessions = liveSessions.filter(
+    (session) => session.participationStatus === "declined",
+  ).length;
+  const decidedSessions = confirmedSessions + declinedSessions;
   return [
     {
       key: "profile",
@@ -51,13 +55,15 @@ export function speakerMilestones({
       key: "sessions",
       label: "Sessions",
       detail: liveSessions.length
-        ? `${confirmedSessions} of ${liveSessions.length} confirmed`
+        ? declinedSessions > 0
+          ? `${decidedSessions} of ${liveSessions.length} responded · ${confirmedSessions} confirmed · ${declinedSessions} declined`
+          : `${confirmedSessions} of ${liveSessions.length} confirmed`
         : "No sessions linked yet",
       state: !liveSessions.length
         ? "not_started"
-        : confirmedSessions === liveSessions.length
+        : decidedSessions === liveSessions.length
           ? "complete"
-          : confirmedSessions > 0
+          : decidedSessions > 0
             ? "in_progress"
             : "not_started",
       href: "/participant/sessions",
@@ -106,6 +112,30 @@ export type SpeakerOutstandingResource = {
   title: string;
   href: string;
 };
+
+export function speakerParticipationBadge(
+  session: Pick<
+    SpeakerPortal["sessions"][number],
+    "participationStatus" | "status"
+  >,
+) {
+  if (session.participationStatus === "confirmed")
+    return { className: "success", label: "Confirmed" };
+  if (session.participationStatus === "declined")
+    return { className: "danger", label: "Declined by you" };
+  if (session.status === "cancelled")
+    return { className: "", label: "Not required" };
+  return { className: "warning", label: "Confirmation needed" };
+}
+
+function SpeakerParticipationBadge({
+  session,
+}: {
+  session: SpeakerPortal["sessions"][number];
+}) {
+  const status = speakerParticipationBadge(session);
+  return <span className={`status ${status.className}`}>{status.label}</span>;
+}
 
 export function speakerHeroActions(
   next: SpeakerTask | undefined,
@@ -363,15 +393,7 @@ export function SpeakerSessionsPanel({
                 <div>
                   <dt>Participation</dt>
                   <dd>
-                    <span
-                      className={`status ${session.participationStatus === "confirmed" ? "success" : session.status === "cancelled" ? "" : "warning"}`}
-                    >
-                      {session.participationStatus === "confirmed"
-                        ? "Confirmed"
-                        : session.status === "cancelled"
-                          ? "Not required"
-                          : "Confirmation needed"}
-                    </span>
+                    <SpeakerParticipationBadge session={session} />
                   </dd>
                 </div>
                 <div>

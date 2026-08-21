@@ -133,7 +133,8 @@ export async function requireTargetLabel(
                    AND m.role = 'speaker' AND m.accepted_at IS NOT NULL
                    AND m.revoked_at IS NULL)
         OR EXISTS (SELECT 1 FROM session_speakers ss
-                    WHERE ss.person_id = p.id AND ss.event_id = event.id)
+                    WHERE ss.person_id = p.id AND ss.event_id = event.id
+                      AND ss.participation_status IN ('pending','confirmed'))
       )`,
   )
     .bind(viewer.eventId, viewer.organisationId, targetId)
@@ -158,19 +159,38 @@ export async function validateTaskReferences(
     input.targetId,
   );
   if (input.ownerPersonId) {
-    const owner = await env.DB.prepare(
-      `SELECT p.display_name AS name FROM people p
-        JOIN events event ON event.id = ? AND event.organisation_id = ?
-        WHERE p.id = ? AND (
-          EXISTS (SELECT 1 FROM memberships m
-                   WHERE m.person_id = p.id AND m.event_id = event.id
-                     AND m.accepted_at IS NOT NULL AND m.revoked_at IS NULL)
-          OR EXISTS (SELECT 1 FROM session_speakers ss
-                      WHERE ss.person_id = p.id AND ss.event_id = event.id)
-        )`,
-    )
-      .bind(viewer.eventId, viewer.organisationId, input.ownerPersonId)
-      .first<{ name: string }>();
+    const owner =
+      input.targetType === "session"
+        ? await env.DB.prepare(
+            `SELECT p.display_name AS name FROM people p
+              JOIN events event ON event.id = ? AND event.organisation_id = ?
+              JOIN session_speakers ss
+                ON ss.event_id = event.id AND ss.session_id = ?
+               AND ss.person_id = p.id
+               AND ss.participation_status IN ('pending','confirmed')
+             WHERE p.id = ?`,
+          )
+            .bind(
+              viewer.eventId,
+              viewer.organisationId,
+              input.targetId,
+              input.ownerPersonId,
+            )
+            .first<{ name: string }>()
+        : await env.DB.prepare(
+            `SELECT p.display_name AS name FROM people p
+              JOIN events event ON event.id = ? AND event.organisation_id = ?
+             WHERE p.id = ? AND (
+               EXISTS (SELECT 1 FROM memberships m
+                        WHERE m.person_id = p.id AND m.event_id = event.id
+                          AND m.accepted_at IS NOT NULL AND m.revoked_at IS NULL)
+               OR EXISTS (SELECT 1 FROM session_speakers ss
+                           WHERE ss.person_id = p.id AND ss.event_id = event.id
+                             AND ss.participation_status IN ('pending','confirmed'))
+             )`,
+          )
+            .bind(viewer.eventId, viewer.organisationId, input.ownerPersonId)
+            .first<{ name: string }>();
     if (!owner)
       throw new AiToolValidationError(
         "The proposed task owner is not available in this event.",

@@ -295,7 +295,9 @@ converge while delayed requests from an earlier cycle and changed decline
 reasons fail stale. Reset clears the decline timestamp and reason. Audit records
 the transition and actor but never copies the free-text reason. Missing or
 malformed D1 batch results are integrity failures; they are never interpreted
-as a zero-row transition or a converged retry.
+as a zero-row transition or a converged retry. The participant dashboard treats
+both confirmation and decline as terminal responses, so a declined invitation
+does not leave an impossible preparation action.
 
 A declined relationship grants no access to that session's participant tasks,
 comments, evidence, files or session-targeted resources and contributes no
@@ -312,15 +314,35 @@ session does not alter event membership, submitter access, another active
 session or an event-wide speaker workflow. Generated resource-acknowledgement
 tasks recheck the current published resource audience, so a task cannot outlive
 the exact accepted/session audience that granted it while event-wide person,
-role and speaker audiences remain independent.
+role and speaker audiences remain independent. The same current-audience rule
+applies to participant API task reads and task-reminder recipient cohorts, so an
+inaccessible acknowledgement cannot leak through another delivery surface.
+Participant dependency hydration applies the same authorization independently:
+an inaccessible prerequisite exposes neither its identity, title nor state, but
+retains one generic blocked prerequisite so the dependent task cannot appear
+actionable when the participant has no way to complete its dependency. That
+fail-closed state is rechecked in participant completion and file-evidence
+submission writes, so completing or waiving the hidden prerequisite never makes
+the dependent task participant-actionable or reveals its state.
+Participant API file reads also reauthorize task-targeted assets against the
+current task relationship; declining a session removes its evidence metadata as
+well as the task itself while leaving independently owned files available.
+API task creation repeats target and owner eligibility in the atomic insert;
+when participation changes after preflight, the batch rolls back its task and
+idempotency claim and reports a conflict instead of committing orphan work.
 
 External active-participation consumers fail closed consistently. Accelevents
 exports only confirmed speaker relationships. Calendar administration offers a
 new request only for confirmed participation but retains an existing invitation
-for explicit cancellation and history. Private task API owner/target fallback
+for explicit cancellation and history. RSVP reconciliation rechecks confirmed
+participation before contacting the provider and again in its durable update,
+so a concurrent decline cannot restore a confirmed invitation state. Private task API owner/target fallback
 checks count only pending or confirmed relationships unless an independent
 accepted event membership grants the speaker scope. AI draft session copy may
-include pending participants but excludes declined relationships.
+include pending participants but excludes declined relationships. AI task
+proposal validation uses the same active-participation target and owner rules as
+the task command, and AI task/reminder cohorts recheck the current published
+resource audience before describing participant work.
 
 Participant session corrections use one optional built-in task preset,
 `session_details_review_v1`, rather than a participant-authored proposal
@@ -330,7 +352,9 @@ participant may complete it for the session, and `completed_by_person_id`
 records who did so. Participant role is deliberately excluded because it varies
 per relationship and would make shared evidence falsely personal. Completion
 records and compare-and-sets both the displayed session revision and a
-fingerprint of those displayed values. Later edits are shown as a task-level
+fingerprint of those displayed values. The authenticated participant task API
+returns that canonical field set, revision and fingerprint before accepting the
+same evidence on completion. Later edits are shown as a task-level
 revision mismatch and do not imply approval by every linked participant or of
 the new content; another review is an explicit organiser action. A completed
 preset without canonical review evidence is corrupt and fails explicitly rather
@@ -349,13 +373,20 @@ Cancelled or archived sessions make this preset unavailable to participants and
 exclude it from participant readiness without changing unrelated operational
 session tasks. Participant-retention finalisation treats its descriptions,
 evidence and complete comment thread as participant data. Actor identities are
-remapped only when the task target or session relationship establishes
-participant provenance, so an organiser reply is redacted without being
-misclassified as a participant; comment audits record the actual administrator
-or participant UI origin. Unrelated organiser session tasks remain operational records.
+remapped only when the task target, explicit owner or session relationship and
+immutable `participant_ui` action evidence establish participant provenance;
+file evidence recognises its distinct `task.file.submitted` action. An organiser
+reply is therefore redacted without being misclassified as participant activity,
+including when that organiser is also a speaker in the session; comment audits
+record the actual administrator or participant UI origin. Unrelated organiser
+session tasks remain operational records.
 Cross-event identity classification includes those completion, evidence and
 comment references so retention cannot anonymise an identity still used by
 another event.
+Participant API completion recovery attributes completed tasks through
+`completed_by_person_id` and approval-required submissions through the exact
+operation-derived evidence row, so both committed states can be replayed
+without weakening actor isolation.
 
 Manual and direct-session speaker invitations validate authentication, sender
 and Queue readiness before the domain mutation. Their communication operation,

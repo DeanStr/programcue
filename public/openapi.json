@@ -4087,6 +4087,7 @@
           },
           "tasks": {
             "type": "array",
+            "description": "Participant-accessible tasks. A session_details_review_v1 task includes sessionDetailsReview with the canonical fields, sessionRevision and fingerprint required by the completion command.",
             "items": {
               "$ref": "#/components/schemas/ApiRecord"
             }
@@ -6709,7 +6710,8 @@
             "type": "string",
             "enum": [
               "speaker_travel_hotel_v1",
-              "speaker_travel_flight_v1"
+              "speaker_travel_flight_v1",
+              "session_details_review_v1"
             ]
           },
           "form": {

@@ -29,6 +29,9 @@ describe("participant retention", () => {
     );
     const sessionReviewEvidenceId = id("privacy-session-review-evidence");
     const operationalSessionTaskId = id("privacy-operational-session-task");
+    const crossSpeakerTaskId = id("privacy-cross-speaker-task");
+    const fileTaskId = id("privacy-file-task");
+    const fileTaskEvidenceId = id("privacy-file-task-evidence");
     await seeded.testEnv.DB.batch([
       seeded.testEnv.DB.prepare(
         `INSERT INTO task_instances (
@@ -76,8 +79,8 @@ describe("participant retention", () => {
       ),
       seeded.testEnv.DB.prepare(
         `INSERT INTO task_comments (
-           id, event_id, task_id, author_person_id, body, visibility
-         ) VALUES (?, ?, ?, 'person-demo-admin',
+         id, event_id, task_id, author_person_id, body, visibility
+         ) VALUES (?, ?, ?, 'person-demo-owner',
                    'Organiser response containing participant context.',
                    'participant')`,
       ).bind(sessionReviewAdminCommentId, seeded.eventId, sessionReviewTaskId),
@@ -93,6 +96,47 @@ describe("participant retention", () => {
         JSON.stringify({ description: "Private correction evidence" }),
       ),
       seeded.testEnv.DB.prepare(
+        `INSERT INTO audit_events (
+           id, actor_kind, origin, metadata_version, organisation_id, event_id,
+           actor_person_id, action, entity_type, entity_id, metadata_json
+         ) VALUES (?, 'person', 'participant_ui', 1, ?, ?, ?,
+                   'task.completed', 'task_instance', ?, ?)`,
+      ).bind(
+        id("privacy-session-review-completion-audit"),
+        seeded.owner.organisationId,
+        seeded.eventId,
+        seeded.exclusiveId,
+        sessionReviewTaskId,
+        JSON.stringify({ evidenceId: sessionReviewEvidenceId }),
+      ),
+      seeded.testEnv.DB.prepare(
+        `INSERT INTO audit_events (
+           id, actor_kind, origin, metadata_version, organisation_id, event_id,
+           actor_person_id, action, entity_type, entity_id, metadata_json
+         ) VALUES (?, 'person', 'participant_ui', 1, ?, ?, ?,
+                   'task.comment.added', 'task_instance', ?, ?)`,
+      ).bind(
+        id("privacy-session-review-comment-audit"),
+        seeded.owner.organisationId,
+        seeded.eventId,
+        seeded.exclusiveId,
+        sessionReviewTaskId,
+        JSON.stringify({ commentId: sessionReviewCommentId }),
+      ),
+      seeded.testEnv.DB.prepare(
+        `INSERT INTO audit_events (
+           id, actor_kind, origin, metadata_version, organisation_id, event_id,
+           actor_person_id, action, entity_type, entity_id, metadata_json
+         ) VALUES (?, 'person', 'admin_ui', 1, ?, ?, 'person-demo-owner',
+                   'task.comment.added', 'task_instance', ?, ?)`,
+      ).bind(
+        id("privacy-session-review-admin-comment-audit"),
+        seeded.owner.organisationId,
+        seeded.eventId,
+        sessionReviewTaskId,
+        JSON.stringify({ commentId: sessionReviewAdminCommentId }),
+      ),
+      seeded.testEnv.DB.prepare(
         `INSERT INTO task_instances (
            id, event_id, target_type, target_id, owner_person_id, title,
            description, task_type, impact, evidence_mode, configuration_json,
@@ -102,6 +146,50 @@ describe("participant retention", () => {
                    'administrator_only', 'low', 'admin_approval', '{}',
                    'completed', 'on_track', 100, 'person-demo-owner')`,
       ).bind(operationalSessionTaskId, seeded.eventId, seeded.sessionId),
+      seeded.testEnv.DB.prepare(
+        `INSERT INTO task_instances (
+           id, event_id, target_type, target_id, owner_person_id, title,
+           description, task_type, impact, evidence_mode, configuration_json,
+           status, readiness_state, readiness_percent
+         ) VALUES (?, ?, 'speaker', ?, ?, 'Cross-speaker participant task',
+                   'Participant-owned task for another speaker', 'checklist',
+                   'low', 'checkbox', '{}', 'not_started', 'on_track', 0)`,
+      ).bind(
+        crossSpeakerTaskId,
+        seeded.eventId,
+        seeded.exclusiveId,
+        seeded.sharedId,
+      ),
+      seeded.testEnv.DB.prepare(
+        `INSERT INTO task_instances (
+           id, event_id, target_type, target_id, owner_person_id, title,
+           description, task_type, impact, evidence_mode, configuration_json,
+           status, readiness_state, readiness_percent, evidence_json
+         ) VALUES (?, ?, 'speaker', ?, ?, 'Participant file task',
+                   'Upload participant evidence', 'file_upload', 'high', 'file',
+                   '{"fileScope":"participant_document"}', 'submitted',
+                   'on_track', 80, '{"fileVersionId":"retained-version"}')`,
+      ).bind(fileTaskId, seeded.eventId, seeded.sharedId, seeded.sharedId),
+      seeded.testEnv.DB.prepare(
+        `INSERT INTO task_evidence (
+           id, event_id, task_id, submitted_by_person_id, evidence_json, status
+         ) VALUES (?, ?, ?, ?, '{"fileVersionId":"retained-version"}',
+                   'submitted')`,
+      ).bind(fileTaskEvidenceId, seeded.eventId, fileTaskId, seeded.sharedId),
+      seeded.testEnv.DB.prepare(
+        `INSERT INTO audit_events (
+           id, actor_kind, origin, metadata_version, organisation_id, event_id,
+           actor_person_id, action, entity_type, entity_id, metadata_json
+         ) VALUES (?, 'person', 'participant_ui', 1, ?, ?, ?,
+                   'task.file.submitted', 'task_instance', ?, ?)`,
+      ).bind(
+        id("privacy-file-task-audit"),
+        seeded.owner.organisationId,
+        seeded.eventId,
+        seeded.sharedId,
+        fileTaskId,
+        JSON.stringify({ evidenceId: fileTaskEvidenceId }),
+      ),
     ]);
     const service = new ParticipantRetentionService(seeded.testEnv);
     const preview = await service.preview(seeded.owner);
@@ -110,7 +198,7 @@ describe("participant retention", () => {
       canRun: true,
       pendingParticipants: 3,
       completed: false,
-      immutableAuditRecords: 3,
+      immutableAuditRecords: 7,
       retainedProgrammeRecords: 1,
       externalProviderErasureRequired: true,
     });
@@ -138,7 +226,7 @@ describe("participant retention", () => {
       pendingParticipants: 0,
       anonymisedParticipants: 3,
       sharedIdentities: 2,
-      sharedIdentityAuditLinks: 2,
+      sharedIdentityAuditLinks: 4,
     });
     expect(
       await seeded.testEnv.DB.prepare(
@@ -407,6 +495,28 @@ describe("participant retention", () => {
       redacted: true,
       reason: "event_retention_period_elapsed",
     });
+    const retainedParticipantTaskActors = await seeded.testEnv.DB.prepare(
+      `SELECT cross_task.owner_person_id AS crossTaskOwnerPersonId,
+              file_evidence.submitted_by_person_id AS fileEvidencePersonId
+         FROM task_instances cross_task
+         JOIN task_evidence file_evidence
+           ON file_evidence.task_id = ? AND file_evidence.event_id = ?
+        WHERE cross_task.id = ? AND cross_task.event_id = ?`,
+    )
+      .bind(fileTaskId, seeded.eventId, crossSpeakerTaskId, seeded.eventId)
+      .first<{
+        crossTaskOwnerPersonId: string;
+        fileEvidencePersonId: string;
+      }>();
+    expect(retainedParticipantTaskActors?.crossTaskOwnerPersonId).toMatch(
+      /^retained-participant-/,
+    );
+    expect(retainedParticipantTaskActors?.fileEvidencePersonId).toBe(
+      retainedParticipantTaskActors?.crossTaskOwnerPersonId,
+    );
+    expect(retainedParticipantTaskActors?.fileEvidencePersonId).not.toBe(
+      seeded.sharedId,
+    );
     await expect(
       seeded.testEnv.DB.prepare(
         `SELECT author_person_id AS authorPersonId, body
@@ -415,7 +525,7 @@ describe("participant retention", () => {
         .bind(sessionReviewAdminCommentId, seeded.eventId)
         .first(),
     ).resolves.toEqual({
-      authorPersonId: "person-demo-admin",
+      authorPersonId: "person-demo-owner",
       body: "[redacted after event retention]",
     });
     await expect(

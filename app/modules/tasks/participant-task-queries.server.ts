@@ -7,6 +7,7 @@ import {
 } from "./session-details-review.server";
 import {
   parseTaskEvidenceDetails,
+  participantTaskAccessSql,
   structuredTaskForm,
   type TaskRow,
   taskConfiguration,
@@ -57,16 +58,38 @@ export class ParticipantTaskQueries extends ParticipantTaskWorkflowFoundation {
     const dependencies = ids.length
       ? await this.env.DB.prepare(
           `
-      SELECT dep.task_id AS taskId, prerequisite.id, prerequisite.title, prerequisite.status
-        FROM task_instance_dependencies dep
-        JOIN task_instances prerequisite ON prerequisite.id = dep.depends_on_task_id
-       WHERE dep.task_id IN (
-         SELECT CAST(value AS TEXT) FROM json_each(?)
-       )
-       ORDER BY prerequisite.title
+      WITH requested_tasks(id) AS (
+        SELECT CAST(value AS TEXT) FROM json_each(?)
+      ), scoped_dependencies AS (
+        SELECT dep.task_id AS taskId, prerequisite.id, prerequisite.title,
+               prerequisite.status,
+               CASE WHEN prerequisite.event_id = ?
+                          AND ${participantTaskAccessSql("prerequisite", true)}
+                    THEN 1 ELSE 0 END AS participantAccessible
+          FROM task_instance_dependencies dep
+          JOIN requested_tasks requested ON requested.id = dep.task_id
+          JOIN task_instances prerequisite
+            ON prerequisite.id = dep.depends_on_task_id
+      )
+      SELECT taskId, id, title, status
+        FROM scoped_dependencies
+       WHERE participantAccessible = 1
+      UNION ALL
+      SELECT taskId, 'restricted-prerequisite:' || taskId,
+             'a prerequisite managed by the event team', 'blocked'
+        FROM scoped_dependencies
+       WHERE participantAccessible = 0
+       GROUP BY taskId
+       ORDER BY title
     `,
         )
-          .bind(JSON.stringify(ids))
+          .bind(
+            JSON.stringify(ids),
+            viewer.eventId,
+            viewer.personId,
+            viewer.personId,
+            viewer.personId,
+          )
           .all<{ taskId: string; id: string; title: string; status: string }>()
       : { results: [] };
     const comments = ids.length
@@ -124,7 +147,7 @@ export class ParticipantTaskQueries extends ParticipantTaskWorkflowFoundation {
         );
       }
     }
-    return Promise.all(
+    const projected = await Promise.all(
       tasks.results.map(async (task) => {
         const configuration = taskConfiguration(task.configurationJson);
         const isSessionDetailsReview =
@@ -159,8 +182,29 @@ export class ParticipantTaskQueries extends ParticipantTaskWorkflowFoundation {
           task.taskType === "acknowledgement"
             ? taskResourcePageId(task.configurationJson)
             : null;
+        const taskDependencies = dependencies.results.filter(
+          (dependency) => dependency.taskId === task.id,
+        );
+        const restrictedPrerequisite = taskDependencies.some((dependency) =>
+          dependency.id.startsWith("restricted-prerequisite:"),
+        );
         return {
           ...task,
+          status:
+            restrictedPrerequisite &&
+            !["completed", "waived", "submitted"].includes(task.status)
+              ? ("blocked" as const)
+              : task.status,
+          readinessState:
+            restrictedPrerequisite &&
+            !["completed", "waived", "submitted"].includes(task.status)
+              ? ("blocked" as const)
+              : task.readinessState,
+          readinessPercent:
+            restrictedPrerequisite &&
+            !["completed", "waived", "submitted"].includes(task.status)
+              ? 0
+              : task.readinessPercent,
           formFields: structuredTaskForm(task.configurationJson)?.fields ?? [],
           destinationUrl:
             task.taskType === "link_visit"
@@ -182,14 +226,27 @@ export class ParticipantTaskQueries extends ParticipantTaskWorkflowFoundation {
           resourceHref: resourcePageId
             ? (resourceHrefs.get(resourcePageId) ?? null)
             : null,
-          dependencies: dependencies.results.filter(
-            (dependency) => dependency.taskId === task.id,
-          ),
+          dependencies: taskDependencies,
           comments: comments.results.filter(
             (comment) => comment.taskId === task.id,
           ),
         };
       }),
+    );
+    const statusOrder = new Map([
+      ["overdue", 0],
+      ["blocked", 1],
+      ["not_started", 2],
+      ["in_progress", 3],
+      ["submitted", 4],
+    ]);
+    return projected.sort(
+      (left, right) =>
+        (statusOrder.get(left.status) ?? 5) -
+          (statusOrder.get(right.status) ?? 5) ||
+        Number(left.dueAt === null) - Number(right.dueAt === null) ||
+        (left.dueAt ?? 0) - (right.dueAt ?? 0) ||
+        left.title.localeCompare(right.title),
     );
   }
 }

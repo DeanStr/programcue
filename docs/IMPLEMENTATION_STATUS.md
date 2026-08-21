@@ -118,7 +118,9 @@ withdrawal remains coordinated through event support, and audit metadata does
 not retain the free-text decline note. Missing D1 mutation results fail as
 integrity errors rather than being treated as zero-row retries. Publication distinguishes pending from
 declined participation and atomically blocks both while allowing a confirmed
-speaker whose portal invitation remains pending. Manual and direct-session invitation delivery intent is persisted
+speaker whose portal invitation remains pending. The participant dashboard
+counts confirmation and decline as terminal responses rather than leaving a
+declined invitation as impossible unfinished work. Manual and direct-session invitation delivery intent is persisted
 atomically and replays report its durable status; missing delivery configuration
 fails before the participant mutation. Participant UI and REST profile writes now converge on one
 compare-and-set mutation with shared validation, audit, webhook, realtime and
@@ -241,23 +243,33 @@ in the Tasks summary, Command Centre blockers and upcoming-session risk while
 remaining correctly unavailable to participants. Generated resource
 acknowledgement tasks revalidate the current published audience, preventing an
 inaccessible session/accepted-speaker resource from leaving behind an actionable
-orphan task. Existing reminder audiences are speaker-task scoped, so no
-unrelated event-wide reminder suppression was added.
+orphan task. Participant API reads and incomplete/due/overdue reminder cohorts
+apply the same current-audience check. Participant file API reads additionally
+reauthorize task-targeted assets, so declined-session evidence metadata is not
+returned while independently owned files remain available. API task creation also rechecks current
+target and owner eligibility inside its atomic write, rolling back when a
+participant declines after preflight. Existing reminder audiences remain
+speaker-task scoped, so no unrelated event-wide reminder suppression was added.
 
 Confirmed participation is required when Accelevents exports speaker records or
 session-speaker associations. Calendar administration offers new invitation
 requests only for confirmed relationships while retaining existing invitation
 rows for cancellation and history. Private task API ownership checks accept an
 independent active event membership or pending/confirmed session participation,
-and AI session-copy evidence excludes declined relationships while retaining
-pending draft participants.
+and AI task proposals enforce those same target and owner rules before a preview
+is persisted. AI session-copy evidence excludes declined relationships while
+retaining pending draft participants; AI incomplete-task and reminder cohorts
+also exclude resource acknowledgements that are no longer in the participant's
+current published audience.
 
 An optional one-click `session_details_review_v1` task preset presents the
 fixed shared title, description, format, duration and track. Any pending or
 confirmed participant may complete this session-level task; completion records
 the actual actor, compare-and-sets the displayed session revision and canonical
 field fingerprint, stores both as task evidence and reports later content drift
-without implying that every linked participant personally reviewed it. A
+without implying that every linked participant personally reviewed it. The
+participant task API returns those current fields, revision and fingerprint so
+REST clients can submit the required compare-and-set evidence. A
 completed preset with missing canonical evidence fails explicitly rather than
 appearing unreviewed. Administrator completion and approval are rejected at the
 shared mutation boundary and omitted from the task table; waiver, reopening and
@@ -273,9 +285,11 @@ readiness while leaving unrelated operational session tasks unchanged.
 Participant-retention analysis, redaction and identity remapping include this
 participant-authored session evidence and the complete correction thread but
 exclude ordinary organiser session tasks. Comment audit origins distinguish
-administrator and participant actions, and only task-target or session-linked
-participant actors are remapped; organiser replies retain their attribution
-after their content is redacted. Cross-event completion, evidence and comment
+administrator and participant actions, and mutable actor attribution is remapped
+only when target, explicit-owner or session provenance and the immutable
+`participant_ui` action agree, including the distinct file-submission action;
+organiser replies retain their attribution after their content is redacted, even
+when that organiser is also a session speaker. Cross-event completion, evidence and comment
 references also preserve the shared identity. No proposal schema, approval state or
 separate notification workflow was added. Task evidence accepts MP4/WebM session
 video against the event's video limit in browser validation, declaration and
@@ -285,9 +299,16 @@ creation, and template assignment's exact-definition duplicate check includes
 active direct/API-created tasks. Administrators retain explicitly labelled,
 non-clickable visibility of legacy participant-submitted link evidence without
 reintroducing that input into current completion behavior.
-These changes and migration `0049_task_instance_configuration_snapshot.sql` are
-included in production source `8a0c39f`; the focused tests remain the acceptance
-evidence for the individual boundaries.
+Participant API completion recovery now identifies approval-required submitted
+work through its exact operation-derived evidence row, while completed work
+continues to use `completed_by_person_id`; committed submissions therefore
+return and replay without broadening actor access.
+The pre-existing task snapshot changes and migration
+`0049_task_instance_configuration_snapshot.sql` are included in production
+source `8a0c39f`. The participation decision and session-review changes,
+including migration `0050_session_participation_decisions.sql`, are repository
+implementation and focused-test claims only; no corresponding migration or
+application release has been deployed.
 
 Schedule placement errors identify the affected speaker and both clashing
 session titles instead of reducing a rejected overlap to a transient conflict

@@ -189,7 +189,6 @@ export function participantSpeakerAccessSql(
       SELECT 1 FROM session_speakers entitled_speaker
        WHERE entitled_speaker.event_id = rp.event_id
          AND entitled_speaker.person_id = ${personIdSql}
-         AND entitled_speaker.participation_status IN ('pending','confirmed')
     )
   )`;
 }
@@ -367,6 +366,34 @@ export function materializePublishedResourceAcknowledgementsForSession(
     eventId,
     "SELECT DISTINCT person_id FROM session_speakers WHERE event_id = ? AND session_id = ?",
     [eventId, sessionId],
+  );
+}
+
+export function materializePublishedResourceAcknowledgementsForParticipationReset(
+  env: CloudflareEnvironment,
+  eventId: string,
+  sessionId: string,
+  personId: string,
+  participationRevision: number,
+  resetAuditEventId: string,
+) {
+  return acknowledgementTaskStatementsForCandidates(
+    env,
+    eventId,
+    `SELECT relationship.person_id
+       FROM session_speakers relationship
+      WHERE relationship.event_id = ?
+        AND relationship.session_id = ?
+        AND relationship.person_id = ?
+        AND relationship.participation_status = 'pending'
+        AND relationship.participation_revision = ?
+        AND EXISTS (
+          SELECT 1 FROM audit_events audit
+           WHERE audit.id = ? AND audit.event_id = relationship.event_id
+             AND audit.action = 'speaker.participation.reset'
+             AND audit.entity_id = relationship.session_id || ':' || relationship.person_id
+        )`,
+    [eventId, sessionId, personId, participationRevision, resetAuditEventId],
   );
 }
 

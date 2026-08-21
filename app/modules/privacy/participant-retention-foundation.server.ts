@@ -76,7 +76,8 @@ export function participantTaskActorProvenanceSql(
   personIdExpression: string,
 ) {
   return `(
-    (${taskAlias}.target_type = 'speaker'
+    ${taskAlias}.owner_person_id = ${personIdExpression}
+    OR (${taskAlias}.target_type = 'speaker'
       AND ${taskAlias}.target_id = ${personIdExpression})
     OR (
       ${taskAlias}.target_type = 'session'
@@ -87,6 +88,55 @@ export function participantTaskActorProvenanceSql(
            AND participant_relationship.person_id = ${personIdExpression}
       )
     )
+  )`;
+}
+
+export function participantTaskCompletionAuditSql(
+  taskAlias: string,
+  personIdExpression: string,
+) {
+  return `EXISTS (
+    SELECT 1 FROM audit_events participant_completion_audit
+     WHERE participant_completion_audit.event_id = ${taskAlias}.event_id
+       AND participant_completion_audit.actor_person_id = ${personIdExpression}
+       AND participant_completion_audit.origin = 'participant_ui'
+       AND participant_completion_audit.action IN ('task.completed','task.submitted')
+       AND participant_completion_audit.entity_type = 'task_instance'
+       AND participant_completion_audit.entity_id = ${taskAlias}.id
+  )`;
+}
+
+export function participantTaskEvidenceAuditSql(
+  taskAlias: string,
+  evidenceAlias: string,
+) {
+  return `EXISTS (
+    SELECT 1 FROM audit_events participant_evidence_audit
+     WHERE participant_evidence_audit.event_id = ${taskAlias}.event_id
+       AND participant_evidence_audit.actor_person_id = ${evidenceAlias}.submitted_by_person_id
+       AND participant_evidence_audit.origin = 'participant_ui'
+       AND participant_evidence_audit.action IN (
+         'task.completed','task.submitted','task.file.submitted'
+       )
+       AND participant_evidence_audit.entity_type = 'task_instance'
+       AND participant_evidence_audit.entity_id = ${taskAlias}.id
+       AND json_extract(participant_evidence_audit.metadata_json, '$.evidenceId') = ${evidenceAlias}.id
+  )`;
+}
+
+export function participantTaskCommentAuditSql(
+  taskAlias: string,
+  commentAlias: string,
+) {
+  return `EXISTS (
+    SELECT 1 FROM audit_events participant_comment_audit
+     WHERE participant_comment_audit.event_id = ${taskAlias}.event_id
+       AND participant_comment_audit.actor_person_id = ${commentAlias}.author_person_id
+       AND participant_comment_audit.origin = 'participant_ui'
+       AND participant_comment_audit.action = 'task.comment.added'
+       AND participant_comment_audit.entity_type = 'task_instance'
+       AND participant_comment_audit.entity_id = ${taskAlias}.id
+       AND json_extract(participant_comment_audit.metadata_json, '$.commentId') = ${commentAlias}.id
   )`;
 }
 
@@ -111,10 +161,11 @@ export const participantPredicateSql = `(
       AND candidate_profile_revision.person_id = person.id)
   OR EXISTS (SELECT 1 FROM task_instances candidate_task
     WHERE candidate_task.event_id = ?
-      AND (candidate_task.owner_person_id = person.id
-        OR candidate_task.completed_by_person_id = person.id)
       AND ${participantRetentionTaskPredicateSql("candidate_task")}
-      AND ${participantTaskActorProvenanceSql("candidate_task", "person.id")})
+      AND ${participantTaskActorProvenanceSql("candidate_task", "person.id")}
+      AND (candidate_task.owner_person_id = person.id
+        OR (candidate_task.completed_by_person_id = person.id
+          AND ${participantTaskCompletionAuditSql("candidate_task", "person.id")})))
   OR EXISTS (SELECT 1 FROM task_evidence candidate_evidence
     JOIN task_instances candidate_evidence_task
       ON candidate_evidence_task.id = candidate_evidence.task_id
@@ -122,6 +173,7 @@ export const participantPredicateSql = `(
     WHERE candidate_evidence.event_id = ?
       AND ${participantRetentionTaskPredicateSql("candidate_evidence_task")}
       AND ${participantTaskActorProvenanceSql("candidate_evidence_task", "person.id")}
+      AND ${participantTaskEvidenceAuditSql("candidate_evidence_task", "candidate_evidence")}
       AND candidate_evidence.submitted_by_person_id = person.id)
   OR EXISTS (SELECT 1 FROM task_comments candidate_comment
     JOIN task_instances candidate_comment_task
@@ -130,6 +182,7 @@ export const participantPredicateSql = `(
     WHERE candidate_comment.event_id = ?
       AND ${participantRetentionTaskPredicateSql("candidate_comment_task")}
       AND ${participantTaskActorProvenanceSql("candidate_comment_task", "person.id")}
+      AND ${participantTaskCommentAuditSql("candidate_comment_task", "candidate_comment")}
       AND candidate_comment.author_person_id = person.id)
   OR EXISTS (SELECT 1 FROM resource_acknowledgements candidate_acknowledgement
     WHERE candidate_acknowledgement.event_id = ? AND candidate_acknowledgement.person_id = person.id)

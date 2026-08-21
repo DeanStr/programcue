@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   speakerHeroActions,
   speakerMilestones,
+  speakerParticipationBadge,
 } from "./speaker-dashboard-overview";
 import type { SpeakerPortal } from "./speaker-dashboard-panel-shared";
 
@@ -169,5 +170,34 @@ describe("speaker preparation milestones", () => {
     ).toMatchObject({
       detail: "1 of 2 acknowledged",
     });
+  });
+
+  it("treats a declined session as a completed participation response", () => {
+    const sessions = milestones({
+      portal: portal({
+        sessions: [
+          {
+            status: "scheduled",
+            participationStatus: "declined",
+          },
+        ] as SpeakerPortal["sessions"],
+      }),
+    }).find((milestone) => milestone.key === "sessions");
+
+    expect(sessions).toMatchObject({
+      detail: "1 of 1 responded · 0 confirmed · 1 declined",
+      state: "complete",
+    });
+  });
+});
+
+describe("speaker participation badge", () => {
+  it("renders a declined session as a completed decision, not a pending response", () => {
+    expect(
+      speakerParticipationBadge({
+        participationStatus: "declined",
+        status: "scheduled",
+      }),
+    ).toEqual({ className: "danger", label: "Declined by you" });
   });
 });

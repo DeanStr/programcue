@@ -1,4 +1,5 @@
 import { ReadinessService } from "~/modules/readiness/readiness-service.server";
+import { participantResourceTaskAccessSql } from "~/modules/tasks/task-service-foundation.server";
 import type { Viewer } from "~/platform/auth/authorize.server";
 import {
   distinctEvidence,
@@ -109,6 +110,7 @@ export class AiOperationalReadTools {
          JOIN events e ON e.id = ? AND e.organisation_id = ?
          LEFT JOIN task_instances ti ON ti.event_id = e.id
            AND ti.target_type = 'speaker' AND ti.target_id = p.id
+           AND ${participantResourceTaskAccessSql("ti")}
         GROUP BY p.id, p.display_name
        HAVING incompleteCount > 0
         ORDER BY overdueCount DESC, incompleteCount DESC, p.display_name

@@ -1,5 +1,6 @@
 import { env } from "cloudflare:test";
 import { describe, expect, it } from "vitest";
+import type { AirtableProviderBoundary } from "~/modules/airtable/airtable-provider-boundary.server";
 import { ResourceService } from "~/modules/resources/resource-service.server";
 import {
   getPublicSessionPage,
@@ -433,6 +434,140 @@ describe("speaker profile service", () => {
       participationRevision: 4,
       resetConfirmation: "pending",
     });
+  });
+
+  it("replays committed participation transitions after the session becomes inactive", async () => {
+    const testEnv = env as unknown as CloudflareEnvironment;
+    await ensureDemoSpeakerData(testEnv);
+    const service = new SpeakerService(testEnv);
+    const sessionId = "session-demo-speaker";
+    const session = await testEnv.DB.prepare(
+      "SELECT status FROM sessions WHERE event_id = ? AND id = ?",
+    )
+      .bind(speaker.eventId, sessionId)
+      .first<{ status: string }>();
+    if (!session) throw new Error("Demo speaker session is missing.");
+    await testEnv.DB.prepare(
+      `UPDATE session_speakers
+          SET participation_status = 'pending', participation_revision = 1,
+              participation_confirmed_at = NULL,
+              participation_declined_at = NULL,
+              participation_decline_reason = NULL
+        WHERE event_id = ? AND session_id = ? AND person_id = ?`,
+    )
+      .bind(speaker.eventId, sessionId, speaker.personId)
+      .run();
+
+    const decline = {
+      sessionId,
+      participationRevision: 1,
+      declineConfirmation: "declined" as const,
+      reason: "A committed response must remain replayable.",
+    };
+    try {
+      await service.declineOwnParticipation(speaker, decline);
+      await testEnv.DB.prepare(
+        "UPDATE sessions SET status = 'cancelled' WHERE event_id = ? AND id = ?",
+      )
+        .bind(speaker.eventId, sessionId)
+        .run();
+      await expect(
+        service.declineOwnParticipation(speaker, decline),
+      ).resolves.toMatchObject({
+        participationStatus: "declined",
+        participationRevision: 2,
+        changed: false,
+      });
+
+      await testEnv.DB.prepare(
+        "UPDATE sessions SET status = ? WHERE event_id = ? AND id = ?",
+      )
+        .bind(session.status, speaker.eventId, sessionId)
+        .run();
+      const reset = {
+        sessionId,
+        participationRevision: 2,
+        resetConfirmation: "pending" as const,
+      };
+      await service.resetDeclinedParticipation(admin, speaker.personId, reset);
+      await testEnv.DB.prepare(
+        "UPDATE sessions SET status = 'archived' WHERE event_id = ? AND id = ?",
+      )
+        .bind(speaker.eventId, sessionId)
+        .run();
+      await expect(
+        service.resetDeclinedParticipation(admin, speaker.personId, reset),
+      ).resolves.toMatchObject({
+        participationStatus: "pending",
+        participationRevision: 3,
+        changed: false,
+      });
+      await expect(
+        service.declineOwnParticipation(speaker, {
+          ...decline,
+          participationRevision: 3,
+        }),
+      ).rejects.toMatchObject({ status: 404 });
+    } finally {
+      await testEnv.DB.prepare(
+        "UPDATE sessions SET status = ? WHERE event_id = ? AND id = ?",
+      )
+        .bind(session.status, speaker.eventId, sessionId)
+        .run();
+    }
+  });
+
+  it("revalidates Airtable participation replays against the current invitation cycle", async () => {
+    const testEnv = env as unknown as CloudflareEnvironment;
+    await ensureDemoSpeakerData(testEnv);
+    const sessionId = "session-demo-speaker";
+    await testEnv.DB.prepare(
+      `UPDATE session_speakers
+          SET participation_status = 'pending', participation_revision = 1,
+              participation_confirmed_at = NULL,
+              participation_declined_at = NULL,
+              participation_decline_reason = NULL
+        WHERE event_id = ? AND session_id = ? AND person_id = ?`,
+    )
+      .bind(speaker.eventId, sessionId, speaker.personId)
+      .run();
+    const decline = {
+      sessionId,
+      participationRevision: 1,
+      declineConfirmation: "declined" as const,
+      reason: "This exact replay must be checked against D1.",
+    };
+    const committed = await new SpeakerService(testEnv).declineOwnParticipation(
+      speaker,
+      decline,
+    );
+    const replayBoundary = {
+      executeIdempotent: async () => committed,
+    } as unknown as AirtableProviderBoundary;
+    const replayService = new SpeakerService(testEnv, {
+      airtable: replayBoundary,
+    });
+
+    await expect(
+      replayService.declineOwnParticipation(speaker, decline),
+    ).resolves.toMatchObject({
+      changed: false,
+      participationStatus: "declined",
+      participationRevision: 2,
+    });
+
+    await new SpeakerService(testEnv).resetDeclinedParticipation(
+      admin,
+      speaker.personId,
+      {
+        sessionId,
+        participationRevision: 2,
+        resetConfirmation: "pending",
+      },
+    );
+    await expect(
+      replayService.declineOwnParticipation(speaker, decline),
+    ).rejects.toMatchObject({ status: 409 });
   });
 
   it("converges concurrent exact participation retries without duplicating transitions", async () => {
@@ -908,6 +1043,83 @@ describe("speaker profile service", () => {
         .bind(taskId)
         .first(),
     ).resolves.toEqual(before);
+  });
+
+  it("does not materialise acknowledgements from a losing concurrent reset", async () => {
+    const testEnv = env as unknown as CloudflareEnvironment;
+    await ensureDemoSpeakerData(testEnv);
+    const sessionId = "session-demo-speaker";
+    await testEnv.DB.prepare(
+      `UPDATE session_speakers
+          SET participation_status = 'declined', participation_revision = 201,
+              participation_confirmed_at = NULL,
+              participation_declined_at = unixepoch(),
+              participation_decline_reason = NULL
+        WHERE event_id = ? AND session_id = ? AND person_id = ?`,
+    )
+      .bind(speaker.eventId, sessionId, speaker.personId)
+      .run();
+    const resources = new ResourceService(testEnv);
+    const pageId = await resources.save(admin, {
+      title: "Concurrent reset acknowledgement",
+      slug: `concurrent-reset-ack-${crypto.randomUUID().slice(0, 8)}`,
+      category: "Preparation",
+      audienceScope: "all_speakers",
+      acknowledgementRequired: true,
+      document: {
+        type: "doc",
+        content: [
+          { type: "paragraph", content: [{ type: "text", text: "Read me." }] },
+        ],
+      },
+    });
+    const draft = (await resources.getAdminWorkspace(admin, pageId)).selected!;
+    await resources.publish(admin, pageId, draft.revision);
+    const taskId = `resource-ack:${pageId}:${speaker.personId}`;
+    await testEnv.DB.prepare("DELETE FROM task_instances WHERE id = ?")
+      .bind(taskId)
+      .run();
+
+    const racingEnv = withFirstBatchRace(testEnv, async () => {
+      await testEnv.DB.prepare(
+        `UPDATE sessions SET status = 'archived', revision = revision + 1
+          WHERE id = ? AND event_id = ?`,
+      )
+        .bind(sessionId, speaker.eventId)
+        .run();
+    });
+    await expect(
+      new SpeakerService(racingEnv).resetDeclinedParticipation(
+        admin,
+        speaker.personId,
+        {
+          sessionId,
+          participationRevision: 201,
+          resetConfirmation: "pending",
+        },
+      ),
+    ).rejects.toMatchObject({ status: 409 });
+    await expect(
+      testEnv.DB.prepare("SELECT id FROM task_instances WHERE id = ?")
+        .bind(taskId)
+        .first(),
+    ).resolves.toBeNull();
+    await expect(
+      testEnv.DB.prepare(
+        `SELECT participation_status AS status,
+                participation_revision AS revision
+           FROM session_speakers
+          WHERE event_id = ? AND session_id = ? AND person_id = ?`,
+      )
+        .bind(speaker.eventId, sessionId, speaker.personId)
+        .first(),
+    ).resolves.toEqual({ status: "declined", revision: 201 });
+    await testEnv.DB.prepare(
+      `UPDATE sessions SET status = 'scheduled', revision = revision + 1
+        WHERE id = ? AND event_id = ?`,
+    )
+      .bind(sessionId, speaker.eventId)
+      .run();
   });
 
   it("does not rematerialise confirmed-speaker tasks after eligibility was already established", async () => {

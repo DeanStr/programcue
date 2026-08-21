@@ -446,6 +446,67 @@ describe("versioned administration commands", () => {
     }
   });
 
+  it("returns and replays a participant submission awaiting administrator approval", async () => {
+    const suffix = crypto.randomUUID();
+    const template = await result(
+      await command(
+        "administrator",
+        "task-templates",
+        "new",
+        "save",
+        {
+          name: `API approval task ${suffix}`,
+          description: "Submit this requirement for administrator approval.",
+          targetType: "speaker",
+          taskType: "checklist",
+          impact: "high",
+          evidenceMode: "admin_approval",
+          dueAnchor: "none",
+          dueOffsetDays: null,
+          fixedDueDate: null,
+          autoAssignOnAcceptance: false,
+          dependencyIds: [],
+        },
+        `approval-template-${suffix}`,
+      ),
+    );
+    const assignment = await result(
+      await command(
+        "administrator",
+        "task-assignments",
+        "new",
+        "assign",
+        {
+          templateId: template.result.templateId,
+          targetId: "person-demo-speaker",
+        },
+        `approval-assignment-${suffix}`,
+      ),
+    );
+    const taskId = String(assignment.result.taskId);
+    const idempotencyKey = `approval-completion-${suffix}`;
+    const complete = () =>
+      participantTaskAction({
+        request: new Request(
+          `https://programcue.test/api/v1/events/${eventId}/participant/tasks/${taskId}/complete`,
+          {
+            method: "POST",
+            headers: headers("speaker", idempotencyKey),
+            body: JSON.stringify({ taskId, revision: 1, confirmed: true }),
+          },
+        ),
+        params: { eventId, taskId },
+        context: context(),
+      } as never);
+
+    await expect(result(await complete())).resolves.toMatchObject({
+      result: { taskId, status: "submitted", revision: 2, replayed: false },
+    });
+    await expect(result(await complete())).resolves.toMatchObject({
+      result: { taskId, status: "submitted", revision: 2, replayed: true },
+    });
+  });
+
   it("recovers the canonical session-review preset and rejects drifted preset claims", async () => {
     const suffix = crypto.randomUUID();
     const presetInput = {

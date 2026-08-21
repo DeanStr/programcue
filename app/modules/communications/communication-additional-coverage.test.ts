@@ -1,6 +1,6 @@
 import { env } from "cloudflare:test";
 import { afterEach, describe, expect, it, vi } from "vitest";
-
+import { ensureDemoSpeakerData } from "~/modules/speakers/demo.server";
 import type { Viewer } from "~/platform/auth/authorize.server";
 import { ensureDemoData } from "~/platform/demo/seed.server";
 import {
@@ -264,6 +264,228 @@ describe("Communications D1 vertical slice", () => {
       expect(addresses).toContain(`${activeId}@example.com`);
       expect(addresses).not.toContain(`${declinedId}@example.com`);
       expect(addresses).not.toContain(`${withdrawnId}@example.com`);
+    });
+
+    it.each([
+      {
+        audienceType: "incomplete_speakers" as const,
+        status: "not_started",
+        dueOffsetSeconds: null,
+      },
+      {
+        audienceType: "due_speakers" as const,
+        status: "not_started",
+        dueOffsetSeconds: 3_600,
+      },
+      {
+        audienceType: "overdue_speakers" as const,
+        status: "overdue",
+        dueOffsetSeconds: -3_600,
+      },
+    ])(
+      "excludes inaccessible resource tasks from $audienceType reminders",
+      async ({ audienceType, status, dueOffsetSeconds }) => {
+        const { testEnv } = await communicationEnvironment();
+        const token = crypto.randomUUID();
+        const personId = `resource-reminder-${token}`;
+        const pageId = `unavailable-reminder-resource-${token}`;
+        const templateId = `resource-ack:${pageId}`;
+        const taskId = `${templateId}:${personId}`;
+        const now = Math.floor(Date.now() / 1_000);
+        await testEnv.DB.batch([
+          testEnv.DB.prepare(
+            `INSERT INTO people (
+               id, email, display_name, email_verified, profile_status,
+               created_at, updated_at
+             ) VALUES (?, ?, 'Unavailable resource recipient', 1, 'draft',
+                       unixepoch(), unixepoch())`,
+          ).bind(personId, `${personId}@example.com`),
+          testEnv.DB.prepare(
+            `INSERT INTO event_speaker_workflows (
+               event_id, person_id, status, source, last_operation_id,
+               updated_by_person_id, created_at, updated_at
+             ) VALUES (?, ?, 'confirmed', 'manual', ?, ?,
+                       unixepoch(), unixepoch())`,
+          ).bind(
+            viewer.eventId,
+            personId,
+            `resource-reminder-workflow-${token}`,
+            viewer.personId,
+          ),
+          testEnv.DB.prepare(
+            `INSERT INTO task_templates (
+               id, event_id, name, target_type, task_type, impact,
+               evidence_mode, due_anchor, auto_assign_on_acceptance,
+               configuration_json, status, created_at, updated_at
+             ) VALUES (?, ?, 'Unavailable resource acknowledgement',
+                       'speaker', 'acknowledgement', 'medium', 'checkbox',
+                       'none', 0, ?, 'active', unixepoch(), unixepoch())`,
+          ).bind(
+            templateId,
+            viewer.eventId,
+            JSON.stringify({ resourcePageId: pageId }),
+          ),
+          testEnv.DB.prepare(
+            `INSERT INTO task_instances (
+               id, event_id, template_id, target_type, target_id,
+               owner_person_id, title, task_type, impact, evidence_mode,
+               configuration_json, status, readiness_state,
+               readiness_percent, revision, due_at, created_at, updated_at
+             ) VALUES (?, ?, ?, 'speaker', ?, ?, 'Read unavailable resource',
+                       'acknowledgement', 'medium', 'checkbox', ?, ?,
+                       ?, 0, 1, ?, unixepoch(), unixepoch())`,
+          ).bind(
+            taskId,
+            viewer.eventId,
+            templateId,
+            personId,
+            personId,
+            JSON.stringify({ resourcePageId: pageId }),
+            status,
+            status === "overdue" ? "overdue" : "on_track",
+            dueOffsetSeconds === null ? null : now + dueOffsetSeconds,
+          ),
+        ]);
+
+        const preview = await new RecipientQuery(testEnv).preview(viewer, {
+          audienceType,
+          manualRecipients: "",
+          category: "task_reminder",
+          kind: "transactional",
+        });
+
+        expect(
+          preview.deliverable.some(
+            (recipient) => recipient.personId === personId,
+          ),
+        ).toBe(false);
+      },
+    );
+
+    it("keeps event-wide resource reminders after a submitter declines their only session", async () => {
+      const { testEnv } = await communicationEnvironment();
+      await ensureDemoSpeakerData(testEnv);
+      const token = crypto.randomUUID();
+      const personId = `event-wide-reminder-person-${token}`;
+      const pageId = `event-wide-reminder-resource-${token}`;
+      const versionId = `event-wide-reminder-version-${token}`;
+      const templateId = `resource-ack:${pageId}`;
+      const taskId = `${templateId}:${personId}`;
+      await testEnv.DB.batch([
+        testEnv.DB.prepare(
+          `INSERT INTO people (
+             id, email, display_name, email_verified, profile_status,
+             created_at, updated_at
+           ) VALUES (?, ?, 'Event-wide reminder participant', 1, 'draft',
+                     unixepoch(), unixepoch())`,
+        ).bind(personId, `${personId}@example.com`),
+        testEnv.DB.prepare(
+          `INSERT INTO memberships (
+             id, organisation_id, event_id, person_id, role, accepted_at,
+             created_at
+           ) VALUES (?, ?, ?, ?, 'submitter', unixepoch(), unixepoch())`,
+        ).bind(
+          `event-wide-reminder-membership-${token}`,
+          viewer.organisationId,
+          viewer.eventId,
+          personId,
+        ),
+        testEnv.DB.prepare(
+          `INSERT INTO event_speaker_workflows (
+             event_id, person_id, status, source, last_operation_id,
+             updated_by_person_id, created_at, updated_at
+           ) VALUES (?, ?, 'confirmed', 'manual', ?, ?, unixepoch(), unixepoch())
+           ON CONFLICT(event_id, person_id) DO UPDATE SET
+             status = 'confirmed', source = 'manual',
+             last_operation_id = excluded.last_operation_id,
+             updated_by_person_id = excluded.updated_by_person_id,
+             revision = event_speaker_workflows.revision + 1,
+             updated_at = unixepoch()`,
+        ).bind(
+          viewer.eventId,
+          personId,
+          `event-wide-reminder-workflow-${token}`,
+          viewer.personId,
+        ),
+        testEnv.DB.prepare(
+          `INSERT INTO session_speakers (
+             session_id, event_id, person_id, position, role_label,
+             visibility, participation_status, participation_revision,
+             participation_declined_at, participation_decline_reason
+           )
+           SELECT session.id, session.event_id, ?,
+                  COALESCE((
+                    SELECT MAX(existing.position) + 1
+                      FROM session_speakers existing
+                     WHERE existing.session_id = session.id
+                  ), 0),
+                  'Speaker', 'public', 'declined', 2, unixepoch(),
+                  'Unavailable'
+             FROM sessions session
+            WHERE session.event_id = ?
+            ORDER BY session.id
+            LIMIT 1`,
+        ).bind(personId, viewer.eventId),
+        testEnv.DB.prepare(
+          `INSERT INTO resource_pages (
+             id, event_id, title, slug, status, audience_scope,
+             acknowledgement_required, revision, created_by_person_id,
+             created_at, updated_at
+           ) VALUES (?, ?, 'Event-wide reminder resource', ?, 'published',
+                     'all_speakers', 1, 1, ?, unixepoch(), unixepoch())`,
+        ).bind(pageId, viewer.eventId, pageId, viewer.personId),
+        testEnv.DB.prepare(
+          `INSERT INTO resource_page_versions (
+             id, event_id, resource_page_id, version_number, title, slug,
+             audience_scope, acknowledgement_required, document_json,
+             rendered_html, status, created_by_person_id, created_at,
+             published_at
+           ) VALUES (?, ?, ?, 1, 'Event-wide reminder resource', ?,
+                     'all_speakers', 1, '{"type":"doc"}', '', 'published',
+                     ?, unixepoch(), unixepoch())`,
+        ).bind(versionId, viewer.eventId, pageId, pageId, viewer.personId),
+        testEnv.DB.prepare(
+          `INSERT INTO task_templates (
+             id, event_id, name, target_type, task_type, impact,
+             evidence_mode, due_anchor, auto_assign_on_acceptance,
+             configuration_json, status, created_at, updated_at
+           ) VALUES (?, ?, 'Event-wide resource acknowledgement', 'speaker',
+                     'acknowledgement', 'medium', 'checkbox', 'none', 0, ?,
+                     'active', unixepoch(), unixepoch())`,
+        ).bind(
+          templateId,
+          viewer.eventId,
+          JSON.stringify({ resourcePageId: pageId }),
+        ),
+        testEnv.DB.prepare(
+          `INSERT INTO task_instances (
+             id, event_id, template_id, target_type, target_id,
+             owner_person_id, title, task_type, impact, evidence_mode,
+             configuration_json, status, readiness_state,
+             readiness_percent, revision, created_at, updated_at
+           ) VALUES (?, ?, ?, 'speaker', ?, ?, 'Read event-wide resource',
+                     'acknowledgement', 'medium', 'checkbox', ?, 'not_started',
+                     'on_track', 0, 1, unixepoch(), unixepoch())`,
+        ).bind(
+          taskId,
+          viewer.eventId,
+          templateId,
+          personId,
+          personId,
+          JSON.stringify({ resourcePageId: pageId }),
+        ),
+      ]);
+
+      const preview = await new RecipientQuery(testEnv).preview(viewer, {
+        audienceType: "incomplete_speakers",
+        manualRecipients: "",
+        category: "task_reminder",
+        kind: "transactional",
+      });
+
+      expect(preview.deliverable).toContainEqual(
+        expect.objectContaining({ personId, sourceId: taskId }),
+      );
     });
   });
 

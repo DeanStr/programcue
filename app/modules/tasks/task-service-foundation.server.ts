@@ -38,9 +38,11 @@ export class TaskEvidenceAttachmentConflictError extends TaskStateError {
 
 type ParticipantTaskSqlAlias =
   | "ti"
+  | "t"
   | "task"
   | "task_instances"
-  | "speaker_task";
+  | "speaker_task"
+  | "prerequisite";
 
 export function participantResourceTaskAccessSql(
   alias: ParticipantTaskSqlAlias,
@@ -62,7 +64,6 @@ export function participantResourceTaskAccessSql(
       SELECT 1 FROM session_speakers resource_relationship
        WHERE resource_relationship.event_id = rp.event_id
          AND resource_relationship.person_id = ${personIdSql}
-         AND resource_relationship.participation_status IN ('pending','confirmed')
     )
   )`;
   return `(
@@ -149,6 +150,19 @@ export function participantTaskAccessSql(
   return requireCurrentResourceAudience
     ? `(${currentTaskAccessSql} AND ${participantResourceTaskAccessSql(alias)})`
     : currentTaskAccessSql;
+}
+
+export function participantPrerequisitesAccessibleSql(
+  taskAlias: ParticipantTaskSqlAlias,
+) {
+  return `NOT EXISTS (
+    SELECT 1 FROM task_instance_dependencies participant_dependency
+    JOIN task_instances prerequisite
+      ON prerequisite.id = participant_dependency.depends_on_task_id
+     AND prerequisite.event_id = ${taskAlias}.event_id
+   WHERE participant_dependency.task_id = ${taskAlias}.id
+     AND NOT (${participantTaskAccessSql("prerequisite", true)})
+  )`;
 }
 
 export function taskTemplateIdForIntent(eventId: string, intentId: string) {
