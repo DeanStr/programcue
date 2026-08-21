@@ -818,13 +818,7 @@ export function AuthenticatedApplicationWorkspace({
         <section className="card pad">
           {selected ? (
             <DraftEditor
-              key={`${selected.id}-${
-                actionData?.committed &&
-                actionData.submissionId === selected.id &&
-                actionData.revision !== undefined
-                  ? actionData.revision
-                  : selected.revision
-              }`}
+              key={selected.id}
               draft={
                 actionData?.committed &&
                 actionData.submissionId === selected.id &&

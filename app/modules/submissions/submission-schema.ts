@@ -866,18 +866,15 @@ export function incompleteRequiredVisibleFields(
   });
 }
 
+/** First visible section for a new or reopened application. Failed
+ *  submissions pass errors and land on the first invalid step. */
 export function deriveInitialApplicantFormStepId({
   schema,
   answers,
-  uploads = {},
   errors,
 }: {
   schema: StoredSubmissionFormSchema;
   answers: Record<string, string | string[]>;
-  speakers: Array<{ name: string; email: string }>;
-  minSpeakers: number;
-  maxSpeakers: number | null;
-  uploads?: Record<string, UploadReference>;
   errors?: Record<string, string[]>;
 }): string {
   const steps = formApplicantSteps(schema, answers);
@@ -888,24 +885,7 @@ export function deriveInitialApplicantFormStepId({
     return resolveApplicantFormStepId(schema, answers, errorStepId);
   }
 
-  const incomplete = incompleteRequiredVisibleFields(
-    schema,
-    answers,
-    uploads,
-  )[0];
-  if (
-    incomplete &&
-    "sectionId" in incomplete &&
-    typeof incomplete.sectionId === "string"
-  ) {
-    return resolveApplicantFormStepId(schema, answers, incomplete.sectionId);
-  }
-  const fallbackStepId = steps[0]?.id;
-  if (incomplete && fallbackStepId) {
-    return resolveApplicantFormStepId(schema, answers, fallbackStepId);
-  }
-
-  return APPLICANT_SPEAKERS_STEP_ID;
+  return steps[0]?.id ?? "";
 }
 
 export function visibleAnswers(

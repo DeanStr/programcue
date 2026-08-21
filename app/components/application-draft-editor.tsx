@@ -186,17 +186,6 @@ export function DraftEditor({
   const initialStepId = deriveInitialApplicantFormStepId({
     schema,
     answers: draft.answers,
-    speakers: draft.speakers,
-    minSpeakers: 1,
-    maxSpeakers,
-    uploads: currentUpload
-      ? {
-          [currentUpload.fieldId]: {
-            assetId: currentUpload.assetId,
-            versionId: currentUpload.versionId,
-          },
-        }
-      : draft.uploads,
     errors,
   });
   const [currentStepId, setCurrentStepId] = useState(initialStepId);
@@ -261,10 +250,6 @@ export function DraftEditor({
       deriveInitialApplicantFormStepId({
         schema,
         answers,
-        speakers,
-        minSpeakers: 1,
-        maxSpeakers,
-        uploads,
         errors,
       }),
     );

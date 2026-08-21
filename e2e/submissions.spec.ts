@@ -976,6 +976,10 @@ test.describe
         .fill("A practical takeaway for programme teams.");
       await page.getByLabel("Event Operations").check();
       await page.getByLabel("Format").selectOption("Presentation");
+      await page.getByRole("button", { name: "Save draft" }).click();
+      await expect(page.getByText("Your draft has been saved")).toBeVisible();
+      await expect(sessionTitle).toBeVisible();
+      await expect(page.getByText(/Step \d+ of \d+: Speakers/)).toHaveCount(0);
       await page.getByRole("button", { name: "Continue" }).click();
 
       if (await page.getByLabel("Key takeaway").count()) {

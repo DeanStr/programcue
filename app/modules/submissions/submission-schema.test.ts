@@ -530,9 +530,6 @@ describe("submission form rules", () => {
       deriveInitialApplicantFormStepId({
         schema,
         answers: {},
-        speakers: [{ name: "", email: "" }],
-        minSpeakers: 1,
-        maxSpeakers: null,
       }),
     ).toBe("proposal");
     expect(
@@ -544,11 +541,8 @@ describe("submission form rules", () => {
           category: ["Event Operations"],
           format: "Presentation",
         },
-        speakers: [{ name: "Priya Shah", email: "priya@example.com" }],
-        minSpeakers: 1,
-        maxSpeakers: null,
       }),
-    ).toBe(APPLICANT_SPEAKERS_STEP_ID);
+    ).toBe("proposal");
     expect(
       deriveInitialApplicantFormStepId({
         schema,
@@ -558,9 +552,6 @@ describe("submission form rules", () => {
           category: ["Event Operations"],
           format: "Workshop",
         },
-        speakers: [{ name: "Priya Shah", email: "priya@example.com" }],
-        minSpeakers: 1,
-        maxSpeakers: null,
         errors: { audience_level: ["Audience level is required"] },
       }),
     ).toBe("audience");
@@ -573,9 +564,6 @@ describe("submission form rules", () => {
           category: ["Event Operations"],
           format: "Workshop",
         },
-        speakers: [{ name: "", email: "" }],
-        minSpeakers: 1,
-        maxSpeakers: null,
         errors: {
           speakers: ["Every speaker needs a name and email address"],
           audience_level: ["Audience level is required"],
@@ -624,11 +612,58 @@ describe("submission form rules", () => {
           category: ["Event Operations"],
           format: "Presentation",
         },
-        speakers: [{ name: "Priya Shah", email: "priya@example.com" }],
-        minSpeakers: 1,
-        maxSpeakers: null,
         errors: { speaker_notes: ["Speaker notes is required"] },
       }),
     ).toBe("speakers");
+
+    const optionalFirst = formSchemaSchema.parse({
+      ...structuredClone(DEFAULT_FORM_SCHEMA),
+      layout: "steps",
+      sections: [
+        { id: "intro", title: "Welcome", description: "" },
+        ...DEFAULT_FORM_SCHEMA.sections,
+      ],
+      fields: [
+        {
+          sectionId: "intro",
+          id: "notes",
+          label: "Notes",
+          type: "short_text",
+          required: false,
+          help: "",
+          example: "",
+          options: [],
+          reviewVisibility: "reviewers",
+          blindReviewVisibility: "content",
+          condition: null,
+        },
+        ...DEFAULT_FORM_SCHEMA.fields,
+      ],
+    });
+    expect(
+      deriveInitialApplicantFormStepId({
+        schema: optionalFirst,
+        answers: {},
+      }),
+    ).toBe("intro");
+
+    const allOptional = formSchemaSchema.parse({
+      ...structuredClone(DEFAULT_FORM_SCHEMA),
+      layout: "steps",
+      fields: DEFAULT_FORM_SCHEMA.fields.map((field) => ({
+        ...field,
+        required: false,
+      })),
+    });
+    expect(formApplicantSteps(allOptional, {}).map((step) => step.id)).toEqual([
+      "proposal",
+      APPLICANT_SPEAKERS_STEP_ID,
+    ]);
+    expect(
+      deriveInitialApplicantFormStepId({
+        schema: allOptional,
+        answers: {},
+      }),
+    ).toBe("proposal");
   });
 });
