@@ -114,6 +114,40 @@ def validate_schedule_review_links_forward_migration(root: Path) -> None:
     )
     try:
         connection.execute(
+            """
+            INSERT INTO schedule_review_links (
+              id, organisation_id, event_id, schedule_version_id, schedule_revision,
+              projection_json, token_hash, expires_at, created_by_person_id, created_at,
+              purpose, revoked_at
+            ) VALUES (
+              'review-link-null-reason', 'review-org', 'review-event', 'review-draft', 3,
+              '{"schemaVersion":1}',
+              'bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb',
+              unixepoch() + 86400, 'review-admin', unixepoch(), 'Programme committee',
+              unixepoch()
+            )
+            """
+        )
+    except sqlite3.IntegrityError:
+        pass
+    else:
+        raise SystemExit(
+            "Migration 0052 accepted a revoked review link without a revocation reason"
+        )
+
+    try:
+        connection.execute(
+            "UPDATE schedule_review_links SET revoked_at = unixepoch() WHERE id = 'review-link'"
+        )
+    except sqlite3.IntegrityError:
+        pass
+    else:
+        raise SystemExit(
+            "Migration 0052 allowed revoke without a revocation reason"
+        )
+
+    try:
+        connection.execute(
             "UPDATE schedule_review_links SET projection_json = '{}' WHERE id = 'review-link'"
         )
     except sqlite3.IntegrityError:

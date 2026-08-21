@@ -636,7 +636,7 @@ export const scheduleReviewLinks = sqliteTable(
     ),
     check(
       "schedule_review_links_revocation_check",
-      sql`(${table.revokedAt} IS NULL AND ${table.revokedByPersonId} IS NULL AND ${table.revocationReason} IS NULL) OR (${table.revokedAt} IS NOT NULL AND ${table.revocationReason} IN ('manual', 'published') AND (${table.revocationReason} <> 'manual' OR (${table.revokedByPersonId} IS NOT NULL AND trim(${table.revokedByPersonId}) <> '')))`,
+      sql`(${table.revokedAt} IS NULL AND ${table.revokedByPersonId} IS NULL AND ${table.revocationReason} IS NULL) OR (${table.revokedAt} IS NOT NULL AND ${table.revocationReason} IS NOT NULL AND ${table.revocationReason} IN ('manual', 'published') AND (${table.revocationReason} <> 'manual' OR (${table.revokedByPersonId} IS NOT NULL AND trim(${table.revokedByPersonId}) <> '')))`,
     ),
   ],
 );

@@ -40,6 +40,7 @@ CREATE TABLE schedule_review_links (
       AND revocation_reason IS NULL)
     OR
     (revoked_at IS NOT NULL
+      AND revocation_reason IS NOT NULL
       AND revocation_reason IN ('manual', 'published')
       AND (
         revocation_reason <> 'manual'
@@ -68,6 +69,7 @@ BEFORE UPDATE OF revoked_at, revoked_by_person_id, revocation_reason
 ON schedule_review_links
 WHEN OLD.revoked_at IS NOT NULL
   OR NEW.revoked_at IS NULL
+  OR NEW.revocation_reason IS NULL
   OR NEW.revocation_reason NOT IN ('manual', 'published')
   OR (
     NEW.revocation_reason = 'manual'
