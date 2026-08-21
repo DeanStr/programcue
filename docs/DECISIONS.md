@@ -697,8 +697,11 @@ execution claim remains live. The claim is renewed and revalidated immediately
 before each domain or communication mutation and is required again when the
 execution result and audit settle atomically. A local demo reset supersedes
 every still-pending proposal before replacing event data, regardless of the AI
-provider that created it. Pre-release null-token operation rows are removed by
-fixture reseeding rather than supported through a runtime compatibility path.
+provider that created it. Pre-release null-token operation rows are reconciled
+by the scheduler after the same five-minute lease horizon, with an explicit
+interrupted failure and matching audit evidence. Reset ignores only a
+well-formed, explicitly expired lease; missing claim fields remain blocking
+until that reconciliation succeeds.
 
 Workspace navigation uses immediate document scrolling by default. Smooth
 scrolling is opt-in only for a bounded interaction that explicitly benefits

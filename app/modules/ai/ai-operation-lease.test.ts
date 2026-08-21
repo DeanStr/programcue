@@ -97,6 +97,108 @@ describe("AI operation leases", () => {
     }
   });
 
+  it("reconciles missing ownership fields only after the lease horizon", async () => {
+    const abandoned = [
+      { id: crypto.randomUUID(), claimToken: null },
+      { id: crypto.randomUUID(), claimToken: crypto.randomUUID() },
+    ];
+    const recent = [
+      { id: crypto.randomUUID(), claimToken: null },
+      { id: crypto.randomUUID(), claimToken: crypto.randomUUID() },
+    ];
+    for (const operation of [...abandoned, ...recent]) {
+      const ageSeconds = abandoned.includes(operation) ? 301 : 60;
+      await env.DB.prepare(
+        `INSERT INTO operation_jobs (
+           id, organisation_id, event_id, requested_by_person_id, type,
+           idempotency_key, correlation_id, status, payload_json,
+           progress_total, progress_completed, progress_failed, attempt_count,
+           cancellable, claim_token, claim_expires_at, started_at, created_at,
+           updated_at
+         ) VALUES (?, ?, ?, ?, 'ai.assistant.run', ?, ?, 'running', '{}',
+                   1, 0, 0, 1, 0, ?, NULL, unixepoch() - ?,
+                   unixepoch() - ?, unixepoch() - ?)`,
+      )
+        .bind(
+          operation.id,
+          organisationId,
+          eventId,
+          personId,
+          `test-ai-operation:${operation.id}`,
+          operation.id,
+          operation.claimToken,
+          ageSeconds,
+          ageSeconds,
+          ageSeconds,
+        )
+        .run();
+    }
+
+    await expect(
+      reconcileInterruptedAiOperations(env as unknown as CloudflareEnvironment),
+    ).resolves.toBe(2);
+
+    for (const operation of abandoned) {
+      expect(
+        await env.DB.prepare(
+          `SELECT status, claim_token AS claimToken,
+                  claim_expires_at AS claimExpiresAt
+             FROM operation_jobs WHERE id = ?`,
+        )
+          .bind(operation.id)
+          .first(),
+      ).toEqual({
+        status: "failed",
+        claimToken: null,
+        claimExpiresAt: null,
+      });
+      expect(
+        await env.DB.prepare(
+          `SELECT COUNT(*) AS count FROM audit_events
+            WHERE correlation_id = ? AND action = 'assistant.interrupted'`,
+        )
+          .bind(operation.id)
+          .first(),
+      ).toEqual({ count: 1 });
+    }
+    for (const operation of recent) {
+      expect(
+        await env.DB.prepare(
+          `SELECT status, claim_token AS claimToken,
+                  claim_expires_at AS claimExpiresAt
+             FROM operation_jobs WHERE id = ?`,
+        )
+          .bind(operation.id)
+          .first(),
+      ).toEqual({
+        status: "running",
+        claimToken: operation.claimToken,
+        claimExpiresAt: null,
+      });
+      expect(
+        await env.DB.prepare(
+          `SELECT COUNT(*) AS count FROM audit_events
+            WHERE correlation_id = ? AND action = 'assistant.interrupted'`,
+        )
+          .bind(operation.id)
+          .first(),
+      ).toEqual({ count: 0 });
+    }
+
+    for (const operation of recent) {
+      await env.DB.prepare(
+        `UPDATE operation_jobs
+            SET created_at = unixepoch() - 301
+          WHERE id = ?`,
+      )
+        .bind(operation.id)
+        .run();
+    }
+    await expect(
+      reconcileInterruptedAiOperations(env as unknown as CloudflareEnvironment),
+    ).resolves.toBe(2);
+  });
+
   it("leaves an expired claim untouched when interruption evidence cannot commit", async () => {
     const operationId = crypto.randomUUID();
     await env.DB.prepare(

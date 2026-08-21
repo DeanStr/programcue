@@ -666,8 +666,11 @@ than counted as a Command Centre operation failure, while provider failures
 retain their bounded request identifier in both operation and audit diagnostics.
 Concurrent reminder-version drift is also reported as a cancelled regenerate
 conflict rather than an internal operation failure. The minute scheduler marks
-expired synchronous assistant claims as interrupted failures with matching
-audit evidence and does not rerun provider work. Focused failure-injection
+expired synchronous assistant claims, plus running claims with missing
+ownership fields after the same five-minute horizon, as interrupted failures
+with matching audit evidence and does not rerun provider work. Reset ignores
+only well-formed expired claims; malformed claims remain blocking until
+reconciliation succeeds. Focused failure-injection
 coverage verifies that rejected completion or supersession evidence rolls the
 associated proposal mutation back, and lease coverage verifies bounded,
 idempotent interruption recovery. Approved proposal execution renews and

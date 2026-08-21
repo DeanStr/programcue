@@ -784,6 +784,90 @@ describe("production evaluation fixture", () => {
     }
   });
 
+  it("blocks malformed synchronous AI ownership before retiring an extra event", async () => {
+    const environment = productionEnvironment();
+    await resetProductionEvaluationFixture(
+      environment,
+      "Future of Events 2027",
+      verifiedDomains,
+    );
+    const eventId = "evaluation-malformed-ai-operation-event";
+    const operationId = "evaluation-malformed-ai-operation";
+    await environment.DB.batch([
+      environment.DB.prepare(
+        `INSERT INTO events (
+           id, organisation_id, name, slug, timezone, starts_at, ends_at,
+           file_policy_json, activation_status
+         ) SELECT ?, organisation_id, 'Malformed AI operation event', ?,
+                  timezone, starts_at + 31536000, ends_at + 31536000,
+                  file_policy_json, 'active'
+             FROM events WHERE id = ?`,
+      ).bind(eventId, eventId, DEMO_EVENT_ID),
+      environment.DB.prepare(
+        `INSERT INTO operation_jobs (
+           id, organisation_id, event_id, requested_by_person_id, type,
+           idempotency_key, correlation_id, status, payload_json,
+           progress_total, progress_completed, progress_failed, attempt_count,
+           cancellable, claim_token, claim_expires_at, started_at, created_at,
+           updated_at
+         ) VALUES (?, ?, ?, ?, 'ai.context.run', ?, ?, 'running', '{}',
+                   1, 0, 0, 1, 0, ?, NULL, unixepoch(), unixepoch(), unixepoch())`,
+      ).bind(
+        operationId,
+        DEMO_ORGANISATION_ID,
+        eventId,
+        SBEK_FIXTURE_PEOPLE.organizer.personId,
+        operationId,
+        operationId,
+        crypto.randomUUID(),
+      ),
+    ]);
+
+    await expect(
+      resetProductionEvaluationFixture(
+        environment,
+        "Future of Events 2027",
+        verifiedDomains,
+      ),
+    ).rejects.toThrow(/extra events have active work/iu);
+    await expect(
+      environment.DB.prepare(
+        "SELECT activation_status AS status FROM events WHERE id = ?",
+      )
+        .bind(eventId)
+        .first(),
+    ).resolves.toEqual({ status: "active" });
+    await expect(
+      environment.DB.prepare("SELECT status FROM operation_jobs WHERE id = ?")
+        .bind(operationId)
+        .first(),
+    ).resolves.toEqual({ status: "running" });
+
+    await environment.DB.prepare(
+      `UPDATE operation_jobs
+          SET claim_expires_at = unixepoch() - 1
+        WHERE id = ?`,
+    )
+      .bind(operationId)
+      .run();
+    await expect(
+      resetProductionEvaluationFixture(
+        environment,
+        "Future of Events 2027",
+        verifiedDomains,
+      ),
+    ).resolves.toMatchObject({
+      evidence: { fixtureOrganisationAdministrators: 1 },
+    });
+    await expect(
+      environment.DB.prepare(
+        "SELECT activation_status AS status FROM events WHERE id = ?",
+      )
+        .bind(eventId)
+        .first(),
+    ).resolves.toEqual({ status: "discarded" });
+  });
+
   it("rejects an overlapping live reset and exposes no generation until its owner completes", async () => {
     const environment = productionEnvironment();
     await resetProductionEvaluationFixture(

@@ -223,7 +223,8 @@ export async function readDemoActiveWork(
               status <> 'running'
               OR type NOT IN ('ai.assistant.run','ai.context.run','ai.proposal.revision')
               OR claim_token IS NULL
-              OR (claim_token IS NOT NULL AND claim_expires_at > unixepoch())
+              OR claim_expires_at IS NULL
+              OR claim_expires_at > unixepoch()
             ))
         +
         (SELECT COUNT(*) FROM assistant_proposal_executions

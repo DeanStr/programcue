@@ -1313,7 +1313,7 @@ describe("complete evaluator demo reset", () => {
   });
 
   describe("destructive-operation guards", () => {
-    it("blocks on live synchronous AI work but ignores an abandoned expired claim", async () => {
+    it("blocks on live or malformed synchronous AI work but ignores a well-formed expired claim", async () => {
       const testEnvironment = demoEnvironment();
       await ensureDemoData(testEnvironment);
       const operationId = crypto.randomUUID();
@@ -1354,6 +1354,24 @@ describe("complete evaluator demo reset", () => {
           WHERE id = ?`,
       )
         .bind(operationId)
+        .run();
+      await expect(
+        resetDemoEvent(
+          testEnvironment,
+          demoAdministrator.personId,
+          DEMO_RESET_CONFIRMATION,
+        ),
+      ).rejects.toMatchObject({
+        name: DemoResetBusyError.name,
+        activeWork: { operations: 1 },
+      });
+
+      await testEnvironment.DB.prepare(
+        `UPDATE operation_jobs
+            SET claim_token = ?, claim_expires_at = NULL
+          WHERE id = ?`,
+      )
+        .bind(crypto.randomUUID(), operationId)
         .run();
       await expect(
         resetDemoEvent(

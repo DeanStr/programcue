@@ -302,9 +302,17 @@ export async function reconcileInterruptedAiOperations(
       'ai.assistant.run', 'ai.context.run', 'ai.proposal.revision'
     )
     AND operation.status = 'running'
-    AND operation.claim_token IS NOT NULL
-    AND operation.claim_expires_at IS NOT NULL
-    AND operation.claim_expires_at <= unixepoch()`;
+    AND (
+      (
+        operation.claim_token IS NOT NULL
+        AND operation.claim_expires_at IS NOT NULL
+        AND operation.claim_expires_at <= unixepoch()
+      )
+      OR (
+        (operation.claim_token IS NULL OR operation.claim_expires_at IS NULL)
+        AND operation.created_at <= unixepoch() - ${AI_OPERATION_LEASE_SECONDS}
+      )
+    )`;
   let results: D1Result[];
   try {
     results = await env.DB.batch([
