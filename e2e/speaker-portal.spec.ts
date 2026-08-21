@@ -368,6 +368,27 @@ test.describe("optional session-details review", () => {
     await expect(task.getByRole("status")).toContainText(
       "Ask the event team to reopen this task",
     );
+
+    await page.context().addCookies([
+      {
+        name: "program_cue_demo_identity",
+        value: "administrator",
+        domain: "127.0.0.1",
+        path: "/",
+        httpOnly: true,
+        sameSite: "Lax",
+      },
+    ]);
+    await page.goto(`/admin/tasks?task=${encodeURIComponent(taskId)}`);
+    await page.locator("body[data-hydrated='true']").waitFor();
+    const assignedTask = page.getByRole("row").filter({
+      has: page.getByText("Review session details", { exact: true }),
+    });
+    await assignedTask.getByRole("button", { name: "Reopen" }).click();
+    await expect(
+      page.getByRole("status").filter({ hasText: "Task reopened." }),
+    ).toBeVisible();
+    await expect(assignedTask).toContainText("Not started");
   });
 });
 

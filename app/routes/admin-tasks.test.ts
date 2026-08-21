@@ -83,6 +83,33 @@ async function load(search = "") {
   } as never);
 }
 
+async function createChecklistTask(
+  environment: CloudflareEnvironment,
+  name: string,
+) {
+  const service = new TaskService(environment);
+  const templateId = await service.createTemplate(administrator, {
+    name,
+    description: "Confirm the test requirement.",
+    targetType: "speaker",
+    taskType: "checklist",
+    impact: "high",
+    evidenceMode: "checkbox",
+    dueAnchor: "none",
+    dueOffsetDays: null,
+    fixedDueDate: null,
+    autoAssignOnAcceptance: false,
+    dependencyIds: [],
+  });
+  return (
+    await service.assignTemplate(
+      administrator,
+      templateId,
+      "person-demo-speaker",
+    )
+  ).taskId;
+}
+
 beforeEach(async () => {
   await ensureDemoData(workerEnv);
 });
@@ -352,5 +379,95 @@ describe("administrator task filters", () => {
 
     expect(result.data).toMatchObject({ ok: false });
     expect(result.init?.status).toBe(422);
+  });
+});
+
+describe("administrator task actions", () => {
+  it("reopens a completed task when the form omits the optional reason", async () => {
+    const queued: unknown[] = [];
+    const testEnv = routeEnvironment(queued);
+    const taskId = await createChecklistTask(
+      testEnv,
+      `Route reopen without reason ${crypto.randomUUID()}`,
+    );
+    await testEnv.DB.prepare(
+      `UPDATE task_instances
+          SET status = 'completed', readiness_state = 'on_track',
+              readiness_percent = 100, completed_at = unixepoch(),
+              completed_by_person_id = ?
+        WHERE id = ? AND event_id = ?`,
+    )
+      .bind(administrator.personId, taskId, administrator.eventId)
+      .run();
+
+    const result = await action({
+      request: adminPost({
+        intent: "reopen",
+        taskId,
+        revision: "1",
+      }),
+      params: {},
+      context: context(testEnv),
+    } as never);
+
+    if (result instanceof Response) {
+      throw new Error("Task reopen returned a raw response.");
+    }
+    expect(result.data).toMatchObject({
+      ok: true,
+      message: "Task reopened.",
+    });
+    await expect(
+      testEnv.DB.prepare(
+        `SELECT status, readiness_percent AS readinessPercent, revision,
+                completed_at AS completedAt,
+                completed_by_person_id AS completedByPersonId
+           FROM task_instances WHERE id = ? AND event_id = ?`,
+      )
+        .bind(taskId, administrator.eventId)
+        .first(),
+    ).resolves.toEqual({
+      status: "not_started",
+      readinessPercent: 0,
+      revision: 2,
+      completedAt: null,
+      completedByPersonId: null,
+    });
+  });
+
+  it("still rejects a waiver when the form omits its required reason", async () => {
+    const queued: unknown[] = [];
+    const testEnv = routeEnvironment(queued);
+    const taskId = await createChecklistTask(
+      testEnv,
+      `Route waiver without reason ${crypto.randomUUID()}`,
+    );
+
+    const result = await action({
+      request: adminPost({
+        intent: "waive",
+        taskId,
+        revision: "1",
+      }),
+      params: {},
+      context: context(testEnv),
+    } as never);
+
+    if (result instanceof Response) {
+      throw new Error("Task waiver returned a raw response.");
+    }
+    expect(result.data).toMatchObject({
+      ok: false,
+      message: "Explain why this requirement is being waived.",
+    });
+    expect(result.init?.status).toBe(409);
+    await expect(
+      testEnv.DB.prepare(
+        `SELECT status, revision FROM task_instances
+          WHERE id = ? AND event_id = ?`,
+      )
+        .bind(taskId, administrator.eventId)
+        .first(),
+    ).resolves.toEqual({ status: "not_started", revision: 1 });
   });
 });

@@ -349,11 +349,12 @@ export async function action({ request, context }: Route.ActionArgs) {
     }
     if (["approve", "complete", "waive", "reopen"].includes(intent)) {
       const taskId = String(form.get("taskId") ?? "");
+      const reason = form.get("reason") ?? undefined;
       const result = await service.administerTask(viewer, {
         taskId,
         revision: form.get("revision"),
         intent,
-        reason: form.get("reason"),
+        reason,
       });
       const realtimeFailure = await recordRouteChange(env, viewer, {
         entityType: "task_instance",
