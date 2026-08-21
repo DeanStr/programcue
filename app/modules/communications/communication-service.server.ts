@@ -59,6 +59,12 @@ export class CommunicationService {
     return this.delivery.preview(...args);
   }
 
+  previewCandidate(
+    ...args: Parameters<CommunicationDeliveryService["previewCandidate"]>
+  ) {
+    return this.delivery.previewCandidate(...args);
+  }
+
   confirm(...args: Parameters<CommunicationDeliveryService["confirm"]>) {
     return this.delivery.confirm(...args);
   }

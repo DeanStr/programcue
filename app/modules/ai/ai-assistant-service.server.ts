@@ -15,12 +15,14 @@ import {
   parseJson,
 } from "./ai-assistant-core-service.server";
 import { AiPermissionError, AiProposalStateError } from "./ai-assistant-errors";
-import { assertReminderDeliveryReady } from "./ai-proposal-executor-foundation.server";
+import {
+  assertReminderDeliveryReady,
+  stageReminderSendProposal,
+} from "./ai-proposal-executor-foundation.server";
 import type { AiProposalApprovalResult } from "./ai-proposal-lifecycle.server";
 import { AiProviderSettingsService } from "./ai-provider.server";
 import {
   loadReminderCohort,
-  prepareReminderSendProposal,
   reminderCohortSchema,
   supportedReminderMergeVariables,
 } from "./ai-tools.server";
@@ -461,7 +463,7 @@ Return: (1) a concise neutral summary, (2) a criterion-by-criterion evidence map
             `${result.attribution.provider} returned no structured reminder draft for preview.`,
           );
         }
-        const prepared = await prepareReminderSendProposal(this.env, viewer, {
+        const prepared = await stageReminderSendProposal(this.env, viewer, {
           runId: operationId,
           model: result.attribution.model,
           arguments: {
@@ -472,7 +474,10 @@ Return: (1) a concise neutral summary, (2) a criterion-by-criterion evidence map
             body: result.draft.body,
           },
         });
-        return { result, proposal: prepared.preview };
+        return {
+          value: { result, proposal: prepared.preview },
+          mutation: prepared.mutation,
+        };
       },
     );
   }

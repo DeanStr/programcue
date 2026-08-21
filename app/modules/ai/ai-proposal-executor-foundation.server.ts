@@ -13,6 +13,11 @@ import {
 import { apiTaskCreateSchema } from "~/platform/api/api-task-service.server";
 import type { Viewer } from "~/platform/auth/authorize.server";
 import {
+  atomicBatchGuardStatement,
+  isAtomicBatchGuardError,
+} from "~/platform/database/atomic-batch-guard.server";
+import type { AiOperationAtomicMutation } from "./ai-operation-lease.server";
+import {
   adminRoles,
   assistantProposalMetadataSchema,
   reminderSendProposalArgumentsSchema,
@@ -246,7 +251,14 @@ export function assertReminderDeliveryReady(preview: CommunicationPreview) {
   }
 }
 
-export async function prepareReminderSendProposal(
+export type StagedReminderSendProposal = {
+  preview: AiProposalPreview & { toolName: "propose_reminder_send" };
+  metadata: z.infer<typeof assistantProposalMetadataSchema>;
+  evidence: AiEvidence[];
+  mutation: AiOperationAtomicMutation;
+};
+
+export async function stageReminderSendProposal(
   env: CloudflareEnvironment,
   viewer: Viewer,
   input: {
@@ -286,18 +298,54 @@ export async function prepareReminderSendProposal(
   renderMergeTemplate(args.subject, representativeMergeValues);
   renderMergeTemplate(args.body, representativeMergeValues);
 
-  const saved = await communications.saveTemplate(viewer, {
-    ...(input.templateId ? { templateId: input.templateId } : {}),
-    name: `Assistant reminder · ${args.subject.slice(0, 120)}`,
-    category: "task_reminder",
+  const name = `Assistant reminder · ${args.subject.slice(0, 120)}`;
+  const templateId = input.templateId ?? crypto.randomUUID();
+  const existing = input.templateId
+    ? await env.DB.prepare(
+        `SELECT template.status,
+                COALESCE(MAX(version.version_number), 0) + 1 AS versionNumber
+           FROM communication_templates template
+           JOIN events event
+             ON event.id = template.event_id AND event.organisation_id = ?
+           LEFT JOIN communication_template_versions version
+             ON version.template_id = template.id
+            AND version.event_id = template.event_id
+            AND version.channel = 'email'
+          WHERE template.id = ? AND template.event_id = ?
+            AND template.status <> 'archived'
+          GROUP BY template.id`,
+      )
+        .bind(viewer.organisationId, templateId, viewer.eventId)
+        .first<{ status: "draft" | "active"; versionNumber: number }>()
+    : null;
+  if (input.templateId && !existing) {
+    throw new AiToolValidationError(
+      "The assistant reminder template is no longer available in this event.",
+    );
+  }
+  const versionId = crypto.randomUUID();
+  const versionNumber = existing?.versionNumber ?? 1;
+  const candidate = {
+    id: versionId,
+    templateId,
+    name,
+    category: "task_reminder" as const,
+    templateStatus: existing?.status ?? ("draft" as const),
+    versionNumber,
     subject: args.subject,
     content,
-  });
+    versionStatus: "draft" as const,
+    publishedAt: null,
+  };
   const previewInput = {
     ...deliveryInput,
-    templateVersionId: saved.versionId,
+    templateVersionId: versionId,
   };
-  const exactPreview = await communications.preview(viewer, previewInput);
+  const exactPreview = await communications.previewCandidate(
+    viewer,
+    previewInput,
+    candidate,
+  );
   if (
     !exactPreview.provider.configured ||
     !exactPreview.provider.sender ||
@@ -375,29 +423,147 @@ export async function prepareReminderSendProposal(
     arguments: args,
     preview,
   });
-  await env.DB.prepare(
-    `INSERT INTO audit_events (
-      id, actor_kind, origin, metadata_version, organisation_id, event_id, actor_person_id, actor_id, action,
-      entity_type, entity_id, correlation_id, metadata_json, created_at
-    ) VALUES (?, 'agent', 'admin_ui', 1, ?, ?, ?, 'program_cue_agent', 'assistant.proposal.previewed',
-              'assistant_proposal', ?, ?, ?, unixepoch())`,
-  )
-    .bind(
-      crypto.randomUUID(),
-      viewer.organisationId,
+  const saveOperationId = crypto.randomUUID();
+  const versionAuditId = crypto.randomUUID();
+  const proposalAuditId = crypto.randomUUID();
+  const contentJson = JSON.stringify(content);
+  const metadataJson = JSON.stringify(metadata);
+  const mutation: AiOperationAtomicMutation = {
+    statements: [
+      env.DB.prepare(
+        `INSERT INTO communication_templates (
+           id, event_id, name, category, status, last_operation_id,
+           created_by_person_id, created_at, updated_at
+         )
+         SELECT ?, event.id, ?, 'task_reminder', 'draft', ?, ?,
+                unixepoch(), unixepoch()
+           FROM events event
+          WHERE event.id = ? AND event.organisation_id = ?
+         ON CONFLICT(id) DO UPDATE SET
+           name = excluded.name, category = excluded.category,
+           last_operation_id = excluded.last_operation_id,
+           updated_at = unixepoch()
+         WHERE communication_templates.event_id = excluded.event_id
+           AND communication_templates.status <> 'archived'`,
+      ).bind(
+        templateId,
+        name,
+        saveOperationId,
+        viewer.personId,
+        viewer.eventId,
+        viewer.organisationId,
+      ),
+      env.DB.prepare(
+        `INSERT INTO communication_template_versions (
+           id, event_id, template_id, version_number, name, category,
+           channel, subject_template, content_json, rendered_preview_html,
+           status, created_by_person_id, created_at
+         )
+         SELECT ?, template.event_id, template.id, ?, ?, 'task_reminder',
+                'email', ?, ?, ?, 'draft', ?, unixepoch()
+           FROM communication_templates template
+          WHERE template.id = ? AND template.event_id = ?
+            AND template.status <> 'archived'
+            AND template.last_operation_id = ?
+            AND ? = COALESCE((
+              SELECT MAX(existing.version_number) + 1
+                FROM communication_template_versions existing
+               WHERE existing.template_id = template.id
+                 AND existing.channel = 'email'
+            ), 1)`,
+      ).bind(
+        versionId,
+        versionNumber,
+        name,
+        args.subject,
+        contentJson,
+        exactPreview.rendered.html,
+        viewer.personId,
+        templateId,
+        viewer.eventId,
+        saveOperationId,
+        versionNumber,
+      ),
+      env.DB.prepare(
+        `INSERT INTO audit_events (
+           id, actor_kind, origin, metadata_version, organisation_id,
+           event_id, actor_person_id, action, entity_type, entity_id,
+           metadata_json, created_at
+         )
+         SELECT ?, 'person', 'admin_ui', 1, ?, version.event_id, ?,
+                'communication.template.version.created',
+                'communication_template', version.template_id,
+                json_object(
+                  'versionId', version.id,
+                  'versionNumber', version.version_number,
+                  'category', version.category
+                ), unixepoch()
+           FROM communication_template_versions version
+          WHERE version.id = ? AND version.event_id = ?
+            AND version.template_id = ?`,
+      ).bind(
+        versionAuditId,
+        viewer.organisationId,
+        viewer.personId,
+        versionId,
+        viewer.eventId,
+        templateId,
+      ),
+      env.DB.prepare(
+        `INSERT INTO audit_events (
+           id, actor_kind, origin, metadata_version, organisation_id,
+           event_id, actor_person_id, actor_id, action, entity_type,
+           entity_id, correlation_id, metadata_json, created_at
+         )
+         SELECT ?, 'agent', 'admin_ui', 1, ?, version.event_id, ?,
+                'program_cue_agent', 'assistant.proposal.previewed',
+                'assistant_proposal', ?, ?, ?, unixepoch()
+           FROM communication_template_versions version
+          WHERE version.id = ? AND version.event_id = ?
+            AND version.template_id = ?
+            AND EXISTS (
+              SELECT 1 FROM audit_events audit WHERE audit.id = ?
+            )`,
+      ).bind(
+        proposalAuditId,
+        viewer.organisationId,
+        viewer.personId,
+        proposalId,
+        input.runId,
+        metadataJson,
+        versionId,
+        viewer.eventId,
+        templateId,
+        versionAuditId,
+      ),
+    ],
+    failurePredicateSql: `NOT EXISTS (
+       SELECT 1 FROM communication_template_versions version
+        WHERE version.id = ? AND version.event_id = ?
+          AND version.template_id = ? AND version.version_number = ?
+          AND version.subject_template = ? AND version.content_json = ?
+     ) OR NOT EXISTS (
+       SELECT 1 FROM audit_events audit WHERE audit.id = ?
+     ) OR NOT EXISTS (
+       SELECT 1 FROM audit_events audit WHERE audit.id = ?
+     )`,
+    bindings: [
+      versionId,
       viewer.eventId,
-      viewer.personId,
-      proposalId,
-      input.runId,
-      JSON.stringify(metadata),
-    )
-    .run();
+      templateId,
+      versionNumber,
+      args.subject,
+      contentJson,
+      versionAuditId,
+      proposalAuditId,
+    ],
+  };
   const evidence: AiEvidence[] = [
     {
-      id: `communication-template-version:${saved.versionId}`,
+      id: `communication-template-version:${versionId}`,
       label: exactPreview.template.name,
-      detail: `Draft reminder template version ${saved.versionNumber}`,
-      href: `/admin/communications?template=${encodeURIComponent(saved.templateId)}`,
+      detail: `Draft reminder template version ${versionNumber}`,
+      href: `/admin/communications?template=${encodeURIComponent(templateId)}`,
       source: "Program Cue D1",
     },
     {
@@ -408,7 +574,41 @@ export async function prepareReminderSendProposal(
       source: "Program Cue D1",
     },
   ];
-  return { preview, metadata, evidence };
+  return { preview, metadata, evidence, mutation };
+}
+
+export async function persistStagedReminderSendProposal(
+  env: CloudflareEnvironment,
+  staged: StagedReminderSendProposal,
+) {
+  try {
+    await env.DB.batch([
+      ...staged.mutation.statements,
+      atomicBatchGuardStatement(
+        env,
+        staged.mutation.failurePredicateSql,
+        staged.mutation.bindings,
+      ),
+    ]);
+  } catch (error) {
+    if (isAtomicBatchGuardError(error)) {
+      throw new AiToolValidationError(
+        "The reminder template changed while its assistant preview was being prepared. Generate a fresh preview.",
+      );
+    }
+    throw error;
+  }
+}
+
+export async function prepareReminderSendProposal(
+  env: CloudflareEnvironment,
+  viewer: Viewer,
+  input: Parameters<typeof stageReminderSendProposal>[2],
+) {
+  const staged = await stageReminderSendProposal(env, viewer, input);
+  await persistStagedReminderSendProposal(env, staged);
+  const { mutation: _mutation, ...result } = staged;
+  return result;
 }
 
 export abstract class AiProposalExecutorFoundation {

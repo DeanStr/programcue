@@ -7,7 +7,10 @@ import {
   AiAssistantService,
   AiPermissionError,
 } from "./ai-assistant-service.server";
-import { AiToolPermissionError } from "./ai-tools.server";
+import {
+  AiToolPermissionError,
+  prepareReminderSendProposal,
+} from "./ai-tools.server";
 
 const admin: Viewer = {
   personId: "person-demo-admin",
@@ -524,6 +527,154 @@ describe("agent tool permissions and approval", () => {
     expect(fetcher).not.toHaveBeenCalled();
   });
 
+  it("does not persist a contextual reminder proposal without its completion", async () => {
+    const { testEnv, baseTemplateVersionId } = await reminderEnvironment();
+    const before = await testEnv.DB.prepare(
+      `SELECT
+         (SELECT COUNT(*) FROM communication_template_versions
+           WHERE event_id = ?) AS versions,
+         (SELECT COUNT(*) FROM audit_events
+           WHERE event_id = ? AND action = 'assistant.proposal.previewed') AS proposals`,
+    )
+      .bind(admin.eventId, admin.eventId)
+      .first<{ versions: number; proposals: number }>();
+    await testEnv.DB.prepare(
+      `CREATE TRIGGER reject_contextual_reminder_completion
+       BEFORE INSERT ON audit_events
+       WHEN NEW.action = 'assistant.context.completed'
+       BEGIN
+         SELECT RAISE(ABORT, 'contextual completion audit rejected by test');
+       END`,
+    ).run();
+    try {
+      await expect(
+        new AiAssistantService(testEnv, {
+          fetcher: vi.fn<typeof fetch>().mockResolvedValue(
+            textResponse(
+              JSON.stringify({
+                subject: "Please complete {{task.title}}",
+                body: "Hello {{recipient.firstName}}, please complete {{task.title}}.",
+              }),
+            ),
+          ),
+          providerConfiguration,
+        }).draftReminderProposal(
+          admin,
+          "incomplete_speakers",
+          "Ask speakers to complete their remaining tasks.",
+          baseTemplateVersionId,
+          "optional",
+        ),
+      ).rejects.toThrow();
+    } finally {
+      await testEnv.DB.prepare(
+        "DROP TRIGGER reject_contextual_reminder_completion",
+      ).run();
+    }
+    const after = await testEnv.DB.prepare(
+      `SELECT
+         (SELECT COUNT(*) FROM communication_template_versions
+           WHERE event_id = ?) AS versions,
+         (SELECT COUNT(*) FROM audit_events
+           WHERE event_id = ? AND action = 'assistant.proposal.previewed') AS proposals`,
+    )
+      .bind(admin.eventId, admin.eventId)
+      .first<{ versions: number; proposals: number }>();
+    expect(after).toEqual(before);
+    const operation = await testEnv.DB.prepare(
+      `SELECT status FROM operation_jobs
+        WHERE event_id = ? AND type = 'ai.context.run'
+          AND EXISTS (
+            SELECT 1 FROM audit_events audit
+             WHERE audit.correlation_id = operation_jobs.id
+               AND audit.action = 'assistant.context.failed'
+               AND json_extract(audit.metadata_json, '$.message') LIKE
+                   '%contextual completion audit rejected by test%'
+          )`,
+    )
+      .bind(admin.eventId)
+      .first<{ status: string }>();
+    expect(operation?.status).toBe("failed");
+  });
+
+  it("rolls a reminder revision back when its supersession audit cannot commit", async () => {
+    const { testEnv, baseTemplateVersionId } = await reminderEnvironment();
+    const prepared = await prepareReminderSendProposal(testEnv, admin, {
+      runId: crypto.randomUUID(),
+      model: providerConfiguration.model,
+      arguments: {
+        baseTemplateVersionId,
+        audienceType: "incomplete_speakers",
+        kind: "optional",
+        subject: "Please complete {{task.title}}",
+        body: "Hello {{recipient.firstName}}, please complete {{task.title}}.",
+      },
+    });
+    const before = await testEnv.DB.prepare(
+      `SELECT
+         (SELECT COUNT(*) FROM communication_template_versions
+           WHERE event_id = ? AND template_id = ?) AS versions,
+         (SELECT COUNT(*) FROM audit_events
+           WHERE event_id = ? AND action = 'assistant.proposal.previewed') AS proposals`,
+    )
+      .bind(
+        admin.eventId,
+        prepared.preview.reminder.template.templateId,
+        admin.eventId,
+      )
+      .first<{ versions: number; proposals: number }>();
+    await testEnv.DB.prepare(
+      `CREATE TRIGGER reject_assistant_proposal_supersession
+       BEFORE INSERT ON audit_events
+       WHEN NEW.action = 'assistant.proposal.superseded'
+       BEGIN
+         SELECT RAISE(ABORT, 'assistant supersession audit rejected by test');
+       END`,
+    ).run();
+    try {
+      await expect(
+        new AiAssistantService(testEnv).reviseReminderProposal(
+          admin,
+          prepared.preview.id,
+          "Updated task: {{task.title}}",
+          "Hello {{recipient.firstName}}, please complete the updated {{task.title}}.",
+        ),
+      ).rejects.toThrow();
+    } finally {
+      await testEnv.DB.prepare(
+        "DROP TRIGGER reject_assistant_proposal_supersession",
+      ).run();
+    }
+    const after = await testEnv.DB.prepare(
+      `SELECT
+         (SELECT COUNT(*) FROM communication_template_versions
+           WHERE event_id = ? AND template_id = ?) AS versions,
+         (SELECT COUNT(*) FROM audit_events
+           WHERE event_id = ? AND action = 'assistant.proposal.previewed') AS proposals,
+         (SELECT COUNT(*) FROM audit_events
+           WHERE event_id = ? AND action = 'assistant.proposal.superseded'
+             AND entity_id = ?) AS superseded`,
+    )
+      .bind(
+        admin.eventId,
+        prepared.preview.reminder.template.templateId,
+        admin.eventId,
+        admin.eventId,
+        prepared.preview.id,
+      )
+      .first<{ versions: number; proposals: number; superseded: number }>();
+    expect(after).toEqual({ ...before, superseded: 0 });
+    const revision = await testEnv.DB.prepare(
+      `SELECT status FROM operation_jobs
+        WHERE event_id = ? AND type = 'ai.proposal.revision'
+          AND json_extract(payload_json, '$.proposalId') = ?
+        ORDER BY created_at DESC, id DESC LIMIT 1`,
+    )
+      .bind(admin.eventId, prepared.preview.id)
+      .first<{ status: string }>();
+    expect(revision?.status).toBe("failed");
+  });
+
   it("durably previews exact reminder recipients and content, then queues once after explicit approval", async () => {
     const {
       testEnv,
@@ -617,6 +768,25 @@ describe("agent tool permissions and approval", () => {
         .bind(admin.eventId, proposal.reminder.template.templateId)
         .first<{ count: number }>(),
     ).resolves.toEqual(versionCountBeforeUnsafeEdit);
+    const rejectedRevision = await testEnv.DB.prepare(
+      `SELECT status, progress_failed AS progressFailed,
+              last_error AS lastError
+         FROM operation_jobs
+        WHERE event_id = ? AND type = 'ai.proposal.revision'
+          AND json_extract(payload_json, '$.proposalId') = ?
+        ORDER BY created_at DESC, id DESC LIMIT 1`,
+    )
+      .bind(admin.eventId, proposal.id)
+      .first<{
+        status: string;
+        progressFailed: number;
+        lastError: string | null;
+      }>();
+    expect(rejectedRevision).toEqual({
+      status: "cancelled",
+      progressFailed: 0,
+      lastError: null,
+    });
     const revisedSubject = "Action required: {{task.title}}";
     const revisedBody =
       "Hello {{recipient.firstName}}, please finish {{task.title}} in your speaker workspace.";

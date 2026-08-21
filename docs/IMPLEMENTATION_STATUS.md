@@ -657,6 +657,15 @@ leave an expired operation blocking fixture recovery indefinitely. Focused
 Worker coverage verifies reset invalidation, approval rejection, reset
 exclusion, expired-claim recovery, the contextual 409 response and the provider
 budget; Chromium coverage verifies the bounded suggested request is submitted.
+Assistant request, success, failure and cancellation transitions now commit
+atomically with their matching audit evidence. Contextual reminder creation and
+reminder revision stage their exact preview before a guarded batch commits the
+draft version, proposal evidence, supersession where applicable and operation
+completion together. Expected missing/stale preflight state is cancelled rather
+than counted as a Command Centre operation failure, while provider failures
+retain their bounded request identifier in both operation and audit diagnostics.
+Focused failure-injection coverage verifies that rejected completion or
+supersession evidence rolls the associated proposal mutation back.
 Deployment and fresh live-provider acceptance remain outstanding.
 
 ## Capability status

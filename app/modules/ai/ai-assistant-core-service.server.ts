@@ -15,6 +15,13 @@ import {
   fixedAssistantToolPlan,
 } from "./ai-assistant-suggestions";
 import {
+  isExpectedAiOperationCancellation,
+  safeAiErrorMetadata,
+} from "./ai-error-metadata";
+import {
+  type AiOperationAtomicMutation,
+  AiOperationSettlementIndeterminateError,
+  cancelAiOperationLease,
   completeAiOperationLease,
   failAiOperationLease,
   renewAiOperationLease,
@@ -223,24 +230,6 @@ export function parseJson(value: string, context: string) {
   }
 }
 
-function safeErrorMetadata(error: unknown) {
-  if (error instanceof AiProviderError) {
-    return {
-      errorType: error.name,
-      status: error.status,
-      providerRequestId: error.providerRequestId,
-      message: error.message.slice(0, 500),
-    };
-  }
-  return {
-    errorType: error instanceof Error ? error.name : "UnknownError",
-    message:
-      error instanceof Error
-        ? error.message.slice(0, 500)
-        : String(error).slice(0, 500),
-  };
-}
-
 export class AiAssistantCoreService {
   private readonly now: () => Date;
   protected readonly proposalLifecycle: AiProposalLifecycleService;
@@ -354,19 +343,19 @@ export class AiAssistantCoreService {
         model: provider.model,
         instructionHash,
       },
-    });
-    await this.audit(viewer, {
-      actorKind: "person",
-      action: "assistant.requested",
-      entityType: "assistant_run",
-      entityId: runId,
-      correlationId: runId,
-      metadata: {
-        provider: provider.providerName,
-        model: provider.model,
-        instructionHash,
-        instruction: compactInstruction(userPrompt),
-        operationId: runId,
+      audit: {
+        actorKind: "person",
+        action: "assistant.requested",
+        entityType: "assistant_run",
+        entityId: runId,
+        correlationId: runId,
+        metadata: {
+          provider: provider.providerName,
+          model: provider.model,
+          instructionHash,
+          instruction: compactInstruction(userPrompt),
+          operationId: runId,
+        },
       },
     });
 
@@ -456,31 +445,36 @@ Lead with the answer, include material uncertainty, and end with the safest conc
               `${provider.providerName} returned neither assistant text nor a valid function call.`,
             );
           }
-          await this.audit(viewer, {
-            actorKind: "agent",
-            action: "assistant.completed",
-            entityType: "assistant_run",
-            entityId: runId,
-            correlationId: runId,
-            metadata: {
+          await completeAiOperationLease(
+            this.env,
+            viewer,
+            operationLease,
+            {
               provider: provider.providerName,
               model: latestModel,
               responseId: response.id,
               toolNames: usedTools,
-              evidenceIds: distinctEvidence(evidence).map((item) => item.id),
+              evidenceCount: distinctEvidence(evidence).length,
               proposalIds: proposals.map((proposal) => proposal.id),
-              outputHash: await sha256(answer),
-              operationId: runId,
             },
-          });
-          await completeAiOperationLease(this.env, operationLease, {
-            provider: provider.providerName,
-            model: latestModel,
-            responseId: response.id,
-            toolNames: usedTools,
-            evidenceCount: distinctEvidence(evidence).length,
-            proposalIds: proposals.map((proposal) => proposal.id),
-          });
+            {
+              actorKind: "agent",
+              action: "assistant.completed",
+              entityType: "assistant_run",
+              entityId: runId,
+              correlationId: runId,
+              metadata: {
+                provider: provider.providerName,
+                model: latestModel,
+                responseId: response.id,
+                toolNames: usedTools,
+                evidenceIds: distinctEvidence(evidence).map((item) => item.id),
+                proposalIds: proposals.map((proposal) => proposal.id),
+                outputHash: await sha256(answer),
+                operationId: runId,
+              },
+            },
+          );
           return {
             runId,
             operationId: runId,
@@ -568,7 +562,7 @@ Lead with the answer, include material uncertainty, and end with the safest conc
                 responseId: response.id,
                 toolName: call.name,
                 callId: call.call_id,
-                ...safeErrorMetadata(error),
+                ...safeAiErrorMetadata(error),
                 operationId: runId,
               },
             });
@@ -577,22 +571,29 @@ Lead with the answer, include material uncertainty, and end with the safest conc
         }
       }
     } catch (error) {
-      await failAiOperationLease(this.env, operationLease, error);
-      await this.audit(viewer, {
-        actorKind: "agent",
-        action: "assistant.failed",
-        entityType: "assistant_run",
-        entityId: runId,
-        correlationId: runId,
-        metadata: {
-          provider: provider.providerName,
-          model: latestModel,
-          responseId: latestResponseId,
-          toolNames: usedTools,
-          ...safeErrorMetadata(error),
-          operationId: runId,
+      if (error instanceof AiOperationSettlementIndeterminateError) throw error;
+      const errorMetadata = safeAiErrorMetadata(error);
+      await failAiOperationLease(
+        this.env,
+        viewer,
+        operationLease,
+        errorMetadata,
+        {
+          actorKind: "agent",
+          action: "assistant.failed",
+          entityType: "assistant_run",
+          entityId: runId,
+          correlationId: runId,
+          metadata: {
+            provider: provider.providerName,
+            model: latestModel,
+            responseId: latestResponseId,
+            toolNames: usedTools,
+            ...errorMetadata,
+            operationId: runId,
+          },
         },
-      });
+      );
       throw error;
     }
   }
@@ -609,11 +610,12 @@ Lead with the answer, include material uncertainty, and end with the safest conc
     afterResult?: (
       result: ContextualAiResult,
       operationId: string,
-    ) => Promise<T>,
+    ) => Promise<{ value: T; mutation?: AiOperationAtomicMutation }>,
   ): Promise<T> {
     const correlationId = crypto.randomUUID();
     const focus = focusSchema.parse(operation.focus ?? null);
     const focusHash = focus ? await sha256(focus) : null;
+    const provider = await this.provider(viewer);
     const operationLease = await startAiOperationLease(this.env, viewer, {
       id: correlationId,
       type: "ai.context.run",
@@ -624,10 +626,27 @@ Lead with the answer, include material uncertainty, and end with the safest conc
         entityId: operation.entityId,
         ...(focusHash ? { focusHash } : {}),
       },
+      audit: {
+        actorKind: "person",
+        action: "assistant.context.requested",
+        entityType: operation.entityType,
+        entityId: operation.entityId,
+        correlationId,
+        metadata: {
+          kind: operation.kind,
+          provider: provider.providerName,
+          model: provider.model,
+          ...(focus
+            ? {
+                focusHash,
+                focus: compactInstruction(focus),
+              }
+            : {}),
+          operationId: correlationId,
+        },
+      },
     });
-    let provider: AiModelProvider | null = null;
     try {
-      provider = await this.provider(viewer);
       const input = await loadEvidence();
       if (
         input.kind !== operation.kind ||
@@ -659,26 +678,6 @@ Lead with the answer, include material uncertainty, and end with the safest conc
       const readinessPriorityCount = input.readinessContext
         ? Math.min(3, input.readinessContext.blockers.length)
         : 0;
-      await this.audit(viewer, {
-        actorKind: "person",
-        action: "assistant.context.requested",
-        entityType: input.entityType,
-        entityId: input.entityId,
-        correlationId,
-        metadata: {
-          kind: input.kind,
-          provider: provider.providerName,
-          model: provider.model,
-          evidenceIds: input.evidence.map((item) => item.id),
-          ...(focus
-            ? {
-                focusHash,
-                focus: compactInstruction(focus),
-              }
-            : {}),
-          operationId: correlationId,
-        },
-      });
       await renewAiOperationLease(this.env, operationLease);
       const response = await provider.create({
         instructions: input.instructions,
@@ -833,46 +832,57 @@ Lead with the answer, include material uncertainty, and end with the safest conc
         ...(draft ? { draft } : {}),
       };
       await renewAiOperationLease(this.env, operationLease);
-      const value = afterResult
+      const completion = afterResult
         ? await afterResult(result, correlationId)
-        : (result as T);
-      await this.audit(viewer, {
-        actorKind: "agent",
-        action: "assistant.context.completed",
-        entityType: input.entityType,
-        entityId: input.entityId,
-        correlationId,
-        metadata: {
+        : { value: result as T };
+      await completeAiOperationLease(
+        this.env,
+        viewer,
+        operationLease,
+        {
           kind: input.kind,
           provider: provider.providerName,
           model,
           responseId: response.id,
           evidenceIds: input.evidence.map((item) => item.id),
-          outputHash: await sha256(structuredOutputForAudit ?? content),
-          operationId: correlationId,
         },
-      });
-      await completeAiOperationLease(this.env, operationLease, {
-        kind: input.kind,
-        provider: provider.providerName,
-        model,
-        responseId: response.id,
-        evidenceIds: input.evidence.map((item) => item.id),
-      });
-      return value;
+        {
+          actorKind: "agent",
+          action: "assistant.context.completed",
+          entityType: input.entityType,
+          entityId: input.entityId,
+          correlationId,
+          metadata: {
+            kind: input.kind,
+            provider: provider.providerName,
+            model,
+            responseId: response.id,
+            evidenceIds: input.evidence.map((item) => item.id),
+            outputHash: await sha256(structuredOutputForAudit ?? content),
+            operationId: correlationId,
+          },
+        },
+        completion.mutation,
+      );
+      return completion.value;
     } catch (error) {
-      await failAiOperationLease(this.env, operationLease, error);
-      await this.audit(viewer, {
+      if (error instanceof AiOperationSettlementIndeterminateError) throw error;
+      const errorMetadata = safeAiErrorMetadata(error);
+      const cancelled = isExpectedAiOperationCancellation(error);
+      const settle = cancelled ? cancelAiOperationLease : failAiOperationLease;
+      await settle(this.env, viewer, operationLease, errorMetadata, {
         actorKind: "agent",
-        action: "assistant.context.failed",
+        action: cancelled
+          ? "assistant.context.cancelled"
+          : "assistant.context.failed",
         entityType: operation.entityType,
         entityId: operation.entityId,
         correlationId,
         metadata: {
           kind: operation.kind,
-          provider: provider?.providerName ?? null,
-          model: provider?.model ?? null,
-          ...safeErrorMetadata(error),
+          provider: provider.providerName,
+          model: provider.model,
+          ...errorMetadata,
           operationId: correlationId,
         },
       });

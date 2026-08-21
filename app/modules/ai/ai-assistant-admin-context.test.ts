@@ -84,6 +84,76 @@ async function seedReadinessBlockers() {
 }
 
 describe("contextual administrator actions", () => {
+  it("does not create an operation when provider configuration preflight fails", async () => {
+    const before = await env.DB.prepare(
+      `SELECT COUNT(*) AS count FROM operation_jobs
+        WHERE event_id = ? AND type = 'ai.context.run'`,
+    )
+      .bind(admin.eventId)
+      .first<{ count: number }>();
+    const fetcher = vi.fn<typeof fetch>();
+
+    await expect(
+      new AiAssistantService(env as unknown as CloudflareEnvironment, {
+        fetcher,
+      }).summarizeReadiness(admin),
+    ).rejects.toThrow(/not configured|unavailable/u);
+    const after = await env.DB.prepare(
+      `SELECT COUNT(*) AS count FROM operation_jobs
+        WHERE event_id = ? AND type = 'ai.context.run'`,
+    )
+      .bind(admin.eventId)
+      .first<{ count: number }>();
+    expect(after).toEqual(before);
+    expect(fetcher).not.toHaveBeenCalled();
+  });
+
+  it("cancels a missing-record preflight without creating a readiness failure", async () => {
+    const failureCount = async () => {
+      const snapshot = await new ReadinessService(
+        env as unknown as CloudflareEnvironment,
+      ).getCommandCentre(admin);
+      return (
+        snapshot.blockers.find(
+          (blocker) => blocker.key === "operation_failures",
+        )?.count ?? 0
+      );
+    };
+    const before = await failureCount();
+    const missingSessionId = `missing-ai-session-${crypto.randomUUID()}`;
+    const fetcher = vi.fn<typeof fetch>();
+
+    await expect(
+      new AiAssistantService(env as unknown as CloudflareEnvironment, {
+        fetcher,
+        providerConfiguration,
+      }).generateSessionCopy(admin, missingSessionId),
+    ).rejects.toMatchObject({ status: 404 });
+    expect(fetcher).not.toHaveBeenCalled();
+    const operation = await env.DB.prepare(
+      `SELECT operation.status, operation.progress_failed AS progressFailed,
+              operation.last_error AS lastError
+         FROM operation_jobs operation
+         JOIN audit_events requested
+           ON requested.correlation_id = operation.id
+          AND requested.action = 'assistant.context.requested'
+        WHERE operation.event_id = ? AND requested.entity_id = ?
+        ORDER BY operation.created_at DESC, operation.id DESC LIMIT 1`,
+    )
+      .bind(admin.eventId, missingSessionId)
+      .first<{
+        status: string;
+        progressFailed: number;
+        lastError: string | null;
+      }>();
+    expect(operation).toEqual({
+      status: "cancelled",
+      progressFailed: 0,
+      lastError: null,
+    });
+    expect(await failureCount()).toBe(before);
+  });
+
   it("summarises the authoritative readiness snapshot without exposing mutation tools", async () => {
     await seedReadinessBlockers();
     const responseId = `readiness-response-${crypto.randomUUID()}`;

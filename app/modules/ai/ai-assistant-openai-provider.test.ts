@@ -168,6 +168,143 @@ describe("OpenAI Responses provider boundary", () => {
     expect(Number(operation?.count ?? 0)).toBe(0);
   });
 
+  it("rolls operation creation back when its requested audit cannot be written", async () => {
+    const before = await env.DB.prepare(
+      `SELECT COUNT(*) AS count FROM operation_jobs
+        WHERE event_id = ? AND type = 'ai.assistant.run'`,
+    )
+      .bind(admin.eventId)
+      .first<{ count: number }>();
+    await env.DB.prepare(
+      `CREATE TRIGGER reject_assistant_requested_audit
+       BEFORE INSERT ON audit_events
+       WHEN NEW.action = 'assistant.requested'
+       BEGIN
+         SELECT RAISE(ABORT, 'assistant requested audit rejected by test');
+       END`,
+    ).run();
+    const fetcher = vi.fn<typeof fetch>();
+    try {
+      await expect(
+        new AiAssistantService(env as unknown as CloudflareEnvironment, {
+          fetcher,
+          providerConfiguration,
+        }).ask(admin, "What is blocking readiness?"),
+      ).rejects.toThrow();
+    } finally {
+      await env.DB.prepare(
+        "DROP TRIGGER reject_assistant_requested_audit",
+      ).run();
+    }
+    const after = await env.DB.prepare(
+      `SELECT COUNT(*) AS count FROM operation_jobs
+        WHERE event_id = ? AND type = 'ai.assistant.run'`,
+    )
+      .bind(admin.eventId)
+      .first<{ count: number }>();
+    expect(after).toEqual(before);
+    expect(fetcher).not.toHaveBeenCalled();
+  });
+
+  it("atomically records a failed operation when completion evidence is rejected", async () => {
+    let operationId: string | null = null;
+    const fetcher = vi.fn<typeof fetch>().mockImplementation(async () => {
+      const operation = await env.DB.prepare(
+        `SELECT id FROM operation_jobs
+          WHERE event_id = ? AND type = 'ai.assistant.run'
+            AND status = 'running'
+          ORDER BY created_at DESC, id DESC LIMIT 1`,
+      )
+        .bind(admin.eventId)
+        .first<{ id: string }>();
+      operationId = operation?.id ?? null;
+      return textResponse("Grounded answer");
+    });
+    await env.DB.prepare(
+      `CREATE TRIGGER reject_assistant_completed_audit
+       BEFORE INSERT ON audit_events
+       WHEN NEW.action = 'assistant.completed'
+       BEGIN
+         SELECT RAISE(ABORT, 'assistant completion audit rejected by test');
+       END`,
+    ).run();
+    try {
+      await expect(
+        new AiAssistantService(env as unknown as CloudflareEnvironment, {
+          fetcher,
+          providerConfiguration,
+        }).ask(admin, "Answer from the current event evidence."),
+      ).rejects.toThrow();
+    } finally {
+      await env.DB.prepare(
+        "DROP TRIGGER reject_assistant_completed_audit",
+      ).run();
+    }
+    expect(operationId).not.toBeNull();
+    const operation = await env.DB.prepare(
+      `SELECT status FROM operation_jobs WHERE id = ? AND event_id = ?`,
+    )
+      .bind(operationId, admin.eventId)
+      .first<{ status: string }>();
+    expect(operation?.status).toBe("failed");
+    const terminalAudits = await env.DB.prepare(
+      `SELECT action FROM audit_events
+        WHERE correlation_id = ?
+          AND action IN ('assistant.completed', 'assistant.failed')
+        ORDER BY action`,
+    )
+      .bind(operationId)
+      .all<{ action: string }>();
+    expect(terminalAudits.results).toEqual([{ action: "assistant.failed" }]);
+  });
+
+  it("retains the provider request ID in failed operation diagnostics", async () => {
+    let operationId: string | null = null;
+    const fetcher = vi.fn<typeof fetch>().mockImplementation(async () => {
+      const operation = await env.DB.prepare(
+        `SELECT id FROM operation_jobs
+          WHERE event_id = ? AND type = 'ai.assistant.run'
+            AND status = 'running'
+          ORDER BY created_at DESC, id DESC LIMIT 1`,
+      )
+        .bind(admin.eventId)
+        .first<{ id: string }>();
+      operationId = operation?.id ?? null;
+      return providerJson(
+        { error: { message: "The selected model is unavailable." } },
+        503,
+      );
+    });
+
+    await expect(
+      new AiAssistantService(env as unknown as CloudflareEnvironment, {
+        fetcher,
+        providerConfiguration,
+      }).ask(admin, "What is blocking readiness?"),
+    ).rejects.toMatchObject({ providerRequestId: "openai-request-test" });
+    const operation = await env.DB.prepare(
+      `SELECT status, result_json AS resultJson
+         FROM operation_jobs WHERE id = ? AND event_id = ?`,
+    )
+      .bind(operationId, admin.eventId)
+      .first<{ status: string; resultJson: string }>();
+    expect(operation?.status).toBe("failed");
+    expect(JSON.parse(operation!.resultJson)).toMatchObject({
+      phase: "failed",
+      errorType: "AiProviderError",
+      providerRequestId: "openai-request-test",
+    });
+    const audit = await env.DB.prepare(
+      `SELECT metadata_json AS metadataJson FROM audit_events
+        WHERE correlation_id = ? AND action = 'assistant.failed'`,
+    )
+      .bind(operationId)
+      .first<{ metadataJson: string }>();
+    expect(JSON.parse(audit!.metadataJson)).toMatchObject({
+      providerRequestId: "openai-request-test",
+    });
+  });
+
   it("rejects an oversized non-streaming provider response", async () => {
     const fetcher = vi.fn<typeof fetch>().mockResolvedValue(
       new Response("{}", {

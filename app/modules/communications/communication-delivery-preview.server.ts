@@ -34,15 +34,31 @@ export abstract class CommunicationDeliveryPreview extends CommunicationDelivery
     return this.previewParsed(viewer, parsed, false);
   }
 
+  async previewCandidate(
+    viewer: Viewer,
+    input: PreviewCommunicationInput,
+    template: CommunicationPreview["template"],
+  ): Promise<CommunicationPreview> {
+    const parsed = previewCommunicationSchema.parse(input);
+    if (parsed.templateVersionId !== template.id) {
+      throw new CommunicationStateError(
+        "The candidate template does not match the requested preview version.",
+      );
+    }
+    return this.previewParsed(viewer, parsed, false, template);
+  }
+
   protected async previewParsed(
     viewer: Viewer,
     parsed: PreviewCommunicationInput,
     representativeTest: boolean,
+    candidateTemplate?: CommunicationPreview["template"],
   ): Promise<CommunicationPreview> {
     if (!representativeTest && parsed.audienceType !== "manual")
       await this.airtable.assertReadable(viewer);
     const [template, event, sender] = await Promise.all([
-      this.templates.getTemplateVersion(viewer, parsed.templateVersionId),
+      candidateTemplate ??
+        this.templates.getTemplateVersion(viewer, parsed.templateVersionId),
       this.getEvent(viewer),
       this.getVerifiedSender(viewer),
     ]);

@@ -14,16 +14,19 @@ import {
 } from "./ai-assistant-errors";
 import { AiClaimedProposalExecutor } from "./ai-claimed-proposal-executor.server";
 import {
+  isExpectedAiOperationCancellation,
+  safeAiErrorMetadata,
+} from "./ai-error-metadata";
+import {
+  AiOperationSettlementIndeterminateError,
+  cancelAiOperationLease,
   completeAiOperationLease,
   failAiOperationLease,
   renewAiOperationLease,
   startAiOperationLease,
 } from "./ai-operation-lease.server";
-import {
-  assistantProposalMetadataSchema,
-  prepareReminderSendProposal,
-} from "./ai-tools.server";
-import { AiProviderError } from "./openai-responses-provider.server";
+import { stageReminderSendProposal } from "./ai-proposal-executor-foundation.server";
+import { assistantProposalMetadataSchema } from "./ai-tools.server";
 
 const PROPOSAL_LIFETIME_SECONDS = 24 * 60 * 60;
 const PROPOSAL_EXECUTION_LEASE_SECONDS = 5 * 60;
@@ -124,24 +127,6 @@ function parseJson(value: string, context: string) {
   } catch (error) {
     throw new Error(`${context} contains invalid JSON.`, { cause: error });
   }
-}
-
-function safeErrorMetadata(error: unknown) {
-  if (error instanceof AiProviderError) {
-    return {
-      errorType: error.name,
-      status: error.status,
-      providerRequestId: error.providerRequestId,
-      message: error.message.slice(0, 500),
-    };
-  }
-  return {
-    errorType: error instanceof Error ? error.name : "UnknownError",
-    message:
-      error instanceof Error
-        ? error.message.slice(0, 500)
-        : String(error).slice(0, 500),
-  };
 }
 
 export class AiProposalLifecycleService {
@@ -645,7 +630,7 @@ export class AiProposalLifecycleService {
             proposalId,
             toolName: metadata.data.toolName,
             model: metadata.data.model,
-            ...safeErrorMetadata(error),
+            ...safeAiErrorMetadata(error),
           },
         });
       } catch {
@@ -680,6 +665,17 @@ export class AiProposalLifecycleService {
       id: revisionOperationId,
       type: "ai.proposal.revision",
       payload: { proposalId },
+      audit: {
+        actorKind: "person",
+        action: "assistant.proposal.revision.requested",
+        entityType: "assistant_proposal",
+        entityId: proposalId,
+        correlationId,
+        metadata: {
+          proposalId,
+          operationId: revisionOperationId,
+        },
+      },
     });
     try {
       const proposal = await this.env.DB.prepare(
@@ -736,7 +732,7 @@ export class AiProposalLifecycleService {
         );
       }
       await renewAiOperationLease(this.env, revisionLease);
-      const revised = await prepareReminderSendProposal(this.env, viewer, {
+      const revised = await stageReminderSendProposal(this.env, viewer, {
         runId: correlationId,
         model: metadata.data.model,
         templateId: metadata.data.preview.reminder.template.templateId,
@@ -746,28 +742,52 @@ export class AiProposalLifecycleService {
           body,
         },
       });
-      await this.audit(viewer, {
-        actorKind: "person",
-        action: "assistant.proposal.superseded",
+      await renewAiOperationLease(this.env, revisionLease);
+      await completeAiOperationLease(
+        this.env,
+        viewer,
+        revisionLease,
+        {
+          revised: true,
+          proposalId,
+          replacementProposalId: revised.preview.id,
+        },
+        {
+          actorKind: "person",
+          action: "assistant.proposal.superseded",
+          entityType: "assistant_proposal",
+          entityId: proposalId,
+          correlationId,
+          metadata: {
+            proposalId,
+            replacementProposalId: revised.preview.id,
+            toolName: metadata.data.toolName,
+            subjectChanged: subject !== metadata.data.arguments.subject,
+            bodyChanged: body !== metadata.data.arguments.body,
+          },
+        },
+        revised.mutation,
+      );
+      return revised.preview;
+    } catch (error) {
+      if (error instanceof AiOperationSettlementIndeterminateError) throw error;
+      const errorMetadata = safeAiErrorMetadata(error);
+      const cancelled = isExpectedAiOperationCancellation(error);
+      const settle = cancelled ? cancelAiOperationLease : failAiOperationLease;
+      await settle(this.env, viewer, revisionLease, errorMetadata, {
+        actorKind: "agent",
+        action: cancelled
+          ? "assistant.proposal.revision.cancelled"
+          : "assistant.proposal.revision.failed",
         entityType: "assistant_proposal",
         entityId: proposalId,
         correlationId,
         metadata: {
           proposalId,
-          replacementProposalId: revised.preview.id,
-          toolName: metadata.data.toolName,
-          subjectChanged: subject !== metadata.data.arguments.subject,
-          bodyChanged: body !== metadata.data.arguments.body,
+          ...errorMetadata,
+          operationId: revisionOperationId,
         },
       });
-      await completeAiOperationLease(this.env, revisionLease, {
-        revised: true,
-        proposalId,
-        replacementProposalId: revised.preview.id,
-      });
-      return revised.preview;
-    } catch (error) {
-      await failAiOperationLease(this.env, revisionLease, error);
       throw error;
     }
   }
