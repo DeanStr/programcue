@@ -216,7 +216,9 @@ test("Event Setup clears validation after leaving the route", async ({
   await warning.getByRole("button", { name: "Leave and discard" }).click();
   await expect(page).toHaveURL(/\/admin\/submissions/);
 
-  await page.goBack();
+  await page
+    .getByRole("link", { name: "Event settings", exact: true })
+    .click();
   await expect(page).toHaveURL(/\/admin\/event/);
   await page.locator("body[data-hydrated='true']").waitFor();
   await expect(eventName).toHaveValue(originalName);
