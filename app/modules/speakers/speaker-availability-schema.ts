@@ -15,7 +15,9 @@ const clockSchema = z
 
 const optionalClockSchema = z.preprocess(
   (value) =>
-    typeof value === "string" && value.trim() === "" ? undefined : value,
+    value == null || (typeof value === "string" && value.trim() === "")
+      ? undefined
+      : value,
   clockSchema.optional(),
 );
 

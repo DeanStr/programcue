@@ -68,6 +68,7 @@ export const nodeOnlyTestFiles = [
   "app/modules/submissions/sessionize-profile-import.test.ts",
   "app/modules/submissions/submission-routing-explanation.test.ts",
   "app/modules/submissions/submission-schema.test.ts",
+  "app/modules/speakers/speaker-availability-schema.test.ts",
   "app/modules/speakers/speaker-schema.test.ts",
   "app/modules/tasks/task-schema.test.ts",
   "app/lib/required-value.test.ts",

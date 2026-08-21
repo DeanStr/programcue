@@ -41,6 +41,25 @@ async function useDemoIdentity(
   ]);
 }
 
+test("speakers can save an all-day unavailable period without time fields", async ({
+  page,
+}) => {
+  await useDemoIdentity(page, "speaker");
+  await page.goto("/participant/availability");
+  await waitForHydrated(page);
+  await page.getByLabel("All day").check();
+  await expect(page.getByLabel(/Start time/)).toHaveCount(0);
+  await page.getByLabel("Start date").fill("2027-05-21");
+  await page.getByLabel("End date").fill("2027-05-21");
+  await page.getByLabel("Private note").fill("All-day travel");
+  await page.getByRole("button", { name: "Add unavailable period" }).click();
+  await expect(page.getByRole("status")).toContainText("All day ·");
+  await expect(page.getByText("All-day travel")).toBeVisible();
+  await expect(
+    page.locator("li").filter({ hasText: "All-day travel" }).locator("strong"),
+  ).toContainText("All day ·");
+});
+
 test("speakers can record availability that organisers can see and delete", async ({
   page,
 }) => {

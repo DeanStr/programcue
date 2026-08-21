@@ -10,6 +10,7 @@ import {
 import {
   eventBoundaryCalendarDate,
   eventLocalTimeEpoch,
+  participantAllDayRange,
 } from "~/modules/schedule/schedule-time";
 import type { Viewer } from "~/platform/auth/authorize.server";
 import { SpeakerAvailabilityService } from "./speaker-availability-service.server";
@@ -215,6 +216,39 @@ describe("speaker availability", () => {
     expect(created.startsAt).toBe(
       eventLocalTimeEpoch(event!.startsAt, "America/Toronto", 9),
     );
+  });
+
+  it("creates an all-day window when FormData omitted the unmounted time fields", async () => {
+    const availability = new SpeakerAvailabilityService(scheduleTestEnv);
+    const event = await env.DB.prepare(
+      "SELECT revision, starts_at AS startsAt, timezone FROM events WHERE id = ?",
+    )
+      .bind(speaker.eventId)
+      .first<{ revision: number; startsAt: number; timezone: string }>();
+    const startDate = eventBoundaryCalendarDate(event!.startsAt);
+    const expected = participantAllDayRange(
+      startDate,
+      startDate,
+      event!.timezone,
+    );
+    const created = await availability.createOwnWindow(speaker, {
+      eventRevision: event!.revision,
+      startDate,
+      endDate: startDate,
+      startTime: null,
+      endTime: null,
+      allDay: "true",
+      note: "All-day travel",
+    });
+    expect(created.startsAt).toBe(expected.startsAt);
+    expect(created.endsAt).toBe(expected.endsAt);
+    expect(created.interval).toMatch(/^All day · /);
+    const stored = await env.DB.prepare(
+      `SELECT note FROM speaker_blackout_windows WHERE id = ?`,
+    )
+      .bind(created.windowId)
+      .first<{ note: string | null }>();
+    expect(stored?.note).toBe("All-day travel");
   });
 
   it("rejects times that include non-zero seconds", async () => {
