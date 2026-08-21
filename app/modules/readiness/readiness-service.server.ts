@@ -1,5 +1,8 @@
 import { AirtableProviderBoundary } from "~/modules/airtable/airtable-provider-boundary.server";
-import { participantResourceTaskAccessSql } from "~/modules/tasks/task-service-foundation.server";
+import {
+  participantCurrentTaskAccessSql,
+  participantResourceTaskAccessSql,
+} from "~/modules/tasks/task-service-foundation.server";
 import type { Viewer } from "~/platform/auth/authorize.server";
 import {
   groupProgrammeSetupSteps,
@@ -117,6 +120,7 @@ async function loadCommandCentreRecords(
                       AND eligible_participant.session_id = task_instances.target_id
                       AND eligible_participant.participation_status IN ('pending','confirmed')
                  ))
+                 AND ${participantCurrentTaskAccessSql("task_instances")}
                  AND ${participantResourceTaskAccessSql("task_instances")}
                ) THEN 1 ELSE 0 END AS participantActionable
           FROM task_instances
@@ -259,6 +263,7 @@ async function loadCommandCentreRecords(
                    AND speaker_task.target_id = s.id
                    AND speaker_task.status NOT IN ('completed','waived')
                    AND speaker_task.impact IN ('critical','high')
+                   AND ${participantCurrentTaskAccessSql("speaker_task")}
                    AND EXISTS (
                      SELECT 1 FROM session_speakers eligible_participant
                       WHERE eligible_participant.event_id = speaker_task.event_id

@@ -1,8 +1,7 @@
 import type { AirtableProviderBoundary } from "~/modules/airtable/airtable-provider-boundary.server";
 import { parseEventFilePolicy } from "~/modules/files/file-policy";
 import { PublishedHeadshotService } from "~/modules/programme/published-headshot-service.server";
-import { SESSION_DETAILS_REVIEW_TEMPLATE_INTENT } from "~/modules/tasks/session-details-review.server";
-import { taskTemplateIdForIntent } from "~/modules/tasks/task-service-foundation.server";
+import { canonicalSessionDetailsReviewTaskSql } from "~/modules/tasks/session-details-review.server";
 import type { Viewer } from "~/platform/auth/authorize.server";
 import { readSpeakerProfileHistory } from "./speaker-profile-revision.server";
 
@@ -96,10 +95,6 @@ export class SpeakerPortalService {
   async getPortal(viewer: Viewer) {
     await this.airtable.assertReadable(viewer);
     await this.assertParticipant(viewer);
-    const sessionDetailsReviewTemplateId = taskTemplateIdForIntent(
-      viewer.eventId,
-      SESSION_DETAILS_REVIEW_TEMPLATE_INTENT,
-    );
     const [profile, event, sessions, files, profileHistory] = await Promise.all(
       [
         this.env.DB.prepare(
@@ -163,15 +158,20 @@ export class SpeakerPortalService {
                (SELECT task.id
                  FROM task_instances task
                  WHERE task.event_id = s.event_id
-                   AND task.template_id = ?
                    AND task.target_type = 'session'
                    AND task.target_id = s.id
-                   AND task.task_type = 'acknowledgement'
-                   AND task.evidence_mode = 'checkbox'
-                   AND json_valid(task.configuration_json)
-                   AND json_extract(task.configuration_json, '$.preset') = 'session_details_review_v1'
+                   AND ${canonicalSessionDetailsReviewTaskSql("task")}
+                   AND s.status NOT IN ('cancelled','archived')
                  ORDER BY task.created_at DESC, task.id DESC LIMIT 1
-               ) AS sessionDetailsReviewTaskId
+               ) AS sessionDetailsReviewTaskId,
+               (SELECT COUNT(*)
+                  FROM task_instances task
+                 WHERE task.event_id = s.event_id
+                   AND task.target_type = 'session'
+                   AND task.target_id = s.id
+                   AND json_extract(task.configuration_json, '$.preset') = 'session_details_review_v1'
+                   AND s.status NOT IN ('cancelled','archived')
+               ) AS sessionDetailsReviewTaskCount
           FROM session_speakers ss
           JOIN sessions s ON s.id = ss.session_id AND s.event_id = ss.event_id
           LEFT JOIN tracks track ON track.id = s.track_id AND track.event_id = s.event_id
@@ -182,8 +182,8 @@ export class SpeakerPortalService {
          ORDER BY se.starts_at IS NULL, se.starts_at, s.title
       `,
         )
-          .bind(sessionDetailsReviewTemplateId, viewer.eventId, viewer.personId)
-          .all<SessionRow>(),
+          .bind(viewer.eventId, viewer.personId)
+          .all<SessionRow & { sessionDetailsReviewTaskCount: number }>(),
         this.env.DB.prepare(
           `
         SELECT fa.id, fa.asset_kind AS kind,
@@ -348,6 +348,24 @@ export class SpeakerPortalService {
     );
     if (!profile || !event)
       throw new Response("Speaker workspace not found.", { status: 404 });
+    const duplicateSessionReview = sessions.results.find(
+      (session) => session.sessionDetailsReviewTaskCount > 1,
+    );
+    if (duplicateSessionReview) {
+      throw new Error(
+        `Session ${duplicateSessionReview.id} has duplicate session-details review tasks.`,
+      );
+    }
+    const driftedSessionReview = sessions.results.find(
+      (session) =>
+        session.sessionDetailsReviewTaskCount === 1 &&
+        session.sessionDetailsReviewTaskId === null,
+    );
+    if (driftedSessionReview) {
+      throw new Error(
+        `Session ${driftedSessionReview.id} has a session-details review task that differs from the required shared acknowledgement.`,
+      );
+    }
     const fileWithUnavailableCurrentVersion = files.results.find(
       (file) =>
         file.assetCurrentVersionId !== null &&
@@ -480,7 +498,9 @@ export class SpeakerPortalService {
         ...eventSummary,
         filePolicy: parseEventFilePolicy(filePolicyJson),
       },
-      sessions: sessions.results,
+      sessions: sessions.results.map(
+        ({ sessionDetailsReviewTaskCount: _taskCount, ...session }) => session,
+      ),
       files: files.results.map(
         ({
           assetCurrentVersionId: _assetCurrentVersionId,

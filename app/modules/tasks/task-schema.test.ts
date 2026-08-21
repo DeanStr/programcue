@@ -178,4 +178,31 @@ describe("task template form values", () => {
       }),
     ).toThrow(/Unrecognized key/);
   });
+
+  it("reserves the session-details preset for its complete built-in shape", () => {
+    const preset = {
+      name: "Review session details",
+      description: "Review the shared session details.",
+      targetType: "session" as const,
+      taskType: "acknowledgement" as const,
+      impact: "high" as const,
+      evidenceMode: "checkbox" as const,
+      dueAnchor: "none" as const,
+      dueOffsetDays: null,
+      fixedDueDate: null,
+      autoAssignOnAcceptance: true,
+      dependencyIds: [],
+      configuration: { preset: "session_details_review_v1" as const },
+    };
+    expect(taskTemplateInputSchema.parse(preset)).toMatchObject(preset);
+    for (const drifted of [
+      { ...preset, impact: "low" },
+      { ...preset, dueOffsetDays: 1 },
+      { ...preset, dependencyIds: ["another-template"] },
+    ]) {
+      expect(() => taskTemplateInputSchema.parse(drifted)).toThrow(
+        /must use the fixed high-impact/i,
+      );
+    }
+  });
 });

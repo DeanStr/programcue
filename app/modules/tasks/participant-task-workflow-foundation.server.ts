@@ -1,5 +1,9 @@
 import type { Viewer } from "~/platform/auth/authorize.server";
 import {
+  isCanonicalSessionDetailsReviewTask,
+  SESSION_DETAILS_REVIEW_PRESET,
+} from "./session-details-review.server";
+import {
   isSharedSessionDeliverableTask,
   parseTaskEvidenceDetails,
   type TaskRow,
@@ -9,7 +13,7 @@ import {
 
 export class ParticipantTaskWorkflowFoundation extends TaskServiceFoundation {
   protected async participantTask(viewer: Viewer, taskId: string) {
-    return this.env.DB.prepare(
+    const task = await this.env.DB.prepare(
       `
       SELECT ti.id, ti.template_id AS templateId, ti.target_type AS targetType,
              ti.target_id AS targetId, target_session.title AS targetLabel,
@@ -39,6 +43,21 @@ export class ParticipantTaskWorkflowFoundation extends TaskServiceFoundation {
         viewer.personId,
       )
       .first<TaskRow>();
+    if (
+      task &&
+      JSON.parse(task.configurationJson).preset ===
+        SESSION_DETAILS_REVIEW_PRESET &&
+      !(await isCanonicalSessionDetailsReviewTask(
+        this.env,
+        viewer.eventId,
+        task.id,
+      ))
+    ) {
+      throw new TaskStateError(
+        "The session-details review task differs from the required shared acknowledgement.",
+      );
+    }
+    return task;
   }
 
   async assertFileEvidenceUploadAllowed(viewer: Viewer, taskId: string) {

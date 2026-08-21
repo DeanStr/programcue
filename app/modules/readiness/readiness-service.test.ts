@@ -525,6 +525,82 @@ describe("D1-backed command centre", () => {
     });
   });
 
+  it("excludes an inactive session-details review from participant readiness", async () => {
+    const service = new ReadinessService(
+      env as unknown as CloudflareEnvironment,
+    );
+    const before = await service.getCommandCentre(viewer);
+    const blockerCounts = (snapshot: typeof before) => ({
+      overdue:
+        snapshot.blockers.find((blocker) => blocker.key === "overdue_tasks")
+          ?.count ?? 0,
+      critical:
+        snapshot.blockers.find((blocker) => blocker.key === "critical_tasks")
+          ?.count ?? 0,
+    });
+    const sessionId = crypto.randomUUID();
+    const upcomingSession = before.upcoming[0];
+    if (!upcomingSession) throw new Error("Demo upcoming session is missing.");
+    await env.DB.batch([
+      env.DB.prepare(
+        `INSERT INTO sessions (
+           id, event_id, title, slug, format, duration_minutes, status,
+           visibility, revision, created_at, updated_at
+         ) VALUES (?, ?, 'Cancelled review session', ?, 'presentation', 45,
+                   'cancelled', 'private', 1, unixepoch(), unixepoch())`,
+      ).bind(sessionId, viewer.eventId, `cancelled-${sessionId}`),
+      env.DB.prepare(
+        `INSERT INTO session_speakers (
+           session_id, event_id, person_id, position, role_label,
+           participation_status, participation_confirmed_at, visibility
+         ) VALUES (?, ?, ?, 0, 'Speaker', 'confirmed', unixepoch(), 'private')`,
+      ).bind(sessionId, viewer.eventId, viewer.personId),
+      env.DB.prepare(
+        `INSERT INTO task_instances (
+           id, event_id, target_type, target_id, title, description,
+           task_type, impact, evidence_mode, configuration_json, status,
+           readiness_state, readiness_percent, revision, due_at,
+           created_at, updated_at
+         ) VALUES (?, ?, 'session', ?, 'Review session details',
+                   'Review the cancelled session.', 'acknowledgement',
+                   'critical', 'checkbox',
+                   '{"preset":"session_details_review_v1"}', 'overdue',
+                   'overdue', 0, 1, unixepoch() - 60,
+                   unixepoch(), unixepoch())`,
+      ).bind(crypto.randomUUID(), viewer.eventId, sessionId),
+      env.DB.prepare(
+        `INSERT OR IGNORE INTO session_speakers (
+           session_id, event_id, person_id, position, role_label,
+           participation_status, participation_confirmed_at, visibility
+         ) VALUES (?, ?, 'person-demo-speaker', 99, 'Speaker', 'confirmed',
+                   unixepoch(), 'private')`,
+      ).bind(upcomingSession.id, viewer.eventId),
+      env.DB.prepare(
+        `INSERT INTO task_instances (
+           id, event_id, target_type, target_id, title, task_type, impact,
+           evidence_mode, configuration_json, status, readiness_state,
+           readiness_percent, revision, created_at, updated_at
+         ) VALUES (?, ?, 'session', ?, 'Review session details',
+                   'acknowledgement', 'high', 'checkbox',
+                   '{"preset":"session_details_review_v1"}', 'not_started',
+                   'on_track', 0, 1, unixepoch(), unixepoch())`,
+      ).bind(crypto.randomUUID(), viewer.eventId, upcomingSession.id),
+      env.DB.prepare(
+        `UPDATE sessions SET status = 'cancelled', updated_at = unixepoch()
+          WHERE id = ? AND event_id = ?`,
+      ).bind(upcomingSession.id, viewer.eventId),
+    ]);
+
+    const after = await service.getCommandCentre(viewer);
+    expect(blockerCounts(after)).toEqual(blockerCounts(before));
+    expect(
+      after.upcoming.find((session) => session.id === upcomingSession.id),
+    ).toMatchObject({
+      status: upcomingSession.status,
+      riskReason: upcomingSession.riskReason,
+    });
+  });
+
   it("rejects a viewer whose organisation does not own the event", async () => {
     await expect(
       new ReadinessService(

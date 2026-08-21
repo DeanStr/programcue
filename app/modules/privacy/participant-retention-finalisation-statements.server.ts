@@ -3,6 +3,7 @@ import {
   type CompletionMetadata,
   completionId,
   eventClaimGuard,
+  participantRetentionTaskPredicateSql,
   REDACTED_JSON,
 } from "./participant-retention-foundation.server";
 
@@ -177,7 +178,8 @@ export function buildParticipantRetentionFinalisationStatements(
               waiver_json = CASE WHEN waiver_json IS NULL THEN NULL ELSE ? END,
               last_operation_id = NULL, idempotency_key = NULL,
               updated_at = unixepoch()
-        WHERE event_id = ? AND target_type = 'speaker'`,
+        WHERE event_id = ?
+          AND ${participantRetentionTaskPredicateSql("task_instances")}`,
       REDACTED_JSON,
       REDACTED_JSON,
       viewer.eventId,
@@ -187,8 +189,9 @@ export function buildParticipantRetentionFinalisationStatements(
           SET body = '[redacted after event retention]', edited_at = unixepoch()
         WHERE event_id = ?
           AND task_id IN (
-            SELECT id FROM task_instances
-             WHERE event_id = task_comments.event_id AND target_type = 'speaker'
+            SELECT participant_task.id FROM task_instances participant_task
+             WHERE participant_task.event_id = task_comments.event_id
+               AND ${participantRetentionTaskPredicateSql("participant_task")}
           )`,
       viewer.eventId,
     ),
@@ -196,8 +199,9 @@ export function buildParticipantRetentionFinalisationStatements(
       `UPDATE task_evidence SET evidence_json = ?
         WHERE event_id = ?
           AND task_id IN (
-            SELECT id FROM task_instances
-             WHERE event_id = task_evidence.event_id AND target_type = 'speaker'
+            SELECT participant_task.id FROM task_instances participant_task
+             WHERE participant_task.event_id = task_evidence.event_id
+               AND ${participantRetentionTaskPredicateSql("participant_task")}
           )`,
       REDACTED_JSON,
       viewer.eventId,

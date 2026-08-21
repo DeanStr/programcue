@@ -5,6 +5,65 @@ export const SESSION_DETAILS_REVIEW_PRESET = "session_details_review_v1";
 export const SESSION_DETAILS_REVIEW_TEMPLATE_INTENT =
   "preset:session-details-review:v1";
 
+export function canonicalSessionDetailsReviewTaskSql(alias: string) {
+  return `(
+    ${alias}.target_type = 'session'
+    AND ${alias}.task_type = 'acknowledgement'
+    AND ${alias}.impact = 'high'
+    AND ${alias}.evidence_mode = 'checkbox'
+    AND ${alias}.due_at IS NULL
+    AND json_valid(${alias}.configuration_json)
+    AND json_extract(${alias}.configuration_json, '$.preset') = '${SESSION_DETAILS_REVIEW_PRESET}'
+    AND (SELECT COUNT(*) FROM json_each(${alias}.configuration_json)) = 1
+    AND (
+      SELECT COUNT(*) FROM task_templates event_review_template
+       WHERE event_review_template.event_id = ${alias}.event_id
+         AND json_extract(event_review_template.configuration_json, '$.preset') = '${SESSION_DETAILS_REVIEW_PRESET}'
+    ) = 1
+    AND NOT EXISTS (
+      SELECT 1 FROM task_instance_dependencies review_dependency
+       WHERE review_dependency.task_id = ${alias}.id
+    )
+    AND EXISTS (
+      SELECT 1 FROM task_templates review_template
+       WHERE review_template.id = ${alias}.template_id
+         AND review_template.event_id = ${alias}.event_id
+         AND review_template.status = 'active'
+         AND review_template.target_type = 'session'
+         AND review_template.task_type = 'acknowledgement'
+         AND review_template.impact = 'high'
+         AND review_template.evidence_mode = 'checkbox'
+         AND review_template.due_anchor = 'none'
+         AND review_template.due_offset_minutes IS NULL
+         AND review_template.fixed_due_at IS NULL
+         AND review_template.auto_assign_on_acceptance = 1
+         AND json_valid(review_template.configuration_json)
+         AND json_extract(review_template.configuration_json, '$.preset') = '${SESSION_DETAILS_REVIEW_PRESET}'
+         AND (SELECT COUNT(*) FROM json_each(review_template.configuration_json)) = 1
+         AND NOT EXISTS (
+           SELECT 1 FROM task_template_dependencies template_dependency
+            WHERE template_dependency.template_id = review_template.id
+         )
+    )
+  )`;
+}
+
+export async function isCanonicalSessionDetailsReviewTask(
+  env: CloudflareEnvironment,
+  eventId: string,
+  taskId: string,
+) {
+  const row = await env.DB.prepare(
+    `SELECT CASE WHEN ${canonicalSessionDetailsReviewTaskSql("review_task")}
+                 THEN 1 ELSE 0 END AS canonical
+       FROM task_instances review_task
+      WHERE review_task.id = ? AND review_task.event_id = ?`,
+  )
+    .bind(taskId, eventId)
+    .first<{ canonical: number }>();
+  return row?.canonical === 1;
+}
+
 export const sessionDetailsReviewFieldsSchema = z.object({
   title: z.string(),
   description: z.string().nullable(),

@@ -4,8 +4,9 @@ import { EvaluationService } from "~/modules/evaluations/evaluation-service.serv
 import { ResourceAuthoringService } from "~/modules/resources/resource-authoring-service.server";
 import { ScheduleService } from "~/modules/schedule/schedule-service.server";
 import {
+  fixedDateEndEpoch,
   TaskService,
-  taskTemplateIdForIntent,
+  taskTemplateIdForCreationIntent,
 } from "~/modules/tasks/task-service.server";
 import type { Viewer } from "~/platform/auth/authorize.server";
 import { SessionBulkService } from "~/platform/operations/session-bulk-service.server";
@@ -184,14 +185,76 @@ export class ApiAdministrationDomainCommands extends ApiAdministrationCommandExe
           ),
         }),
         recover: async (commandId) => {
-          const templateId = taskTemplateIdForIntent(viewer.eventId, commandId);
+          const templateId = taskTemplateIdForCreationIntent(
+            viewer.eventId,
+            commandId,
+            input.configuration.preset,
+          );
           const row = await this.env.DB.prepare(
-            `SELECT id AS templateId FROM task_templates
-              WHERE id = ? AND event_id = ?`,
+            `SELECT template.id AS templateId, template.name,
+                    template.description, template.target_type AS targetType,
+                    template.task_type AS taskType, template.impact,
+                    template.evidence_mode AS evidenceMode,
+                    template.due_anchor AS dueAnchor,
+                    template.due_offset_minutes AS dueOffsetMinutes,
+                    template.fixed_due_at AS fixedDueAt,
+                    template.auto_assign_on_acceptance AS autoAssignOnAcceptance,
+                    template.configuration_json AS configurationJson,
+                    event.timezone
+               FROM task_templates template
+               JOIN events event
+                 ON event.id = template.event_id
+                AND event.organisation_id = ?
+              WHERE template.id = ? AND template.event_id = ?
+                AND template.status = 'active'`,
           )
-            .bind(templateId, viewer.eventId)
-            .first<{ templateId: string }>();
-          return row;
+            .bind(viewer.organisationId, templateId, viewer.eventId)
+            .first<{
+              templateId: string;
+              name: string;
+              description: string | null;
+              targetType: string;
+              taskType: string;
+              impact: string;
+              evidenceMode: string;
+              dueAnchor: string;
+              dueOffsetMinutes: number | null;
+              fixedDueAt: number | null;
+              autoAssignOnAcceptance: number;
+              configurationJson: string;
+              timezone: string;
+            }>();
+          if (!row) return null;
+          const dependencies = await this.env.DB.prepare(
+            `SELECT depends_on_template_id AS id
+               FROM task_template_dependencies
+              WHERE template_id = ? ORDER BY depends_on_template_id`,
+          )
+            .bind(templateId)
+            .all<{ id: string }>();
+          const requestedDependencies = [
+            ...new Set(input.dependencyIds),
+          ].sort();
+          const exact =
+            row.name === input.name &&
+            row.description === (input.description || null) &&
+            row.targetType === input.targetType &&
+            row.taskType === input.taskType &&
+            row.impact === input.impact &&
+            row.evidenceMode === input.evidenceMode &&
+            row.dueAnchor === input.dueAnchor &&
+            row.dueOffsetMinutes ===
+              (input.dueOffsetDays === null
+                ? null
+                : input.dueOffsetDays * 1_440) &&
+            row.fixedDueAt ===
+              fixedDateEndEpoch(input.fixedDueDate, row.timezone) &&
+            row.autoAssignOnAcceptance ===
+              (input.autoAssignOnAcceptance ? 1 : 0) &&
+            row.configurationJson === JSON.stringify(input.configuration) &&
+            JSON.stringify(dependencies.results.map(({ id }) => id)) ===
+              JSON.stringify(requestedDependencies);
+          return exact ? { templateId: row.templateId } : null;
         },
       });
       return { ...response.result, replayed: response.replayed };

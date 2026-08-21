@@ -78,6 +78,51 @@ function withBatchBarrier(testEnv: CloudflareEnvironment, participants = 2) {
 
 describe("onboarding task service", () => {
   describe("template workflows", () => {
+    it("canonicalizes fresh session-review preset creation across request intents", async () => {
+      const testEnv = env as unknown as CloudflareEnvironment;
+      await ensureDemoSpeakerData(testEnv);
+      const service = new TaskService(withBatchBarrier(testEnv));
+      const input = {
+        name: "Review session details",
+        description:
+          "Review the shared session title, description, format, duration and track. Any active session participant may confirm them for the session or leave a correction comment.",
+        targetType: "session",
+        taskType: "acknowledgement",
+        impact: "high",
+        evidenceMode: "checkbox",
+        dueAnchor: "none",
+        dueOffsetDays: null,
+        fixedDueDate: null,
+        autoAssignOnAcceptance: true,
+        dependencyIds: [],
+        configuration: { preset: "session_details_review_v1" },
+      } as const;
+
+      const [first, second] = await Promise.all([
+        service.createTemplate(
+          admin,
+          input,
+          `session-review-first:${crypto.randomUUID()}`,
+        ),
+        service.createTemplate(
+          admin,
+          input,
+          `session-review-second:${crypto.randomUUID()}`,
+        ),
+      ]);
+
+      expect(second).toBe(first);
+      await expect(
+        testEnv.DB.prepare(
+          `SELECT COUNT(*) AS count FROM task_templates
+            WHERE event_id = ?
+              AND json_extract(configuration_json, '$.preset') = 'session_details_review_v1'`,
+        )
+          .bind(admin.eventId)
+          .first<{ count: number }>(),
+      ).resolves.toEqual({ count: 1 });
+    });
+
     it("creates and validates the minimum structured travel onboarding forms", async () => {
       const testEnv = env as unknown as CloudflareEnvironment;
       await ensureDemoSpeakerData(testEnv);

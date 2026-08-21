@@ -9,6 +9,7 @@ export {
   type TaskCompletionMutationResult,
   TaskEvidenceAttachmentConflictError,
   TaskStateError,
+  taskTemplateIdForCreationIntent,
   taskTemplateIdForIntent,
 } from "./task-service-foundation.server";
 

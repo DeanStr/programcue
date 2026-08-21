@@ -12,7 +12,11 @@ import {
   WebhookService,
   webhookActorForAudit,
 } from "~/platform/operations/webhook-service.server";
-import { sessionDetailsReviewEvidenceSchema } from "./session-details-review.server";
+import {
+  SESSION_DETAILS_REVIEW_PRESET,
+  SESSION_DETAILS_REVIEW_TEMPLATE_INTENT,
+  sessionDetailsReviewEvidenceSchema,
+} from "./session-details-review.server";
 import {
   assignedTaskConfigurationSchema,
   taskDestinationUrlSchema,
@@ -32,7 +36,11 @@ export class TaskEvidenceAttachmentConflictError extends TaskStateError {
   }
 }
 
-type ParticipantTaskSqlAlias = "ti" | "task" | "task_instances";
+type ParticipantTaskSqlAlias =
+  | "ti"
+  | "task"
+  | "task_instances"
+  | "speaker_task";
 
 export function participantResourceTaskAccessSql(
   alias: ParticipantTaskSqlAlias,
@@ -85,6 +93,21 @@ export function participantResourceTaskAccessSql(
   )`;
 }
 
+export function participantCurrentTaskAccessSql(
+  alias: ParticipantTaskSqlAlias,
+) {
+  return `(
+    ${alias}.target_type <> 'session'
+    OR json_extract(${alias}.configuration_json, '$.preset') IS NOT 'session_details_review_v1'
+    OR EXISTS (
+      SELECT 1 FROM sessions active_task_session
+       WHERE active_task_session.event_id = ${alias}.event_id
+         AND active_task_session.id = ${alias}.target_id
+         AND active_task_session.status NOT IN ('cancelled','archived')
+    )
+  )`;
+}
+
 export function participantTaskAccessSql(
   alias: ParticipantTaskSqlAlias = "ti",
   requireCurrentResourceAudience = false,
@@ -102,9 +125,10 @@ export function participantTaskAccessSql(
       OR (${alias}.target_type = 'speaker' AND ${alias}.target_id = ?)
     ))
   )`;
+  const currentTaskAccessSql = `(${taskIdentityAccessSql} AND ${participantCurrentTaskAccessSql(alias)})`;
   return requireCurrentResourceAudience
-    ? `(${taskIdentityAccessSql} AND ${participantResourceTaskAccessSql(alias)})`
-    : taskIdentityAccessSql;
+    ? `(${currentTaskAccessSql} AND ${participantResourceTaskAccessSql(alias)})`
+    : currentTaskAccessSql;
 }
 
 export function taskTemplateIdForIntent(eventId: string, intentId: string) {
@@ -119,6 +143,19 @@ export function taskTemplateIdForIntent(eventId: string, intentId: string) {
       "A bounded task-template creation intent is required.",
     );
   return `task-template:${normalizedEventId.length}:${normalizedEventId}:${normalizedIntentId}`;
+}
+
+export function taskTemplateIdForCreationIntent(
+  eventId: string,
+  intentId: string,
+  preset?: string,
+) {
+  return taskTemplateIdForIntent(
+    eventId,
+    preset === SESSION_DETAILS_REVIEW_PRESET
+      ? SESSION_DETAILS_REVIEW_TEMPLATE_INTENT
+      : intentId,
+  );
 }
 
 export const TRAVEL_ONBOARDING_TEMPLATE_INTENTS = {

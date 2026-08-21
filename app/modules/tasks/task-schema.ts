@@ -193,8 +193,13 @@ export const taskTemplateInputSchema = z
       input.configuration.preset === "session_details_review_v1" &&
       (input.targetType !== "session" ||
         input.taskType !== "acknowledgement" ||
+        input.impact !== "high" ||
         input.evidenceMode !== "checkbox" ||
+        input.dueAnchor !== "none" ||
+        input.dueOffsetDays !== null ||
+        input.fixedDueDate !== null ||
         !input.autoAssignOnAcceptance ||
+        input.dependencyIds.length !== 0 ||
         input.configuration.form !== undefined ||
         input.configuration.destinationUrl !== undefined ||
         input.configuration.fileScope !== undefined)
@@ -203,7 +208,7 @@ export const taskTemplateInputSchema = z
         code: "custom",
         path: ["configuration", "preset"],
         message:
-          "The session-details review preset must be an automatically assigned session acknowledgement using checkbox evidence.",
+          "The session-details review preset must use the fixed high-impact, automatically assigned session acknowledgement without a due date or prerequisites.",
       });
     }
     const fieldIds = input.configuration.form?.fields.map((field) => field.id);

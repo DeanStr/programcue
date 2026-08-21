@@ -259,8 +259,17 @@ completed preset with missing canonical evidence fails explicitly rather than
 appearing unreviewed. The
 session correction action targets only this preset's comment area, moves focus
 to its message field, then falls back to the configured participant support URL;
-it never guesses another task. No proposal schema, approval state or separate
-notification workflow was added. Task evidence accepts MP4/WebM session
+it never guesses another task. Preset discovery uses the immutable configuration
+and required task shape rather than the source event's deterministic template
+identifier, so cloned events retain the link. Duplicate or behaviorally drifted
+presets fail explicitly. Cancelled and archived sessions hide this review task,
+reject further participant comments or completion and remove it from participant
+readiness while leaving unrelated operational session tasks unchanged.
+Participant-retention analysis, redaction and identity remapping include this
+participant-authored session evidence and correction thread but exclude ordinary
+organiser session tasks; cross-event completion, evidence and comment references
+also preserve the shared identity. No proposal schema, approval state or
+separate notification workflow was added. Task evidence accepts MP4/WebM session
 video against the event's video limit in browser validation, declaration and
 multipart completion; other evidence retains the supporting-document limit.
 Private task API reads return the validated immutable configuration written at

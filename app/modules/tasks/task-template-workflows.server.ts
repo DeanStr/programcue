@@ -9,13 +9,16 @@ import {
   SESSION_DETAILS_REVIEW_PRESET,
   SESSION_DETAILS_REVIEW_TEMPLATE_INTENT,
 } from "./session-details-review.server";
-import { taskTemplateInputSchema } from "./task-schema";
+import {
+  taskTemplateConfigurationSchema,
+  taskTemplateInputSchema,
+} from "./task-schema";
 import {
   fixedDateEndEpoch,
   TaskServiceFoundation,
   TaskStateError,
   type TemplateRow,
-  taskTemplateIdForIntent,
+  taskTemplateIdForCreationIntent,
 } from "./task-service-foundation.server";
 import {
   assignmentTemplateSnapshot,
@@ -98,6 +101,66 @@ export class TaskTemplateWorkflows extends TaskServiceFoundation {
         "Review and confirm the optional session-details task before creating it.",
       );
     }
+    await this.assertEvent(viewer);
+    const existing = await this.env.DB.prepare(
+      `SELECT template.id, template.name, template.description,
+              template.target_type AS targetType,
+              template.task_type AS taskType, template.impact,
+              template.evidence_mode AS evidenceMode,
+              template.due_anchor AS dueAnchor,
+              template.due_offset_minutes AS dueOffsetMinutes,
+              template.fixed_due_at AS fixedDueAt,
+              template.auto_assign_on_acceptance AS autoAssignOnAcceptance,
+              template.configuration_json AS configurationJson,
+              template.status,
+              (SELECT COUNT(*) FROM task_template_dependencies dependency
+                WHERE dependency.template_id = template.id) AS dependencyCount
+        FROM task_templates template
+        WHERE template.event_id = ?
+          AND json_extract(template.configuration_json, '$.preset') = ?
+        ORDER BY template.id`,
+    )
+      .bind(viewer.eventId, SESSION_DETAILS_REVIEW_PRESET)
+      .all<TemplateRow & { dependencyCount: number }>();
+    if (existing.results.length > 1) {
+      throw new TaskStateError(
+        "This event contains duplicate session-details review presets. Repair the duplicate preset markers before continuing.",
+      );
+    }
+    const existingTemplate = existing.results[0];
+    if (existingTemplate) {
+      let configuration: ReturnType<
+        typeof taskTemplateConfigurationSchema.parse
+      >;
+      try {
+        configuration = taskTemplateConfigurationSchema.parse(
+          JSON.parse(existingTemplate.configurationJson),
+        );
+      } catch {
+        throw new TaskStateError(
+          "The session-details review preset has invalid stored configuration.",
+        );
+      }
+      if (
+        existingTemplate.status !== "active" ||
+        existingTemplate.targetType !== "session" ||
+        existingTemplate.taskType !== "acknowledgement" ||
+        existingTemplate.impact !== "high" ||
+        existingTemplate.evidenceMode !== "checkbox" ||
+        existingTemplate.dueAnchor !== "none" ||
+        existingTemplate.dueOffsetMinutes !== null ||
+        existingTemplate.fixedDueAt !== null ||
+        Number(existingTemplate.autoAssignOnAcceptance) !== 1 ||
+        existingTemplate.dependencyCount !== 0 ||
+        JSON.stringify(configuration) !==
+          JSON.stringify({ preset: SESSION_DETAILS_REVIEW_PRESET })
+      ) {
+        throw new TaskStateError(
+          "The session-details review preset differs from the required shared acknowledgement. Restore it before continuing.",
+        );
+      }
+      return { templateId: existingTemplate.id, created: false };
+    }
     const result = await this.createTemplateWithResult(
       viewer,
       {
@@ -152,7 +215,26 @@ export class TaskTemplateWorkflows extends TaskServiceFoundation {
         );
       }
     }
-    const id = taskTemplateIdForIntent(viewer.eventId, intentId);
+    const id = taskTemplateIdForCreationIntent(
+      viewer.eventId,
+      intentId,
+      input.configuration.preset,
+    );
+    if (input.configuration.preset === SESSION_DETAILS_REVIEW_PRESET) {
+      const duplicatePreset = await this.env.DB.prepare(
+        `SELECT id FROM task_templates
+          WHERE event_id = ? AND id <> ?
+            AND json_extract(configuration_json, '$.preset') = ?
+          LIMIT 1`,
+      )
+        .bind(viewer.eventId, id, SESSION_DETAILS_REVIEW_PRESET)
+        .first<{ id: string }>();
+      if (duplicatePreset) {
+        throw new TaskStateError(
+          "This event already contains a session-details review preset. Repair or reuse that preset instead of creating a duplicate.",
+        );
+      }
+    }
     const expected = {
       name: input.name,
       description: input.description || null,

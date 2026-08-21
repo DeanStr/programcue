@@ -1,6 +1,7 @@
 import type { Viewer } from "~/platform/auth/authorize.server";
 import { ParticipantTaskWorkflowFoundation } from "./participant-task-workflow-foundation.server";
 import {
+  isCanonicalSessionDetailsReviewTask,
   loadParticipantSessionDetailsReview,
   SESSION_DETAILS_REVIEW_PRESET,
 } from "./session-details-review.server";
@@ -131,6 +132,18 @@ export class ParticipantTaskQueries extends ParticipantTaskWorkflowFoundation {
           task.targetType === "session" &&
           task.taskType === "acknowledgement" &&
           task.evidenceMode === "checkbox";
+        if (
+          configuration.preset === SESSION_DETAILS_REVIEW_PRESET &&
+          !(await isCanonicalSessionDetailsReviewTask(
+            this.env,
+            viewer.eventId,
+            task.id,
+          ))
+        ) {
+          throw new Error(
+            `Session-details review task ${task.id} differs from the required shared acknowledgement.`,
+          );
+        }
         const evidenceDetails = task.evidenceJson
           ? parseTaskEvidenceDetails(task.id, task.evidenceJson)
           : null;

@@ -6,6 +6,7 @@ import {
   fixedDateEndEpoch,
   hashUndoSecret,
   parseTaskEvidenceDetails,
+  participantCurrentTaskAccessSql,
   participantResourceTaskAccessSql,
   randomUndoSecret,
   statusProgress,
@@ -264,6 +265,7 @@ export class TaskAdministrationWorkflows extends TaskServiceFoundation {
                         AND eligible_participant.session_id = ti.target_id
                         AND eligible_participant.participation_status IN ('pending','confirmed')
                    ))
+                   AND ${participantCurrentTaskAccessSql("ti")}
                    AND ${participantResourceTaskAccessSql("ti")}
                  ) THEN 1 ELSE 0 END AS participantActionable
           FROM task_instances ti

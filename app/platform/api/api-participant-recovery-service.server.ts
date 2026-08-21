@@ -1,5 +1,4 @@
 import type { Applicant } from "~/modules/submissions/submission-repository.server";
-import { participantTaskAccessSql } from "~/modules/tasks/task-service-foundation.server";
 import type { Viewer } from "~/platform/auth/authorize.server";
 import { EventRealtimeService } from "~/platform/realtime/event-realtime.server";
 import { ApiError } from "./api.server";
@@ -26,7 +25,7 @@ export class ApiParticipantRecoveryService {
         WHERE task.id = ? AND task.event_id = ?
           AND task.last_operation_id = ? AND task.revision = ?
           AND task.status IN ('completed','submitted')
-          AND ${participantTaskAccessSql("task")}`,
+          AND task.completed_by_person_id = ?`,
     )
       .bind(
         viewer.organisationId,
@@ -34,8 +33,6 @@ export class ApiParticipantRecoveryService {
         viewer.eventId,
         operationId,
         previousRevision + 1,
-        viewer.personId,
-        viewer.personId,
         viewer.personId,
       )
       .first<{

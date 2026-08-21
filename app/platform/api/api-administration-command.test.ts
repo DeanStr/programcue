@@ -446,6 +446,154 @@ describe("versioned administration commands", () => {
     }
   });
 
+  it("recovers the canonical session-review preset and rejects drifted preset claims", async () => {
+    const suffix = crypto.randomUUID();
+    const presetInput = {
+      name: "Review session details",
+      description:
+        "Review the shared session title, description, format, duration and track. Any active session participant may confirm them for the session or leave a correction comment.",
+      targetType: "session",
+      taskType: "acknowledgement",
+      impact: "high",
+      evidenceMode: "checkbox",
+      dueAnchor: "none",
+      dueOffsetDays: null,
+      fixedDueDate: null,
+      autoAssignOnAcceptance: true,
+      dependencyIds: [],
+      configuration: { preset: "session_details_review_v1" },
+    };
+    const rejected = await command(
+      "administrator",
+      "task-templates",
+      "new",
+      "save",
+      { ...presetInput, impact: "low" },
+      `session-review-drift-${suffix}`,
+    );
+    expect(rejected.status).toBe(422);
+
+    const idempotencyKey = `session-review-${suffix}`;
+    const created = await result(
+      await command(
+        "administrator",
+        "task-templates",
+        "new",
+        "save",
+        presetInput,
+        idempotencyKey,
+      ),
+    );
+    const templateId = String(created.result.templateId);
+    expect(templateId).toContain("preset:session-details-review:v1");
+    const reset = await testEnv.DB.prepare(
+      `UPDATE idempotency_records
+          SET status = 'processing', response_json = NULL, completed_at = NULL
+        WHERE event_id = ? AND actor_id = ? AND scope = 'api.task-template.save'
+          AND idempotency_key = ? AND status = 'completed'`,
+    )
+      .bind(eventId, `person:${administrator.personId}`, idempotencyKey)
+      .run();
+    expect(reset.meta.changes).toBe(1);
+
+    const recovered = await result(
+      await command(
+        "administrator",
+        "task-templates",
+        "new",
+        "save",
+        presetInput,
+        idempotencyKey,
+      ),
+    );
+    expect(recovered.result).toEqual({ templateId, replayed: true });
+
+    const conflicting = await command(
+      "administrator",
+      "task-templates",
+      "new",
+      "save",
+      { ...presetInput, name: "A different session review request" },
+      `session-review-conflict-${suffix}`,
+    );
+    expect(conflicting.status).toBe(409);
+    await expect(conflicting.json()).resolves.toMatchObject({
+      error: { code: "TASK_STATE_ERROR" },
+    });
+  });
+
+  it("recovers a committed shared-session completion after cancellation", async () => {
+    const speaker = {
+      personId: "person-demo-speaker",
+      name: "Priya Shah",
+      email: "priya.speaker@example.com",
+      role: "speaker" as const,
+      organisationId: "org-future-events",
+      eventId,
+      demo: true,
+    };
+    const relationship = await testEnv.DB.prepare(
+      `SELECT session_id AS sessionId FROM session_speakers
+        WHERE event_id = ? AND person_id = ? LIMIT 1`,
+    )
+      .bind(eventId, speaker.personId)
+      .first<{ sessionId: string }>();
+    if (!relationship) throw new Error("Demo session relationship is missing.");
+    const session = await testEnv.DB.prepare(
+      `SELECT status FROM sessions WHERE id = ? AND event_id = ?`,
+    )
+      .bind(relationship.sessionId, eventId)
+      .first<{ status: string }>();
+    if (!session) throw new Error("Demo session is missing.");
+    const taskId = `cancelled-review-recovery-${crypto.randomUUID()}`;
+    const operationId = `cancelled-review-operation-${crypto.randomUUID()}`;
+    await testEnv.DB.batch([
+      testEnv.DB.prepare(
+        `INSERT INTO task_instances (
+           id, event_id, target_type, target_id, title, task_type, impact,
+           evidence_mode, configuration_json, status, readiness_state,
+           readiness_percent, revision, last_operation_id,
+           completed_by_person_id, completed_at
+         ) VALUES (?, ?, 'session', ?, 'Review session details',
+                   'acknowledgement', 'high', 'checkbox',
+                   '{"preset":"session_details_review_v1"}', 'completed',
+                   'on_track', 100, 2, ?, ?, unixepoch())`,
+      ).bind(
+        taskId,
+        eventId,
+        relationship.sessionId,
+        operationId,
+        speaker.personId,
+      ),
+      testEnv.DB.prepare(
+        `UPDATE sessions SET status = 'cancelled', updated_at = unixepoch()
+          WHERE id = ? AND event_id = ?`,
+      ).bind(relationship.sessionId, eventId),
+    ]);
+
+    try {
+      const recovery = new ApiParticipantService(testEnv);
+      await expect(
+        recovery.recoverTaskCompletion(speaker, taskId, 1, operationId),
+      ).resolves.toEqual({ taskId, status: "completed", revision: 2 });
+      await expect(
+        recovery.recoverTaskCompletion(
+          { ...speaker, personId: "person-demo-submitter" },
+          taskId,
+          1,
+          operationId,
+        ),
+      ).resolves.toBeNull();
+    } finally {
+      await testEnv.DB.prepare(
+        `UPDATE sessions SET status = ?, updated_at = unixepoch()
+          WHERE id = ? AND event_id = ?`,
+      )
+        .bind(session.status, relationship.sessionId, eventId)
+        .run();
+    }
+  });
+
   it("persists people, session and decision lifecycle commands without synthesising delivery", async () => {
     const suffix = crypto.randomUUID();
     const invited = await result(

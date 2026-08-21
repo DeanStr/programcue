@@ -10,6 +10,7 @@ import {
   ParticipantRetentionFoundation,
   ParticipantRetentionStateError,
   parseCompletionMetadata,
+  participantRetentionTaskPredicateSql,
   RETAINED_PERSON_PREFIX,
   requireOwner,
   sha256Hex,
@@ -155,7 +156,7 @@ export abstract class ParticipantRetentionAnalysis extends ParticipantRetentionF
                AND record.description IS NOT NULL)
           + (SELECT COUNT(*) FROM public_itineraries record WHERE record.event_id IN locked)
           + (SELECT COUNT(*) FROM task_instances record WHERE record.event_id IN locked
-            AND record.target_type = 'speaker'
+            AND ${participantRetentionTaskPredicateSql("record")}
             AND (record.description IS NOT NULL
               OR record.title <> 'Retained participant task'
               OR (record.evidence_json IS NOT NULL
@@ -164,14 +165,16 @@ export abstract class ParticipantRetentionAnalysis extends ParticipantRetentionF
                 AND COALESCE(json_extract(record.waiver_json, '$.redacted'), 0) <> 1)))
           + (SELECT COUNT(*) FROM task_comments record WHERE record.event_id IN locked
             AND record.task_id IN (
-              SELECT id FROM task_instances
-               WHERE event_id = record.event_id AND target_type = 'speaker'
+              SELECT participant_task.id FROM task_instances participant_task
+               WHERE participant_task.event_id = record.event_id
+                 AND ${participantRetentionTaskPredicateSql("participant_task")}
             )
             AND record.body <> '[redacted after event retention]')
           + (SELECT COUNT(*) FROM task_evidence record WHERE record.event_id IN locked
             AND record.task_id IN (
-              SELECT id FROM task_instances
-               WHERE event_id = record.event_id AND target_type = 'speaker'
+              SELECT participant_task.id FROM task_instances participant_task
+               WHERE participant_task.event_id = record.event_id
+                 AND ${participantRetentionTaskPredicateSql("participant_task")}
             )
             AND COALESCE(json_extract(record.evidence_json, '$.redacted'), 0) <> 1)
           + (SELECT COUNT(*) FROM resource_acknowledgements record
@@ -349,11 +352,26 @@ export abstract class ParticipantRetentionAnalysis extends ParticipantRetentionF
               WHERE owner_person_id = ? AND event_id <> ?
            )
            OR EXISTS (
+             SELECT 1 FROM task_instances external_completed_task
+              WHERE external_completed_task.completed_by_person_id = ?
+                AND external_completed_task.event_id <> ?
+                AND ${participantRetentionTaskPredicateSql("external_completed_task")}
+           )
+           OR EXISTS (
              SELECT 1 FROM task_evidence evidence
              JOIN task_instances task
                ON task.id = evidence.task_id AND task.event_id = evidence.event_id
               WHERE evidence.submitted_by_person_id = ?
-                AND evidence.event_id <> ? AND task.target_type = 'speaker'
+                AND evidence.event_id <> ?
+                AND ${participantRetentionTaskPredicateSql("task")}
+           )
+           OR EXISTS (
+             SELECT 1 FROM task_comments comment
+             JOIN task_instances task
+               ON task.id = comment.task_id AND task.event_id = comment.event_id
+              WHERE comment.author_person_id = ?
+                AND comment.event_id <> ?
+                AND ${participantRetentionTaskPredicateSql("task")}
            )
            OR EXISTS (
              SELECT 1 FROM resource_acknowledgements
@@ -411,7 +429,7 @@ export abstract class ParticipantRetentionAnalysis extends ParticipantRetentionF
          ) AS immutableAuditRows`,
     )
       .bind(
-        ...Array.from({ length: 16 }, () => [
+        ...Array.from({ length: 18 }, () => [
           candidate.id,
           viewer.eventId,
         ]).flat(),

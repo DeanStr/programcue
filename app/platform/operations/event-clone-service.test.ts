@@ -1026,6 +1026,53 @@ describe("event cloning", () => {
     ).resolves.toEqual({ count: 2 });
   });
 
+  it("recognizes a cloned session-details review preset without creating a duplicate", async () => {
+    const testEnv = env as unknown as CloudflareEnvironment;
+    const source = await new TaskService(
+      testEnv,
+    ).createSessionDetailsReviewTemplate(viewer, true);
+    const token = crypto.randomUUID().slice(0, 8);
+    const cloned = await new EventCloneService(testEnv).clone(viewer, {
+      name: `Session review preset clone ${token}`,
+      slug: `session-review-preset-clone-${token}`,
+      timezone: "America/Toronto",
+      startDate: "2027-05-20",
+      endDate: "2027-05-22",
+      repositoryProvider: "d1",
+    });
+    const clonedViewer = { ...viewer, eventId: cloned.eventId };
+    const before = await testEnv.DB.prepare(
+      `SELECT id FROM task_templates
+        WHERE event_id = ?
+          AND json_valid(configuration_json)
+          AND json_extract(configuration_json, '$.preset') = 'session_details_review_v1'`,
+    )
+      .bind(cloned.eventId)
+      .all<{ id: string }>();
+    expect(before.results).toHaveLength(1);
+    expect(before.results[0]?.id).not.toBe(source.templateId);
+
+    await expect(
+      new TaskService(testEnv).createSessionDetailsReviewTemplate(
+        clonedViewer,
+        true,
+      ),
+    ).resolves.toEqual({
+      templateId: before.results[0]?.id,
+      created: false,
+    });
+    await expect(
+      testEnv.DB.prepare(
+        `SELECT COUNT(*) AS count FROM task_templates
+          WHERE event_id = ?
+            AND json_valid(configuration_json)
+            AND json_extract(configuration_json, '$.preset') = 'session_details_review_v1'`,
+      )
+        .bind(cloned.eventId)
+        .first<{ count: number }>(),
+    ).resolves.toEqual({ count: 1 });
+  });
+
   it("copies a verified sender inside the clone transaction and records reuse evidence", async () => {
     const sourceSenderId = await insertSenderProfile();
     const token = crypto.randomUUID().slice(0, 8);

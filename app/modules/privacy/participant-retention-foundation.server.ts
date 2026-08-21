@@ -61,6 +61,16 @@ export type CompletionMetadata = {
   unscopedStoresNotAutomaticallyRedacted: string[];
 };
 
+export function participantRetentionTaskPredicateSql(alias: string) {
+  return `(
+    ${alias}.target_type = 'speaker'
+    OR (
+      ${alias}.target_type = 'session'
+      AND json_extract(${alias}.configuration_json, '$.preset') = 'session_details_review_v1'
+    )
+  )`;
+}
+
 export const participantPredicateSql = `(
   EXISTS (SELECT 1 FROM memberships candidate_membership
     WHERE candidate_membership.event_id = ?
@@ -81,15 +91,24 @@ export const participantPredicateSql = `(
     WHERE candidate_profile_revision.event_id = ?
       AND candidate_profile_revision.person_id = person.id)
   OR EXISTS (SELECT 1 FROM task_instances candidate_task
-    WHERE candidate_task.event_id = ? AND candidate_task.owner_person_id = person.id
-      AND candidate_task.target_type = 'speaker')
+    WHERE candidate_task.event_id = ?
+      AND (candidate_task.owner_person_id = person.id
+        OR candidate_task.completed_by_person_id = person.id)
+      AND ${participantRetentionTaskPredicateSql("candidate_task")})
   OR EXISTS (SELECT 1 FROM task_evidence candidate_evidence
     JOIN task_instances candidate_evidence_task
       ON candidate_evidence_task.id = candidate_evidence.task_id
      AND candidate_evidence_task.event_id = candidate_evidence.event_id
     WHERE candidate_evidence.event_id = ?
-      AND candidate_evidence_task.target_type = 'speaker'
+      AND ${participantRetentionTaskPredicateSql("candidate_evidence_task")}
       AND candidate_evidence.submitted_by_person_id = person.id)
+  OR EXISTS (SELECT 1 FROM task_comments candidate_comment
+    JOIN task_instances candidate_comment_task
+      ON candidate_comment_task.id = candidate_comment.task_id
+     AND candidate_comment_task.event_id = candidate_comment.event_id
+    WHERE candidate_comment.event_id = ?
+      AND ${participantRetentionTaskPredicateSql("candidate_comment_task")}
+      AND candidate_comment.author_person_id = person.id)
   OR EXISTS (SELECT 1 FROM resource_acknowledgements candidate_acknowledgement
     WHERE candidate_acknowledgement.event_id = ? AND candidate_acknowledgement.person_id = person.id)
   OR EXISTS (SELECT 1 FROM resource_audiences candidate_audience
@@ -112,7 +131,7 @@ export const participantPredicateSql = `(
 )`;
 
 export function participantIdBindings(eventId: string) {
-  return Array.from({ length: 17 }, () => eventId);
+  return Array.from({ length: 18 }, () => eventId);
 }
 
 export function candidateSql(suffix: string) {

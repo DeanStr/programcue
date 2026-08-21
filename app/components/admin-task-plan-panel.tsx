@@ -92,8 +92,13 @@ export function AdminTaskPlanPanel({
       template.preset === "session_details_review_v1" &&
       template.targetType === "session" &&
       template.taskType === "acknowledgement" &&
+      template.impact === "high" &&
       template.evidenceMode === "checkbox" &&
-      Boolean(template.autoAssignOnAcceptance),
+      template.dueAnchor === "none" &&
+      template.dueOffsetMinutes === null &&
+      template.fixedDueAt === null &&
+      Boolean(template.autoAssignOnAcceptance) &&
+      template.dependencies.length === 0,
   );
   return (
     <aside className="tasks-side stack">

@@ -335,7 +335,18 @@ page links only to that exact task's comments and focuses the message field. If
 the preset is not assigned, it uses the configured participant support URL and
 otherwise omits the correction action. Comments request a correction without
 completing the task. Individual participation consent remains the separate
-per-session Accept/Decline decision.
+per-session Accept/Decline decision. The immutable preset marker and task shape,
+not a generated template identifier, identify this workflow so cloned events
+retain their correction link. An event may contain only one such preset;
+duplicates or a preset whose required behavior has drifted fail explicitly.
+Cancelled or archived sessions make this preset unavailable to participants and
+exclude it from participant readiness without changing unrelated operational
+session tasks. Participant-retention finalisation treats its descriptions,
+evidence, comments and participant actor identities as participant-authored
+data, while unrelated organiser session tasks remain operational records.
+Cross-event identity classification includes those completion, evidence and
+comment references so retention cannot anonymise an identity still used by
+another event.
 
 Manual and direct-session speaker invitations validate authentication, sender
 and Queue readiness before the domain mutation. Their communication operation,

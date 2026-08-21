@@ -22,6 +22,77 @@ beforeEach(async () => {
 describe("participant retention", () => {
   it("anonymises event-scoped PII, revokes exclusive credentials, and preserves shared identities plus immutable audit", async () => {
     const seeded = await seedExpiredRetentionEvent();
+    const sessionReviewTaskId = id("privacy-session-review-task");
+    const sessionReviewCommentId = id("privacy-session-review-comment");
+    const sessionReviewEvidenceId = id("privacy-session-review-evidence");
+    const operationalSessionTaskId = id("privacy-operational-session-task");
+    await seeded.testEnv.DB.batch([
+      seeded.testEnv.DB.prepare(
+        `INSERT INTO task_instances (
+           id, event_id, target_type, target_id, title, description,
+           task_type, impact, evidence_mode, configuration_json, status,
+           readiness_state, readiness_percent, evidence_json,
+           completed_by_person_id, completed_at
+         ) VALUES (?, ?, 'session', ?, 'Review session details',
+                   'Participant review task', 'acknowledgement', 'high',
+                   'checkbox', '{"preset":"session_details_review_v1"}',
+                   'completed', 'on_track', 100, ?, ?, unixepoch())`,
+      ).bind(
+        sessionReviewTaskId,
+        seeded.eventId,
+        seeded.sessionId,
+        JSON.stringify({
+          confirmed: true,
+          sessionDetailsReview: {
+            version: 1,
+            sessionRevision: 1,
+            fingerprint: "a".repeat(64),
+            fields: {
+              title: "Retained programme fact",
+              description: "Private correction evidence",
+              format: "presentation",
+              durationMinutes: 30,
+              trackId: null,
+              trackName: null,
+            },
+            reviewedAt: 1_700_000_000,
+          },
+        }),
+        seeded.exclusiveId,
+      ),
+      seeded.testEnv.DB.prepare(
+        `INSERT INTO task_comments (
+           id, event_id, task_id, author_person_id, body, visibility
+         ) VALUES (?, ?, ?, ?, 'Please correct my private session description.',
+                   'participant')`,
+      ).bind(
+        sessionReviewCommentId,
+        seeded.eventId,
+        sessionReviewTaskId,
+        seeded.exclusiveId,
+      ),
+      seeded.testEnv.DB.prepare(
+        `INSERT INTO task_evidence (
+           id, event_id, task_id, submitted_by_person_id, evidence_json, status
+         ) VALUES (?, ?, ?, ?, ?, 'approved')`,
+      ).bind(
+        sessionReviewEvidenceId,
+        seeded.eventId,
+        sessionReviewTaskId,
+        seeded.exclusiveId,
+        JSON.stringify({ description: "Private correction evidence" }),
+      ),
+      seeded.testEnv.DB.prepare(
+        `INSERT INTO task_instances (
+           id, event_id, target_type, target_id, owner_person_id, title,
+           description, task_type, impact, evidence_mode, configuration_json,
+           status, readiness_state, readiness_percent, completed_by_person_id
+         ) VALUES (?, ?, 'session', ?, 'person-demo-owner',
+                   'Operational session task', 'Retained stage instruction',
+                   'administrator_only', 'low', 'admin_approval', '{}',
+                   'completed', 'on_track', 100, 'person-demo-owner')`,
+      ).bind(operationalSessionTaskId, seeded.eventId, seeded.sessionId),
+    ]);
     const service = new ParticipantRetentionService(seeded.testEnv);
     const preview = await service.preview(seeded.owner);
     expect(preview).toMatchObject({
@@ -278,6 +349,115 @@ describe("participant retention", () => {
       submittedByPersonId: "person-demo-owner",
       evidenceJson: '{"operational":true}',
     });
+    const retainedSessionReview = await seeded.testEnv.DB.prepare(
+      `SELECT task.title, task.description,
+              task.completed_by_person_id AS completedByPersonId,
+              task.evidence_json AS taskEvidenceJson,
+              comment.author_person_id AS commentAuthorPersonId,
+              comment.body AS commentBody,
+              evidence.submitted_by_person_id AS evidencePersonId,
+              evidence.evidence_json AS evidenceJson
+         FROM task_instances task
+         JOIN task_comments comment
+           ON comment.task_id = task.id AND comment.event_id = task.event_id
+         JOIN task_evidence evidence
+           ON evidence.task_id = task.id AND evidence.event_id = task.event_id
+        WHERE task.id = ? AND task.event_id = ?`,
+    )
+      .bind(sessionReviewTaskId, seeded.eventId)
+      .first<{
+        title: string;
+        description: string | null;
+        completedByPersonId: string;
+        taskEvidenceJson: string;
+        commentAuthorPersonId: string;
+        commentBody: string;
+        evidencePersonId: string;
+        evidenceJson: string;
+      }>();
+    expect(retainedSessionReview).toMatchObject({
+      title: "Retained participant task",
+      description: null,
+      commentBody: "[redacted after event retention]",
+    });
+    expect(retainedSessionReview?.completedByPersonId).toMatch(
+      /^retained-participant-/,
+    );
+    expect(retainedSessionReview?.commentAuthorPersonId).toBe(
+      retainedSessionReview?.completedByPersonId,
+    );
+    expect(retainedSessionReview?.evidencePersonId).toBe(
+      retainedSessionReview?.completedByPersonId,
+    );
+    expect(JSON.parse(retainedSessionReview!.taskEvidenceJson)).toMatchObject({
+      redacted: true,
+      reason: "event_retention_period_elapsed",
+    });
+    expect(JSON.parse(retainedSessionReview!.evidenceJson)).toMatchObject({
+      redacted: true,
+      reason: "event_retention_period_elapsed",
+    });
+    await expect(
+      seeded.testEnv.DB.prepare(
+        `SELECT owner_person_id AS ownerPersonId,
+                completed_by_person_id AS completedByPersonId,
+                title, description, evidence_json AS evidenceJson
+           FROM task_instances WHERE id = ? AND event_id = ?`,
+      )
+        .bind(operationalSessionTaskId, seeded.eventId)
+        .first(),
+    ).resolves.toEqual({
+      ownerPersonId: "person-demo-owner",
+      completedByPersonId: "person-demo-owner",
+      title: "Operational session task",
+      description: "Retained stage instruction",
+      evidenceJson: null,
+    });
+    await expect(
+      seeded.testEnv.DB.prepare(
+        `UPDATE task_instances SET description = 'PII restored after retention'
+          WHERE id = ? AND event_id = ?`,
+      )
+        .bind(sessionReviewTaskId, seeded.eventId)
+        .run(),
+    ).rejects.toThrow(/participant PII is read-only/i);
+    await expect(
+      seeded.testEnv.DB.prepare(
+        `INSERT INTO task_comments (
+           id, event_id, task_id, author_person_id, body, visibility
+         ) VALUES (?, ?, ?, 'person-demo-owner', 'PII after retention',
+                   'administrator')`,
+      )
+        .bind(
+          id("post-retention-session-review-comment"),
+          seeded.eventId,
+          sessionReviewTaskId,
+        )
+        .run(),
+    ).rejects.toThrow(/participant PII is read-only/i);
+    await expect(
+      seeded.testEnv.DB.prepare(
+        `INSERT INTO task_evidence (
+           id, event_id, task_id, submitted_by_person_id, evidence_json, status
+         ) VALUES (?, ?, ?, 'person-demo-owner',
+                   '{"description":"PII after retention"}', 'approved')`,
+      )
+        .bind(
+          id("post-retention-session-review-evidence"),
+          seeded.eventId,
+          sessionReviewTaskId,
+        )
+        .run(),
+    ).rejects.toThrow(/participant PII is read-only/i);
+    await expect(
+      seeded.testEnv.DB.prepare(
+        `UPDATE task_instances
+            SET description = 'Updated retained stage instruction'
+          WHERE id = ? AND event_id = ?`,
+      )
+        .bind(operationalSessionTaskId, seeded.eventId)
+        .run(),
+    ).resolves.toMatchObject({ meta: { changes: 1 } });
     expect(
       await seeded.testEnv.DB.prepare(
         "SELECT COUNT(*) AS total FROM auth_sessions WHERE person_id = ?",
@@ -443,6 +623,87 @@ describe("participant retention", () => {
         acknowledged: true,
       }),
     ).resolves.toMatchObject({ complete: true, duplicate: true });
+  });
+
+  it("preserves an identity referenced only by another event's session-review correction", async () => {
+    const seeded = await seedExpiredRetentionEvent();
+    const otherSessionId = id("privacy-other-review-session");
+    const otherTaskId = id("privacy-other-review-task");
+    const otherCommentId = id("privacy-other-review-comment");
+    await seeded.testEnv.DB.batch([
+      seeded.testEnv.DB.prepare(
+        `INSERT INTO sessions (
+           id, event_id, title, slug, format, duration_minutes, status,
+           visibility
+         ) VALUES (?, ?, 'Other event session', ?, 'presentation', 30,
+                   'unscheduled', 'private')`,
+      ).bind(
+        otherSessionId,
+        seeded.otherEventId,
+        id("privacy-other-review-slug"),
+      ),
+      seeded.testEnv.DB.prepare(
+        `INSERT INTO task_instances (
+           id, event_id, target_type, target_id, title, task_type, impact,
+           evidence_mode, configuration_json, status, readiness_state,
+           readiness_percent
+         ) VALUES (?, ?, 'session', ?, 'Review session details',
+                   'acknowledgement', 'high', 'checkbox',
+                   '{"preset":"session_details_review_v1"}', 'not_started',
+                   'on_track', 0)`,
+      ).bind(otherTaskId, seeded.otherEventId, otherSessionId),
+      seeded.testEnv.DB.prepare(
+        `INSERT INTO task_comments (
+           id, event_id, task_id, author_person_id, body, visibility
+         ) VALUES (?, ?, ?, ?, 'Keep this other-event correction private.',
+                   'participant')`,
+      ).bind(
+        otherCommentId,
+        seeded.otherEventId,
+        otherTaskId,
+        seeded.exclusiveId,
+      ),
+    ]);
+
+    await new ParticipantRetentionService(
+      seeded.testEnv,
+    ).anonymiseExpiredParticipants(seeded.owner, {
+      confirmation: "Expired privacy event",
+      acknowledged: true,
+    });
+
+    await expect(
+      seeded.testEnv.DB.prepare(
+        `SELECT email, display_name AS displayName
+           FROM people WHERE id = ?`,
+      )
+        .bind(seeded.exclusiveId)
+        .first(),
+    ).resolves.toEqual({
+      email: `${seeded.exclusiveId}@example.com`,
+      displayName: "Exclusive Person",
+    });
+    await expect(
+      seeded.testEnv.DB.prepare(
+        `SELECT author_person_id AS authorPersonId, body
+           FROM task_comments WHERE id = ? AND event_id = ?`,
+      )
+        .bind(otherCommentId, seeded.otherEventId)
+        .first(),
+    ).resolves.toEqual({
+      authorPersonId: seeded.exclusiveId,
+      body: "Keep this other-event correction private.",
+    });
+    const retainedCurrentRelationship = await seeded.testEnv.DB.prepare(
+      `SELECT person_id AS personId FROM session_speakers
+        WHERE event_id = ? AND session_id = ? AND position = 0`,
+    )
+      .bind(seeded.eventId, seeded.sessionId)
+      .first<{ personId: string }>();
+    expect(retainedCurrentRelationship?.personId).toMatch(
+      /^retained-participant-/,
+    );
+    expect(retainedCurrentRelationship?.personId).not.toBe(seeded.exclusiveId);
   });
 
   it("redacts immutable session evaluation snapshots before completing retention", async () => {

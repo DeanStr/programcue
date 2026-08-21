@@ -326,7 +326,8 @@ export default function SpeakerSessions(_props: Route.ComponentProps) {
                           respond again.
                         </p>
                       ) : null}
-                      {session.participationStatus !== "declined" ? (
+                      {session.participationStatus !== "declined" &&
+                      session.status !== "cancelled" ? (
                         session.sessionDetailsReviewTaskId ? (
                           <Link
                             className="btn small"

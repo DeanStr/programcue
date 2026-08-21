@@ -14,6 +14,7 @@ import {
   ParticipantRetentionStateError,
   participantIdBindings,
   participantPredicateSql,
+  participantRetentionTaskPredicateSql,
   RETAINED_PERSON_PREFIX,
   requireOwner,
 } from "./participant-retention-foundation.server";
@@ -217,7 +218,7 @@ export abstract class ParticipantRetentionExecution extends ParticipantRetention
         "task_instances",
         "owner_person_id",
         "event_id = ?",
-        "target_type = 'speaker'",
+        participantRetentionTaskPredicateSql("task_instances"),
       ),
       mapStatement(
         this.env,
@@ -225,7 +226,7 @@ export abstract class ParticipantRetentionExecution extends ParticipantRetention
         "task_instances",
         "completed_by_person_id",
         "event_id = ?",
-        "target_type = 'speaker'",
+        participantRetentionTaskPredicateSql("task_instances"),
       ),
       mapStatement(
         this.env,
@@ -233,7 +234,11 @@ export abstract class ParticipantRetentionExecution extends ParticipantRetention
         "task_comments",
         "author_person_id",
         "event_id = ?",
-        "task_id IN (SELECT id FROM task_instances WHERE event_id = task_comments.event_id AND target_type = 'speaker')",
+        `task_id IN (
+          SELECT participant_task.id FROM task_instances participant_task
+           WHERE participant_task.event_id = task_comments.event_id
+             AND ${participantRetentionTaskPredicateSql("participant_task")}
+        )`,
       ),
       mapStatement(
         this.env,
@@ -264,7 +269,11 @@ export abstract class ParticipantRetentionExecution extends ParticipantRetention
         "task_evidence",
         "submitted_by_person_id",
         "event_id = ?",
-        "task_id IN (SELECT id FROM task_instances WHERE event_id = task_evidence.event_id AND target_type = 'speaker')",
+        `task_id IN (
+          SELECT participant_task.id FROM task_instances participant_task
+           WHERE participant_task.event_id = task_evidence.event_id
+             AND ${participantRetentionTaskPredicateSql("participant_task")}
+        )`,
       ),
       mapStatement(
         this.env,

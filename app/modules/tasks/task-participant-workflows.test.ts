@@ -373,41 +373,50 @@ describe("onboarding task service", () => {
         .run();
 
       try {
+        const clonedPresetTemplateId = crypto.randomUUID();
+        await testEnv.DB.prepare(
+          `INSERT INTO task_templates (
+             id, event_id, name, description, target_type, task_type, impact,
+             evidence_mode, due_anchor, due_offset_minutes, fixed_due_at,
+             auto_assign_on_acceptance, configuration_json, status
+           ) VALUES (?, ?, 'Review session details',
+                     'Review the shared session title, description, format, duration and track. Any active session participant may confirm them for the session or leave a correction comment.',
+                     'session', 'acknowledgement', 'high', 'checkbox', 'none',
+                     NULL, NULL, 1,
+                     '{"preset":"session_details_review_v1"}', 'active')`,
+        )
+          .bind(clonedPresetTemplateId, admin.eventId)
+          .run();
         const preset = await service.createSessionDetailsReviewTemplate(
           admin,
           true,
         );
+        expect(preset).toEqual({
+          templateId: clonedPresetTemplateId,
+          created: false,
+        });
         const { taskId } = await service.assignTemplate(
           admin,
           preset.templateId,
           "session-demo-speaker",
         );
-        const duplicateTemplateId = await service.createTemplate(admin, {
-          name: `Duplicate session review ${crypto.randomUUID()}`,
-          description:
-            "A duplicate preset must not become the correction route.",
-          targetType: "session",
-          taskType: "acknowledgement",
-          impact: "high",
-          evidenceMode: "checkbox",
-          dueAnchor: "none",
-          dueOffsetDays: null,
-          fixedDueDate: null,
-          autoAssignOnAcceptance: true,
-          dependencyIds: [],
-          configuration: { preset: "session_details_review_v1" },
-        });
-        const duplicateTask = await service.assignTemplate(
-          admin,
-          duplicateTemplateId,
-          "session-demo-speaker",
-        );
-        await testEnv.DB.prepare(
-          `UPDATE task_instances SET created_at = unixepoch() + 60
-            WHERE id = ? AND event_id = ?`,
-        )
-          .bind(duplicateTask.taskId, speaker.eventId)
-          .run();
+        await expect(
+          service.createTemplate(admin, {
+            name: `Duplicate session review ${crypto.randomUUID()}`,
+            description:
+              "A duplicate preset must fail instead of becoming a second correction route.",
+            targetType: "session",
+            taskType: "acknowledgement",
+            impact: "high",
+            evidenceMode: "checkbox",
+            dueAnchor: "none",
+            dueOffsetDays: null,
+            fixedDueDate: null,
+            autoAssignOnAcceptance: true,
+            dependencyIds: [],
+            configuration: { preset: "session_details_review_v1" },
+          }),
+        ).rejects.toThrow("already contains a session-details review preset");
         const portalSession = (
           await new SpeakerService(testEnv).getPortal(speaker)
         ).sessions.find((session) => session.id === "session-demo-speaker");
@@ -516,6 +525,30 @@ describe("onboarding task service", () => {
           .bind(original.title, speaker.eventId)
           .run();
       }
+
+      const duplicateTemplateId = crypto.randomUUID();
+      await testEnv.DB.prepare(
+        `INSERT INTO task_templates (
+           id, event_id, name, target_type, task_type, impact, evidence_mode,
+           due_anchor, auto_assign_on_acceptance, configuration_json, status
+         ) VALUES (?, ?, 'Duplicate session review', 'session',
+                   'acknowledgement', 'high', 'checkbox', 'none', 1,
+                   '{"preset":"session_details_review_v1"}', 'active')`,
+      )
+        .bind(duplicateTemplateId, speaker.eventId)
+        .run();
+      try {
+        await expect(service.listParticipantTasks(speaker)).rejects.toThrow(
+          /differs from the required shared acknowledgement/i,
+        );
+        await expect(
+          new SpeakerService(testEnv).getPortal(speaker),
+        ).rejects.toThrow(/differs from the required shared acknowledgement/i);
+      } finally {
+        await testEnv.DB.prepare("DELETE FROM task_templates WHERE id = ?")
+          .bind(duplicateTemplateId)
+          .run();
+      }
     });
 
     it("rejects unsupported evidence combinations and persists an explicit supported scope", async () => {
@@ -545,7 +578,7 @@ describe("onboarding task service", () => {
           configuration: { preset: "session_details_review_v1" },
         }),
       ).rejects.toThrow(
-        /session-details review preset must be an automatically assigned session acknowledgement/i,
+        /session-details review preset must use the fixed high-impact/i,
       );
       await expect(
         service.createTemplate(admin, { ...base, targetType: "session" }),
@@ -584,6 +617,145 @@ describe("onboarding task service", () => {
   });
 
   describe("participant workflows", () => {
+    it("fails explicitly when an assigned session-review task has drifted", async () => {
+      const testEnv = env as unknown as CloudflareEnvironment;
+      await ensureDemoSpeakerData(testEnv);
+      const service = new TaskService(testEnv);
+      const preset = await service.createSessionDetailsReviewTemplate(
+        admin,
+        true,
+      );
+      const { taskId } = await service.assignTemplate(
+        admin,
+        preset.templateId,
+        "session-demo-speaker",
+      );
+      await testEnv.DB.prepare(
+        `UPDATE task_instances SET impact = 'low', updated_at = unixepoch()
+          WHERE id = ? AND event_id = ?`,
+      )
+        .bind(taskId, speaker.eventId)
+        .run();
+
+      try {
+        await expect(service.listParticipantTasks(speaker)).rejects.toThrow(
+          /differs from the required shared acknowledgement/i,
+        );
+        await expect(
+          new SpeakerService(testEnv).getPortal(speaker),
+        ).rejects.toThrow(/differs from the required shared acknowledgement/i);
+        await expect(
+          service.addComment(
+            speaker,
+            taskId,
+            "This must not use a drifted correction workflow.",
+            "participant",
+            `drifted-session-review:${crypto.randomUUID()}`,
+          ),
+        ).rejects.toThrow(/differs from the required shared acknowledgement/i);
+      } finally {
+        await testEnv.DB.prepare(
+          `UPDATE task_instances SET impact = 'high', updated_at = unixepoch()
+            WHERE id = ? AND event_id = ?`,
+        )
+          .bind(taskId, speaker.eventId)
+          .run();
+      }
+    });
+
+    it("makes an inactive session-details review unavailable without hiding unrelated session tasks", async () => {
+      const testEnv = env as unknown as CloudflareEnvironment;
+      await ensureDemoSpeakerData(testEnv);
+      const service = new TaskService(testEnv);
+      const originalSession = await testEnv.DB.prepare(
+        `SELECT status FROM sessions
+          WHERE id = 'session-demo-speaker' AND event_id = ?`,
+      )
+        .bind(speaker.eventId)
+        .first<{ status: string }>();
+      if (!originalSession) throw new Error("Demo session is missing.");
+      const preset = await service.createSessionDetailsReviewTemplate(
+        admin,
+        true,
+      );
+      const reviewTaskId = (
+        await service.assignTemplate(
+          admin,
+          preset.templateId,
+          "session-demo-speaker",
+        )
+      ).taskId;
+      const checklistTaskId = crypto.randomUUID();
+      await testEnv.DB.prepare(
+        `INSERT INTO task_instances (
+           id, event_id, target_type, target_id, title, description,
+           task_type, impact, evidence_mode, configuration_json, status,
+           readiness_state, readiness_percent, revision, created_at, updated_at
+         ) VALUES (?, ?, 'session', 'session-demo-speaker',
+                   'Cancelled-session operational checklist',
+                   'An unrelated session task retains its existing contract.',
+                   'checklist', 'low', 'checkbox', '{}', 'not_started',
+                   'on_track', 0, 1, unixepoch(), unixepoch())`,
+      )
+        .bind(checklistTaskId, speaker.eventId)
+        .run();
+      const review = (await service.listParticipantTasks(speaker)).find(
+        (task) => task.id === reviewTaskId,
+      );
+      if (!review?.sessionDetailsReview)
+        throw new Error("Session review details were not loaded.");
+
+      try {
+        await testEnv.DB.prepare(
+          `UPDATE sessions SET status = 'cancelled', updated_at = unixepoch()
+            WHERE id = 'session-demo-speaker' AND event_id = ?`,
+        )
+          .bind(speaker.eventId)
+          .run();
+
+        const participantTaskIds = (
+          await service.listParticipantTasks(speaker)
+        ).map((task) => task.id);
+        expect(participantTaskIds).not.toContain(reviewTaskId);
+        expect(participantTaskIds).toContain(checklistTaskId);
+        expect(
+          (await new SpeakerService(testEnv).getPortal(speaker)).sessions.find(
+            (session) => session.id === "session-demo-speaker",
+          )?.sessionDetailsReviewTaskId,
+        ).toBeNull();
+        expect(
+          (await service.getAdminWorkspace(admin)).tasks.find(
+            (task) => task.id === reviewTaskId,
+          )?.participantActionable,
+        ).toBe(false);
+        await expect(
+          service.completeParticipant(speaker, {
+            taskId: reviewTaskId,
+            revision: review.revision,
+            confirmed: true,
+            sessionDetailsRevision: review.sessionDetailsReview.sessionRevision,
+            sessionDetailsFingerprint: review.sessionDetailsReview.fingerprint,
+          }),
+        ).rejects.toThrow("not owned by this speaker");
+        await expect(
+          service.addComment(
+            speaker,
+            reviewTaskId,
+            "This cancelled session must not accept another correction.",
+            "participant",
+            `cancelled-session-comment:${crypto.randomUUID()}`,
+          ),
+        ).rejects.toThrow("not accessible to this participant");
+      } finally {
+        await testEnv.DB.prepare(
+          `UPDATE sessions SET status = ?, updated_at = unixepoch()
+            WHERE id = 'session-demo-speaker' AND event_id = ?`,
+        )
+          .bind(originalSession.status, speaker.eventId)
+          .run();
+      }
+    });
+
     it("rejects ineligible task uploads before any file storage begins", async () => {
       const testEnv = env as unknown as CloudflareEnvironment;
       await ensureDemoSpeakerData(testEnv);
