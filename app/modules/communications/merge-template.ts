@@ -6,11 +6,10 @@ const SINGLE_BRACE_MERGE_PATTERN =
 const PLACEHOLDER_INSTRUCTION_PATTERN =
   /^(?:insert|add|enter|provide|replace|fill\s+in|include)\b/iu;
 const PLACEHOLDER_LABEL_PATTERN =
-  /^(?:(?:recipient|administrator|admin|organizer|organiser|speaker|reviewer|contact|your)\s+).*(?:name|e-?mail|contact|deadline|due\s+date|date|link|url|phone|address)$/iu;
+  /^(?:(?:recipient|administrator|admin|organizer|organiser|speaker|reviewer|event|contact|your)\s+).*(?:name|e-?mail|contact|deadline|due\s+date|dates?|link|url|phone|address)$/iu;
 const EXPLICIT_PLACEHOLDER_LABELS = new Set([
   "company name",
   "email address",
-  "event name",
   "first name",
   "system/tool name",
 ]);
@@ -87,7 +86,7 @@ function findExtraBraceMergeToken(template: string) {
 function findMalformedMergeToken(template: string) {
   const open = template.indexOf("{{");
   const close = template.indexOf("}}");
-  if (open >= 0 && (close < 0 || open < close)) {
+  if (open >= 0) {
     const lineEnd = template.indexOf("\n", open);
     const matchedClose = template.indexOf("}}", open + 2);
     const end =
@@ -102,7 +101,7 @@ function findMalformedMergeToken(template: string) {
     const prefix = template
       .slice(Math.max(0, close - 120), close)
       .match(/[a-z][a-zA-Z0-9.]*\s*$/u)?.[0];
-    return `${prefix ?? ""}}}`;
+    return prefix ? `${prefix}}}` : null;
   }
   return null;
 }

@@ -273,21 +273,31 @@ export async function processCommunicationSend(
   const snapshot = communicationContentSnapshotSchemaForEnvironment(
     env.APP_ENV,
   ).parse(JSON.parse(communication.contentSnapshotJson));
-  const provider = dependencies.email ?? createEmailProvider(env);
-  const durableProviders = await env.DB.prepare(
-    `SELECT DISTINCT provider
-       FROM communication_deliveries
-      WHERE communication_id = ? AND event_id = ?`,
-  )
-    .bind(message.communicationId, message.eventId)
-    .all<{ provider: string | null }>();
-  if (
-    durableProviders.results.length !== 1 ||
-    durableProviders.results[0]?.provider !== provider.name
-  ) {
-    throw new Error(
-      "The communication delivery provider does not match its durable intent.",
-    );
+  const unresolved = findUnresolvedTemplateContent({
+    subject: snapshot.subjectTemplate,
+    body: snapshot.content.body,
+    physicalAddress: snapshot.content.physicalAddress,
+    buttonText: snapshot.content.buttonText,
+    buttonUrl: snapshot.content.buttonUrl,
+  });
+  let provider: NonNullable<QueueProviderDependencies["email"]> | null = null;
+  if (!unresolved) {
+    provider = dependencies.email ?? createEmailProvider(env);
+    const durableProviders = await env.DB.prepare(
+      `SELECT DISTINCT provider
+         FROM communication_deliveries
+        WHERE communication_id = ? AND event_id = ?`,
+    )
+      .bind(message.communicationId, message.eventId)
+      .all<{ provider: string | null }>();
+    if (
+      durableProviders.results.length !== 1 ||
+      durableProviders.results[0]?.provider !== provider.name
+    ) {
+      throw new Error(
+        "The communication delivery provider does not match its durable intent.",
+      );
+    }
   }
 
   // The immutable operation ID plus the queued/sending transition is the send
@@ -385,16 +395,14 @@ export async function processCommunicationSend(
   }
 
   try {
-    const unresolved = findUnresolvedTemplateContent({
-      subject: snapshot.subjectTemplate,
-      body: snapshot.content.body,
-      physicalAddress: snapshot.content.physicalAddress,
-      buttonText: snapshot.content.buttonText,
-      buttonUrl: snapshot.content.buttonUrl,
-    });
     if (unresolved) {
       throw new UnresolvedTemplateContentError(
         unresolvedTemplateTokenMessage(unresolved),
+      );
+    }
+    if (!provider) {
+      throw new Error(
+        "The email provider was not resolved for validated communication content.",
       );
     }
     // Resolve mutable sender authority only after this worker owns the

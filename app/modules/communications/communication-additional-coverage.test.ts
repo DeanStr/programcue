@@ -562,7 +562,11 @@ describe("Communications D1 vertical slice", () => {
         },
       } satisfies Message;
 
-      await handleProgramCueQueueMessage(queueMessage, testEnv);
+      await handleProgramCueQueueMessage(queueMessage, {
+        ...testEnv,
+        EMAIL_PROVIDER: undefined,
+        RESEND_API_KEY: undefined,
+      });
 
       expect(acknowledgements).toBe(1);
       expect(retries).toEqual([]);
@@ -602,6 +606,72 @@ describe("Communications D1 vertical slice", () => {
         itemStatus: "failed",
         itemErrorCode: "UnresolvedTemplateContentError",
         itemError: expect.stringContaining("[insert registration link]"),
+      });
+    });
+
+    it("keeps provider configuration failures retryable before the Queue claim", async () => {
+      const { testEnv, sent } = await communicationEnvironment();
+      const service = new CommunicationService(testEnv);
+      const saved = await service.saveTemplate(viewer, {
+        name: "Retryable provider configuration",
+        category: "ad_hoc",
+        subject: "Event update",
+        content: {
+          body: "The event briefing is ready.",
+          physicalAddress: "100 Programme Way, Toronto",
+        },
+      });
+      await service.publishTemplate(viewer, saved.versionId);
+      const confirmed = await confirmPreviewed(service, {
+        templateVersionId: saved.versionId,
+        audienceType: "manual",
+        manualRecipients: "provider-retry@example.com",
+        kind: "transactional",
+        idempotencyKey: `provider-retry-${crypto.randomUUID()}`,
+      });
+      let acknowledgements = 0;
+      const retries: QueueRetryOptions[] = [];
+      const queueMessage = {
+        id: "provider-configuration-message",
+        timestamp: new Date(),
+        attempts: 1,
+        body: sent[0],
+        ack() {
+          acknowledgements += 1;
+        },
+        retry(options?: QueueRetryOptions) {
+          retries.push(options ?? {});
+        },
+      } satisfies Message;
+
+      await handleProgramCueQueueMessage(queueMessage, {
+        ...testEnv,
+        EMAIL_PROVIDER: undefined,
+        RESEND_API_KEY: undefined,
+      });
+
+      expect(acknowledgements).toBe(0);
+      expect(retries).toEqual([{}]);
+      await expect(
+        testEnv.DB.prepare(
+          `SELECT operation.status AS operationStatus,
+                  operation.claim_token AS claimToken,
+                  communication.status AS communicationStatus,
+                  delivery.status AS deliveryStatus
+             FROM operation_jobs operation
+             JOIN communications communication
+               ON communication.operation_id = operation.id
+             JOIN communication_deliveries delivery
+               ON delivery.communication_id = communication.id
+            WHERE operation.id = ?`,
+        )
+          .bind(confirmed.operationId)
+          .first(),
+      ).resolves.toEqual({
+        operationStatus: "retrying",
+        claimToken: null,
+        communicationStatus: "queued",
+        deliveryStatus: "queued",
       });
     });
   });

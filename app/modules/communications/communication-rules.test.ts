@@ -173,6 +173,10 @@ describe("communication and readiness rules", () => {
     "[Administrator name/email]",
     "[system/tool name]",
     "[Event name]",
+    "[Event date]",
+    "[Event dates]",
+    "[Event link]",
+    "[Event address]",
     "[Company name]",
     "[First name]",
     "[Email address]",
@@ -193,6 +197,12 @@ describe("communication and readiness rules", () => {
     expect(findUnresolvedTemplateToken(`Reminder: ${token}`)).toBe(token);
   });
 
+  it("detects a dangling merge opener after literal closing delimiters", () => {
+    expect(
+      findUnresolvedTemplateToken("Use `}}`; then {{recipient.firstName"),
+    ).toBe("{{recipient.firstName");
+  });
+
   it.each([
     "[Important] Complete this today.",
     "See citations [1] and [2].",
@@ -200,6 +210,7 @@ describe("communication and readiness rules", () => {
     "Use <strong>care</strong> in HTML examples.",
     "Use an <address> element in HTML examples.",
     "Use {example.value} in the code sample.",
+    "Use the literal sequence `}}` in this example.",
     "Alex Morgan <alex@example.com>",
     "Hello {{recipient.firstName}} from {{event.name}}.",
   ])("preserves authored template text %s", (text) => {
