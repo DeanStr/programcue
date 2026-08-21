@@ -1,5 +1,6 @@
 import { createRequestHandler, RouterContextProvider } from "react-router";
 
+import { reconcileInterruptedAiOperations } from "../app/modules/ai/ai-operation-lease.server";
 import { runCommunicationAutomation } from "../app/modules/communications/communication-automation-service.server";
 import { cleanupExpiredContentZipExports } from "../app/modules/content/content-archive-service.server";
 import { requireRetiredEventBrandAssetCleanup } from "../app/modules/events/event-brand-asset-cleanup.server";
@@ -536,6 +537,12 @@ export default {
         observe(
           "content-zip-export-cleanup",
           cleanupExpiredContentZipExports(env),
+        ),
+      );
+      ctx.waitUntil(
+        observe(
+          "interrupted-ai-operation-reconciliation",
+          reconcileInterruptedAiOperations(env),
         ),
       );
       return;

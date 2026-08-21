@@ -8,6 +8,13 @@ import {
   AiPermissionError,
 } from "./ai-assistant-service.server";
 import {
+  cancelAiOperationLease,
+  completeAiOperationLease,
+  startAiOperationLease,
+} from "./ai-operation-lease.server";
+import { stageReminderSendProposal } from "./ai-proposal-executor-foundation.server";
+import { AiToolValidationError } from "./ai-tool-execution";
+import {
   AiToolPermissionError,
   prepareReminderSendProposal,
 } from "./ai-tools.server";
@@ -673,6 +680,112 @@ describe("agent tool permissions and approval", () => {
       .bind(admin.eventId, prepared.preview.id)
       .first<{ status: string }>();
     expect(revision?.status).toBe("failed");
+  });
+
+  it("classifies concurrent reminder revision drift as a cancelled conflict", async () => {
+    const { testEnv, baseTemplateVersionId } = await reminderEnvironment();
+    const prepared = await prepareReminderSendProposal(testEnv, admin, {
+      runId: crypto.randomUUID(),
+      model: providerConfiguration.model,
+      arguments: {
+        baseTemplateVersionId,
+        audienceType: "incomplete_speakers",
+        kind: "optional",
+        subject: "Please complete {{task.title}}",
+        body: "Hello {{recipient.firstName}}, please complete {{task.title}}.",
+      },
+    });
+    const operationId = crypto.randomUUID();
+    const lease = await startAiOperationLease(testEnv, admin, {
+      id: operationId,
+      type: "ai.proposal.revision",
+      payload: { proposalId: prepared.preview.id },
+      audit: {
+        actorKind: "person",
+        action: "assistant.proposal.revision.requested",
+        entityType: "assistant_proposal",
+        entityId: prepared.preview.id,
+        correlationId: operationId,
+        metadata: { proposalId: prepared.preview.id, operationId },
+      },
+    });
+    const staged = await stageReminderSendProposal(testEnv, admin, {
+      runId: operationId,
+      model: providerConfiguration.model,
+      templateId: prepared.preview.reminder.template.templateId,
+      arguments: {
+        baseTemplateVersionId,
+        audienceType: "incomplete_speakers",
+        kind: "optional",
+        subject: "Staged revision for {{task.title}}",
+        body: "Hello {{recipient.firstName}}, this staged {{task.title}} reminder must not persist.",
+      },
+    });
+    await new CommunicationService(testEnv).saveTemplate(admin, {
+      templateId: prepared.preview.reminder.template.templateId,
+      name: "Concurrent human edit",
+      category: "task_reminder",
+      subject: "Concurrent edit for {{task.title}}",
+      content: {
+        ...prepared.preview.reminder.template.content,
+        body: "Hello {{recipient.firstName}}, this concurrent {{task.title}} edit wins.",
+      },
+    });
+
+    let conflict: unknown;
+    try {
+      await completeAiOperationLease(
+        testEnv,
+        admin,
+        lease,
+        { revised: true },
+        {
+          actorKind: "person",
+          action: "assistant.proposal.superseded",
+          entityType: "assistant_proposal",
+          entityId: prepared.preview.id,
+          correlationId: operationId,
+          metadata: { proposalId: prepared.preview.id },
+        },
+        staged.mutation,
+      );
+    } catch (error) {
+      conflict = error;
+    }
+    expect(conflict).toBeInstanceOf(AiToolValidationError);
+    expect(conflict).toMatchObject({
+      message:
+        "The reminder template changed while its assistant preview was being prepared. Generate a fresh preview.",
+    });
+    const errorMetadata = {
+      errorType: "AiToolValidationError",
+      message: (conflict as Error).message,
+    };
+    await cancelAiOperationLease(testEnv, admin, lease, errorMetadata, {
+      actorKind: "agent",
+      action: "assistant.proposal.revision.cancelled",
+      entityType: "assistant_proposal",
+      entityId: prepared.preview.id,
+      correlationId: operationId,
+      metadata: { proposalId: prepared.preview.id, ...errorMetadata },
+    });
+
+    expect(
+      await testEnv.DB.prepare(
+        `SELECT status, progress_failed AS progressFailed
+           FROM operation_jobs WHERE id = ?`,
+      )
+        .bind(operationId)
+        .first(),
+    ).toEqual({ status: "cancelled", progressFailed: 0 });
+    expect(
+      await testEnv.DB.prepare(
+        `SELECT COUNT(*) AS count FROM communication_template_versions
+          WHERE id = ? AND event_id = ?`,
+      )
+        .bind(staged.preview.reminder.template.id, admin.eventId)
+        .first(),
+    ).toEqual({ count: 0 });
   });
 
   it("durably previews exact reminder recipients and content, then queues once after explicit approval", async () => {

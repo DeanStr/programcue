@@ -38,6 +38,11 @@ export type AiOperationAtomicMutation = {
   statements: D1PreparedStatement[];
   failurePredicateSql: string;
   bindings: Array<string | number | null>;
+  conflict?: {
+    predicateSql: string;
+    bindings: Array<string | number | null>;
+    createError: () => Error;
+  };
 };
 
 export class AiOperationSettlementIndeterminateError extends Error {
@@ -131,6 +136,44 @@ async function operationAndAuditSettled(
       row.audited === 1 &&
       (resultJson === null || row.resultJson === resultJson),
   );
+}
+
+async function operationLeaseIsLive(
+  env: CloudflareEnvironment,
+  viewer: Viewer,
+  lease: AiOperationLease,
+) {
+  return Boolean(
+    await env.DB.prepare(
+      `SELECT 1 FROM operation_jobs
+        WHERE id = ? AND type = ? AND status = 'running'
+          AND organisation_id = ? AND event_id = ?
+          AND requested_by_person_id = ? AND claim_token = ?
+          AND claim_expires_at > unixepoch()`,
+    )
+      .bind(
+        lease.id,
+        lease.type,
+        viewer.organisationId,
+        viewer.eventId,
+        viewer.personId,
+        lease.claimToken,
+      )
+      .first(),
+  );
+}
+
+export async function aiOperationMutationConflict(
+  env: CloudflareEnvironment,
+  mutation: AiOperationAtomicMutation,
+) {
+  if (!mutation.conflict) return null;
+  const conflict = await env.DB.prepare(
+    `SELECT 1 WHERE ${mutation.conflict.predicateSql}`,
+  )
+    .bind(...mutation.conflict.bindings)
+    .first();
+  return conflict ? mutation.conflict.createError() : null;
 }
 
 export async function startAiOperationLease(
@@ -242,6 +285,107 @@ export async function renewAiOperationLease(
   }
 }
 
+export async function reconcileInterruptedAiOperations(
+  env: CloudflareEnvironment,
+) {
+  const recoveryId = crypto.randomUUID();
+  const message =
+    "The AI request was interrupted before Program Cue could record its result.";
+  const resultJson = JSON.stringify({
+    phase: "failed",
+    errorType: "InterruptedAiOperation",
+    message,
+    retrySafe: false,
+    recoveryId,
+  });
+  const eligible = `operation.type IN (
+      'ai.assistant.run', 'ai.context.run', 'ai.proposal.revision'
+    )
+    AND operation.status = 'running'
+    AND operation.claim_token IS NOT NULL
+    AND operation.claim_expires_at IS NOT NULL
+    AND operation.claim_expires_at <= unixepoch()`;
+  let results: D1Result[];
+  try {
+    results = await env.DB.batch([
+      env.DB.prepare(
+        `INSERT INTO audit_events (
+         id, actor_kind, origin, metadata_version, organisation_id, event_id,
+         actor_person_id, actor_id, action, entity_type, entity_id,
+         correlation_id, metadata_json, created_at
+       )
+       SELECT 'assistant-interrupted-' || lower(hex(randomblob(16))),
+              'agent', 'scheduled', 1, operation.organisation_id,
+              operation.event_id, operation.requested_by_person_id,
+              'program_cue_agent', 'assistant.interrupted', 'operation',
+              operation.id, operation.id,
+              json_object(
+                'operationType', operation.type,
+                'message', ?,
+                'retrySafe', json('false'),
+                'recoveryId', ?
+              ), unixepoch()
+         FROM operation_jobs operation
+        WHERE ${eligible}`,
+      ).bind(message, recoveryId),
+      env.DB.prepare(
+        `UPDATE operation_jobs AS operation
+          SET status = 'failed', progress_completed = 0,
+              progress_failed = progress_total, last_error = ?,
+              result_json = ?, claim_token = NULL, claim_expires_at = NULL,
+              completed_at = unixepoch(), updated_at = unixepoch()
+        WHERE ${eligible}
+          AND EXISTS (
+            SELECT 1 FROM audit_events audit
+             WHERE audit.correlation_id = operation.id
+               AND audit.action = 'assistant.interrupted'
+               AND json_extract(audit.metadata_json, '$.recoveryId') = ?
+          )`,
+      ).bind(message, resultJson, recoveryId),
+      atomicBatchGuardStatement(
+        env,
+        `EXISTS (
+         SELECT 1 FROM operation_jobs operation WHERE ${eligible}
+       ) OR EXISTS (
+         SELECT 1 FROM audit_events audit
+         LEFT JOIN operation_jobs operation
+           ON operation.id = audit.correlation_id
+        WHERE audit.action = 'assistant.interrupted'
+          AND json_extract(audit.metadata_json, '$.recoveryId') = ?
+          AND (
+            operation.id IS NULL
+            OR operation.status <> 'failed'
+            OR json_extract(operation.result_json, '$.recoveryId') IS NOT ?
+          )
+       )`,
+        [recoveryId, recoveryId],
+      ),
+    ]);
+  } catch (error) {
+    if (isAtomicBatchGuardError(error)) {
+      throw new Error(
+        "Interrupted AI operations could not record complete recovery evidence.",
+        { cause: error },
+      );
+    }
+    throw error;
+  }
+  const [audited, failed] = results;
+  if (!audited || !failed) {
+    throw new Error(
+      "Interrupted AI operations returned incomplete recovery results.",
+    );
+  }
+  const auditedCount = audited.meta.changes ?? 0;
+  const failedCount = failed.meta.changes ?? 0;
+  if (auditedCount !== failedCount) {
+    throw new Error(
+      "Interrupted AI operations could not record complete recovery evidence.",
+    );
+  }
+  return failedCount;
+}
+
 async function settleAiOperationLease(
   env: CloudflareEnvironment,
   viewer: Viewer,
@@ -335,6 +479,10 @@ async function settleAiOperationLease(
       );
     }
     if (isAtomicBatchGuardError(error)) {
+      if (mutation && (await operationLeaseIsLive(env, viewer, lease))) {
+        const conflict = await aiOperationMutationConflict(env, mutation);
+        if (conflict) throw conflict;
+      }
       throw new Error(
         `AI operation ${lease.id} could not atomically settle as ${input.status}.`,
         { cause: error },

@@ -16,7 +16,10 @@ import {
   atomicBatchGuardStatement,
   isAtomicBatchGuardError,
 } from "~/platform/database/atomic-batch-guard.server";
-import type { AiOperationAtomicMutation } from "./ai-operation-lease.server";
+import {
+  type AiOperationAtomicMutation,
+  aiOperationMutationConflict,
+} from "./ai-operation-lease.server";
 import {
   adminRoles,
   assistantProposalMetadataSchema,
@@ -557,6 +560,35 @@ export async function stageReminderSendProposal(
       versionAuditId,
       proposalAuditId,
     ],
+    ...(input.templateId
+      ? {
+          conflict: {
+            predicateSql: `NOT EXISTS (
+              SELECT 1 FROM communication_templates template
+              JOIN events event
+                ON event.id = template.event_id AND event.organisation_id = ?
+             WHERE template.id = ? AND template.event_id = ?
+               AND template.status <> 'archived'
+               AND ? = COALESCE((
+                 SELECT MAX(existing.version_number) + 1
+                   FROM communication_template_versions existing
+                  WHERE existing.template_id = template.id
+                    AND existing.channel = 'email'
+               ), 1)
+            )`,
+            bindings: [
+              viewer.organisationId,
+              templateId,
+              viewer.eventId,
+              versionNumber,
+            ],
+            createError: () =>
+              new AiToolValidationError(
+                "The reminder template changed while its assistant preview was being prepared. Generate a fresh preview.",
+              ),
+          },
+        }
+      : {}),
   };
   const evidence: AiEvidence[] = [
     {
@@ -592,8 +624,11 @@ export async function persistStagedReminderSendProposal(
     ]);
   } catch (error) {
     if (isAtomicBatchGuardError(error)) {
-      throw new AiToolValidationError(
-        "The reminder template changed while its assistant preview was being prepared. Generate a fresh preview.",
+      const conflict = await aiOperationMutationConflict(env, staged.mutation);
+      if (conflict) throw conflict;
+      throw new Error(
+        "The reminder proposal could not commit its complete durable preview.",
+        { cause: error },
       );
     }
     throw error;

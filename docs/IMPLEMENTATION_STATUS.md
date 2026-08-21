@@ -664,8 +664,13 @@ draft version, proposal evidence, supersession where applicable and operation
 completion together. Expected missing/stale preflight state is cancelled rather
 than counted as a Command Centre operation failure, while provider failures
 retain their bounded request identifier in both operation and audit diagnostics.
-Focused failure-injection coverage verifies that rejected completion or
-supersession evidence rolls the associated proposal mutation back.
+Concurrent reminder-version drift is also reported as a cancelled regenerate
+conflict rather than an internal operation failure. The minute scheduler marks
+expired synchronous assistant claims as interrupted failures with matching
+audit evidence and does not rerun provider work. Focused failure-injection
+coverage verifies that rejected completion or supersession evidence rolls the
+associated proposal mutation back, and lease coverage verifies bounded,
+idempotent interruption recovery.
 Deployment and fresh live-provider acceptance remain outstanding.
 
 ## Capability status
