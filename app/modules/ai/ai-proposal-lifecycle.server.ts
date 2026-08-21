@@ -814,6 +814,7 @@ export class AiProposalLifecycleService {
             toolName: metadata.data.toolName,
             subjectChanged: subject !== metadata.data.arguments.subject,
             bodyChanged: body !== metadata.data.arguments.body,
+            operationId: revisionOperationId,
           },
         },
         revised.mutation,

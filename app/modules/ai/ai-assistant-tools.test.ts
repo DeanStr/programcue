@@ -968,14 +968,26 @@ describe("agent tool permissions and approval", () => {
     ).toContain(suppressedAddress);
     expect(queued).toHaveLength(0);
     const draft = await testEnv.DB.prepare(
-      `SELECT status, subject_template AS subject, content_json AS contentJson
+      `SELECT status, subject_template AS subject, content_json AS contentJson,
+              rendered_preview_html AS renderedPreviewHtml
          FROM communication_template_versions
         WHERE id = ? AND event_id = ?`,
     )
       .bind(proposal.reminder.template.id, admin.eventId)
-      .first<{ status: string; subject: string; contentJson: string }>();
+      .first<{
+        status: string;
+        subject: string;
+        contentJson: string;
+        renderedPreviewHtml: string;
+      }>();
     expect(draft).toMatchObject({ status: "draft", subject });
     expect(JSON.parse(draft!.contentJson)).toMatchObject({ body });
+    expect(draft!.renderedPreviewHtml).toContain("Alex");
+    expect(draft!.renderedPreviewHtml).toContain("Upload final presentation");
+    expect(draft!.renderedPreviewHtml).not.toContain(
+      "Deliverable reminder speaker",
+    );
+    expect(draft!.renderedPreviewHtml).not.toContain("Upload final slides");
 
     await expect(
       service.approveProposal(admin, proposal.id, false),
@@ -1039,6 +1051,19 @@ describe("agent tool permissions and approval", () => {
       toolName: "propose_reminder_send",
       title: revisedSubject,
     });
+    const revisionOperation = await testEnv.DB.prepare(
+      `SELECT operation.id
+         FROM operation_jobs operation
+         JOIN audit_events terminal
+           ON json_extract(terminal.metadata_json, '$.operationId') = operation.id
+          AND terminal.action = 'assistant.proposal.superseded'
+          AND terminal.entity_id = ?
+        WHERE operation.event_id = ? AND operation.type = 'ai.proposal.revision'
+          AND operation.status = 'completed'`,
+    )
+      .bind(proposal.id, admin.eventId)
+      .first<{ id: string }>();
+    expect(revisionOperation?.id).toBeTruthy();
     await expect(
       service.approveProposal(admin, proposal.id, true),
     ).rejects.toThrow("This assistant preview is no longer current");

@@ -4,6 +4,7 @@ import {
   assertMergeAudienceCompatible,
   type CommunicationPreview,
 } from "~/modules/communications/communication-service-shared";
+import { renderStoredTemplatePreview } from "~/modules/communications/communication-template-service.server";
 import {
   findUnresolvedTemplateContent,
   renderMergeTemplate,
@@ -363,6 +364,11 @@ export async function stageReminderSendProposal(
       "The selected reminder audience no longer has deliverable recipients.",
     );
   }
+  const storedPreview = await renderStoredTemplatePreview(
+    env,
+    exactPreview.mergeSnapshot.event,
+    candidate,
+  );
 
   const proposalId = crypto.randomUUID();
   const reminder = {
@@ -480,7 +486,7 @@ export async function stageReminderSendProposal(
         name,
         args.subject,
         contentJson,
-        exactPreview.rendered.html,
+        storedPreview.html,
         viewer.personId,
         templateId,
         viewer.eventId,

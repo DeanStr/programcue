@@ -30,6 +30,27 @@ const DELIVERY_HEALTH_DEFAULT_SECONDS =
 
 type DeliveryHealthPeriod = "recent" | "lifetime";
 
+export async function renderStoredTemplatePreview(
+  env: CloudflareEnvironment,
+  event: EventMergeRow,
+  template: Pick<CommunicationTemplateVersion, "subject" | "content">,
+) {
+  const values = mergeValues(event);
+  const subject = renderMergeTemplate(template.subject, values);
+  const body = renderMergeTemplate(template.content.body, values);
+  return renderProgramCueEmail({
+    preview: subject,
+    heading: subject,
+    body,
+    eventName: event.eventName,
+    accent: event.brandAccent,
+    logoUrl: eventEmailLogoUrl(env, event),
+    physicalAddress: template.content.physicalAddress,
+    buttonText: template.content.buttonText,
+    buttonUrl: template.content.buttonUrl,
+  });
+}
+
 export class CommunicationTemplateService {
   constructor(private readonly env: CloudflareEnvironment) {}
 
@@ -430,20 +451,7 @@ export class CommunicationTemplateService {
     const event = await this.getEvent(viewer);
     const versionId = operation?.versionId ?? crypto.randomUUID();
     const saveOperationId = operation?.operationId ?? crypto.randomUUID();
-    const values = mergeValues(event);
-    const subject = renderMergeTemplate(parsed.subject, values);
-    const body = renderMergeTemplate(parsed.content.body, values);
-    const preview = await renderProgramCueEmail({
-      preview: subject,
-      heading: subject,
-      body,
-      eventName: event.eventName,
-      accent: event.brandAccent,
-      logoUrl: eventEmailLogoUrl(this.env, event),
-      physicalAddress: parsed.content.physicalAddress,
-      buttonText: parsed.content.buttonText,
-      buttonUrl: parsed.content.buttonUrl,
-    });
+    const preview = await renderStoredTemplatePreview(this.env, event, parsed);
     let results: D1Result<unknown>[];
     try {
       results = await this.env.DB.batch([
