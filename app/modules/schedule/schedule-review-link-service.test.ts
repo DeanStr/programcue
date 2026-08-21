@@ -5,10 +5,14 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { cloudflareContext } from "~/platform/cloudflare-context";
 import { action, loader } from "~/routes/programme-preview";
 import {
+  ScheduleReviewLinkExpiredError,
   ScheduleReviewLinkLimitError,
   ScheduleRevisionConflictError,
 } from "./schedule-errors";
-import { ScheduleReviewLinkService } from "./schedule-review-link-service.server";
+import {
+  SCHEDULE_REVIEW_LINK_INACTIVE_LIST_LIMIT,
+  ScheduleReviewLinkService,
+} from "./schedule-review-link-service.server";
 import {
   createScheduleReviewToken,
   hashScheduleReviewToken,
@@ -36,7 +40,10 @@ function previewContext() {
 
 const PLACEHOLDER_PROJECTION_HASH = "a".repeat(64);
 
-async function reviewLinkCreateInput(schedule: ScheduleService) {
+async function reviewLinkCreateInput(
+  schedule: ScheduleService,
+  purpose = "Programme committee",
+) {
   const workspace = await schedule.getWorkspace(viewer);
   const summary = await schedule.summarizeReviewLinks(viewer, workspace);
   if (!summary.projectionHash) {
@@ -47,6 +54,7 @@ async function reviewLinkCreateInput(schedule: ScheduleService) {
     scheduleRevision: workspace.version!.revision,
     acknowledgement: SCHEDULE_REVIEW_LINK_ACKNOWLEDGEMENT,
     projectionHash: summary.projectionHash,
+    purpose,
   };
 }
 
@@ -144,8 +152,18 @@ describe("schedule review links", () => {
         scheduleRevision: 1,
         acknowledgement: SCHEDULE_REVIEW_LINK_ACKNOWLEDGEMENT,
         projectionHash: PLACEHOLDER_PROJECTION_HASH,
+        purpose: "Programme committee",
       }),
     ).rejects.toThrow(/draft schedule is required/i);
+    await expect(
+      schedule.createReviewLink(viewer, {
+        scheduleVersionId: "missing",
+        scheduleRevision: 1,
+        acknowledgement: SCHEDULE_REVIEW_LINK_ACKNOWLEDGEMENT,
+        projectionHash: PLACEHOLDER_PROJECTION_HASH,
+        purpose: "   ",
+      }),
+    ).rejects.toThrow(/short purpose/i);
 
     await placedDraft();
     await env.DB.prepare(
@@ -169,7 +187,7 @@ describe("schedule review links", () => {
     for (let index = 0; index < 10; index += 1) {
       await schedule.createReviewLink(
         viewer,
-        await reviewLinkCreateInput(schedule),
+        await reviewLinkCreateInput(schedule, `Reviewer ${index + 1}`),
       );
     }
     await expect(
@@ -181,15 +199,17 @@ describe("schedule review links", () => {
     expect(summary.projectionHash).toMatch(/^[0-9a-f]{64}$/u);
 
     const listed = await schedule.listReviewLinks(viewer);
-    expect(listed).toHaveLength(10);
-    expect(listed.every((link) => link.status === "active")).toBe(true);
+    expect(listed.items).toHaveLength(10);
+    expect(listed.omittedInactiveCount).toBe(0);
+    expect(listed.items.every((link) => link.status === "active")).toBe(true);
+    expect(new Set(listed.items.map((link) => link.purpose)).size).toBe(10);
     const creator = await env.DB.prepare(
       "SELECT display_name AS displayName FROM people WHERE id = ?",
     )
       .bind(viewer.personId)
       .first<{ displayName: string }>();
-    expect(listed[0]?.createdByName).toBe(creator?.displayName ?? null);
-    expect(listed[0]?.createdAt).toBeGreaterThan(0);
+    expect(listed.items[0]?.createdByName).toBe(creator?.displayName ?? null);
+    expect(listed.items[0]?.createdAt).toBeGreaterThan(0);
     const raw = await env.DB.prepare(
       `SELECT projection_json AS projectionJson
          FROM schedule_review_links
@@ -197,7 +217,7 @@ describe("schedule review links", () => {
     )
       .bind(viewer.eventId)
       .all();
-    expect(JSON.stringify(listed)).not.toContain(
+    expect(JSON.stringify(listed.items)).not.toContain(
       String(raw.results[0]?.projectionJson ?? "schemaVersion"),
     );
   });
@@ -254,6 +274,7 @@ describe("schedule review links", () => {
         scheduleRevision: workspace.version!.revision,
         acknowledgement: SCHEDULE_REVIEW_LINK_ACKNOWLEDGEMENT,
         projectionHash: PLACEHOLDER_PROJECTION_HASH,
+        purpose: "Programme committee",
       }),
     ).rejects.toThrow(/draft schedule is required/i);
   });
@@ -272,6 +293,7 @@ describe("schedule review links", () => {
         scheduleRevision: workspace.version!.revision,
         acknowledgement: SCHEDULE_REVIEW_LINK_ACKNOWLEDGEMENT,
         projectionHash: PLACEHOLDER_PROJECTION_HASH,
+        purpose: "Programme committee",
       }),
     ).rejects.toBeInstanceOf(ScheduleRevisionConflictError);
   });
@@ -284,9 +306,10 @@ describe("schedule review links", () => {
       env.DB.prepare(
         `INSERT INTO schedule_review_links (
            id, organisation_id, event_id, schedule_version_id, schedule_revision,
-           projection_json, token_hash, expires_at, created_by_person_id, created_at
+           projection_json, token_hash, expires_at, created_by_person_id, created_at,
+           purpose
          ) VALUES (?, ?, ?, ?, 1, '{"schemaVersion":1,"event":{"name":"X","timezone":"UTC"},"entries":[]}',
-                   ?, unixepoch() - 10, ?, unixepoch() - 1000)`,
+                   ?, unixepoch() - 10, ?, unixepoch() - 1000, 'Expired snapshot')`,
       ).bind(
         crypto.randomUUID(),
         viewer.organisationId,
@@ -298,9 +321,10 @@ describe("schedule review links", () => {
       env.DB.prepare(
         `INSERT INTO schedule_review_links (
            id, organisation_id, event_id, schedule_version_id, schedule_revision,
-           projection_json, token_hash, expires_at, created_by_person_id, created_at
+           projection_json, token_hash, expires_at, created_by_person_id, created_at,
+           purpose
          ) VALUES (?, ?, ?, ?, 1, '{"schemaVersion":1}',
-                   ?, unixepoch() + 86400, ?, unixepoch())`,
+                   ?, unixepoch() + 86400, ?, unixepoch(), 'Corrupt snapshot')`,
       ).bind(
         crypto.randomUUID(),
         viewer.organisationId,
@@ -393,6 +417,7 @@ describe("schedule review links", () => {
           scheduleRevision: workspace.version!.revision,
           acknowledgement: SCHEDULE_REVIEW_LINK_ACKNOWLEDGEMENT,
           projectionHash: PLACEHOLDER_PROJECTION_HASH,
+          purpose: "Programme committee",
         }),
       ).rejects.toThrow(/missing a display name/i);
     } finally {
@@ -442,7 +467,10 @@ describe("schedule review links", () => {
       ...viewer,
       organisationId: "org-does-not-exist",
     };
-    expect(await schedule.listReviewLinks(outsider)).toEqual([]);
+    expect(await schedule.listReviewLinks(outsider)).toEqual({
+      items: [],
+      omittedInactiveCount: 0,
+    });
     await expect(
       schedule.revokeReviewLink(outsider, {
         linkId: created.id,
@@ -488,5 +516,89 @@ describe("schedule review links", () => {
       },
     });
     await expect(review.summarize(viewer)).rejects.toThrow("D1 exploded");
+  });
+
+  it("rejects manual revoke of an expired review link", async () => {
+    const { schedule, workspace } = await placedDraft();
+    const expiredId = crypto.randomUUID();
+    await env.DB.prepare(
+      `INSERT INTO schedule_review_links (
+         id, organisation_id, event_id, schedule_version_id, schedule_revision,
+         projection_json, token_hash, expires_at, created_by_person_id, created_at,
+         purpose
+       ) VALUES (?, ?, ?, ?, 1, '{"schemaVersion":1,"event":{"name":"X","timezone":"UTC"},"entries":[]}',
+                 ?, unixepoch() - 10, ?, unixepoch() - 1000, 'Expired snapshot')`,
+    )
+      .bind(
+        expiredId,
+        viewer.organisationId,
+        viewer.eventId,
+        workspace.version!.id,
+        await hashScheduleReviewToken(createScheduleReviewToken()),
+        viewer.personId,
+      )
+      .run();
+    await expect(
+      schedule.revokeReviewLink(viewer, {
+        linkId: expiredId,
+        confirmation: "revoke-draft-review-link",
+      }),
+    ).rejects.toBeInstanceOf(ScheduleReviewLinkExpiredError);
+    expect(
+      await env.DB.prepare(
+        `SELECT revoked_at AS revokedAt, revocation_reason AS reason
+           FROM schedule_review_links WHERE id = ?`,
+      )
+        .bind(expiredId)
+        .first(),
+    ).toEqual({ revokedAt: null, reason: null });
+    expect(
+      await env.DB.prepare(
+        `SELECT COUNT(*) AS total
+           FROM audit_events
+          WHERE entity_id = ?
+            AND action = 'schedule.review_link.revoked'`,
+      )
+        .bind(expiredId)
+        .first(),
+    ).toEqual({ total: 0 });
+  });
+
+  it("lists every active link and a bounded inactive history", async () => {
+    const { schedule, workspace } = await placedDraft();
+    const inserts = Array.from({ length: 25 }, (_, index) =>
+      env.DB.prepare(
+        `INSERT INTO schedule_review_links (
+           id, organisation_id, event_id, schedule_version_id, schedule_revision,
+           projection_json, token_hash, expires_at, created_by_person_id, created_at,
+           purpose
+         ) VALUES (?, ?, ?, ?, 1, '{"schemaVersion":1,"event":{"name":"X","timezone":"UTC"},"entries":[]}',
+                   ?, unixepoch() - 10, ?, unixepoch() - ?, ?)`,
+      ).bind(
+        crypto.randomUUID(),
+        viewer.organisationId,
+        viewer.eventId,
+        workspace.version!.id,
+        `${index.toString(16).padStart(2, "0")}${"b".repeat(62)}`,
+        viewer.personId,
+        1_000 + index,
+        `History ${index + 1}`,
+      ),
+    );
+    await env.DB.batch(inserts);
+    const active = await schedule.createReviewLink(
+      viewer,
+      await reviewLinkCreateInput(schedule, "Venue reviewer"),
+    );
+    const listed = await schedule.listReviewLinks(viewer);
+    expect(listed.items.some((link) => link.id === active.id)).toBe(true);
+    expect(
+      listed.items.filter((link) => link.status === "active"),
+    ).toHaveLength(1);
+    expect(
+      listed.items.filter((link) => link.status !== "active"),
+    ).toHaveLength(SCHEDULE_REVIEW_LINK_INACTIVE_LIST_LIMIT);
+    expect(listed.omittedInactiveCount).toBe(5);
+    expect(listed.items[0]?.purpose).toBe("Venue reviewer");
   });
 });

@@ -72,6 +72,13 @@ export class ScheduleReviewLinkNotFoundError extends Error {
   }
 }
 
+export class ScheduleReviewLinkExpiredError extends Error {
+  constructor(message = "That draft review link has already expired.") {
+    super(message);
+    this.name = "ScheduleReviewLinkExpiredError";
+  }
+}
+
 export class ScheduleIdempotencyConflictError extends Error {
   constructor(
     readonly code: "IDEMPOTENCY_KEY_REUSED" | "IDEMPOTENCY_REQUEST_IN_PROGRESS",

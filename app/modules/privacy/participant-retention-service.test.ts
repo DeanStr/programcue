@@ -219,9 +219,10 @@ describe("participant retention", () => {
     await seeded.testEnv.DB.prepare(
       `INSERT INTO schedule_review_links (
          id, organisation_id, event_id, schedule_version_id, schedule_revision,
-         projection_json, token_hash, expires_at, created_by_person_id, created_at
+         projection_json, token_hash, expires_at, created_by_person_id, created_at,
+         purpose
        ) VALUES (?, ?, ?, ?, 1, '{"schemaVersion":1,"speakers":["Exclusive Person"]}',
-                 ?, unixepoch() + 86400, ?, unixepoch())`,
+                 ?, unixepoch() + 86400, ?, unixepoch(), 'Retention wipe')`,
     )
       .bind(
         id("privacy-review-link"),

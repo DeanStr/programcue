@@ -30,6 +30,8 @@ export const schedulePublishSchema = z.object({
 export const SCHEDULE_REVIEW_LINK_ACKNOWLEDGEMENT =
   "unpublished-speaker-names" as const;
 
+export const SCHEDULE_REVIEW_LINK_PURPOSE_MAX_LENGTH = 80;
+
 export const scheduleReviewLinkCreateSchema = z
   .object({
     scheduleVersionId: z.string().trim().min(1),
@@ -38,6 +40,21 @@ export const scheduleReviewLinkCreateSchema = z
     projectionHash: z
       .string()
       .regex(/^[0-9a-f]{64}$/u, "The draft snapshot confirmation is invalid."),
+    purpose: z
+      .string()
+      .trim()
+      .min(
+        1,
+        "Give this review link a short purpose so it can be identified later.",
+      )
+      .max(
+        SCHEDULE_REVIEW_LINK_PURPOSE_MAX_LENGTH,
+        "Keep the purpose to 80 characters.",
+      )
+      .refine(
+        (value) => !/[\r\n\0]/u.test(value),
+        "The purpose cannot contain line breaks.",
+      ),
   })
   .strict();
 

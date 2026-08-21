@@ -13,6 +13,7 @@ import {
   ScheduleNotFoundError,
   SchedulePlacementBlockedError,
   SchedulePublicationBlockedError,
+  ScheduleReviewLinkExpiredError,
   ScheduleReviewLinkLimitError,
   ScheduleReviewLinkNotFoundError,
   ScheduleRevisionConflictError,
@@ -176,7 +177,7 @@ export async function loader({ request, context }: Route.LoaderArgs) {
     throw new Response("Schedule conflict not found in this event", {
       status: 404,
     });
-  const [reviewLinks, reviewLinkSummary] = await Promise.all([
+  const [reviewLinkList, reviewLinkSummary] = await Promise.all([
     service.listReviewLinks(viewer),
     service.summarizeReviewLinks(viewer, workspace),
   ]);
@@ -193,7 +194,8 @@ export async function loader({ request, context }: Route.LoaderArgs) {
     intentId: crypto.randomUUID(),
     calendarPreviews,
     publicationPreview,
-    reviewLinks,
+    reviewLinks: reviewLinkList.items,
+    reviewLinkOmittedInactiveCount: reviewLinkList.omittedInactiveCount,
     reviewLinkSummary,
   };
 }
@@ -525,6 +527,7 @@ export async function action({ request, context }: Route.ActionArgs) {
           scheduleRevision: values.get("scheduleRevision"),
           acknowledgement: values.get("acknowledgement"),
           projectionHash: values.get("projectionHash"),
+          purpose: values.get("purpose"),
         });
         const origin = new URL(request.url).origin;
         return {
@@ -679,6 +682,8 @@ export async function action({ request, context }: Route.ActionArgs) {
       );
     }
     if (error instanceof ScheduleReviewLinkLimitError)
+      return data({ ok: false, intent, error: error.message }, { status: 409 });
+    if (error instanceof ScheduleReviewLinkExpiredError)
       return data({ ok: false, intent, error: error.message }, { status: 409 });
     if (error instanceof ScheduleReviewLinkNotFoundError)
       return data({ ok: false, intent, error: error.message }, { status: 404 });

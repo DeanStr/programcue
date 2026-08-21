@@ -48,6 +48,7 @@ def validate_schedule_review_links_forward_migration(root: Path) -> None:
         "expires_at",
         "created_by_person_id",
         "created_at",
+        "purpose",
         "revoked_at",
         "revoked_by_person_id",
         "revocation_reason",
@@ -82,12 +83,13 @@ def validate_schedule_review_links_forward_migration(root: Path) -> None:
             """
             INSERT INTO schedule_review_links (
               id, organisation_id, event_id, schedule_version_id, schedule_revision,
-              projection_json, token_hash, expires_at, created_by_person_id, created_at
+              projection_json, token_hash, expires_at, created_by_person_id, created_at,
+              purpose
             ) VALUES (
               'review-link-bad-hash', 'review-org', 'review-event', 'review-draft', 3,
               '{"schemaVersion":1}',
               'a' || replace(hex(zeroblob(31)), '0', 'z') || 'a',
-              unixepoch() + 86400, 'review-admin', unixepoch()
+              unixepoch() + 86400, 'review-admin', unixepoch(), 'Programme committee'
             )
             """
         )
@@ -100,12 +102,13 @@ def validate_schedule_review_links_forward_migration(root: Path) -> None:
         """
         INSERT INTO schedule_review_links (
           id, organisation_id, event_id, schedule_version_id, schedule_revision,
-          projection_json, token_hash, expires_at, created_by_person_id, created_at
+          projection_json, token_hash, expires_at, created_by_person_id, created_at,
+          purpose
         ) VALUES (
           'review-link', 'review-org', 'review-event', 'review-draft', 3,
           '{"schemaVersion":1}',
           'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
-          unixepoch() + 86400, 'review-admin', unixepoch()
+          unixepoch() + 86400, 'review-admin', unixepoch(), 'Programme committee'
         )
         """
     )

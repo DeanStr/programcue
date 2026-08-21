@@ -1261,9 +1261,10 @@ describe("event cloning", () => {
     await env.DB.prepare(
       `INSERT INTO schedule_review_links (
          id, organisation_id, event_id, schedule_version_id, schedule_revision,
-         projection_json, token_hash, expires_at, created_by_person_id, created_at
+         projection_json, token_hash, expires_at, created_by_person_id, created_at,
+         purpose
        ) VALUES (?, ?, ?, ?, 1, '{"schemaVersion":1,"secret":"do-not-copy"}',
-                 ?, unixepoch() + 86400, ?, unixepoch())`,
+                 ?, unixepoch() + 86400, ?, unixepoch(), 'Do not copy')`,
     )
       .bind(
         sourceLinkId,

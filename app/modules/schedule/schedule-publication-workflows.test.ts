@@ -325,16 +325,17 @@ describe("schedule publication workflows", () => {
         scheduleRevision: current.version!.revision,
         acknowledgement: SCHEDULE_REVIEW_LINK_ACKNOWLEDGEMENT,
         projectionHash: summary.projectionHash,
+        purpose: "Programme committee",
       };
     };
     const first = await service.createReviewLink(
       viewer,
       await reviewLinkInput(),
     );
-    const second = await service.createReviewLink(
-      viewer,
-      await reviewLinkInput(),
-    );
+    const second = await service.createReviewLink(viewer, {
+      ...(await reviewLinkInput()),
+      purpose: "Venue reviewer",
+    });
     await expect(
       service.publish(viewer, {
         scheduleVersionId: versionId,
@@ -408,9 +409,10 @@ describe("schedule publication workflows", () => {
     await env.DB.prepare(
       `INSERT INTO schedule_review_links (
          id, organisation_id, event_id, schedule_version_id, schedule_revision,
-         projection_json, token_hash, expires_at, created_by_person_id, created_at
+         projection_json, token_hash, expires_at, created_by_person_id, created_at,
+         purpose
        ) VALUES (?, ?, ?, ?, ?, '{"schemaVersion":1,"event":{"name":"X","timezone":"UTC"},"entries":[]}',
-                 ?, unixepoch() - 10, ?, unixepoch() - 1000)`,
+                 ?, unixepoch() - 10, ?, unixepoch() - 1000, 'Expired snapshot')`,
     )
       .bind(
         expiredId,

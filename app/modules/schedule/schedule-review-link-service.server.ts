@@ -2,6 +2,7 @@ import type { Viewer } from "~/platform/auth/authorize.server";
 import {
   ScheduleConfigurationError,
   ScheduleNotFoundError,
+  ScheduleReviewLinkExpiredError,
   ScheduleReviewLinkLimitError,
   ScheduleReviewLinkNotFoundError,
   ScheduleRevisionConflictError,
@@ -32,11 +33,13 @@ import type {
 
 export const SCHEDULE_REVIEW_LINK_ACTIVE_LIMIT = 10;
 export const SCHEDULE_REVIEW_LINK_TTL_SECONDS = 2_592_000;
+export const SCHEDULE_REVIEW_LINK_INACTIVE_LIST_LIMIT = 20;
 
 const LIST_COLUMNS = `link.id,
        link.schedule_version_id AS scheduleVersionId,
        link.schedule_revision AS scheduleRevision,
        version.version_number AS versionNumber,
+       link.purpose AS purpose,
        link.expires_at AS expiresAt,
        link.created_at AS createdAt,
        creator.display_name AS createdByName,
@@ -58,12 +61,18 @@ export type ScheduleReviewLinkListItem = {
   scheduleVersionId: string;
   scheduleRevision: number;
   versionNumber: number | null;
+  purpose: string;
   expiresAt: number;
   createdAt: number;
   createdByName: string | null;
   revokedAt: number | null;
   revocationReason: "manual" | "published" | null;
   status: ScheduleReviewLinkStatus;
+};
+
+export type ScheduleReviewLinkListResult = {
+  items: ScheduleReviewLinkListItem[];
+  omittedInactiveCount: number;
 };
 
 export type ScheduleReviewLinkSummary = {
@@ -358,42 +367,99 @@ export class ScheduleReviewLinkService {
     }
   }
 
-  async list(viewer: Viewer): Promise<ScheduleReviewLinkListItem[]> {
+  async list(viewer: Viewer): Promise<ScheduleReviewLinkListResult> {
     requireAdministrator(viewer);
-    const now = Math.floor(Date.now() / 1_000);
-    const result = await this.env.DB.prepare(
-      `
-        SELECT ${LIST_COLUMNS}
+    const listJoins = `
           FROM schedule_review_links link
           LEFT JOIN schedule_versions version
             ON version.id = link.schedule_version_id
            AND version.event_id = link.event_id
           LEFT JOIN people creator
             ON creator.id = link.created_by_person_id
-         WHERE link.organisation_id = ? AND link.event_id = ?
-         ORDER BY link.created_at DESC, link.id DESC
-      `,
-    )
-      .bind(viewer.organisationId, viewer.eventId)
-      .all<{
-        id: string;
-        scheduleVersionId: string;
-        scheduleRevision: number;
-        versionNumber: number | null;
-        expiresAt: number;
-        createdAt: number;
-        createdByName: string | null;
-        revokedAt: number | null;
-        revocationReason: "manual" | "published" | null;
-      }>();
-    return result.results.map((row) => ({
-      ...row,
-      status: reviewLinkStatus({
-        revokedAt: row.revokedAt,
-        expiresAt: row.expiresAt,
-        now,
+         WHERE link.organisation_id = ? AND link.event_id = ?`;
+    const [result, inactiveCount] = await Promise.all([
+      this.env.DB.prepare(
+        `
+          SELECT ${LIST_COLUMNS},
+                 unixepoch() AS now
+            ${listJoins}
+             AND (
+               (link.revoked_at IS NULL AND link.expires_at > unixepoch())
+               OR link.id IN (
+                 SELECT inner_link.id
+                   FROM schedule_review_links inner_link
+                  WHERE inner_link.organisation_id = ?
+                    AND inner_link.event_id = ?
+                    AND (
+                      inner_link.revoked_at IS NOT NULL
+                      OR inner_link.expires_at <= unixepoch()
+                    )
+                  ORDER BY inner_link.created_at DESC, inner_link.id DESC
+                  LIMIT ?
+               )
+             )
+           ORDER BY link.created_at DESC, link.id DESC
+        `,
+      )
+        .bind(
+          viewer.organisationId,
+          viewer.eventId,
+          viewer.organisationId,
+          viewer.eventId,
+          SCHEDULE_REVIEW_LINK_INACTIVE_LIST_LIMIT,
+        )
+        .all<{
+          id: string;
+          scheduleVersionId: string;
+          scheduleRevision: number;
+          versionNumber: number | null;
+          purpose: string;
+          expiresAt: number;
+          createdAt: number;
+          createdByName: string | null;
+          revokedAt: number | null;
+          revocationReason: "manual" | "published" | null;
+          now: number;
+        }>(),
+      this.env.DB.prepare(
+        `
+          SELECT COUNT(*) AS total
+            FROM schedule_review_links
+           WHERE organisation_id = ? AND event_id = ?
+             AND (revoked_at IS NOT NULL OR expires_at <= unixepoch())
+        `,
+      )
+        .bind(viewer.organisationId, viewer.eventId)
+        .first<{ total: number }>(),
+    ]);
+    if (
+      typeof inactiveCount?.total !== "number" ||
+      !Number.isFinite(inactiveCount.total) ||
+      inactiveCount.total < 0
+    ) {
+      throw new Error("The draft review link history count could not be read.");
+    }
+    return {
+      items: result.results.map(({ now: rowNow, ...row }) => {
+        if (typeof rowNow !== "number" || !Number.isFinite(rowNow)) {
+          throw new Error(
+            "The draft review link list clock could not be read.",
+          );
+        }
+        return {
+          ...row,
+          status: reviewLinkStatus({
+            revokedAt: row.revokedAt,
+            expiresAt: row.expiresAt,
+            now: rowNow,
+          }),
+        };
       }),
-    }));
+      omittedInactiveCount: Math.max(
+        0,
+        inactiveCount.total - SCHEDULE_REVIEW_LINK_INACTIVE_LIST_LIMIT,
+      ),
+    };
   }
 
   async create(
@@ -435,9 +501,10 @@ export class ScheduleReviewLinkService {
         `
           INSERT INTO schedule_review_links (
             id, organisation_id, event_id, schedule_version_id, schedule_revision,
-            projection_json, token_hash, expires_at, created_by_person_id, created_at
+            projection_json, token_hash, expires_at, created_by_person_id, created_at,
+            purpose
           )
-          SELECT ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
+          SELECT ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
            WHERE EXISTS (
              SELECT 1 FROM events
               WHERE id = ? AND organisation_id = ?
@@ -466,6 +533,7 @@ export class ScheduleReviewLinkService {
         expiresAt,
         viewer.personId,
         createdAt,
+        parsed.purpose,
         viewer.eventId,
         viewer.organisationId,
         parsed.scheduleVersionId,
@@ -557,7 +625,12 @@ export class ScheduleReviewLinkService {
       `
         SELECT schedule_version_id AS scheduleVersionId,
                schedule_revision AS scheduleRevision,
-               version.version_number AS versionNumber
+               version.version_number AS versionNumber,
+               CASE
+                 WHEN link.revoked_at IS NOT NULL THEN 'revoked'
+                 WHEN link.expires_at <= unixepoch() THEN 'expired'
+                 ELSE 'active'
+               END AS status
           FROM schedule_review_links link
           LEFT JOIN schedule_versions version
             ON version.id = link.schedule_version_id
@@ -570,8 +643,17 @@ export class ScheduleReviewLinkService {
         scheduleVersionId: string;
         scheduleRevision: number;
         versionNumber: number | null;
+        status: "active" | "expired" | "revoked";
       }>();
     if (!current) throw new ScheduleReviewLinkNotFoundError();
+    if (current.status === "revoked") {
+      throw new ScheduleReviewLinkNotFoundError(
+        "That draft review link has already been revoked.",
+      );
+    }
+    if (current.status === "expired") {
+      throw new ScheduleReviewLinkExpiredError();
+    }
     const auditEventId = crypto.randomUUID();
     const [updated, audit] = await this.env.DB.batch([
       this.env.DB.prepare(
@@ -582,6 +664,7 @@ export class ScheduleReviewLinkService {
                  revocation_reason = 'manual'
            WHERE id = ? AND organisation_id = ? AND event_id = ?
              AND revoked_at IS NULL
+             AND expires_at > unixepoch()
         `,
       ).bind(
         viewer.personId,
@@ -633,9 +716,25 @@ export class ScheduleReviewLinkService {
       ),
     ]);
     if ((updated.meta.changes ?? 0) !== 1) {
-      throw new ScheduleReviewLinkNotFoundError(
-        "That draft review link has already been revoked.",
-      );
+      const latest = await this.env.DB.prepare(
+        `
+          SELECT revoked_at AS revokedAt,
+                 CASE WHEN expires_at <= unixepoch() THEN 1 ELSE 0 END AS expired
+            FROM schedule_review_links
+           WHERE id = ? AND organisation_id = ? AND event_id = ?
+        `,
+      )
+        .bind(parsed.linkId, viewer.organisationId, viewer.eventId)
+        .first<{ revokedAt: number | null; expired: number }>();
+      if (latest?.revokedAt != null) {
+        throw new ScheduleReviewLinkNotFoundError(
+          "That draft review link has already been revoked.",
+        );
+      }
+      if (latest?.expired === 1) {
+        throw new ScheduleReviewLinkExpiredError();
+      }
+      throw new ScheduleReviewLinkNotFoundError();
     }
     if ((audit.meta.changes ?? 0) !== 1) {
       throw new Error("The draft review snapshot revocation was not recorded.");

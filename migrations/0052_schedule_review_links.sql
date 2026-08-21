@@ -15,6 +15,12 @@ CREATE TABLE schedule_review_links (
   expires_at INTEGER NOT NULL,
   created_by_person_id TEXT NOT NULL REFERENCES people(id),
   created_at INTEGER NOT NULL DEFAULT (unixepoch()),
+  purpose TEXT NOT NULL CHECK (
+    length(trim(purpose)) BETWEEN 1 AND 80
+    AND purpose = trim(purpose)
+    AND instr(purpose, char(10)) = 0
+    AND instr(purpose, char(13)) = 0
+  ),
   revoked_at INTEGER,
   revoked_by_person_id TEXT REFERENCES people(id),
   revocation_reason TEXT CHECK (
@@ -51,7 +57,7 @@ CREATE INDEX idx_schedule_review_links_event
 CREATE TRIGGER schedule_review_links_immutable_identity
 BEFORE UPDATE OF id, organisation_id, event_id, schedule_version_id,
   schedule_revision, projection_json, token_hash, expires_at,
-  created_by_person_id, created_at
+  created_by_person_id, created_at, purpose
 ON schedule_review_links
 BEGIN
   SELECT RAISE(ABORT, 'schedule review links are immutable after creation');

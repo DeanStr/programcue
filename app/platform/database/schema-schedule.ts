@@ -584,6 +584,7 @@ export const scheduleReviewLinks = sqliteTable(
       .notNull()
       .references(() => people.id),
     createdAt: integer("created_at").notNull().default(epochNow),
+    purpose: text("purpose").notNull(),
     revokedAt: integer("revoked_at"),
     revokedByPersonId: text("revoked_by_person_id").references(() => people.id),
     revocationReason: text("revocation_reason").$type<"manual" | "published">(),
@@ -628,6 +629,10 @@ export const scheduleReviewLinks = sqliteTable(
     check(
       "schedule_review_links_expiry_check",
       sql`${table.expiresAt} > ${table.createdAt} AND ${table.expiresAt} <= ${table.createdAt} + 2592000`,
+    ),
+    check(
+      "schedule_review_links_purpose_check",
+      sql`length(trim(${table.purpose})) BETWEEN 1 AND 80 AND ${table.purpose} = trim(${table.purpose}) AND instr(${table.purpose}, char(10)) = 0 AND instr(${table.purpose}, char(13)) = 0`,
     ),
     check(
       "schedule_review_links_revocation_check",

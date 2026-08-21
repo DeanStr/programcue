@@ -131,6 +131,7 @@ export {
   ScheduleNotFoundError,
   SchedulePlacementBlockedError,
   SchedulePublicationBlockedError,
+  ScheduleReviewLinkExpiredError,
   ScheduleReviewLinkLimitError,
   ScheduleReviewLinkNotFoundError,
   ScheduleRevisionConflictError,

@@ -1,7 +1,10 @@
 import { useEffect, useId, useRef, useState } from "react";
 import { useFetcher } from "react-router";
 import { Dialog } from "~/components/dialog";
-import { SCHEDULE_REVIEW_LINK_ACKNOWLEDGEMENT } from "~/modules/schedule/schedule-schema";
+import {
+  SCHEDULE_REVIEW_LINK_ACKNOWLEDGEMENT,
+  SCHEDULE_REVIEW_LINK_PURPOSE_MAX_LENGTH,
+} from "~/modules/schedule/schedule-schema";
 import type { action as schedulePlannerAction } from "~/routes/schedule-planner.server";
 import type { SchedulePlannerWorkspaceData } from "./schedule-planner-panel-types";
 import { isRecord } from "./schedule-planner-workspace-helpers";
@@ -49,6 +52,8 @@ export function ScheduleReviewLinksPanel({
   const [urlDismissed, setUrlDismissed] = useState(false);
   const [revokeId, setRevokeId] = useState<string | null>(null);
   const urlFieldId = useId();
+  const purposeFieldId = useId();
+  const createFormId = useId();
   const urlInputRef = useRef<HTMLInputElement>(null);
   const created = isReviewUrlResult(createFetcher.data)
     ? createFetcher.data
@@ -61,6 +66,9 @@ export function ScheduleReviewLinksPanel({
   const draft =
     workspace.version?.status === "draft" ? workspace.version : null;
   const [revokeSubmitted, setRevokeSubmitted] = useState(false);
+  const revokeTarget = workspace.reviewLinks.find(
+    (link) => link.id === revokeId,
+  );
 
   function closeCreate() {
     if (created) setUrlDismissed(true);
@@ -101,7 +109,8 @@ export function ScheduleReviewLinksPanel({
           <h2 id="draft-review-links-heading">Draft review links</h2>
           <p className="subtle">
             Share a frozen unpublished timetable. The secret URL is shown once.
-            {workspace.reviewLinks.length === 0
+            {workspace.reviewLinks.length === 0 &&
+            workspace.reviewLinkOmittedInactiveCount === 0
               ? " No review links have been created for this event."
               : null}
           </p>
@@ -133,10 +142,10 @@ export function ScheduleReviewLinksPanel({
           {workspace.reviewLinks.map((link) => (
             <li key={link.id}>
               <div>
-                <strong>{statusLabel(link.status)}</strong>
+                <strong>{link.purpose}</strong>
                 <span>
-                  Version {link.versionNumber ?? "—"} · revision{" "}
-                  {link.scheduleRevision}
+                  {statusLabel(link.status)} · version{" "}
+                  {link.versionNumber ?? "—"} · revision {link.scheduleRevision}
                 </span>
                 <span>
                   Created{" "}
@@ -159,6 +168,7 @@ export function ScheduleReviewLinksPanel({
                 <button
                   className="btn ghost"
                   type="button"
+                  aria-label={`Revoke ${link.purpose}`}
                   onClick={() => {
                     setRevokeSubmitted(false);
                     setRevokeId(link.id);
@@ -171,6 +181,15 @@ export function ScheduleReviewLinksPanel({
           ))}
         </ul>
       )}
+      {workspace.reviewLinkOmittedInactiveCount > 0 ? (
+        <p className="subtle mt">
+          {workspace.reviewLinkOmittedInactiveCount} older expired or revoked
+          {workspace.reviewLinkOmittedInactiveCount === 1
+            ? " link is"
+            : " links are"}{" "}
+          not shown.
+        </p>
+      ) : null}
       {createOpen ? (
         <Dialog
           title="Create a confidential draft review link?"
@@ -189,7 +208,7 @@ export function ScheduleReviewLinksPanel({
                 {showCreatedUrl ? "Close" : "Cancel"}
               </button>
               {showCreatedUrl || !draft ? null : (
-                <createFetcher.Form method="post">
+                <createFetcher.Form id={createFormId} method="post">
                   <input
                     type="hidden"
                     name="intent"
@@ -268,6 +287,20 @@ export function ScheduleReviewLinksPanel({
                   , including unpublished profiles and pending confirmations.
                   Declined speakers are omitted.
                 </p>
+                <label htmlFor={purposeFieldId}>Purpose</label>
+                <input
+                  id={purposeFieldId}
+                  form={createFormId}
+                  name="purpose"
+                  required
+                  maxLength={SCHEDULE_REVIEW_LINK_PURPOSE_MAX_LENGTH}
+                  autoComplete="off"
+                  placeholder="Programme committee"
+                />
+                <p className="subtle">
+                  Shown in the list so you can tell links apart after the URL is
+                  gone.
+                </p>
                 <div className="validation-item warn">
                   <strong>This URL is a secret.</strong>
                   <span>
@@ -291,7 +324,11 @@ export function ScheduleReviewLinksPanel({
       {revokeId ? (
         <Dialog
           title="Revoke this confidential review link?"
-          description="The unpublished snapshot will immediately return a generic not-found page."
+          description={
+            revokeTarget
+              ? `“${revokeTarget.purpose}” will immediately return a generic not-found page.`
+              : "The unpublished snapshot will immediately return a generic not-found page."
+          }
           tone="danger"
           onClose={() => {
             setRevokeSubmitted(false);

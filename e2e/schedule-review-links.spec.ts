@@ -45,6 +45,7 @@ test("creates a one-time confidential review URL and invalidates it on revoke an
     name: "Create a confidential draft review link?",
   });
   await expect(createDialog).toContainText("unpublished profiles");
+  await createDialog.getByLabel("Purpose").fill("Programme committee");
   await createDialog
     .getByRole("button", { name: "Create confidential link" })
     .click();
@@ -61,6 +62,7 @@ test("creates a one-time confidential review URL and invalidates it on revoke an
   await expect(page.getByText("Confidential preview URL")).toHaveCount(0);
   await expect(page.locator("text=/programme-preview/")).toHaveCount(0);
   const reviewList = page.locator(".schedule-review-link-list");
+  await expect(reviewList).toContainText("Programme committee");
   await expect(reviewList).toContainText("Created");
   await expect(reviewList).toContainText("Jordan Alvarez");
 
@@ -84,11 +86,14 @@ test("creates a one-time confidential review URL and invalidates it on revoke an
   ).toBeVisible();
 
   await waitForInterface(page, "/admin/schedule");
-  await page.getByRole("button", { name: "Revoke" }).first().click();
   await page
-    .getByRole("dialog", { name: "Revoke this confidential review link?" })
-    .getByRole("button", { name: "Revoke link" })
+    .getByRole("button", { name: "Revoke Programme committee" })
     .click();
+  const revokeDialog = page.getByRole("dialog", {
+    name: "Revoke this confidential review link?",
+  });
+  await expect(revokeDialog).toContainText("Programme committee");
+  await revokeDialog.getByRole("button", { name: "Revoke link" }).click();
   await expect(page.getByText("Manually revoked")).toBeVisible();
   const revoked = await page.goto(previewPath);
   expect(revoked?.status()).toBe(404);
@@ -98,8 +103,11 @@ test("creates a one-time confidential review URL and invalidates it on revoke an
 
   await waitForInterface(page, "/admin/schedule");
   await page.getByRole("button", { name: "Create review link" }).click();
-  await page
-    .getByRole("dialog", { name: "Create a confidential draft review link?" })
+  const secondCreate = page.getByRole("dialog", {
+    name: "Create a confidential draft review link?",
+  });
+  await secondCreate.getByLabel("Purpose").fill("Venue reviewer");
+  await secondCreate
     .getByRole("button", { name: "Create confidential link" })
     .click();
   const secondUrl = await page
