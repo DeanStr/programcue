@@ -167,9 +167,10 @@ test("review link controls stay reachable on a narrow schedule page", async ({
       "Create a draft schedule before sharing a confidential review snapshot.",
     ),
   ).toBeInViewport();
-  await expect(
-    page.locator(".schedule-review-links"),
-  ).toHaveCSS("max-height", "none");
+  await expect(page.locator(".schedule-review-links")).toHaveCSS(
+    "max-height",
+    "none",
+  );
 });
 
 test("review link history does not collapse the planner canvas", async ({
