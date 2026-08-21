@@ -62,6 +62,13 @@ export async function loader({ request, context }: LoaderFunctionArgs) {
 type ActionResult =
   | {
       ok: true;
+      intent: "ask";
+      message: string;
+      result: Awaited<ReturnType<AiAssistantService["ask"]>>;
+      approval: null;
+    }
+  | {
+      ok: true;
       intent: "approve";
       message: string;
       approval: Awaited<ReturnType<AiAssistantService["approveProposal"]>>;
@@ -80,7 +87,7 @@ type ActionResult =
     }
   | {
       ok: false;
-      intent: "approve" | "revise" | "configure" | "unknown";
+      intent: "ask" | "approve" | "revise" | "configure" | "unknown";
       message: string;
       approval: null;
     };
@@ -113,7 +120,7 @@ export function providerFailureMessage(error: unknown) {
 
 function knownErrorResponse(
   error: unknown,
-  intent: "approve" | "revise" | "configure",
+  intent: "ask" | "approve" | "revise" | "configure",
 ) {
   let status: number | null = null;
   const errorName = error instanceof Error ? error.name : "";
@@ -170,6 +177,7 @@ export async function action({ request, context }: ActionFunctionArgs) {
   const form = await request.formData();
   const rawIntent = form.get("intent");
   if (
+    rawIntent !== "ask" &&
     rawIntent !== "approve" &&
     rawIntent !== "revise" &&
     rawIntent !== "configure"
@@ -240,7 +248,17 @@ export async function action({ request, context }: ActionFunctionArgs) {
         approval: null,
       });
     }
-    throw new Error("The assistant action was not handled.");
+    const prompt = form.get("suggestedPrompt") ?? form.get("prompt");
+    const result = await agent.ask(viewer, prompt);
+    return data<ActionResult>({
+      ok: true,
+      intent,
+      message: result.proposals.length
+        ? "The assistant prepared a preview. No write has executed."
+        : "The assistant completed an evidence-backed advisory response.",
+      result,
+      approval: null,
+    });
   } catch (error) {
     const response = knownErrorResponse(error, intent);
     if (response) return response;
@@ -395,7 +413,7 @@ function StreamingAssistantWorkspace({
         <h2>What do you need to know or prepare?</h2>
         <div className="stack">
           <form
-            action="/admin/assistant/stream"
+            action="/admin/assistant"
             method="post"
             className="stack"
             id="assistant-stream-form"
@@ -471,8 +489,10 @@ export default function AssistantRoute() {
   const loaderData = useLoaderData<typeof loader>();
   const actionData = useActionData<typeof action>();
   const navigation = useNavigation();
+  const actionResult =
+    actionData?.ok && actionData.intent === "ask" ? actionData.result : null;
   const [streamedResult, setStreamedResult] =
-    useState<AiAssistantResult | null>(null);
+    useState<AiAssistantResult | null>(actionResult);
   const busy = navigation.state !== "idle";
   const streamedProposals = streamedResult?.proposals ?? [];
   const streamedProposalIds = new Set(
@@ -494,7 +514,9 @@ export default function AssistantRoute() {
     streamedProposals.length > 0 || recentProposals.length > 0;
 
   useEffect(() => {
-    if (
+    if (actionData?.ok && actionData.intent === "ask") {
+      setStreamedResult(actionData.result);
+    } else if (
       actionData?.ok &&
       (actionData.intent === "approve" || actionData.intent === "revise")
     ) {

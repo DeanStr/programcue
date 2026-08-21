@@ -38,7 +38,7 @@ test("assistant fails explicitly when the OpenAI credential is unavailable", asy
   ).toBeDisabled();
   await expect(page.locator("form#assistant-stream-form")).toHaveAttribute(
     "action",
-    "/admin/assistant/stream",
+    "/admin/assistant",
   );
   const suggestedRequest = page.getByRole("button", {
     name: "What is blocking event readiness? Cite the exact records and rank the next three actions.",
