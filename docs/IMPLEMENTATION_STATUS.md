@@ -412,6 +412,15 @@ from the separate durable portal-invitation action. Blank D1 event creation can
 explicitly reuse a still-verified same-organisation sender after transactional
 source revalidation; it does not copy templates or fabricate delivery.
 
+Communication content keeps unfinished human-authored drafts editable but
+rejects high-confidence placeholder residue and invalid merge syntax at AI
+parsing/proposal, approval, publication, exact preview and the claimed Queue
+boundary. Queue rejection records a durable terminal failure before provider or
+individual-delivery work and is acknowledged instead of retried. This is
+repository test evidence; no production residue scan has been performed. The
+pre-release `/evaluate` reset and reseed is the authoritative cleanup for its
+disposable fixture data rather than a backward-compatibility migration.
+
 Template assignment now binds the exact roster revision/status, full task
 template/dependency material and prior assignment state before materialising one
 target's complete prerequisite/root graph, dependency edges, assignment audit,

@@ -171,6 +171,11 @@ describe("communication and readiness rules", () => {
   it.each([
     "[Recipient Name]",
     "[Administrator name/email]",
+    "[system/tool name]",
+    "[Event name]",
+    "[Company name]",
+    "[First name]",
+    "[Email address]",
     "[insert link]",
     "[Add deadline if applicable]",
     "<placeholder>",

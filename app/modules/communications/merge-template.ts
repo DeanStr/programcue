@@ -7,6 +7,13 @@ const PLACEHOLDER_INSTRUCTION_PATTERN =
   /^(?:insert|add|enter|provide|replace|fill\s+in|include)\b/iu;
 const PLACEHOLDER_LABEL_PATTERN =
   /^(?:(?:recipient|administrator|admin|organizer|organiser|speaker|reviewer|contact|your)\s+).*(?:name|e-?mail|contact|deadline|due\s+date|date|link|url|phone|address)$/iu;
+const EXPLICIT_PLACEHOLDER_LABELS = new Set([
+  "company name",
+  "email address",
+  "event name",
+  "first name",
+  "system/tool name",
+]);
 
 export type MergeValues = Record<string, string | number | null | undefined>;
 
@@ -37,6 +44,7 @@ function isHighConfidencePlaceholderLabel(value: string) {
   return (
     PLACEHOLDER_INSTRUCTION_PATTERN.test(label) ||
     PLACEHOLDER_LABEL_PATTERN.test(label) ||
+    EXPLICIT_PLACEHOLDER_LABELS.has(label.toLowerCase()) ||
     label.toLowerCase() === "placeholder"
   );
 }
