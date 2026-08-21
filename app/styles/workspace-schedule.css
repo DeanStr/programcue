@@ -243,6 +243,10 @@
   max-height: 16rem;
   overflow: hidden;
 }
+.schedule-review-links:not(:has(.schedule-review-link-list)) {
+  max-height: none;
+  overflow: visible;
+}
 .schedule-review-links > :not(.schedule-review-link-list) {
   flex: 0 0 auto;
 }

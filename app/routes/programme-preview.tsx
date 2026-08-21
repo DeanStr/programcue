@@ -1,10 +1,12 @@
-import { data, Form } from "react-router";
+import { data, Form, isRouteErrorResponse } from "react-router";
 import { BrandMark } from "~/components/brand-mark";
+import { routeErrorCopy, routeErrorMessage } from "~/lib/route-error-copy";
 import {
   ScheduleReviewLinkService,
   scheduleReviewPreviewHeaders,
   scheduleReviewPreviewNotFound,
 } from "~/modules/schedule/schedule-review-link-service.server";
+import { composeScheduleReviewPreviewHeaders } from "~/modules/schedule/schedule-review-preview-http";
 import type { ScheduleReviewProjection } from "~/modules/schedule/schedule-review-projection";
 import { ScheduleService } from "~/modules/schedule/schedule-service.server";
 import { eventLocalCalendarDate } from "~/modules/schedule/schedule-time";
@@ -15,8 +17,35 @@ import {
 } from "~/platform/http/public-abuse-protection.server";
 import type { Route } from "./+types/programme-preview";
 
-export const headers: Route.HeadersFunction = () =>
-  scheduleReviewPreviewHeaders();
+export function headers({
+  loaderHeaders,
+  actionHeaders,
+  errorHeaders,
+}: Route.HeadersArgs) {
+  return composeScheduleReviewPreviewHeaders(
+    errorHeaders ?? actionHeaders ?? loaderHeaders,
+  );
+}
+
+export function ErrorBoundary({ error }: Route.ErrorBoundaryProps) {
+  const status = isRouteErrorResponse(error) ? error.status : 500;
+  const title = routeErrorCopy(status).title;
+  const message = isRouteErrorResponse(error)
+    ? routeErrorMessage(status, error.data)
+    : routeErrorCopy(status).message;
+  return (
+    <main className="design-board" id="main" tabIndex={-1}>
+      <section
+        className="card pad"
+        style={{ maxWidth: 680, margin: "8vh auto" }}
+      >
+        <BrandMark />
+        <h1>{title}</h1>
+        <p className="subtle">{message}</p>
+      </section>
+    </main>
+  );
+}
 
 export const meta: Route.MetaFunction = () => [
   { title: "Confidential programme preview" },

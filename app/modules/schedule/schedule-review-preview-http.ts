@@ -9,6 +9,16 @@ export function scheduleReviewPreviewHeaders(): Record<string, string> {
   };
 }
 
+export function composeScheduleReviewPreviewHeaders(
+  source?: Headers | null,
+): Headers {
+  const headers = new Headers(source ?? undefined);
+  for (const [name, value] of Object.entries(scheduleReviewPreviewHeaders())) {
+    headers.set(name, value);
+  }
+  return headers;
+}
+
 export function isScheduleReviewPreviewPath(pathname: string) {
   return (
     pathname === "/programme-preview" ||

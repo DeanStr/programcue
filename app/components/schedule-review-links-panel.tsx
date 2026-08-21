@@ -1,6 +1,6 @@
 import { Copy } from "lucide-react";
 import { useEffect, useId, useRef, useState } from "react";
-import { useFetcher } from "react-router";
+import { useFetcher, useRevalidator } from "react-router";
 import { Dialog } from "~/components/dialog";
 import {
   SCHEDULE_REVIEW_LINK_ACKNOWLEDGEMENT,
@@ -51,7 +51,9 @@ export function ScheduleReviewLinksPanel({
 }) {
   const createFetcher = useFetcher<typeof schedulePlannerAction>();
   const revokeFetcher = useFetcher<typeof schedulePlannerAction>();
+  const revalidator = useRevalidator();
   const [createOpen, setCreateOpen] = useState(false);
+  const [createRefreshing, setCreateRefreshing] = useState(false);
   const [urlDismissed, setUrlDismissed] = useState(false);
   const [revokeId, setRevokeId] = useState<string | null>(null);
   const urlFieldId = useId();
@@ -61,6 +63,7 @@ export function ScheduleReviewLinksPanel({
   const blockedReasonId = useId();
   const urlInputRef = useRef<HTMLInputElement>(null);
   const headingRef = useRef<HTMLHeadingElement>(null);
+  const createButtonRef = useRef<HTMLButtonElement>(null);
   const revokeReturnFocusRef = useRef<HTMLElement | null>(null);
   const created = isReviewUrlResult(createFetcher.data)
     ? createFetcher.data
@@ -89,6 +92,19 @@ export function ScheduleReviewLinksPanel({
   function closeCreate() {
     if (created) setUrlDismissed(true);
     setCreateOpen(false);
+  }
+
+  async function requestCreate() {
+    if (createRefreshing) return;
+    setUrlDismissed(true);
+    setCreateErrorDismissed(true);
+    setCreateRefreshing(true);
+    try {
+      await revalidator.revalidate();
+      setCreateOpen(true);
+    } finally {
+      setCreateRefreshing(false);
+    }
   }
 
   useEffect(() => {
@@ -120,6 +136,16 @@ export function ScheduleReviewLinksPanel({
     if (showCreatedUrl) urlInputRef.current?.select();
   }, [showCreatedUrl]);
 
+  const createReady =
+    workspace.reviewLinkSummary.canCreate &&
+    Boolean(workspace.reviewLinkSummary.projectionHash);
+
+  useEffect(() => {
+    if (!createReady && !showCreatedUrl) {
+      setCreateOpen(false);
+    }
+  }, [createReady, showCreatedUrl]);
+
   return (
     <section
       className="card pad schedule-review-links"
@@ -139,21 +165,22 @@ export function ScheduleReviewLinksPanel({
           </p>
         </div>
         <button
+          ref={createButtonRef}
           className="btn ghost"
           type="button"
-          disabled={!draft || !workspace.reviewLinkSummary.canCreate}
+          disabled={
+            !draft || !workspace.reviewLinkSummary.canCreate || createRefreshing
+          }
           aria-describedby={
             workspace.reviewLinkSummary.blockedReason
               ? blockedReasonId
               : undefined
           }
           onClick={() => {
-            setUrlDismissed(true);
-            setCreateErrorDismissed(true);
-            setCreateOpen(true);
+            void requestCreate();
           }}
         >
-          Create review link
+          {createRefreshing ? "Refreshing snapshot…" : "Create review link"}
         </button>
       </div>
       {workspace.reviewLinkSummary.blockedReason ? (
@@ -223,11 +250,19 @@ export function ScheduleReviewLinksPanel({
           not shown.
         </p>
       ) : null}
-      {createOpen ? (
+      {createOpen && (showCreatedUrl || createReady) ? (
         <Dialog
           title="Create a confidential draft review link?"
           description="Anyone with the URL can open a frozen unpublished timetable."
           tone="warning"
+          returnFocus={{
+            get current() {
+              const button = createButtonRef.current;
+              return button?.isConnected && !button.disabled
+                ? button
+                : headingRef.current;
+            },
+          }}
           onClose={closeCreate}
           dismissible={!creating}
           footer={
@@ -275,9 +310,7 @@ export function ScheduleReviewLinksPanel({
                   <button
                     className="btn primary"
                     type="submit"
-                    disabled={
-                      creating || !workspace.reviewLinkSummary.projectionHash
-                    }
+                    disabled={creating || !createReady}
                   >
                     {creating ? "Creating link…" : "Create confidential link"}
                   </button>

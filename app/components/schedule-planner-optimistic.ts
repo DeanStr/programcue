@@ -185,5 +185,17 @@ export function reconcileCommittedScheduleMove(
     // diff after an optimistic move would be worse than making that boundary
     // perform its deliberate authoritative read.
     publicationPreview: null,
+    // Confirmation hash and disclosures are loader-derived. Keeping them after
+    // a skip-revalidation move would submit a new revision with a stale hash.
+    reviewLinkSummary: workspace.reviewLinkSummary
+      ? {
+          canCreate: workspace.reviewLinkSummary.canCreate,
+          blockedReason: workspace.reviewLinkSummary.blockedReason,
+          entryCount: 0,
+          speakerNameCount: 0,
+          projectionHash: null,
+          disclosures: [],
+        }
+      : workspace.reviewLinkSummary,
   };
 }

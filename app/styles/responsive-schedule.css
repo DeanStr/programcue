@@ -90,6 +90,14 @@
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
+@media (max-width: 1099px) {
+  /* Auto-height schedule pages must not clip the review-link header, create
+     control or blocked-reason copy behind the desktop canvas cap. */
+  .schedule-review-links {
+    max-height: none;
+    overflow: visible;
+  }
+}
 @media (max-width: 1099px) and (min-width: 761px) {
   .schedule-page {
     height: auto;

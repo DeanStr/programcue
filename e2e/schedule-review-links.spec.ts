@@ -151,6 +151,27 @@ test("creates a one-time confidential review URL and invalidates it on revoke an
   expect(published?.status()).toBe(404);
 });
 
+test("review link controls stay reachable on a narrow schedule page", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await waitForInterface(page, "/admin/schedule");
+  const heading = page.getByRole("heading", { name: "Draft review links" });
+  await heading.scrollIntoViewIfNeeded();
+  await expect(heading).toBeInViewport();
+  await expect(
+    page.getByRole("button", { name: "Create review link" }),
+  ).toBeInViewport();
+  await expect(
+    page.getByText(
+      "Create a draft schedule before sharing a confidential review snapshot.",
+    ),
+  ).toBeInViewport();
+  await expect(
+    page.locator(".schedule-review-links"),
+  ).toHaveCSS("max-height", "none");
+});
+
 test("review link history does not collapse the planner canvas", async ({
   page,
 }) => {

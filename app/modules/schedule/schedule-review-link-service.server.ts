@@ -153,6 +153,14 @@ function sessionById(workspace: ScheduleWorkspace) {
   return new Map(workspace.sessions.map((session) => [session.id, session]));
 }
 
+function publicTrackName(workspace: ScheduleWorkspace, trackId: string | null) {
+  if (!trackId) return null;
+  const track = workspace.tracks.find((item) => item.id === trackId);
+  if (!track?.isPublic) return null;
+  const name = track.name.trim();
+  return name || null;
+}
+
 function speakerNamesBySession(
   sessionIds: ReadonlyArray<string>,
   rows: ReadonlyArray<SpeakerRow>,
@@ -216,7 +224,7 @@ function draftEntries(
       title: session.title,
       formatLabel,
       roomName,
-      trackName: session.trackName?.trim() ? session.trackName.trim() : null,
+      trackName: publicTrackName(workspace, session.trackId),
       speakers: speakers.get(session.id) ?? [],
     });
   }

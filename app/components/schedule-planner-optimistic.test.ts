@@ -59,6 +59,21 @@ function workspaceFixture() {
       "session-two": { payload: {}, ics: "unchanged calendar" },
     },
     publicationPreview: { changes: {} },
+    reviewLinkSummary: {
+      canCreate: true,
+      blockedReason: null,
+      entryCount: 1,
+      speakerNameCount: 1,
+      projectionHash: "a".repeat(64),
+      disclosures: [
+        {
+          title: "Stale session",
+          room: "Stale room",
+          startsAt: 1_800_000_000,
+          speakers: ["Ada"],
+        },
+      ],
+    },
   } as unknown as SchedulePlannerWorkspaceData;
 }
 
@@ -142,6 +157,14 @@ describe("optimistic schedule placement", () => {
       "session-two": { payload: {}, ics: "unchanged calendar" },
     });
     expect(reconciled.publicationPreview).toBeNull();
+    expect(reconciled.reviewLinkSummary).toEqual({
+      canCreate: true,
+      blockedReason: null,
+      entryCount: 0,
+      speakerNameCount: 0,
+      projectionHash: null,
+      disclosures: [],
+    });
   });
 
   it("rejects malformed fast-path responses instead of trusting them", () => {

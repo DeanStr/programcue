@@ -146,6 +146,7 @@ describe("schedule review links", () => {
           expect.objectContaining({
             title: "First test session",
             room: "Main Stage",
+            track: "Operations",
             speakers: expect.not.arrayContaining(["Changed Speaker"]),
           }),
         ],
@@ -469,6 +470,41 @@ describe("schedule review links", () => {
     expect((corruptPost as Response).status).toBe(404);
     expect(await (corruptPost as Response).text()).toBe(
       "That page does not exist, or the link has changed.",
+    );
+  });
+
+  it("omits non-public track names from the frozen snapshot", async () => {
+    const { schedule } = await placedDraft();
+    const hiddenTrack = await env.DB.prepare(
+      `UPDATE tracks SET is_public = 0
+        WHERE id = 'schedule-test-track' AND event_id = ?`,
+    )
+      .bind(viewer.eventId)
+      .run();
+    expect(hiddenTrack.meta.changes).toBeGreaterThan(0);
+    const created = await schedule.createReviewLink(
+      viewer,
+      await reviewLinkCreateInput(schedule),
+    );
+    expect(created.entryCount).toBe(1);
+    const revealed = await action({
+      request: new Request(`http://localhost${created.path}`, {
+        method: "POST",
+        headers: { origin: "http://localhost" },
+      }),
+      params: { token: created.token },
+      context: previewContext(),
+    } as never);
+    if (revealed instanceof Response)
+      throw new Error("Reveal returned a raw response.");
+    expect(revealed.data).toMatchObject({
+      kind: "snapshot",
+      projection: {
+        entries: [expect.objectContaining({ track: null })],
+      },
+    });
+    expect(JSON.stringify(revealed.data.projection)).not.toContain(
+      "Operations",
     );
   });
 
