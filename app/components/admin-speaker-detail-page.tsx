@@ -18,6 +18,7 @@ import { EmptyState } from "~/components/ui/states";
 import { useUnsavedChanges } from "~/components/ui/use-unsaved-changes";
 import { requireValue } from "~/lib/required-value";
 import { maximumMegabytes } from "~/modules/files/file-policy";
+import { formatEventLocalAvailabilityWindow } from "~/modules/schedule/schedule-time";
 import {
   formatSpeakerXHandleInput,
   normalizeSpeakerLinkedinUrl,
@@ -497,8 +498,11 @@ export function AdminSpeakerDetailPage({
                 <li key={window.id} className="stack">
                   <p>
                     <strong>
-                      {formatTimestamp(window.startsAt, event.timezone)}–
-                      {formatTimestamp(window.endsAt, event.timezone)}
+                      {formatEventLocalAvailabilityWindow(
+                        window.startsAt,
+                        window.endsAt,
+                        event.timezone,
+                      )}
                     </strong>
                   </p>
                   {window.overlappingSessions.length ? (
@@ -537,7 +541,11 @@ export function AdminSpeakerDetailPage({
                             description:
                               "The speaker can add the same period again. This does not edit the published programme.",
                             records: [
-                              `${formatTimestamp(window.startsAt, event.timezone)}–${formatTimestamp(window.endsAt, event.timezone)}`,
+                              formatEventLocalAvailabilityWindow(
+                                window.startsAt,
+                                window.endsAt,
+                                event.timezone,
+                              ),
                               ...window.overlappingSessions.map(
                                 (session) => `Overlaps “${session.title}”`,
                               ),

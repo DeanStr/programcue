@@ -60,6 +60,8 @@ describe("speaker availability", () => {
       .bind(created.windowId)
       .first<{ note: string | null; startsAt: number; endsAt: number }>();
     expect(stored).toMatchObject({ note: "Travel day" });
+    expect(created.changeSequence).toEqual(expect.any(Number));
+    expect(created.changeSequence).toBeGreaterThan(0);
     workspace = await schedule.getWorkspace(scheduleTestViewer);
     const startsAt = eventLocalTimeEpoch(
       workspace.event.startsAt,

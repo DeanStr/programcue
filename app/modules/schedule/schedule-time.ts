@@ -312,11 +312,51 @@ export function participantAllDayRange(
   return { startsAt, endsAt };
 }
 
-export function formatEventLocalInterval(
+function formatEventLocalDate(epoch: number, timezone: string) {
+  return new Intl.DateTimeFormat("en-GB", {
+    timeZone: timezone,
+    year: "numeric",
+    month: "short",
+    day: "numeric",
+  }).format(new Date(epoch * 1_000));
+}
+
+export function isParticipantAllDayRange(
   startsAt: number,
   endsAt: number,
   timezone: string,
 ) {
+  if (
+    !Number.isInteger(startsAt) ||
+    !Number.isInteger(endsAt) ||
+    endsAt <= startsAt
+  ) {
+    return false;
+  }
+  try {
+    const range = participantAllDayRange(
+      eventLocalCalendarDate(startsAt, timezone),
+      eventLocalCalendarDate(endsAt - 1, timezone),
+      timezone,
+    );
+    return range.startsAt === startsAt && range.endsAt === endsAt;
+  } catch {
+    return false;
+  }
+}
+
+export function formatEventLocalAvailabilityWindow(
+  startsAt: number,
+  endsAt: number,
+  timezone: string,
+) {
+  if (isParticipantAllDayRange(startsAt, endsAt, timezone)) {
+    const startLabel = formatEventLocalDate(startsAt, timezone);
+    const endLabel = formatEventLocalDate(endsAt - 1, timezone);
+    return startLabel === endLabel
+      ? `All day · ${startLabel}`
+      : `All day · ${startLabel}–${endLabel}`;
+  }
   const formatter = new Intl.DateTimeFormat("en-GB", {
     timeZone: timezone,
     year: "numeric",
@@ -326,7 +366,15 @@ export function formatEventLocalInterval(
     minute: "2-digit",
     hourCycle: "h23",
   });
-  return `${formatter.format(new Date(startsAt * 1_000))}–${formatter.format(new Date(endsAt * 1_000))} ${timezone}`;
+  return `${formatter.format(new Date(startsAt * 1_000))}–${formatter.format(new Date(endsAt * 1_000))}`;
+}
+
+export function formatEventLocalInterval(
+  startsAt: number,
+  endsAt: number,
+  timezone: string,
+) {
+  return `${formatEventLocalAvailabilityWindow(startsAt, endsAt, timezone)} ${timezone}`;
 }
 
 export const SCHEDULE_DAY_START_HOUR = 7;

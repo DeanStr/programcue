@@ -11,6 +11,8 @@ import {
   eventLocalEndOfDayEpoch,
   eventLocalExclusiveEndEpoch,
   eventLocalTimeEpoch,
+  formatEventLocalAvailabilityWindow,
+  formatEventLocalInterval,
   participantAllDayRange,
   participantEventLocalTimeEpoch,
 } from "./schedule-time";
@@ -205,5 +207,44 @@ describe("event-local schedule time", () => {
         "America/Toronto",
       ),
     );
+  });
+
+  it("labels exact event-local day-boundary windows as all day", () => {
+    const oneDay = participantAllDayRange(
+      "2027-05-21",
+      "2027-05-21",
+      "America/Toronto",
+    );
+    const twoDays = participantAllDayRange(
+      "2027-05-21",
+      "2027-05-22",
+      "America/Toronto",
+    );
+    expect(
+      formatEventLocalAvailabilityWindow(
+        oneDay.startsAt,
+        oneDay.endsAt,
+        "America/Toronto",
+      ),
+    ).toBe("All day · 21 May 2027");
+    expect(
+      formatEventLocalInterval(
+        twoDays.startsAt,
+        twoDays.endsAt,
+        "America/Toronto",
+      ),
+    ).toBe("All day · 21 May 2027–22 May 2027 America/Toronto");
+    const timedStart = eventLocalTimeEpoch(
+      Date.parse("2027-05-21T00:00:00Z") / 1_000,
+      "America/Toronto",
+      9,
+    );
+    expect(
+      formatEventLocalAvailabilityWindow(
+        timedStart,
+        timedStart + 3_600,
+        "America/Toronto",
+      ),
+    ).toMatch(/09:00/);
   });
 });

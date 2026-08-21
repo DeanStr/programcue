@@ -28,7 +28,10 @@ import {
   speakerBlackoutCreateSchema,
   speakerBlackoutDeleteSchema,
 } from "./speaker-availability-schema";
-import { SpeakerAdminStateError } from "./speaker-service-errors";
+import {
+  SpeakerAdminIntegrityError,
+  SpeakerAdminStateError,
+} from "./speaker-service-errors";
 
 export type SpeakerAvailabilityWindow = SpeakerBlackoutWindow & {
   note: string | null;
@@ -715,7 +718,12 @@ export class SpeakerAvailabilityService {
         "The event changed after this page loaded. Refresh before continuing.",
       );
     }
-    const changeSequence = change?.results[0]?.sequence ?? null;
+    const changeSequence = Number(change?.results[0]?.sequence);
+    if (!Number.isInteger(changeSequence) || changeSequence <= 0) {
+      throw new SpeakerAdminIntegrityError(
+        "The committed availability change cursor was not recorded.",
+      );
+    }
     const interval = formatEventLocalInterval(
       auditWindow.startsAt,
       auditWindow.endsAt,

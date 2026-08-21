@@ -5,16 +5,16 @@ import { SpeakerActionNotice } from "~/components/speaker-action-notice";
 import { useSpeakerWorkspace } from "~/components/speaker-workspace-context";
 import { useConfirm } from "~/components/ui/confirm-dialog";
 import { ScheduleRevisionConflictError } from "~/modules/schedule/schedule-errors";
-import { eventBoundaryCalendarDate } from "~/modules/schedule/schedule-time";
+import {
+  eventBoundaryCalendarDate,
+  formatEventLocalAvailabilityWindow,
+} from "~/modules/schedule/schedule-time";
 import {
   SpeakerAdminStateError,
   SpeakerService,
 } from "~/modules/speakers/speaker-service.server";
 import { requireSpeakerWorkspace } from "~/modules/speakers/speaker-workspace.server";
-import {
-  notifyRouteChange,
-  recordRouteChange,
-} from "~/platform/realtime/route-realtime.server";
+import { notifyRouteChange } from "~/platform/realtime/route-realtime.server";
 import type { Route } from "./+types/speaker-availability";
 
 export const meta = () => [{ title: "Availability · Program Cue" }];
@@ -59,19 +59,12 @@ export async function action({ request, context }: Route.ActionArgs) {
             windowId: form.get("windowId"),
             confirmation: form.get("confirmation"),
           });
-    const realtimeFailure =
-      result.changeSequence != null
-        ? await notifyRouteChange(
-            env,
-            viewer,
-            result.changeSequence,
-            result.personId,
-          )
-        : await recordRouteChange(env, viewer, {
-            entityType: "person",
-            entityId: result.personId,
-            changeType: "updated",
-          });
+    const realtimeFailure = await notifyRouteChange(
+      env,
+      viewer,
+      result.changeSequence,
+      result.personId,
+    );
     if (realtimeFailure) return data(realtimeFailure, { status: 207 });
     return data({
       ok: true,
@@ -229,7 +222,7 @@ export default function SpeakerAvailability({
               <li key={window.id} className="stack">
                 <p>
                   <strong>
-                    {formatWindow(
+                    {formatEventLocalAvailabilityWindow(
                       window.startsAt,
                       window.endsAt,
                       portal.event.timezone,
@@ -259,7 +252,7 @@ export default function SpeakerAvailability({
                           description:
                             "Organisers will be able to schedule you during this time again.",
                           records: [
-                            formatWindow(
+                            formatEventLocalAvailabilityWindow(
                               window.startsAt,
                               window.endsAt,
                               portal.event.timezone,
@@ -283,16 +276,4 @@ export default function SpeakerAvailability({
       </section>
     </>
   );
-}
-
-function formatWindow(startsAt: number, endsAt: number, timezone: string) {
-  return new Intl.DateTimeFormat("en-GB", {
-    timeZone: timezone,
-    year: "numeric",
-    month: "short",
-    day: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-    hourCycle: "h23",
-  }).formatRange(new Date(startsAt * 1_000), new Date(endsAt * 1_000));
 }
