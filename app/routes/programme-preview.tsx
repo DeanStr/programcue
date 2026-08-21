@@ -154,11 +154,9 @@ function SnapshotView({
             <section key={day.key} className="programme-preview-day">
               <h2>{day.heading}</h2>
               <ol className="programme-preview-list">
-                {day.entries.map((entry) => (
-                  <li
-                    key={`${day.key}:${entry.startsAt}:${entry.endsAt}:${entry.room}:${entry.title}:${entry.format}:${entry.speakers.join(",")}`}
-                    className="programme-preview-item"
-                  >
+                {day.entries.map((entry, index) => (
+                  // biome-ignore lint/suspicious/noArrayIndexKey: Frozen snapshot rows have no stored identity; duplicate visible fields are valid.
+                  <li key={index} className="programme-preview-item">
                     <p className="programme-preview-when">
                       {clockLabel(entry.startsAt, projection.event.timezone)}–
                       {clockLabel(entry.endsAt, projection.event.timezone)}

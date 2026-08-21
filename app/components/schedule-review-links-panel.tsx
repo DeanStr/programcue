@@ -331,6 +331,33 @@ export function ScheduleReviewLinksPanel({
                   , including unpublished profiles and pending confirmations.
                   Declined speakers are omitted.
                 </p>
+                {workspace.reviewLinkSummary.disclosures.length ? (
+                  <ol className="schedule-review-link-disclosure">
+                    {workspace.reviewLinkSummary.disclosures.map(
+                      (item, index) => (
+                        // biome-ignore lint/suspicious/noArrayIndexKey: Frozen disclosure rows have no stored identity; duplicate titles are valid.
+                        <li key={index}>
+                          <strong>{item.title}</strong>
+                          <span>
+                            {expiryLabel(
+                              item.startsAt,
+                              workspace.event.timezone,
+                            )}
+                            {" · "}
+                            {item.room}
+                            {item.speakers.length
+                              ? ` · ${item.speakers.join(", ")}`
+                              : ""}
+                          </span>
+                        </li>
+                      ),
+                    )}
+                  </ol>
+                ) : (
+                  <p className="subtle">
+                    This snapshot has no scheduled public sessions.
+                  </p>
+                )}
                 <label htmlFor={purposeFieldId}>Purpose</label>
                 <input
                   id={purposeFieldId}

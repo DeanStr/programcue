@@ -708,10 +708,12 @@ capability tokens and a strict frozen projection in D1. Owners and
 administrators create, list and revoke links from the schedule planner; the
 anonymous `/programme-preview/:token` GET is a notice-only page and a
 same-origin POST reveals the snapshot. Create is compare-and-set against
-SHA-256 of the frozen projection plus the draft version/revision. Summarize
-reports the ten-active cap as a blocking reason and rethrows unexpected
-errors. Create uses a loader-issued intent so an exact retry fails without
-minting another secret. Administrators choose 1, 3, 7 or 30 days of
+SHA-256 of the frozen projection plus the draft version/revision. Create
+force-freshs the Airtable authority checkpoint and does not persist the
+bearer token. The confirmation lists the disclosed session titles and
+speaker names. Summarize reports the ten-active cap as a blocking reason
+and rethrows unexpected errors. Create uses a loader-issued intent so an
+exact retry fails without minting another secret. Administrators choose 1, 3, 7 or 30 days of
 expiry, defaulting to 7, under the existing 30-day ceiling. Listed links
 include a required short purpose, creator and created time. The planner
 shows every active link plus a bounded recent inactive history. Manual

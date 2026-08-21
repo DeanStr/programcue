@@ -45,6 +45,7 @@ test("creates a one-time confidential review URL and invalidates it on revoke an
     name: "Create a confidential draft review link?",
   });
   await expect(createDialog).toContainText("unpublished profiles");
+  await expect(createDialog).toContainText("Community and Connection");
   await expect(createDialog.getByLabel("Expires in")).toHaveValue("7");
   await createDialog.getByLabel("Purpose").fill("Programme committee");
   await createDialog

@@ -77,12 +77,20 @@ export type ScheduleReviewLinkListResult = {
   omittedInactiveCount: number;
 };
 
+export type ScheduleReviewLinkDisclosure = {
+  title: string;
+  room: string;
+  startsAt: number;
+  speakers: string[];
+};
+
 export type ScheduleReviewLinkSummary = {
   canCreate: boolean;
   entryCount: number;
   speakerNameCount: number;
   projectionHash: string | null;
   blockedReason: string | null;
+  disclosures: ScheduleReviewLinkDisclosure[];
 };
 
 export type ScheduleReviewLinkCreateResult = {
@@ -207,16 +215,33 @@ export {
   scheduleReviewPreviewNotFound,
 } from "./schedule-review-preview-http";
 
+function disclosedRecords(
+  projection: ScheduleReviewProjection,
+): ScheduleReviewLinkDisclosure[] {
+  return projection.entries.map((entry) => ({
+    title: entry.title,
+    room: entry.room,
+    startsAt: entry.startsAt,
+    speakers: [...entry.speakers],
+  }));
+}
+
 export class ScheduleReviewLinkService {
   constructor(
     private readonly env: CloudflareEnvironment,
     private readonly dependencies: {
-      getWorkspace: (viewer: ScheduleEventScope) => Promise<ScheduleWorkspace>;
+      getWorkspace: (
+        viewer: ScheduleEventScope,
+        options?: { bypassCache?: boolean },
+      ) => Promise<ScheduleWorkspace>;
     },
   ) {}
 
-  private getWorkspace(viewer: ScheduleEventScope) {
-    return this.dependencies.getWorkspace(viewer);
+  private getWorkspace(
+    viewer: ScheduleEventScope,
+    options?: { bypassCache?: boolean },
+  ) {
+    return this.dependencies.getWorkspace(viewer, options);
   }
 
   private async loadAssignedSpeakers(
@@ -320,6 +345,7 @@ export class ScheduleReviewLinkService {
         projectionHash: null,
         blockedReason:
           "Create a draft schedule before sharing a confidential review snapshot.",
+        disclosures: [],
       };
     }
     try {
@@ -332,6 +358,7 @@ export class ScheduleReviewLinkService {
         (total, entry) => total + entry.speakers.length,
         0,
       );
+      const disclosures = disclosedRecords(projection);
       if (
         (await this.countActiveLinks(viewer)) >=
         SCHEDULE_REVIEW_LINK_ACTIVE_LIMIT
@@ -342,6 +369,7 @@ export class ScheduleReviewLinkService {
           speakerNameCount,
           projectionHash,
           blockedReason: new ScheduleReviewLinkLimitError().message,
+          disclosures,
         };
       }
       return {
@@ -350,6 +378,7 @@ export class ScheduleReviewLinkService {
         speakerNameCount,
         projectionHash,
         blockedReason: null,
+        disclosures,
       };
     } catch (error) {
       if (
@@ -363,6 +392,7 @@ export class ScheduleReviewLinkService {
           speakerNameCount: 0,
           projectionHash: null,
           blockedReason: error.message,
+          disclosures: [],
         };
       }
       throw error;
@@ -470,7 +500,7 @@ export class ScheduleReviewLinkService {
   ): Promise<ScheduleReviewLinkCreateResult> {
     requireAdministrator(viewer);
     const parsed = scheduleReviewLinkCreateSchema.parse(input);
-    const workspace = await this.getWorkspace(viewer);
+    const workspace = await this.getWorkspace(viewer, { bypassCache: true });
     if (workspace.version?.status !== "draft") {
       throw new ScheduleNotFoundError(
         "A draft schedule is required before creating a review snapshot.",

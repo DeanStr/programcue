@@ -207,15 +207,18 @@ export class AirtableProviderBoundary {
 
   async assertReadable(
     scope: EventScope,
+    options: { bypassCache?: boolean } = {},
   ): Promise<AirtableEventDataSnapshot["freshness"] | null> {
     if ((await this.provider(scope)) === "d1") return null;
     const state = await this.repository.assertSynchronized(
       scope.organisationId,
       scope.eventId,
+      { bypassCache: options.bypassCache },
     );
     const rooms = await this.repository.assertRoomProjectionSynchronized(
       scope.organisationId,
       scope.eventId,
+      { bypassCache: options.bypassCache },
     );
     return {
       ...state.airtable.freshness,

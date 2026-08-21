@@ -94,6 +94,14 @@ describe("schedule review links", () => {
     )
       .bind(viewer.eventId)
       .run();
+    const summary = await schedule.summarizeReviewLinks(viewer);
+    expect(summary.disclosures).toEqual([
+      expect.objectContaining({
+        title: "First test session",
+        room: "Main Stage",
+        speakers: ["Priya Shah"],
+      }),
+    ]);
     const created = await schedule.createReviewLink(
       viewer,
       await reviewLinkCreateInput(schedule),
@@ -205,6 +213,7 @@ describe("schedule review links", () => {
     expect(summary.canCreate).toBe(false);
     expect(summary.blockedReason).toMatch(/10 active draft review links/i);
     expect(summary.projectionHash).toMatch(/^[0-9a-f]{64}$/u);
+    expect(summary.disclosures[0]?.title).toBe("First test session");
 
     const listed = await schedule.listReviewLinks(viewer);
     expect(listed.items).toHaveLength(10);
@@ -523,6 +532,33 @@ describe("schedule review links", () => {
         .bind(previous?.displayName ?? "Priya Shah")
         .run();
     }
+  });
+
+  it("force-freshs the workspace only when creating a review link", async () => {
+    const { workspace } = await placedDraft();
+    const loads: Array<{ bypassCache?: boolean } | undefined> = [];
+    const review = new ScheduleReviewLinkService(scheduleTestEnv, {
+      getWorkspace: async (_viewer, options) => {
+        loads.push(options);
+        return workspace;
+      },
+    });
+    const summary = await review.summarize(viewer);
+    expect(loads).toEqual([undefined]);
+    if (!summary.projectionHash) {
+      throw new Error(summary.blockedReason ?? "missing projection hash");
+    }
+    const created = await review.create(viewer, {
+      scheduleVersionId: workspace.version!.id,
+      scheduleRevision: workspace.version!.revision,
+      acknowledgement: SCHEDULE_REVIEW_LINK_ACKNOWLEDGEMENT,
+      projectionHash: summary.projectionHash,
+      purpose: "Programme committee",
+      createIntentId: crypto.randomUUID(),
+      ttlDays: 7,
+    });
+    expect(created.entryCount).toBe(1);
+    expect(loads).toEqual([undefined, { bypassCache: true }]);
   });
 
   it("does not treat unexpected summarize failures as validation copy", async () => {

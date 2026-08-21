@@ -233,7 +233,10 @@ export class ScheduleService {
     this.airtable =
       dependencies.airtable ?? new AirtableProviderBoundary(this.env);
     const workflowDependencies = {
-      getWorkspace: (viewer: ScheduleEventScope) => this.getWorkspace(viewer),
+      getWorkspace: (
+        viewer: ScheduleEventScope,
+        options?: { bypassCache?: boolean },
+      ) => this.getWorkspace(viewer, options),
     };
     this.contentWorkflow = new ScheduleContentWorkflow(
       this.env,
@@ -379,10 +382,19 @@ export class ScheduleService {
 
   async getWorkspace(
     viewer: ScheduleEventScope,
-    options: { includePublicationConflicts?: boolean } = {},
+    options: {
+      includePublicationConflicts?: boolean;
+      bypassCache?: boolean;
+    } = {},
   ): Promise<ScheduleWorkspace> {
-    if (this.projectionDepth === 0) await this.airtable.assertReadable(viewer);
-    return loadScheduleWorkspaceD1(this.env, viewer, options);
+    if (this.projectionDepth === 0) {
+      await this.airtable.assertReadable(viewer, {
+        bypassCache: options.bypassCache,
+      });
+    }
+    return loadScheduleWorkspaceD1(this.env, viewer, {
+      includePublicationConflicts: options.includePublicationConflicts,
+    });
   }
 
   async previewAutoPlacement(
