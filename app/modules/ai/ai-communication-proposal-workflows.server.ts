@@ -3,8 +3,10 @@ import {
   saveTemplateSchema,
 } from "~/modules/communications/communication-schema";
 import {
+  findUnresolvedTemplateContent,
   renderMergeTemplate,
   representativeMergeValues,
+  unresolvedTemplateTokenMessage,
 } from "~/modules/communications/merge-template";
 import {
   AiProposalExecutorFoundation,
@@ -17,6 +19,7 @@ import {
   reminderSendProposalArgumentsSchema,
 } from "./ai-tool-contracts.server";
 import type { AiToolExecution } from "./ai-tool-execution";
+import { AiToolValidationError } from "./ai-tool-execution";
 import type { AiEvidence, AiProposalPreview } from "./ai-types";
 
 export abstract class AiCommunicationProposalWorkflows extends AiProposalExecutorFoundation {
@@ -76,6 +79,18 @@ export abstract class AiCommunicationProposalWorkflows extends AiProposalExecuto
       encodedArguments,
       emailTemplateDraftProposalArgumentsSchema,
     );
+    const unresolved = findUnresolvedTemplateContent({
+      subject: args.subject,
+      body: args.body,
+      physicalAddress: args.physicalAddress,
+      buttonText: args.buttonText ?? undefined,
+      buttonUrl: args.buttonUrl ?? undefined,
+    });
+    if (unresolved) {
+      throw new AiToolValidationError(
+        unresolvedTemplateTokenMessage(unresolved),
+      );
+    }
     renderMergeTemplate(args.subject, representativeMergeValues);
     renderMergeTemplate(args.body, representativeMergeValues);
     const snapshot: SaveTemplateInput = saveTemplateSchema.parse({

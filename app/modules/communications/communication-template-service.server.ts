@@ -4,6 +4,7 @@ import {
   saveTemplateSchema,
 } from "./communication-schema";
 import {
+  assertNoUnresolvedTemplateContent,
   CommunicationNotFoundError,
   CommunicationStateError,
   type CommunicationTemplateVersion,
@@ -544,6 +545,7 @@ export class CommunicationTemplateService {
 
   async publishTemplate(viewer: Viewer, versionId: string) {
     const version = await this.getTemplateVersion(viewer, versionId);
+    assertNoUnresolvedTemplateContent(version);
     if (version.versionStatus === "published") return version;
     if (version.versionStatus !== "draft")
       throw new CommunicationStateError(

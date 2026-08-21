@@ -5,8 +5,10 @@ import {
   type CommunicationPreview,
 } from "~/modules/communications/communication-service-shared";
 import {
+  findUnresolvedTemplateContent,
   renderMergeTemplate,
   representativeMergeValues,
+  unresolvedTemplateTokenMessage,
 } from "~/modules/communications/merge-template";
 import { apiTaskCreateSchema } from "~/platform/api/api-task-service.server";
 import type { Viewer } from "~/platform/auth/authorize.server";
@@ -253,6 +255,13 @@ export async function prepareReminderSendProposal(
     content,
   };
   assertMergeAudienceCompatible(candidateTemplate, args.audienceType);
+  const unresolved = findUnresolvedTemplateContent({
+    subject: args.subject,
+    body: args.body,
+  });
+  if (unresolved) {
+    throw new AiToolValidationError(unresolvedTemplateTokenMessage(unresolved));
+  }
   // Reject unknown merge variables before a durable draft version is created.
   renderMergeTemplate(args.subject, representativeMergeValues);
   renderMergeTemplate(args.body, representativeMergeValues);

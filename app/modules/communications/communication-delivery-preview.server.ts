@@ -9,6 +9,7 @@ import {
 } from "./communication-schema";
 import {
   assertMergeAudienceCompatible,
+  assertNoUnresolvedTemplateContent,
   type CommunicationPreview,
   CommunicationStateError,
   eventEmailLogoUrl,
@@ -50,6 +51,7 @@ export abstract class CommunicationDeliveryPreview extends CommunicationDelivery
         "Submission confirmation templates are reserved for automatic delivery after an application is submitted.",
       );
     }
+    assertNoUnresolvedTemplateContent(template);
     if (!representativeTest)
       assertMergeAudienceCompatible(template, parsed.audienceType);
     const recipients = await this.recipients.preview(viewer, {

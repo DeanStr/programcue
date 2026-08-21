@@ -310,6 +310,102 @@ describe("Communications D1 vertical slice", () => {
         }),
       ).rejects.toThrow(/must use HTTPS/i);
     });
+
+    it("allows unfinished human drafts but rejects unresolved content at publication", async () => {
+      const { testEnv } = await communicationEnvironment();
+      const service = new CommunicationService(testEnv);
+      const unfinished = await service.saveTemplate(viewer, {
+        name: "Unfinished event update",
+        category: "ad_hoc",
+        subject: "Event update",
+        content: {
+          body: "Read the event briefing at [insert link].",
+          physicalAddress: "100 Programme Way, Toronto",
+        },
+      });
+
+      await expect(
+        service.publishTemplate(viewer, unfinished.versionId),
+      ).rejects.toThrow(
+        'Body contains unresolved template token "[insert link]"',
+      );
+
+      const unfinishedFooter = await service.saveTemplate(viewer, {
+        name: "Unfinished footer",
+        category: "ad_hoc",
+        subject: "Event update",
+        content: {
+          body: "The event briefing is ready.",
+          physicalAddress: "[insert venue address]",
+        },
+      });
+      await expect(
+        service.publishTemplate(viewer, unfinishedFooter.versionId),
+      ).rejects.toThrow(
+        'Physical address contains unresolved template token "[insert venue address]"',
+      );
+
+      const mergeFooter = await service.saveTemplate(viewer, {
+        name: "Merge footer",
+        category: "ad_hoc",
+        subject: "Event update",
+        content: {
+          body: "The event briefing is ready.",
+          physicalAddress: "{{event.name}} offices",
+        },
+      });
+      await expect(
+        service.publishTemplate(viewer, mergeFooter.versionId),
+      ).rejects.toThrow(
+        'Physical address contains unresolved template token "{{event.name}}"',
+      );
+
+      const authored = await service.saveTemplate(viewer, {
+        name: "Important event update",
+        category: "ad_hoc",
+        subject: "[Important] Event update",
+        content: {
+          body: "Read [Contact us](https://example.com/contact) for help.",
+          physicalAddress: "100 Programme Way, Toronto",
+        },
+      });
+      await expect(
+        service.publishTemplate(viewer, authored.versionId),
+      ).resolves.toMatchObject({ versionStatus: "published" });
+    });
+
+    it("rejects unresolved residue in a previously published template preview", async () => {
+      const { testEnv } = await communicationEnvironment();
+      const service = new CommunicationService(testEnv);
+      const saved = await service.saveTemplate(viewer, {
+        name: "Legacy event update",
+        category: "ad_hoc",
+        subject: "Event update",
+        content: {
+          body: "The event briefing is ready.",
+          physicalAddress: "100 Programme Way, Toronto",
+        },
+      });
+      await service.publishTemplate(viewer, saved.versionId);
+      await testEnv.DB.prepare(
+        `UPDATE communication_template_versions
+            SET content_json = json_set(content_json, '$.body', 'Contact [Administrator name/email] for help.')
+          WHERE id = ? AND event_id = ?`,
+      )
+        .bind(saved.versionId, viewer.eventId)
+        .run();
+
+      await expect(
+        service.preview(viewer, {
+          templateVersionId: saved.versionId,
+          audienceType: "manual",
+          manualRecipients: "alex@example.com",
+          kind: "transactional",
+        }),
+      ).rejects.toThrow(
+        'Body contains unresolved template token "[Administrator name/email]"',
+      );
+    });
   });
 
   describe("additional workflow coverage", () => {
@@ -399,6 +495,114 @@ describe("Communications D1 vertical slice", () => {
         ),
       });
       expect(duplicateProviderCalls).toBe(0);
+    });
+
+    it("fails unsafe durable content after the Queue claim and before provider delivery", async () => {
+      const { testEnv, sent } = await communicationEnvironment();
+      const service = new CommunicationService(testEnv);
+      const saved = await service.saveTemplate(viewer, {
+        name: "Queue content guard",
+        category: "ad_hoc",
+        subject: "Event update",
+        content: {
+          body: "The event briefing is ready.",
+          physicalAddress: "100 Programme Way, Toronto",
+        },
+      });
+      await service.publishTemplate(viewer, saved.versionId);
+      const confirmed = await confirmPreviewed(service, {
+        templateVersionId: saved.versionId,
+        audienceType: "manual",
+        manualRecipients: "queue-content-guard@example.com",
+        kind: "transactional",
+        idempotencyKey: `queue-content-guard-${crypto.randomUUID()}`,
+      });
+      const stored = await testEnv.DB.prepare(
+        `SELECT content_snapshot_json AS contentSnapshotJson
+           FROM communications WHERE id = ? AND event_id = ?`,
+      )
+        .bind(confirmed.communicationId, viewer.eventId)
+        .first<{ contentSnapshotJson: string }>();
+      const unsafeSnapshot = JSON.parse(stored!.contentSnapshotJson) as {
+        content: { body: string };
+      };
+      unsafeSnapshot.content.body = "Contact the event team before attending.";
+      Object.assign(unsafeSnapshot.content, {
+        buttonText: "[insert registration link]",
+        buttonUrl: "https://example.com/register",
+      });
+      await testEnv.DB.prepare(
+        `UPDATE communications SET content_snapshot_json = ?
+          WHERE id = ? AND event_id = ?`,
+      )
+        .bind(
+          JSON.stringify(unsafeSnapshot),
+          confirmed.communicationId,
+          viewer.eventId,
+        )
+        .run();
+
+      const providerFetch = vi
+        .spyOn(globalThis, "fetch")
+        .mockResolvedValue(
+          Response.json({ id: "must-not-send-unsafe-content" }),
+        );
+      let acknowledgements = 0;
+      const retries: QueueRetryOptions[] = [];
+      const queueMessage = {
+        id: "unsafe-content-message",
+        timestamp: new Date(),
+        attempts: 1,
+        body: sent[0],
+        ack() {
+          acknowledgements += 1;
+        },
+        retry(options?: QueueRetryOptions) {
+          retries.push(options ?? {});
+        },
+      } satisfies Message;
+
+      await handleProgramCueQueueMessage(queueMessage, testEnv);
+
+      expect(acknowledgements).toBe(1);
+      expect(retries).toEqual([]);
+      expect(providerFetch).not.toHaveBeenCalled();
+      await expect(
+        testEnv.DB.prepare(
+          `SELECT operation.status AS operationStatus,
+                  operation.last_error AS lastError,
+                  operation.claim_token AS claimToken,
+                  communication.status AS communicationStatus,
+                  delivery.status AS deliveryStatus,
+                  delivery.failure_code AS deliveryFailureCode,
+                  delivery.failure_message AS deliveryFailure,
+                  item.status AS itemStatus,
+                  item.error_code AS itemErrorCode,
+                  item.error_message AS itemError
+             FROM operation_jobs operation
+             JOIN communications communication
+               ON communication.operation_id = operation.id
+             JOIN communication_deliveries delivery
+               ON delivery.communication_id = communication.id
+             JOIN operation_items item
+               ON item.operation_id = operation.id
+              AND item.entity_id = delivery.id
+            WHERE operation.id = ?`,
+        )
+          .bind(confirmed.operationId)
+          .first(),
+      ).resolves.toMatchObject({
+        operationStatus: "failed",
+        lastError: expect.stringContaining("[insert registration link]"),
+        claimToken: null,
+        communicationStatus: "failed",
+        deliveryStatus: "failed",
+        deliveryFailureCode: "UnresolvedTemplateContentError",
+        deliveryFailure: expect.stringContaining("[insert registration link]"),
+        itemStatus: "failed",
+        itemErrorCode: "UnresolvedTemplateContentError",
+        itemError: expect.stringContaining("[insert registration link]"),
+      });
     });
   });
 

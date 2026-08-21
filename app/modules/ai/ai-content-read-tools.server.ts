@@ -1,3 +1,7 @@
+import {
+  findUnresolvedTemplateContent,
+  unresolvedTemplateTokenMessage,
+} from "~/modules/communications/merge-template";
 import type { Viewer } from "~/platform/auth/authorize.server";
 import {
   likePattern,
@@ -8,10 +12,12 @@ import {
   emptyArgumentsSchema,
   reminderDraftArgumentsSchema,
   submissionSearchSchema,
+  supportedReminderMergeVariables,
 } from "./ai-tool-contracts.server";
 import {
   type AiToolExecution,
   AiToolPermissionError,
+  AiToolValidationError,
 } from "./ai-tool-execution";
 import type { AiEvidence } from "./ai-types";
 
@@ -222,6 +228,14 @@ export class AiContentReadTools {
       encodedArguments,
       reminderDraftArgumentsSchema,
     );
+    const unresolved = findUnresolvedTemplateContent(args, {
+      allowedMergeVariables: supportedReminderMergeVariables(args.cohort),
+    });
+    if (unresolved) {
+      throw new AiToolValidationError(
+        unresolvedTemplateTokenMessage(unresolved),
+      );
+    }
     const cohort = await loadReminderCohort(this.env, this.viewer, args.cohort);
     const evidence: AiEvidence[] = [
       {

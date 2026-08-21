@@ -227,7 +227,7 @@ describe("contextual administrator actions", () => {
       textResponse(
         JSON.stringify({
           subject: "Complete your outstanding Program Cue tasks",
-          body: "Please review the remaining items in your speaker dashboard. [Add deadline if applicable]",
+          body: "Hello {{recipient.firstName}}, please review {{task.title}} before {{task.dueDate}}.",
         }),
       ),
     );
@@ -247,7 +247,7 @@ describe("contextual administrator actions", () => {
       content: expect.stringContaining("Subject:"),
       draft: {
         subject: "Complete your outstanding Program Cue tasks",
-        body: expect.stringContaining("speaker dashboard"),
+        body: expect.stringContaining("{{task.dueDate}}"),
       },
     });
     const request = JSON.parse(String(fetcher.mock.calls[0]![1]?.body)) as {
@@ -261,11 +261,70 @@ describe("contextual administrator actions", () => {
     expect(request.instructions).toContain(
       "do not claim it was queued or sent",
     );
+    for (const field of [
+      "{{recipient.name}}",
+      "{{recipient.firstName}}",
+      "{{event.name}}",
+      "{{event.dates}}",
+      "{{task.title}}",
+      "{{task.dueDate}}",
+    ]) {
+      expect(request.instructions).toContain(field);
+    }
+    expect(request.instructions).toContain(
+      "Omit any unavailable detail instead of adding",
+    );
     expect(request.text.format).toMatchObject({
       type: "json_schema",
       strict: true,
       name: "program_cue_reminder_draft",
     });
+  });
+
+  it("rejects unresolved AI reminder placeholders after structured parsing", async () => {
+    const fetcher = vi.fn<typeof fetch>().mockResolvedValue(
+      textResponse(
+        JSON.stringify({
+          subject: "Complete your outstanding Program Cue tasks",
+          body: "Please finish your tasks. [Add deadline if applicable]",
+        }),
+      ),
+    );
+
+    await expect(
+      new AiAssistantService(env as unknown as CloudflareEnvironment, {
+        fetcher,
+        providerConfiguration,
+      }).draftReminder(
+        admin,
+        "incomplete_speakers",
+        "Explain the outstanding work and provide a clear next step.",
+      ),
+    ).rejects.toThrow(
+      'Body contains unresolved template token "[Add deadline if applicable]"',
+    );
+  });
+
+  it("rejects unknown merge fields in a structured reminder draft", async () => {
+    const fetcher = vi.fn<typeof fetch>().mockResolvedValue(
+      textResponse(
+        JSON.stringify({
+          subject: "Complete your outstanding Program Cue tasks",
+          body: "Please finish the outstanding work by {{deadline}}.",
+        }),
+      ),
+    );
+
+    await expect(
+      new AiAssistantService(env as unknown as CloudflareEnvironment, {
+        fetcher,
+        providerConfiguration,
+      }).draftReminder(
+        admin,
+        "incomplete_speakers",
+        "Explain the outstanding work and provide a clear next step.",
+      ),
+    ).rejects.toThrow('Body contains unresolved template token "{{deadline}}"');
   });
 
   it("explains a scoped deterministic schedule conflict without claiming an unvalidated slot", async () => {

@@ -8,11 +8,13 @@ import {
   templateContentSchema,
 } from "./communication-schema";
 import {
+  findUnresolvedTemplateContent,
   formatEventDateMarkers,
   formatTaskDueDate,
   type MergeValues,
   mergeTemplateVariables,
   representativeMergeValues,
+  unresolvedTemplateTokenMessage,
 } from "./merge-template";
 import type { RecipientPreview } from "./recipient-query.server";
 
@@ -150,6 +152,27 @@ export class CommunicationStateError extends Error {
   }
 }
 
+export function assertNoUnresolvedTemplateContent(template: {
+  subject: string;
+  content: Pick<
+    TemplateContent,
+    "body" | "physicalAddress" | "buttonText" | "buttonUrl"
+  >;
+}) {
+  const unresolved = findUnresolvedTemplateContent({
+    subject: template.subject,
+    body: template.content.body,
+    physicalAddress: template.content.physicalAddress,
+    buttonText: template.content.buttonText,
+    buttonUrl: template.content.buttonUrl,
+  });
+  if (unresolved) {
+    throw new CommunicationStateError(
+      unresolvedTemplateTokenMessage(unresolved),
+    );
+  }
+}
+
 export class CommunicationQueueUnavailableError extends Error {
   constructor(
     readonly operationId: string,
@@ -251,6 +274,32 @@ const sourceVariableRequirements: Record<
     categories: new Set(["task_reminder"]),
   },
 };
+
+const commonCommunicationMergeVariables = [
+  "recipient.name",
+  "recipient.firstName",
+  "event.name",
+  "event.dates",
+] as const;
+
+export function supportedCommonCommunicationMergeVariables() {
+  return [...commonCommunicationMergeVariables];
+}
+
+export function supportedTaskReminderMergeVariables(
+  audienceType: AudienceType,
+) {
+  return [
+    ...supportedCommonCommunicationMergeVariables(),
+    ...Object.entries(sourceVariableRequirements)
+      .filter(
+        ([, requirement]) =>
+          requirement.categories.has("task_reminder") &&
+          requirement.audiences.has(audienceType),
+      )
+      .map(([variable]) => variable),
+  ];
+}
 
 export function sourceVariables(
   template: Pick<

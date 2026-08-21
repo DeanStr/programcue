@@ -1,4 +1,8 @@
 import { z } from "zod";
+import {
+  findUnresolvedTemplateContent,
+  unresolvedTemplateTokenMessage,
+} from "~/modules/communications/merge-template";
 import type { CommandCentreSnapshot } from "~/modules/readiness/readiness-service.server";
 import type { Viewer } from "~/platform/auth/authorize.server";
 import {
@@ -595,6 +599,7 @@ Lead with the answer, include material uncertainty, and end with the safest conc
       entityId: string;
       focus?: string | null;
       readinessContext?: ReadinessContext;
+      reminderMergeVariables?: readonly string[];
     },
   ): Promise<ContextualAiResult> {
     const provider = await this.provider(viewer);
@@ -608,6 +613,14 @@ Lead with the answer, include material uncertainty, and end with the safest conc
     if ((input.kind === "readiness_summary") !== hasReadinessContext) {
       throw new Error(
         "The contextual readiness action is missing its authoritative snapshot.",
+      );
+    }
+    if (
+      (input.kind === "reminder_draft") !==
+      Boolean(input.reminderMergeVariables)
+    ) {
+      throw new Error(
+        "The contextual reminder action is missing its merge-field contract.",
       );
     }
     const readinessPriorityCount = input.readinessContext
@@ -767,6 +780,16 @@ Lead with the answer, include material uncertainty, and end with the safest conc
         if (!parsedDraft.success) {
           throw new AiProviderError(
             `${provider.providerName} returned a reminder draft that does not match the required schema.`,
+          );
+        }
+        const unresolved = findUnresolvedTemplateContent(parsedDraft.data, {
+          allowedMergeVariables: input.reminderMergeVariables,
+        });
+        if (unresolved) {
+          throw new AiProviderError(
+            `${provider.providerName} returned an unsafe reminder draft. ${unresolvedTemplateTokenMessage(unresolved)}`,
+            null,
+            response.id,
           );
         }
         draft = parsedDraft.data;

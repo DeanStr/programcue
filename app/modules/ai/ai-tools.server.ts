@@ -25,6 +25,7 @@ export {
   reminderCohortSchema,
   reminderSendAudienceSchema,
   reminderSendProposalArgumentsSchema,
+  supportedReminderMergeVariables,
   taskProposalArgumentsSchema,
 } from "./ai-tool-contracts.server";
 export type { AiToolExecution } from "./ai-tool-execution";

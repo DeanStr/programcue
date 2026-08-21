@@ -242,6 +242,44 @@ describe("agent tool permissions and approval", () => {
     );
   });
 
+  it("rejects an unresolved placeholder in an agent reminder draft", async () => {
+    const fetcher = vi.fn<typeof fetch>().mockResolvedValue(
+      toolResponse("draft_reminder", {
+        cohort: "incomplete_speakers",
+        subject: "Complete your speaker tasks",
+        body: "Please finish the outstanding work by [insert deadline].",
+      }),
+    );
+
+    await expect(
+      new AiAssistantService(env as unknown as CloudflareEnvironment, {
+        fetcher,
+        providerConfiguration,
+      }).ask(admin, "Draft an incomplete-speaker reminder."),
+    ).rejects.toThrow(
+      'Body contains unresolved template token "[insert deadline]"',
+    );
+  });
+
+  it("rejects a merge field that is unsupported for the reminder cohort", async () => {
+    const fetcher = vi.fn<typeof fetch>().mockResolvedValue(
+      toolResponse("draft_reminder", {
+        cohort: "reviewers_with_open_assignments",
+        subject: "Complete your assigned reviews",
+        body: "Please complete {{task.title}} before the review window closes.",
+      }),
+    );
+
+    await expect(
+      new AiAssistantService(env as unknown as CloudflareEnvironment, {
+        fetcher,
+        providerConfiguration,
+      }).ask(admin, "Draft a reviewer reminder."),
+    ).rejects.toThrow(
+      'Body contains unresolved template token "{{task.title}}"',
+    );
+  });
+
   it("saves a write preview, requires confirmation and executes idempotently", async () => {
     const title = `Resolve readiness blocker ${crypto.randomUUID()}`;
     const fetcher = vi
@@ -532,6 +570,32 @@ describe("agent tool permissions and approval", () => {
       service.approveProposal(admin, proposal.id, false),
     ).rejects.toThrow("Explicit confirmation is required");
     expect(queued).toHaveLength(0);
+    const versionCountBeforeUnsafeEdit = await testEnv.DB.prepare(
+      `SELECT COUNT(*) AS count
+         FROM communication_template_versions
+        WHERE event_id = ? AND template_id = ?`,
+    )
+      .bind(admin.eventId, proposal.reminder.template.templateId)
+      .first<{ count: number }>();
+    await expect(
+      service.reviseReminderProposal(
+        admin,
+        proposal.id,
+        "Action required: {{task.title}}",
+        "Please finish {{task.title}} by [insert deadline].",
+      ),
+    ).rejects.toThrow(
+      'Body contains unresolved template token "[insert deadline]"',
+    );
+    await expect(
+      testEnv.DB.prepare(
+        `SELECT COUNT(*) AS count
+           FROM communication_template_versions
+          WHERE event_id = ? AND template_id = ?`,
+      )
+        .bind(admin.eventId, proposal.reminder.template.templateId)
+        .first<{ count: number }>(),
+    ).resolves.toEqual(versionCountBeforeUnsafeEdit);
     const revisedSubject = "Action required: {{task.title}}";
     const revisedBody =
       "Hello {{recipient.firstName}}, please finish {{task.title}} in your speaker workspace.";
@@ -611,6 +675,79 @@ describe("agent tool permissions and approval", () => {
     });
   });
 
+  it("rejects an unsafe reminder proposal before saving its draft version", async () => {
+    const { testEnv, baseTemplateVersionId } = await reminderEnvironment();
+    const versionsBefore = await testEnv.DB.prepare(
+      "SELECT COUNT(*) AS count FROM communication_template_versions WHERE event_id = ?",
+    )
+      .bind(admin.eventId)
+      .first<{ count: number }>();
+    const fetcher = vi.fn<typeof fetch>().mockResolvedValue(
+      toolResponse("propose_reminder_send", {
+        baseTemplateVersionId,
+        audienceType: "incomplete_speakers",
+        kind: "optional",
+        subject: "Please complete {{task.title}}",
+        body: "Please complete {{task.title}}. [Add deadline if applicable]",
+      }),
+    );
+
+    await expect(
+      new AiAssistantService(testEnv, {
+        fetcher,
+        providerConfiguration,
+      }).ask(admin, "Prepare an incomplete-speaker reminder preview."),
+    ).rejects.toThrow(
+      'Body contains unresolved template token "[Add deadline if applicable]"',
+    );
+    await expect(
+      testEnv.DB.prepare(
+        "SELECT COUNT(*) AS count FROM communication_template_versions WHERE event_id = ?",
+      )
+        .bind(admin.eventId)
+        .first<{ count: number }>(),
+    ).resolves.toEqual(versionsBefore);
+  });
+
+  it("rejects unresolved static fields before persisting an email template proposal", async () => {
+    const proposalsBefore = await env.DB.prepare(
+      `SELECT COUNT(*) AS count FROM audit_events
+        WHERE event_id = ? AND actor_person_id = ?
+          AND action = 'assistant.proposal.previewed'`,
+    )
+      .bind(admin.eventId, admin.personId)
+      .first<{ count: number }>();
+    const fetcher = vi.fn<typeof fetch>().mockResolvedValue(
+      toolResponse("propose_email_template_draft", {
+        name: `Unsafe footer ${crypto.randomUUID()}`,
+        category: "ad_hoc",
+        subject: "Event briefing",
+        body: "The event briefing is ready.",
+        physicalAddress: "{{event.name}} offices",
+        buttonText: null,
+        buttonUrl: null,
+      }),
+    );
+
+    await expect(
+      new AiAssistantService(env as unknown as CloudflareEnvironment, {
+        fetcher,
+        providerConfiguration,
+      }).ask(admin, "Prepare an email template draft."),
+    ).rejects.toThrow(
+      'Physical address contains unresolved template token "{{event.name}}"',
+    );
+    await expect(
+      env.DB.prepare(
+        `SELECT COUNT(*) AS count FROM audit_events
+          WHERE event_id = ? AND actor_person_id = ?
+            AND action = 'assistant.proposal.previewed'`,
+      )
+        .bind(admin.eventId, admin.personId)
+        .first<{ count: number }>(),
+    ).resolves.toEqual(proposalsBefore);
+  });
+
   it("previews and explicitly approves an email template draft without publishing or sending", async () => {
     const suffix = crypto.randomUUID();
     const name = `Speaker briefing ${suffix}`;
@@ -651,6 +788,65 @@ describe("agent tool permissions and approval", () => {
       .bind(admin.eventId, name)
       .first<{ count: number }>();
     expect(before?.count).toBe(0);
+
+    const storedProposal = await env.DB.prepare(
+      `SELECT id, metadata_json AS metadataJson
+         FROM audit_events
+        WHERE event_id = ? AND actor_person_id = ?
+          AND action = 'assistant.proposal.previewed'
+          AND entity_type = 'assistant_proposal' AND entity_id = ?
+        ORDER BY created_at DESC, id DESC LIMIT 1`,
+    )
+      .bind(admin.eventId, admin.personId, proposalId)
+      .first<{ id: string; metadataJson: string }>();
+    const unsafeMetadata = JSON.parse(storedProposal!.metadataJson) as {
+      snapshot: { content: { body: string } };
+    };
+    unsafeMetadata.snapshot.content.body =
+      "Contact [Administrator name/email] for details.";
+    await env.DB.prepare(
+      `INSERT INTO audit_events (
+         id, actor_kind, origin, metadata_version, organisation_id, event_id,
+         actor_person_id, actor_id, action, entity_type, entity_id,
+         correlation_id, metadata_json, created_at
+       )
+       SELECT ?, actor_kind, origin, metadata_version, organisation_id,
+              event_id, actor_person_id, actor_id, action, entity_type,
+              entity_id, correlation_id, ?, created_at + 1
+         FROM audit_events WHERE id = ? AND event_id = ?`,
+    )
+      .bind(
+        crypto.randomUUID(),
+        JSON.stringify(unsafeMetadata),
+        storedProposal!.id,
+        admin.eventId,
+      )
+      .run();
+    await expect(
+      service.approveProposal(admin, proposalId, true),
+    ).rejects.toThrow(
+      'Body contains unresolved template token "[Administrator name/email]"',
+    );
+    await expect(
+      env.DB.prepare(
+        "SELECT COUNT(*) AS count FROM communication_templates WHERE event_id = ? AND name = ?",
+      )
+        .bind(admin.eventId, name)
+        .first<{ count: number }>(),
+    ).resolves.toEqual(before);
+    await env.DB.prepare(
+      `INSERT INTO audit_events (
+         id, actor_kind, origin, metadata_version, organisation_id, event_id,
+         actor_person_id, actor_id, action, entity_type, entity_id,
+         correlation_id, metadata_json, created_at
+       )
+       SELECT ?, actor_kind, origin, metadata_version, organisation_id,
+              event_id, actor_person_id, actor_id, action, entity_type,
+              entity_id, correlation_id, metadata_json, created_at + 2
+         FROM audit_events WHERE id = ? AND event_id = ?`,
+    )
+      .bind(crypto.randomUUID(), storedProposal!.id, admin.eventId)
+      .run();
 
     const approved = await service.approveProposal(admin, proposalId, true);
     expect(approved).toMatchObject({

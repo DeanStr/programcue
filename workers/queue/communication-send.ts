@@ -1,6 +1,10 @@
 import { z } from "zod";
 
 import { createEmailProvider } from "../../app/modules/communications/email-provider.server";
+import {
+  findUnresolvedTemplateContent,
+  unresolvedTemplateTokenMessage,
+} from "../../app/modules/communications/merge-template";
 import { sourceRevisionForLog } from "../../app/platform/observability/source-revision.server";
 import { WebhookService } from "../../app/platform/operations/webhook-service.server";
 import {
@@ -31,6 +35,13 @@ const communicationQueueMessageSchema = z.object({
 });
 
 export const COMMUNICATION_SEND_BATCH_SIZE = 10;
+
+class UnresolvedTemplateContentError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "UnresolvedTemplateContentError";
+  }
+}
 
 function communicationQueuePayload(
   message: z.infer<typeof communicationQueueMessageSchema>,
@@ -64,7 +75,7 @@ async function finishOwnedCommunicationFailure(
   error: unknown,
 ) {
   const failure = errorDetails(error);
-  await env.DB.batch([
+  const results = await env.DB.batch([
     env.DB.prepare(
       `UPDATE communication_deliveries
       SET status = 'failed', failure_code = ?, failure_message = ?, next_attempt_at = NULL,
@@ -159,6 +170,12 @@ async function finishOwnedCommunicationFailure(
       message.communicationId,
     ),
   ]);
+  return (
+    (results[0].meta.changes ?? 0) > 0 &&
+    (results[1].meta.changes ?? 0) > 0 &&
+    (results[2].meta.changes ?? 0) === 1 &&
+    (results[3].meta.changes ?? 0) === 1
+  );
 }
 type ClaimedCommunication = {
   kind: "transactional" | "optional";
@@ -368,6 +385,18 @@ export async function processCommunicationSend(
   }
 
   try {
+    const unresolved = findUnresolvedTemplateContent({
+      subject: snapshot.subjectTemplate,
+      body: snapshot.content.body,
+      physicalAddress: snapshot.content.physicalAddress,
+      buttonText: snapshot.content.buttonText,
+      buttonUrl: snapshot.content.buttonUrl,
+    });
+    if (unresolved) {
+      throw new UnresolvedTemplateContentError(
+        unresolvedTemplateTokenMessage(unresolved),
+      );
+    }
     // Resolve mutable sender authority only after this worker owns the
     // operation. A sender disabled before the claim must never be used from a
     // stale pre-claim read.
@@ -758,8 +787,9 @@ export async function processCommunicationSend(
       message.operationId,
     );
   } catch (error) {
+    let failureRecorded = false;
     try {
-      await finishOwnedCommunicationFailure(
+      failureRecorded = await finishOwnedCommunicationFailure(
         env,
         message,
         operation.payloadJson,
@@ -784,6 +814,9 @@ export async function processCommunicationSend(
           message: "The owned communication failure could not be persisted.",
         }),
       );
+    }
+    if (error instanceof UnresolvedTemplateContentError && failureRecorded) {
+      return;
     }
     throw error;
   }

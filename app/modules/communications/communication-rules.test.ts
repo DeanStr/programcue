@@ -7,13 +7,20 @@ import {
   previewCommunicationSchema,
   saveCommunicationTriggerSchema,
 } from "./communication-schema";
-import { eventEmailLogoUrl, firstName } from "./communication-service-shared";
+import {
+  eventEmailLogoUrl,
+  firstName,
+  supportedTaskReminderMergeVariables,
+} from "./communication-service-shared";
 import { emailDeliveryIssue, formatMailbox } from "./email-deliverability";
 import {
+  findUnresolvedTemplateContent,
+  findUnresolvedTemplateToken,
   formatEventDateMarkers,
   formatTaskDueDate,
   renderMergeTemplate,
   UnknownMergeVariableError,
+  unresolvedTemplateTokenMessage,
 } from "./merge-template";
 import { saveSenderProfileSchema } from "./sender-profile-schema";
 
@@ -113,6 +120,20 @@ describe("communication and readiness rules", () => {
     );
   });
 
+  it("derives task-reminder merge fields from audience compatibility", () => {
+    expect(supportedTaskReminderMergeVariables("incomplete_speakers")).toEqual([
+      "recipient.name",
+      "recipient.firstName",
+      "event.name",
+      "event.dates",
+      "task.title",
+      "task.dueDate",
+    ]);
+    expect(supportedTaskReminderMergeVariables("event_administrators")).toEqual(
+      ["recipient.name", "recipient.firstName", "event.name", "event.dates"],
+    );
+  });
+
   it("keeps legacy HTTPS email logos and resolves managed logo paths", () => {
     expect(
       eventEmailLogoUrl({} as CloudflareEnvironment, {
@@ -145,6 +166,133 @@ describe("communication and readiness rules", () => {
         "recipient.name": "Alex Morgan",
       }),
     ).toThrow(/constructor/);
+  });
+
+  it.each([
+    "[Recipient Name]",
+    "[Administrator name/email]",
+    "[insert link]",
+    "[Add deadline if applicable]",
+    "<placeholder>",
+    "<provide contact details>",
+    "{{recipient.firstName",
+    "{{recipient.firstName}",
+    "recipient.firstName}}",
+    "{{ recipient name }}",
+    "{{{recipient.firstName}}}",
+    "{{recipient.firstName}}}",
+    "{{{recipient.firstName}}",
+    "{task.dueDate}",
+    "{ recipient.firstName }",
+  ])("detects high-confidence unresolved template token %s", (token) => {
+    expect(findUnresolvedTemplateToken(`Reminder: ${token}`)).toBe(token);
+  });
+
+  it.each([
+    "[Important] Complete this today.",
+    "See citations [1] and [2].",
+    "Read [Contact us](https://example.com/contact).",
+    "Use <strong>care</strong> in HTML examples.",
+    "Use an <address> element in HTML examples.",
+    "Use {example.value} in the code sample.",
+    "Alex Morgan <alex@example.com>",
+    "Hello {{recipient.firstName}} from {{event.name}}.",
+  ])("preserves authored template text %s", (text) => {
+    expect(findUnresolvedTemplateToken(text)).toBeNull();
+  });
+
+  it("identifies the field and exact unresolved token", () => {
+    expect(
+      findUnresolvedTemplateContent({
+        subject: "Event reminder",
+        body: "Contact [Administrator name/email] for help.",
+      }),
+    ).toEqual({
+      field: "body",
+      token: "[Administrator name/email]",
+    });
+  });
+
+  it("rejects merge variables outside an explicit reminder contract", () => {
+    expect(
+      findUnresolvedTemplateContent(
+        {
+          subject: "Reminder for {{recipient.firstName}}",
+          body: "Complete {{task.title}} by {{deadline}}.",
+        },
+        {
+          allowedMergeVariables: ["recipient.firstName", "task.title"],
+        },
+      ),
+    ).toEqual({ field: "body", token: "{{deadline}}" });
+
+    expect(
+      findUnresolvedTemplateContent(
+        {
+          subject: "Review reminder",
+          body: "Complete {{task.title}}.",
+        },
+        {
+          allowedMergeVariables: [
+            "recipient.firstName",
+            "event.name",
+            "event.dates",
+          ],
+        },
+      ),
+    ).toEqual({ field: "body", token: "{{task.title}}" });
+  });
+
+  it.each([
+    [
+      "physicalAddress",
+      "Physical address",
+      "[insert venue address]",
+      "[insert venue address]",
+    ],
+    [
+      "buttonText",
+      "Button text",
+      "[add registration label]",
+      "[add registration label]",
+    ],
+    [
+      "buttonUrl",
+      "Button URL",
+      "https://example.com/[insert-registration-link]",
+      "[insert-registration-link]",
+    ],
+  ] as const)(
+    "identifies unresolved residue in rendered %s content",
+    (field, label, value, token) => {
+      const finding = findUnresolvedTemplateContent({
+        subject: "Event reminder",
+        body: "Registration is open.",
+        physicalAddress: "100 Programme Way, Toronto",
+        buttonText: "Register",
+        buttonUrl: "https://example.com/register",
+        [field]: value,
+      });
+      expect(finding).toEqual({ field, token });
+      expect(unresolvedTemplateTokenMessage(finding!)).toContain(label);
+    },
+  );
+
+  it.each([
+    ["physicalAddress", "{{event.name}} offices"],
+    ["buttonText", "View {{event.name}}"],
+    ["buttonUrl", "https://example.com/{{event.name}}"],
+  ] as const)("rejects merge syntax in static %s content", (field, token) => {
+    expect(
+      findUnresolvedTemplateContent({
+        subject: "Event reminder",
+        body: "Registration is open.",
+        physicalAddress: "100 Programme Way, Toronto",
+        buttonText: "Register",
+        buttonUrl: "https://example.com/register",
+        [field]: token,
+      }),
+    ).toEqual({ field, token: expect.stringContaining("{{event.name}}") });
   });
 
   it("rejects protocol-relative and credentialed event logos", () => {

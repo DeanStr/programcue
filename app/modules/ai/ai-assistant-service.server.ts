@@ -20,6 +20,7 @@ import {
   loadReminderCohort,
   prepareReminderSendProposal,
   reminderCohortSchema,
+  supportedReminderMergeVariables,
 } from "./ai-tools.server";
 import type { AiEvidence } from "./ai-types";
 import { AiProviderError } from "./openai-responses-provider.server";
@@ -322,6 +323,10 @@ Return: (1) a concise neutral summary, (2) a criterion-by-criterion evidence map
     const cohortName = reminderCohortSchema.parse(rawCohort);
     const objective = z.string().trim().min(3).max(500).parse(rawObjective);
     const cohort = await loadReminderCohort(this.env, viewer, cohortName);
+    const reminderMergeVariables = supportedReminderMergeVariables(cohortName);
+    const supportedMergeFields = reminderMergeVariables
+      .map((variable) => `{{${variable}}}`)
+      .join(", ");
     const evidence: AiEvidence[] = [
       {
         id: `reminder-cohort:${cohortName}`,
@@ -337,13 +342,14 @@ Return: (1) a concise neutral summary, (2) a criterion-by-criterion evidence map
       entityType: "event",
       entityId: viewer.eventId,
       focus: objective,
+      reminderMergeVariables,
       evidence,
       evidencePayload: {
         cohort: cohort.cohort,
         recipientCount: cohort.count,
         reason: cohort.reason,
       },
-      instructions: `Draft a concise operational email subject and body for the supplied deterministic cohort and objective. Do not invent recipient details, deadlines, links or completion state. Clearly mark placeholders that need administrator input. This is an editable draft only; do not claim it was queued or sent.`,
+      instructions: `Draft a concise operational email subject and body for the supplied deterministic cohort and objective. The only supported merge fields for this cohort are ${supportedMergeFields}. Do not invent recipient details, deadlines, links, contacts or completion state. Omit any unavailable detail instead of adding a bracketed, angle-bracketed, malformed merge or other placeholder. This is an editable draft only; do not claim it was queued or sent.`,
     });
   }
 

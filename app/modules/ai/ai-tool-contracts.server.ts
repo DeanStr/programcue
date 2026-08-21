@@ -1,6 +1,10 @@
 import { z } from "zod";
 import { saveTemplateSchema } from "~/modules/communications/communication-schema";
 import {
+  supportedCommonCommunicationMergeVariables,
+  supportedTaskReminderMergeVariables,
+} from "~/modules/communications/communication-service-shared";
+import {
   assignmentBatchSchema,
   draftRoundUpdateSchema,
 } from "~/modules/evaluations/evaluation-schema";
@@ -29,6 +33,25 @@ export const reminderCohortSchema = z.enum([
   "overdue_speaker_tasks",
   "reviewers_with_open_assignments",
 ]);
+
+const reminderCohortMergeAudience = {
+  incomplete_speakers: "incomplete_speakers",
+  overdue_speaker_tasks: "overdue_speakers",
+  reviewers_with_open_assignments: null,
+} as const satisfies Record<
+  z.infer<typeof reminderCohortSchema>,
+  Parameters<typeof supportedTaskReminderMergeVariables>[0] | null
+>;
+
+export function supportedReminderMergeVariables(
+  cohort: z.infer<typeof reminderCohortSchema>,
+) {
+  const audience = reminderCohortMergeAudience[cohort];
+  return audience === null
+    ? supportedCommonCommunicationMergeVariables()
+    : supportedTaskReminderMergeVariables(audience);
+}
+
 export const reminderDraftArgumentsSchema = z
   .object({
     cohort: reminderCohortSchema,
@@ -511,6 +534,17 @@ function defineAiTool(
   };
 }
 
+function formatMergeFields(fields: string[]) {
+  return fields.map((field) => `{{${field}}}`).join(", ");
+}
+
+const taskBackedReminderMergeFields = formatMergeFields(
+  supportedReminderMergeVariables("incomplete_speakers"),
+);
+const commonReminderMergeFields = formatMergeFields(
+  supportedReminderMergeVariables("reviewers_with_open_assignments"),
+);
+
 export const AI_TOOLS: AiToolDefinition[] = [
   defineAiTool(
     "get_event_readiness",
@@ -581,13 +615,13 @@ export const AI_TOOLS: AiToolDefinition[] = [
   defineAiTool(
     "draft_reminder",
     "draft",
-    "Create an editable reminder preview for a deterministic cohort. This never queues or sends a communication.",
+    `Create an editable reminder preview for a deterministic cohort. Speaker task cohorts support only ${taskBackedReminderMergeFields}; reviewer cohorts support only ${commonReminderMergeFields}. Omit unavailable details and never add bracketed, angle-bracketed or malformed merge placeholders. This never queues or sends a communication.`,
     reminderDraftArgumentsSchema,
   ),
   defineAiTool(
     "propose_reminder_send",
     "write",
-    "Create an immutable draft template and save an exact reminder audience/content preview. This never sends. A signed-in administrator must inspect the recipients and explicitly approve the saved preview before Program Cue can queue it.",
+    `Create an immutable draft template and save an exact reminder audience/content preview. Task-backed speaker audiences support only ${taskBackedReminderMergeFields}; event administrators support only ${commonReminderMergeFields}. Omit unavailable details and never add bracketed, angle-bracketed or malformed merge placeholders. This never sends. A signed-in administrator must inspect the recipients and explicitly approve the saved preview before Program Cue can queue it.`,
     reminderSendProposalArgumentsSchema,
   ),
   defineAiTool(

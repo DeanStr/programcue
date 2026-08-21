@@ -1,5 +1,6 @@
 import type { z } from "zod";
 import { CommunicationService } from "~/modules/communications/communication-service.server";
+import { assertNoUnresolvedTemplateContent } from "~/modules/communications/communication-service-shared";
 import { EvaluationService } from "~/modules/evaluations/evaluation-service.server";
 import { IntegrationService } from "~/modules/integrations/integration-service.server";
 import { ScheduleService } from "~/modules/schedule/schedule-service.server";
@@ -227,6 +228,9 @@ export class AiDomainProposalExecutor {
     >,
   ): Promise<ExecutedDomainProposal> {
     const { proposalId, metadata, operationId } = input;
+    // Revalidate at approval so proposals stored before this guard was
+    // deployed cannot persist unsafe AI-authored content.
+    assertNoUnresolvedTemplateContent(metadata.snapshot);
     const result = await new CommunicationService(this.env).saveTemplate(
       viewer,
       metadata.snapshot,
