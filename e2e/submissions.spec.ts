@@ -996,4 +996,85 @@ test.describe
       await expect(page.getByText("Your draft has been saved")).toBeVisible();
       await expect(page.getByText(/Step \d+ of \d+: Speakers/)).toBeVisible();
     });
+
+    test("stepped error links focus grouped tracks and speakers", async ({
+      page,
+    }) => {
+      test.setTimeout(60_000);
+      const unique = Date.now();
+      await page.goto("/admin/submissions/form");
+      await expect(
+        page.getByRole("heading", { name: "Call for Speakers Form Builder" }),
+      ).toBeVisible();
+      await page.locator("body[data-hydrated='true']").waitFor();
+      await page.getByLabel("Applicant layout").selectOption("steps");
+      await page.getByRole("button", { name: "Save draft" }).click();
+      await expect(
+        page.locator(".validation-item.ok[role='status']").filter({
+          hasText: "Draft form saved.",
+        }),
+      ).toBeVisible();
+      await page.getByRole("button", { name: "Publish version" }).click();
+      await page.getByRole("button", { name: "Confirm publication" }).click();
+      await expect(
+        page.locator(".validation-item.ok[role='status']").filter({
+          hasText: "Published a new immutable form version",
+        }),
+      ).toBeVisible();
+
+      await page.goto("/apply/form");
+      await page.getByRole("link", { name: "Continue to application" }).click();
+      await page
+        .getByLabel("Email address")
+        .fill(`stepped-focus-${unique}@example.com`);
+      await page
+        .getByRole("button", { name: "Send verification code" })
+        .click();
+      await page.getByLabel("Six-digit code").fill("424242");
+      await page
+        .getByRole("button", { name: "Verify and open applications" })
+        .click();
+      await page.getByRole("button", { name: "Start application" }).click();
+
+      const application = page.locator("#submitted-application");
+      const tracks = application.locator("#answer-category");
+      for (let attempt = 0; attempt < 8; attempt += 1) {
+        if (await tracks.count()) break;
+        const continueButton = page.getByRole("button", { name: "Continue" });
+        if ((await continueButton.count()) === 0) break;
+        await continueButton.click();
+      }
+      await expect(tracks).toBeVisible();
+      await application
+        .locator("#answer-title")
+        .fill(`Focus session ${unique}`);
+      await page
+        .getByLabel("Session description")
+        .fill("A practical takeaway for programme teams.");
+      await page.getByLabel("Format").selectOption("Presentation");
+      await page.getByRole("button", { name: "Continue" }).click();
+      await page.getByRole("link", { name: /Tracks is required/ }).click();
+      await expect(tracks).toBeFocused();
+      await page
+        .getByRole("status")
+        .getByRole("link", { name: "Tracks", exact: true })
+        .click();
+      await expect(tracks).toBeFocused();
+
+      await page.getByLabel("Event Operations").check();
+      for (let attempt = 0; attempt < 8; attempt += 1) {
+        if (await page.getByLabel("Speaker 1 name").count()) break;
+        if (await page.getByLabel("Key takeaway").count()) {
+          await page.getByLabel("Key takeaway").fill("A reusable checklist.");
+        }
+        const continueButton = page.getByRole("button", { name: "Continue" });
+        if ((await continueButton.count()) === 0) break;
+        await continueButton.click();
+      }
+      await expect(page.getByLabel("Speaker 1 name")).toBeVisible();
+      const speakers = application.locator("#application-speakers");
+      await expect(speakers).toHaveAttribute("tabindex", "-1");
+      await speakers.focus();
+      await expect(speakers).toBeFocused();
+    });
   });

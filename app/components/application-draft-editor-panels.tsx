@@ -281,6 +281,8 @@ export function ApplicationAnswers({
                 <fieldset
                   className="application-choice-field"
                   key={field.id}
+                  id={`answer-${field.id}`}
+                  tabIndex={-1}
                   aria-invalid={Boolean(error) || undefined}
                   aria-describedby={describedBy}
                 >
@@ -387,7 +389,7 @@ export function ApplicationSpeakers({
   headingRef,
 }: ApplicationSpeakersProps) {
   return (
-    <fieldset className="card pad" id="application-speakers">
+    <fieldset className="card pad" id="application-speakers" tabIndex={-1}>
       <legend
         className={headingRef ? "application-form-step-heading" : undefined}
         tabIndex={headingRef ? -1 : undefined}
