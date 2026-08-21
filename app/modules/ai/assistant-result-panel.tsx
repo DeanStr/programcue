@@ -211,7 +211,7 @@ export function ProposalApproval({
       ? domainApprovalCopy[proposal.toolName]
       : null;
   return (
-    <section className="card pad">
+    <section className="card pad" data-proposal-id={proposal.id}>
       <div className="card-title">
         <div>
           <span className="pc-page-eyebrow">Write preview</span>

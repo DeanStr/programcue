@@ -261,6 +261,7 @@ test("assistant task preview requires confirmation and executes through the real
   const fixtureData = JSON.parse(fixtureBody) as {
     demonstrationOnly: boolean;
     providerCalled: boolean;
+    proposalId: string;
     taskTitle: string;
   };
   expect(fixtureData).toMatchObject({
@@ -270,9 +271,9 @@ test("assistant task preview requires confirmation and executes through the real
 
   await page.goto("/admin/assistant");
   await page.locator("body[data-hydrated='true']").waitFor();
-  const proposal = page
-    .locator("section.card")
-    .filter({ hasText: fixtureData.taskTitle });
+  const proposal = page.locator(
+    `section[data-proposal-id="${fixtureData.proposalId}"]`,
+  );
   await expect(
     proposal.getByText("Approval required", { exact: true }),
   ).toBeVisible();
@@ -294,9 +295,9 @@ test("assistant task preview requires confirmation and executes through the real
     }),
   ).toBeVisible();
   await expect(
-    page.getByRole("link", { name: "Open created task" }),
+    proposal.getByRole("link", { name: "Open created task" }),
   ).toBeVisible();
-  await page.getByRole("link", { name: "Open created task" }).click();
+  await proposal.getByRole("link", { name: "Open created task" }).click();
   await expect(page).toHaveURL(/\/admin\/tasks\?task=/);
   await expect(
     page
