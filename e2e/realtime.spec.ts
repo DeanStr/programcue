@@ -129,6 +129,7 @@ test("an Event Setup commit invalidates another authenticated browser page over 
     expect(Number.isSafeInteger(readyCursor)).toBeTruthy();
 
     await editor.goto("/admin/event");
+    await editor.locator("body[data-hydrated='true']").waitFor();
     await expect(
       editor.getByRole("heading", { name: "Event settings" }),
     ).toBeVisible();
@@ -187,6 +188,7 @@ test("an Event Setup commit invalidates another authenticated browser page over 
   } finally {
     if (originalVenue !== undefined) {
       await editor.goto("/admin/event");
+      await editor.locator("body[data-hydrated='true']").waitFor();
       const venue = editor.getByLabel("Venue", { exact: true });
       if ((await venue.inputValue()) !== originalVenue) {
         await venue.fill(originalVenue);

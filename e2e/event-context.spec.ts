@@ -81,6 +81,7 @@ test("an event switch persists across reloads on the local HTTP Worker", async (
   });
 
   await page.reload();
+  await page.locator("body[data-hydrated='true']").waitFor();
   await expect(page.locator(".event-switcher strong")).toHaveText(eventName);
   await page.getByLabel("Event name").fill("   ");
   await page.getByRole("button", { name: "Save event" }).click();

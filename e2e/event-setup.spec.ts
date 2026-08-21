@@ -217,6 +217,7 @@ test("Event Setup clears validation after leaving the route", async ({
   await expect(page).toHaveURL(/\/admin\/submissions/);
 
   await page.goBack();
+  await expect(page).toHaveURL(/\/admin\/event/);
   await page.locator("body[data-hydrated='true']").waitFor();
   await expect(eventName).toHaveValue(originalName);
   await expect(retainedError).toHaveCount(0);
