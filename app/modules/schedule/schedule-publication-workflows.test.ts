@@ -371,6 +371,14 @@ describe("schedule publication workflows", () => {
       { id: first.id, reason: "published" },
       { id: second.id, reason: "published" },
     ]);
+    const version = await env.DB.prepare(
+      `SELECT version_number AS versionNumber
+         FROM schedule_versions
+        WHERE id = ?`,
+    )
+      .bind(versionId)
+      .first<{ versionNumber: number }>();
+    expect(version?.versionNumber).toEqual(expect.any(Number));
     const audits = await env.DB.prepare(
       `SELECT entity_id AS entityId, metadata_json AS metadataJson
          FROM audit_events
@@ -379,14 +387,29 @@ describe("schedule publication workflows", () => {
     )
       .bind(viewer.eventId)
       .all<{ entityId: string; metadataJson: string }>();
-    const reasons = new Map(
+    const metadata = new Map(
       audits.results.map((row) => [
         row.entityId,
-        (JSON.parse(row.metadataJson) as { reason: string }).reason,
+        JSON.parse(row.metadataJson) as {
+          reason: string;
+          versionNumber: number;
+          revision: number;
+        },
       ]),
     );
-    expect(reasons.get(first.id)).toBe("published");
-    expect(reasons.get(second.id)).toBe("published");
+    expect(metadata.get(first.id)).toEqual({
+      reason: "published",
+      versionNumber: version!.versionNumber,
+      revision: expect.any(Number),
+    });
+    expect(metadata.get(first.id)?.revision).toBeGreaterThan(
+      version!.versionNumber,
+    );
+    expect(metadata.get(second.id)).toEqual({
+      reason: "published",
+      versionNumber: version!.versionNumber,
+      revision: expect.any(Number),
+    });
   });
 
   it("leaves expired review links expired instead of revoking them on publication", async () => {
@@ -452,7 +475,6 @@ describe("schedule publication workflows", () => {
         .first(),
     ).toEqual({ total: 0 });
   });
-
 
   it("rejects an unapproved public snapshot at the database publication boundary", async () => {
     const service = new ScheduleService(scheduleTestEnv);

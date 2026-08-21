@@ -173,8 +173,8 @@ export function ScheduleReviewLinksPanel({
               <div>
                 <strong>{link.purpose}</strong>
                 <span>
-                  {statusLabel(link.status)} · version{" "}
-                  {link.versionNumber ?? "—"} · revision {link.scheduleRevision}
+                  {statusLabel(link.status)} · version {link.versionNumber} ·
+                  revision {link.scheduleRevision}
                 </span>
                 <span>
                   Created{" "}

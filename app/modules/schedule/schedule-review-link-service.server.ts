@@ -49,6 +49,15 @@ const LIST_COLUMNS = `link.id,
        link.revoked_at AS revokedAt,
        link.revocation_reason AS revocationReason`;
 
+function requireScheduleVersionNumber(value: unknown): number {
+  if (typeof value !== "number" || !Number.isSafeInteger(value) || value < 1) {
+    throw new Error(
+      "A draft review link is missing its schedule version number.",
+    );
+  }
+  return value;
+}
+
 type SpeakerRow = {
   sessionId: string;
   personId: string;
@@ -64,7 +73,7 @@ export type ScheduleReviewLinkListItem = {
   id: string;
   scheduleVersionId: string;
   scheduleRevision: number;
-  versionNumber: number | null;
+  versionNumber: number;
   purpose: string;
   expiresAt: number;
   createdAt: number;
@@ -438,7 +447,7 @@ export class ScheduleReviewLinkService {
     requireAdministrator(viewer);
     const listJoins = `
           FROM schedule_review_links link
-          LEFT JOIN schedule_versions version
+          JOIN schedule_versions version
             ON version.id = link.schedule_version_id
            AND version.event_id = link.event_id
           LEFT JOIN people creator
@@ -515,6 +524,7 @@ export class ScheduleReviewLinkService {
         }
         return {
           ...row,
+          versionNumber: requireScheduleVersionNumber(row.versionNumber),
           status: reviewLinkStatus({
             revokedAt: row.revokedAt,
             expiresAt: row.expiresAt,
@@ -748,7 +758,7 @@ export class ScheduleReviewLinkService {
                  ELSE 'active'
                END AS status
           FROM schedule_review_links link
-          LEFT JOIN schedule_versions version
+          JOIN schedule_versions version
             ON version.id = link.schedule_version_id
            AND version.event_id = link.event_id
          WHERE link.id = ? AND link.organisation_id = ? AND link.event_id = ?
@@ -762,6 +772,7 @@ export class ScheduleReviewLinkService {
         status: "active" | "expired" | "revoked";
       }>();
     if (!current) throw new ScheduleReviewLinkNotFoundError();
+    const versionNumber = requireScheduleVersionNumber(current.versionNumber);
     if (current.status === "revoked") {
       throw new ScheduleReviewLinkNotFoundError(
         "That draft review link has already been revoked.",
@@ -819,7 +830,7 @@ export class ScheduleReviewLinkService {
         parsed.linkId,
         JSON.stringify({
           reason: "manual",
-          versionNumber: current.versionNumber ?? current.scheduleRevision,
+          versionNumber,
           revision: current.scheduleRevision,
         }),
         parsed.linkId,

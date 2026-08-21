@@ -296,7 +296,8 @@ export function buildSchedulePublicationStatements(input: {
       publishOperationId,
     ),
     // Audit rows this publication stamped. Do not re-test expires_at: a
-    // later unixepoch() can skip a link the UPDATE just revoked.
+    // later unixepoch() can skip a link the UPDATE just revoked. Require
+    // the parent schedule version number; do not substitute schedule_revision.
     env.DB.prepare(
       `
         INSERT INTO audit_events (
@@ -309,14 +310,12 @@ export function buildSchedulePublicationStatements(input: {
                'schedule_review_link', link.id,
                json_object(
                  'reason', 'published',
-                 'versionNumber', COALESCE(
-                   version.version_number, link.schedule_revision
-                 ),
+                 'versionNumber', version.version_number,
                  'revision', link.schedule_revision
                ),
                unixepoch()
           FROM schedule_review_links link
-          LEFT JOIN schedule_versions version
+          JOIN schedule_versions version
             ON version.id = link.schedule_version_id
            AND version.event_id = link.event_id
          WHERE link.organisation_id = ? AND link.event_id = ?

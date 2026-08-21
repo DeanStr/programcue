@@ -718,8 +718,10 @@ declined speakers. Summarize reports the ten-active cap as a blocking reason
 and rethrows unexpected errors. Create uses a loader-issued intent so an
 exact retry fails without minting another secret. Administrators choose 1, 3, 7 or 30 days of
 expiry, defaulting to 7, under the existing 30-day ceiling. Listed links
-include a required short purpose, creator and created time. The planner
-shows every active link plus a bounded recent inactive history. Manual
+include a required short purpose, creator, created time and the parent
+schedule version number. List, manual revoke and publication-revoke audits
+require that version number and do not fall back to the draft revision. The
+planner shows every active link plus a bounded recent inactive history. Manual
 revoke of an already-expired link is rejected. Successful schedule
 publication revokes every active event link; participant retention deletes
 the rows. This does not complete published-only public programme

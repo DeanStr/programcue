@@ -296,6 +296,10 @@ describe("schedule review links", () => {
       .first<{ displayName: string }>();
     expect(listed.items[0]?.createdByName).toBe(creator?.displayName ?? null);
     expect(listed.items[0]?.createdAt).toBeGreaterThan(0);
+    expect(listed.items[0]?.versionNumber).toBe(
+      workspace.version!.versionNumber,
+    );
+    expect(listed.items[0]?.scheduleRevision).toBe(workspace.version!.revision);
     const raw = await env.DB.prepare(
       `SELECT projection_json AS projectionJson
          FROM schedule_review_links
@@ -524,7 +528,10 @@ describe("schedule review links", () => {
   });
 
   it("does not record a second audit event when manual revoke is retried", async () => {
-    const { schedule } = await placedDraft();
+    const { schedule, workspace } = await placedDraft();
+    expect(workspace.version!.revision).toBeGreaterThan(
+      workspace.version!.versionNumber,
+    );
     const created = await schedule.createReviewLink(
       viewer,
       await reviewLinkCreateInput(schedule),
@@ -549,6 +556,19 @@ describe("schedule review links", () => {
         .bind(created.id)
         .first(),
     ).toEqual({ total: 1 });
+    const audit = await env.DB.prepare(
+      `SELECT metadata_json AS metadataJson
+         FROM audit_events
+        WHERE entity_id = ?
+          AND action = 'schedule.review_link.revoked'`,
+    )
+      .bind(created.id)
+      .first<{ metadataJson: string }>();
+    expect(JSON.parse(audit?.metadataJson ?? "{}")).toEqual({
+      reason: "manual",
+      versionNumber: workspace.version!.versionNumber,
+      revision: workspace.version!.revision,
+    });
   });
 
   it("does not list or revoke another organisation's review links", async () => {
