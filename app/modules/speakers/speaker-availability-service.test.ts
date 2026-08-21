@@ -287,10 +287,14 @@ describe("speaker availability", () => {
   });
 
   it("runs availability mutations behind the Airtable command boundary", async () => {
+    let reads = 0;
     let commands = 0;
     const operations: string[] = [];
     const airtable = {
-      assertReadable: async () => null,
+      assertReadable: async () => {
+        reads += 1;
+        return null;
+      },
       executeIdempotent: async (
         _scope: unknown,
         input: { operation: string },
@@ -311,6 +315,8 @@ describe("speaker availability", () => {
       .bind(speaker.eventId)
       .first<{ revision: number; startsAt: number }>();
     const startDate = eventBoundaryCalendarDate(event!.startsAt);
+    await availability.listOwnWindows(speaker);
+    expect(reads).toBe(1);
     await availability.createOwnWindow(speaker, {
       eventRevision: event!.revision,
       startDate,
@@ -320,7 +326,24 @@ describe("speaker availability", () => {
       allDay: false,
       note: "",
     });
+    expect(reads).toBe(2);
     expect(commands).toBe(1);
     expect(operations).toEqual(["speaker.availability.create"]);
+  });
+
+  it("does not checkpoint Airtable when checking availability write access", async () => {
+    let reads = 0;
+    const airtable = {
+      assertReadable: async () => {
+        reads += 1;
+        return null;
+      },
+    } as unknown as AirtableProviderBoundary;
+    const availability = new SpeakerAvailabilityService(
+      scheduleTestEnv,
+      airtable,
+    );
+    await expect(availability.canManage(speaker)).resolves.toBe(true);
+    expect(reads).toBe(0);
   });
 });

@@ -129,6 +129,32 @@ function buildAcceptedClaimPropagationAuditStatement(
   );
 }
 
+function unscheduledClaimDraftEntryGuards(eventId: string, sessionId: string) {
+  return {
+    versionGuardSql: `AND NOT EXISTS (
+           SELECT 1 FROM schedule_entries entry
+           JOIN schedule_versions version
+             ON version.id = entry.schedule_version_id
+            AND version.event_id = entry.event_id
+          WHERE entry.event_id = events.id
+            AND entry.session_id = ?
+            AND version.status = 'draft'
+         )`,
+    versionGuardBindings: [sessionId] as Array<string | number>,
+    speakerGuardSql: `AND NOT EXISTS (
+           SELECT 1 FROM schedule_entries entry
+           JOIN schedule_versions version
+             ON version.id = entry.schedule_version_id
+            AND version.event_id = entry.event_id
+          WHERE entry.event_id = ?
+            AND entry.session_id = ?
+            AND version.status = 'draft'
+         )`,
+    speakerGuardBindings: [eventId, sessionId] as Array<string | number>,
+    statements: [] as D1PreparedStatement[],
+  };
+}
+
 function buildAcceptedDirectClaimPropagationAuditStatement(
   env: CloudflareEnvironment,
   input: {
@@ -826,6 +852,26 @@ export class SubmissionCoSpeakerRepository {
       statements: [] as D1PreparedStatement[],
     };
     if (!input.sessionId) return empty;
+    const unscheduledGuards = unscheduledClaimDraftEntryGuards(
+      input.eventId,
+      input.sessionId,
+    );
+    const draftEntry = await this.env.DB.prepare(
+      `
+      SELECT 1 AS present
+        FROM schedule_versions version
+        JOIN schedule_entries entry
+          ON entry.schedule_version_id = version.id
+         AND entry.event_id = version.event_id
+       WHERE version.event_id = ?
+         AND version.status = 'draft'
+         AND entry.session_id = ?
+       LIMIT 1
+    `,
+    )
+      .bind(input.eventId, input.sessionId)
+      .first();
+    if (!draftEntry) return unscheduledGuards;
     let workspace: ScheduleWorkspace;
     try {
       workspace = await loadScheduleWorkspaceD1(
@@ -844,11 +890,11 @@ export class SubmissionCoSpeakerRepository {
     }
     const draft =
       workspace.version?.status === "draft" ? workspace.version : null;
-    if (!draft) return empty;
     if (
+      !draft ||
       !workspace.entries.some((entry) => entry.sessionId === input.sessionId)
     ) {
-      return empty;
+      return unscheduledGuards;
     }
     return {
       versionGuardSql: `AND EXISTS (

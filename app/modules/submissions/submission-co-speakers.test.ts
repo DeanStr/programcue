@@ -1082,6 +1082,20 @@ describe("Submissions D1 vertical slice", () => {
 
     it("rebuilds draft unavailability conflicts when a co-speaker claims a scheduled session", async () => {
       const { service, id, slug, testEnv } = await publishedForm();
+      await testEnv.DB.batch([
+        testEnv.DB.prepare(
+          `INSERT OR IGNORE INTO sender_profiles (
+             id, event_id, name, from_name, from_email, provider, status,
+             created_at, updated_at
+           ) VALUES (?, ?, 'Scheduled claim invitations', 'Program Cue',
+                     'submissions@example.com', 'resend', 'verified',
+                     unixepoch(), unixepoch())`,
+        ).bind(`sender-scheduled-claim-${crypto.randomUUID()}`, viewer.eventId),
+        testEnv.DB.prepare(
+          `UPDATE sender_profiles SET status = 'verified', updated_at = unixepoch()
+            WHERE event_id = ? AND provider = 'resend'`,
+        ).bind(viewer.eventId),
+      ]);
       const applicant = await verifiedApplicant(service, slug);
       const coSpeakerEmail = `scheduled-claim-${crypto.randomUUID()}@example.com`;
       const submissionId = await service.createDraft(slug, applicant);
@@ -1186,6 +1200,165 @@ describe("Submissions D1 vertical slice", () => {
             AND conflict_type = 'speaker_unavailable'`,
       )
         .bind(viewer.eventId, versionId)
+        .all<{ type: string; detailsJson: string }>();
+      expect(persisted.results).toEqual([
+        expect.objectContaining({
+          type: "speaker_unavailable",
+          detailsJson: expect.stringContaining(coSpeakerPersonId),
+        }),
+      ]);
+    });
+
+    it("rejects an unscheduled co-speaker claim if the session is placed before the claim batch", async () => {
+      const { service, id, slug, testEnv } = await publishedForm();
+      await testEnv.DB.batch([
+        testEnv.DB.prepare(
+          `INSERT OR IGNORE INTO sender_profiles (
+             id, event_id, name, from_name, from_email, provider, status,
+             created_at, updated_at
+           ) VALUES (?, ?, 'Place claim race invitations', 'Program Cue',
+                     'submissions@example.com', 'resend', 'verified',
+                     unixepoch(), unixepoch())`,
+        ).bind(
+          `sender-place-claim-race-${crypto.randomUUID()}`,
+          viewer.eventId,
+        ),
+        testEnv.DB.prepare(
+          `UPDATE sender_profiles SET status = 'verified', updated_at = unixepoch()
+            WHERE event_id = ? AND provider = 'resend'`,
+        ).bind(viewer.eventId),
+      ]);
+      const applicant = await verifiedApplicant(service, slug);
+      const coSpeakerEmail = `place-claim-race-${crypto.randomUUID()}@example.com`;
+      const submissionId = await service.createDraft(slug, applicant);
+      const draft = (
+        await service.repository.getApplicantDrafts(id, applicant)
+      )[0]!;
+      await service.submitDraft(slug, applicant, {
+        submissionId,
+        revision: draft.revision,
+        answers: validAnswers,
+        speakers: [
+          { name: "Applicant", email: applicant.email },
+          { name: "Place Claim Race Speaker", email: coSpeakerEmail },
+        ],
+      });
+      const sessionId = crypto.randomUUID();
+      const decisionId = crypto.randomUUID();
+      await env.DB.batch([
+        env.DB.prepare(
+          `UPDATE submissions SET status = 'accepted', updated_at = unixepoch()
+            WHERE id = ? AND status = 'submitted'`,
+        ).bind(submissionId),
+        env.DB.prepare(
+          `INSERT INTO submission_decisions (
+             id, event_id, submission_id, revision_number, status, decision,
+             decided_by_person_id, notification_feedback_json,
+             effect_preview_json, idempotency_key, published_at
+           ) VALUES (?, ?, ?, 1, 'published', 'accepted', ?, '[]', '{}', ?,
+                     unixepoch())`,
+        ).bind(
+          decisionId,
+          viewer.eventId,
+          submissionId,
+          viewer.personId,
+          `accepted-test:${decisionId}`,
+        ),
+        env.DB.prepare(
+          `INSERT INTO sessions (
+             id, event_id, source_submission_id, title, slug, description, format,
+             duration_minutes, status, visibility, revision, created_at, updated_at
+           ) VALUES (?, ?, ?, 'Place claim race session', ?, '', 'presentation', 60,
+                     'unscheduled', 'public', 1, unixepoch(), unixepoch())`,
+        ).bind(
+          sessionId,
+          viewer.eventId,
+          submissionId,
+          `place-claim-race-${sessionId}`,
+        ),
+        env.DB.prepare(
+          `INSERT INTO session_speakers (
+             session_id, event_id, person_id, position, role_label,
+             participation_status, participation_confirmed_at, visibility
+           )
+           SELECT ?, event_id, person_id, 0, 'Primary speaker',
+                  'confirmed', unixepoch(), 'public'
+             FROM submission_speakers
+            WHERE submission_id = ? AND is_primary = 1 AND person_id IS NOT NULL`,
+        ).bind(sessionId, submissionId),
+      ]);
+      const schedule = new ScheduleService(testEnv);
+      const versionId = await schedule.createDraft(viewer);
+      const workspace = await schedule.getWorkspace(viewer);
+      const startsAt = eventLocalTimeEpoch(
+        workspace.event.startsAt,
+        workspace.event.timezone,
+        7,
+      );
+      const coSpeaker = await verifiedApplicant(service, slug, coSpeakerEmail);
+      if (!coSpeaker.personId) {
+        throw new Error("The claimed co-speaker identity is missing.");
+      }
+      const coSpeakerPersonId = coSpeaker.personId;
+      await env.DB.prepare(
+        `INSERT INTO speaker_blackout_windows (
+           id, event_id, person_id, starts_at, ends_at
+         ) VALUES (?, ?, ?, ?, ?)`,
+      )
+        .bind(
+          crypto.randomUUID(),
+          viewer.eventId,
+          coSpeakerPersonId,
+          startsAt,
+          startsAt + 3_600,
+        )
+        .run();
+      const invitation = (
+        await service.repository.getCoSpeakerInvitations(id, coSpeaker)
+      )[0]!;
+      const racingEnv = withNthBatchRace(testEnv, 1, async () => {
+        await schedule.place(viewer, {
+          scheduleVersionId: versionId,
+          scheduleRevision: workspace.version!.revision,
+          sessionId,
+          roomId: "main",
+          startsAt,
+          endsAt: startsAt + 3_600,
+        });
+      });
+      await expect(
+        new SubmissionService(racingEnv).claimCoSpeaker(
+          slug,
+          coSpeaker,
+          invitation.id,
+        ),
+      ).rejects.toThrow(/no longer available/i);
+      await expect(
+        env.DB.prepare(
+          `
+          SELECT invitation_status AS status, person_id AS personId,
+                 (SELECT COUNT(*) FROM session_speakers relationship
+                   WHERE relationship.session_id = ?
+                     AND relationship.person_id = ?) AS relationshipCount
+            FROM submission_speakers WHERE id = ?
+        `,
+        )
+          .bind(sessionId, coSpeakerPersonId, invitation.id)
+          .first(),
+      ).resolves.toEqual({
+        status: "sent",
+        personId: null,
+        relationshipCount: 0,
+      });
+      await service.claimCoSpeaker(slug, coSpeaker, invitation.id);
+      const persisted = await env.DB.prepare(
+        `SELECT conflict_type AS type, details_json AS detailsJson
+           FROM schedule_conflicts
+          WHERE event_id = ? AND schedule_version_id = ?
+            AND conflict_type = 'speaker_unavailable'
+            AND json_extract(details_json, '$.speakerId') = ?`,
+      )
+        .bind(viewer.eventId, versionId, coSpeakerPersonId)
         .all<{ type: string; detailsJson: string }>();
       expect(persisted.results).toEqual([
         expect.objectContaining({

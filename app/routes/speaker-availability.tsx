@@ -21,16 +21,14 @@ export const meta = () => [{ title: "Availability · Program Cue" }];
 
 export async function loader({ request, context }: Route.LoaderArgs) {
   const { env, viewer } = await requireSpeakerWorkspace(request, context);
-  const service = new SpeakerService(env);
-  if (!(await service.canManageAvailability(viewer))) {
-    throw new Response(
-      "Only speakers can manage availability for this event.",
-      {
-        status: 403,
-      },
-    );
+  try {
+    return await new SpeakerService(env).listOwnAvailability(viewer);
+  } catch (error) {
+    if (error instanceof SpeakerAdminStateError && error.status === 403) {
+      throw new Response(error.message, { status: 403 });
+    }
+    throw error;
   }
-  return service.listOwnAvailability(viewer);
 }
 
 export async function action({ request, context }: Route.ActionArgs) {

@@ -90,8 +90,7 @@ export class SpeakerAvailabilityService {
     ),
   ) {}
 
-  async canManage(viewer: Viewer) {
-    await this.airtable.assertReadable(viewer);
+  private async hasWriteAuth(viewer: Viewer) {
     const allowed = await this.env.DB.prepare(
       `SELECT 1 AS allowed FROM events WHERE id = ? AND organisation_id = ? AND ${writeAuthSql}`,
     )
@@ -105,8 +104,12 @@ export class SpeakerAvailabilityService {
     return Boolean(allowed);
   }
 
+  async canManage(viewer: Viewer) {
+    return this.hasWriteAuth(viewer);
+  }
+
   async requireManage(viewer: Viewer) {
-    if (!(await this.canManage(viewer))) {
+    if (!(await this.hasWriteAuth(viewer))) {
       throw new SpeakerAdminStateError(
         "Only speakers can manage availability for this event.",
         403,
