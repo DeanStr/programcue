@@ -346,3 +346,89 @@ test("event roster previews CSV speakers and exposes explicit workflow status", 
     page.getByText("Speaker marked as confirmed.", { exact: true }),
   ).toBeVisible();
 });
+
+test("re-adding a confirmed speaker preserves workflow status and profile", async ({
+  page,
+}) => {
+  const name = "Priya Shah";
+  const email = "priya.speaker@example.com";
+  const jobTitle = "Director of Experience Design";
+  const organisationName = "EventLab";
+  const biography =
+    "Priya Shah helps event teams design useful, inclusive technology experiences. Her work brings together service design, accessible interaction patterns and the practical details that help busy conferences feel calm, welcoming and easy to navigate for every attendee.";
+
+  await page.context().addCookies([
+    {
+      name: "program_cue_event",
+      value: "evt-foe-2025",
+      domain: "127.0.0.1",
+      path: "/",
+      httpOnly: true,
+      sameSite: "Lax",
+    },
+  ]);
+  await page.goto("/admin/speakers");
+
+  const rosterRow = page.getByRole("row").filter({
+    has: page.getByRole("link", { name, exact: true }),
+  });
+  await expect(rosterRow.getByLabel(`Workflow status for ${name}`)).toHaveValue(
+    "confirmed",
+  );
+  await expect(rosterRow).toContainText(`${jobTitle} · ${organisationName}`);
+
+  await page.getByRole("button", { name: "Add speaker", exact: true }).click();
+  const addSpeakerForm = page.locator("#add-speaker-record form");
+  await addSpeakerForm.locator('input[name="name"]').fill(name);
+  await addSpeakerForm.locator('input[name="email"]').fill(email);
+  await addSpeakerForm
+    .locator('input[name="jobTitle"]')
+    .fill("Attempted replacement title");
+  await addSpeakerForm
+    .locator('input[name="organisationName"]')
+    .fill("Attempted replacement organisation");
+  await addSpeakerForm
+    .locator('textarea[name="biography"]')
+    .fill("Attempted replacement biography.");
+  await addSpeakerForm
+    .getByRole("button", { name: "Add speaker record" })
+    .click();
+  await expect(
+    page.getByRole("heading", { name: "Likely existing person" }),
+  ).toBeVisible();
+  await addSpeakerForm.getByLabel(/I reviewed these identities/u).check();
+  await addSpeakerForm
+    .getByRole("button", { name: "Add speaker record" })
+    .click();
+  await expect(
+    page.getByText(
+      "This identity is already on this event roster. Nothing was changed and no invitation email was sent.",
+      { exact: true },
+    ),
+  ).toBeVisible();
+
+  await page.reload();
+  const reloadedRow = page.getByRole("row").filter({
+    has: page.getByRole("link", { name, exact: true }),
+  });
+  await expect(
+    reloadedRow.getByLabel(`Workflow status for ${name}`),
+  ).toHaveValue("confirmed");
+  await expect(reloadedRow).toContainText(`${jobTitle} · ${organisationName}`);
+
+  await page.context().addCookies([
+    {
+      name: "program_cue_demo_identity",
+      value: "speaker",
+      domain: "127.0.0.1",
+      path: "/",
+      httpOnly: true,
+      sameSite: "Lax",
+    },
+  ]);
+  await page.goto("/participant/profile");
+  await expect(page.getByLabel("Display name")).toHaveValue(name);
+  await expect(page.getByLabel("Job title")).toHaveValue(jobTitle);
+  await expect(page.getByLabel("Organisation")).toHaveValue(organisationName);
+  await expect(page.getByLabel("Biography")).toHaveValue(biography);
+});

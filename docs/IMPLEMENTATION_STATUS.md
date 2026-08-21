@@ -1,8 +1,8 @@
 # Verified implementation status
 
-Last verified: 2026-08-20.
+Last verified: 2026-08-21.
 
-This is the canonical implementation audit and requirements traceability record. The product specification remains authoritative for intended scope; this file records observed code, focused tests and local evidence only.
+This is the canonical implementation audit and requirements traceability record. The product specification remains authoritative for intended scope; this file records observed code, focused tests, deployment evidence and bounded production acceptance.
 
 Status terms:
 
@@ -10,6 +10,18 @@ Status terms:
 - **Production foundation** — shared runtime or infrastructure used by production slices.
 - **Demonstration only** — explicitly environment-gated seed or simulation, never a production fallback.
 - **External acceptance outstanding** — the in-repository path exists, but credentials, deployed resources or independent acceptance evidence are unavailable in this workspace.
+
+### Current application deployment
+
+On 21 August 2026 the no-store production health endpoint reported exact source
+`8a0c39ff268c9c78822111095f479313de7b6595`. That release-stamp commit has tested
+source `3108d2d472f949528aadac7aefaf3783f107686c` as its parent and contains every
+application migration through `0049_task_instance_configuration_snapshot.sql`.
+The ordinary release path requires the remote migration ledger and deployed
+schema to match that checkout before it deploys the unchanged build and verifies
+the exact health revision. The deployment statements below are reconciled to
+that release; they do not turn focused repository tests into fresh production
+workflow or external-provider acceptance.
 
 ## Phase 0–7 architecture milestone
 
@@ -33,8 +45,9 @@ receive `Cache-Control: private, no-store` at the Worker response boundary. The
 contextual action remains POST-only, while an accidental document GET renders
 the standard application 405 boundary instead of exposing route-protocol data.
 Focused browser coverage reloads Command Centre before asserting the actual
-POST action request and the private cache policy; no deployed acceptance is
-claimed.
+POST action request and the private cache policy. The change is included in
+production source `8a0c39f`; no fresh production acceptance of that exact route
+boundary is claimed.
 
 ## Public website
 
@@ -111,6 +124,11 @@ desktop viewport. Every eligible roster row exposes its portal-access state and
 an explicit Send or Resend portal invitation action; creating a prospect
 remains provider-honest and sends nothing until that separate action is
 confirmed.
+
+A focused Chromium regression now re-adds the confirmed Priya Shah fixture
+with conflicting manual-entry profile values, reloads the roster, and verifies
+that both her confirmed workflow status and participant-owned profile remain
+unchanged.
 
 The forms and submissions production slice also exposes the canonical
 published-form URL for opening or copying, derives routing-attention states
@@ -212,8 +230,9 @@ creation, and template assignment's exact-definition duplicate check includes
 active direct/API-created tasks. Administrators retain explicitly labelled,
 non-clickable visibility of legacy participant-submitted link evidence without
 reintroducing that input into current completion behavior.
-These are repository implementation and focused-test claims only; no migration
-or application release has been deployed.
+These changes and migration `0049_task_instance_configuration_snapshot.sql` are
+included in production source `8a0c39f`; the focused tests remain the acceptance
+evidence for the individual boundaries.
 
 Schedule placement errors identify the affected speaker and both clashing
 session titles instead of reducing a rejected overlap to a transient conflict
@@ -235,17 +254,18 @@ through retention recovery, bounded cached event-local exclusive-end bounds, res
 fail-closed published speaker-array parsing, required active speaker workflows
 before task reminders, and kept no-recipient reminder days marked complete.
 Applicant cookies now return an explicit Set-Cookie list rather than a newline
-joined header. Evidence is the focused unit and Worker files on this branch; no
-new deployment is claimed.
+joined header. The changes are included in production source `8a0c39f`; evidence
+for the individual boundaries remains the focused unit and Worker files.
 
 Multipart allocation now treats retained file-erasure audit tombstones as used
 logical asset generations even when evaluation reset or retention has removed
 the corresponding `file_assets` row. Focused Worker coverage reproduces that
 production failure boundary and verifies that the next generation receives its
-own file version instead of returning an allocation HTTP 500. This is repository
-evidence only; the production fix is not deployed yet.
+own file version instead of returning an allocation HTTP 500. The fix is
+included in production source `8a0c39f`; the focused Worker regression remains
+its acceptance evidence.
 
-### Production evaluation release-candidate evidence
+### Production evaluation release evidence
 
 A follow-up QA pass on the production `/evaluate` fixture tightened
 role-specific 403 copy, kept the evaluation banner on root error pages, aligned
@@ -253,10 +273,11 @@ auto-place readiness with unpublished sessions on a published schedule, and
 fixed participant draft attribution, apply-form example answers, task-evidence
 PPT/PPTX acceptance, speaker-resource readiness and several stacking, wrapping
 and readiness inconsistencies. Speaker preparation now counts required resource
-acknowledgements as a fourth milestone. Those changes are local-branch evidence
-until this revision is deployed.
+acknowledgements as a fourth milestone. Those changes are included in production
+source `8a0c39f`; their individual acceptance evidence remains local and
+repository-backed unless a production exercise is recorded below.
 
-The current repository revision expands the production-only `/evaluate` slice
+The deployed production revision expands the production-only `/evaluate` slice
 without turning on local demo powers. Access remains rate-limited,
 access-code-gated, fixed-person and bound to the latest completed reset
 generation. Its signed cookie is a separate authentication realm that takes
@@ -303,9 +324,9 @@ participant Applications link through starting and saving a blank anonymous
 draft; save-only validation discards the empty speaker placeholder while final
 submission continues to require a complete speaker. Its Siteverify fixture is
 explicit and loopback-only;
-it does not claim external-provider success. This is repository test evidence
-only: no deployment, production reset or fresh production-browser acceptance
-is claimed.
+it does not claim external-provider success. The path is included in production
+source `8a0c39f`; no fresh production reset or browser acceptance is claimed for
+this exact scenario.
 
 Exactly four documented SBEK aliases resolve to the corresponding seeded
 routeable addresses only for a signed production-evaluation viewer inside an
@@ -354,7 +375,7 @@ session generation only in the same D1 transaction that completes the owning
 operation. Live overlap is rejected; failed and expired attempts remain
 fail-closed while allowing a later operator reset to recover them.
 
-The current release candidate also exposes a destructive, collapsed reset on
+The deployed production application also exposes a destructive, collapsed reset on
 the unlocked `/evaluate` guide for starting a separate human or automated run.
 It requires the canonical event name, consumes a dedicated D1/IP rate limit and
 reuses the same fenced reset engine. Unlike initial operator provisioning, it
@@ -385,10 +406,9 @@ operation. Bulk confirmation claims only its unchanged stored preview and
 carries the same snapshots into each target batch. Targets remain independently
 atomic, so a multi-target run may honestly finish `partially_failed`.
 
-The current audit-remediation worktree closes the remaining reproduced
-cross-surface defects without claiming deployment. Accepted decisions and their
-drafts now persist an explicit current session-format mapping; pending migration
-`0033_decision_draft_session_format.sql` marks deployed legacy drafts for
+The deployed release closes the remaining reproduced cross-surface defects.
+Accepted decisions and their drafts now persist an explicit current session-format
+mapping; migration `0033_decision_draft_session_format.sql` marks older legacy drafts for
 explicit organiser reselection without inferring from their submitted label.
 Decision release fails before mutation unless the recipient is production-
 deliverable and the provider, verified sender and published decision template
@@ -413,7 +433,7 @@ names the canonical public programme destination and exposes it as an action
 after publication. Focused service and Chromium workflow coverage exercises
 these boundaries locally.
 
-The current worktree keeps the intentionally shared evaluation fixture and
+The deployed release keeps the intentionally shared evaluation fixture and
 closes five evaluator-audit defects. Its guide now derives Priya's
 activation/draft/submission state and Sam's valid-or-expired invitation/
 acceptance/assignment/review state from canonical D1 records, uses “Clean” only for an exact baseline,
@@ -427,7 +447,8 @@ sandboxed, and retention impact copy pluralises its asset count. The production
 build, focused route tests and 17 affected Chromium workflows pass locally,
 including an axe colour-contrast assertion on each submitted canonical review.
 The added state-aware guide coverage exercises every requested phase. These
-changes have not been deployed or independently re-evaluated.
+changes are included in production source `8a0c39f`; no fresh independent
+evaluation of that exact revision is recorded.
 
 A follow-up evaluator audit in this worktree also repairs the two seeded
 evaluation submission-detail failures by restoring the immutable form name,
@@ -448,20 +469,21 @@ the settled browser contract still fails if required download labels disappear.
 The focused repository gate passed
 37 files/327 tests, and seven
 Chromium accessibility workflows passed across representative phone, tablet,
-desktop, dark-theme, landmark and embed cases. These changes remain local to
-the audit branch; no deployment or fresh production reset is claimed.
+desktop, dark-theme, landmark and embed cases. These changes are included in
+production source `8a0c39f`; no fresh production reset is claimed for this
+acceptance pass.
 
 Bundled Priya Raman and Marcus Okafor portraits are presentation assets exposed
 only through the canonical event's published programme projection and optional
 application featured-speaker preview, under exact demo/evaluation runtime,
 event and person allowlists. They are not authenticated profile/file state; any
 non-deleted real headshot asset suppresses them, and they are not upload,
-scanner or R2-release evidence. The expanded slice has focused repository and
-browser evidence but has not been deployed or independently re-evaluated. Fresh
+scanner or R2-release evidence. The expanded slice is included in production
+source `8a0c39f` and has focused repository and browser evidence, but has not
+been independently re-evaluated there. Fresh
 SBEK inbox/bounce capture and scheduled-reminder cron evidence remain external.
-No 100% SBEK result is
-claimed before deployment, one clean reset, a fresh complete ordered run and
-the human checklist.
+No 100% SBEK result is claimed before one clean reset, a fresh complete ordered
+run and the human checklist.
 
 Pre-release reviewer-AI hardening now makes setting, requested, generated,
 failed, interrupted and dismissed audit evidence atomic with the corresponding
@@ -555,16 +577,18 @@ link is accepted only with the exact closed
 `decision.notification.legacy_unlinked` audit; any other missing operation
 fails before supersession. The outcome is selected in the same D1 batch.
 Fault injection that suppresses communication cancellation, delivery
-cancellation or item skipping rolls the reopen back. This is
-repository evidence until the candidate is deployed.
+cancellation or item skipping rolls the reopen back. The change is included
+in production source `8a0c39f`; the fault-injection tests remain repository
+acceptance evidence.
 
 Priority 0 review hardening keeps the client autosave CAS token at the last
 revision explicitly acknowledged by the current assignment's save request.
 Retained or stale fetcher responses cannot advance that token or clear newer
 criteria/comments, while the server still serialises saves and enforces its
 compare-and-set boundary. Focused review Worker coverage and the desktop
-Chromium review workflow cover save, reload and conflict-safe recovery. This is
-local candidate evidence; deployment is not claimed.
+Chromium review workflow cover save, reload and conflict-safe recovery. The
+change is included in production source `8a0c39f`; the focused checks remain its
+acceptance evidence.
 
 ### Cross-surface micro-UX evidence
 
@@ -624,7 +648,7 @@ manual assistive-technology acceptance remains external.
 
 ### Evaluation showcase fixture evidence
 
-- **Local release-candidate evidence:** the deterministic reset keeps
+- **Production slice; local and production-reset acceptance:** the deterministic reset keeps
   clean SBEK identities separate from a showcase cohort containing two
   completed reviews with a 2.30-point score spread, one committee
   discussion, a published waitlist decision, one historical public
@@ -682,7 +706,7 @@ manual assistive-technology acceptance remains external.
   Event-local calendar dates drive task due-distance labels, including midnight
   boundaries.
 
-The current repository candidate extends the Operations production slice with
+The deployed production revision extends the Operations production slice with
 an audited, actor-attributed acknowledgement for terminal failures that expose
 neither retry nor cancel in the Operation Centre. Acknowledgement preserves the
 failed operation and its error while removing only its active shell alert and
@@ -697,8 +721,9 @@ the route broadcasts it after commit, keeping concurrent views current while
 preserving D1 polling when live delivery fails. Focused Worker coverage verifies
 eligibility, tenant-scoped persistence, immutable failure status, audit evidence
 and alert/readiness removal; the Chromium assistant workflow exercises the
-confirmation and preserved archived error. This is repository evidence only
-until the migration and candidate are deployed.
+confirmation and preserved archived error. Migration `0028` and the application
+change are included in production source `8a0c39f`; no fresh production
+acknowledgement was performed for this reconciliation.
 
 ### Committee, delivery-health and speaker-link evidence
 
@@ -711,11 +736,11 @@ until the migration and candidate are deployed.
   target boundaries; managers retain read-only access after archival. Focused
   Worker coverage verifies those boundaries. Repository evidence adds a
   newest-50 read boundary, strict keyset cursor and progressive earlier-message
-  loading with Worker and Chromium coverage; that pagination change is not
-  deployed. Migration `0020` and the earlier application release are deployed;
+  loading with Worker and Chromium coverage; that pagination change is included
+  in production source `8a0c39f`. Migration `0020` and the earlier application release are deployed;
   a fresh production committee post was not performed. Reactions, mentions,
   editing, notifications and realtime chat are not implemented.
-- **Production slice; repository evidence only:** The selected-round unified
+- **Production slice; deployed; repository acceptance:** The selected-round unified
   results view is now the chair workbench rather than a second committee board.
   It exposes Coverage, Decision-ready and Moderation presets, transparent
   recommendation distributions and score ranges, recusal/incomplete/split
@@ -735,7 +760,8 @@ until the migration and candidate are deployed.
   scope; Chromium verifies the panel at the supported mobile width. Repository
   evidence also adds delivery-health covering indexes, direct scoped aggregates
   and fail-fast rejection of invalid periods and unaligned or out-of-range
-  recipient offsets; those hardening changes are not deployed. No new provider
+  recipient offsets; those hardening changes are included in production source
+  `8a0c39f`. No new provider
   receipt acceptance is claimed.
 - **Production slice; deployed; repository acceptance:** Public speaker profiles use a
   server-resolved `?speaker=` deep link, absolute speaker canonical/unfurl
@@ -747,7 +773,7 @@ until the migration and candidate are deployed.
 
 ### Abstract workflow evidence
 
-The current evaluation-mode worktree adds repository-level production slices
+The deployed production application includes production slices
 for event-roster CSV preview/confirmation, an event-specific speaker workflow
 state, and identity-backed full personal-itinerary calendar export. The workflow
 row is authoritative: migration and narrow membership/session triggers use
@@ -759,9 +785,9 @@ and apply the supplied
 event workflow state on both new and existing roster rows, refuses unrelated
 existing identities, sends no invitation implicitly and records an idempotent
 audited import only after every row is linked. Migration
-`0011_event_speaker_workflows.sql`, focused Worker
-coverage and Chromium coverage are the intended evidence; no deployment or live
-provider acceptance is claimed here.
+`0011_event_speaker_workflows.sql`, focused Worker coverage and Chromium coverage
+are the acceptance evidence. The slice is included in production source
+`8a0c39f`; no live provider acceptance is claimed here.
 
 Independent round dates, scorecards, blind-review settings and reviewer pools
 are connected through event-scoped D1 services and the administrator UI.
@@ -1131,7 +1157,7 @@ revoked and deleted during file erasure.
 
 ## Public event-site workstream evidence
 
-- **Production slice; local acceptance verified, deployment outstanding:**
+- **Production slice; deployed; local acceptance verified:**
   `/admin/site` is an owner/administrator-only, event-scoped editor backed by
   migration `0037_public_event_site.sql`. It has one compare-and-set draft and
   one immutable published snapshot, explicit preview and publication, and a
@@ -1149,7 +1175,7 @@ revoked and deleted during file erasure.
   add event-scoped site, published-reference, sponsor and recording tables with
   organisation/event foreign-key isolation. Audit and event-change evidence is
   conditional on the exact committed operation. The migration validates and
-  applies locally; it has not been applied to production. The release validator
+  applies locally and is included in production source `8a0c39f`. The release validator
   conditionally verifies its critical table columns, foreign-key definitions,
   indexes, trigger predicates and managed-embed theme migration once migration
   0037 appears in the remote ledger, rather than treating that ledger row alone
@@ -1478,9 +1504,15 @@ and persisted contract were exercised directly after migration.
 
 ## Deployment evidence
 
-Application health at `app.programcue.com` reports production source `2cf56fc`;
-the latest recorded scanner deployment evidence is source `c9e1287` at
-`scanner.programcue.com`.
+On 21 August 2026 application health at `app.programcue.com` reported full
+production source `8a0c39ff268c9c78822111095f479313de7b6595`; the latest
+recorded scanner deployment evidence is source `c9e1287` at
+`scanner.programcue.com`. Application source `8a0c39f` is the release-stamp child
+of tested source `3108d2d` and includes the complete checked-in application
+migration sequence through `0049_task_instance_configuration_snapshot.sql`.
+This confirms deployment of the formerly candidate-only application paths and
+migrations, but does not by itself claim a fresh production mutation or external
+provider result for each path.
 Migrations `0030_audit_contract_and_retention.sql` and
 `0031_contextual_revision_evidence.sql` applied before the earlier Worker
 cutover. Production-discovered migration
@@ -1495,9 +1527,10 @@ columns are present. All pre-contract audit rows retain explicit
 historical/version-0 labels. A fresh evaluation organiser selection persisted a
 version-1 object with explicit `system` actor kind and `internal` origin, and
 every retained decision preview now has both required fields.
-Pending migration `0033_decision_draft_session_format.sql` is not included in
-that deployment evidence; it adds explicit null format evidence only to legacy
-draft previews and remains unapplied until the next tested release.
+The later release includes `0033_decision_draft_session_format.sql` and every
+subsequent checked-in application migration through `0049`; their focused
+migration and behavior checks remain the acceptance evidence unless a live
+exercise is recorded separately.
 
 Repository release-control hardening now preserves the two complete deployed
 `0032` filenames while allowing only that exact historical numeric collision;
@@ -1521,7 +1554,7 @@ GitHub branch protection and production-environment approval remain external
 repository settings and are not claimed configured by these checked-in files.
 
 The separately deployed public website remains live at `programcue.com` and
-`www.programcue.com`. Current health returned source `2cf56fc`; the earlier
+`www.programcue.com`. Current application health returned source `8a0c39f`; the earlier
 release acceptance verified sign-in, evaluation access, the canonical
 published programme and the public programme API at HTTP 200. A fresh
 production evaluation organiser selection returned the expected 303
