@@ -97,6 +97,10 @@
     max-height: none;
     overflow: visible;
   }
+  .schedule-workspace,
+  .schedule-workspace.is-inspecting {
+    flex: 1 1 auto;
+  }
 }
 @media (max-width: 1099px) and (min-width: 761px) {
   .schedule-page {
