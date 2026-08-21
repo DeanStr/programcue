@@ -478,7 +478,9 @@ export function DraftEditor({
       }}
       onInvalid={() => {
         setClientValidationMessage(
-          "Complete the highlighted required field before submitting.",
+          stepped && resolvedStepId !== APPLICANT_SPEAKERS_STEP_ID
+            ? "Complete the highlighted required field before continuing."
+            : "Complete the highlighted required field before submitting.",
         );
       }}
     >

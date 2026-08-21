@@ -163,10 +163,6 @@ export function ApplicantVideoUpload({
 }) {
   const fileInput = useRef<HTMLInputElement>(null);
   const uploadSession = useRef<ProgramCueMultipartSession | null>(null);
-  const completedUpload = useRef<{
-    assetId: string;
-    versionId: string;
-  } | null>(null);
   const uploadOperation = useRef<symbol | null>(null);
   const cancellationOperation = useRef<symbol | null>(null);
   const [cancellationInFlight, setCancellationInFlight] = useState(false);
@@ -186,7 +182,6 @@ export function ApplicantVideoUpload({
     () => () => {
       uploadOperation.current = null;
       cancellationOperation.current = null;
-      if (completedUpload.current) uploadSession.current?.markAttached();
       uploadSession.current?.disposePreservingUpload();
       onTransferStatusChangeRef.current?.(false);
     },
@@ -199,21 +194,6 @@ export function ApplicantVideoUpload({
         cancellationInFlight,
     );
   }, [cancellationInFlight, state.status]);
-  useEffect(() => {
-    const completed = completedUpload.current;
-    const active = uploadSession.current;
-    if (
-      !completed ||
-      !active ||
-      current?.assetId !== completed.assetId ||
-      current.versionId !== completed.versionId
-    )
-      return;
-    active.markAttached();
-    active.disposePreservingUpload();
-    completedUpload.current = null;
-    uploadSession.current = null;
-  }, [current?.assetId, current?.versionId]);
   // biome-ignore lint/correctness/useExhaustiveDependencies: Synchronize only when the loader/attached source changes, so local transfer errors stay visible.
   useEffect(() => {
     if (uploadOperation.current || cancellationOperation.current) return;
@@ -287,7 +267,6 @@ export function ApplicantVideoUpload({
       active.disposePreservingUpload();
       return;
     }
-    completedUpload.current = completed;
     active.markAttached();
     active.disposePreservingUpload();
     if (uploadSession.current === active) uploadSession.current = null;
