@@ -295,6 +295,8 @@ export function buildSchedulePublicationStatements(input: {
       viewer.eventId,
       publishOperationId,
     ),
+    // Audit rows this publication stamped. Do not re-test expires_at: a
+    // later unixepoch() can skip a link the UPDATE just revoked.
     env.DB.prepare(
       `
         INSERT INTO audit_events (
@@ -320,7 +322,6 @@ export function buildSchedulePublicationStatements(input: {
          WHERE link.organisation_id = ? AND link.event_id = ?
            AND link.revocation_reason = 'published'
            AND link.revoked_at IS NOT NULL
-           AND link.expires_at > unixepoch()
            AND EXISTS (
              SELECT 1 FROM schedule_versions
               WHERE id = ? AND event_id = ? AND status = 'published'
