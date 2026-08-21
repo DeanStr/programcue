@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   eventBoundaryCalendarDate,
+  eventCalendarDateEpoch,
   eventCalendarDayBoundaries,
   eventDayHourlySlots,
   eventDayScheduleSlots,
@@ -10,6 +11,8 @@ import {
   eventLocalEndOfDayEpoch,
   eventLocalExclusiveEndEpoch,
   eventLocalTimeEpoch,
+  participantAllDayRange,
+  participantEventLocalTimeEpoch,
 } from "./schedule-time";
 
 describe("event-local schedule time", () => {
@@ -160,5 +163,47 @@ describe("event-local schedule time", () => {
       eventDayScheduleSlots(springForward, "America/Toronto"),
     ).toHaveLength(46);
     expect(eventDayScheduleSlots(fallBack, "America/Toronto")).toHaveLength(50);
+  });
+
+  it("rejects calendar dates that do not exist", () => {
+    expect(() => eventCalendarDateEpoch("2026-02-31")).toThrow(/invalid/);
+    expect(eventCalendarDateEpoch("2026-02-28")).toBe(
+      Date.parse("2026-02-28T00:00:00Z") / 1_000,
+    );
+  });
+
+  it("rejects nonexistent and ambiguous participant-typed local times", () => {
+    const springForward = Date.parse("2026-03-08T00:00:00Z") / 1_000;
+    const fallBack = Date.parse("2026-11-01T00:00:00Z") / 1_000;
+
+    expect(() =>
+      participantEventLocalTimeEpoch(springForward, "America/Toronto", 2, 30),
+    ).toThrow(/does not exist/);
+    expect(() =>
+      participantEventLocalTimeEpoch(fallBack, "America/Toronto", 1, 30),
+    ).toThrow(/ambiguous/);
+    expect(
+      participantEventLocalTimeEpoch(springForward, "America/Toronto", 3, 30),
+    ).toBe(eventLocalTimeEpoch(springForward, "America/Toronto", 3, 30));
+  });
+
+  it("converts an all-day date range with exclusive calendar-day ends", () => {
+    const range = participantAllDayRange(
+      "2027-05-20",
+      "2027-05-21",
+      "America/Toronto",
+    );
+    expect(eventLocalCalendarDate(range.startsAt, "America/Toronto")).toBe(
+      "2027-05-20",
+    );
+    expect(eventLocalCalendarDate(range.endsAt, "America/Toronto")).toBe(
+      "2027-05-22",
+    );
+    expect(range.endsAt).toBe(
+      eventLocalExclusiveEndEpoch(
+        Date.parse("2027-05-21T00:00:00Z") / 1_000,
+        "America/Toronto",
+      ),
+    );
   });
 });

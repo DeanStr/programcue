@@ -92,12 +92,32 @@ export function eventCalendarDayBoundaries(
   return days;
 }
 
-export function eventLocalTimeEpoch(
-  boundaryEpoch: number,
+export function eventCalendarDateEpoch(date: string) {
+  if (!/^\d{4}-\d{2}-\d{2}$/u.test(date)) {
+    throw new Error("Event-local dates must use YYYY-MM-DD.");
+  }
+  const epoch = Date.parse(`${date}T00:00:00Z`) / 1_000;
+  if (!Number.isInteger(epoch) || eventBoundaryCalendarDate(epoch) !== date) {
+    throw new Error(`The event-local date ${date} is invalid.`);
+  }
+  return epoch;
+}
+
+export function eventLocalRange(
+  eventStartsAt: number,
+  eventEndsAt: number,
   timezone: string,
-  hour: number,
-  minute = 0,
 ) {
+  const eventStartDate = eventBoundaryCalendarDate(eventStartsAt);
+  const previousStartMarker =
+    Date.parse(`${eventStartDate}T00:00:00Z`) / 1_000 - 24 * 60 * 60;
+  return {
+    startsAt: eventLocalExclusiveEndEpoch(previousStartMarker, timezone),
+    endsAtExclusive: eventLocalExclusiveEndEpoch(eventEndsAt, timezone),
+  };
+}
+
+function assertEventLocalClock(hour: number, minute: number) {
   if (
     !Number.isInteger(hour) ||
     hour < 0 ||
@@ -108,6 +128,15 @@ export function eventLocalTimeEpoch(
   ) {
     throw new Error("Event-local time must contain a valid hour and minute.");
   }
+}
+
+export function eventLocalTimeEpoch(
+  boundaryEpoch: number,
+  timezone: string,
+  hour: number,
+  minute = 0,
+) {
+  assertEventLocalClock(hour, minute);
   const [year, month, day] = eventBoundaryCalendarDate(boundaryEpoch)
     .split("-")
     .map(Number);
@@ -212,6 +241,92 @@ export function eventDayScheduleSlots(
     if (eventLocalCalendarDate(epoch, timezone) === day) slots.add(epoch);
   }
   return [...slots].sort((left, right) => left - right);
+}
+
+export function participantEventLocalTimeEpoch(
+  boundaryEpoch: number,
+  timezone: string,
+  hour: number,
+  minute = 0,
+) {
+  assertEventLocalClock(hour, minute);
+  const [year, month, day] = eventBoundaryCalendarDate(boundaryEpoch)
+    .split("-")
+    .map(Number);
+  const requestedWallClock = Date.UTC(year, month - 1, day, hour, minute, 0);
+  const matches = new Set<number>();
+  for (
+    let offsetMinutes = -14 * 60;
+    offsetMinutes <= 14 * 60;
+    offsetMinutes += 15
+  ) {
+    const candidate = requestedWallClock - offsetMinutes * 60_000;
+    const parts = localParts(candidate, timezone);
+    if (
+      parts.year === year &&
+      parts.month === month &&
+      parts.day === day &&
+      parts.hour === hour &&
+      parts.minute === minute &&
+      parts.second === 0
+    ) {
+      matches.add(Math.floor(candidate / 1_000));
+    }
+  }
+  const localLabel = `${eventBoundaryCalendarDate(boundaryEpoch)} ${String(hour).padStart(2, "0")}:${String(minute).padStart(2, "0")}`;
+  if (matches.size === 0) {
+    throw new Error(
+      `The event-local time ${localLabel} does not exist in ${timezone}.`,
+    );
+  }
+  if (matches.size > 1) {
+    throw new Error(
+      `The event-local time ${localLabel} is ambiguous in ${timezone}.`,
+    );
+  }
+  const [epoch] = matches;
+  if (epoch === undefined) {
+    throw new Error(
+      `The event-local time ${localLabel} could not be resolved in ${timezone}.`,
+    );
+  }
+  return epoch;
+}
+
+export function participantAllDayRange(
+  startDate: string,
+  endDate: string,
+  timezone: string,
+) {
+  const startBoundary = eventCalendarDateEpoch(startDate);
+  const endBoundary = eventCalendarDateEpoch(endDate);
+  if (endDate < startDate) {
+    throw new Error("The unavailable period must end after it starts.");
+  }
+  const previousStartMarker = startBoundary - 24 * 60 * 60;
+  const startsAt = eventLocalExclusiveEndEpoch(previousStartMarker, timezone);
+  const endsAt = eventLocalExclusiveEndEpoch(endBoundary, timezone);
+  if (endsAt <= startsAt) {
+    throw new Error("The unavailable period must end after it starts.");
+  }
+  return { startsAt, endsAt };
+}
+
+export function formatEventLocalInterval(
+  startsAt: number,
+  endsAt: number,
+  timezone: string,
+) {
+  const formatter = new Intl.DateTimeFormat("en-GB", {
+    timeZone: timezone,
+    year: "numeric",
+    month: "short",
+    day: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+    hourCycle: "h23",
+  });
+  return `${formatter.format(new Date(startsAt * 1_000))}–${formatter.format(new Date(endsAt * 1_000))} ${timezone}`;
 }
 
 export const SCHEDULE_DAY_START_HOUR = 7;

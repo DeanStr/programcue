@@ -8,6 +8,7 @@ import {
 import { autoPlacementD1StatementCount } from "./schedule-auto-placement-workflow.server";
 import type { ScheduleWorkspace } from "./schedule-service.server";
 import { eventLocalTimeEpoch } from "./schedule-time";
+import { detectWorkspaceConflicts } from "./schedule-workspace.server";
 
 const eventStartsAt = Date.parse("2025-05-20T00:00:00Z") / 1_000;
 const eventEndsAt = Date.parse("2025-05-20T23:59:59Z") / 1_000;
@@ -19,6 +20,7 @@ const blockingPolicies = {
   track: "block",
   boundary: "block",
   capacity: "block",
+  speakerUnavailable: "block",
   minimumTurnaroundMinutes: 0,
 } as const;
 
@@ -97,6 +99,7 @@ function workspace(
     sessionFormats: [],
     sessions,
     entries: [],
+    speakerBlackouts: [],
     conflicts: [],
     publicationConflicts: [],
     policies: blockingPolicies,
@@ -561,5 +564,36 @@ describe("deterministic auto-placement", () => {
       startsAt: occupiedEnd,
       endsAt: eventLocalTimeEpoch(transitionDay, "America/Toronto", 22),
     });
+  });
+
+  it("keeps distinct missing-resource conflicts for one schedule entry", () => {
+    const conflicts = detectWorkspaceConflicts(
+      workspace(
+        [
+          session("session", "Panel", {
+            requiredResources: ["kit-a", "kit-b"],
+            status: "scheduled",
+          }),
+        ],
+        {
+          entries: [
+            {
+              id: "entry-1",
+              sessionId: "session",
+              roomId: "main",
+              startsAt: eventStartsAt + 9 * 3_600,
+              endsAt: eventStartsAt + 10 * 3_600,
+              revision: 1,
+            },
+          ],
+        },
+      ),
+    );
+    expect(
+      conflicts.map(({ conflict }) => [conflict.type, conflict.resource]),
+    ).toEqual([
+      ["resource_configuration", "kit-a"],
+      ["resource_configuration", "kit-b"],
+    ]);
   });
 });

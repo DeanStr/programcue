@@ -226,6 +226,7 @@ export default [
     route("participant/dashboard", "routes/speaker-dashboard.tsx"),
     route("participant/applications", "routes/participant-applications.tsx"),
     route("participant/sessions", "routes/speaker-sessions.tsx"),
+    route("participant/availability", "routes/speaker-availability.tsx"),
     route("participant/tasks", "routes/speaker-tasks.tsx"),
     route("participant/files", "routes/speaker-files.tsx"),
     route("participant/profile", "routes/speaker-profile.tsx"),

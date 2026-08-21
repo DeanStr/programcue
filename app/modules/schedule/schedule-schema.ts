@@ -139,6 +139,7 @@ export const scheduleBreakSchema = z
   });
 
 const conflictAction = z.enum(["allow", "warn", "block"]);
+const unavailableConflictAction = z.enum(["warn", "block"]);
 
 export const schedulePolicySchema = z.object({
   revision: z.coerce.number().int().positive(),
@@ -148,6 +149,7 @@ export const schedulePolicySchema = z.object({
   trackAction: conflictAction,
   boundaryAction: conflictAction,
   capacityAction: conflictAction,
+  speakerUnavailableAction: unavailableConflictAction,
   minimumTurnaroundMinutes: z.coerce.number().int().min(0).max(240),
 });
 

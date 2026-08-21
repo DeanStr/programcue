@@ -147,6 +147,15 @@ export function buildParticipantRetentionFinalisationStatements(
       viewer.eventId,
     ),
     guarded(
+      `DELETE FROM speaker_blackout_windows WHERE event_id = ?`,
+      viewer.eventId,
+    ),
+    guarded(
+      `DELETE FROM schedule_conflicts
+        WHERE event_id = ? AND conflict_type = 'speaker_unavailable'`,
+      viewer.eventId,
+    ),
+    guarded(
       `UPDATE schedule_conflicts
           SET details_json = ?, resolution_json = CASE WHEN resolution_json IS NULL THEN NULL ELSE ? END
         WHERE event_id = ?`,

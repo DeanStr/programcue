@@ -238,6 +238,7 @@ Return: (1) a concise neutral summary, (2) a criterion-by-criterion evidence map
               policy.exclusive_track_overlap_action AS trackOverlapAction,
               policy.event_boundary_action AS eventBoundaryAction,
               policy.capacity_action AS capacityAction,
+              policy.speaker_unavailable_action AS speakerUnavailableAction,
               policy.minimum_turnaround_minutes AS minimumTurnaroundMinutes,
               primary_entry.starts_at AS primaryStartsAt,
               primary_entry.ends_at AS primaryEndsAt,
@@ -272,6 +273,7 @@ Return: (1) a concise neutral summary, (2) a criterion-by-criterion evidence map
         trackOverlapAction: string;
         eventBoundaryAction: string;
         capacityAction: string;
+        speakerUnavailableAction: string;
         minimumTurnaroundMinutes: number;
         primaryStartsAt: number | null;
         primaryEndsAt: number | null;

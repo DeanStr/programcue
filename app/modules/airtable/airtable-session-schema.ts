@@ -210,7 +210,8 @@ export const AIRTABLE_SESSION_TABLE_SPECS: readonly AirtableEventTableSpec[] = [
     query: `SELECT event_id, event_id AS id, room_overlap_action,
                    speaker_overlap_action, required_resource_overlap_action,
                    exclusive_track_overlap_action, event_boundary_action,
-                   capacity_action, minimum_turnaround_minutes, revision,
+                   capacity_action, speaker_unavailable_action,
+                   minimum_turnaround_minutes, revision,
                    updated_at
               FROM schedule_policies WHERE event_id = ?`,
     schema: z
@@ -222,6 +223,7 @@ export const AIRTABLE_SESSION_TABLE_SPECS: readonly AirtableEventTableSpec[] = [
         exclusive_track_overlap_action: z.enum(["allow", "warn", "block"]),
         event_boundary_action: z.enum(["allow", "warn", "block"]),
         capacity_action: z.enum(["allow", "warn", "block"]),
+        speaker_unavailable_action: z.enum(["warn", "block"]).default("block"),
         minimum_turnaround_minutes: integer.nonnegative(),
         revision: integer.positive(),
         updated_at: integer,
@@ -253,6 +255,7 @@ export const AIRTABLE_SESSION_TABLE_SPECS: readonly AirtableEventTableSpec[] = [
           "resource_configuration",
           "room_resource",
           "turnaround",
+          "speaker_unavailable",
         ]),
         severity: z.enum(["warning", "blocking"]),
         fingerprint: text.min(1),

@@ -35,6 +35,9 @@ export async function prepareScheduleServiceTest() {
       scheduleTestViewer.eventId,
     ),
     env.DB.prepare(
+      "DELETE FROM speaker_blackout_windows WHERE event_id = ?",
+    ).bind(scheduleTestViewer.eventId),
+    env.DB.prepare(
       "UPDATE events SET programme_published_at = NULL WHERE id = ?",
     ).bind(scheduleTestViewer.eventId),
     env.DB.prepare(
@@ -46,6 +49,7 @@ export async function prepareScheduleServiceTest() {
               required_resource_overlap_action = 'block',
               exclusive_track_overlap_action = 'warn',
               event_boundary_action = 'block', capacity_action = 'warn',
+              speaker_unavailable_action = 'block',
               minimum_turnaround_minutes = 0
         WHERE event_id = ?`,
     ).bind(scheduleTestViewer.eventId),

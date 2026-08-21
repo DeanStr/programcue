@@ -92,6 +92,17 @@ export function ScheduleValidationPanel({
             </label>
           ))}
           <label className="label">
+            Speaker unavailability
+            <select
+              className="select"
+              name="speakerUnavailableAction"
+              defaultValue={workspace.policies.speakerUnavailable}
+            >
+              <option value="block">Block</option>
+              <option value="warn">Warn</option>
+            </select>
+          </label>
+          <label className="label">
             Minimum speaker turnaround (minutes)
             <input
               className="field"

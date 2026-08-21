@@ -165,6 +165,7 @@ export const DEMO_RESET_EVENT_TABLES = [
   "event_speaker_workflows",
   "session_tags",
   "session_archives",
+  "speaker_blackout_windows",
   "session_speakers",
   "sessions",
   "tags",

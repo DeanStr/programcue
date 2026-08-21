@@ -64,6 +64,7 @@ export const nodeOnlyTestFiles = [
   "app/modules/files/multipart-r2-provider.server.test.ts",
   "app/modules/integrations/accelevents-provider.test.ts",
   "app/modules/airtable/airtable-client.test.ts",
+  "app/modules/airtable/airtable-session-schema.test.ts",
   "app/modules/submissions/sessionize-profile-import.test.ts",
   "app/modules/submissions/submission-routing-explanation.test.ts",
   "app/modules/submissions/submission-schema.test.ts",

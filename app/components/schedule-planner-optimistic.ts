@@ -32,6 +32,7 @@ const scheduleConflictTypes = new Set<SchedulePlacementWarning["type"]>([
   "resource_configuration",
   "room_resource",
   "turnaround",
+  "speaker_unavailable",
 ]);
 
 function isScheduleConflictNotice(

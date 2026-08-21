@@ -439,6 +439,7 @@ export function buildEventClonePlan(
          exclusive_track_overlap_action = source.exclusive_track_overlap_action,
          event_boundary_action = source.event_boundary_action,
          capacity_action = source.capacity_action,
+         speaker_unavailable_action = source.speaker_unavailable_action,
          minimum_turnaround_minutes = source.minimum_turnaround_minutes,
          revision = 1, updated_at = unixepoch()
         FROM schedule_policies source

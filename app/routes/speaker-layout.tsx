@@ -9,9 +9,14 @@ import type { Route } from "./+types/speaker-layout";
 
 export async function loader({ request, context }: Route.LoaderArgs) {
   const { env, viewer } = await requireSpeakerWorkspace(request, context);
-  const portal = await new SpeakerService(env).getPortal(viewer);
+  const service = new SpeakerService(env);
+  const [portal, canManageAvailability] = await Promise.all([
+    service.getPortal(viewer),
+    service.canManageAvailability(viewer),
+  ]);
   return {
     portal,
+    canManageAvailability,
     event: {
       name: portal.event.name,
       brandAccent: portal.event.brandAccent,
@@ -30,7 +35,11 @@ export async function loader({ request, context }: Route.LoaderArgs) {
 export default function SpeakerLayout({ loaderData }: Route.ComponentProps) {
   const { portal, viewer } = loaderData;
   return (
-    <SpeakerShell event={loaderData.event} viewer={viewer}>
+    <SpeakerShell
+      event={loaderData.event}
+      viewer={viewer}
+      canManageAvailability={loaderData.canManageAvailability}
+    >
       <Outlet context={{ portal, viewer }} />
     </SpeakerShell>
   );

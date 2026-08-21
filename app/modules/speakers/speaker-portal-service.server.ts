@@ -117,6 +117,7 @@ export class SpeakerPortalService {
         this.env.DB.prepare(
           `
         SELECT name, slug, timezone, starts_at AS startsAt, ends_at AS endsAt,
+               revision,
                venue_name AS venue, city, brand_accent AS brandAccent,
                CASE WHEN brand_logo_asset_id IS NOT NULL
                  THEN '/public/brand/' || slug || '/logo'
@@ -135,6 +136,7 @@ export class SpeakerPortalService {
             timezone: string;
             startsAt: number;
             endsAt: number;
+            revision: number;
             venue: string | null;
             city: string | null;
             brandAccent: string;

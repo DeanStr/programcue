@@ -157,7 +157,7 @@ function unplacedReason(
 export function computeAutoPlacements(
   workspace: Pick<
     ScheduleWorkspace,
-    "event" | "rooms" | "sessions" | "entries" | "policies"
+    "event" | "rooms" | "sessions" | "entries" | "policies" | "speakerBlackouts"
   >,
 ): AutoPlacementComputation {
   const sessions = orderedSessions(workspace);
@@ -233,6 +233,7 @@ export function computeAutoPlacements(
             eventEndsAt: workspace.event.endsAt,
             eventTimezone: workspace.event.timezone,
             policies: workspace.policies,
+            speakerBlackouts: workspace.speakerBlackouts,
           });
           const blocking = conflicts.filter(
             (conflict) => conflict.severity === "blocking",
@@ -289,7 +290,13 @@ export function computeAutoPlacements(
 export function getAutoPlacementReadiness(
   workspace: Pick<
     ScheduleWorkspace,
-    "event" | "rooms" | "sessions" | "entries" | "policies" | "version"
+    | "event"
+    | "rooms"
+    | "sessions"
+    | "entries"
+    | "policies"
+    | "speakerBlackouts"
+    | "version"
   >,
 ): AutoPlacementReadiness {
   const computation = computeAutoPlacements(workspace);
@@ -329,7 +336,7 @@ export function getAutoPlacementReadiness(
 export function revalidateSelectedAutoPlacements(
   workspace: Pick<
     ScheduleWorkspace,
-    "event" | "rooms" | "sessions" | "entries" | "policies"
+    "event" | "rooms" | "sessions" | "entries" | "policies" | "speakerBlackouts"
   >,
   placements: ReadonlyArray<AutoPlacementProposal>,
 ) {
@@ -370,6 +377,7 @@ export function revalidateSelectedAutoPlacements(
       eventEndsAt: workspace.event.endsAt,
       eventTimezone: workspace.event.timezone,
       policies: workspace.policies,
+      speakerBlackouts: workspace.speakerBlackouts,
     });
     if (conflicts.some((conflict) => conflict.severity === "blocking")) {
       return null;

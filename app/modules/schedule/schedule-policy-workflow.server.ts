@@ -7,6 +7,7 @@ import { schedulePolicySchema } from "./schedule-schema";
 import {
   detectWorkspaceConflicts,
   schedulePolicyAction,
+  scheduleUnavailablePolicyAction,
 } from "./schedule-workspace.server";
 
 export abstract class SchedulePolicyWorkflow extends ScheduleNotesWorkflow {
@@ -41,6 +42,9 @@ export abstract class SchedulePolicyWorkflow extends ScheduleNotesWorkflow {
       track: schedulePolicyAction(parsed.trackAction),
       boundary: schedulePolicyAction(parsed.boundaryAction),
       capacity: schedulePolicyAction(parsed.capacityAction),
+      speakerUnavailable: scheduleUnavailablePolicyAction(
+        parsed.speakerUnavailableAction,
+      ),
       minimumTurnaroundMinutes: parsed.minimumTurnaroundMinutes,
     };
     const conflicts =
@@ -74,7 +78,8 @@ export abstract class SchedulePolicyWorkflow extends ScheduleNotesWorkflow {
            SET room_overlap_action = ?, speaker_overlap_action = ?,
                required_resource_overlap_action = ?,
                exclusive_track_overlap_action = ?, event_boundary_action = ?,
-               capacity_action = ?, minimum_turnaround_minutes = ?,
+               capacity_action = ?, speaker_unavailable_action = ?,
+               minimum_turnaround_minutes = ?,
                revision = revision + 1, updated_at = unixepoch()
          WHERE event_id = ? AND revision = ?
            AND EXISTS (
@@ -90,6 +95,7 @@ export abstract class SchedulePolicyWorkflow extends ScheduleNotesWorkflow {
         parsed.trackAction,
         parsed.boundaryAction,
         parsed.capacityAction,
+        parsed.speakerUnavailableAction,
         parsed.minimumTurnaroundMinutes,
         viewer.eventId,
         parsed.revision,

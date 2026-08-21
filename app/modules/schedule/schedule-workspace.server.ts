@@ -2,11 +2,13 @@ import { z } from "zod";
 
 import { parseSessionFormatsConfiguration } from "~/modules/events/event-configuration";
 import { eventResourceSchema } from "~/modules/events/event-schema";
+import { scheduleConflictFingerprint } from "./schedule-conflict-fingerprint";
 import { ScheduleConfigurationError } from "./schedule-errors";
 import {
   detectScheduleConflicts,
   type ScheduleConflict,
   type ScheduledItem,
+  type SpeakerBlackoutWindow,
 } from "./schedule-rules";
 import type {
   ScheduleEntry,
@@ -51,7 +53,7 @@ export function detectWorkspaceConflicts(workspace: ScheduleWorkspace) {
     };
   });
   const conflicts: Array<{ entryId: string; conflict: ScheduleConflict }> = [];
-  const overlapPairs = new Set<string>();
+  const seen = new Set<string>();
   for (const entry of scheduled) {
     const detected = detectScheduleConflicts({
       candidate: entry,
@@ -61,15 +63,13 @@ export function detectWorkspaceConflicts(workspace: ScheduleWorkspace) {
       eventEndsAt: workspace.event.endsAt,
       eventTimezone: workspace.event.timezone,
       policies: workspace.policies,
+      speakerBlackouts: workspace.speakerBlackouts,
       excludeEntryId: entry.entryId,
     });
     for (const conflict of detected) {
-      if (conflict.conflictingEntryId) {
-        const pair = [entry.entryId, conflict.conflictingEntryId].sort();
-        const fingerprint = `${conflict.type}:${pair[0]}:${pair[1]}`;
-        if (overlapPairs.has(fingerprint)) continue;
-        overlapPairs.add(fingerprint);
-      }
+      const fingerprint = scheduleConflictFingerprint(entry.entryId, conflict);
+      if (seen.has(fingerprint)) continue;
+      seen.add(fingerprint);
       conflicts.push({ entryId: entry.entryId, conflict });
     }
   }
@@ -83,6 +83,15 @@ export function schedulePolicyAction(
   if (value === "warn" || value === "block") return value;
   throw new ScheduleConfigurationError(
     `Unsupported schedule policy action: ${value}.`,
+  );
+}
+
+export function scheduleUnavailablePolicyAction(
+  value: string,
+): "warn" | "block" {
+  if (value === "warn" || value === "block") return value;
+  throw new ScheduleConfigurationError(
+    `Unsupported speaker unavailability policy action: ${value}.`,
   );
 }
 
@@ -109,47 +118,48 @@ export async function loadScheduleWorkspaceD1(
   if (!event.publicSlug.trim())
     throw new Error("Event has no valid public programme slug.");
 
-  const [version, rooms, tracks, sessions, policyRow] = await Promise.all([
-    env.DB.prepare(
-      `
+  const [version, rooms, tracks, sessions, policyRow, blackouts] =
+    await Promise.all([
+      env.DB.prepare(
+        `
         SELECT id, version_number AS versionNumber, status, revision, notes
           FROM schedule_versions
          WHERE event_id = ? AND status IN ('draft','published')
          ORDER BY CASE status WHEN 'draft' THEN 0 ELSE 1 END, version_number DESC
          LIMIT 1
       `,
-    )
-      .bind(viewer.eventId)
-      .first<{
-        id: string;
-        versionNumber: number;
-        status: string;
-        revision: number;
-        notes: string;
-      }>(),
-    env.DB.prepare(
-      "SELECT id, name, position, capacity, resources_json AS resourcesJson FROM rooms WHERE event_id = ? AND status = 'active' ORDER BY position, name",
-    )
-      .bind(viewer.eventId)
-      .all<{
-        id: string;
-        name: string;
-        position: number;
-        capacity: number;
-        resourcesJson: string;
-      }>(),
-    env.DB.prepare(
-      "SELECT id, name, exclusive, is_public AS isPublic FROM tracks WHERE event_id = ? ORDER BY position, name",
-    )
-      .bind(viewer.eventId)
-      .all<{
-        id: string;
-        name: string;
-        exclusive: number;
-        isPublic: number;
-      }>(),
-    env.DB.prepare(
-      `
+      )
+        .bind(viewer.eventId)
+        .first<{
+          id: string;
+          versionNumber: number;
+          status: string;
+          revision: number;
+          notes: string;
+        }>(),
+      env.DB.prepare(
+        "SELECT id, name, position, capacity, resources_json AS resourcesJson FROM rooms WHERE event_id = ? AND status = 'active' ORDER BY position, name",
+      )
+        .bind(viewer.eventId)
+        .all<{
+          id: string;
+          name: string;
+          position: number;
+          capacity: number;
+          resourcesJson: string;
+        }>(),
+      env.DB.prepare(
+        "SELECT id, name, exclusive, is_public AS isPublic FROM tracks WHERE event_id = ? ORDER BY position, name",
+      )
+        .bind(viewer.eventId)
+        .all<{
+          id: string;
+          name: string;
+          exclusive: number;
+          isPublic: number;
+        }>(),
+      env.DB.prepare(
+        `
         SELECT s.id,
                COALESCE(content.title, s.title) AS title,
                COALESCE(content.slug, s.slug) AS slug,
@@ -211,48 +221,60 @@ export async function loadScheduleWorkspaceD1(
          WHERE s.event_id = ? AND s.status IN ('unscheduled','scheduled','published')
          ORDER BY s.title
       `,
-    )
-      .bind(viewer.eventId)
-      .all<
-        Omit<
-          ScheduleSession,
-          | "speakerIds"
-          | "speakerNames"
-          | "trackExclusive"
-          | "requiredResources"
-          | "hasUnpublishedSpeaker"
-        > & {
-          trackExclusive: number;
-          requiredResourcesJson: string;
-          hasUnpublishedSpeaker: number;
-          snapshotSessionId: string | null;
-          speakersJson: string;
-        }
-      >(),
-    env.DB.prepare(
-      `
+      )
+        .bind(viewer.eventId)
+        .all<
+          Omit<
+            ScheduleSession,
+            | "speakerIds"
+            | "speakerNames"
+            | "trackExclusive"
+            | "requiredResources"
+            | "hasUnpublishedSpeaker"
+          > & {
+            trackExclusive: number;
+            requiredResourcesJson: string;
+            hasUnpublishedSpeaker: number;
+            snapshotSessionId: string | null;
+            speakersJson: string;
+          }
+        >(),
+      env.DB.prepare(
+        `
         SELECT room_overlap_action AS roomAction, speaker_overlap_action AS speakerAction,
                required_resource_overlap_action AS resourceAction,
                exclusive_track_overlap_action AS trackAction,
                event_boundary_action AS boundaryAction,
                capacity_action AS capacityAction,
+               speaker_unavailable_action AS speakerUnavailableAction,
                minimum_turnaround_minutes AS minimumTurnaroundMinutes,
                revision
           FROM schedule_policies WHERE event_id = ?
       `,
-    )
-      .bind(viewer.eventId)
-      .first<{
-        roomAction: string;
-        speakerAction: string;
-        resourceAction: string;
-        trackAction: string;
-        boundaryAction: string;
-        capacityAction: string;
-        minimumTurnaroundMinutes: number;
-        revision: number;
-      }>(),
-  ]);
+      )
+        .bind(viewer.eventId)
+        .first<{
+          roomAction: string;
+          speakerAction: string;
+          resourceAction: string;
+          trackAction: string;
+          boundaryAction: string;
+          capacityAction: string;
+          speakerUnavailableAction: string;
+          minimumTurnaroundMinutes: number;
+          revision: number;
+        }>(),
+      env.DB.prepare(
+        `
+        SELECT id, person_id AS personId, starts_at AS startsAt, ends_at AS endsAt
+          FROM speaker_blackout_windows
+         WHERE event_id = ?
+         ORDER BY starts_at, id
+      `,
+      )
+        .bind(viewer.eventId)
+        .all<SpeakerBlackoutWindow>(),
+    ]);
 
   if (!policyRow) throw new ScheduleConfigurationError();
   const currentVersion = version ?? null;
@@ -398,6 +420,7 @@ export async function loadScheduleWorkspaceD1(
     sessionFormats: parsedFormats,
     sessions: configuredSessions,
     entries: entries.results,
+    speakerBlackouts: blackouts.results,
     /* A conflict that cannot point at the cards it is about is only a
        sentence. Both ends of an overlap are implicated; a single-entry
        breach such as an event boundary has a primary and nothing else. */
@@ -417,6 +440,9 @@ export async function loadScheduleWorkspaceD1(
       track: schedulePolicyAction(policyRow.trackAction),
       boundary: schedulePolicyAction(policyRow.boundaryAction),
       capacity: schedulePolicyAction(policyRow.capacityAction),
+      speakerUnavailable: scheduleUnavailablePolicyAction(
+        policyRow.speakerUnavailableAction,
+      ),
       minimumTurnaroundMinutes: policyRow.minimumTurnaroundMinutes,
     },
     policyRevision: policyRow.revision,

@@ -470,5 +470,6 @@ describe("contextual administrator actions", () => {
       "Do not claim a proposed time is conflict-free",
     );
     expect(request.input).toContain("AI schedule source A");
+    expect(request.input).toContain("speakerUnavailableAction");
   });
 });

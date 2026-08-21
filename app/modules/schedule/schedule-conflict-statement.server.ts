@@ -1,3 +1,7 @@
+import {
+  scheduleConflictDetailsJson,
+  scheduleConflictFingerprint,
+} from "./schedule-conflict-fingerprint";
 import type { ScheduleConflict } from "./schedule-rules";
 
 export function scheduleConflictInsert(
@@ -9,9 +13,6 @@ export function scheduleConflictInsert(
   operationId: string,
   conflictId: string = crypto.randomUUID(),
 ) {
-  const fingerprint = conflict.conflictingEntryId
-    ? `${conflict.type}:${[entryId, conflict.conflictingEntryId].sort().join(":")}`
-    : `${conflict.type}:${entryId}`;
   return env.DB.prepare(
     `
       INSERT INTO schedule_conflicts (
@@ -27,10 +28,10 @@ export function scheduleConflictInsert(
     versionId,
     conflict.type,
     conflict.severity,
-    fingerprint,
+    scheduleConflictFingerprint(entryId, conflict),
     entryId,
     conflict.conflictingEntryId ?? null,
-    JSON.stringify({ message: conflict.message }),
+    scheduleConflictDetailsJson(conflict),
     versionId,
     operationId,
   );

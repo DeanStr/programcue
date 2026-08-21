@@ -1,6 +1,7 @@
 import {
   eventBoundaryCalendarDate,
   eventLocalExclusiveEndEpoch,
+  formatEventLocalInterval,
 } from "./schedule-time";
 
 export type ConflictPolicy = "ignore" | "warn" | "block";
@@ -29,6 +30,13 @@ export type ScheduleRoom = {
   resources: ReadonlyArray<string>;
 };
 
+export type SpeakerBlackoutWindow = {
+  id: string;
+  personId: string;
+  startsAt: number;
+  endsAt: number;
+};
+
 export type ScheduleConflict = {
   type:
     | "event_boundary"
@@ -39,10 +47,14 @@ export type ScheduleConflict = {
     | "required_resource"
     | "resource_configuration"
     | "room_resource"
-    | "turnaround";
+    | "turnaround"
+    | "speaker_unavailable";
   severity: "warning" | "blocking";
   message: string;
   conflictingEntryId?: string;
+  speakerId?: string;
+  blackoutWindowId?: string;
+  resource?: string;
 };
 
 export type SchedulePolicies = {
@@ -52,6 +64,7 @@ export type SchedulePolicies = {
   track: ConflictPolicy;
   boundary: ConflictPolicy;
   capacity: ConflictPolicy;
+  speakerUnavailable: "warn" | "block";
   minimumTurnaroundMinutes: number;
 };
 
@@ -77,6 +90,7 @@ export function detectScheduleConflicts({
   eventEndsAt,
   eventTimezone,
   policies,
+  speakerBlackouts,
   excludeEntryId,
 }: {
   candidate: ScheduleCandidate;
@@ -86,6 +100,7 @@ export function detectScheduleConflicts({
   eventEndsAt: number;
   eventTimezone: string;
   policies: SchedulePolicies;
+  speakerBlackouts: ReadonlyArray<SpeakerBlackoutWindow>;
   excludeEntryId?: string;
 }): ScheduleConflict[] {
   if (candidate.endsAt <= candidate.startsAt)
@@ -158,12 +173,14 @@ export function detectScheduleConflicts({
         type: "resource_configuration",
         severity: "blocking",
         message: `Required resource “${resource}” is not configured in any active room.`,
+        resource,
       });
     } else if (room && !room.resources.includes(resource)) {
       conflicts.push({
         type: "room_resource",
         severity: "blocking",
         message: `Required resource “${resource}” is not available in this room.`,
+        resource,
       });
     }
   }
@@ -264,6 +281,34 @@ export function detectScheduleConflicts({
           message: `Track overlaps “${item.title}”.`,
           conflictingEntryId: item.entryId,
         });
+    }
+  }
+
+  const unavailableLevel = severity(policies.speakerUnavailable);
+  if (unavailableLevel) {
+    for (const [index, personId] of candidate.speakerIds.entries()) {
+      const speakerName = candidate.speakerNames[index];
+      for (const window of speakerBlackouts) {
+        if (
+          window.personId !== personId ||
+          window.endsAt <= window.startsAt ||
+          !intervalsOverlap(
+            candidate.startsAt,
+            candidate.endsAt,
+            window.startsAt,
+            window.endsAt,
+          )
+        ) {
+          continue;
+        }
+        conflicts.push({
+          type: "speaker_unavailable",
+          severity: unavailableLevel,
+          message: `${speakerName} is unavailable during “${candidate.title}” (${formatEventLocalInterval(window.startsAt, window.endsAt, eventTimezone)}).`,
+          speakerId: personId,
+          blackoutWindowId: window.id,
+        });
+      }
     }
   }
   return conflicts;

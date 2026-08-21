@@ -27,6 +27,7 @@ import type { action } from "~/routes/admin-speaker-detail";
 
 type AdminSpeakerDetailLoaderData = {
   detail: Awaited<ReturnType<SpeakerService["getAdminSpeakerDetail"]>>;
+  availability: Awaited<ReturnType<SpeakerService["listAdminAvailability"]>>;
 };
 
 function formatTimestamp(epoch: number, timezone: string) {
@@ -55,7 +56,7 @@ export function AdminSpeakerDetailPage({
 }: {
   loaderData: AdminSpeakerDetailLoaderData;
 }) {
-  const { detail } = loaderData;
+  const { detail, availability } = loaderData;
   const {
     profile,
     profileShared,
@@ -482,6 +483,81 @@ export function AdminSpeakerDetailPage({
             />
           </section>
         </div>
+        <section className="crm-record-section" id="availability">
+          <h2>Speaker availability</h2>
+          <p className="subtle">
+            Speakers record these unavailable times in {event.timezone}. The
+            private note stays with the speaker.
+          </p>
+          {availability.windows.length === 0 ? (
+            <p className="subtle">No unavailable periods recorded.</p>
+          ) : (
+            <ul className="stack">
+              {availability.windows.map((window) => (
+                <li key={window.id} className="stack">
+                  <p>
+                    <strong>
+                      {formatTimestamp(window.startsAt, event.timezone)}–
+                      {formatTimestamp(window.endsAt, event.timezone)}
+                    </strong>
+                  </p>
+                  {window.overlappingSessions.length ? (
+                    <p className="subtle">
+                      Overlaps draft sessions:{" "}
+                      {window.overlappingSessions
+                        .map((session) => session.title)
+                        .join(", ")}
+                    </p>
+                  ) : (
+                    <p className="subtle">No overlapping draft sessions.</p>
+                  )}
+                  <Form method="post">
+                    <input
+                      type="hidden"
+                      name="_intent"
+                      value="delete_speaker_blackout"
+                    />
+                    <input
+                      type="hidden"
+                      name="eventRevision"
+                      value={availability.event.revision}
+                    />
+                    <input type="hidden" name="windowId" value={window.id} />
+                    <input type="hidden" name="confirmation" value="delete" />
+                    <button
+                      className="btn"
+                      type="button"
+                      disabled={busy}
+                      onClick={(clickEvent) => {
+                        const form = clickEvent.currentTarget.form;
+                        if (!form) return;
+                        confirmAction(
+                          {
+                            title: "Remove this unavailable period?",
+                            description:
+                              "The speaker can add the same period again. This does not edit the published programme.",
+                            records: [
+                              `${formatTimestamp(window.startsAt, event.timezone)}–${formatTimestamp(window.endsAt, event.timezone)}`,
+                              ...window.overlappingSessions.map(
+                                (session) => `Overlaps “${session.title}”`,
+                              ),
+                            ],
+                            confirmLabel: "Remove period",
+                          },
+                          () => {
+                            form.requestSubmit();
+                          },
+                        );
+                      }}
+                    >
+                      Remove unavailable period
+                    </button>
+                  </Form>
+                </li>
+              ))}
+            </ul>
+          )}
+        </section>
         <section className="crm-record-section" id="sessions">
           <h2>Linked sessions</h2>
           {sessions.length ? (

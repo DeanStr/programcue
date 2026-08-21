@@ -150,6 +150,7 @@ const CONFLICT_TYPE_NAMES: Record<string, string> = {
   required_resource: "Required resource overlap",
   resource_configuration: "Resource configuration",
   room_resource: "Room resource",
+  speaker_unavailable: "Speaker unavailable",
 };
 
 export function conflictTypeName(type: string) {

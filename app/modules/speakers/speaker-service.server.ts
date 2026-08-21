@@ -4,6 +4,7 @@ import {
   type AdminSpeakerFilters,
   SpeakerAdministrationService,
 } from "./speaker-administration-service.server";
+import { SpeakerAvailabilityService } from "./speaker-availability-service.server";
 import { SpeakerParticipationService } from "./speaker-participation-service.server";
 
 export { ParticipantProfileConflictError as SpeakerProfileConflictError } from "./participant-profile-service.server";
@@ -25,6 +26,7 @@ export {
 export class SpeakerService {
   private readonly participation: SpeakerParticipationService;
   private readonly administration: SpeakerAdministrationService;
+  private readonly availability: SpeakerAvailabilityService;
 
   constructor(
     env: CloudflareEnvironment,
@@ -33,6 +35,7 @@ export class SpeakerService {
     const airtable = dependencies.airtable ?? new AirtableProviderBoundary(env);
     this.participation = new SpeakerParticipationService(env, airtable);
     this.administration = new SpeakerAdministrationService(env, { airtable });
+    this.availability = new SpeakerAvailabilityService(env, airtable);
   }
 
   getPortal(viewer: Viewer) {
@@ -73,6 +76,34 @@ export class SpeakerService {
       rawPersonId,
       rawInput,
     );
+  }
+
+  canManageAvailability(viewer: Viewer) {
+    return this.availability.canManage(viewer);
+  }
+
+  listOwnAvailability(viewer: Viewer) {
+    return this.availability.listOwnWindows(viewer);
+  }
+
+  createOwnAvailability(viewer: Viewer, rawInput: unknown) {
+    return this.availability.createOwnWindow(viewer, rawInput);
+  }
+
+  deleteOwnAvailability(viewer: Viewer, rawInput: unknown) {
+    return this.availability.deleteOwnWindow(viewer, rawInput);
+  }
+
+  listAdminAvailability(viewer: Viewer, personId: string) {
+    return this.availability.listAdminWindows(viewer, personId);
+  }
+
+  deleteAdminAvailability(
+    viewer: Viewer,
+    rawPersonId: string,
+    rawInput: unknown,
+  ) {
+    return this.availability.deleteAdminWindow(viewer, rawPersonId, rawInput);
   }
 
   addManualSpeakerRecord(viewer: Viewer, rawInput: unknown) {

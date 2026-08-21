@@ -171,6 +171,37 @@ describe("optimistic schedule placement", () => {
     expect(needsAuthoritativeScheduleMoveRefresh(incomplete)).toBe(true);
   });
 
+  it("accepts speaker-unavailability warnings on the committed fast path", () => {
+    expect(
+      committedScheduleMove({
+        committed: true,
+        intent: "place",
+        skipRevalidation: true,
+        placement: originalEntry,
+        session: originalSession,
+        scheduleRevision: 8,
+        warnings: [
+          {
+            id: "conflict-unavailable",
+            type: "speaker_unavailable",
+            severity: "warning",
+            message: "The speaker is unavailable.",
+            speakerId: "person-demo-speaker",
+            blackoutWindowId: "window-one",
+          },
+        ],
+      }),
+    ).toMatchObject({
+      scheduleRevision: 8,
+      warnings: [
+        expect.objectContaining({
+          type: "speaker_unavailable",
+          speakerId: "person-demo-speaker",
+        }),
+      ],
+    });
+  });
+
   it("requires persisted identifiers for reconciled warnings", () => {
     expect(
       committedScheduleMove({

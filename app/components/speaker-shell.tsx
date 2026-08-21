@@ -1,5 +1,6 @@
 import {
   BookOpen,
+  CalendarClock,
   CheckSquare,
   ClipboardList,
   FileStack,
@@ -17,6 +18,7 @@ export function SpeakerShell({
   children,
   event,
   viewer,
+  canManageAvailability = false,
 }: {
   children: React.ReactNode;
   event: {
@@ -28,6 +30,7 @@ export function SpeakerShell({
     participantSupportUrl: string | null;
   };
   viewer: { name: string; email: string; demo: boolean };
+  canManageAvailability?: boolean;
 }) {
   const location = useLocation();
   const name = viewer.name;
@@ -132,6 +135,11 @@ export function SpeakerShell({
           <NavLink to="/participant/sessions" aria-label="My sessions">
             <Mic2 aria-hidden size={17} /> <span>My sessions</span>
           </NavLink>
+          {canManageAvailability ? (
+            <NavLink to="/participant/availability" aria-label="Availability">
+              <CalendarClock aria-hidden size={17} /> <span>Availability</span>
+            </NavLink>
+          ) : null}
           <NavLink to="/participant/tasks" aria-label="Tasks">
             <CheckSquare aria-hidden size={17} /> <span>Tasks</span>
           </NavLink>

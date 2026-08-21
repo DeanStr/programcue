@@ -189,6 +189,7 @@ const scheduleConflictTypes = new Set<ScheduleConflict["type"]>([
   "resource_configuration",
   "room_resource",
   "turnaround",
+  "speaker_unavailable",
 ]);
 
 function parseSchedulePlacementResult(value: unknown): SchedulePlacementResult {
@@ -298,7 +299,12 @@ function parseSchedulePlacementResult(value: unknown): SchedulePlacementResult {
       typeof parsed.message !== "string" ||
       parsed.message.length === 0 ||
       (parsed.conflictingEntryId !== undefined &&
-        typeof parsed.conflictingEntryId !== "string")
+        typeof parsed.conflictingEntryId !== "string") ||
+      (parsed.speakerId !== undefined &&
+        typeof parsed.speakerId !== "string") ||
+      (parsed.blackoutWindowId !== undefined &&
+        typeof parsed.blackoutWindowId !== "string") ||
+      (parsed.resource !== undefined && typeof parsed.resource !== "string")
     ) {
       throw new Error(
         "The completed schedule placement has an invalid durable warning.",
@@ -312,6 +318,13 @@ function parseSchedulePlacementResult(value: unknown): SchedulePlacementResult {
       ...(parsed.conflictingEntryId === undefined
         ? {}
         : { conflictingEntryId: parsed.conflictingEntryId }),
+      ...(parsed.speakerId === undefined
+        ? {}
+        : { speakerId: parsed.speakerId }),
+      ...(parsed.blackoutWindowId === undefined
+        ? {}
+        : { blackoutWindowId: parsed.blackoutWindowId }),
+      ...(parsed.resource === undefined ? {} : { resource: parsed.resource }),
     } as SchedulePlacementWarning;
   });
   const parsedUndo = undo as Record<string, unknown>;
@@ -475,6 +488,7 @@ export class SchedulePlacementWorkflow {
       eventEndsAt: workspace.event.endsAt,
       eventTimezone: workspace.event.timezone,
       policies: workspace.policies,
+      speakerBlackouts: workspace.speakerBlackouts,
       excludeEntryId: currentEntry?.id,
     });
     const blockingConflicts = conflicts.filter(

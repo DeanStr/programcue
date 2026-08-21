@@ -20,7 +20,11 @@ import { ScheduleDraftWorkflow } from "./schedule-draft-workflow.server";
 import { ScheduleConfigurationError } from "./schedule-errors";
 import { SchedulePlacementWorkflow } from "./schedule-placement-workflow.server";
 import { SchedulePublicationWorkflow } from "./schedule-publication-workflow.server";
-import type { ScheduleConflict, SchedulePolicies } from "./schedule-rules";
+import type {
+  ScheduleConflict,
+  SchedulePolicies,
+  SpeakerBlackoutWindow,
+} from "./schedule-rules";
 import {
   scheduleAutoPlacementConfirmSchema,
   scheduleNotesSchema,
@@ -108,6 +112,7 @@ export type ScheduleWorkspace = {
   }>;
   sessions: ScheduleSession[];
   entries: ScheduleEntry[];
+  speakerBlackouts: SpeakerBlackoutWindow[];
   conflicts: Array<{
     id: string;
     type: string;

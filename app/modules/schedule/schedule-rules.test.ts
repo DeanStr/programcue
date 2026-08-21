@@ -1,9 +1,11 @@
 import { describe, expect, it } from "vitest";
 
+import { scheduleConflictFingerprint } from "./schedule-conflict-fingerprint";
 import {
   assertPublishable,
   detectScheduleConflicts,
   intervalsOverlap,
+  type SpeakerBlackoutWindow,
 } from "./schedule-rules";
 import { eventLocalTimeEpoch } from "./schedule-time";
 
@@ -14,8 +16,23 @@ const policies = {
   track: "warn",
   boundary: "block",
   capacity: "warn",
+  speakerUnavailable: "block",
   minimumTurnaroundMinutes: 0,
 } as const;
+
+function detect(
+  args: Omit<
+    Parameters<typeof detectScheduleConflicts>[0],
+    "speakerBlackouts"
+  > & {
+    speakerBlackouts?: ReadonlyArray<SpeakerBlackoutWindow>;
+  },
+) {
+  return detectScheduleConflicts({
+    ...args,
+    speakerBlackouts: args.speakerBlackouts ?? [],
+  });
+}
 
 describe("authoritative schedule rules", () => {
   it("treats touching intervals as non-overlapping", () => {
@@ -23,7 +40,7 @@ describe("authoritative schedule rules", () => {
   });
 
   it("finds room, speaker, resource, track and capacity conflicts", () => {
-    const conflicts = detectScheduleConflicts({
+    const conflicts = detect({
       candidate: {
         sessionId: "new",
         title: "New session",
@@ -76,8 +93,184 @@ describe("authoritative schedule rules", () => {
     expect(() => assertPublishable(conflicts)).toThrow(/3 blocking/);
   });
 
+  it("blocks a session that overlaps a speaker blackout window", () => {
+    const conflicts = detect({
+      candidate: {
+        sessionId: "new",
+        title: "Keynote",
+        roomId: "main",
+        startsAt: 150,
+        endsAt: 250,
+        trackId: null,
+        trackExclusive: false,
+        speakerIds: ["speaker-a"],
+        speakerNames: ["Priya Raman"],
+        requiredResources: [],
+        expectedAttendance: null,
+      },
+      existing: [],
+      rooms: [{ id: "main", capacity: 100, resources: [] }],
+      eventStartsAt: 0,
+      eventEndsAt: 86_399,
+      eventTimezone: "UTC",
+      policies,
+      speakerBlackouts: [
+        {
+          id: "window-a",
+          personId: "speaker-a",
+          startsAt: 200,
+          endsAt: 300,
+        },
+      ],
+    });
+    expect(conflicts).toEqual([
+      expect.objectContaining({
+        type: "speaker_unavailable",
+        severity: "blocking",
+        speakerId: "speaker-a",
+        blackoutWindowId: "window-a",
+      }),
+    ]);
+    expect(conflicts[0]?.conflictingEntryId).toBeUndefined();
+    expect(conflicts[0]?.message).toContain("Priya Raman");
+    expect(conflicts[0]?.message).toContain("Keynote");
+  });
+
+  it("allows a session that only touches a blackout and does not apply turnaround to it", () => {
+    const conflicts = detect({
+      candidate: {
+        sessionId: "new",
+        title: "Keynote",
+        roomId: "main",
+        startsAt: 200,
+        endsAt: 300,
+        trackId: null,
+        trackExclusive: false,
+        speakerIds: ["speaker-a"],
+        speakerNames: ["Priya Raman"],
+        requiredResources: [],
+        expectedAttendance: null,
+      },
+      existing: [],
+      rooms: [{ id: "main", capacity: 100, resources: [] }],
+      eventStartsAt: 0,
+      eventEndsAt: 86_399,
+      eventTimezone: "UTC",
+      policies: { ...policies, minimumTurnaroundMinutes: 15 },
+      speakerBlackouts: [
+        {
+          id: "window-a",
+          personId: "speaker-a",
+          startsAt: 100,
+          endsAt: 200,
+        },
+      ],
+    });
+    expect(conflicts).toEqual([]);
+  });
+
+  it("records one unavailability conflict per speaker and window", () => {
+    const conflicts = detect({
+      candidate: {
+        sessionId: "new",
+        title: "Panel",
+        roomId: "main",
+        startsAt: 100,
+        endsAt: 400,
+        trackId: null,
+        trackExclusive: false,
+        speakerIds: ["speaker-a", "speaker-b"],
+        speakerNames: ["Priya Raman", "Alex Morgan"],
+        requiredResources: [],
+        expectedAttendance: null,
+      },
+      existing: [],
+      rooms: [{ id: "main", capacity: 100, resources: [] }],
+      eventStartsAt: 0,
+      eventEndsAt: 86_399,
+      eventTimezone: "UTC",
+      policies,
+      speakerBlackouts: [
+        {
+          id: "window-a1",
+          personId: "speaker-a",
+          startsAt: 50,
+          endsAt: 150,
+        },
+        {
+          id: "window-a2",
+          personId: "speaker-a",
+          startsAt: 300,
+          endsAt: 450,
+        },
+        {
+          id: "window-b",
+          personId: "speaker-b",
+          startsAt: 200,
+          endsAt: 250,
+        },
+      ],
+    });
+    expect(
+      conflicts.map((conflict) => [
+        conflict.speakerId,
+        conflict.blackoutWindowId,
+      ]),
+    ).toEqual([
+      ["speaker-a", "window-a1"],
+      ["speaker-a", "window-a2"],
+      ["speaker-b", "window-b"],
+    ]);
+  });
+
+  it("fingerprints unavailability by entry, speaker and window", () => {
+    expect(
+      scheduleConflictFingerprint("entry-a", {
+        type: "speaker_unavailable",
+        speakerId: "speaker-a",
+        blackoutWindowId: "window-a",
+      }),
+    ).toBe("speaker_unavailable:entry-a:speaker-a:window-a");
+    expect(
+      scheduleConflictFingerprint("entry-a", {
+        type: "room",
+        conflictingEntryId: "entry-b",
+      }),
+    ).toBe(
+      scheduleConflictFingerprint("entry-b", {
+        type: "room",
+        conflictingEntryId: "entry-a",
+      }),
+    );
+    expect(() =>
+      scheduleConflictFingerprint("entry-a", { type: "speaker_unavailable" }),
+    ).toThrow(/speaker and window identifiers/);
+    expect(
+      scheduleConflictFingerprint("entry-a", {
+        type: "resource_configuration",
+        resource: "av-kit",
+      }),
+    ).toBe("resource_configuration:entry-a:av-kit");
+    expect(
+      scheduleConflictFingerprint("entry-a", {
+        type: "resource_configuration",
+        resource: "av-kit",
+      }),
+    ).not.toBe(
+      scheduleConflictFingerprint("entry-a", {
+        type: "resource_configuration",
+        resource: "livestream crew",
+      }),
+    );
+    expect(() =>
+      scheduleConflictFingerprint("entry-a", {
+        type: "room_resource",
+      }),
+    ).toThrow(/resource identifier/);
+  });
+
   it("always blocks an entry outside event bounds", () => {
-    const conflicts = detectScheduleConflicts({
+    const conflicts = detect({
       candidate: {
         sessionId: "new",
         title: "New session",
@@ -103,6 +296,7 @@ describe("authoritative schedule rules", () => {
         track: "ignore",
         boundary: "block",
         capacity: "ignore",
+        speakerUnavailable: "block",
         minimumTurnaroundMinutes: 0,
       },
     });
@@ -115,7 +309,7 @@ describe("authoritative schedule rules", () => {
     const firstDayMarker = Date.parse("2025-10-05T00:00:00Z") / 1_000;
     const lastDayMarker = Date.parse("2025-10-07T23:59:59Z") / 1_000;
     const noConflicts = (timezone: string, startsAt: number, endsAt: number) =>
-      detectScheduleConflicts({
+      detect({
         candidate: {
           sessionId: "new",
           title: "New session",
@@ -141,6 +335,7 @@ describe("authoritative schedule rules", () => {
           track: "ignore",
           boundary: "block",
           capacity: "ignore",
+          speakerUnavailable: "block",
           minimumTurnaroundMinutes: 0,
         },
       });
@@ -176,7 +371,7 @@ describe("authoritative schedule rules", () => {
       9,
     );
     expect(() =>
-      detectScheduleConflicts({
+      detect({
         candidate: {
           sessionId: "new",
           title: "Santiago session",
@@ -202,6 +397,7 @@ describe("authoritative schedule rules", () => {
           track: "ignore",
           boundary: "block",
           capacity: "ignore",
+          speakerUnavailable: "block",
           minimumTurnaroundMinutes: 0,
         },
       }),
@@ -209,7 +405,7 @@ describe("authoritative schedule rules", () => {
   });
 
   it("blocks an overlap when the existing session already owns the exclusive track", () => {
-    const conflicts = detectScheduleConflicts({
+    const conflicts = detect({
       candidate: {
         sessionId: "new",
         title: "New session",
@@ -259,7 +455,7 @@ describe("authoritative schedule rules", () => {
   });
 
   it("allows overlapping sessions on a non-exclusive track", () => {
-    const conflicts = detectScheduleConflicts({
+    const conflicts = detect({
       candidate: {
         sessionId: "new",
         title: "New session",
@@ -305,7 +501,7 @@ describe("authoritative schedule rules", () => {
   });
 
   it("enforces configured speaker turnaround without treating touching slots as overlaps", () => {
-    const conflicts = detectScheduleConflicts({
+    const conflicts = detect({
       candidate: {
         sessionId: "new",
         title: "New session",
@@ -376,7 +572,19 @@ describe("authoritative schedule rules", () => {
     };
 
     expect(
-      detectScheduleConflicts({
+      detect({
+        ...base,
+        candidate: {
+          ...base.candidate,
+          requiredResources: ["unconfigured kit", "second kit"],
+        },
+      }).map((conflict) => [conflict.type, conflict.resource]),
+    ).toEqual([
+      ["resource_configuration", "unconfigured kit"],
+      ["resource_configuration", "second kit"],
+    ]);
+    expect(
+      detect({
         ...base,
         candidate: {
           ...base.candidate,
@@ -390,7 +598,7 @@ describe("authoritative schedule rules", () => {
       }),
     );
     expect(
-      detectScheduleConflicts({
+      detect({
         ...base,
         candidate: {
           ...base.candidate,

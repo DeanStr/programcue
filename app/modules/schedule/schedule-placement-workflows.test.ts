@@ -923,4 +923,92 @@ describe("schedule placement workflows", () => {
       durationMinutes: 60,
     });
   });
+
+  it("replays a warned speaker-unavailability placement from durable assistant intent", async () => {
+    const service = new ScheduleService(scheduleTestEnv);
+    await env.DB.prepare(
+      `UPDATE schedule_policies
+          SET speaker_unavailable_action = 'warn'
+        WHERE event_id = ?`,
+    )
+      .bind(viewer.eventId)
+      .run();
+    const versionId = await service.createDraft(viewer);
+    let workspace = await service.getWorkspace(viewer);
+    const startsAt = eventLocalTimeEpoch(
+      workspace.event.startsAt,
+      workspace.event.timezone,
+      9,
+    );
+    await env.DB.prepare(
+      `INSERT INTO speaker_blackout_windows (
+         id, event_id, person_id, starts_at, ends_at
+       ) VALUES ('window-test-speaker-warn', ?, 'person-demo-speaker', ?, ?)`,
+    )
+      .bind(viewer.eventId, startsAt, startsAt + 3_600)
+      .run();
+    workspace = await service.getWorkspace(viewer);
+    const input = {
+      scheduleVersionId: versionId,
+      scheduleRevision: workspace.version!.revision,
+      sessionId: "schedule-test-one",
+      roomId: "main",
+      startsAt,
+      endsAt: startsAt + 3_600,
+    };
+    const command = {
+      actorId: `assistant:${viewer.personId}`,
+      idempotencyKey: `assistant:${crypto.randomUUID()}`,
+      requestHash: "c".repeat(64),
+    };
+    const first = await service.place(viewer, input, command);
+    expect(first.warnings).toEqual([
+      expect.objectContaining({
+        type: "speaker_unavailable",
+        severity: "warning",
+        speakerId: "person-demo-speaker",
+        blackoutWindowId: "window-test-speaker-warn",
+      }),
+    ]);
+    await expect(service.place(viewer, input, command)).resolves.toEqual(first);
+  });
+
+  it("blocks placement that overlaps a speaker blackout window", async () => {
+    const service = new ScheduleService(scheduleTestEnv);
+    const versionId = await service.createDraft(viewer);
+    let workspace = await service.getWorkspace(viewer);
+    const startsAt = eventLocalTimeEpoch(
+      workspace.event.startsAt,
+      workspace.event.timezone,
+      9,
+    );
+    await env.DB.prepare(
+      `INSERT INTO speaker_blackout_windows (
+         id, event_id, person_id, starts_at, ends_at
+       ) VALUES ('window-test-speaker', ?, 'person-demo-speaker', ?, ?)`,
+    )
+      .bind(viewer.eventId, startsAt, startsAt + 3_600)
+      .run();
+    workspace = await service.getWorkspace(viewer);
+    await expect(
+      service.place(viewer, {
+        scheduleVersionId: versionId,
+        scheduleRevision: workspace.version!.revision,
+        sessionId: "schedule-test-one",
+        roomId: "main",
+        startsAt,
+        endsAt: startsAt + 3_600,
+      }),
+    ).rejects.toMatchObject({
+      name: "SchedulePlacementBlockedError",
+      conflicts: [
+        expect.objectContaining({
+          type: "speaker_unavailable",
+          severity: "blocking",
+          speakerId: "person-demo-speaker",
+          blackoutWindowId: "window-test-speaker",
+        }),
+      ],
+    });
+  });
 });

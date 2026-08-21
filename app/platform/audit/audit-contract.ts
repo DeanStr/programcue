@@ -114,6 +114,33 @@ const displayMetadataByAction: Readonly<
     ["entryCount"],
     z.object({ entryCount: displayCount }),
   ),
+  "speaker.blackout.created": displayMetadataContract(
+    ["windowId", "startsAt", "endsAt"],
+    z.object({
+      windowId: displayString,
+      personId: displayString,
+      startsAt: z.number().int().nonnegative(),
+      endsAt: z.number().int().positive(),
+    }),
+  ),
+  "speaker.blackout.deleted": displayMetadataContract(
+    ["windowId", "startsAt", "endsAt"],
+    z.object({
+      windowId: displayString,
+      personId: displayString,
+      startsAt: z.number().int().nonnegative(),
+      endsAt: z.number().int().positive(),
+    }),
+  ),
+  "speaker.blackout.deleted_by_organiser": displayMetadataContract(
+    ["windowId", "startsAt", "endsAt"],
+    z.object({
+      windowId: displayString,
+      personId: displayString,
+      startsAt: z.number().int().nonnegative(),
+      endsAt: z.number().int().positive(),
+    }),
+  ),
   "session.content.status_changed": displayMetadataContract(
     ["from", "to", "contentRevision"],
     z.object({

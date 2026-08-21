@@ -3,6 +3,7 @@ import { ZodError } from "zod";
 import { AdminSpeakerDetailPage } from "~/components/admin-speaker-detail-page";
 import { statusPresentation } from "~/components/ui/domain-status-badge";
 import { adminRecordBreadcrumbHandle } from "~/modules/administration/admin-route-breadcrumb";
+import { ScheduleRevisionConflictError } from "~/modules/schedule/schedule-errors";
 import { ensureDemoSpeakerData } from "~/modules/speakers/demo.server";
 import {
   SpeakerAdminStateError,
@@ -39,11 +40,10 @@ export async function loader({ request, params, context }: Route.LoaderArgs) {
     "owner",
     "administrator",
   ]);
+  const service = new SpeakerService(env);
   return {
-    detail: await new SpeakerService(env).getAdminSpeakerDetail(
-      viewer,
-      params.personId,
-    ),
+    detail: await service.getAdminSpeakerDetail(viewer, params.personId),
+    availability: await service.listAdminAvailability(viewer, params.personId),
   };
 }
 
@@ -59,7 +59,8 @@ export async function action({ request, params, context }: Route.ActionArgs) {
     intent !== "save_speaker_profile" &&
     intent !== "save_speaker_scoped_profile" &&
     intent !== "confirm_external_participation" &&
-    intent !== "reset_declined_participation"
+    intent !== "reset_declined_participation" &&
+    intent !== "delete_speaker_blackout"
   ) {
     return data(
       { ok: false, message: "Unsupported speaker action." },
@@ -67,6 +68,35 @@ export async function action({ request, params, context }: Route.ActionArgs) {
     );
   }
   try {
+    if (intent === "delete_speaker_blackout") {
+      const result = await new SpeakerService(env).deleteAdminAvailability(
+        viewer,
+        params.personId,
+        {
+          eventRevision: form.get("eventRevision"),
+          windowId: form.get("windowId"),
+          confirmation: form.get("confirmation"),
+        },
+      );
+      const realtimeFailure =
+        result.changeSequence != null
+          ? await notifyRouteChange(
+              env,
+              viewer,
+              result.changeSequence,
+              result.personId,
+            )
+          : await recordRouteChange(env, viewer, {
+              entityType: "person",
+              entityId: result.personId,
+              changeType: "updated",
+            });
+      if (realtimeFailure) return data(realtimeFailure, { status: 207 });
+      return data({
+        ok: true,
+        message: `Removed unavailable period ${result.interval}.`,
+      });
+    }
     if (
       intent === "confirm_external_participation" ||
       intent === "reset_declined_participation"
@@ -191,6 +221,9 @@ export async function action({ request, params, context }: Route.ActionArgs) {
       );
     }
     if (error instanceof SpeakerProfileConflictError) {
+      return data({ ok: false, message: error.message }, { status: 409 });
+    }
+    if (error instanceof ScheduleRevisionConflictError) {
       return data({ ok: false, message: error.message }, { status: 409 });
     }
     if (error instanceof SpeakerAdminStateError) {

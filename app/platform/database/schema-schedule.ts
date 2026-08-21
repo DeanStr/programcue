@@ -116,12 +116,51 @@ export const schedulePolicies = sqliteTable("schedule_policies", {
     .notNull()
     .default("warn")
     .$type<"allow" | "warn" | "block">(),
+  speakerUnavailableAction: text("speaker_unavailable_action")
+    .notNull()
+    .default("block")
+    .$type<"warn" | "block">(),
   minimumTurnaroundMinutes: integer("minimum_turnaround_minutes")
     .notNull()
     .default(0),
   revision: integer("revision").notNull().default(1),
   updatedAt: integer("updated_at").notNull().default(epochNow),
 });
+
+export const speakerBlackoutWindows = sqliteTable(
+  "speaker_blackout_windows",
+  {
+    id: text("id").primaryKey(),
+    eventId: text("event_id")
+      .notNull()
+      .references(() => events.id, { onDelete: "cascade" }),
+    personId: text("person_id")
+      .notNull()
+      .references(() => people.id),
+    startsAt: integer("starts_at").notNull(),
+    endsAt: integer("ends_at").notNull(),
+    note: text("note"),
+    revision: integer("revision").notNull().default(1),
+    createdAt: integer("created_at").notNull().default(epochNow),
+    updatedAt: integer("updated_at").notNull().default(epochNow),
+  },
+  (table) => [
+    uniqueIndex("speaker_blackout_windows_id_event_unique").on(
+      table.id,
+      table.eventId,
+    ),
+    index("idx_speaker_blackout_windows_person").on(
+      table.eventId,
+      table.personId,
+      table.startsAt,
+    ),
+    index("idx_speaker_blackout_windows_event").on(
+      table.eventId,
+      table.startsAt,
+      table.endsAt,
+    ),
+  ],
+);
 
 export const programmeEmbeds = sqliteTable(
   "programme_embeds",
@@ -545,6 +584,7 @@ export const scheduleConflicts = sqliteTable(
         | "resource_configuration"
         | "room_resource"
         | "turnaround"
+        | "speaker_unavailable"
       >(),
     severity: text("severity").notNull().$type<"warning" | "blocking">(),
     fingerprint: text("fingerprint").notNull(),

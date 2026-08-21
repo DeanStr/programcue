@@ -102,6 +102,7 @@ export abstract class AiScheduleProposalWorkflows extends AiEvaluationProposalWo
       eventEndsAt: workspace.event.endsAt,
       eventTimezone: workspace.event.timezone,
       policies: workspace.policies,
+      speakerBlackouts: workspace.speakerBlackouts,
       excludeEntryId: currentEntry?.id,
     });
     const blocking = conflicts.filter(

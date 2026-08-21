@@ -316,6 +316,7 @@ describe("schedule content and draft workflows", () => {
       trackAction: "allow",
       boundaryAction: "block",
       capacityAction: "block",
+      speakerUnavailableAction: "block",
       minimumTurnaroundMinutes: 15,
     });
     const after = await service.getWorkspace(viewer);
@@ -329,6 +330,7 @@ describe("schedule content and draft workflows", () => {
       track: "ignore",
       boundary: "block",
       capacity: "block",
+      speakerUnavailable: "block",
       minimumTurnaroundMinutes: 15,
     });
     await expect(
@@ -340,6 +342,7 @@ describe("schedule content and draft workflows", () => {
         trackAction: "block",
         boundaryAction: "block",
         capacityAction: "block",
+        speakerUnavailableAction: "warn",
         minimumTurnaroundMinutes: 0,
       }),
     ).rejects.toThrow(/schedule changed/i);

@@ -400,6 +400,7 @@ export async function action({ request, context }: Route.ActionArgs) {
           trackAction: values.get("trackAction"),
           boundaryAction: values.get("boundaryAction"),
           capacityAction: values.get("capacityAction"),
+          speakerUnavailableAction: values.get("speakerUnavailableAction"),
           minimumTurnaroundMinutes: values.get("minimumTurnaroundMinutes"),
         });
         const realtimeFailure = await recordRouteChange(env, viewer, {
