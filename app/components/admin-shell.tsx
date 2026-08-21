@@ -588,17 +588,6 @@ export function AdminShell({
         : commandTriggerRef.current;
     setDialog("command");
   }, []);
-  const closeCommandDialog = useCallback(() => {
-    setDialog(null);
-    // The controlled Radix root unmounts in the same event as Escape. Restore
-    // after its focus scope has completed teardown, using the element captured
-    // synchronously when the toolbar button or keyboard shortcut opened it.
-    window.requestAnimationFrame(() => {
-      window.requestAnimationFrame(() =>
-        commandReturnFocusRef.current?.focus(),
-      );
-    });
-  }, []);
   const initials = viewer.name
     .split(/\s+/)
     .map((part) => part[0])
@@ -792,7 +781,7 @@ export function AdminShell({
 
       <AdminCommandDialog
         open={dialog === "command"}
-        closeDialog={closeCommandDialog}
+        closeDialog={closeDialog}
         commandPalette={commandPalette}
         commandQuery={commandQuery}
         setCommandQuery={setCommandQuery}

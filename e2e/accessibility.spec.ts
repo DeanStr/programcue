@@ -43,29 +43,31 @@ test("skip navigation and command palette preserve keyboard focus", async ({
   const trigger = page.getByRole("button", {
     name: /search or run a command/i,
   });
+  const commandDialog = page.getByRole("dialog", {
+    name: "Search or run a command",
+  });
   await trigger.click();
-  await expect(
-    page.getByRole("dialog", { name: "Search or run a command" }),
-  ).toBeVisible();
+  await expect(commandDialog).toBeVisible();
   await expect(
     page.getByRole("combobox", { name: "Program Cue commands" }),
   ).toBeFocused();
   await page.keyboard.press("Escape");
+  await expect(commandDialog).toBeHidden();
   await expect(trigger).toBeFocused();
 
   await page.keyboard.press("Control+k");
-  await expect(
-    page.getByRole("dialog", { name: "Search or run a command" }),
-  ).toBeVisible();
+  await expect(commandDialog).toBeVisible();
   await page.keyboard.press("Escape");
+  await expect(commandDialog).toBeHidden();
+  await expect(trigger).toBeFocused();
 
   const priorControl = page.getByRole("button", { name: "New", exact: true });
   await priorControl.focus();
+  await expect(priorControl).toBeFocused();
   await page.keyboard.press("Control+k");
-  await expect(
-    page.getByRole("dialog", { name: "Search or run a command" }),
-  ).toBeVisible();
+  await expect(commandDialog).toBeVisible();
   await page.keyboard.press("Escape");
+  await expect(commandDialog).toBeHidden();
   await expect(priorControl).toBeFocused();
 });
 
