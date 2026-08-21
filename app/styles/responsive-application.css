@@ -43,8 +43,8 @@
 .application-form-step-heading:focus,
 .application-choice-field:focus,
 #application-speakers:focus {
-  outline: 2px solid var(--ring, var(--accent));
-  outline-offset: 2px;
+  outline: var(--focus-width) solid var(--focus-ring);
+  outline-offset: var(--focus-halo-width);
 }
 .application-form-step-nav {
   margin-top: var(--space-2);
