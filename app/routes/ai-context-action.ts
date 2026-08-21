@@ -6,6 +6,7 @@ import {
 import { ZodError } from "zod";
 
 import {
+  AiAssistantBusyError,
   AiAssistantService,
   AiContextTooLargeError,
   AiPermissionError,
@@ -39,6 +40,7 @@ function failure(error: unknown) {
   if (error instanceof AiProviderError) status = 502;
   if (error instanceof AiPermissionError) status = 403;
   if (
+    error instanceof AiAssistantBusyError ||
     error instanceof AiContextTooLargeError ||
     error instanceof AiProposalStateError ||
     error instanceof CommunicationStateError

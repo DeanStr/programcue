@@ -14,6 +14,12 @@ import {
 } from "./ai-assistant-errors";
 import { AiClaimedProposalExecutor } from "./ai-claimed-proposal-executor.server";
 import {
+  completeAiOperationLease,
+  failAiOperationLease,
+  renewAiOperationLease,
+  startAiOperationLease,
+} from "./ai-operation-lease.server";
+import {
   assistantProposalMetadataSchema,
   prepareReminderSendProposal,
 } from "./ai-tools.server";
@@ -528,80 +534,6 @@ export class AiProposalLifecycleService {
       .run();
   }
 
-  private async startReminderRevisionOperation(
-    viewer: Viewer,
-    proposalId: string,
-  ) {
-    if (
-      !requireRuntimeMode(this.env).evaluation ||
-      viewer.organisationId !== DEMO_ORGANISATION_ID
-    ) {
-      return null;
-    }
-    const operationId = crypto.randomUUID();
-    const started = await this.env.DB.prepare(
-      `INSERT INTO operation_jobs (
-         id, organisation_id, event_id, requested_by_person_id, type,
-         idempotency_key, correlation_id, status, payload_json,
-         progress_total, progress_completed, progress_failed, attempt_count,
-         cancellable, started_at, created_at, updated_at
-       ) SELECT ?, ?, ?, ?, 'ai.proposal.revision', ?, ?, 'running', ?,
-                1, 0, 0, 1, 0, unixepoch(), unixepoch(), unixepoch()
-          WHERE NOT EXISTS (
-            SELECT 1 FROM operation_jobs fixture_reset
-             WHERE fixture_reset.id = ? AND fixture_reset.type = ?
-               AND fixture_reset.status = 'running'
-          )`,
-    )
-      .bind(
-        operationId,
-        viewer.organisationId,
-        viewer.eventId,
-        viewer.personId,
-        `ai.proposal.revision:${operationId}`,
-        operationId,
-        JSON.stringify({ proposalId }),
-        EVALUATION_FIXTURE_RESET_OPERATION_ID,
-        EVALUATION_FIXTURE_RESET_OPERATION_TYPE,
-      )
-      .run();
-    if ((started.meta.changes ?? 0) !== 1) throw new AiAssistantBusyError();
-    return operationId;
-  }
-
-  private async settleReminderRevisionOperation(
-    operationId: string,
-    outcome: { status: "completed" } | { status: "failed"; error: unknown },
-  ) {
-    const failure =
-      outcome.status === "failed" ? safeErrorMetadata(outcome.error) : null;
-    const settled = await this.env.DB.prepare(
-      `UPDATE operation_jobs
-          SET status = ?, progress_completed = ?, progress_failed = ?,
-              last_error = ?, result_json = ?, completed_at = unixepoch(),
-              updated_at = unixepoch()
-        WHERE id = ? AND status = 'running'`,
-    )
-      .bind(
-        outcome.status,
-        outcome.status === "completed" ? 1 : 0,
-        outcome.status === "failed" ? 1 : 0,
-        failure?.message ?? null,
-        JSON.stringify(
-          outcome.status === "completed"
-            ? { revised: true }
-            : { errorType: failure?.errorType ?? "UnknownError" },
-        ),
-        operationId,
-      )
-      .run();
-    if ((settled.meta.changes ?? 0) !== 1) {
-      throw new Error(
-        `Assistant reminder revision operation ${operationId} could not be settled.`,
-      );
-    }
-  }
-
   async approveProposal(
     viewer: Viewer,
     rawProposalId: unknown,
@@ -743,10 +675,12 @@ export class AiProposalLifecycleService {
     const proposalId = identifierSchema.parse(rawProposalId);
     const subject = z.string().trim().min(3).max(200).parse(rawSubject);
     const body = z.string().trim().min(10).max(100_000).parse(rawBody);
-    const revisionOperationId = await this.startReminderRevisionOperation(
-      viewer,
-      proposalId,
-    );
+    const revisionOperationId = crypto.randomUUID();
+    const revisionLease = await startAiOperationLease(this.env, viewer, {
+      id: revisionOperationId,
+      type: "ai.proposal.revision",
+      payload: { proposalId },
+    });
     try {
       const proposal = await this.env.DB.prepare(
         `SELECT proposal.metadata_json AS metadataJson,
@@ -801,6 +735,7 @@ export class AiProposalLifecycleService {
           "Only reminder-send previews have editable communication content.",
         );
       }
+      await renewAiOperationLease(this.env, revisionLease);
       const revised = await prepareReminderSendProposal(this.env, viewer, {
         runId: correlationId,
         model: metadata.data.model,
@@ -825,19 +760,14 @@ export class AiProposalLifecycleService {
           bodyChanged: body !== metadata.data.arguments.body,
         },
       });
-      if (revisionOperationId) {
-        await this.settleReminderRevisionOperation(revisionOperationId, {
-          status: "completed",
-        });
-      }
+      await completeAiOperationLease(this.env, revisionLease, {
+        revised: true,
+        proposalId,
+        replacementProposalId: revised.preview.id,
+      });
       return revised.preview;
     } catch (error) {
-      if (revisionOperationId) {
-        await this.settleReminderRevisionOperation(revisionOperationId, {
-          status: "failed",
-          error,
-        });
-      }
+      await failAiOperationLease(this.env, revisionLease, error);
       throw error;
     }
   }

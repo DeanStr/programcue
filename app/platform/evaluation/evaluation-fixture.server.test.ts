@@ -360,6 +360,11 @@ describe("production evaluation fixture", () => {
         ),
       ).rejects.toEqual(new AiAssistantBusyError());
       await expect(
+        new AiAssistantService(environment).summarizeReadiness(
+          evaluationOrganizer,
+        ),
+      ).rejects.toEqual(new AiAssistantBusyError());
+      await expect(
         environment.DB.prepare(
           `SELECT proposal_id FROM assistant_proposal_executions
             WHERE proposal_id = ?`,

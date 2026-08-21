@@ -1314,6 +1314,75 @@ describe("complete evaluator demo reset", () => {
   });
 
   describe("destructive-operation guards", () => {
+    it("blocks on live synchronous AI work but ignores an abandoned expired claim", async () => {
+      const testEnvironment = demoEnvironment();
+      await ensureDemoData(testEnvironment);
+      const operationId = crypto.randomUUID();
+      await testEnvironment.DB.prepare(
+        `INSERT INTO operation_jobs (
+           id, organisation_id, event_id, requested_by_person_id, type,
+           idempotency_key, correlation_id, status, payload_json,
+           progress_total, progress_completed, progress_failed, attempt_count,
+           claim_token, claim_expires_at, created_at, updated_at
+         ) VALUES (?, ?, ?, ?, 'ai.proposal.revision', ?, ?, 'running', '{}',
+                   1, 0, 0, 1, ?, unixepoch() + 300, unixepoch(), unixepoch())`,
+      )
+        .bind(
+          operationId,
+          DEMO_ORGANISATION_ID,
+          DEMO_EVENT_ID,
+          demoAdministrator.personId,
+          `ai.proposal.revision:${operationId}`,
+          operationId,
+          crypto.randomUUID(),
+        )
+        .run();
+
+      await expect(
+        resetDemoEvent(
+          testEnvironment,
+          demoAdministrator.personId,
+          DEMO_RESET_CONFIRMATION,
+        ),
+      ).rejects.toMatchObject({
+        name: DemoResetBusyError.name,
+        activeWork: { operations: 1 },
+      });
+
+      await testEnvironment.DB.prepare(
+        `UPDATE operation_jobs
+            SET claim_token = NULL, claim_expires_at = NULL
+          WHERE id = ?`,
+      )
+        .bind(operationId)
+        .run();
+      await expect(
+        resetDemoEvent(
+          testEnvironment,
+          demoAdministrator.personId,
+          DEMO_RESET_CONFIRMATION,
+        ),
+      ).rejects.toMatchObject({
+        name: DemoResetBusyError.name,
+        activeWork: { operations: 1 },
+      });
+
+      await testEnvironment.DB.prepare(
+        `UPDATE operation_jobs
+            SET claim_token = ?, claim_expires_at = unixepoch() - 1
+          WHERE id = ?`,
+      )
+        .bind(crypto.randomUUID(), operationId)
+        .run();
+      await expect(
+        resetDemoEvent(
+          testEnvironment,
+          demoAdministrator.personId,
+          DEMO_RESET_CONFIRMATION,
+        ),
+      ).resolves.toBeTruthy();
+    });
+
     it("refuses reset while an assistant proposal execution owns its lease", async () => {
       const testEnvironment = demoEnvironment();
       await ensureDemoData(testEnvironment);

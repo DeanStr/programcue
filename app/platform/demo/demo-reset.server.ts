@@ -219,7 +219,13 @@ export async function readDemoActiveWork(
   const row = await env.DB.prepare(
     `SELECT
        ((SELECT COUNT(*) FROM operation_jobs
-          WHERE event_id = ? AND status IN ('queued','received','running','retrying'))
+          WHERE event_id = ? AND status IN ('queued','received','running','retrying')
+            AND (
+              status <> 'running'
+              OR type NOT IN ('ai.assistant.run','ai.context.run','ai.proposal.revision')
+              OR claim_token IS NULL
+              OR (claim_token IS NOT NULL AND claim_expires_at > unixepoch())
+            ))
         +
         (SELECT COUNT(*) FROM assistant_proposal_executions
           WHERE event_id = ? AND status = 'processing'

@@ -649,11 +649,15 @@ preview; the service enforces that fixed sequence before tool execution rather
 than relying on model compliance. Standalone assistant requests use a
 4,000-token completion budget.
 Assistant operation creation for the canonical evaluation event also rejects an
-active reset lease, closing the concurrent-preview gap before any model call.
-Focused Worker coverage verifies reset invalidation, approval rejection, reset
-exclusion and the provider budget; Chromium coverage verifies the bounded
-suggested request is submitted. Deployment and fresh live-provider acceptance
-remain outstanding.
+active reset lease. Contextual operations now acquire that bounded owner-token
+lease before reading authoritative evidence and retain it through provider work
+and reminder-proposal persistence; proposal revisions use the same lease.
+Reset counts only live synchronous AI claims, so a terminated Worker cannot
+leave an expired operation blocking fixture recovery indefinitely. Focused
+Worker coverage verifies reset invalidation, approval rejection, reset
+exclusion, expired-claim recovery, the contextual 409 response and the provider
+budget; Chromium coverage verifies the bounded suggested request is submitted.
+Deployment and fresh live-provider acceptance remain outstanding.
 
 ## Capability status
 
