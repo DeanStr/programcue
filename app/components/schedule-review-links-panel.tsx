@@ -62,8 +62,14 @@ export function ScheduleReviewLinksPanel({
   const created = isReviewUrlResult(createFetcher.data)
     ? createFetcher.data
     : null;
-  const createError = actionError(createFetcher.data);
-  const revokeError = actionError(revokeFetcher.data);
+  const [createErrorDismissed, setCreateErrorDismissed] = useState(false);
+  const [revokeErrorDismissed, setRevokeErrorDismissed] = useState(false);
+  const createError = createErrorDismissed
+    ? null
+    : actionError(createFetcher.data);
+  const revokeError = revokeErrorDismissed
+    ? null
+    : actionError(revokeFetcher.data);
   const showCreatedUrl = Boolean(created) && !urlDismissed;
   const creating = createFetcher.state !== "idle";
   const revoking = revokeFetcher.state !== "idle";
@@ -85,6 +91,7 @@ export function ScheduleReviewLinksPanel({
   useEffect(() => {
     if (revokeFetcher.state !== "idle") {
       setRevokeSubmitted(true);
+      setRevokeErrorDismissed(false);
       return;
     }
     if (
@@ -98,7 +105,10 @@ export function ScheduleReviewLinksPanel({
   }, [revokeFetcher.data, revokeFetcher.state, revokeSubmitted]);
 
   useEffect(() => {
-    if (createFetcher.state !== "idle") return;
+    if (createFetcher.state !== "idle") {
+      setCreateErrorDismissed(false);
+      return;
+    }
     if (isReviewUrlResult(createFetcher.data)) setUrlDismissed(false);
   }, [createFetcher.data, createFetcher.state]);
 
@@ -133,6 +143,7 @@ export function ScheduleReviewLinksPanel({
           }
           onClick={() => {
             setUrlDismissed(true);
+            setCreateErrorDismissed(true);
             setCreateOpen(true);
           }}
         >
@@ -179,6 +190,7 @@ export function ScheduleReviewLinksPanel({
                   aria-label={`Revoke ${link.purpose}`}
                   onClick={() => {
                     setRevokeSubmitted(false);
+                    setRevokeErrorDismissed(true);
                     setRevokeId(link.id);
                   }}
                 >
@@ -329,7 +341,8 @@ export function ScheduleReviewLinksPanel({
                       : "s"}
                   </strong>
                   , including unpublished profiles and pending confirmations.
-                  Declined speakers are omitted.
+                  Declined speakers and private or hidden speaker listings are
+                  omitted.
                 </p>
                 {workspace.reviewLinkSummary.disclosures.length ? (
                   <ol className="schedule-review-link-disclosure">

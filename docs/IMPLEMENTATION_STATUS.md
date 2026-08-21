@@ -711,7 +711,8 @@ same-origin POST reveals the snapshot. Create is compare-and-set against
 SHA-256 of the frozen projection plus the draft version/revision. Create
 force-freshs the Airtable authority checkpoint and does not persist the
 bearer token. The confirmation lists the disclosed session titles and
-speaker names. Summarize reports the ten-active cap as a blocking reason
+speaker names. Private and hidden speaker listings are omitted alongside
+declined speakers. Summarize reports the ten-active cap as a blocking reason
 and rethrows unexpected errors. Create uses a loader-issued intent so an
 exact retry fails without minting another secret. Administrators choose 1, 3, 7 or 30 days of
 expiry, defaulting to 7, under the existing 30-day ceiling. Listed links

@@ -198,6 +198,74 @@ describe("schedule review links", () => {
     expect(created.speakerNameCount).toBe(0);
   });
 
+  it("omits private and hidden speaker listings from the frozen snapshot", async () => {
+    const { schedule } = await placedDraft();
+    await env.DB.prepare(
+      `UPDATE session_speakers
+          SET visibility = 'private'
+        WHERE session_id = 'schedule-test-one' AND event_id = ?`,
+    )
+      .bind(viewer.eventId)
+      .run();
+    const privateLink = await schedule.createReviewLink(
+      viewer,
+      await reviewLinkCreateInput(schedule),
+    );
+    expect(privateLink.entryCount).toBe(1);
+    expect(privateLink.speakerNameCount).toBe(0);
+
+    await env.DB.prepare(
+      `UPDATE session_speakers
+          SET visibility = 'hidden'
+        WHERE session_id = 'schedule-test-one' AND event_id = ?`,
+    )
+      .bind(viewer.eventId)
+      .run();
+    const hiddenLink = await schedule.createReviewLink(
+      viewer,
+      await reviewLinkCreateInput(schedule),
+    );
+    expect(hiddenLink.entryCount).toBe(1);
+    expect(hiddenLink.speakerNameCount).toBe(0);
+
+    await env.DB.prepare(
+      `UPDATE session_speakers
+          SET visibility = 'public'
+        WHERE session_id = 'schedule-test-one'
+          AND person_id = 'person-demo-speaker'
+          AND event_id = ?`,
+    )
+      .bind(viewer.eventId)
+      .run();
+    await env.DB.prepare(
+      `INSERT OR IGNORE INTO session_speakers (
+         session_id, event_id, person_id, position, role_label,
+         participation_status, participation_confirmed_at, visibility
+       ) VALUES (
+         'schedule-test-one', ?, 'person-demo-submitter', 1, 'Speaker',
+         'confirmed', unixepoch(), 'private'
+       )`,
+    )
+      .bind(viewer.eventId)
+      .run();
+    await env.DB.prepare(
+      `UPDATE session_speakers
+          SET visibility = 'private'
+        WHERE session_id = 'schedule-test-one'
+          AND person_id = 'person-demo-submitter'
+          AND event_id = ?`,
+    )
+      .bind(viewer.eventId)
+      .run();
+    const mixed = await schedule.summarizeReviewLinks(viewer);
+    expect(mixed.disclosures[0]?.speakers).toEqual(["Priya Shah"]);
+    const mixedLink = await schedule.createReviewLink(
+      viewer,
+      await reviewLinkCreateInput(schedule),
+    );
+    expect(mixedLink.speakerNameCount).toBe(1);
+  });
+
   it("enforces the active-link cap and lists metadata without the projection", async () => {
     const { schedule, workspace } = await placedDraft();
     for (let index = 0; index < 10; index += 1) {

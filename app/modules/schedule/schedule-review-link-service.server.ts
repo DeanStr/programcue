@@ -53,6 +53,7 @@ type SpeakerRow = {
   personId: string;
   position: number;
   participationStatus: "pending" | "confirmed" | "declined";
+  visibility: "public" | "private" | "hidden";
   displayName: string | null;
 };
 
@@ -143,6 +144,7 @@ function speakerNamesBySession(
     sessionIds.map((sessionId) => [sessionId, []]),
   );
   for (const row of rows) {
+    if (row.visibility !== "public") continue;
     if (row.participationStatus === "declined") continue;
     const list = names.get(row.sessionId);
     if (!list) continue;
@@ -254,6 +256,7 @@ export class ScheduleReviewLinkService {
                session_speaker.person_id AS personId,
                session_speaker.position AS position,
                session_speaker.participation_status AS participationStatus,
+               session_speaker.visibility AS visibility,
                person.display_name AS displayName
           FROM session_speakers session_speaker
           JOIN events event
@@ -261,6 +264,7 @@ export class ScheduleReviewLinkService {
            AND event.organisation_id = ?
           LEFT JOIN people person ON person.id = session_speaker.person_id
          WHERE session_speaker.event_id = ?
+           AND session_speaker.visibility = 'public'
            AND session_speaker.session_id IN (
              SELECT entry.session_id
                FROM schedule_entries entry
