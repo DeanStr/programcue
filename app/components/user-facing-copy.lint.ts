@@ -89,7 +89,7 @@ const EXEMPT: ReadonlyArray<{ file: string; reason: string }> = [
       "API key and outbound webhook setup, read by whoever writes the consumer.",
   },
   {
-    file: "components/programme-embed-builder.tsx",
+    file: "components/programme-embed-configuration-panel.tsx",
     reason:
       "Feed format links (JSON, HTML, iCal) for whoever embeds the programme in a website; the format is the label.",
   },
