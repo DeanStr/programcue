@@ -58,6 +58,7 @@ export function ScheduleReviewLinksPanel({
   const purposeFieldId = useId();
   const ttlFieldId = useId();
   const createFormId = useId();
+  const blockedReasonId = useId();
   const urlInputRef = useRef<HTMLInputElement>(null);
   const created = isReviewUrlResult(createFetcher.data)
     ? createFetcher.data
@@ -137,9 +138,10 @@ export function ScheduleReviewLinksPanel({
           className="btn ghost"
           type="button"
           disabled={!draft || !workspace.reviewLinkSummary.canCreate}
-          title={
-            workspace.reviewLinkSummary.blockedReason ??
-            (!draft ? "Create a draft schedule first." : undefined)
+          aria-describedby={
+            workspace.reviewLinkSummary.blockedReason
+              ? blockedReasonId
+              : undefined
           }
           onClick={() => {
             setUrlDismissed(true);
@@ -150,8 +152,12 @@ export function ScheduleReviewLinksPanel({
           Create review link
         </button>
       </div>
-      {draft && workspace.reviewLinkSummary.blockedReason ? (
-        <div className="validation-item warn mt" role="status">
+      {workspace.reviewLinkSummary.blockedReason ? (
+        <div
+          id={blockedReasonId}
+          className="validation-item warn mt"
+          role="status"
+        >
           <strong>Cannot create a review link</strong>
           <span>{workspace.reviewLinkSummary.blockedReason}</span>
         </div>

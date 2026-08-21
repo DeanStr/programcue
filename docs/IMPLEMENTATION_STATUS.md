@@ -708,7 +708,9 @@ capability tokens and a strict frozen projection in D1. Owners and
 administrators create, list and revoke links from the schedule planner; the
 anonymous `/programme-preview/:token` GET is a notice-only page and a
 same-origin POST reveals the snapshot. Create is compare-and-set against
-SHA-256 of the frozen projection plus the draft version/revision. Create
+SHA-256 of the frozen projection plus the draft version/revision, so a
+later speaker-graph change cannot confirm a different snapshot than the
+hashed dialog. The insert stores that confirmed blob. Create
 force-freshs the Airtable authority checkpoint and does not persist the
 bearer token. The confirmation lists the disclosed session titles and
 speaker names. Private and hidden speaker listings are omitted alongside

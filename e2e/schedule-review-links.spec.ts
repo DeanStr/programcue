@@ -31,6 +31,16 @@ test("creates a one-time confidential review URL and invalidates it on revoke an
   page,
 }) => {
   await waitForInterface(page, "/admin/schedule");
+  const createReviewLink = page.getByRole("button", {
+    name: "Create review link",
+  });
+  await expect(createReviewLink).toBeDisabled();
+  await expect(
+    page.getByText(
+      "Create a draft schedule before sharing a confidential review snapshot.",
+    ),
+  ).toBeVisible();
+  await expect(createReviewLink).toHaveAttribute("aria-describedby");
   await page.getByRole("button", { name: "Create next draft" }).click();
   const nextDraft = page.getByRole("dialog", {
     name: "Create the next schedule draft?",
