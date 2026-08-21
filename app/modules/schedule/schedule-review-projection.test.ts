@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   buildScheduleReviewProjection,
+  hashScheduleReviewProjection,
   parseScheduleReviewProjection,
   SCHEDULE_REVIEW_PROJECTION_MAX_BYTES,
   ScheduleReviewProjectionError,
@@ -20,7 +21,7 @@ const entry = {
 };
 
 describe("schedule review projection", () => {
-  it("serializes only the allowlisted keys in stable order", () => {
+  it("serializes only the allowlisted keys in stable order", async () => {
     const projection = buildScheduleReviewProjection({
       eventName: "Future of Events",
       timezone: "America/Toronto",
@@ -65,6 +66,12 @@ describe("schedule review projection", () => {
     expect(parseScheduleReviewProjection(serialized)).toEqual(
       JSON.parse(serialized),
     );
+    await expect(hashScheduleReviewProjection(serialized)).resolves.toMatch(
+      /^[0-9a-f]{64}$/u,
+    );
+    expect(await hashScheduleReviewProjection(serialized)).toBe(
+      await hashScheduleReviewProjection(serialized),
+    );
   });
 
   it("uses the internal entry id only as a non-serialized sort tie-breaker", () => {
@@ -108,5 +115,15 @@ describe("schedule review projection", () => {
       /larger than 1 MiB/i,
     );
     expect(SCHEDULE_REVIEW_PROJECTION_MAX_BYTES).toBe(1_048_576);
+  });
+
+  it("rejects an invalid timezone as a projection error rather than a raw schema throw", () => {
+    expect(() =>
+      buildScheduleReviewProjection({
+        eventName: "Future of Events",
+        timezone: "Not/AZone",
+        entries: [entry],
+      }),
+    ).toThrow(ScheduleReviewProjectionError);
   });
 });

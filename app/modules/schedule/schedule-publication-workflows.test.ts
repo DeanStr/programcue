@@ -314,16 +314,27 @@ describe("schedule publication workflows", () => {
       endsAt: startsAt + 3_600,
     });
     workspace = await service.getWorkspace(viewer);
-    const first = await service.createReviewLink(viewer, {
-      scheduleVersionId: versionId,
-      scheduleRevision: workspace.version!.revision,
-      acknowledgement: SCHEDULE_REVIEW_LINK_ACKNOWLEDGEMENT,
-    });
-    const second = await service.createReviewLink(viewer, {
-      scheduleVersionId: versionId,
-      scheduleRevision: workspace.version!.revision,
-      acknowledgement: SCHEDULE_REVIEW_LINK_ACKNOWLEDGEMENT,
-    });
+    const reviewLinkInput = async () => {
+      const current = await service.getWorkspace(viewer);
+      const summary = await service.summarizeReviewLinks(viewer, current);
+      if (!summary.projectionHash) {
+        throw new Error(summary.blockedReason ?? "missing projection hash");
+      }
+      return {
+        scheduleVersionId: current.version!.id,
+        scheduleRevision: current.version!.revision,
+        acknowledgement: SCHEDULE_REVIEW_LINK_ACKNOWLEDGEMENT,
+        projectionHash: summary.projectionHash,
+      };
+    };
+    const first = await service.createReviewLink(
+      viewer,
+      await reviewLinkInput(),
+    );
+    const second = await service.createReviewLink(
+      viewer,
+      await reviewLinkInput(),
+    );
     await expect(
       service.publish(viewer, {
         scheduleVersionId: versionId,

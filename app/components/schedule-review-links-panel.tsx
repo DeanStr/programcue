@@ -136,7 +136,15 @@ export function ScheduleReviewLinksPanel({
                 <strong>{statusLabel(link.status)}</strong>
                 <span>
                   Version {link.versionNumber ?? "—"} · revision{" "}
-                  {link.scheduleRevision} · expires{" "}
+                  {link.scheduleRevision}
+                </span>
+                <span>
+                  Created{" "}
+                  {expiryLabel(link.createdAt, workspace.event.timezone)}
+                  {link.createdByName ? ` · ${link.createdByName}` : ""}
+                </span>
+                <span>
+                  Expires{" "}
                   {expiryLabel(link.expiresAt, workspace.event.timezone)}
                 </span>
                 {link.revocationReason ? (
@@ -202,10 +210,17 @@ export function ScheduleReviewLinksPanel({
                     name="acknowledgement"
                     value={SCHEDULE_REVIEW_LINK_ACKNOWLEDGEMENT}
                   />
+                  <input
+                    type="hidden"
+                    name="projectionHash"
+                    value={workspace.reviewLinkSummary.projectionHash ?? ""}
+                  />
                   <button
                     className="btn primary"
                     type="submit"
-                    disabled={creating}
+                    disabled={
+                      creating || !workspace.reviewLinkSummary.projectionHash
+                    }
                   >
                     {creating ? "Creating link…" : "Create confidential link"}
                   </button>

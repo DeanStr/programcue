@@ -707,9 +707,12 @@ path, not a published-programme surface. Migration `0052` stores hashed
 capability tokens and a strict frozen projection in D1. Owners and
 administrators create, list and revoke links from the schedule planner; the
 anonymous `/programme-preview/:token` GET is a notice-only page and a
-same-origin POST reveals the snapshot. Successful schedule publication revokes
-every active event link; participant retention deletes the rows. This does not
-complete published-only public programme requirements.
+same-origin POST reveals the snapshot. Create is compare-and-set against
+SHA-256 of the frozen projection plus the draft version/revision. Summarize
+reports the ten-active cap as a blocking reason and rethrows unexpected
+errors. Listed links include creator and created time. Successful schedule
+publication revokes every active event link; participant retention deletes the
+rows. This does not complete published-only public programme requirements.
 
 Review save and reopen now have repository
 evidence that suppressed conditional writes fail inside their D1 batch and roll

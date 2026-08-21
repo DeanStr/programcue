@@ -35,6 +35,9 @@ export const scheduleReviewLinkCreateSchema = z
     scheduleVersionId: z.string().trim().min(1),
     scheduleRevision: z.coerce.number().int().positive(),
     acknowledgement: z.literal(SCHEDULE_REVIEW_LINK_ACKNOWLEDGEMENT),
+    projectionHash: z
+      .string()
+      .regex(/^[0-9a-f]{64}$/u, "The draft snapshot confirmation is invalid."),
   })
   .strict();
 

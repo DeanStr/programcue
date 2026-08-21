@@ -73,7 +73,11 @@ export async function prepareScheduleServiceTest() {
     ).bind(scheduleTestViewer.eventId),
     env.DB.prepare(
       `UPDATE rooms
-          SET resources_json = '[]',
+          SET name = CASE id
+                WHEN 'main' THEN 'Main Stage'
+                ELSE name
+              END,
+              resources_json = '[]',
               capacity = CASE id
                 WHEN 'main' THEN 1200
                 WHEN '301a' THEN 300
@@ -81,6 +85,9 @@ export async function prepareScheduleServiceTest() {
               END
         WHERE event_id = ? AND id IN ('main', '301a')`,
     ).bind(scheduleTestViewer.eventId),
+    env.DB.prepare(
+      `UPDATE people SET display_name = 'Priya Shah' WHERE id = 'person-demo-speaker'`,
+    ),
     env.DB.prepare(
       "INSERT OR IGNORE INTO session_speakers (session_id, event_id, person_id, position, role_label, participation_status, participation_confirmed_at, visibility) VALUES ('schedule-test-one', ?, 'person-demo-speaker', 0, 'Speaker', 'confirmed', unixepoch(), 'public')",
     ).bind(scheduleTestViewer.eventId),

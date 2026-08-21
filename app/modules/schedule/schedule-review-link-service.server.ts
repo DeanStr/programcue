@@ -8,6 +8,7 @@ import {
 } from "./schedule-errors";
 import {
   buildScheduleReviewProjection,
+  hashScheduleReviewProjection,
   parseScheduleReviewProjection,
   type ScheduleReviewProjection,
   type ScheduleReviewProjectionEntryInput,
@@ -69,6 +70,7 @@ export type ScheduleReviewLinkSummary = {
   canCreate: boolean;
   entryCount: number;
   speakerNameCount: number;
+  projectionHash: string | null;
   blockedReason: string | null;
 };
 
@@ -272,6 +274,27 @@ export class ScheduleReviewLinkService {
     });
   }
 
+  private async countActiveLinks(viewer: ScheduleEventScope) {
+    const active = await this.env.DB.prepare(
+      `
+        SELECT COUNT(*) AS total
+          FROM schedule_review_links
+         WHERE organisation_id = ? AND event_id = ?
+           AND revoked_at IS NULL AND expires_at > unixepoch()
+      `,
+    )
+      .bind(viewer.organisationId, viewer.eventId)
+      .first<{ total: number }>();
+    if (
+      typeof active?.total !== "number" ||
+      !Number.isFinite(active.total) ||
+      active.total < 0
+    ) {
+      throw new Error("The active draft review link count could not be read.");
+    }
+    return active.total;
+  }
+
   async summarize(
     viewer: Viewer,
     workspace?: ScheduleWorkspace,
@@ -283,31 +306,55 @@ export class ScheduleReviewLinkService {
         canCreate: false,
         entryCount: 0,
         speakerNameCount: 0,
+        projectionHash: null,
         blockedReason:
           "Create a draft schedule before sharing a confidential review snapshot.",
       };
     }
     try {
       const projection = await this.buildDraftProjection(viewer, loaded);
+      const projectionHash = await hashScheduleReviewProjection(
+        serializeScheduleReviewProjection(projection),
+      );
+      const entryCount = projection.entries.length;
+      const speakerNameCount = projection.entries.reduce(
+        (total, entry) => total + entry.speakers.length,
+        0,
+      );
+      if (
+        (await this.countActiveLinks(viewer)) >=
+        SCHEDULE_REVIEW_LINK_ACTIVE_LIMIT
+      ) {
+        return {
+          canCreate: false,
+          entryCount,
+          speakerNameCount,
+          projectionHash,
+          blockedReason: new ScheduleReviewLinkLimitError().message,
+        };
+      }
       return {
         canCreate: true,
-        entryCount: projection.entries.length,
-        speakerNameCount: projection.entries.reduce(
-          (total, entry) => total + entry.speakers.length,
-          0,
-        ),
+        entryCount,
+        speakerNameCount,
+        projectionHash,
         blockedReason: null,
       };
     } catch (error) {
-      return {
-        canCreate: false,
-        entryCount: 0,
-        speakerNameCount: 0,
-        blockedReason:
-          error instanceof Error
-            ? error.message
-            : "The draft review snapshot cannot be created.",
-      };
+      if (
+        error instanceof ScheduleReviewProjectionError ||
+        error instanceof ScheduleConfigurationError ||
+        error instanceof ScheduleNotFoundError
+      ) {
+        return {
+          canCreate: false,
+          entryCount: 0,
+          speakerNameCount: 0,
+          projectionHash: null,
+          blockedReason: error.message,
+        };
+      }
+      throw error;
     }
   }
 
@@ -371,6 +418,12 @@ export class ScheduleReviewLinkService {
     }
     const projection = await this.buildDraftProjection(viewer, workspace);
     const serialized = serializeScheduleReviewProjection(projection);
+    const projectionHash = await hashScheduleReviewProjection(serialized);
+    if (projectionHash !== parsed.projectionHash) {
+      throw new ScheduleRevisionConflictError(
+        "The unpublished snapshot changed after this page loaded. Refresh before creating a review snapshot.",
+      );
+    }
     const token = createScheduleReviewToken();
     const tokenHash = await hashScheduleReviewToken(token);
     const id = crypto.randomUUID();
@@ -487,17 +540,9 @@ export class ScheduleReviewLinkService {
         "The schedule changed after this page loaded. Refresh before creating a review snapshot.",
       );
     }
-    const active = await this.env.DB.prepare(
-      `
-        SELECT COUNT(*) AS total
-          FROM schedule_review_links
-         WHERE organisation_id = ? AND event_id = ?
-           AND revoked_at IS NULL AND expires_at > unixepoch()
-      `,
-    )
-      .bind(viewer.organisationId, viewer.eventId)
-      .first<{ total: number }>();
-    if ((active?.total ?? 0) >= SCHEDULE_REVIEW_LINK_ACTIVE_LIMIT) {
+    if (
+      (await this.countActiveLinks(viewer)) >= SCHEDULE_REVIEW_LINK_ACTIVE_LIMIT
+    ) {
       throw new ScheduleReviewLinkLimitError();
     }
     throw new ScheduleRevisionConflictError(

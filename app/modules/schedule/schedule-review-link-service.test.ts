@@ -34,6 +34,22 @@ function previewContext() {
   return value;
 }
 
+const PLACEHOLDER_PROJECTION_HASH = "a".repeat(64);
+
+async function reviewLinkCreateInput(schedule: ScheduleService) {
+  const workspace = await schedule.getWorkspace(viewer);
+  const summary = await schedule.summarizeReviewLinks(viewer, workspace);
+  if (!summary.projectionHash) {
+    throw new Error(summary.blockedReason ?? "missing projection hash");
+  }
+  return {
+    scheduleVersionId: workspace.version!.id,
+    scheduleRevision: workspace.version!.revision,
+    acknowledgement: SCHEDULE_REVIEW_LINK_ACKNOWLEDGEMENT,
+    projectionHash: summary.projectionHash,
+  };
+}
+
 async function placedDraft() {
   const schedule = new ScheduleService(scheduleTestEnv);
   const versionId = await schedule.createDraft(viewer);
@@ -57,7 +73,7 @@ async function placedDraft() {
 
 describe("schedule review links", () => {
   it("creates a frozen snapshot that ignores later room and speaker edits", async () => {
-    const { schedule, workspace } = await placedDraft();
+    const { schedule } = await placedDraft();
     await env.DB.prepare(
       `UPDATE session_speakers
           SET participation_status = 'pending',
@@ -66,11 +82,10 @@ describe("schedule review links", () => {
     )
       .bind(viewer.eventId)
       .run();
-    const created = await schedule.createReviewLink(viewer, {
-      scheduleVersionId: workspace.version!.id,
-      scheduleRevision: workspace.version!.revision,
-      acknowledgement: SCHEDULE_REVIEW_LINK_ACKNOWLEDGEMENT,
-    });
+    const created = await schedule.createReviewLink(
+      viewer,
+      await reviewLinkCreateInput(schedule),
+    );
     expect(created.path).toMatch(/^\/programme-preview\/[A-Za-z0-9_-]{43}$/u);
     expect(created.speakerNameCount).toBeGreaterThan(0);
 
@@ -128,10 +143,11 @@ describe("schedule review links", () => {
         scheduleVersionId: "missing",
         scheduleRevision: 1,
         acknowledgement: SCHEDULE_REVIEW_LINK_ACKNOWLEDGEMENT,
+        projectionHash: PLACEHOLDER_PROJECTION_HASH,
       }),
     ).rejects.toThrow(/draft schedule is required/i);
 
-    const { workspace } = await placedDraft();
+    await placedDraft();
     await env.DB.prepare(
       `UPDATE session_speakers
           SET participation_status = 'declined',
@@ -141,34 +157,39 @@ describe("schedule review links", () => {
     )
       .bind(viewer.eventId)
       .run();
-    const created = await schedule.createReviewLink(viewer, {
-      scheduleVersionId: workspace.version!.id,
-      scheduleRevision: workspace.version!.revision,
-      acknowledgement: SCHEDULE_REVIEW_LINK_ACKNOWLEDGEMENT,
-    });
+    const created = await schedule.createReviewLink(
+      viewer,
+      await reviewLinkCreateInput(schedule),
+    );
     expect(created.speakerNameCount).toBe(0);
   });
 
   it("enforces the active-link cap and lists metadata without the projection", async () => {
     const { schedule, workspace } = await placedDraft();
     for (let index = 0; index < 10; index += 1) {
-      await schedule.createReviewLink(viewer, {
-        scheduleVersionId: workspace.version!.id,
-        scheduleRevision: workspace.version!.revision,
-        acknowledgement: SCHEDULE_REVIEW_LINK_ACKNOWLEDGEMENT,
-      });
+      await schedule.createReviewLink(
+        viewer,
+        await reviewLinkCreateInput(schedule),
+      );
     }
     await expect(
-      schedule.createReviewLink(viewer, {
-        scheduleVersionId: workspace.version!.id,
-        scheduleRevision: workspace.version!.revision,
-        acknowledgement: SCHEDULE_REVIEW_LINK_ACKNOWLEDGEMENT,
-      }),
+      schedule.createReviewLink(viewer, await reviewLinkCreateInput(schedule)),
     ).rejects.toBeInstanceOf(ScheduleReviewLinkLimitError);
+    const summary = await schedule.summarizeReviewLinks(viewer, workspace);
+    expect(summary.canCreate).toBe(false);
+    expect(summary.blockedReason).toMatch(/10 active draft review links/i);
+    expect(summary.projectionHash).toMatch(/^[0-9a-f]{64}$/u);
 
     const listed = await schedule.listReviewLinks(viewer);
     expect(listed).toHaveLength(10);
     expect(listed.every((link) => link.status === "active")).toBe(true);
+    const creator = await env.DB.prepare(
+      "SELECT display_name AS displayName FROM people WHERE id = ?",
+    )
+      .bind(viewer.personId)
+      .first<{ displayName: string }>();
+    expect(listed[0]?.createdByName).toBe(creator?.displayName ?? null);
+    expect(listed[0]?.createdAt).toBeGreaterThan(0);
     const raw = await env.DB.prepare(
       `SELECT projection_json AS projectionJson
          FROM schedule_review_links
@@ -182,12 +203,11 @@ describe("schedule review links", () => {
   });
 
   it("returns identical 404 responses for unknown, malformed, revoked and expired tokens", async () => {
-    const { schedule, workspace } = await placedDraft();
-    const created = await schedule.createReviewLink(viewer, {
-      scheduleVersionId: workspace.version!.id,
-      scheduleRevision: workspace.version!.revision,
-      acknowledgement: SCHEDULE_REVIEW_LINK_ACKNOWLEDGEMENT,
-    });
+    const { schedule } = await placedDraft();
+    const created = await schedule.createReviewLink(
+      viewer,
+      await reviewLinkCreateInput(schedule),
+    );
     await schedule.revokeReviewLink(viewer, {
       linkId: created.id,
       confirmation: "revoke-draft-review-link",
@@ -233,6 +253,7 @@ describe("schedule review links", () => {
         scheduleVersionId: versionId,
         scheduleRevision: workspace.version!.revision,
         acknowledgement: SCHEDULE_REVIEW_LINK_ACKNOWLEDGEMENT,
+        projectionHash: PLACEHOLDER_PROJECTION_HASH,
       }),
     ).rejects.toThrow(/draft schedule is required/i);
   });
@@ -250,6 +271,7 @@ describe("schedule review links", () => {
         scheduleVersionId: workspace.version!.id,
         scheduleRevision: workspace.version!.revision,
         acknowledgement: SCHEDULE_REVIEW_LINK_ACKNOWLEDGEMENT,
+        projectionHash: PLACEHOLDER_PROJECTION_HASH,
       }),
     ).rejects.toBeInstanceOf(ScheduleRevisionConflictError);
   });
@@ -331,7 +353,7 @@ describe("schedule review links", () => {
   });
 
   it("omits private scheduled sessions from the frozen snapshot", async () => {
-    const { schedule, workspace, versionId } = await placedDraft();
+    const { schedule, versionId } = await placedDraft();
     const hiddenContent = await env.DB.prepare(
       `UPDATE schedule_session_contents
           SET visibility = 'private'
@@ -341,11 +363,10 @@ describe("schedule review links", () => {
       .bind(viewer.eventId, versionId)
       .run();
     expect(hiddenContent.meta.changes).toBeGreaterThan(0);
-    const hidden = await schedule.createReviewLink(viewer, {
-      scheduleVersionId: workspace.version!.id,
-      scheduleRevision: workspace.version!.revision,
-      acknowledgement: SCHEDULE_REVIEW_LINK_ACKNOWLEDGEMENT,
-    });
+    const hidden = await schedule.createReviewLink(
+      viewer,
+      await reviewLinkCreateInput(schedule),
+    );
     expect(hidden.entryCount).toBe(0);
     expect(hidden.speakerNameCount).toBe(0);
   });
@@ -362,11 +383,16 @@ describe("schedule review links", () => {
       getWorkspace: async () => workspace,
     });
     try {
+      const summary = await review.summarize(viewer, workspace);
+      expect(summary.canCreate).toBe(false);
+      expect(summary.projectionHash).toBeNull();
+      expect(summary.blockedReason).toMatch(/missing a display name/i);
       await expect(
         review.create(viewer, {
           scheduleVersionId: workspace.version!.id,
           scheduleRevision: workspace.version!.revision,
           acknowledgement: SCHEDULE_REVIEW_LINK_ACKNOWLEDGEMENT,
+          projectionHash: PLACEHOLDER_PROJECTION_HASH,
         }),
       ).rejects.toThrow(/missing a display name/i);
     } finally {
@@ -379,12 +405,11 @@ describe("schedule review links", () => {
   });
 
   it("does not record a second audit event when manual revoke is retried", async () => {
-    const { schedule, workspace } = await placedDraft();
-    const created = await schedule.createReviewLink(viewer, {
-      scheduleVersionId: workspace.version!.id,
-      scheduleRevision: workspace.version!.revision,
-      acknowledgement: SCHEDULE_REVIEW_LINK_ACKNOWLEDGEMENT,
-    });
+    const { schedule } = await placedDraft();
+    const created = await schedule.createReviewLink(
+      viewer,
+      await reviewLinkCreateInput(schedule),
+    );
     await schedule.revokeReviewLink(viewer, {
       linkId: created.id,
       confirmation: "revoke-draft-review-link",
@@ -408,12 +433,11 @@ describe("schedule review links", () => {
   });
 
   it("does not list or revoke another organisation's review links", async () => {
-    const { schedule, workspace } = await placedDraft();
-    const created = await schedule.createReviewLink(viewer, {
-      scheduleVersionId: workspace.version!.id,
-      scheduleRevision: workspace.version!.revision,
-      acknowledgement: SCHEDULE_REVIEW_LINK_ACKNOWLEDGEMENT,
-    });
+    const { schedule } = await placedDraft();
+    const created = await schedule.createReviewLink(
+      viewer,
+      await reviewLinkCreateInput(schedule),
+    );
     const outsider = {
       ...viewer,
       organisationId: "org-does-not-exist",
@@ -425,5 +449,44 @@ describe("schedule review links", () => {
         confirmation: "revoke-draft-review-link",
       }),
     ).rejects.toThrow(/not found/i);
+  });
+
+  it("rejects create when speaker names change after the confirmation hash", async () => {
+    const { schedule } = await placedDraft();
+    const previous = await env.DB.prepare(
+      "SELECT display_name AS displayName FROM people WHERE id = 'person-demo-speaker'",
+    ).first<{ displayName: string }>();
+    const input = await reviewLinkCreateInput(schedule);
+    await env.DB.prepare(
+      "UPDATE people SET display_name = 'Hash Cas Speaker' WHERE id = 'person-demo-speaker'",
+    ).run();
+    try {
+      await expect(
+        schedule.createReviewLink(viewer, input),
+      ).rejects.toBeInstanceOf(ScheduleRevisionConflictError);
+      await expect(schedule.createReviewLink(viewer, input)).rejects.toThrow(
+        /unpublished snapshot changed/i,
+      );
+      const created = await schedule.createReviewLink(
+        viewer,
+        await reviewLinkCreateInput(schedule),
+      );
+      expect(created.speakerNameCount).toBeGreaterThan(0);
+    } finally {
+      await env.DB.prepare(
+        "UPDATE people SET display_name = ? WHERE id = 'person-demo-speaker'",
+      )
+        .bind(previous?.displayName ?? "Priya Shah")
+        .run();
+    }
+  });
+
+  it("does not treat unexpected summarize failures as validation copy", async () => {
+    const review = new ScheduleReviewLinkService(scheduleTestEnv, {
+      getWorkspace: async () => {
+        throw new Error("D1 exploded");
+      },
+    });
+    await expect(review.summarize(viewer)).rejects.toThrow("D1 exploded");
   });
 });

@@ -60,6 +60,9 @@ test("creates a one-time confidential review URL and invalidates it on revoke an
   await createDialog.getByText("Close", { exact: true }).click();
   await expect(page.getByText("Confidential preview URL")).toHaveCount(0);
   await expect(page.locator("text=/programme-preview/")).toHaveCount(0);
+  const reviewList = page.locator(".schedule-review-link-list");
+  await expect(reviewList).toContainText("Created");
+  await expect(reviewList).toContainText("Jordan Alvarez");
 
   const preview = await page.goto(previewPath);
   expect(preview?.ok()).toBeTruthy();

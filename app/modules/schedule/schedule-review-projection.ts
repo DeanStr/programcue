@@ -105,6 +105,16 @@ export function serializeScheduleReviewProjection(
   return serialized;
 }
 
+export async function hashScheduleReviewProjection(serialized: string) {
+  const digest = await crypto.subtle.digest(
+    "SHA-256",
+    new TextEncoder().encode(serialized),
+  );
+  return Array.from(new Uint8Array(digest), (byte) =>
+    byte.toString(16).padStart(2, "0"),
+  ).join("");
+}
+
 export function parseScheduleReviewProjection(value: string) {
   let decoded: unknown;
   try {
@@ -146,7 +156,7 @@ export function buildScheduleReviewProjection(input: {
       left.title.localeCompare(right.title) ||
       left.id.localeCompare(right.id),
   );
-  return scheduleReviewProjectionSchema.parse({
+  const parsed = scheduleReviewProjectionSchema.safeParse({
     schemaVersion: SCHEDULE_REVIEW_PROJECTION_SCHEMA_VERSION,
     event: {
       name: input.eventName,
@@ -162,4 +172,11 @@ export function buildScheduleReviewProjection(input: {
       speakers: entry.speakers,
     })),
   });
+  if (!parsed.success) {
+    throw new ScheduleReviewProjectionError(
+      parsed.error.issues[0]?.message ??
+        "The draft review snapshot is invalid.",
+    );
+  }
+  return parsed.data;
 }

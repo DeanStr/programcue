@@ -524,6 +524,7 @@ export async function action({ request, context }: Route.ActionArgs) {
           scheduleVersionId: values.get("scheduleVersionId"),
           scheduleRevision: values.get("scheduleRevision"),
           acknowledgement: values.get("acknowledgement"),
+          projectionHash: values.get("projectionHash"),
         });
         const origin = new URL(request.url).origin;
         return {
