@@ -657,6 +657,12 @@ leave an expired operation blocking fixture recovery indefinitely. Focused
 Worker coverage verifies reset invalidation, approval rejection, reset
 exclusion, expired-claim recovery, the contextual 409 response and the provider
 budget; Chromium coverage verifies the bounded suggested request is submitted.
+The reset lease now carries the last verified completion separately from the
+current attempt and records an explicit destructive-phase transition. A busy or
+expired pre-destructive attempt is cancelled and restores that matched prior
+generation, while malformed state and failures after mutation begins keep
+evaluation unavailable. Focused Worker coverage exercises the active-work race,
+expired pre-destructive recovery and post-mutation storage failure.
 Assistant request, success, failure and cancellation transitions now commit
 atomically with their matching audit evidence. Contextual reminder creation and
 reminder revision stage their exact preview before a guarded batch commits the

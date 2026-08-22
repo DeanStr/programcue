@@ -9,6 +9,7 @@ import { ensureDemoData } from "~/platform/demo/seed.server";
 import { resetProductionEvaluationFixture } from "~/platform/evaluation/evaluation-fixture.server";
 import {
   acquireEvaluationFixtureReset,
+  beginEvaluationFixtureResetDestructiveWork,
   completeEvaluationFixtureReset,
   EVALUATION_FIXTURE_RESET_OPERATION_ID,
 } from "~/platform/evaluation/evaluation-fixture-reset-lock.server";
@@ -102,6 +103,7 @@ async function recordFixtureReset(environment: CloudflareEnvironment) {
   if (resetLock) {
     const ownerToken = crypto.randomUUID();
     await acquireEvaluationFixtureReset(environment, ownerToken);
+    await beginEvaluationFixtureResetDestructiveWork(environment, ownerToken);
     await completeEvaluationFixtureReset(
       environment,
       ownerToken,
@@ -416,17 +418,33 @@ describe("production evaluation guide", () => {
     const environment = productionEnvironment();
     const unavailableEnvironment =
       withUnavailableRateLimitDatabase(environment);
+    const errorLog = vi.spyOn(console, "error").mockImplementation(() => {});
 
-    await expect(
-      action({
-        request: request({
-          _intent: "unlock",
-          accessCode: "wrong-evaluation-access-code",
-        }),
-        params: {},
-        context: context(unavailableEnvironment),
-      } as never),
-    ).rejects.toThrow("simulated rate-limit storage failure");
+    const result = await action({
+      request: request({
+        _intent: "unlock",
+        accessCode: "wrong-evaluation-access-code",
+      }),
+      params: {},
+      context: context(unavailableEnvironment),
+    } as never);
+
+    if (result instanceof Response) {
+      throw new Error(
+        "Unavailable rate-limit storage returned a raw response.",
+      );
+    }
+    expect(result.init?.status).toBe(503);
+    const headers = new Headers(result.init?.headers);
+    expect(headers.get("cache-control")).toBe("no-store");
+    expect(headers.has("set-cookie")).toBe(false);
+    expect(result.data).toEqual({
+      ok: false,
+      message: "Evaluation access is temporarily unavailable. Try again.",
+    });
+    expect(errorLog).toHaveBeenCalledWith(
+      expect.stringContaining('"event":"rate-limit-storage-failed"'),
+    );
   });
 
   it("locks evaluation so the same browser can continue with its Better Auth identity", async () => {
@@ -1297,7 +1315,7 @@ describe("production evaluation guide", () => {
     ).resolves.toEqual(activationAuditsBefore);
   });
 
-  it("rate-limits repeated access-code attempts", async () => {
+  it("rate-limits invalid access codes without blocking a valid code", async () => {
     const environment = productionEnvironment();
     const ip = "203.0.113.151";
     for (let attempt = 0; attempt < 20; attempt += 1) {
@@ -1333,5 +1351,22 @@ describe("production evaluation guide", () => {
       ok: false,
       retryAfterSeconds: expect.any(Number),
     });
+
+    const unlocked = await action({
+      request: request(
+        {
+          _intent: "unlock",
+          accessCode: "evaluation-access-code-2026",
+        },
+        { ip },
+      ),
+      params: {},
+      context: context(environment),
+    } as never);
+    expect(unlocked).toBeInstanceOf(Response);
+    expect((unlocked as Response).status).toBe(303);
+    expect(responseCookieHeader(unlocked as Response)).toContain(
+      "__Host-program_cue_evaluation=",
+    );
   });
 });

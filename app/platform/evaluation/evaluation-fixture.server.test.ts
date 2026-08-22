@@ -16,7 +16,9 @@ import {
 } from "~/platform/demo/demo-identities";
 import {
   acquireEvaluationFixtureReset,
+  beginEvaluationFixtureResetDestructiveWork,
   completeEvaluationFixtureReset,
+  EVALUATION_FIXTURE_RESET_ACCESS_ACTOR_ID,
   EVALUATION_FIXTURE_RESET_OPERATION_ID,
   markEvaluationFixtureResetFailed,
 } from "~/platform/evaluation/evaluation-fixture-reset-lock.server";
@@ -25,6 +27,7 @@ import {
   resetProductionEvaluationFixtureForEvaluator,
 } from "./evaluation-fixture.server";
 import {
+  activateEvaluationApplicantAccount,
   evaluationSessionCookie,
   readEvaluationSession,
 } from "./evaluation-session.server";
@@ -678,6 +681,21 @@ describe("production evaluation fixture", () => {
       "Future of Events 2027",
       verifiedDomains,
     );
+    const priorSessionCookie = await evaluationSessionCookie(
+      environment,
+      "organizer",
+    );
+    const priorSessionRequest = new Request(
+      "https://app.programcue.com/evaluate",
+      { headers: { cookie: priorSessionCookie.split(";", 1)[0]! } },
+    );
+    const priorSession = await readEvaluationSession(
+      priorSessionRequest,
+      environment,
+    );
+    if (!priorSession) {
+      throw new Error("The completed fixture did not issue a session.");
+    }
     await environment.DB.prepare(
       `INSERT INTO events (
          id, organisation_id, name, slug, timezone, starts_at, ends_at,
@@ -772,6 +790,50 @@ describe("production evaluation fixture", () => {
         ).first(),
       ).resolves.toEqual({ status: "running" });
       await expect(environment.FILES.head(objectKey)).resolves.not.toBeNull();
+      await expect(
+        readEvaluationSession(priorSessionRequest, environment),
+      ).resolves.toMatchObject({
+        fixtureGeneration: priorSession.fixtureGeneration,
+        identityKey: "organizer",
+      });
+      await expect(
+        evaluationSessionCookie(environment, "organizer"),
+      ).resolves.toContain("__Host-program_cue_evaluation=");
+      await expect(
+        activateEvaluationApplicantAccount(
+          environment,
+          priorSession.fixtureGeneration,
+        ),
+      ).resolves.toMatchObject({
+        membershipId: "membership-production-evaluation-applicant-event",
+        replayed: false,
+      });
+      await expect(
+        environment.DB.prepare(
+          `SELECT status,
+                  json_extract(payload_json, '$.destructiveStarted') AS destructiveStarted,
+                  json_extract(result_json, '$.fixtureGeneration') AS retainedFixtureGeneration
+             FROM operation_jobs WHERE id = ?`,
+        )
+          .bind(EVALUATION_FIXTURE_RESET_OPERATION_ID)
+          .first(),
+      ).resolves.toEqual({
+        status: "cancelled",
+        destructiveStarted: 0,
+        retainedFixtureGeneration: priorSession.fixtureGeneration,
+      });
+      await expect(
+        environment.DB.prepare(
+          `SELECT action,
+                  json_extract(metadata_json, '$.destructiveStarted') AS destructiveStarted
+             FROM audit_events
+            WHERE action = 'evaluation.fixture.reset.cancelled'
+            ORDER BY rowid DESC LIMIT 1`,
+        ).first(),
+      ).resolves.toEqual({
+        action: "evaluation.fixture.reset.cancelled",
+        destructiveStarted: 0,
+      });
     } finally {
       await environment.DB.prepare(
         `DELETE FROM operation_jobs
@@ -1049,6 +1111,234 @@ describe("production evaluation fixture", () => {
     ).resolves.toContain("__Host-program_cue_evaluation=");
   });
 
+  it("restores an expired pre-destructive lease but rejects malformed terminal state", async () => {
+    const environment = productionEnvironment();
+    await resetProductionEvaluationFixture(
+      environment,
+      "Future of Events 2027",
+      verifiedDomains,
+    );
+    const priorCookie = await evaluationSessionCookie(environment, "organizer");
+    const priorRequest = new Request("https://app.programcue.com/evaluate", {
+      headers: { cookie: priorCookie.split(";", 1)[0]! },
+    });
+    const priorSession = await readEvaluationSession(priorRequest, environment);
+    if (!priorSession) {
+      throw new Error("The completed fixture did not issue a session.");
+    }
+
+    const abandonedOwner = crypto.randomUUID();
+    await acquireEvaluationFixtureReset(
+      environment,
+      abandonedOwner,
+      undefined,
+      EVALUATION_FIXTURE_RESET_ACCESS_ACTOR_ID,
+    );
+    await expect(
+      readEvaluationSession(priorRequest, environment),
+    ).rejects.toMatchObject({ status: 503 });
+    await environment.DB.prepare(
+      `UPDATE operation_jobs
+          SET claim_expires_at = unixepoch() - 1
+        WHERE id = ? AND claim_token = ?`,
+    )
+      .bind(EVALUATION_FIXTURE_RESET_OPERATION_ID, abandonedOwner)
+      .run();
+
+    await expect(
+      readEvaluationSession(priorRequest, environment),
+    ).resolves.toMatchObject({
+      fixtureGeneration: priorSession.fixtureGeneration,
+      identityKey: "organizer",
+    });
+    await expect(
+      environment.DB.prepare(
+        `SELECT status, claim_token AS claimToken,
+                claim_expires_at AS claimExpiresAt
+           FROM operation_jobs WHERE id = ?`,
+      )
+        .bind(EVALUATION_FIXTURE_RESET_OPERATION_ID)
+        .first(),
+    ).resolves.toEqual({
+      status: "cancelled",
+      claimToken: null,
+      claimExpiresAt: null,
+    });
+    await expect(
+      environment.DB.prepare(
+        `SELECT action, actor_id AS actorId,
+                json_extract(metadata_json, '$.restoredFixtureGeneration') AS restoredFixtureGeneration
+           FROM audit_events
+          WHERE id = ?`,
+      )
+        .bind(`evaluation-fixture-reset-terminal:${abandonedOwner}`)
+        .first(),
+    ).resolves.toEqual({
+      action: "evaluation.fixture.reset.cancelled",
+      actorId: EVALUATION_FIXTURE_RESET_ACCESS_ACTOR_ID,
+      restoredFixtureGeneration: priorSession.fixtureGeneration,
+    });
+    await environment.DB.prepare(
+      `UPDATE operation_jobs
+          SET payload_json = json_set(
+                payload_json,
+                '$.attemptId',
+                'mismatched-cancelled-attempt'
+              )
+        WHERE id = ?`,
+    )
+      .bind(EVALUATION_FIXTURE_RESET_OPERATION_ID)
+      .run();
+    await expect(
+      readEvaluationSession(priorRequest, environment),
+    ).rejects.toMatchObject({ status: 503 });
+    await environment.DB.prepare(
+      `UPDATE operation_jobs
+          SET payload_json = json_set(payload_json, '$.attemptId', ?)
+        WHERE id = ?`,
+    )
+      .bind(abandonedOwner, EVALUATION_FIXTURE_RESET_OPERATION_ID)
+      .run();
+    const replacementOwner = crypto.randomUUID();
+    await acquireEvaluationFixtureReset(
+      environment,
+      replacementOwner,
+      priorSession.fixtureGeneration,
+    );
+    await markEvaluationFixtureResetFailed(
+      environment,
+      replacementOwner,
+      new Error("Pre-destructive test cleanup."),
+    );
+    await expect(
+      readEvaluationSession(priorRequest, environment),
+    ).resolves.toMatchObject({
+      fixtureGeneration: priorSession.fixtureGeneration,
+      identityKey: "organizer",
+    });
+    await environment.DB.prepare(
+      `UPDATE operation_jobs
+          SET status = 'failed', progress_failed = 1
+        WHERE id = ? AND status = 'cancelled'`,
+    )
+      .bind(EVALUATION_FIXTURE_RESET_OPERATION_ID)
+      .run();
+    await expect(
+      readEvaluationSession(priorRequest, environment),
+    ).rejects.toMatchObject({ status: 503 });
+  });
+
+  it("rejects a completed reset whose payload belongs to another attempt", async () => {
+    const environment = productionEnvironment();
+    await resetProductionEvaluationFixture(
+      environment,
+      "Future of Events 2027",
+      verifiedDomains,
+    );
+    const completed = await environment.DB.prepare(
+      `SELECT json_extract(result_json, '$.fixtureGeneration') AS fixtureGeneration
+         FROM operation_jobs WHERE id = ?`,
+    )
+      .bind(EVALUATION_FIXTURE_RESET_OPERATION_ID)
+      .first<{ fixtureGeneration: string }>();
+    if (!completed?.fixtureGeneration) {
+      throw new Error("The completed reset did not publish a generation.");
+    }
+    await environment.DB.prepare(
+      `UPDATE operation_jobs
+          SET payload_json = json_set(
+                payload_json,
+                '$.attemptId',
+                'mismatched-completed-attempt'
+              )
+        WHERE id = ?`,
+    )
+      .bind(EVALUATION_FIXTURE_RESET_OPERATION_ID)
+      .run();
+
+    await expect(
+      evaluationSessionCookie(environment, "organizer"),
+    ).rejects.toMatchObject({ status: 503 });
+    await expect(
+      acquireEvaluationFixtureReset(
+        environment,
+        crypto.randomUUID(),
+        completed.fixtureGeneration,
+      ),
+    ).rejects.toThrow(/invalid state/iu);
+  });
+
+  it("does not retain a cancelled generation with malformed destructive evidence", async () => {
+    const environment = productionEnvironment();
+    await resetProductionEvaluationFixture(
+      environment,
+      "Future of Events 2027",
+      verifiedDomains,
+    );
+    const completed = await environment.DB.prepare(
+      `SELECT result_json AS resultJson
+         FROM operation_jobs WHERE id = ?`,
+    )
+      .bind(EVALUATION_FIXTURE_RESET_OPERATION_ID)
+      .first<{ resultJson: string }>();
+    if (!completed?.resultJson) {
+      throw new Error("The completed reset did not publish a generation.");
+    }
+    const result = JSON.parse(completed.resultJson) as {
+      attemptId: string;
+      fixtureGeneration: string;
+    };
+    const malformedAttemptId = crypto.randomUUID();
+    await environment.DB.batch([
+      environment.DB.prepare(
+        `UPDATE operation_jobs
+            SET status = 'cancelled', payload_json = ?,
+                progress_completed = 0, progress_failed = 0,
+                claim_token = NULL, claim_expires_at = NULL,
+                completed_at = unixepoch(), updated_at = unixepoch()
+          WHERE id = ?`,
+      ).bind(
+        JSON.stringify({
+          actorId: "production-evaluation-fixture-operator",
+          attemptId: malformedAttemptId,
+          destructiveStarted: false,
+        }),
+        EVALUATION_FIXTURE_RESET_OPERATION_ID,
+      ),
+      environment.DB.prepare(
+        `INSERT INTO audit_events (
+           id, actor_kind, origin, metadata_version, organisation_id, event_id,
+           actor_id, action, entity_type, entity_id, metadata_json, created_at
+         ) VALUES (?, 'system', 'internal', 1, ?, ?,
+                   'production-evaluation-fixture-operator',
+                   'evaluation.fixture.reset.cancelled', 'event', ?, ?, unixepoch())`,
+      ).bind(
+        `evaluation-fixture-reset-terminal:${malformedAttemptId}`,
+        DEMO_ORGANISATION_ID,
+        DEMO_EVENT_ID,
+        DEMO_EVENT_ID,
+        JSON.stringify({
+          status: "cancelled",
+          attemptId: malformedAttemptId,
+          destructiveStarted: true,
+          restoredFixtureGeneration: result.fixtureGeneration,
+          restoredAttemptId: result.attemptId,
+        }),
+      ),
+    ]);
+
+    await expect(
+      evaluationSessionCookie(environment, "organizer"),
+    ).rejects.toMatchObject({ status: 503 });
+    await expect(
+      acquireEvaluationFixtureReset(
+        environment,
+        crypto.randomUUID(),
+        result.fixtureGeneration,
+      ),
+    ).rejects.toThrow(/invalid state/iu);
+  });
+
   it("prevents an expired owner from publishing completion after a new owner claims the reset", async () => {
     const environment = productionEnvironment();
     await resetProductionEvaluationFixture(
@@ -1126,6 +1416,7 @@ describe("production evaluation fixture", () => {
     const newerOwner = crypto.randomUUID();
     const newerGeneration = crypto.randomUUID();
     await acquireEvaluationFixtureReset(environment, newerOwner);
+    await beginEvaluationFixtureResetDestructiveWork(environment, newerOwner);
     await completeEvaluationFixtureReset(
       environment,
       newerOwner,
@@ -1283,6 +1574,7 @@ describe("production evaluation fixture", () => {
     await expect(
       environment.DB.prepare(
         `SELECT status, claim_token AS claimToken,
+                json_extract(payload_json, '$.destructiveStarted') AS destructiveStarted,
                 claim_expires_at AS claimExpiresAt
            FROM operation_jobs WHERE id = ?`,
       )
@@ -1292,6 +1584,19 @@ describe("production evaluation fixture", () => {
       status: "failed",
       claimToken: null,
       claimExpiresAt: null,
+      destructiveStarted: 1,
+    });
+    await expect(
+      environment.DB.prepare(
+        `SELECT action,
+                json_extract(metadata_json, '$.destructiveStarted') AS destructiveStarted
+           FROM audit_events
+          WHERE action = 'evaluation.fixture.reset.failed'
+          ORDER BY rowid DESC LIMIT 1`,
+      ).first(),
+    ).resolves.toEqual({
+      action: "evaluation.fixture.reset.failed",
+      destructiveStarted: 1,
     });
 
     await expect(

@@ -21,7 +21,9 @@ import {
 import {
   acquireEvaluationFixtureReset,
   assertEvaluationFixtureResetOwner,
+  beginEvaluationFixtureResetDestructiveWork,
   completeEvaluationFixtureReset,
+  EVALUATION_FIXTURE_RESET_ACCESS_ACTOR_ID,
   EVALUATION_FIXTURE_RESET_ACTOR_ID,
   EVALUATION_FIXTURE_RESET_OPERATION_ID,
   EVALUATION_FIXTURE_RESET_OPERATION_TYPE,
@@ -34,7 +36,6 @@ import {
 import { requireRuntimeMode } from "~/platform/runtime-environment.server";
 
 const EVALUATION_SENDER_ID = "sender-production-evaluation-fixture";
-const EVALUATION_ACCESS_ACTOR_ID = "production-evaluation-access";
 const EVALUATION_ORGANISATION_SLUG = "future-events-association";
 const EVALUATION_EVENT_SLUG = "future-of-events-2027";
 const EVALUATION_ORGANIZER_MEMBERSHIP_ID =
@@ -1001,7 +1002,7 @@ async function resetProductionEvaluationFixtureWithAuthority(
   const actorId =
     authority.kind === "operator"
       ? EVALUATION_FIXTURE_RESET_ACTOR_ID
-      : EVALUATION_ACCESS_ACTOR_ID;
+      : EVALUATION_FIXTURE_RESET_ACCESS_ACTOR_ID;
   const retainedEventWithCompletedRetention = await env.DB.prepare(
     `SELECT id FROM events
       WHERE organisation_id = ? AND id <> ?
@@ -1029,6 +1030,7 @@ async function resetProductionEvaluationFixtureWithAuthority(
     env,
     fixtureAttemptId,
     authority.kind === "evaluator" ? authority.fixtureGeneration : undefined,
+    actorId,
   );
   try {
     await assertEvaluationFixtureResetOwner(env, fixtureAttemptId);
@@ -1090,6 +1092,7 @@ async function resetProductionEvaluationFixtureWithAuthority(
             `The evaluation fixture cannot reset while extra events have active work: ${JSON.stringify(boundaryExtraActiveWork)}.`,
           );
         }
+        await beginEvaluationFixtureResetDestructiveWork(env, fixtureAttemptId);
         await assertEvaluationFixtureResetOwner(env, fixtureAttemptId);
         retiredEventCount = await retireExtraFixtureEvents(
           env,
@@ -1285,7 +1288,12 @@ async function resetProductionEvaluationFixtureWithAuthority(
     return { ...seeded, evidence };
   } catch (error) {
     try {
-      await markEvaluationFixtureResetFailed(env, fixtureAttemptId, error);
+      await markEvaluationFixtureResetFailed(
+        env,
+        fixtureAttemptId,
+        error,
+        actorId,
+      );
     } catch (ownershipError) {
       throw new AggregateError(
         [error, ownershipError],

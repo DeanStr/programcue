@@ -16,6 +16,51 @@ const SESSION_SECONDS = 60 * 60 * 8;
 export const EVALUATION_APPLICANT_MEMBERSHIP_ID =
   "membership-production-evaluation-applicant-event";
 
+const effectiveEvaluationFixtureGenerationCte = `
+  latest_reset_transition AS (
+    SELECT id, action, organisation_id, event_id, entity_type, entity_id,
+           metadata_json
+      FROM audit_events
+     WHERE organisation_id = ? AND event_id = ?
+       AND action IN (
+         'evaluation.fixture.reset.started',
+         'evaluation.fixture.reset',
+         'evaluation.fixture.reset.cancelled',
+         'evaluation.fixture.reset.failed'
+       )
+       AND entity_type = 'event' AND entity_id = ?
+     ORDER BY rowid DESC
+     LIMIT 1
+  ),
+  restored_reset AS (
+    SELECT completed_reset.id
+      FROM latest_reset_transition transition
+      JOIN audit_events completed_reset
+        ON transition.action = 'evaluation.fixture.reset.cancelled'
+       AND completed_reset.id = json_extract(
+             transition.metadata_json,
+             '$.restoredFixtureGeneration'
+           )
+       AND completed_reset.organisation_id = transition.organisation_id
+       AND completed_reset.event_id = transition.event_id
+       AND completed_reset.action = 'evaluation.fixture.reset'
+       AND completed_reset.entity_type = transition.entity_type
+       AND completed_reset.entity_id = transition.entity_id
+       AND json_extract(completed_reset.metadata_json, '$.status') = 'completed'
+       AND json_extract(completed_reset.metadata_json, '$.attemptId') =
+           json_extract(transition.metadata_json, '$.restoredAttemptId')
+  ),
+  latest_reset AS (
+    SELECT COALESCE(restored.id, transition.id) AS id,
+           CASE
+             WHEN restored.id IS NOT NULL
+             THEN 'evaluation.fixture.reset'
+             ELSE transition.action
+           END AS action
+      FROM latest_reset_transition transition
+      LEFT JOIN restored_reset restored ON TRUE
+  )`;
+
 export const EVALUATION_IDENTITIES = {
   owner: {
     ...DEMO_IDENTITIES.owner,
@@ -486,18 +531,7 @@ export async function activateEvaluationApplicantAccount(
   }
   const [membership, audit, verification] = await env.DB.batch([
     env.DB.prepare(
-      `WITH latest_reset AS (
-         SELECT id, action
-           FROM audit_events
-          WHERE organisation_id = ? AND event_id = ?
-            AND action IN (
-              'evaluation.fixture.reset.started',
-              'evaluation.fixture.reset'
-            )
-            AND entity_type = 'event' AND entity_id = ?
-          ORDER BY rowid DESC
-          LIMIT 1
-       )
+      `WITH ${effectiveEvaluationFixtureGenerationCte}
        INSERT INTO memberships (
          id, organisation_id, event_id, person_id, role,
          invited_at, accepted_at, revoked_at, last_operation_id, created_at
@@ -552,18 +586,7 @@ export async function activateEvaluationApplicantAccount(
       metadataJson,
     ),
     env.DB.prepare(
-      `WITH latest_reset AS (
-         SELECT id, action
-           FROM audit_events
-          WHERE organisation_id = ? AND event_id = ?
-            AND action IN (
-              'evaluation.fixture.reset.started',
-              'evaluation.fixture.reset'
-            )
-            AND entity_type = 'event' AND entity_id = ?
-          ORDER BY rowid DESC
-          LIMIT 1
-       )
+      `WITH ${effectiveEvaluationFixtureGenerationCte}
        INSERT INTO audit_events (
          id, actor_kind, origin, metadata_version, organisation_id, event_id, actor_id, action, entity_type,
          entity_id, correlation_id, metadata_json, created_at
@@ -599,18 +622,7 @@ export async function activateEvaluationApplicantAccount(
       operationId,
     ),
     env.DB.prepare(
-      `WITH latest_reset AS (
-         SELECT id, action
-           FROM audit_events
-          WHERE organisation_id = ? AND event_id = ?
-            AND action IN (
-              'evaluation.fixture.reset.started',
-              'evaluation.fixture.reset'
-            )
-            AND entity_type = 'event' AND entity_id = ?
-          ORDER BY rowid DESC
-          LIMIT 1
-       )
+      `WITH ${effectiveEvaluationFixtureGenerationCte}
        SELECT EXISTS (
                 SELECT 1 FROM latest_reset
                  WHERE id = ? AND action = 'evaluation.fixture.reset'

@@ -446,24 +446,21 @@ export async function action({ request, context }: Route.ActionArgs) {
         );
       }
       if (error instanceof AbuseProtectionConfigurationError) {
-        console.error(
-          JSON.stringify({
-            level: "error",
-            subsystem: "evaluation-access",
-            event: "rate-limit-unavailable",
-            errorName: error.name,
-            message: "Evaluation access rate limiting is unavailable.",
-          }),
-        );
-        return data<ActionResult>(
-          {
-            ok: false,
-            message: "Evaluation access is temporarily unavailable.",
-          },
-          { status: 503, headers: { "cache-control": "no-store" } },
+        return evaluationDependencyUnavailable(
+          env,
+          request,
+          "rate-limit-unavailable",
+          "configure-invalid-attempt-limit",
+          error,
         );
       }
-      throw error;
+      return evaluationDependencyUnavailable(
+        env,
+        request,
+        "rate-limit-storage-failed",
+        "record-invalid-unlock-attempt",
+        error,
+      );
     }
     return data<ActionResult>(
       { ok: false, message: "That evaluation access code is not valid." },
