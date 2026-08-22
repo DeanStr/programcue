@@ -174,8 +174,11 @@ test.describe
         .click();
       await expect(
         page.getByText(
-          "This identity is already on this event roster. Nothing was changed and no invitation email was sent.",
+          "This identity is already on this event roster. The entered profile values were not applied; edit the existing speaker record instead.",
         ),
       ).toBeVisible();
+      await expect(
+        page.getByRole("link", { name: "Open Priya Shah." }),
+      ).toHaveAttribute("href", "/admin/speakers?person=person-demo-speaker");
     });
   });
