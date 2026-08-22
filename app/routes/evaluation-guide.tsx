@@ -414,6 +414,12 @@ export async function action({ request, context }: Route.ActionArgs) {
   const intent = String(form.get("_intent") ?? "");
 
   if (intent === "unlock") {
+    if (await evaluationAccessCodeMatches(env, form.get("accessCode"))) {
+      return redirect("/evaluate", {
+        status: 303,
+        headers: { "set-cookie": await evaluationSessionCookie(env, null) },
+      });
+    }
     try {
       await enforcePublicRateLimit({
         env,
@@ -459,16 +465,10 @@ export async function action({ request, context }: Route.ActionArgs) {
       }
       throw error;
     }
-    if (!(await evaluationAccessCodeMatches(env, form.get("accessCode")))) {
-      return data<ActionResult>(
-        { ok: false, message: "That evaluation access code is not valid." },
-        { status: 401, headers: { "cache-control": "no-store" } },
-      );
-    }
-    return redirect("/evaluate", {
-      status: 303,
-      headers: { "set-cookie": await evaluationSessionCookie(env, null) },
-    });
+    return data<ActionResult>(
+      { ok: false, message: "That evaluation access code is not valid." },
+      { status: 401, headers: { "cache-control": "no-store" } },
+    );
   }
 
   let session: Awaited<ReturnType<typeof readEvaluationSession>>;

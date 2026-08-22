@@ -151,6 +151,27 @@ function withActivationBatchRace(
   });
 }
 
+function withUnavailableRateLimitDatabase(environment: CloudflareEnvironment) {
+  const unavailableDatabase = new Proxy(environment.DB, {
+    get(target, property) {
+      if (property === "batch") {
+        return async () => {
+          throw new Error("simulated rate-limit storage failure");
+        };
+      }
+      const value = Reflect.get(target, property);
+      return typeof value === "function" ? value.bind(target) : value;
+    },
+  });
+  return new Proxy(environment, {
+    get(target, property) {
+      return property === "DB"
+        ? unavailableDatabase
+        : Reflect.get(target, property);
+    },
+  });
+}
+
 describe("production evaluation guide", () => {
   afterEach(() => {
     vi.restoreAllMocks();
@@ -367,6 +388,45 @@ describe("production evaluation guide", () => {
     }
     expect(unauthorised.status).toBe(302);
     expect(unauthorised.headers.get("location")).toBe("/evaluate");
+  });
+
+  it("does not make a valid access code depend on rate-limit storage", async () => {
+    const environment = productionEnvironment();
+    const unavailableEnvironment =
+      withUnavailableRateLimitDatabase(environment);
+
+    const unlocked = await action({
+      request: request({
+        _intent: "unlock",
+        accessCode: "evaluation-access-code-2026",
+      }),
+      params: {},
+      context: context(unavailableEnvironment),
+    } as never);
+
+    expect(unlocked).toBeInstanceOf(Response);
+    expect((unlocked as Response).status).toBe(303);
+    expect((unlocked as Response).headers.get("location")).toBe("/evaluate");
+    expect(responseCookieHeader(unlocked as Response)).toContain(
+      "__Host-program_cue_evaluation=",
+    );
+  });
+
+  it("still fails closed when an invalid code cannot be rate-limited", async () => {
+    const environment = productionEnvironment();
+    const unavailableEnvironment =
+      withUnavailableRateLimitDatabase(environment);
+
+    await expect(
+      action({
+        request: request({
+          _intent: "unlock",
+          accessCode: "wrong-evaluation-access-code",
+        }),
+        params: {},
+        context: context(unavailableEnvironment),
+      } as never),
+    ).rejects.toThrow("simulated rate-limit storage failure");
   });
 
   it("locks evaluation so the same browser can continue with its Better Auth identity", async () => {

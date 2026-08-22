@@ -754,6 +754,12 @@ Completion audits the evaluator authority, invalidates every older evaluator
 session and gives only the initiating browser a fresh gate-only session with no
 selected persona.
 
+The evaluation gate verifies its high-entropy access code before touching
+rate-limit storage. A valid code can therefore create its signed gate session
+when that unrelated write boundary is unavailable; every invalid guess is
+still charged to the IP-scoped D1 limit, and an invalid request fails closed if
+that attempt cannot be recorded.
+
 The signed, activated evaluation applicant may perform an accepted-submission
 co-speaker invitation while its fixture mailbox deliberately remains
 unverified. The ordinary participant path still requires a verified email.
