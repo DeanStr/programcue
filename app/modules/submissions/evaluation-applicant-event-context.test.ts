@@ -42,7 +42,7 @@ function productionEvaluationEnvironment() {
     BETTER_AUTH_URL: "https://app.programcue.com",
     BETTER_AUTH_SECRET:
       "evaluation-applicant-better-auth-secret-with-thirty-two-characters",
-    EVALUATION_ACCESS_CODE: "evaluation-access-code-2026",
+    EVALUATION_ACCESS_CODE: "0123456789abcdef0123456789abcdef",
     EVALUATION_SESSION_SECRET:
       "evaluation-session-secret-with-more-than-thirty-two-characters",
   } as CloudflareEnvironment;

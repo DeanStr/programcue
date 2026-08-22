@@ -25,7 +25,7 @@ function environment() {
     APP_ENV: "production",
     DEMO_MODE: "false",
     EVALUATION_MODE: "true",
-    EVALUATION_ACCESS_CODE: "evaluation-access-code-2026",
+    EVALUATION_ACCESS_CODE: "0123456789abcdef0123456789abcdef",
     EVALUATION_SESSION_SECRET:
       "evaluation-session-secret-with-more-than-thirty-two-characters",
   } as CloudflareEnvironment;
@@ -95,13 +95,13 @@ describe.sequential("production evaluation sessions", () => {
     const testEnv = environment();
     await recordFixtureReset(testEnv);
     await expect(
-      evaluationAccessCodeMatches(testEnv, "evaluation-access-code-2026"),
+      evaluationAccessCodeMatches(testEnv, "0123456789abcdef0123456789abcdef"),
     ).resolves.toBe(true);
     await expect(
       evaluationAccessCodeMatches(testEnv, "incorrect-access-code"),
     ).resolves.toBe(false);
     const cookie = await evaluationSessionCookie(testEnv, "organizer", 1_000);
-    expect(cookie).not.toContain("evaluation-access-code-2026");
+    expect(cookie).not.toContain("0123456789abcdef0123456789abcdef");
     expect(cookie).toContain("HttpOnly");
     expect(cookie).toContain("Secure");
     expect(cookie).toContain("SameSite=Lax");
@@ -342,15 +342,20 @@ describe.sequential("production evaluation sessions", () => {
   });
 
   it("does not turn missing evaluator secrets into ordinary access failures", async () => {
-    await expect(
-      evaluationAccessCodeMatches(
-        {
-          ...environment(),
-          EVALUATION_ACCESS_CODE: "short",
-        } as CloudflareEnvironment,
-        "short",
-      ),
-    ).rejects.toThrow(/EVALUATION_ACCESS_CODE/);
+    for (const invalidAccessCode of [
+      "short",
+      "0123456789abcdef0123456789abcdeg",
+    ]) {
+      await expect(
+        evaluationAccessCodeMatches(
+          {
+            ...environment(),
+            EVALUATION_ACCESS_CODE: invalidAccessCode,
+          } as CloudflareEnvironment,
+          invalidAccessCode,
+        ),
+      ).rejects.toThrow(/EVALUATION_ACCESS_CODE/);
+    }
     await expect(
       readEvaluationSession(
         new Request("https://app.programcue.com/evaluate", {

@@ -337,7 +337,7 @@ describe("published programme and itinerary", () => {
       APP_ENV: "production",
       DEMO_MODE: "false",
       EVALUATION_MODE: "true",
-      EVALUATION_ACCESS_CODE: "evaluation-access-code-2026",
+      EVALUATION_ACCESS_CODE: "0123456789abcdef0123456789abcdef",
       EVALUATION_SESSION_SECRET:
         "evaluation-session-secret-with-more-than-thirty-two-characters",
     } as CloudflareEnvironment;
@@ -380,7 +380,7 @@ describe("published programme and itinerary", () => {
       BETTER_AUTH_SECRET:
         "evaluation-itinerary-better-auth-secret-with-thirty-two-characters",
       BETTER_AUTH_URL: "https://app.programcue.com",
-      EVALUATION_ACCESS_CODE: "evaluation-access-code-2026",
+      EVALUATION_ACCESS_CODE: "0123456789abcdef0123456789abcdef",
       EVALUATION_SESSION_SECRET:
         "evaluation-session-secret-with-more-than-thirty-two-characters",
     } as CloudflareEnvironment;

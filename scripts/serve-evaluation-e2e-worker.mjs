@@ -13,7 +13,7 @@ const { inspectorPort, port, statePath } = resolveE2eRuntime();
 const wranglerExecutable = resolvePackageExecutable("wrangler", "wrangler");
 const accessCode =
   process.env.PROGRAM_CUE_EVALUATION_E2E_ACCESS_CODE ??
-  "program-cue-evaluation-e2e-access";
+  "0123456789abcdef0123456789abcdef";
 const sourceRevision = execFileSync("git", ["rev-parse", "HEAD"], {
   cwd: repositoryRoot,
   encoding: "utf8",

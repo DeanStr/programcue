@@ -7,7 +7,7 @@ import {
 
 const accessCode =
   process.env.PROGRAM_CUE_EVALUATION_E2E_ACCESS_CODE ??
-  "program-cue-evaluation-e2e-access";
+  "0123456789abcdef0123456789abcdef";
 
 test("locking evaluation returns the same browser to the ordinary authentication realm", async ({
   page,

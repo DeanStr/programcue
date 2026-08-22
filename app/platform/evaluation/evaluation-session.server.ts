@@ -4,6 +4,10 @@ import {
   DEMO_ORGANISATION_ID,
   DEMO_RESET_CONFIRMATION,
 } from "~/platform/demo/demo-identities";
+import {
+  configuredEvaluationAccessCode,
+  EVALUATION_ACCESS_CODE_HEX_LENGTH,
+} from "~/platform/evaluation/evaluation-access-code";
 import { currentEvaluationFixtureGeneration } from "~/platform/evaluation/evaluation-fixture-reset-lock.server";
 import {
   assertEvaluationPeopleAreDedicated,
@@ -213,10 +217,10 @@ function configuredSecret(env: CloudflareEnvironment) {
 }
 
 function configuredAccessCode(env: CloudflareEnvironment) {
-  const value = env.EVALUATION_ACCESS_CODE?.trim() ?? "";
-  if (value.length < 16) {
+  const value = configuredEvaluationAccessCode(env.EVALUATION_ACCESS_CODE);
+  if (!value) {
     throw new Error(
-      "EVALUATION_ACCESS_CODE must contain at least 16 characters.",
+      `EVALUATION_ACCESS_CODE must contain exactly ${EVALUATION_ACCESS_CODE_HEX_LENGTH} lowercase hexadecimal characters generated from 16 random bytes.`,
     );
   }
   return value;

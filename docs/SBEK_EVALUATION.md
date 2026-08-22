@@ -26,8 +26,9 @@ production Worker with `APP_ENV=production` and `DEMO_MODE=false`; the checked-i
 profile explicitly sets `EVALUATION_MODE=true`. Install these two independent
 secrets for the evaluation period:
 
-- `EVALUATION_ACCESS_CODE`: the private code supplied to human and automated
-  evaluators, at least 16 characters.
+- `EVALUATION_ACCESS_CODE`: the private bearer code supplied to human and
+  automated evaluators. It must be exactly 32 lowercase hexadecimal characters
+  generated from 16 random bytes, for example with `openssl rand -hex 16`.
 - `EVALUATION_SESSION_SECRET`: a random server-only signing value of at least 32
   characters. Never give this value to an evaluator.
 
@@ -113,9 +114,16 @@ retained.
 Fixed SBEK identities remain dedicated and fail reset if linked outside the
 fixture. Event rows, global authentication state and append-only audit history
 are retained. Reset never crosses the fixture organisation boundary. Reset
-attempts use one renewable owner lease: a second live request is rejected,
-while a failed or expired owner keeps evaluation access unavailable until a
-later reset completes. Immediately delete all six temporary Worker secrets:
+attempts use one renewable owner lease, so a second live request is rejected. A
+verified failure or lease expiry before destructive work records a cancellation
+and restores the previous completed generation. Once destructive work starts, a
+failure or malformed state invalidates evaluator sessions and keeps evaluation
+unavailable until a successful operator reset. The in-product reset is
+inaccessible in that state: recreate the protected reset environment with a
+fresh operator secret, a temporary full-access Resend key and the four persisted
+evaluator addresses; install those six credentials, run the operator reset,
+then repeat the removal and provider-key revocation steps below. Immediately
+after every successful operator reset, delete all six temporary Worker secrets:
 
 ```bash
 wrangler secret delete EVALUATION_FIXTURE_SECRET -c wrangler.jsonc
@@ -198,10 +206,14 @@ shows only accepted or pending real memberships inside the fixture organisation
 and invitation acceptance remains explicit. There is no `/demo` or provider
 simulation. Better Auth and real Resend magic links remain
 available for delivery/authentication acceptance, but are not required merely
-to review every seeded persona. Unlock attempts are IP-rate-limited. Missing or
-weak evaluator configuration returns production runtime unavailability rather
-than an ordinary bad-code response, and a missing fixture person is reported as
-reset-required unavailability rather than an anonymous session. Sam remains
+to review every seeded persona. The 128-bit bearer code is verified before
+rate-limit storage is touched, so possession cannot be denied by an exhausted
+IP bucket or an unavailable invalid-attempt write. Invalid guesses are still
+subject to the hashed D1 IP abuse limit; that limit is not the credential's
+guess-resistance boundary. Missing or weak evaluator configuration returns
+production runtime unavailability rather than an ordinary bad-code response,
+and a missing fixture person is reported as reset-required unavailability rather
+than an anonymous session. Sam remains
 unauthorised until the organiser performs and the reviewer accepts the real
 invitation workflow.
 

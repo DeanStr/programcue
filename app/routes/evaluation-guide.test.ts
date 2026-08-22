@@ -35,7 +35,7 @@ function productionEnvironment() {
     BETTER_AUTH_SECRET:
       "evaluation-route-better-auth-secret-with-thirty-two-characters",
     BETTER_AUTH_URL: "https://app.programcue.com",
-    EVALUATION_ACCESS_CODE: "evaluation-access-code-2026",
+    EVALUATION_ACCESS_CODE: "0123456789abcdef0123456789abcdef",
     EVALUATION_SESSION_SECRET:
       "evaluation-session-secret-with-more-than-thirty-two-characters",
     AUTH_EMAIL_FROM: "Program Cue <auth@programcue.com>",
@@ -221,7 +221,7 @@ describe("production evaluation guide", () => {
     const unlocked = await action({
       request: request({
         _intent: "unlock",
-        accessCode: "evaluation-access-code-2026",
+        accessCode: "0123456789abcdef0123456789abcdef",
       }),
       params: {},
       context: context(environment),
@@ -400,7 +400,7 @@ describe("production evaluation guide", () => {
     const unlocked = await action({
       request: request({
         _intent: "unlock",
-        accessCode: "evaluation-access-code-2026",
+        accessCode: "0123456789abcdef0123456789abcdef",
       }),
       params: {},
       context: context(unavailableEnvironment),
@@ -454,7 +454,7 @@ describe("production evaluation guide", () => {
     const unlocked = await action({
       request: request({
         _intent: "unlock",
-        accessCode: "evaluation-access-code-2026",
+        accessCode: "0123456789abcdef0123456789abcdef",
       }),
       params: {},
       context: context(environment),
@@ -523,7 +523,7 @@ describe("production evaluation guide", () => {
     const unlocked = await action({
       request: request({
         _intent: "unlock",
-        accessCode: "evaluation-access-code-2026",
+        accessCode: "0123456789abcdef0123456789abcdef",
       }),
       params: {},
       context: context(environment),
@@ -604,7 +604,7 @@ describe("production evaluation guide", () => {
     const unlocked = await action({
       request: request({
         _intent: "unlock",
-        accessCode: "evaluation-access-code-2026",
+        accessCode: "0123456789abcdef0123456789abcdef",
       }),
       params: {},
       context: context(environment),
@@ -686,7 +686,7 @@ describe("production evaluation guide", () => {
     const unlocked = await action({
       request: request({
         _intent: "unlock",
-        accessCode: "evaluation-access-code-2026",
+        accessCode: "0123456789abcdef0123456789abcdef",
       }),
       params: {},
       context: context(environment),
@@ -716,7 +716,7 @@ describe("production evaluation guide", () => {
     const unlocked = await action({
       request: request({
         _intent: "unlock",
-        accessCode: "evaluation-access-code-2026",
+        accessCode: "0123456789abcdef0123456789abcdef",
       }),
       params: {},
       context: context(environment),
@@ -806,7 +806,7 @@ describe("production evaluation guide", () => {
     const unlocked = await action({
       request: request({
         _intent: "unlock",
-        accessCode: "evaluation-access-code-2026",
+        accessCode: "0123456789abcdef0123456789abcdef",
       }),
       params: {},
       context: context(environment),
@@ -846,7 +846,7 @@ describe("production evaluation guide", () => {
     const unlocked = await action({
       request: request({
         _intent: "unlock",
-        accessCode: "evaluation-access-code-2026",
+        accessCode: "0123456789abcdef0123456789abcdef",
       }),
       params: {},
       context: context(environment),
@@ -896,7 +896,7 @@ describe("production evaluation guide", () => {
       request: request(
         {
           _intent: "unlock",
-          accessCode: "evaluation-access-code-2026",
+          accessCode: "0123456789abcdef0123456789abcdef",
         },
         { ip: "203.0.113.181" },
       ),
@@ -992,7 +992,7 @@ describe("production evaluation guide", () => {
       request: request(
         {
           _intent: "unlock",
-          accessCode: "evaluation-access-code-2026",
+          accessCode: "0123456789abcdef0123456789abcdef",
         },
         { ip: "203.0.113.182" },
       ),
@@ -1153,7 +1153,7 @@ describe("production evaluation guide", () => {
     const unlocked = await action({
       request: request({
         _intent: "unlock",
-        accessCode: "evaluation-access-code-2026",
+        accessCode: "0123456789abcdef0123456789abcdef",
       }),
       params: {},
       context: context(environment),
@@ -1214,7 +1214,7 @@ describe("production evaluation guide", () => {
     const unlocked = await action({
       request: request({
         _intent: "unlock",
-        accessCode: "evaluation-access-code-2026",
+        accessCode: "0123456789abcdef0123456789abcdef",
       }),
       params: {},
       context: context(environment),
@@ -1258,7 +1258,7 @@ describe("production evaluation guide", () => {
     const unlocked = await action({
       request: request({
         _intent: "unlock",
-        accessCode: "evaluation-access-code-2026",
+        accessCode: "0123456789abcdef0123456789abcdef",
       }),
       params: {},
       context: context(environment),
@@ -1284,7 +1284,7 @@ describe("production evaluation guide", () => {
     const unlocked = await action({
       request: request({
         _intent: "unlock",
-        accessCode: "evaluation-access-code-2026",
+        accessCode: "0123456789abcdef0123456789abcdef",
       }),
       params: {},
       context: context(environment),
@@ -1356,7 +1356,7 @@ describe("production evaluation guide", () => {
       request: request(
         {
           _intent: "unlock",
-          accessCode: "evaluation-access-code-2026",
+          accessCode: "0123456789abcdef0123456789abcdef",
         },
         { ip },
       ),

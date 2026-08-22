@@ -2,6 +2,7 @@ import {
   parseResourceEmbedProviders,
   resourceEmbedConfiguration,
 } from "~/modules/resources/resource-embed-policy";
+import { configuredEvaluationAccessCode } from "~/platform/evaluation/evaluation-access-code";
 import {
   requireRuntimeMode,
   requiresProductionSecurity,
@@ -139,10 +140,7 @@ export function requireProductionRuntimeReadiness(
     invalid.push("FILE_SCANNER_DISPATCH_SECRET", "FILE_SCANNER_WEBHOOK_SECRET");
   }
   if (runtime.evaluation) {
-    if (
-      typeof values.EVALUATION_ACCESS_CODE === "string" &&
-      values.EVALUATION_ACCESS_CODE.trim().length < 16
-    ) {
+    if (!configuredEvaluationAccessCode(values.EVALUATION_ACCESS_CODE)) {
       invalid.push("EVALUATION_ACCESS_CODE");
     }
     if (

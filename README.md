@@ -382,7 +382,8 @@ acceptance evidence.
 The final SBEK run uses the ordinary production deployment and provider paths
 with `APP_ENV=production`, `DEMO_MODE=false` and the explicit
 `EVALUATION_MODE=true` gate. Reviewers unlock `/evaluate` with a separately
-configured access code, then select only fixed fixture identities. The signed
+configured 128-bit bearer code represented by 32 lowercase hexadecimal
+characters, then select only fixed fixture identities. The signed
 session is bound to the latest reset generation, restricted to the dedicated
 fixture organisation and never falls through to an unrelated ordinary login.
 Only the clean-applicant card has an explicit audited membership activation;

@@ -181,6 +181,35 @@ describe("service readiness", () => {
     }
   });
 
+  it("requires a canonical 128-bit evaluation access code", async () => {
+    vi.spyOn(console, "error").mockImplementation(() => undefined);
+    const production = {
+      ...completeProductionEnvironment(),
+      EVALUATION_MODE: "true",
+      EVALUATION_SESSION_SECRET:
+        "evaluation-session-secret-with-more-than-thirty-two-characters",
+    } as unknown as CloudflareEnvironment;
+    for (const accessCode of [
+      "human-readable-evaluation-code",
+      "0123456789abcdef0123456789abcdeg",
+    ]) {
+      const response = await health({
+        ...production,
+        EVALUATION_ACCESS_CODE: accessCode,
+      } as CloudflareEnvironment);
+      expect(response.status).toBe(503);
+      await expect(response.json()).resolves.toMatchObject({
+        error: { code: "RUNTIME_CONFIGURATION_INVALID" },
+      });
+    }
+
+    const response = await health({
+      ...production,
+      EVALUATION_ACCESS_CODE: "0123456789abcdef0123456789abcdef",
+    } as CloudflareEnvironment);
+    expect(response.status).toBe(200);
+  });
+
   it("requires independent scanner dispatch and callback secrets", async () => {
     vi.spyOn(console, "error").mockImplementation(() => undefined);
     const production = completeProductionEnvironment();

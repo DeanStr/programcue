@@ -18,7 +18,7 @@ const environment = {
     process.env.PROGRAM_CUE_E2E_STATE ?? ".wrangler/e2e-state-evaluation",
   PROGRAM_CUE_EVALUATION_E2E_ACCESS_CODE:
     process.env.PROGRAM_CUE_EVALUATION_E2E_ACCESS_CODE ??
-    "program-cue-evaluation-e2e-access",
+    "0123456789abcdef0123456789abcdef",
 };
 
 if (process.env.PROGRAM_CUE_E2E_SKIP_BUILD !== "1") {
