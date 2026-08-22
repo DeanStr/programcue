@@ -400,12 +400,9 @@ test("re-adding a confirmed speaker preserves workflow status and profile", asyn
   await addSpeakerForm
     .getByRole("button", { name: "Add speaker record" })
     .click();
-  await expect(
-    page.getByText(
-      "This identity is already on this event roster. Nothing was changed and no invitation email was sent.",
-      { exact: true },
-    ),
-  ).toBeVisible();
+  await expect(page.getByRole("alert")).toContainText(
+    "This identity is already on this event roster. The entered profile values were not applied; edit the existing speaker record instead.",
+  );
 
   await page.reload();
   const reloadedRow = page.getByRole("row").filter({

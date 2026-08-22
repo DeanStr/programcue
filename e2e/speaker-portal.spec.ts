@@ -134,10 +134,15 @@ test("speaker profile, sessions and D1 task state render through the production 
   await expect(
     page.getByRole("link", { name: "Overview" }),
   ).not.toHaveAttribute("aria-current");
-  await expect(page.getByLabel("File purpose")).toContainText("MP4/WebM video");
-  await expect(page.getByLabel("Choose file")).toHaveAttribute(
+  const slidesTask = page.locator('article[id^="task-"]').filter({
+    has: page.getByRole("heading", { name: "Upload presentation slides" }),
+  });
+  await expect(slidesTask.getByLabel("File purpose")).toContainText(
+    "Presentation slides",
+  );
+  await expect(slidesTask.getByLabel("Choose file")).toHaveAttribute(
     "accept",
-    /\.mp4,.webm/u,
+    /\.pdf,.ppt,.pptx/u,
   );
   const commentTask = page.locator('article[id^="task-"]').first();
   const commentTaskElementId = await commentTask.getAttribute("id");
