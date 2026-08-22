@@ -869,6 +869,23 @@ manual assistive-technology acceptance remains external.
   the speaker capture performed the documented fixed-account activation without
   claiming mailbox or provider delivery. The evaluator plan reports exactly
   those three personas as pre-authenticated.
+- **Latest production reset and calendar acceptance:** On 22 August 2026 at
+  05:51:05 UTC, the production fixture reset completed under deployed revision
+  `44f0dfd369a5dbd5e4425755774ebd1880fdf5f9`. Server evidence confirmed all six
+  controlled `@programcue.com` evaluator identities, the verified Resend sender
+  and the configured Workers AI provider. The eight temporary Worker secrets
+  were then deleted, the temporary full-access Resend key was revoked and the
+  operator reset endpoint again returned HTTP 404. `/evaluate` unlock returned
+  the expected 303 redirect followed by an unlocked 200 response with the
+  organiser role available. Fresh `organizer`, `speaker` and `reviewer` browser
+  states were captured with mode `0600` and restored successfully against their
+  expected destinations. A subsequent controlled email-ICS schedule check sent
+  one invitation for Priya Shah's _The Future of Attendee Engagement_ session;
+  the recipient state reached `sent` and the Calendar sync operation completed
+  1/1. This is evidence of provider acceptance, not confirmed inbox delivery.
+  The ordinary `/evaluate` reset was then run: all five seeded invitation
+  targets returned to `Not sent`, the test calendar operation was absent from
+  active fixture state and the clean evaluator baseline was restored.
 
 ### Reference-board adoption evidence
 
