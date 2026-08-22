@@ -88,10 +88,7 @@ export function PublicSpeakersSurface({
   const publishedCount =
     model.orderedSpeakers?.length ?? model.directorySpeakers.length;
   const sparse = publishedCount <= SPARSE_SPEAKER_SEARCH;
-  const showSearch =
-    !model.embedded &&
-    model.showControl("search") &&
-    (!sparse || model.directoryQuery.trim() !== "");
+  const showSearch = !model.embedded && model.showControl("search");
   const pair = model.directorySpeakers.length <= 2;
   return (
     <section
@@ -315,10 +312,7 @@ export function PublicSpeakerGallerySurface({
   const publishedCount =
     model.orderedSpeakers?.length ?? model.gallerySpeakers.length;
   const sparse = publishedCount <= SPARSE_SPEAKER_SEARCH;
-  const showSearch =
-    !model.embedded &&
-    model.showControl("search") &&
-    (!sparse || model.galleryQuery.trim() !== "");
+  const showSearch = !model.embedded && model.showControl("search");
   const pair = model.gallerySpeakers.length <= 2;
   return (
     <section

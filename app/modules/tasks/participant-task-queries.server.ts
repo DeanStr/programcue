@@ -214,6 +214,10 @@ export class ParticipantTaskQueries extends ParticipantTaskWorkflowFoundation {
             task.taskType === "file_upload"
               ? (configuration.fileScope ?? null)
               : null,
+          fileKind:
+            task.taskType === "file_upload"
+              ? (configuration.fileKind ?? null)
+              : null,
           sessionDetailsReview: isSessionDetailsReview
             ? await loadParticipantSessionDetailsReview(
                 this.env,

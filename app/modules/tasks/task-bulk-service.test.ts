@@ -3,6 +3,12 @@ import { describe, expect, it, vi } from "vitest";
 import type { AirtableProviderBoundary } from "~/modules/airtable/airtable-provider-boundary.server";
 import { ensureDemoSpeakerData } from "~/modules/speakers/demo.server";
 import type { Viewer } from "~/platform/auth/authorize.server";
+import {
+  acquireEvaluationFixtureReset,
+  beginEvaluationFixtureResetDestructiveWork,
+  completeEvaluationFixtureReset,
+  markEvaluationFixtureResetFailed,
+} from "~/platform/evaluation/evaluation-fixture-reset-lock.server";
 import { OperationService } from "~/platform/operations/operation-service.server";
 import {
   TaskBulkService,
@@ -19,6 +25,28 @@ const admin: Viewer = {
   eventId: "evt-foe-2025",
   demo: true,
 };
+
+function evaluationEnvironment() {
+  return {
+    ...(env as unknown as CloudflareEnvironment),
+    APP_ENV: "production",
+    DEMO_MODE: "false",
+    EVALUATION_MODE: "true",
+  } as CloudflareEnvironment;
+}
+
+async function establishEvaluationFixtureGeneration(
+  testEnv: CloudflareEnvironment,
+) {
+  const ownerToken = crypto.randomUUID();
+  const fixtureGeneration = crypto.randomUUID();
+  await acquireEvaluationFixtureReset(testEnv, ownerToken);
+  await beginEvaluationFixtureResetDestructiveWork(testEnv, ownerToken);
+  await completeEvaluationFixtureReset(testEnv, ownerToken, fixtureGeneration, {
+    testFixtureGeneration: true,
+  });
+  return fixtureGeneration;
+}
 
 async function createSpeaker(testEnv: CloudflareEnvironment, prefix: string) {
   const personId = `${prefix}-person`;
@@ -645,6 +673,51 @@ describe("bulk task operations", () => {
       .bind(admin.eventId, waiver.operationId, reopen.operationId)
       .first<{ count: number }>();
     expect(audit?.count).toBe(2);
+  });
+
+  it("does not claim an uncommitted preview during evaluation reset", async () => {
+    const testEnv = evaluationEnvironment();
+    await ensureDemoSpeakerData(testEnv);
+    await establishEvaluationFixtureGeneration(testEnv);
+    const prefix = `bulk-reset-fence-${crypto.randomUUID()}`;
+    const templateId = await createTemplate(testEnv, `${prefix} task`);
+    const taskId = (
+      await new TaskService(testEnv).assignTemplate(
+        admin,
+        templateId,
+        "person-demo-speaker",
+      )
+    ).taskId;
+    const service = new TaskBulkService(testEnv);
+    const preview = await service.preview(admin, {
+      action: "waive",
+      recordIds: [taskId],
+      reason: "This mutation must not cross the reset boundary.",
+    });
+    const resetOwner = crypto.randomUUID();
+    await acquireEvaluationFixtureReset(testEnv, resetOwner);
+    try {
+      await expect(service.confirm(admin, preview.operationId)).rejects.toThrow(
+        "evaluation fixture is resetting",
+      );
+      await expect(
+        testEnv.DB.prepare("SELECT status FROM task_instances WHERE id = ?")
+          .bind(taskId)
+          .first(),
+      ).resolves.toEqual({ status: "not_started" });
+      await expect(
+        testEnv.DB.prepare("SELECT status FROM operation_jobs WHERE id = ?")
+          .bind(preview.operationId)
+          .first(),
+      ).resolves.toEqual({ status: "received" });
+    } finally {
+      await markEvaluationFixtureResetFailed(
+        testEnv,
+        resetOwner,
+        new Error("Reset-fence test cleanup."),
+      );
+      await service.cancel(admin, preview.operationId);
+    }
   });
 
   it("fails a stale status preview before applying any selected mutation", async () => {

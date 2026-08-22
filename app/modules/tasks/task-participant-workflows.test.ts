@@ -104,7 +104,10 @@ async function createFileTask(testEnv: CloudflareEnvironment, name: string) {
     fixedDueDate: null,
     autoAssignOnAcceptance: false,
     dependencyIds: [],
-    configuration: { fileScope: "participant_document" },
+    configuration: {
+      fileScope: "participant_document",
+      fileKind: "supporting_document",
+    },
   });
   return (await tasks.assignTemplate(admin, templateId, speaker.personId))
     .taskId;
@@ -127,10 +130,18 @@ async function createSessionFileTask(
     fixedDueDate: null,
     autoAssignOnAcceptance: false,
     dependencyIds: [],
-    configuration: { fileScope: "session_deliverable" },
+    configuration: { fileScope: "session_deliverable", fileKind: "slides" },
   });
   return (await tasks.assignTemplate(admin, templateId, "session-demo-speaker"))
     .taskId;
+}
+
+function testPdfFile(name: string, marker = 0) {
+  return new File(
+    [new TextEncoder().encode(`%PDF-1.7\nTask evidence ${marker}`)],
+    name,
+    { type: "application/pdf" },
+  );
 }
 
 async function createChecklistTask(
@@ -216,7 +227,12 @@ async function createDependencyPair(
     autoAssignOnAcceptance: false,
     dependencyIds: [prerequisiteTemplateId],
     ...(dependent.taskType === "file_upload"
-      ? { configuration: { fileScope: "participant_document" as const } }
+      ? {
+          configuration: {
+            fileScope: "participant_document" as const,
+            fileKind: "supporting_document" as const,
+          },
+        }
       : {}),
   });
   const { taskId: dependentTaskId } = await tasks.assignTemplate(
@@ -333,7 +349,10 @@ describe("onboarding task service", () => {
         fixedDueDate: null,
         autoAssignOnAcceptance: false,
         dependencyIds: [],
-        configuration: { fileScope: "session_deliverable" },
+        configuration: {
+          fileScope: "session_deliverable",
+          fileKind: "supporting_document",
+        },
       });
       const { taskId } = await service.assignTemplate(
         admin,
@@ -1319,15 +1338,7 @@ describe("onboarding task service", () => {
           targetId: pair.dependent.id,
           assetKind: "task_evidence",
         },
-        new File(
-          [
-            new Uint8Array([
-              0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0, 0, 0,
-            ]),
-          ],
-          "dependency-race.png",
-          { type: "image/png" },
-        ),
+        testPdfFile("dependency-race.pdf"),
       );
       const racingEnv = withBatchRace(testEnv, async () => {
         await new TaskService(testEnv).administerTask(admin, {
@@ -1398,14 +1409,10 @@ describe("onboarding task service", () => {
       await ensureDemoSpeakerData(testEnv);
       const tasks = new TaskService(testEnv);
       const files = new FileService(testEnv);
-      const png = new File(
-        [
-          new Uint8Array([
-            0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0, 0, 0,
-          ]),
-        ],
-        "evidence.png",
-        { type: "image/png" },
+      const presentation = new File(
+        [new TextEncoder().encode("%PDF-1.7\npresentation evidence")],
+        "presentation.pdf",
+        { type: "application/pdf" },
       );
       const upload = await completeTestDirectUpload(
         testEnv,
@@ -1415,7 +1422,7 @@ describe("onboarding task service", () => {
           targetId: "task-demo-slides",
           assetKind: "task_evidence",
         },
-        png,
+        presentation,
       );
       await expect(
         tasks.attachCompletedFileEvidence(speaker, {
@@ -1505,15 +1512,7 @@ describe("onboarding task service", () => {
           targetId: taskId,
           assetKind: "task_evidence",
         },
-        new File(
-          [
-            new Uint8Array([
-              0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0, 0, 0,
-            ]),
-          ],
-          "exact-version.png",
-          { type: "image/png" },
-        ),
+        testPdfFile("exact-version.pdf"),
       );
       await expect(
         new TaskService(testEnv).attachCompletedFileEvidence(speaker, {
@@ -1537,24 +1536,7 @@ describe("onboarding task service", () => {
       const taskId = await createFileTask(testEnv, "Versioned presentation");
       const files = new FileService(testEnv);
       const tasks = new TaskService(testEnv);
-      const evidenceFile = (name: string, marker: number) =>
-        new File(
-          [
-            new Uint8Array([
-              0x89,
-              0x50,
-              0x4e,
-              0x47,
-              0x0d,
-              0x0a,
-              0x1a,
-              0x0a,
-              marker,
-            ]),
-          ],
-          name,
-          { type: "image/png" },
-        );
+      const evidenceFile = testPdfFile;
       const first = await completeTestDirectUpload(
         testEnv,
         speaker,
@@ -1563,7 +1545,7 @@ describe("onboarding task service", () => {
           targetId: taskId,
           assetKind: "task_evidence",
         },
-        evidenceFile("slides-v1.png", 1),
+        evidenceFile("slides-v1.pdf", 1),
       );
       await tasks.attachCompletedFileEvidence(speaker, {
         taskId,
@@ -1592,7 +1574,7 @@ describe("onboarding task service", () => {
           targetId: taskId,
           assetKind: "task_evidence",
         },
-        evidenceFile("slides-v2.png", 2),
+        evidenceFile("slides-v2.pdf", 2),
       );
       expect(second).toMatchObject({
         assetId: first.assetId,
@@ -1625,7 +1607,7 @@ describe("onboarding task service", () => {
           targetId: taskId,
           assetKind: "task_evidence",
         },
-        evidenceFile("slides-v3-infected.png", 3),
+        evidenceFile("slides-v3-infected.pdf", 3),
       );
       await tasks.attachCompletedFileEvidence(speaker, {
         taskId,
@@ -1726,24 +1708,7 @@ describe("onboarding task service", () => {
         testEnv,
         `Shared session slides ${crypto.randomUUID()}`,
       );
-      const evidenceFile = (name: string, marker: number) =>
-        new File(
-          [
-            new Uint8Array([
-              0x89,
-              0x50,
-              0x4e,
-              0x47,
-              0x0d,
-              0x0a,
-              0x1a,
-              0x0a,
-              marker,
-            ]),
-          ],
-          name,
-          { type: "image/png" },
-        );
+      const evidenceFile = testPdfFile;
       const target = {
         targetType: "task" as const,
         targetId: taskId,
@@ -1754,7 +1719,7 @@ describe("onboarding task service", () => {
         testEnv,
         speaker,
         target,
-        evidenceFile("shared-slides-v1.png", 1),
+        evidenceFile("shared-slides-v1.pdf", 1),
       );
       await tasks.attachCompletedFileEvidence(speaker, {
         taskId: target.targetId,
@@ -1800,7 +1765,7 @@ describe("onboarding task service", () => {
         testEnv,
         coSpeaker,
         target,
-        evidenceFile("shared-slides-v2.png", 2),
+        evidenceFile("shared-slides-v2.pdf", 2),
       );
       expect(second).toMatchObject({
         assetId: first.assetId,
@@ -1844,7 +1809,7 @@ describe("onboarding task service", () => {
         testEnv,
         coSpeaker,
         target,
-        evidenceFile("shared-slides-v3.png", 3),
+        evidenceFile("shared-slides-v3.pdf", 3),
       );
       const racingEnv = withBatchRace(testEnv, async () => {
         await testEnv.DB.prepare(
@@ -1956,15 +1921,7 @@ describe("onboarding task service", () => {
         testEnv,
         speaker,
         target,
-        new File(
-          [
-            new Uint8Array([
-              0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x44,
-            ]),
-          ],
-          "revoked-owner-evidence.png",
-          { type: "image/png" },
-        ),
+        testPdfFile("revoked-owner-evidence.pdf", 0x44),
       );
       await tasks.attachCompletedFileEvidence(speaker, {
         taskId: fileTaskId,
@@ -2175,16 +2132,7 @@ describe("onboarding task service", () => {
       const taskId = await createFileTask(testEnv, "Replace infected evidence");
       const files = new FileService(testEnv);
       const tasks = new TaskService(testEnv);
-      const evidenceFile = (name: string) =>
-        new File(
-          [
-            new Uint8Array([
-              0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0, 0, 0,
-            ]),
-          ],
-          name,
-          { type: "image/png" },
-        );
+      const evidenceFile = testPdfFile;
       const infected = await completeTestDirectUpload(
         testEnv,
         speaker,
@@ -2193,7 +2141,7 @@ describe("onboarding task service", () => {
           targetId: taskId,
           assetKind: "task_evidence",
         },
-        evidenceFile("infected.png"),
+        evidenceFile("infected.pdf"),
       );
       await tasks.attachCompletedFileEvidence(speaker, {
         taskId,
@@ -2235,7 +2183,7 @@ describe("onboarding task service", () => {
           targetId: taskId,
           assetKind: "task_evidence",
         },
-        evidenceFile("replacement.png"),
+        evidenceFile("replacement.pdf"),
       );
       await tasks.attachCompletedFileEvidence(speaker, {
         taskId,
@@ -2312,15 +2260,7 @@ describe("onboarding task service", () => {
           targetId: taskId,
           assetKind: "task_evidence",
         },
-        new File(
-          [
-            new Uint8Array([
-              0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0, 0, 0,
-            ]),
-          ],
-          "raced.png",
-          { type: "image/png" },
-        ),
+        testPdfFile("raced.pdf"),
       );
       const racingEnv = withBatchRace(testEnv, async () => {
         await testEnv.DB.prepare(
@@ -2385,15 +2325,7 @@ describe("onboarding task service", () => {
           targetId: taskId,
           assetKind: "task_evidence",
         },
-        new File(
-          [
-            new Uint8Array([
-              0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0, 0, 0,
-            ]),
-          ],
-          "approval-race.png",
-          { type: "image/png" },
-        ),
+        testPdfFile("approval-race.pdf"),
       );
       await tasks.attachCompletedFileEvidence(speaker, {
         taskId,

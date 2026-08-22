@@ -187,9 +187,10 @@ async function seedTerminalDecisionCandidates() {
          decided_at, published_at
        ) VALUES (
          'review-cycle-decision-rejected', ?,
-         'demo-evaluation-submission-inclusive', 'demo-evaluation-round', 1,
+         'demo-evaluation-submission-inclusive', NULL, 1,
          'published', 'rejected', ?, 'Rejected in the first cycle.',
-         '[]', '{}', 'review-cycle-decision-rejected',
+         '[]', '{"planId":"demo-evaluation-plan","reviewEvidenceOverride":true}',
+         'review-cycle-decision-rejected',
          unixepoch(), unixepoch()
        )`,
     ).bind(admin.eventId, admin.personId),
@@ -629,6 +630,52 @@ describe("explicit evaluation review cycles", () => {
         .bind(admin.eventId)
         .first<{ activeCount: number; archivedCount: number }>(),
     ).resolves.toEqual({ activeCount: 1, archivedCount: 1 });
+  });
+
+  it("removes submitted reviews from the reviewer queue when their cycle is archived", async () => {
+    const service = new EvaluationService(
+      env as unknown as CloudflareEnvironment,
+    );
+    const assignment = await env.DB.prepare(
+      `SELECT id FROM evaluator_assignments
+        WHERE event_id = ? AND evaluator_person_id = ?
+          AND NOT EXISTS (
+            SELECT 1 FROM reviews
+             WHERE reviews.assignment_id = evaluator_assignments.id
+               AND reviews.event_id = evaluator_assignments.event_id
+          )
+        ORDER BY assigned_at, id LIMIT 1`,
+    )
+      .bind(admin.eventId, evaluator.personId)
+      .first<{ id: string }>();
+    expect(assignment).not.toBeNull();
+    await env.DB.batch([
+      env.DB.prepare(
+        `UPDATE evaluator_assignments
+            SET status = 'submitted', revision = revision + 1
+          WHERE id = ? AND event_id = ?`,
+      ).bind(assignment!.id, admin.eventId),
+      env.DB.prepare(
+        `INSERT INTO reviews (
+           id, event_id, assignment_id, status, scores_json, weighted_score,
+           recommendation, confidence, submitter_feedback, private_notes,
+           revision, locked_at, created_at, updated_at
+         ) VALUES (
+           'review-cycle-archived-submitted-review', ?, ?, 'submitted', '{}',
+           4, 'accept', 4, 'Historical feedback.', 'Historical notes.',
+           1, unixepoch(), unixepoch(), unixepoch()
+         )`,
+      ).bind(admin.eventId, assignment!.id),
+    ]);
+
+    const before = await service.getReviewerWorkspace(evaluator);
+    expect(before.assignments.map((item) => item.id)).toContain(assignment!.id);
+    await service.startReviewCycle(admin, {
+      ...newCycleInput,
+      expectedUnfinishedAssignmentCount: 1,
+    });
+    const after = await service.getReviewerWorkspace(evaluator);
+    expect(after.assignments).toEqual([]);
   });
 
   it("reviews accepted and rejected submissions only through archived decision provenance", async () => {
@@ -1114,7 +1161,7 @@ describe("explicit evaluation review cycles", () => {
          )`,
       ).bind(admin.eventId),
     ]);
-    await service.startReviewCycle(admin, {
+    const currentCycle = await service.startReviewCycle(admin, {
       ...newCycleInput,
       expectedUnfinishedAssignmentCount: 1,
     });
@@ -1163,12 +1210,93 @@ describe("explicit evaluation review cycles", () => {
     });
     await expect(
       env.DB.prepare(
-        `SELECT round_id AS roundId FROM submission_decisions
+        `SELECT round_id AS roundId,
+                json_extract(effect_preview_json, '$.planId') AS planId
+           FROM submission_decisions
           WHERE id = ? AND event_id = ?`,
       )
         .bind(decision.decisionId, admin.eventId)
-        .first<{ roundId: string | null }>(),
-    ).resolves.toEqual({ roundId: null });
+        .first<{ roundId: string | null; planId: string | null }>(),
+    ).resolves.toEqual({
+      roundId: null,
+      planId: currentCycle.planId,
+    });
+  });
+
+  it("rejects a no-review decision when its exact plan is archived before commit", async () => {
+    let nextCyclePlanId: string | null = null;
+    const racingService = new EvaluationService(
+      withBatchRace(evaluationEnvironment(), async () => {
+        const nextCycle = await new EvaluationService(
+          evaluationEnvironment(),
+        ).startReviewCycle(admin, newCycleInput);
+        nextCyclePlanId = nextCycle.planId;
+      }),
+    );
+
+    await expect(
+      racingService.decide(admin, {
+        submissionId: "demo-evaluation-submission-calm",
+        decision: "rejected",
+        sessionTrackId: null,
+        rationale: "This decision must not cross a review-cycle boundary.",
+        release: true,
+        confirmedWithoutReview: true,
+      }),
+    ).rejects.toBeInstanceOf(EvaluationRevisionConflictError);
+    expect(nextCyclePlanId).not.toBeNull();
+    await expect(
+      env.DB.prepare(
+        `SELECT status,
+                (SELECT COUNT(*) FROM submission_decisions decision
+                  WHERE decision.event_id = submissions.event_id
+                    AND decision.submission_id = submissions.id) AS decisionCount
+           FROM submissions
+          WHERE id = 'demo-evaluation-submission-calm' AND event_id = ?`,
+      )
+        .bind(admin.eventId)
+        .first<{ status: string; decisionCount: number }>(),
+    ).resolves.toEqual({ status: "assigned", decisionCount: 0 });
+  });
+
+  it("pins a sole draft plan when releasing a decision without review evidence", async () => {
+    await env.DB.batch([
+      env.DB.prepare(
+        `UPDATE evaluation_plans
+            SET status = 'draft', revision = revision + 1
+          WHERE id = 'demo-evaluation-plan' AND event_id = ?`,
+      ).bind(admin.eventId),
+      env.DB.prepare(
+        `UPDATE evaluation_rounds
+            SET status = 'draft', revision = revision + 1
+          WHERE plan_id = 'demo-evaluation-plan' AND event_id = ?`,
+      ).bind(admin.eventId),
+    ]);
+
+    const decision = await new EvaluationService(
+      evaluationEnvironment(),
+    ).decide(admin, {
+      submissionId: "demo-evaluation-submission-calm",
+      decision: "rejected",
+      sessionTrackId: null,
+      rationale: "Released under an explicit no-review override.",
+      release: true,
+      confirmedWithoutReview: true,
+    });
+
+    await expect(
+      env.DB.prepare(
+        `SELECT round_id AS roundId,
+                json_extract(effect_preview_json, '$.planId') AS planId
+           FROM submission_decisions
+          WHERE id = ? AND event_id = ?`,
+      )
+        .bind(decision.decisionId, admin.eventId)
+        .first<{ roundId: string | null; planId: string | null }>(),
+    ).resolves.toEqual({
+      roundId: null,
+      planId: "demo-evaluation-plan",
+    });
   });
 
   it("leaves unfinished archived assignments immutable when publishing a decision", async () => {

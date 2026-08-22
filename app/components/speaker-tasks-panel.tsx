@@ -24,6 +24,52 @@ import { maximumMegabytes } from "~/modules/files/file-policy";
 import type { ParticipantTaskEvidenceVersion } from "~/modules/files/file-service.server";
 import { UserFacingError } from "~/platform/user-facing-error";
 
+export function taskEvidenceUploadKind(
+  fileKind: SpeakerTask["fileKind"],
+  fileScope: SpeakerTask["fileScope"],
+  policy: SpeakerPortal["event"]["filePolicy"],
+) {
+  switch (fileKind) {
+    case "slides":
+      return {
+        value: "task_evidence" as const,
+        label: `Presentation slides · PDF, PPT or PPTX · ${maximumMegabytes(policy.slidesMaximumBytes)} MB maximum`,
+        accept: ".pdf,.ppt,.pptx",
+        maximumBytes: policy.slidesMaximumBytes,
+      };
+    case "video":
+      return {
+        value: "task_evidence" as const,
+        label: `Session video · MP4 or WebM · ${maximumMegabytes(policy.videoMaximumBytes)} MB maximum`,
+        accept: ".mp4,.webm",
+        maximumBytes: policy.videoMaximumBytes,
+      };
+    case "supporting_document":
+      return {
+        value: "task_evidence" as const,
+        label: `Supporting document · PDF, Word, Excel or ZIP · ${maximumMegabytes(policy.supportingDocumentMaximumBytes)} MB maximum`,
+        accept: ".pdf,.doc,.docx,.xls,.xlsx,.zip",
+        maximumBytes: policy.supportingDocumentMaximumBytes,
+      };
+    case null:
+      return {
+        value: "task_evidence" as const,
+        label: `General task evidence · documents, images or video · ${maximumMegabytes(policy.supportingDocumentMaximumBytes)} MB document limit`,
+        accept:
+          ".pdf,.ppt,.pptx,.doc,.docx,.xls,.xlsx,.zip,.jpg,.jpeg,.png,.webp,.mp4,.webm",
+        maximumBytes: policy.supportingDocumentMaximumBytes,
+        ...(fileScope === "session_deliverable"
+          ? {
+              maximumBytesByContentType: {
+                "video/mp4": policy.videoMaximumBytes,
+                "video/webm": policy.videoMaximumBytes,
+              },
+            }
+          : {}),
+      };
+  }
+}
+
 async function attachTaskEvidence(
   taskId: string,
   upload: { assetId: string; versionId: string },
@@ -369,28 +415,11 @@ export function SpeakerTasksPanel({
                     <DirectMultipartUpload
                       target={{ targetType: "task", targetId: task.id }}
                       kinds={[
-                        {
-                          value: "task_evidence",
-                          label:
-                            task.fileScope === "session_deliverable"
-                              ? `Task evidence · documents and images (${maximumMegabytes(portal.event.filePolicy.supportingDocumentMaximumBytes)} MB maximum) or MP4/WebM video (${maximumMegabytes(portal.event.filePolicy.videoMaximumBytes)} MB maximum)`
-                              : `Task evidence · ${maximumMegabytes(portal.event.filePolicy.supportingDocumentMaximumBytes)} MB maximum`,
-                          accept:
-                            ".pdf,.ppt,.pptx,.doc,.docx,.xls,.xlsx,.zip,.jpg,.jpeg,.png,.webp,.mp4,.webm",
-                          maximumBytes:
-                            portal.event.filePolicy
-                              .supportingDocumentMaximumBytes,
-                          ...(task.fileScope === "session_deliverable"
-                            ? {
-                                maximumBytesByContentType: {
-                                  "video/mp4":
-                                    portal.event.filePolicy.videoMaximumBytes,
-                                  "video/webm":
-                                    portal.event.filePolicy.videoMaximumBytes,
-                                },
-                              }
-                            : {}),
-                        },
+                        taskEvidenceUploadKind(
+                          task.fileKind,
+                          task.fileScope,
+                          portal.event.filePolicy,
+                        ),
                       ]}
                       heading={
                         task.status === "submitted"

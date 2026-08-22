@@ -159,7 +159,10 @@ export function CommunicationsWorkView({
               }}
             />
           </div>
-          <TemplatePreview draft={templateDraft} />
+          <TemplatePreview
+            draft={templateDraft}
+            mergeValues={loaderData.templatePreviewMergeValues}
+          />
         </div>
       </AdminPageSection>
 

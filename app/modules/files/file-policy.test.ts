@@ -159,4 +159,33 @@ describe("event file policy", () => {
       ),
     ).toThrow(/1 MB event limit/);
   });
+
+  it("enforces an explicitly configured task-evidence file kind", () => {
+    expect(() =>
+      validateDirectFileDeclaration(
+        "task_evidence",
+        {
+          name: "deck.pptx",
+          type: "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+          size: 1,
+        },
+        CANONICAL_EVENT_FILE_POLICY,
+        {
+          taskFileScope: "session_deliverable",
+          taskFileKind: "slides",
+        },
+      ),
+    ).not.toThrow();
+    expect(() =>
+      validateDirectFileDeclaration(
+        "task_evidence",
+        { name: "recording.mp4", type: "video/mp4", size: 1 },
+        CANONICAL_EVENT_FILE_POLICY,
+        {
+          taskFileScope: "session_deliverable",
+          taskFileKind: "slides",
+        },
+      ),
+    ).toThrow(/extension is not allowed/);
+  });
 });

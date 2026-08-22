@@ -684,17 +684,26 @@ describe("typed task API service", () => {
         targetType: "session",
         targetId: "session-demo-speaker",
         taskType: "file_upload",
-        configuration: { fileScope: "session_deliverable" },
+        configuration: {
+          fileScope: "session_deliverable",
+          fileKind: "slides",
+        },
         impact: "high",
-      }).configuration.fileScope,
-    ).toBe("session_deliverable");
+      }).configuration,
+    ).toMatchObject({
+      fileScope: "session_deliverable",
+      fileKind: "slides",
+    });
     expect(() =>
       apiTaskCreateSchema.parse({
         title: "Ambiguous slides",
         targetType: "speaker",
         targetId: "person-demo-speaker",
         taskType: "file_upload",
-        configuration: { fileScope: "session_deliverable" },
+        configuration: {
+          fileScope: "session_deliverable",
+          fileKind: "slides",
+        },
         impact: "high",
       }),
     ).toThrow(/must use session scope/);
@@ -730,7 +739,10 @@ describe("typed task API service", () => {
           targetId: sessionId,
           ownerPersonId: "person-demo-submitter",
           taskType: "file_upload",
-          configuration: { fileScope: "session_deliverable" },
+          configuration: {
+            fileScope: "session_deliverable",
+            fileKind: "slides",
+          },
           impact: "high",
           dueAt: null,
           dependencyIds: [],

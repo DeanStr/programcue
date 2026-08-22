@@ -166,6 +166,74 @@ describe("manual person creation warnings", () => {
     ).resolves.toBeNull();
   });
 
+  it("returns field-specific feedback when the direct-session speaker is blank", async () => {
+    const title = `Blank speaker ${crypto.randomUUID()}`;
+    const result = await action({
+      request: adminRequest(
+        new URLSearchParams({
+          _intent: "create_direct_session",
+          idempotencyKey: crypto.randomUUID(),
+          title,
+          description: "This request has an incomplete speaker row.",
+          format: "presentation",
+          trackId: "demo-track-ai",
+          durationMinutes: "45",
+          speakers: JSON.stringify([{ name: "", email: "", biography: "" }]),
+        }),
+      ),
+      params: {},
+      context: context(),
+    } as never);
+
+    if (result instanceof Response) {
+      throw new Error("Blank speaker returned a raw response.");
+    }
+    expect(result.init?.status).toBe(422);
+    expect(result.data).toMatchObject({
+      ok: false,
+      message: "Add at least one speaker with a name and valid email.",
+      fieldErrors: {
+        speakers: "Add at least one speaker with a name and valid email.",
+      },
+    });
+  });
+
+  it("preserves the duplicate speaker-email validation message", async () => {
+    const title = `Duplicate speaker email ${crypto.randomUUID()}`;
+    const repeatedEmail = `duplicate-${crypto.randomUUID()}@example.com`;
+    const result = await action({
+      request: adminRequest(
+        new URLSearchParams({
+          _intent: "create_direct_session",
+          idempotencyKey: crypto.randomUUID(),
+          title,
+          description: "This request repeats one valid speaker email.",
+          format: "presentation",
+          trackId: "demo-track-ai",
+          durationMinutes: "45",
+          speakers: JSON.stringify([
+            { name: "First speaker", email: repeatedEmail, biography: "" },
+            { name: "Second speaker", email: repeatedEmail, biography: "" },
+          ]),
+        }),
+      ),
+      params: {},
+      context: context(),
+    } as never);
+
+    if (result instanceof Response) {
+      throw new Error("Duplicate speaker emails returned a raw response.");
+    }
+    expect(result.init?.status).toBe(422);
+    expect(result.data).toMatchObject({
+      ok: false,
+      message: "Each speaker must use a different email address",
+      fieldErrors: {
+        speakers: "Each speaker must use a different email address",
+      },
+    });
+  });
+
   it("blocks a direct session until an administrator reviews likely duplicates", async () => {
     const title = `Duplicate warning ${crypto.randomUUID()}`;
     const idempotencyKey = crypto.randomUUID();

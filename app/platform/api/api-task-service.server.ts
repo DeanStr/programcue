@@ -6,6 +6,7 @@ import {
   assignedTaskConfigurationSchema,
   suggestedTaskEvidenceMode,
   taskDestinationUrlSchema,
+  taskFileKindSchema,
   taskFileScopeSchema,
 } from "~/modules/tasks/task-schema";
 import {
@@ -32,6 +33,7 @@ const apiTaskConfigurationSchema = z
   .object({
     destinationUrl: taskDestinationUrlSchema.optional(),
     fileScope: taskFileScopeSchema.optional(),
+    fileKind: taskFileKindSchema.optional(),
   })
   .strict();
 
@@ -87,6 +89,32 @@ export const apiTaskCreateSchema = z
         code: "custom",
         path: ["configuration", "fileScope"],
         message: "File scope is only supported by file-upload tasks.",
+      });
+    }
+    if (input.taskType === "file_upload" && !input.configuration.fileKind) {
+      context.addIssue({
+        code: "custom",
+        path: ["configuration", "fileKind"],
+        message: "File-upload tasks must identify the accepted file type.",
+      });
+    }
+    if (input.taskType !== "file_upload" && input.configuration.fileKind) {
+      context.addIssue({
+        code: "custom",
+        path: ["configuration", "fileKind"],
+        message: "File type is only supported by file-upload tasks.",
+      });
+    }
+    if (
+      input.configuration.fileScope === "participant_document" &&
+      input.configuration.fileKind &&
+      input.configuration.fileKind !== "supporting_document"
+    ) {
+      context.addIssue({
+        code: "custom",
+        path: ["configuration", "fileKind"],
+        message:
+          "Participant documents must use the supporting-document policy.",
       });
     }
     if (

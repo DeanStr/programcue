@@ -193,7 +193,7 @@ export class EvaluationDecisionService {
     const revision = (prior?.revision ?? 0) + 1;
     const completedRound = await this.env.DB.prepare(
       `
-      SELECT a.round_id AS roundId
+      SELECT a.round_id AS roundId, plan.id AS planId
         FROM evaluator_assignments a
         JOIN reviews r
           ON r.assignment_id = a.id AND r.event_id = a.event_id
@@ -212,7 +212,22 @@ export class EvaluationDecisionService {
     `,
     )
       .bind(viewer.eventId, submission.id)
-      .first<{ roundId: string }>();
+      .first<{ roundId: string; planId: string }>();
+    const currentPlan = completedRound
+      ? null
+      : await this.env.DB.prepare(
+          `SELECT plan.id
+             FROM evaluation_plans plan
+             JOIN events event
+               ON event.id = plan.event_id AND event.organisation_id = ?
+            WHERE plan.event_id = ?
+              AND plan.status IN ('draft','active','closed')
+              AND (SELECT COUNT(*) FROM evaluation_plans current_plan
+                    WHERE current_plan.event_id = plan.event_id
+                      AND current_plan.status <> 'archived') = 1`,
+        )
+          .bind(viewer.organisationId, viewer.eventId)
+          .first<{ id: string }>();
     if (parsed.release && !completedRound) {
       if (!parsed.confirmedWithoutReview) {
         throw new EvaluationValidationError(
@@ -527,6 +542,7 @@ export class EvaluationDecisionService {
       notificationFeedback,
       notificationFeedbackEvidence,
       roundId: completedRound?.roundId ?? null,
+      planId: completedRound?.planId ?? currentPlan?.id ?? null,
       speakerMemberships,
       speakerInvitationPlans,
       auditEventId,

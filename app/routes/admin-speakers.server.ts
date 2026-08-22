@@ -17,6 +17,7 @@ import {
 import { requireCurrentEventRole } from "~/platform/auth/current-event.server";
 import { getCloudflareContext } from "~/platform/cloudflare-context";
 import {
+  EvaluatorEmailAliasContextError,
   evaluatorEmailRoutingMessage,
   resolveEvaluatorEmailAlias,
 } from "~/platform/evaluation/evaluator-email-alias.server";
@@ -34,6 +35,7 @@ export type ActionResult = {
     >["matches"];
     truncated: boolean;
   };
+  existingRosterPerson?: { id: string; name: string };
   importPreview?: Awaited<ReturnType<SpeakerRosterImportService["preview"]>> & {
     idempotencyKey: string;
   };
@@ -280,11 +282,14 @@ export async function action({ request, context }: Route.ActionArgs) {
       viewer,
       String(input.email ?? ""),
     );
-    const duplicateCheck = emailResolution.routing
-      ? { matches: [], truncated: false }
-      : await new PersonDuplicateService(env).findLikelyDuplicates(viewer, [
-          { name: input.name, email: emailResolution.email },
-        ]);
+    const personService = new PersonDuplicateService(env);
+    const exactPeople = await personService.searchOrganisationPeople(
+      viewer,
+      emailResolution.email,
+    );
+    const duplicateCheck = await personService.findLikelyDuplicates(viewer, [
+      { name: input.name, email: emailResolution.email },
+    ]);
     if (
       duplicateCheck.matches.length &&
       form.get("confirmDuplicatePeople") !== "yes"
@@ -306,19 +311,41 @@ export async function action({ request, context }: Route.ActionArgs) {
       viewer,
       input,
     );
+    if (!result.createdRosterAssociation) {
+      const existingRosterPerson = exactPeople.find(
+        (person) => person.personId === result.personId,
+      );
+      return data<ActionResult>(
+        {
+          ok: false,
+          intent: "add_manual_speaker",
+          message:
+            "This identity is already on this event roster. The entered profile values were not applied; edit the existing speaker record instead.",
+          existingRosterPerson: {
+            id: result.personId,
+            name: existingRosterPerson?.name ?? String(input.name),
+          },
+        },
+        { status: 409 },
+      );
+    }
     const routingDisclosure = evaluatorEmailRoutingMessage(result.routing);
     return data<ActionResult>({
       ok: true,
       intent: "add_manual_speaker",
       message: `${
-        !result.createdRosterAssociation
-          ? "This identity is already on this event roster. Nothing was changed and no invitation email was sent."
-          : result.createdIdentity
-            ? "The speaker record was added to this event roster. No invitation email was sent."
-            : "The existing identity was added or restored on this event roster. Its participant-owned profile was left unchanged and no invitation email was sent."
+        result.createdIdentity
+          ? "The speaker record was added to this event roster. No invitation email was sent."
+          : "The existing identity was added or restored on this event roster. Its participant-owned profile was left unchanged and no invitation email was sent."
       }${routingDisclosure ? ` ${routingDisclosure}` : ""}`,
     });
   } catch (error) {
+    if (error instanceof EvaluatorEmailAliasContextError) {
+      return data<ActionResult>(
+        { ok: false, message: error.message },
+        { status: 422 },
+      );
+    }
     if (error instanceof ZodError) {
       return data<ActionResult>(
         {

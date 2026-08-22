@@ -27,7 +27,10 @@ import {
   CommunicationStateError,
   communicationErrorMessage,
 } from "~/modules/communications/communication-service.server";
-import { UnknownMergeVariableError } from "~/modules/communications/merge-template";
+import {
+  representativeMergeValues,
+  UnknownMergeVariableError,
+} from "~/modules/communications/merge-template";
 import {
   OrganisationCommunicationSettingsConflictError,
   OrganisationCommunicationSettingsService,
@@ -238,6 +241,16 @@ export async function loader({ request, context }: Route.LoaderArgs) {
       ? (categoryPreset.data satisfies CommunicationCategory)
       : null,
     eventTimezone: event.timezone,
+    templatePreviewMergeValues: {
+      ...representativeMergeValues,
+      "recipient.name": "Example recipient",
+      "recipient.firstName": "Example",
+      "event.name": event.name,
+      "event.dates":
+        event.startDate === event.endDate
+          ? event.startDate
+          : `${event.startDate} – ${event.endDate}`,
+    },
     organisationPhysicalAddress:
       organisationCommunicationSettings.physicalAddress,
     organisationPhysicalAddressRevision:

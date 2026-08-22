@@ -743,6 +743,15 @@ test.describe
       await directSession
         .getByLabel("Description")
         .fill("A confirmed sponsor programme contribution.");
+      await directSession
+        .getByRole("button", { name: "Create unscheduled session" })
+        .click();
+      await expect(
+        directSession.getByRole("alert").filter({
+          hasText: "Add at least one speaker with a name and valid email.",
+        }),
+      ).toBeVisible();
+      await expect(directSession.getByLabel("Speaker 1 name")).toBeFocused();
       await directSession.getByLabel("Find existing speaker 1").fill("Priya");
       const existingEventSpeaker = directSession.getByRole("button", {
         name: /Priya Shah.*Already on this event roster/,

@@ -2,6 +2,14 @@ import { z } from "zod";
 import { requireValue } from "~/lib/required-value";
 
 import type { Viewer } from "~/platform/auth/authorize.server";
+import {
+  currentEvaluationFixtureGeneration,
+  EVALUATION_FIXTURE_GENERATION_FENCE_PREDICATE,
+  EVALUATION_FIXTURE_RESET_OPERATION_ID,
+  EVALUATION_FIXTURE_RESET_OPERATION_TYPE,
+  evaluationFixtureResetIsRunning,
+  shouldFenceEvaluationFixtureMutation,
+} from "~/platform/evaluation/evaluation-fixture-reset-lock.server";
 
 const bulkActionSchema = z.enum([
   "add_tag",
@@ -304,6 +312,18 @@ export class SessionBulkService {
     options: PreviewOptions = {},
   ) {
     const parsed = previewInputSchema.parse(input);
+    const fenceEvaluationReset = shouldFenceEvaluationFixtureMutation(
+      this.env,
+      viewer.organisationId,
+    );
+    const fixtureGeneration = fenceEvaluationReset
+      ? await currentEvaluationFixtureGeneration(this.env)
+      : null;
+    if (fenceEvaluationReset && !fixtureGeneration) {
+      throw new SessionBulkStateError(
+        "A new preview cannot start while the evaluation fixture is resetting.",
+      );
+    }
     const workspace = await this.workspace(viewer);
     const sessionById = new Map(
       workspace.sessions.map((session) => [session.id, session]),
@@ -474,7 +494,11 @@ export class SessionBulkService {
                   unixepoch(), unixepoch()
              FROM events e
             WHERE e.id = ? AND e.organisation_id = ?
-              AND e.repository_provider = 'd1'`,
+              AND e.repository_provider = 'd1'
+              AND (? = 0 OR EXISTS (
+                SELECT 1 FROM operation_jobs fixture_reset
+                 WHERE ${EVALUATION_FIXTURE_GENERATION_FENCE_PREDICATE}
+              ))`,
       ).bind(
         operationId,
         viewer.organisationId,
@@ -493,6 +517,8 @@ export class SessionBulkService {
         invalidCount,
         viewer.eventId,
         viewer.organisationId,
+        fenceEvaluationReset ? 1 : 0,
+        fixtureGeneration,
       ),
       this.env.DB.prepare(
         `INSERT INTO operation_items (
@@ -528,6 +554,15 @@ export class SessionBulkService {
     ]);
     if ((created.meta.changes ?? 0) !== 1) {
       await this.assertD1Authority(viewer);
+      if (
+        fenceEvaluationReset &&
+        (await currentEvaluationFixtureGeneration(this.env)) !==
+          fixtureGeneration
+      ) {
+        throw new SessionBulkStateError(
+          "The evaluation fixture changed while this preview was prepared. Start a new preview.",
+        );
+      }
       throw new Error("The bulk preview could not be recorded.");
     }
     return { operationId, ...summary };
@@ -584,6 +619,13 @@ export class SessionBulkService {
 
   async confirm(viewer: Viewer, operationId: string) {
     await this.assertD1Authority(viewer);
+    if (
+      await evaluationFixtureResetIsRunning(this.env, viewer.organisationId)
+    ) {
+      throw new SessionBulkStateError(
+        "This preview cannot be confirmed while the evaluation fixture is resetting.",
+      );
+    }
     const operation = await this.operation(viewer, operationId);
     if (operation.status !== "received") {
       throw new SessionBulkStateError(
@@ -685,6 +727,21 @@ export class SessionBulkService {
         )`;
       claimBindings.push(summary.undoOf, viewer.eventId, viewer.organisationId);
     }
+    const fenceEvaluationReset = shouldFenceEvaluationFixtureMutation(
+      this.env,
+      viewer.organisationId,
+    );
+    stateGuard += `
+      AND (? = 0 OR NOT EXISTS (
+        SELECT 1 FROM operation_jobs fixture_reset
+         WHERE fixture_reset.id = ? AND fixture_reset.type = ?
+           AND fixture_reset.status = 'running'
+      ))`;
+    claimBindings.push(
+      fenceEvaluationReset ? 1 : 0,
+      EVALUATION_FIXTURE_RESET_OPERATION_ID,
+      EVALUATION_FIXTURE_RESET_OPERATION_TYPE,
+    );
     const claim = this.env.DB.prepare(
       `UPDATE operation_jobs
           SET status = 'running', started_at = unixepoch(),
@@ -964,6 +1021,13 @@ export class SessionBulkService {
     ]);
     if ((results[0].meta.changes ?? 0) !== 1) {
       await this.assertD1Authority(viewer);
+      if (
+        await evaluationFixtureResetIsRunning(this.env, viewer.organisationId)
+      ) {
+        throw new SessionBulkStateError(
+          "This preview cannot be confirmed while the evaluation fixture is resetting.",
+        );
+      }
       await this.markStale(viewer, operationId);
       throw new SessionBulkStateError(
         summary.undoOf

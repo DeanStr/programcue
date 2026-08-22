@@ -70,6 +70,11 @@ export const taskFileScopeSchema = z.enum([
   "participant_document",
   "session_deliverable",
 ]);
+export const taskFileKindSchema = z.enum([
+  "slides",
+  "video",
+  "supporting_document",
+]);
 
 export const taskTemplateConfigurationSchema = z
   .object({
@@ -81,6 +86,7 @@ export const taskTemplateConfigurationSchema = z
       .optional(),
     destinationUrl: taskDestinationUrlSchema.optional(),
     fileScope: taskFileScopeSchema.optional(),
+    fileKind: taskFileKindSchema.optional(),
   })
   .strict();
 
@@ -162,11 +168,37 @@ export const taskTemplateInputSchema = z
           "File-upload tasks must identify a participant document or session deliverable.",
       });
     }
+    if (input.taskType === "file_upload" && !input.configuration.fileKind) {
+      context.addIssue({
+        code: "custom",
+        path: ["configuration", "fileKind"],
+        message: "File-upload tasks must identify the accepted file type.",
+      });
+    }
     if (input.taskType !== "file_upload" && input.configuration.fileScope) {
       context.addIssue({
         code: "custom",
         path: ["configuration", "fileScope"],
         message: "File scope is only supported by file-upload tasks.",
+      });
+    }
+    if (input.taskType !== "file_upload" && input.configuration.fileKind) {
+      context.addIssue({
+        code: "custom",
+        path: ["configuration", "fileKind"],
+        message: "File type is only supported by file-upload tasks.",
+      });
+    }
+    if (
+      input.configuration.fileScope === "participant_document" &&
+      input.configuration.fileKind &&
+      input.configuration.fileKind !== "supporting_document"
+    ) {
+      context.addIssue({
+        code: "custom",
+        path: ["configuration", "fileKind"],
+        message:
+          "Participant documents must use the supporting-document policy.",
       });
     }
     if (
@@ -202,7 +234,8 @@ export const taskTemplateInputSchema = z
         input.dependencyIds.length !== 0 ||
         input.configuration.form !== undefined ||
         input.configuration.destinationUrl !== undefined ||
-        input.configuration.fileScope !== undefined)
+        input.configuration.fileScope !== undefined ||
+        input.configuration.fileKind !== undefined)
     ) {
       context.addIssue({
         code: "custom",
@@ -337,6 +370,7 @@ export type TaskTemplateDraftValues = {
   fixedDueDate: string;
   destinationUrl: string;
   fileScope: "" | z.infer<typeof taskFileScopeSchema>;
+  fileKind: "" | z.infer<typeof taskFileKindSchema>;
   autoAssignOnAcceptance: boolean;
   dependencyIds: string[];
 };
@@ -353,6 +387,7 @@ const taskTemplateDraftSchema = z.object({
   fixedDueDate: z.string().catch(""),
   destinationUrl: z.string().catch(""),
   fileScope: z.union([z.literal(""), taskFileScopeSchema]).catch(""),
+  fileKind: z.union([z.literal(""), taskFileKindSchema]).catch(""),
   autoAssignOnAcceptance: z.boolean().catch(false),
   dependencyIds: z.array(z.string()).catch([]),
 });

@@ -367,8 +367,8 @@ describe("public programme speaker surfaces", () => {
     );
 
     expect(markup).toContain("Speaker Gallery");
-    expect(markup).not.toContain('type="search"');
-    expect(markup).not.toContain("Search speaker gallery by name");
+    expect(markup).toContain('type="search"');
+    expect(markup).toContain("Search speaker gallery by name");
     expect(markup).toContain("Open speaker details for Priya Shah");
     expect(markup).toContain("Director of Experience Design");
     expect(markup).toContain("EventLab");
@@ -376,11 +376,11 @@ describe("public programme speaker surfaces", () => {
     expect(markup).toContain('loading="lazy"');
   });
 
-  it("hides speaker search until the published roster is large enough", () => {
+  it("keeps name search discoverable even for a sparse published roster", () => {
     const sparseGallery = renderToStaticMarkup(
       <PublicSpeakerGallerySurface model={model()} />,
     );
-    expect(sparseGallery).not.toContain('type="search"');
+    expect(sparseGallery).toContain('type="search"');
 
     const queriedGallery = renderToStaticMarkup(
       <PublicSpeakerGallerySurface model={model({ galleryQuery: "Priya" })} />,
@@ -409,7 +409,7 @@ describe("public programme speaker surfaces", () => {
         })}
       />,
     );
-    expect(sparseDirectory).not.toContain("Search speakers by name");
+    expect(sparseDirectory).toContain("Search speakers by name");
   });
 
   it("renders speaker surfaces as non-expanding cards when details are hidden", () => {

@@ -3,6 +3,14 @@ import { requireValue } from "~/lib/required-value";
 
 import { AirtableProviderBoundary } from "~/modules/airtable/airtable-provider-boundary.server";
 import type { Viewer } from "~/platform/auth/authorize.server";
+import {
+  currentEvaluationFixtureGeneration,
+  EVALUATION_FIXTURE_GENERATION_FENCE_PREDICATE,
+  EVALUATION_FIXTURE_RESET_OPERATION_ID,
+  EVALUATION_FIXTURE_RESET_OPERATION_TYPE,
+  evaluationFixtureResetIsRunning,
+  shouldFenceEvaluationFixtureMutation,
+} from "~/platform/evaluation/evaluation-fixture-reset-lock.server";
 import { TaskService, TaskStateError } from "./task-service.server";
 
 const taskBulkActionSchema = z.enum(["assign_template", "waive", "reopen"]);
@@ -355,6 +363,18 @@ export class TaskBulkService {
     },
   ) {
     const parsed = previewInputSchema.parse(input);
+    const fenceEvaluationReset = shouldFenceEvaluationFixtureMutation(
+      this.env,
+      viewer.organisationId,
+    );
+    const fixtureGeneration = fenceEvaluationReset
+      ? await currentEvaluationFixtureGeneration(this.env)
+      : null;
+    if (fenceEvaluationReset && !fixtureGeneration) {
+      throw new TaskBulkStateError(
+        "A new preview cannot start while the evaluation fixture is resetting.",
+      );
+    }
     const workspace = await this.workspace(viewer);
     const items: Array<{
       id: string;
@@ -653,7 +673,11 @@ export class TaskBulkService {
          )
          SELECT ?, ?, ?, ?, 'task.bulk', ?, ?, 'received', ?, ?, ?, ?, ?, 1,
                 unixepoch(), unixepoch()
-           FROM events WHERE id = ? AND organisation_id = ?`,
+           FROM events WHERE id = ? AND organisation_id = ?
+            AND (? = 0 OR EXISTS (
+              SELECT 1 FROM operation_jobs fixture_reset
+               WHERE ${EVALUATION_FIXTURE_GENERATION_FENCE_PREDICATE}
+            ))`,
       ).bind(
         operationId,
         viewer.organisationId,
@@ -668,13 +692,17 @@ export class TaskBulkService {
         invalidCount,
         viewer.eventId,
         viewer.organisationId,
+        fenceEvaluationReset ? 1 : 0,
+        fixtureGeneration,
       ),
       ...items.map((item) =>
         this.env.DB.prepare(
           `INSERT INTO operation_items (
              id, operation_id, item_key, entity_type, entity_id, status,
              result_json, error_code, error_message, updated_at
-           ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, unixepoch())`,
+           )
+           SELECT ?, ?, ?, ?, ?, ?, ?, ?, ?, unixepoch()
+            WHERE EXISTS (SELECT 1 FROM operation_jobs WHERE id = ?)`,
         ).bind(
           item.id,
           operationId,
@@ -685,6 +713,7 @@ export class TaskBulkService {
           JSON.stringify(item.result),
           item.errorCode,
           item.errorMessage,
+          operationId,
         ),
       ),
       this.env.DB.prepare(
@@ -705,6 +734,15 @@ export class TaskBulkService {
       ),
     ]);
     if ((results[0].meta.changes ?? 0) !== 1) {
+      if (
+        fenceEvaluationReset &&
+        (await currentEvaluationFixtureGeneration(this.env)) !==
+          fixtureGeneration
+      ) {
+        throw new TaskBulkStateError(
+          "The evaluation fixture changed while this preview was prepared. Start a new preview.",
+        );
+      }
       throw new Error("The bulk task preview could not be recorded.");
     }
     return { operationId, ...summary };
@@ -743,11 +781,20 @@ export class TaskBulkService {
     viewer: Viewer,
     operation: TaskBulkOperation,
   ) {
+    const fenceEvaluationReset = shouldFenceEvaluationFixtureMutation(
+      this.env,
+      viewer.organisationId,
+    );
     const baseSql = `UPDATE operation_jobs
         SET status = 'running', cancellable = 0, started_at = unixepoch(),
             updated_at = unixepoch()
       WHERE id = ? AND event_id = ? AND organisation_id = ?
-        AND type = 'task.bulk' AND status = 'received'`;
+        AND type = 'task.bulk' AND status = 'received'
+        AND (? = 0 OR NOT EXISTS (
+          SELECT 1 FROM operation_jobs fixture_reset
+           WHERE fixture_reset.id = ? AND fixture_reset.type = ?
+             AND fixture_reset.status = 'running'
+        ))`;
     if (operation.summary.action !== "assign_template") {
       const expected = operation.items
         .filter(
@@ -774,6 +821,9 @@ export class TaskBulkService {
           operation.id,
           viewer.eventId,
           viewer.organisationId,
+          fenceEvaluationReset ? 1 : 0,
+          EVALUATION_FIXTURE_RESET_OPERATION_ID,
+          EVALUATION_FIXTURE_RESET_OPERATION_TYPE,
           viewer.organisationId,
           JSON.stringify(expected),
           viewer.eventId,
@@ -865,6 +915,9 @@ export class TaskBulkService {
         operation.id,
         viewer.eventId,
         viewer.organisationId,
+        fenceEvaluationReset ? 1 : 0,
+        EVALUATION_FIXTURE_RESET_OPERATION_ID,
+        EVALUATION_FIXTURE_RESET_OPERATION_TYPE,
         serializedTemplates,
         viewer.eventId,
         JSON.stringify(templateIds),
@@ -881,6 +934,13 @@ export class TaskBulkService {
   }
 
   async confirm(viewer: Viewer, operationId: string) {
+    if (
+      await evaluationFixtureResetIsRunning(this.env, viewer.organisationId)
+    ) {
+      throw new TaskBulkStateError(
+        "This preview cannot be confirmed while the evaluation fixture is resetting.",
+      );
+    }
     const operation = await this.operation(viewer, operationId);
     if (operation.status !== "received") {
       throw new TaskBulkStateError(
@@ -894,6 +954,13 @@ export class TaskBulkService {
     }
     const claim = await this.claimFreshPreview(viewer, operation);
     if ((claim.meta.changes ?? 0) !== 1) {
+      if (
+        await evaluationFixtureResetIsRunning(this.env, viewer.organisationId)
+      ) {
+        throw new TaskBulkStateError(
+          "This preview cannot be confirmed while the evaluation fixture is resetting.",
+        );
+      }
       const current = await this.env.DB.prepare(
         `SELECT status FROM operation_jobs
           WHERE id = ? AND event_id = ? AND organisation_id = ?

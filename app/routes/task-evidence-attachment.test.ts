@@ -206,13 +206,9 @@ describe("task-evidence attachment resource", () => {
         assetKind: "task_evidence",
       },
       new File(
-        [
-          new Uint8Array([
-            0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0, 0, 0,
-          ]),
-        ],
-        "route-evidence.png",
-        { type: "image/png" },
+        [new TextEncoder().encode("%PDF-1.7\nroute evidence")],
+        "route-evidence.pdf",
+        { type: "application/pdf" },
       ),
     );
     const input = {
@@ -313,13 +309,9 @@ describe("task-evidence attachment resource", () => {
         assetKind: "task_evidence",
       },
       new File(
-        [
-          new Uint8Array([
-            0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 1, 2, 3, 4,
-          ]),
-        ],
-        "stale-task-evidence.png",
-        { type: "image/png" },
+        [new TextEncoder().encode("%PDF-1.7\nstale task evidence")],
+        "stale-task-evidence.pdf",
+        { type: "application/pdf" },
       ),
     );
     const stored = await workerEnv.DB.prepare(

@@ -4,6 +4,12 @@ import { beforeAll, describe, expect, it } from "vitest";
 import type { Viewer } from "~/platform/auth/authorize.server";
 import { ensureDemoData } from "~/platform/demo/seed.server";
 import {
+  acquireEvaluationFixtureReset,
+  beginEvaluationFixtureResetDestructiveWork,
+  completeEvaluationFixtureReset,
+  markEvaluationFixtureResetFailed,
+} from "~/platform/evaluation/evaluation-fixture-reset-lock.server";
+import {
   SessionBulkService,
   SessionBulkStateError,
 } from "~/platform/operations/session-bulk-service.server";
@@ -17,6 +23,28 @@ const viewer: Viewer = {
   eventId: "evt-foe-2025",
   demo: true,
 };
+
+function evaluationEnvironment() {
+  return {
+    ...(env as unknown as CloudflareEnvironment),
+    APP_ENV: "production",
+    DEMO_MODE: "false",
+    EVALUATION_MODE: "true",
+  } as CloudflareEnvironment;
+}
+
+async function establishEvaluationFixtureGeneration(
+  testEnv: CloudflareEnvironment,
+) {
+  const ownerToken = crypto.randomUUID();
+  const fixtureGeneration = crypto.randomUUID();
+  await acquireEvaluationFixtureReset(testEnv, ownerToken);
+  await beginEvaluationFixtureResetDestructiveWork(testEnv, ownerToken);
+  await completeEvaluationFixtureReset(testEnv, ownerToken, fixtureGeneration, {
+    testFixtureGeneration: true,
+  });
+  return fixtureGeneration;
+}
 
 describe("session bulk operations", () => {
   beforeAll(async () => {
@@ -109,6 +137,71 @@ describe("session bulk operations", () => {
         .bind(preview.operationId)
         .first(),
     ).toEqual({ undoneBy: inverse.operationId });
+  });
+
+  it("fences confirmation and cancels the preview when evaluation reset starts", async () => {
+    const testEnv = evaluationEnvironment();
+    await establishEvaluationFixtureGeneration(testEnv);
+    const suffix = crypto.randomUUID();
+    const sessionId = `bulk-reset-fence-${suffix}`;
+    await testEnv.DB.prepare(
+      `INSERT INTO sessions (
+         id, event_id, title, slug, format, duration_minutes, status, visibility
+       ) VALUES (?, ?, 'Reset-fenced session', ?, 'presentation', 30,
+                 'unscheduled', 'public')`,
+    )
+      .bind(sessionId, viewer.eventId, sessionId)
+      .run();
+    const service = new SessionBulkService(testEnv);
+    const preview = await service.preview(viewer, {
+      action: "add_tag",
+      sessionIds: [sessionId],
+      tagName: `Reset fence ${suffix}`,
+      colourToken: "slate",
+    });
+    const resetOwner = crypto.randomUUID();
+    await acquireEvaluationFixtureReset(testEnv, resetOwner);
+    try {
+      await expect(
+        service.confirm(viewer, preview.operationId),
+      ).rejects.toThrow("evaluation fixture is resetting");
+      await expect(
+        testEnv.DB.prepare(`SELECT status FROM operation_jobs WHERE id = ?`)
+          .bind(preview.operationId)
+          .first(),
+      ).resolves.toEqual({ status: "received" });
+      await expect(
+        testEnv.DB.prepare(
+          `SELECT COUNT(*) AS count FROM session_tags
+            WHERE event_id = ? AND session_id = ?`,
+        )
+          .bind(viewer.eventId, sessionId)
+          .first(),
+      ).resolves.toEqual({ count: 0 });
+
+      await beginEvaluationFixtureResetDestructiveWork(testEnv, resetOwner);
+      await expect(
+        testEnv.DB.prepare(
+          `SELECT status, cancellable FROM operation_jobs WHERE id = ?`,
+        )
+          .bind(preview.operationId)
+          .first(),
+      ).resolves.toEqual({ status: "cancelled", cancellable: 0 });
+      await expect(
+        testEnv.DB.prepare(
+          `SELECT status, error_code AS errorCode FROM operation_items
+            WHERE operation_id = ?`,
+        )
+          .bind(preview.operationId)
+          .first(),
+      ).resolves.toEqual({ status: "skipped", errorCode: "FIXTURE_RESET" });
+    } finally {
+      await markEvaluationFixtureResetFailed(
+        testEnv,
+        resetOwner,
+        new Error("Reset-fence test cleanup."),
+      );
+    }
   });
 
   it("archives and restores the exact previous session status", async () => {

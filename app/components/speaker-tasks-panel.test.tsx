@@ -1,7 +1,10 @@
 import { describe, expect, it } from "vitest";
 
 import { directUploadMaximumBytes } from "./direct-multipart-upload";
-import { taskEvidenceVersionStatus } from "./speaker-tasks-panel";
+import {
+  taskEvidenceUploadKind,
+  taskEvidenceVersionStatus,
+} from "./speaker-tasks-panel";
 
 describe("speaker task upload limits", () => {
   it("uses the video limit only for declared supported video MIME types", () => {
@@ -19,6 +22,41 @@ describe("speaker task upload limits", () => {
     expect(directUploadMaximumBytes(kind, " VIDEO/WEBM ")).toBe(100);
     expect(directUploadMaximumBytes(kind, "application/pdf")).toBe(25);
     expect(directUploadMaximumBytes(kind, "")).toBe(25);
+  });
+
+  it("presents the exact configured presentation policy", () => {
+    const kind = taskEvidenceUploadKind("slides", "session_deliverable", {
+      headshotMaximumBytes: 10 * 1_048_576,
+      slidesMaximumBytes: 100 * 1_048_576,
+      supportingDocumentMaximumBytes: 100 * 1_048_576,
+      videoMaximumBytes: 1_024 * 1_048_576,
+    });
+    expect(kind).toMatchObject({
+      label: "Presentation slides · PDF, PPT or PPTX · 100 MB maximum",
+      accept: ".pdf,.ppt,.pptx",
+      maximumBytes: 100 * 1_048_576,
+    });
+  });
+
+  it("does not advertise the larger video limit for legacy participant documents", () => {
+    const policy = {
+      headshotMaximumBytes: 10 * 1_048_576,
+      slidesMaximumBytes: 100 * 1_048_576,
+      supportingDocumentMaximumBytes: 100 * 1_048_576,
+      videoMaximumBytes: 1_024 * 1_048_576,
+    };
+
+    expect(
+      taskEvidenceUploadKind(null, "participant_document", policy),
+    ).not.toHaveProperty("maximumBytesByContentType");
+    expect(
+      taskEvidenceUploadKind(null, "session_deliverable", policy),
+    ).toMatchObject({
+      maximumBytesByContentType: {
+        "video/mp4": policy.videoMaximumBytes,
+        "video/webm": policy.videoMaximumBytes,
+      },
+    });
   });
 });
 

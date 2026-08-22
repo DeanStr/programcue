@@ -20,6 +20,12 @@ describe("communications presentation", () => {
   it("previews the product-owned action for submission confirmations", () => {
     const markup = renderToStaticMarkup(
       <TemplatePreview
+        mergeValues={{
+          "recipient.name": "Example recipient",
+          "recipient.firstName": "Example",
+          "event.name": "DevFlow Conf 2027",
+          "event.dates": "2027-09-03 – 2027-09-04",
+        }}
         draft={{
           name: "Application received",
           category: "submission_confirmation",
@@ -36,6 +42,8 @@ describe("communications presentation", () => {
     expect(markup).toContain("Exact application URL generated when sent");
     expect(markup).not.toContain("Stale organizer button");
     expect(markup).not.toContain("https://example.test/stale");
+    expect(markup).toContain("Example recipient");
+    expect(markup).toContain("template preview, not delivery evidence");
   });
 
   it("isolates tenant-authored email preview HTML from the application origin", () => {

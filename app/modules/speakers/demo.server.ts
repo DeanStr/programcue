@@ -145,7 +145,7 @@ export async function ensureDemoSpeakerData(env: CloudflareEnvironment) {
       ) VALUES (
         'task-template-slides', ?, 'Upload presentation slides', 'Upload the final PDF, PPT or PPTX deck.',
         'session', 'file_upload', 'critical', 'file', 'fixed', NULL,
-        unixepoch('2027-05-10T16:00:00Z'), 1, '{"fileScope":"session_deliverable"}', 'active', unixepoch(), unixepoch()
+        unixepoch('2027-05-10T16:00:00Z'), 1, '{"fileScope":"session_deliverable","fileKind":"slides"}', 'active', unixepoch(), unixepoch()
       )
     `,
     ).bind(EVENT_ID),
@@ -185,7 +185,7 @@ export async function ensureDemoSpeakerData(env: CloudflareEnvironment) {
         readiness_state, readiness_percent, revision, due_at, created_at, updated_at
       ) VALUES (
         'task-demo-slides', ?, 'task-template-slides', 'session', 'session-demo-speaker', ?, 'Upload presentation slides',
-        'Upload the final PDF, PPT or PPTX deck.', 'file_upload', 'critical', 'file', '{"fileScope":"session_deliverable"}',
+        'Upload the final PDF, PPT or PPTX deck.', 'file_upload', 'critical', 'file', '{"fileScope":"session_deliverable","fileKind":"slides"}',
         'not_started', 'at_risk', 0, 1, unixepoch('2027-05-16T16:00:00Z'), unixepoch(), unixepoch()
       )
     `,

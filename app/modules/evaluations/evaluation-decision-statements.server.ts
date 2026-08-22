@@ -315,6 +315,7 @@ export function buildDecisionStatements(input: {
   notificationFeedback: string[];
   notificationFeedbackEvidence: DecisionReviewFeedbackEvidence[];
   roundId: string | null;
+  planId: string | null;
   speakerMemberships: Array<{ membershipId: string; personId: string }>;
   speakerInvitationPlans: AcceptedSpeakerInvitationPlan[];
   auditEventId: string;
@@ -339,6 +340,7 @@ export function buildDecisionStatements(input: {
     notificationFeedback,
     notificationFeedbackEvidence,
     roundId,
+    planId,
     speakerMemberships,
     speakerInvitationPlans,
     auditEventId,
@@ -398,6 +400,63 @@ export function buildDecisionStatements(input: {
         ...speakerMemberships.map((membership) => membership.personId),
       ]
     : [];
+  if (roundId && !planId) {
+    throw new Error(
+      "Decision statements with review evidence require exact plan provenance.",
+    );
+  }
+  const decisionCycleGuard = roundId
+    ? {
+        sql: `EXISTS (
+          SELECT 1
+            FROM evaluator_assignments evidence_assignment
+            JOIN reviews evidence_review
+              ON evidence_review.assignment_id = evidence_assignment.id
+             AND evidence_review.event_id = evidence_assignment.event_id
+             AND evidence_review.status IN ('submitted','locked')
+            JOIN evaluation_rounds evidence_round
+              ON evidence_round.id = evidence_assignment.round_id
+             AND evidence_round.event_id = evidence_assignment.event_id
+            JOIN evaluation_plans evidence_plan
+              ON evidence_plan.id = evidence_round.plan_id
+             AND evidence_plan.event_id = evidence_round.event_id
+           WHERE evidence_assignment.event_id = submissions.event_id
+             AND evidence_assignment.submission_id = submissions.id
+             AND evidence_assignment.round_id = ?
+             AND evidence_plan.id = ?
+             AND evidence_round.status IN ('active','closed')
+             AND evidence_plan.status IN ('active','closed')
+             AND (SELECT COUNT(*)
+                    FROM evaluation_plans current_plan
+                   WHERE current_plan.event_id = submissions.event_id
+                     AND current_plan.status <> 'archived') = 1
+        )`,
+        bindings: [roundId, planId],
+      }
+    : planId
+      ? {
+          sql: `EXISTS (
+            SELECT 1
+              FROM evaluation_plans evidence_plan
+             WHERE evidence_plan.id = ?
+               AND evidence_plan.event_id = submissions.event_id
+               AND evidence_plan.status IN ('draft','active','closed')
+               AND (SELECT COUNT(*)
+                      FROM evaluation_plans current_plan
+                     WHERE current_plan.event_id = submissions.event_id
+                       AND current_plan.status <> 'archived') = 1
+          )`,
+          bindings: [planId],
+        }
+      : {
+          sql: `NOT EXISTS (
+            SELECT 1
+              FROM evaluation_plans current_plan
+             WHERE current_plan.event_id = submissions.event_id
+               AND current_plan.status <> 'archived'
+          )`,
+          bindings: [],
+        };
   const notificationFeedbackGuardSql = parsed.includeReviewerFeedback
     ? `(
         (SELECT COUNT(*)
@@ -455,32 +514,7 @@ export function buildDecisionStatements(input: {
            SET status = ?, revision = revision + 1, last_operation_id = ?, updated_at = unixepoch()
          WHERE id = ? AND event_id = ? AND revision = ?
            AND status IN ('submitted','assigned','in_review','decision_ready')
-           AND (
-             ? IS NULL
-             OR EXISTS (
-               SELECT 1
-                 FROM evaluator_assignments evidence_assignment
-                 JOIN reviews evidence_review
-                   ON evidence_review.assignment_id = evidence_assignment.id
-                  AND evidence_review.event_id = evidence_assignment.event_id
-                  AND evidence_review.status IN ('submitted','locked')
-                 JOIN evaluation_rounds evidence_round
-                   ON evidence_round.id = evidence_assignment.round_id
-                  AND evidence_round.event_id = evidence_assignment.event_id
-                 JOIN evaluation_plans evidence_plan
-                   ON evidence_plan.id = evidence_round.plan_id
-                  AND evidence_plan.event_id = evidence_round.event_id
-                WHERE evidence_assignment.event_id = submissions.event_id
-                  AND evidence_assignment.submission_id = submissions.id
-                  AND evidence_assignment.round_id = ?
-                  AND evidence_round.status IN ('active','closed')
-                  AND evidence_plan.status IN ('active','closed')
-                  AND (SELECT COUNT(*)
-                         FROM evaluation_plans current_plan
-                        WHERE current_plan.event_id = submissions.event_id
-                          AND current_plan.status <> 'archived') = 1
-             )
-           )
+           AND (${decisionCycleGuard.sql})
            AND (${notificationFeedbackGuardSql})
            AND (
              ? <> 'published' OR ? <> 'accepted'
@@ -565,8 +599,7 @@ export function buildDecisionStatements(input: {
       submission.id,
       viewer.eventId,
       submission.revision,
-      roundId,
-      roundId,
+      ...decisionCycleGuard.bindings,
       ...notificationFeedbackGuardBindings,
       status,
       parsed.decision,
@@ -675,6 +708,7 @@ export function buildDecisionStatements(input: {
         materializesOnboardingTaskPlan: Boolean(sessionId),
         queuesNotification: Boolean(notificationOperationId),
         roundId,
+        planId,
         reviewEvidenceOverride: status === "published" && roundId === null,
         includeReviewerFeedback: parsed.includeReviewerFeedback,
         sessionTrackId: sessionTrack?.id ?? null,
@@ -1064,6 +1098,7 @@ export function buildDecisionStatements(input: {
         sessionTrackId: sessionTrack?.id ?? null,
         sessionTrackName: sessionTrack?.name ?? null,
         notificationOperationId,
+        planId,
         reviewEvidenceOverride: parsed.release && roundId === null,
       }),
       submission.id,

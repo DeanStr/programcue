@@ -21,6 +21,7 @@ describe("task template form values", () => {
       fixedDueDate: "",
       destinationUrl: "",
       fileScope: "",
+      fileKind: "",
       autoAssignOnAcceptance: false,
       dependencyIds: [],
     });
@@ -143,9 +144,15 @@ describe("task template form values", () => {
     expect(
       taskTemplateInputSchema.parse({
         ...base,
-        configuration: { fileScope: "session_deliverable" },
-      }).configuration.fileScope,
-    ).toBe("session_deliverable");
+        configuration: {
+          fileScope: "session_deliverable",
+          fileKind: "slides",
+        },
+      }).configuration,
+    ).toMatchObject({
+      fileScope: "session_deliverable",
+      fileKind: "slides",
+    });
     expect(() =>
       taskTemplateInputSchema.parse({
         ...base,
@@ -153,6 +160,16 @@ describe("task template form values", () => {
         configuration: { fileScope: "session_deliverable" },
       }),
     ).toThrow(/must use session scope/);
+    expect(() =>
+      taskTemplateInputSchema.parse({
+        ...base,
+        targetType: "speaker",
+        configuration: {
+          fileScope: "participant_document",
+          fileKind: "slides",
+        },
+      }),
+    ).toThrow(/supporting-document policy/);
   });
 
   it("keeps internal resource bindings outside organizer configuration", () => {

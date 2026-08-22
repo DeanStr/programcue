@@ -12,6 +12,9 @@ type ReviewEligibilityPhase = "assignment" | "review";
 /**
  * A terminal submission may enter a later review cycle only when its published
  * decision has exact provenance in a fully archived evaluation plan and round.
+ * A decision released without review evidence has no round, so its immutable
+ * effect preview instead carries the exact current plan. That plan must also
+ * be archived before the submission can enter a later review cycle.
  * An unpublished decision-ready submission becomes assignable only after all
  * of its prior assignments belong to archived plans. Decisions without round
  * provenance deliberately fail closed.
@@ -61,18 +64,40 @@ export function reviewableSubmissionSql(
       AND EXISTS (
         SELECT 1
           FROM submission_decisions prior_decision
-          JOIN evaluation_rounds prior_decision_round
-            ON prior_decision_round.id = prior_decision.round_id
-           AND prior_decision_round.event_id = prior_decision.event_id
-          JOIN evaluation_plans prior_decision_plan
-            ON prior_decision_plan.id = prior_decision_round.plan_id
-           AND prior_decision_plan.event_id = prior_decision_round.event_id
          WHERE prior_decision.event_id = ${alias}.event_id
            AND prior_decision.submission_id = ${alias}.id
            AND prior_decision.status = 'published'
            AND prior_decision.decision = ${alias}.status
-           AND prior_decision_round.status = 'archived'
-           AND prior_decision_plan.status = 'archived'
+           AND (
+             EXISTS (
+               SELECT 1
+                 FROM evaluation_rounds prior_decision_round
+                 JOIN evaluation_plans prior_decision_plan
+                   ON prior_decision_plan.id = prior_decision_round.plan_id
+                  AND prior_decision_plan.event_id = prior_decision_round.event_id
+                WHERE prior_decision_round.id = prior_decision.round_id
+                  AND prior_decision_round.event_id = prior_decision.event_id
+                  AND prior_decision_round.status = 'archived'
+                  AND prior_decision_plan.status = 'archived'
+             )
+             OR (
+               prior_decision.round_id IS NULL
+               AND json_type(
+                 prior_decision.effect_preview_json,
+                 '$.planId'
+               ) = 'text'
+               AND EXISTS (
+                 SELECT 1
+                   FROM evaluation_plans prior_decision_plan
+                  WHERE prior_decision_plan.id = json_extract(
+                          prior_decision.effect_preview_json,
+                          '$.planId'
+                        )
+                    AND prior_decision_plan.event_id = prior_decision.event_id
+                    AND prior_decision_plan.status = 'archived'
+               )
+             )
+           )
       )
     )
   )`;

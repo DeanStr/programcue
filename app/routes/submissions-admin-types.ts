@@ -6,6 +6,7 @@ export type SubmissionsAdminActionResult = {
   partial?: boolean;
   message: string;
   operationId?: string;
+  fieldErrors?: { speakers?: string };
   duplicateCheck?: {
     intent: "create_direct_session" | "create_manual_application";
     matches: DuplicatePersonMatch[];

@@ -64,7 +64,8 @@ describe("direct R2 multipart upload", () => {
       `UPDATE task_instances
           SET status = 'not_started', evidence_json = NULL,
               submitted_at = NULL, completed_at = NULL,
-              completed_by_person_id = NULL
+              completed_by_person_id = NULL,
+              configuration_json = '{"fileScope":"session_deliverable","fileKind":"slides"}'
         WHERE id = 'task-demo-slides' AND event_id = ?`,
     )
       .bind(speaker.eventId)
@@ -332,6 +333,7 @@ describe("direct R2 multipart upload", () => {
       .bind(
         JSON.stringify({
           ...CANONICAL_EVENT_FILE_POLICY,
+          slidesMaximumBytes: FILE_SIZE_MIB,
           supportingDocumentMaximumBytes: FILE_SIZE_MIB,
         }),
         speaker.eventId,
@@ -390,6 +392,7 @@ describe("direct R2 multipart upload", () => {
         JSON.stringify({
           ...CANONICAL_EVENT_FILE_POLICY,
           supportingDocumentMaximumBytes: FILE_SIZE_MIB,
+          slidesMaximumBytes: FILE_SIZE_MIB,
         }),
         speaker.eventId,
       )
@@ -579,6 +582,7 @@ describe("direct R2 multipart upload", () => {
     const testEnvironment = configuredMultipartEnvironment();
     const policy = {
       ...CANONICAL_EVENT_FILE_POLICY,
+      slidesMaximumBytes: FILE_SIZE_MIB,
       supportingDocumentMaximumBytes: FILE_SIZE_MIB,
       videoMaximumBytes: 2 * FILE_SIZE_MIB,
     };
@@ -601,6 +605,20 @@ describe("direct R2 multipart upload", () => {
         idempotencyKey: crypto.randomUUID(),
       }),
     ).rejects.toThrow("1 MB event limit");
+
+    await expect(
+      service.initiate(speaker, {
+        target: {
+          targetType: "task",
+          targetId: "task-demo-slides",
+          assetKind: "task_evidence",
+        },
+        filename: "wrong-kind.mp4",
+        contentType: "video/mp4",
+        sizeBytes: 1,
+        idempotencyKey: crypto.randomUUID(),
+      }),
+    ).rejects.toThrow(/extension is not allowed/);
 
     const participantDocumentTaskId = `participant-document-${crypto.randomUUID()}`;
     await testEnvironment.DB.prepare(
@@ -633,6 +651,14 @@ describe("direct R2 multipart upload", () => {
         idempotencyKey: crypto.randomUUID(),
       }),
     ).rejects.toThrow("1 MB event limit");
+
+    await testEnvironment.DB.prepare(
+      `UPDATE task_instances
+          SET configuration_json = '{"fileScope":"session_deliverable","fileKind":"video"}'
+        WHERE id = 'task-demo-slides' AND event_id = ?`,
+    )
+      .bind(speaker.eventId)
+      .run();
 
     const bytes = new Uint8Array(FILE_SIZE_MIB + 1);
     bytes.set([0, 0, 0, 16, 0x66, 0x74, 0x79, 0x70, 0x69, 0x73, 0x6f, 0x6d]);

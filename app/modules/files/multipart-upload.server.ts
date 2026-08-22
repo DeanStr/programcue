@@ -51,6 +51,11 @@ const REVOKED_COMPLETION_REASON =
   "Multipart completion was revoked because its target or file policy is no longer eligible.";
 
 type TaskFileScope = "participant_document" | "session_deliverable";
+type TaskFileKind = "slides" | "video" | "supporting_document";
+type TaskEvidenceFilePolicy = {
+  fileScope: TaskFileScope;
+  fileKind?: TaskFileKind;
+};
 
 export const multipartInitiateSchema = z.object({
   target: uploadTargetSchema,
@@ -273,10 +278,10 @@ export class MultipartUploadService {
     });
   }
 
-  private async taskEvidenceFileScope(
+  private async taskEvidenceFilePolicy(
     actor: MultipartActor,
     target: UploadTarget,
-  ): Promise<TaskFileScope | undefined> {
+  ): Promise<TaskEvidenceFilePolicy | undefined> {
     if (target.targetType !== "task" || target.assetKind !== "task_evidence") {
       return undefined;
     }
@@ -295,19 +300,24 @@ export class MultipartUploadService {
     if (task?.taskType !== "file_upload") {
       throw new FileAccessError("This task does not accept file evidence.");
     }
-    let fileScope: ReturnType<typeof taskConfiguration>["fileScope"];
+    let configuration: ReturnType<typeof taskConfiguration>;
     try {
-      fileScope = taskConfiguration(task.configurationJson).fileScope;
+      configuration = taskConfiguration(task.configurationJson);
     } catch {
       throw new FileAccessError(
         "This file task has invalid purpose or target configuration. Ask an administrator to repair it.",
       );
     }
     if (
-      (fileScope === "participant_document" && task.targetType === "speaker") ||
-      (fileScope === "session_deliverable" && task.targetType === "session")
+      (configuration.fileScope === "participant_document" &&
+        task.targetType === "speaker") ||
+      (configuration.fileScope === "session_deliverable" &&
+        task.targetType === "session")
     ) {
-      return fileScope;
+      return {
+        fileScope: configuration.fileScope,
+        ...(configuration.fileKind ? { fileKind: configuration.fileKind } : {}),
+      };
     }
     throw new FileAccessError(
       "This file task has invalid purpose or target configuration. Ask an administrator to repair it.",
@@ -316,14 +326,17 @@ export class MultipartUploadService {
 
   private assertCurrentDeclaration(
     row: MultipartRow,
-    taskFileScope?: TaskFileScope,
+    taskFilePolicy?: TaskEvidenceFilePolicy,
   ) {
     const target = this.uploadTarget(row);
     validateDirectFileDeclaration(
       target.assetKind,
       { name: row.filename, type: row.contentType, size: row.sizeBytes },
       parseEventFilePolicy(row.filePolicyJson),
-      { taskFileScope },
+      {
+        taskFileScope: taskFilePolicy?.fileScope,
+        taskFileKind: taskFilePolicy?.fileKind,
+      },
     );
   }
 
@@ -336,7 +349,7 @@ export class MultipartUploadService {
     this.assertAuthorisedTaskAsset(target, authorisedAssetId, row);
     this.assertCurrentDeclaration(
       row,
-      await this.taskEvidenceFileScope(actor, target),
+      await this.taskEvidenceFilePolicy(actor, target),
     );
   }
 
@@ -779,13 +792,19 @@ export class MultipartUploadService {
       size: input.sizeBytes,
     };
     const authorisedAssetId = await this.assertTarget(actor, input.target);
-    const taskFileScope = await this.taskEvidenceFileScope(actor, input.target);
+    const taskFilePolicy = await this.taskEvidenceFilePolicy(
+      actor,
+      input.target,
+    );
     assertFileScanDispatchConfigured(this.env);
     validateDirectFileDeclaration(
       input.target.assetKind,
       declaration,
       await this.access.loadEventFilePolicy(actor),
-      { taskFileScope },
+      {
+        taskFileScope: taskFilePolicy?.fileScope,
+        taskFileKind: taskFilePolicy?.fileKind,
+      },
     );
     const storedKey = multipartIdempotencyKey(actor, input.idempotencyKey);
     let row = await this.access.loadByIdempotency(actor, storedKey);
@@ -836,7 +855,10 @@ export class MultipartUploadService {
     this.requireBucket();
     const input = multipartResumeSchema.parse(rawInput);
     const authorisedAssetId = await this.assertTarget(actor, input.target);
-    const taskFileScope = await this.taskEvidenceFileScope(actor, input.target);
+    const taskFilePolicy = await this.taskEvidenceFilePolicy(
+      actor,
+      input.target,
+    );
     validateDirectFileDeclaration(
       input.target.assetKind,
       {
@@ -845,7 +867,10 @@ export class MultipartUploadService {
         size: input.sizeBytes,
       },
       await this.access.loadEventFilePolicy(actor),
-      { taskFileScope },
+      {
+        taskFileScope: taskFilePolicy?.fileScope,
+        taskFileKind: taskFilePolicy?.fileKind,
+      },
     );
     const row = await this.access.loadByIdempotency(
       actor,
@@ -1407,6 +1432,32 @@ export class MultipartUploadService {
                      '$.supportingDocumentMaximumBytes'
                    )
                    WHEN 'task_evidence' THEN CASE
+                     WHEN EXISTS (
+                       SELECT 1 FROM task_instances task
+                        WHERE task.id = asset.target_id
+                          AND task.event_id = asset.event_id
+                          AND json_valid(task.configuration_json)
+                          AND json_extract(
+                            task.configuration_json,
+                            '$.fileKind'
+                          ) = 'slides'
+                     ) THEN json_extract(
+                       policy_event.file_policy_json,
+                       '$.slidesMaximumBytes'
+                     )
+                     WHEN EXISTS (
+                       SELECT 1 FROM task_instances task
+                        WHERE task.id = asset.target_id
+                          AND task.event_id = asset.event_id
+                          AND json_valid(task.configuration_json)
+                          AND json_extract(
+                            task.configuration_json,
+                            '$.fileKind'
+                          ) = 'video'
+                     ) THEN json_extract(
+                       policy_event.file_policy_json,
+                       '$.videoMaximumBytes'
+                     )
                      WHEN file_versions.declared_content_type IN (
                        'video/mp4', 'video/webm'
                      ) AND EXISTS (

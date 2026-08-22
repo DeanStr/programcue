@@ -5,6 +5,7 @@ import { Form, Link } from "react-router";
 import { DraftRecoveryStatus } from "~/components/draft-recovery-feedback";
 import { EmptyState } from "~/components/ui/states";
 import {
+  type MergeValues,
   mergeTemplateVariables,
   representativeMergeValues,
 } from "~/modules/communications/merge-template";
@@ -94,13 +95,11 @@ function unresolvableMergeFields(draft: TemplateDraftFields) {
   ].filter((field) => !(field in representativeMergeValues));
 }
 
-function fillMergeFields(text: string) {
+function fillMergeFields(text: string, mergeValues: MergeValues) {
   return text.replace(
     /\{\{\s*([a-z][a-zA-Z0-9.]*)\s*\}\}/gu,
     (token, field: string) =>
-      field in representativeMergeValues
-        ? String(representativeMergeValues[field] ?? "")
-        : token,
+      field in mergeValues ? String(mergeValues[field] ?? "") : token,
   );
 }
 
@@ -359,14 +358,20 @@ export function TemplateEditor({
  * It is the message, not the sent email: the branded frame is added on send,
  * and claiming otherwise would be a preview that lies about fidelity.
  */
-export function TemplatePreview({ draft }: { draft: TemplateDraftFields }) {
+export function TemplatePreview({
+  draft,
+  mergeValues,
+}: {
+  draft: TemplateDraftFields;
+  mergeValues: MergeValues;
+}) {
   const preview = useMemo(
     () => ({
-      subject: fillMergeFields(draft.subject),
-      paragraphs: fillMergeFields(draft.body).split(/\n{2,}/u),
+      subject: fillMergeFields(draft.subject, mergeValues),
+      paragraphs: fillMergeFields(draft.body, mergeValues).split(/\n{2,}/u),
       unresolvable: unresolvableMergeFields(draft),
     }),
-    [draft],
+    [draft, mergeValues],
   );
   return (
     <aside className="comms-message-preview" aria-label="Message preview">
@@ -387,7 +392,7 @@ export function TemplatePreview({ draft }: { draft: TemplateDraftFields }) {
         <div className="comms-message-chrome-row">
           <p className="comms-message-chrome-label">To</p>
           <p className="comms-message-paragraph">
-            {String(representativeMergeValues["recipient.name"])}
+            {String(mergeValues["recipient.name"])}
           </p>
         </div>
         <div className="comms-message-chrome-row">
@@ -417,7 +422,9 @@ export function TemplatePreview({ draft }: { draft: TemplateDraftFields }) {
       <p className="comms-message-footer">
         {draft.physicalAddress}
         <small>
-          Representative merge values. The Program Cue frame is added on send.
+          Example recipient with this event's current details. This is a
+          template preview, not delivery evidence. The Program Cue frame is
+          added on send.
         </small>
       </p>
     </aside>

@@ -93,7 +93,11 @@ function maximumBytesForFileDeclaration(
   contentType: string,
   policy: EventFilePolicy,
   taskFileScope?: "participant_document" | "session_deliverable",
+  taskFileKind?: "slides" | "video" | "supporting_document",
 ) {
+  if (kind === "task_evidence" && taskFileKind) {
+    return maximumBytesForAssetKind(taskFileKind, policy);
+  }
   if (
     kind === "task_evidence" &&
     taskFileScope === "session_deliverable" &&
@@ -259,8 +263,11 @@ function validateDeclaredFile(
   file: FileDeclaration,
   eventPolicy: EventFilePolicy,
   taskFileScope?: "participant_document" | "session_deliverable",
+  taskFileKind?: "slides" | "video" | "supporting_document",
 ) {
-  const policy = policies[kind];
+  const validationKind =
+    kind === "task_evidence" && taskFileKind ? taskFileKind : kind;
+  const policy = policies[validationKind];
   if (!file.name || file.size <= 0)
     throw new FilePolicyError("Choose a non-empty file.");
   assertSafeUploadFilename(file.name);
@@ -277,6 +284,7 @@ function validateDeclaredFile(
     file.type,
     eventPolicy,
     taskFileScope,
+    taskFileKind,
   );
   if (file.size > maximumBytes)
     throw new FilePolicyError(
@@ -290,9 +298,16 @@ export function validateDirectFileDeclaration(
   eventPolicy: EventFilePolicy,
   options: {
     taskFileScope?: "participant_document" | "session_deliverable";
+    taskFileKind?: "slides" | "video" | "supporting_document";
   } = {},
 ) {
-  validateDeclaredFile(kind, file, eventPolicy, options.taskFileScope);
+  validateDeclaredFile(
+    kind,
+    file,
+    eventPolicy,
+    options.taskFileScope,
+    options.taskFileKind,
+  );
 }
 
 export type FileInspectionSource = FileDeclaration & {

@@ -63,6 +63,7 @@ export function AdminTaskPlanPanel({
     fixedDueDate,
     destinationUrl,
     fileScope,
+    fileKind,
     description,
   } = templateDraft;
   const compatibleEvidenceModes =
@@ -329,6 +330,7 @@ export function AdminTaskPlanPanel({
                     }
                     if (next !== "file_upload") {
                       updateTemplateDraft("fileScope", "");
+                      updateTemplateDraft("fileKind", "");
                     }
                   }}
                 >
@@ -377,49 +379,88 @@ export function AdminTaskPlanPanel({
               <input type="hidden" name="destinationUrl" value="" />
             )}
             {taskType === "file_upload" ? (
-              <label className="label">
-                <span className="pc-field-label">
-                  <span>File purpose</span>
-                  <span className="pc-required" aria-hidden="true">
-                    Required
+              <div className="stack">
+                <label className="label">
+                  <span className="pc-field-label">
+                    <span>File purpose</span>
+                    <span className="pc-required" aria-hidden="true">
+                      Required
+                    </span>
                   </span>
-                </span>
-                <select
-                  className="select"
-                  name="fileScope"
-                  required
-                  value={fileScope}
-                  onChange={(event) => {
-                    const next = event.currentTarget.value as
-                      | ""
-                      | "participant_document"
-                      | "session_deliverable";
-                    updateTemplateDraft("fileScope", next);
-                    if (next === "participant_document") {
-                      updateTemplateDraft("targetType", "speaker");
-                    } else if (next === "session_deliverable") {
-                      updateTemplateDraft("targetType", "session");
-                    }
-                  }}
-                  aria-invalid={Boolean(
-                    actionNotice?.errors?.configuration?.length,
-                  )}
-                >
-                  <option value="">Choose a file purpose</option>
-                  <option value="participant_document">
-                    Reusable participant document
-                  </option>
-                  <option value="session_deliverable">
-                    Session deliverable
-                  </option>
-                </select>
-                <span className="help">
-                  Slides, posters, handouts and session videos are session
-                  deliverables. Reusable documents belong to the participant.
-                </span>
-              </label>
+                  <select
+                    className="select"
+                    name="fileScope"
+                    required
+                    value={fileScope}
+                    onChange={(event) => {
+                      const next = event.currentTarget.value as
+                        | ""
+                        | "participant_document"
+                        | "session_deliverable";
+                      updateTemplateDraft("fileScope", next);
+                      if (next === "participant_document") {
+                        updateTemplateDraft("targetType", "speaker");
+                        updateTemplateDraft("fileKind", "supporting_document");
+                      } else if (next === "session_deliverable") {
+                        updateTemplateDraft("targetType", "session");
+                        updateTemplateDraft("fileKind", "slides");
+                      } else {
+                        updateTemplateDraft("fileKind", "");
+                      }
+                    }}
+                    aria-invalid={Boolean(
+                      actionNotice?.errors?.configuration?.length,
+                    )}
+                  >
+                    <option value="">Choose a file purpose</option>
+                    <option value="participant_document">
+                      Reusable participant document
+                    </option>
+                    <option value="session_deliverable">
+                      Session deliverable
+                    </option>
+                  </select>
+                  <span className="help">
+                    Slides, posters, handouts and session videos are session
+                    deliverables. Reusable documents belong to the participant.
+                  </span>
+                </label>
+                {fileScope ? (
+                  <label className="label mt">
+                    Accepted file type
+                    <select
+                      className="select"
+                      name="fileKind"
+                      required
+                      value={fileKind}
+                      onChange={(event) =>
+                        updateTemplateDraft(
+                          "fileKind",
+                          event.currentTarget
+                            .value as TaskTemplateDraftValues["fileKind"],
+                        )
+                      }
+                    >
+                      {fileScope === "session_deliverable" ? (
+                        <>
+                          <option value="slides">Slides · PDF/PPT/PPTX</option>
+                          <option value="video">Video · MP4/WebM</option>
+                        </>
+                      ) : null}
+                      <option value="supporting_document">
+                        Supporting document · PDF/Word/Excel/ZIP
+                      </option>
+                    </select>
+                  </label>
+                ) : (
+                  <input type="hidden" name="fileKind" value="" />
+                )}
+              </div>
             ) : (
-              <input type="hidden" name="fileScope" value="" />
+              <>
+                <input type="hidden" name="fileScope" value="" />
+                <input type="hidden" name="fileKind" value="" />
+              </>
             )}
             <div className="form-row">
               <label className="label">

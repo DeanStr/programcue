@@ -197,7 +197,19 @@ export default function AdminSpeakers({ loaderData }: Route.ComponentProps) {
           role={actionData.ok ? "status" : "alert"}
         >
           <strong>{actionData.ok ? "✓" : "△"}</strong>
-          <span>{actionData.message}</span>
+          <span>
+            {actionData.message}
+            {actionData.existingRosterPerson ? (
+              <>
+                {" "}
+                <Link
+                  to={`/admin/speakers?person=${encodeURIComponent(actionData.existingRosterPerson.id)}`}
+                >
+                  Open {actionData.existingRosterPerson.name}.
+                </Link>
+              </>
+            ) : null}
+          </span>
         </div>
       ) : null}
       <section className="crm-board" id="speaker-readiness">

@@ -214,12 +214,17 @@ function assertDemoRuntime(env: CloudflareEnvironment) {
 
 export async function readDemoActiveWork(
   env: CloudflareEnvironment,
+  cancellablePreviewsWillBeFenced = false,
 ): Promise<DemoActiveWork> {
   assertDemoRuntime(env);
   const row = await env.DB.prepare(
     `SELECT
        ((SELECT COUNT(*) FROM operation_jobs
           WHERE event_id = ? AND status IN ('queued','received','running','retrying')
+            AND (? = 0 OR NOT (
+              status = 'received' AND cancellable = 1
+              AND type IN ('task.bulk','session.bulk','data.import')
+            ))
             AND (
               status <> 'running'
               OR type NOT IN ('ai.assistant.run','ai.context.run','ai.proposal.revision')
@@ -251,6 +256,7 @@ export async function readDemoActiveWork(
   )
     .bind(
       DEMO_EVENT_ID,
+      cancellablePreviewsWillBeFenced ? 1 : 0,
       DEMO_EVENT_ID,
       DEMO_EVENT_ID,
       DEMO_EVENT_ID,
@@ -930,7 +936,11 @@ export async function resetDemoEvent(
     }
   };
   await assertRetentionIncomplete();
-  const initialActiveWork = await readDemoActiveWork(env);
+  const cancellablePreviewsWillBeFenced = beforeDestructiveWork !== null;
+  const initialActiveWork = await readDemoActiveWork(
+    env,
+    cancellablePreviewsWillBeFenced,
+  );
   if (activeWorkTotal(initialActiveWork) > 0) {
     throw new DemoResetBusyError(initialActiveWork);
   }
@@ -938,7 +948,10 @@ export async function resetDemoEvent(
   await ensureDemoData(env);
   await assertDestructiveWorkAllowed?.();
   await assertRetentionIncomplete();
-  const activeWork = await readDemoActiveWork(env);
+  const activeWork = await readDemoActiveWork(
+    env,
+    cancellablePreviewsWillBeFenced,
+  );
   if (activeWorkTotal(activeWork) > 0) throw new DemoResetBusyError(activeWork);
   const preservedAuditEvents = Number(
     (

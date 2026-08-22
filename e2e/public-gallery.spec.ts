@@ -164,7 +164,12 @@ test("anonymous visitors can use all programme surfaces and the gallery detail",
   ).toBeVisible();
   await expect(page.getByText("Alex Morgan", { exact: true })).toBeVisible();
   await expect(page.getByText("Priya Shah", { exact: true })).toBeVisible();
-  await expect(page.getByLabel("Search speakers by name")).toHaveCount(0);
+  const speakerSearch = page.getByLabel("Search speakers by name");
+  await expect(speakerSearch).toBeVisible();
+  await speakerSearch.fill("Priya");
+  await expect(page.getByText("Priya Shah", { exact: true })).toBeVisible();
+  await expect(page.getByText("Alex Morgan", { exact: true })).toHaveCount(0);
+  await speakerSearch.clear();
 
   const retiredAgenda = await page.request.get(
     "/public/programme/future-of-events-2027/agenda?query=AI+operations",
@@ -248,9 +253,7 @@ test("anonymous visitors can use all programme surfaces and the gallery detail",
   await expect(
     page.getByRole("heading", { name: "Speaker Gallery", exact: true }),
   ).toBeVisible();
-  await expect(page.getByLabel("Search speaker gallery by name")).toHaveCount(
-    0,
-  );
+  await expect(page.getByLabel("Search speaker gallery by name")).toBeVisible();
   await expect(page.getByRole("link", { name: /My itinerary/ })).toHaveCount(0);
   await openAnonymous(
     page,

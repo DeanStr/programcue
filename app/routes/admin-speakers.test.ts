@@ -116,10 +116,12 @@ describe("manual speaker identity checks", () => {
     } as never);
     if (alreadyActive instanceof Response)
       throw new Error("Already-active speaker returned a raw response.");
+    expect(alreadyActive.init?.status).toBe(409);
     expect(alreadyActive.data).toMatchObject({
-      ok: true,
+      ok: false,
+      existingRosterPerson: { name: "Priya Shah" },
       message: expect.stringMatching(
-        /already on this event roster.*nothing was changed/i,
+        /already on this event roster.*values were not applied/i,
       ),
     });
 

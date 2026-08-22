@@ -83,7 +83,7 @@ export class PersonDuplicateService {
     rawQuery: unknown,
   ): Promise<OrganisationPersonMatch[]> {
     const query = organisationPersonSearchSchema.parse(rawQuery);
-    const exactEmailSearch = query.length > 120;
+    const exactEmailSearch = z.email().safeParse(query).success;
     const pattern = `%${query
       .replaceAll("\\", "\\\\")
       .replaceAll("%", "\\%")
@@ -115,19 +115,24 @@ export class PersonDuplicateService {
            JOIN events event ON event.id = workflow.event_id
           WHERE event.organisation_id = ?
        )
-       SELECT person.id AS personId, person.display_name AS name, person.email,
+       SELECT person.id AS personId,
+              COALESCE(contact_profile.display_name, person.display_name) AS name,
+              person.email,
               current_workflow.status AS currentEventSpeakerStatus
          FROM organisation_people scoped
          JOIN people person ON person.id = scoped.person_id
+         LEFT JOIN organisation_contact_profiles contact_profile
+           ON contact_profile.organisation_id = ?
+          AND contact_profile.person_id = person.id
          LEFT JOIN event_speaker_workflows current_workflow
            ON current_workflow.event_id = ?
           AND current_workflow.person_id = person.id
         WHERE ${
           exactEmailSearch
             ? "lower(person.email) = lower(?)"
-            : "(person.display_name LIKE ? ESCAPE '\\' COLLATE NOCASE OR person.email LIKE ? ESCAPE '\\' COLLATE NOCASE)"
+            : "(person.display_name LIKE ? ESCAPE '\\' COLLATE NOCASE OR contact_profile.display_name LIKE ? ESCAPE '\\' COLLATE NOCASE OR person.email LIKE ? ESCAPE '\\' COLLATE NOCASE)"
         }
-        GROUP BY person.id, person.display_name, person.email,
+        GROUP BY person.id, contact_profile.display_name, person.display_name, person.email,
                  current_workflow.status
         ORDER BY CASE
                    WHEN current_workflow.status IN ('prospect','invited','confirmed') THEN 0
@@ -143,8 +148,9 @@ export class PersonDuplicateService {
         viewer.organisationId,
         viewer.organisationId,
         viewer.organisationId,
+        viewer.organisationId,
         viewer.eventId,
-        ...(exactEmailSearch ? [query] : [pattern, pattern]),
+        ...(exactEmailSearch ? [query] : [pattern, pattern, pattern]),
       )
       .all<OrganisationPersonMatch>();
     return rows.results;

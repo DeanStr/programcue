@@ -457,7 +457,12 @@ removed and retained
 auxiliary-person counts plus the removed fixture-membership count without
 personal identifiers. Active in-scope external work, completed retention or a
 mutation that cannot be proved fixture-confined still fails before destructive
-cleanup. On first bootstrap, the shared seed may create dedicated canonical
+cleanup. In production evaluation, a task-bulk, session-bulk or data-import
+preview that never advanced beyond `received` is fenced from confirmation and
+atomically cancelled as destructive reset begins; the local demo reset instead
+fails fast because it has no production reset lease. Queued, running, retrying,
+non-cancellable and unknown preview work remains blocking. On first
+bootstrap, the shared seed may create dedicated canonical
 fixture rows before the remaining cleanup preflight; that bounded fixture-only
 mutation is not a completed reset. An atomic owner-token lease serialises
 resets, fences every destructive phase and publishes the new session generation
@@ -511,6 +516,28 @@ back the complete target graph; exact replay reuses its audit, delivery and
 operation. Bulk confirmation claims only its unchanged stored preview and
 carries the same snapshots into each target batch. Targets remain independently
 atomic, so a multi-target run may honestly finish `partially_failed`.
+
+The 22 August 2026 evaluation follow-up closes eight reproduced product defects
+with repository evidence. Released no-review decisions now snapshot their exact
+plan, atomically verify that plan is still current when the decision commits,
+become eligible only after that plan is archived and no longer leave a prior
+submitted review in the current reviewer queue. The public speaker
+directory and gallery retain name search for small rosters. Evaluator-alias
+person lookup resolves the fixed identity before searching; a manual add that
+still targets an active roster identity returns a linked, truthful conflict
+without applying the entered profile. Direct-session creation reports missing
+speaker details through both native browser validation and an explicit server
+field error. Newly authored file-upload tasks require an exact slides, video or
+supporting-document policy, and the presentation fixture advertises and accepts
+only PDF/PPT/PPTX under the slide limit. Communications template preview uses
+the current event plus a clearly labelled example recipient rather than an
+unrelated seeded event/person. Finally, an abandoned cancellable task-bulk
+preview no longer blocks production evaluation reset, while its confirmation
+cannot race the reset boundary. `npm run check:focused`,
+`npm run check:core`, synchronized OpenAPI validation and focused Chromium
+journeys for public speaker search and missing-speaker creation feedback are
+local evidence; deployment and a fresh production evaluation reset are not
+claimed.
 
 The deployed release closes the remaining reproduced cross-surface defects.
 Accepted decisions and their drafts now persist an explicit current session-format

@@ -1455,6 +1455,52 @@ describe("complete evaluator demo reset", () => {
       ).resolves.toBeTruthy();
     });
 
+    it("fails fast on an uncommitted preview when no reset fence is available", async () => {
+      const testEnvironment = demoEnvironment();
+      await ensureDemoData(testEnvironment);
+      const operationId = `demo-abandoned-preview-${crypto.randomUUID()}`;
+      await testEnvironment.DB.prepare(
+        `INSERT INTO operation_jobs (
+           id, organisation_id, event_id, requested_by_person_id, type,
+           idempotency_key, correlation_id, status, payload_json, result_json,
+           progress_total, cancellable, created_at, updated_at
+         ) VALUES (?, ?, ?, ?, 'task.bulk', ?, ?, 'received', '{}', '{}',
+                   1, 1, unixepoch(), unixepoch())`,
+      )
+        .bind(
+          operationId,
+          DEMO_ORGANISATION_ID,
+          DEMO_EVENT_ID,
+          demoAdministrator.personId,
+          operationId,
+          operationId,
+        )
+        .run();
+
+      await expect(
+        resetDemoEvent(
+          testEnvironment,
+          demoAdministrator.personId,
+          DEMO_RESET_CONFIRMATION,
+        ),
+      ).rejects.toMatchObject({
+        name: DemoResetBusyError.name,
+        activeWork: { operations: 1 },
+      });
+      await expect(
+        testEnvironment.DB.prepare(
+          "SELECT status FROM operation_jobs WHERE id = ?",
+        )
+          .bind(operationId)
+          .first(),
+      ).resolves.toEqual({ status: "received" });
+      await testEnvironment.DB.prepare(
+        "DELETE FROM operation_jobs WHERE id = ? AND status = 'received'",
+      )
+        .bind(operationId)
+        .run();
+    });
+
     it("refuses non-terminal work before changing D1 or R2", async () => {
       const testEnvironment = demoEnvironment();
       await ensureDemoData(testEnvironment);

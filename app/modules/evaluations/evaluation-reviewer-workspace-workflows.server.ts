@@ -25,7 +25,10 @@ function reviewerAssignmentVisibleSql(
   sessionAlias: "session",
 ) {
   return `(
-    ${assignmentAlias}.status = 'submitted'
+    (
+      ${assignmentAlias}.status = 'submitted'
+      AND ${planAlias}.status <> 'archived'
+    )
     OR (
       ${planAlias}.status = 'active'
       AND ${roundAlias}.status = 'active'

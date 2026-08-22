@@ -7,6 +7,7 @@ export const nodeOnlyTestFiles = [
   "e2e/support/css-contrast.unit.ts",
   "app/components/admin-public-site-editor.test.tsx",
   "app/components/admin-assigned-tasks-panel.test.ts",
+  "app/components/admin-creation-form.test.tsx",
   "app/components/admin-public-site-recordings.test.tsx",
   "app/components/admin-shell-dialogs.test.ts",
   "app/components/admin-shell-navigation.test.ts",

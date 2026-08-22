@@ -1,10 +1,11 @@
-import { ZodError } from "zod";
+import { ZodError, z } from "zod";
 import { EvaluationStateError } from "~/modules/evaluations/evaluation-errors";
 import { PersonDuplicateService } from "~/modules/people/person-duplicate-service.server";
 import {
   SubmissionRevisionConflictError,
   SubmissionStateError,
 } from "~/modules/submissions/submission-repository.server";
+import { speakerInputSchema } from "~/modules/submissions/submission-schema";
 import type { Viewer } from "~/platform/auth/authorize.server";
 import {
   WebhookService,
@@ -16,6 +17,7 @@ import type {
 } from "./submissions-admin-types";
 
 class InvalidAdminCreationPayloadError extends Error {}
+class InvalidAdminCreationSpeakerError extends Error {}
 
 export function adminCreationSpeakers(formData: FormData) {
   const rawSpeakers = formData.get("speakers");
@@ -26,9 +28,15 @@ export function adminCreationSpeakers(formData: FormData) {
   }
   try {
     const parsed: unknown = JSON.parse(rawSpeakers);
-    if (!Array.isArray(parsed)) throw new Error("Speakers must be a list.");
-    return parsed as SubmissionAdminSpeakerInput[];
-  } catch {
+    const result = z.array(speakerInputSchema).min(1).max(20).safeParse(parsed);
+    if (!result.success) {
+      throw new InvalidAdminCreationSpeakerError(
+        "Add at least one speaker with a name and valid email.",
+      );
+    }
+    return result.data as SubmissionAdminSpeakerInput[];
+  } catch (error) {
+    if (error instanceof InvalidAdminCreationSpeakerError) throw error;
     throw new InvalidAdminCreationPayloadError(
       "The speaker details are invalid. Refresh and try again.",
     );
@@ -122,17 +130,40 @@ export function adminCreationFailure(error: unknown): {
   status: number;
 } | null {
   if (error instanceof ZodError) {
+    const speakerIssue = error.issues.find(
+      (issue) => issue.path[0] === "speakers",
+    );
+    const speakerMessage = speakerIssue
+      ? speakerIssue.code === "custom"
+        ? speakerIssue.message
+        : "Add at least one speaker with a name and valid email."
+      : null;
     return {
       result: {
         ok: false,
         message:
-          error.issues[0]?.message ?? "Review the submitted record details.",
+          speakerMessage ??
+          error.issues[0]?.message ??
+          "Review the submitted record details.",
+        ...(speakerMessage
+          ? { fieldErrors: { speakers: speakerMessage } }
+          : {}),
       },
       status: 422,
     };
   }
   if (error instanceof InvalidAdminCreationPayloadError) {
     return { result: { ok: false, message: error.message }, status: 400 };
+  }
+  if (error instanceof InvalidAdminCreationSpeakerError) {
+    return {
+      result: {
+        ok: false,
+        message: error.message,
+        fieldErrors: { speakers: error.message },
+      },
+      status: 422,
+    };
   }
   if (
     error instanceof SubmissionStateError ||

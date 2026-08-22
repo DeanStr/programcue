@@ -2,6 +2,14 @@ import { z } from "zod";
 
 import type { Viewer } from "~/platform/auth/authorize.server";
 import {
+  currentEvaluationFixtureGeneration,
+  EVALUATION_FIXTURE_GENERATION_FENCE_PREDICATE,
+  EVALUATION_FIXTURE_RESET_OPERATION_ID,
+  EVALUATION_FIXTURE_RESET_OPERATION_TYPE,
+  evaluationFixtureResetIsRunning,
+  shouldFenceEvaluationFixtureMutation,
+} from "~/platform/evaluation/evaluation-fixture-reset-lock.server";
+import {
   type PreparedWebhookEvent,
   WebhookService,
 } from "~/platform/operations/webhook-service.server";
@@ -49,6 +57,18 @@ export class DataImportService {
     input: { resource: unknown; fileName: string; csv: string },
   ) {
     const resource = importResourceSchema.parse(input.resource);
+    const fenceEvaluationReset = shouldFenceEvaluationFixtureMutation(
+      this.env,
+      viewer.organisationId,
+    );
+    const fixtureGeneration = fenceEvaluationReset
+      ? await currentEvaluationFixtureGeneration(this.env)
+      : null;
+    if (fenceEvaluationReset && !fixtureGeneration) {
+      throw new DataImportStateError(
+        "A new preview cannot start while the evaluation fixture is resetting.",
+      );
+    }
     await this.support.assertSupportedAuthority(viewer, resource);
     if (new TextEncoder().encode(input.csv).byteLength > IMPORT_BYTES_LIMIT) {
       throw new Error("CSV import files cannot exceed 512 KB.");
@@ -163,9 +183,13 @@ export class DataImportService {
           created_at, updated_at
         ) SELECT ?, ?, ?, ?, 'data.import', ?, ?, 'received', ?, ?, ?, 0, ?, 1,
                  unixepoch(), unixepoch()
-            FROM events e
+           FROM events e
            WHERE e.id = ? AND e.organisation_id = ?
              AND e.repository_provider = 'd1'
+             AND (? = 0 OR EXISTS (
+               SELECT 1 FROM operation_jobs fixture_reset
+                WHERE ${EVALUATION_FIXTURE_GENERATION_FENCE_PREDICATE}
+             ))
       `,
       ).bind(
         operationId,
@@ -180,6 +204,8 @@ export class DataImportService {
         invalid.length,
         viewer.eventId,
         viewer.organisationId,
+        fenceEvaluationReset ? 1 : 0,
+        fixtureGeneration,
       ),
       this.env.DB.prepare(
         `
@@ -220,6 +246,15 @@ export class DataImportService {
     ]);
     if ((created.meta.changes ?? 0) !== 1) {
       await this.support.assertSupportedAuthority(viewer, resource);
+      if (
+        fenceEvaluationReset &&
+        (await currentEvaluationFixtureGeneration(this.env)) !==
+          fixtureGeneration
+      ) {
+        throw new DataImportStateError(
+          "The evaluation fixture changed while this preview was prepared. Start a new preview.",
+        );
+      }
       throw new Error("The import preview could not be recorded.");
     }
     return {
@@ -231,6 +266,13 @@ export class DataImportService {
   }
 
   async confirm(viewer: Viewer, operationId: string) {
+    if (
+      await evaluationFixtureResetIsRunning(this.env, viewer.organisationId)
+    ) {
+      throw new DataImportStateError(
+        "This preview cannot be confirmed while the evaluation fixture is resetting.",
+      );
+    }
     const operation = await this.env.DB.prepare(
       `
       SELECT o.status, o.result_json AS resultJson, o.progress_failed AS failed
@@ -327,6 +369,10 @@ export class DataImportService {
       summary.resource === "tasks"
         ? this.support.taskStateRefreshStatements(viewer, operationId)
         : [];
+    const fenceEvaluationReset = shouldFenceEvaluationFixtureMutation(
+      this.env,
+      viewer.organisationId,
+    );
     const statements: D1PreparedStatement[] = [
       this.env.DB.prepare(
         `UPDATE operation_jobs SET status = 'running', started_at = unixepoch(),
@@ -339,8 +385,20 @@ export class DataImportService {
                  AND e.organisation_id = operation_jobs.organisation_id
                  AND e.repository_provider = 'd1'
             )
+            AND (? = 0 OR NOT EXISTS (
+              SELECT 1 FROM operation_jobs fixture_reset
+               WHERE fixture_reset.id = ? AND fixture_reset.type = ?
+                 AND fixture_reset.status = 'running'
+            ))
             ${this.support.confirmationFreshnessGuard(summary.resource)}`,
-      ).bind(operationId, viewer.eventId, viewer.organisationId),
+      ).bind(
+        operationId,
+        viewer.eventId,
+        viewer.organisationId,
+        fenceEvaluationReset ? 1 : 0,
+        EVALUATION_FIXTURE_RESET_OPERATION_ID,
+        EVALUATION_FIXTURE_RESET_OPERATION_TYPE,
+      ),
       ...mutations,
       ...taskStateRefreshes,
       this.env.DB.prepare(
@@ -427,6 +485,13 @@ export class DataImportService {
     const results = await this.env.DB.batch(statements);
     if ((results[0].meta.changes ?? 0) !== 1) {
       await this.support.assertSupportedAuthority(viewer, summary.resource);
+      if (
+        await evaluationFixtureResetIsRunning(this.env, viewer.organisationId)
+      ) {
+        throw new DataImportStateError(
+          "This preview cannot be confirmed while the evaluation fixture is resetting.",
+        );
+      }
       throw new DataImportStateError(
         "The import changed before it could be confirmed.",
       );

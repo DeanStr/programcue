@@ -1,7 +1,12 @@
 import {
+  atomicBatchGuardStatement,
+  isAtomicBatchGuardError,
+} from "~/platform/database/atomic-batch-guard.server";
+import {
   DEMO_EVENT_ID,
   DEMO_ORGANISATION_ID,
 } from "~/platform/demo/demo-identities";
+import { requireRuntimeMode } from "~/platform/runtime-environment.server";
 
 export const EVALUATION_FIXTURE_RESET_OPERATION_ID =
   "operation-production-evaluation-fixture-reset";
@@ -16,6 +21,89 @@ const EVALUATION_FIXTURE_RESET_RECONCILER_ACTOR_ID =
 const EVALUATION_FIXTURE_RESET_OPERATION_KEY =
   "production-evaluation-fixture-reset";
 const EVALUATION_FIXTURE_RESET_LEASE_SECONDS = 30 * 60;
+
+// Use this predicate inside the same D1 statement that starts fixture-scoped
+// work. It deliberately mirrors currentEvaluationFixtureGeneration(),
+// including a cancelled pre-destructive reset that restored the last verified
+// generation. The consuming query must alias the singleton operation row as
+// `fixture_reset` and bind the expected fixture generation to the one placeholder.
+export const EVALUATION_FIXTURE_GENERATION_FENCE_PREDICATE = `
+  fixture_reset.id = '${EVALUATION_FIXTURE_RESET_OPERATION_ID}'
+  AND fixture_reset.type = '${EVALUATION_FIXTURE_RESET_OPERATION_TYPE}'
+  AND fixture_reset.claim_token IS NULL
+  AND fixture_reset.claim_expires_at IS NULL
+  AND json_extract(fixture_reset.result_json, '$.fixtureGeneration') = ?
+  AND EXISTS (
+    SELECT 1 FROM audit_events completed_reset
+     WHERE completed_reset.id =
+           json_extract(fixture_reset.result_json, '$.fixtureGeneration')
+       AND completed_reset.organisation_id = '${DEMO_ORGANISATION_ID}'
+       AND completed_reset.event_id = '${DEMO_EVENT_ID}'
+       AND completed_reset.action = 'evaluation.fixture.reset'
+       AND completed_reset.entity_type = 'event'
+       AND completed_reset.entity_id = '${DEMO_EVENT_ID}'
+       AND json_extract(completed_reset.metadata_json, '$.status') = 'completed'
+       AND json_extract(completed_reset.metadata_json, '$.attemptId') =
+           json_extract(fixture_reset.result_json, '$.attemptId')
+  )
+  AND (
+    (
+      fixture_reset.status = 'completed'
+      AND json_extract(fixture_reset.payload_json, '$.attemptId') =
+          json_extract(fixture_reset.result_json, '$.attemptId')
+    )
+    OR (
+      fixture_reset.status = 'cancelled'
+      AND json_extract(fixture_reset.payload_json, '$.destructiveStarted') = 0
+      AND EXISTS (
+        SELECT 1 FROM audit_events cancelled_reset
+         WHERE cancelled_reset.id =
+               'evaluation-fixture-reset-terminal:' ||
+               json_extract(fixture_reset.payload_json, '$.attemptId')
+           AND cancelled_reset.organisation_id = '${DEMO_ORGANISATION_ID}'
+           AND cancelled_reset.event_id = '${DEMO_EVENT_ID}'
+           AND cancelled_reset.action = 'evaluation.fixture.reset.cancelled'
+           AND cancelled_reset.entity_type = 'event'
+           AND cancelled_reset.entity_id = '${DEMO_EVENT_ID}'
+           AND json_extract(cancelled_reset.metadata_json, '$.status') = 'cancelled'
+           AND json_extract(cancelled_reset.metadata_json, '$.destructiveStarted') = 0
+           AND json_extract(cancelled_reset.metadata_json, '$.attemptId') =
+               json_extract(fixture_reset.payload_json, '$.attemptId')
+           AND json_extract(cancelled_reset.metadata_json, '$.restoredFixtureGeneration') =
+               json_extract(fixture_reset.result_json, '$.fixtureGeneration')
+           AND json_extract(cancelled_reset.metadata_json, '$.restoredAttemptId') =
+               json_extract(fixture_reset.result_json, '$.attemptId')
+      )
+    )
+  )`;
+
+export function shouldFenceEvaluationFixtureMutation(
+  env: CloudflareEnvironment,
+  organisationId: string,
+) {
+  return (
+    requireRuntimeMode(env).evaluation &&
+    organisationId === DEMO_ORGANISATION_ID
+  );
+}
+
+export async function evaluationFixtureResetIsRunning(
+  env: CloudflareEnvironment,
+  organisationId: string,
+) {
+  if (!shouldFenceEvaluationFixtureMutation(env, organisationId)) return false;
+  return Boolean(
+    await env.DB.prepare(
+      `SELECT 1 FROM operation_jobs
+        WHERE id = ? AND type = ? AND status = 'running'`,
+    )
+      .bind(
+        EVALUATION_FIXTURE_RESET_OPERATION_ID,
+        EVALUATION_FIXTURE_RESET_OPERATION_TYPE,
+      )
+      .first(),
+  );
+}
 
 async function reconcileExpiredEvaluationFixtureReset(
   env: CloudflareEnvironment,
@@ -363,34 +451,91 @@ export async function beginEvaluationFixtureResetDestructiveWork(
   env: CloudflareEnvironment,
   ownerToken: string,
 ) {
-  const started = await env.DB.prepare(
-    `UPDATE operation_jobs
-        SET payload_json = json_set(
-              payload_json,
-              '$.destructiveStarted',
-              json('true')
-            ),
-            result_json = NULL,
-            updated_at = unixepoch()
-      WHERE id = ? AND type = ? AND status = 'running'
-        AND claim_token = ?
-        AND claim_expires_at IS NOT NULL
-        AND claim_expires_at > unixepoch()
-        AND json_extract(payload_json, '$.attemptId') = ?
-        AND json_extract(payload_json, '$.destructiveStarted') = 0`,
-  )
-    .bind(
-      EVALUATION_FIXTURE_RESET_OPERATION_ID,
-      EVALUATION_FIXTURE_RESET_OPERATION_TYPE,
-      ownerToken,
-      ownerToken,
-    )
-    .run();
-  if ((started.meta.changes ?? 0) !== 1) {
-    throw new Error(
-      "The production evaluation fixture reset could not enter its destructive phase.",
-    );
+  const resetOwnsDestructivePhase = `EXISTS (
+    SELECT 1 FROM operation_jobs fixture_reset
+     WHERE fixture_reset.id = ? AND fixture_reset.type = ?
+       AND fixture_reset.status = 'running'
+       AND fixture_reset.claim_token = ?
+       AND fixture_reset.claim_expires_at IS NOT NULL
+       AND fixture_reset.claim_expires_at > unixepoch()
+       AND json_extract(fixture_reset.payload_json, '$.attemptId') = ?
+       AND json_extract(fixture_reset.payload_json, '$.destructiveStarted') = 1
+  )`;
+  try {
+    const [started] = await env.DB.batch([
+      env.DB.prepare(
+        `UPDATE operation_jobs
+            SET payload_json = json_set(
+                  payload_json,
+                  '$.destructiveStarted',
+                  json('true')
+                ),
+                result_json = NULL,
+                updated_at = unixepoch()
+          WHERE id = ? AND type = ? AND status = 'running'
+            AND claim_token = ?
+            AND claim_expires_at IS NOT NULL
+            AND claim_expires_at > unixepoch()
+            AND json_extract(payload_json, '$.attemptId') = ?
+            AND json_extract(payload_json, '$.destructiveStarted') = 0`,
+      ).bind(
+        EVALUATION_FIXTURE_RESET_OPERATION_ID,
+        EVALUATION_FIXTURE_RESET_OPERATION_TYPE,
+        ownerToken,
+        ownerToken,
+      ),
+      env.DB.prepare(
+        `UPDATE operation_jobs
+            SET status = 'cancelled', cancellable = 0,
+                last_error = 'The uncommitted preview was cancelled by the evaluation fixture reset.',
+                completed_at = unixepoch(), updated_at = unixepoch()
+          WHERE organisation_id = ? AND status = 'received' AND cancellable = 1
+            AND type IN ('task.bulk','session.bulk','data.import')
+            AND event_id IN (
+              SELECT id FROM events WHERE organisation_id = ?
+            )
+            AND ${resetOwnsDestructivePhase}`,
+      ).bind(
+        DEMO_ORGANISATION_ID,
+        DEMO_ORGANISATION_ID,
+        EVALUATION_FIXTURE_RESET_OPERATION_ID,
+        EVALUATION_FIXTURE_RESET_OPERATION_TYPE,
+        ownerToken,
+        ownerToken,
+      ),
+      env.DB.prepare(
+        `UPDATE operation_items
+            SET status = 'skipped', error_code = 'FIXTURE_RESET',
+                error_message = 'The preview was cancelled before the evaluation fixture reset.',
+                completed_at = unixepoch(), updated_at = unixepoch()
+          WHERE status = 'pending'
+            AND operation_id IN (
+              SELECT id FROM operation_jobs
+               WHERE organisation_id = ? AND status = 'cancelled'
+                 AND last_error = 'The uncommitted preview was cancelled by the evaluation fixture reset.'
+            )
+            AND ${resetOwnsDestructivePhase}`,
+      ).bind(
+        DEMO_ORGANISATION_ID,
+        EVALUATION_FIXTURE_RESET_OPERATION_ID,
+        EVALUATION_FIXTURE_RESET_OPERATION_TYPE,
+        ownerToken,
+        ownerToken,
+      ),
+      atomicBatchGuardStatement(env, `NOT ${resetOwnsDestructivePhase}`, [
+        EVALUATION_FIXTURE_RESET_OPERATION_ID,
+        EVALUATION_FIXTURE_RESET_OPERATION_TYPE,
+        ownerToken,
+        ownerToken,
+      ]),
+    ]);
+    if ((started.meta.changes ?? 0) === 1) return;
+  } catch (error) {
+    if (!isAtomicBatchGuardError(error)) throw error;
   }
+  throw new Error(
+    "The production evaluation fixture reset could not enter its destructive phase.",
+  );
 }
 
 export async function assertEvaluationFixtureResetOwner(

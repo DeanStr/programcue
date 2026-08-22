@@ -579,6 +579,10 @@ async function readExtraEventActiveWork(
        ((SELECT COUNT(*) FROM operation_jobs
           WHERE event_id IN (${extraEvents})
             AND status IN ('queued','received','running','retrying')
+            AND NOT (
+              status = 'received' AND cancellable = 1
+              AND type IN ('task.bulk','session.bulk','data.import')
+            )
             AND (
               status <> 'running'
               OR type NOT IN ('ai.assistant.run','ai.context.run','ai.proposal.revision')

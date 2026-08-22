@@ -3046,8 +3046,9 @@ components:
           default: {}
           description: >-
             Assigned task configuration. link_visit tasks require destinationUrl;
-            file_upload tasks require fileScope matching their target; other task
-            types reject those fields. The server snapshots this value on creation.
+            file_upload tasks require fileScope matching their target and an accepted
+            fileKind; other task types reject those fields. The server snapshots this
+            value on creation.
           properties:
             destinationUrl:
               type: string
@@ -3057,6 +3058,9 @@ components:
             fileScope:
               type: string
               enum: [participant_document, session_deliverable]
+            fileKind:
+              type: string
+              enum: [slides, video, supporting_document]
         impact: { $ref: "#/components/schemas/TaskImpact" }
         dueAt:
           {
@@ -3135,6 +3139,9 @@ components:
         fileScope:
           type: string
           enum: [participant_document, session_deliverable]
+        fileKind:
+          type: string
+          enum: [slides, video, supporting_document]
         resourcePageId:
           type: string
           minLength: 1
@@ -4169,6 +4176,12 @@ components:
               enum:
                 - participant_document
                 - session_deliverable
+            fileKind:
+              type: string
+              enum:
+                - slides
+                - video
+                - supporting_document
           additionalProperties: false
       required:
         - name

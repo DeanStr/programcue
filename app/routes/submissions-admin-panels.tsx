@@ -411,15 +411,32 @@ export function SubmissionAdminDetailPanel({
 function SpeakerFields({
   speakers,
   setSpeakers,
+  error,
+  announceError = false,
 }: {
   speakers: SubmissionAdminSpeakerInput[];
   setSpeakers(speakers: SubmissionAdminSpeakerInput[]): void;
+  error?: string;
+  announceError?: boolean;
 }) {
   return (
-    <fieldset className="card pad">
+    <fieldset
+      className="card pad"
+      data-speaker-fields
+      aria-describedby={error ? "admin-creation-speakers-error" : undefined}
+    >
       <legend>
         <strong>Speakers</strong>
       </legend>
+      {error ? (
+        <p
+          className="field-error"
+          id="admin-creation-speakers-error"
+          role={announceError ? "alert" : undefined}
+        >
+          {error}
+        </p>
+      ) : null}
       {speakers.map((speaker, index) => (
         // biome-ignore lint/suspicious/noArrayIndexKey: These controlled rows have positional identity; deleting a co-speaker intentionally promotes each following row to the preceding position.
         <div className="grid grid-3 mb" key={index}>
@@ -551,6 +568,15 @@ export function AdminCreationForm(props: AdminCreationFormProps) {
   const [directDuration, setDirectDuration] = useState(
     sessionFormats[0].defaultDurationMinutes,
   );
+  const [directSpeakerError, setDirectSpeakerError] = useState<string | null>(
+    null,
+  );
+  const setDirectSpeakersWithFeedback = (
+    speakers: SubmissionAdminSpeakerInput[],
+  ) => {
+    setDirectSpeakers(speakers);
+    setDirectSpeakerError(null);
+  };
   return (
     <div className="stack">
       {kind === "application" ? (
@@ -651,6 +677,7 @@ export function AdminCreationForm(props: AdminCreationFormProps) {
             <SpeakerFields
               speakers={applicationSpeakers}
               setSpeakers={setApplicationSpeakers}
+              error={actionResult?.fieldErrors?.speakers}
             />
             <DuplicatePersonWarning
               result={actionResult}
@@ -672,7 +699,20 @@ export function AdminCreationForm(props: AdminCreationFormProps) {
 
       {kind === "session" ? (
         <section className="card pad">
-          <Form method="post" className="stack mt">
+          <Form
+            method="post"
+            className="stack mt"
+            onInvalidCapture={(event) => {
+              if (
+                event.target instanceof HTMLElement &&
+                event.target.closest("[data-speaker-fields]")
+              ) {
+                setDirectSpeakerError(
+                  "Add at least one speaker with a name and valid email.",
+                );
+              }
+            }}
+          >
             <input type="hidden" name="_intent" value="create_direct_session" />
             <input
               type="hidden"
@@ -751,7 +791,16 @@ export function AdminCreationForm(props: AdminCreationFormProps) {
             </label>
             <SpeakerFields
               speakers={directSpeakers}
-              setSpeakers={setDirectSpeakers}
+              setSpeakers={setDirectSpeakersWithFeedback}
+              error={
+                actionResult?.fieldErrors?.speakers ??
+                directSpeakerError ??
+                undefined
+              }
+              announceError={
+                !actionResult?.fieldErrors?.speakers &&
+                Boolean(directSpeakerError)
+              }
             />
             <DuplicatePersonWarning
               result={actionResult}

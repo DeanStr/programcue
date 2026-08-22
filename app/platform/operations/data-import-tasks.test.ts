@@ -3,7 +3,14 @@ import { beforeEach, describe, expect, it } from "vitest";
 
 import type { Viewer } from "~/platform/auth/authorize.server";
 import { ensureDemoData } from "~/platform/demo/seed.server";
+import {
+  acquireEvaluationFixtureReset,
+  beginEvaluationFixtureResetDestructiveWork,
+  completeEvaluationFixtureReset,
+  markEvaluationFixtureResetFailed,
+} from "~/platform/evaluation/evaluation-fixture-reset-lock.server";
 import { DataImportService } from "~/platform/operations/data-import-service.server";
+import { OperationService } from "~/platform/operations/operation-service.server";
 
 const viewer: Viewer = {
   personId: "person-demo-admin",
@@ -14,6 +21,28 @@ const viewer: Viewer = {
   eventId: "evt-foe-2025",
   demo: true,
 };
+
+function evaluationEnvironment() {
+  return {
+    ...(env as unknown as CloudflareEnvironment),
+    APP_ENV: "production",
+    DEMO_MODE: "false",
+    EVALUATION_MODE: "true",
+  } as CloudflareEnvironment;
+}
+
+async function establishEvaluationFixtureGeneration(
+  testEnv: CloudflareEnvironment,
+) {
+  const ownerToken = crypto.randomUUID();
+  const fixtureGeneration = crypto.randomUUID();
+  await acquireEvaluationFixtureReset(testEnv, ownerToken);
+  await beginEvaluationFixtureResetDestructiveWork(testEnv, ownerToken);
+  await completeEvaluationFixtureReset(testEnv, ownerToken, fixtureGeneration, {
+    testFixtureGeneration: true,
+  });
+  return fixtureGeneration;
+}
 
 describe("CSV imports", () => {
   beforeEach(async () => {
@@ -26,6 +55,126 @@ describe("CSV imports", () => {
   });
 
   describe("task imports", () => {
+    it("does not claim an import preview during evaluation reset", async () => {
+      const testEnv = evaluationEnvironment();
+      await establishEvaluationFixtureGeneration(testEnv);
+      const suffix = crypto.randomUUID();
+      const taskId = `task-import-reset-fence-${suffix}`;
+      const service = new DataImportService(testEnv);
+      const preview = await service.preview(viewer, {
+        resource: "tasks",
+        fileName: "reset-fence.csv",
+        csv: [
+          "id,title,description,targetType,targetId,ownerEmail,status,impact,dueAt",
+          `${taskId},Reset-fenced import,,event,${viewer.eventId},,not_started,medium,`,
+        ].join("\n"),
+      });
+      expect(preview).toMatchObject({ validCount: 1, invalidCount: 0 });
+      const resetOwner = crypto.randomUUID();
+      await acquireEvaluationFixtureReset(testEnv, resetOwner);
+      try {
+        await expect(
+          service.confirm(viewer, preview.operationId),
+        ).rejects.toThrow("evaluation fixture is resetting");
+        await expect(
+          testEnv.DB.prepare("SELECT 1 FROM task_instances WHERE id = ?")
+            .bind(taskId)
+            .first(),
+        ).resolves.toBeNull();
+        await expect(
+          testEnv.DB.prepare("SELECT status FROM operation_jobs WHERE id = ?")
+            .bind(preview.operationId)
+            .first(),
+        ).resolves.toEqual({ status: "received" });
+      } finally {
+        await markEvaluationFixtureResetFailed(
+          testEnv,
+          resetOwner,
+          new Error("Reset-fence test cleanup."),
+        );
+        await new OperationService(testEnv).cancel(viewer, preview.operationId);
+      }
+    });
+
+    it("rejects a preview whose fixture generation changes before persistence", async () => {
+      const testEnv = evaluationEnvironment();
+      await establishEvaluationFixtureGeneration(testEnv);
+      let resetAdvanced = false;
+      const racingDatabase = new Proxy(testEnv.DB, {
+        get(target, property) {
+          if (property === "batch") {
+            return async (statements: D1PreparedStatement[]) => {
+              if (!resetAdvanced) {
+                resetAdvanced = true;
+                await establishEvaluationFixtureGeneration(testEnv);
+              }
+              return target.batch(statements);
+            };
+          }
+          const value = Reflect.get(target, property);
+          return typeof value === "function" ? value.bind(target) : value;
+        },
+      });
+      const racingEnvironment = new Proxy(testEnv, {
+        get(target, property) {
+          return property === "DB"
+            ? racingDatabase
+            : Reflect.get(target, property);
+        },
+      });
+      const service = new DataImportService(racingEnvironment);
+
+      await expect(
+        service.preview(viewer, {
+          resource: "tasks",
+          fileName: "cross-generation.csv",
+          csv: [
+            "id,title,description,targetType,targetId,ownerEmail,status,impact,dueAt",
+            `cross-generation-task,Stale preview,,event,${viewer.eventId},,not_started,medium,`,
+          ].join("\n"),
+        }),
+      ).rejects.toThrow("evaluation fixture changed");
+
+      expect(resetAdvanced).toBe(true);
+      await expect(
+        testEnv.DB.prepare(
+          "SELECT COUNT(*) AS count FROM operation_jobs WHERE event_id = ? AND type = 'data.import'",
+        )
+          .bind(viewer.eventId)
+          .first(),
+      ).resolves.toEqual({ count: 0 });
+    });
+
+    it("accepts the restored generation after a pre-destructive reset is cancelled", async () => {
+      const testEnv = evaluationEnvironment();
+      await establishEvaluationFixtureGeneration(testEnv);
+      const resetOwner = crypto.randomUUID();
+      await acquireEvaluationFixtureReset(testEnv, resetOwner);
+      await markEvaluationFixtureResetFailed(
+        testEnv,
+        resetOwner,
+        new Error("Cancel before destructive work."),
+      );
+      const service = new DataImportService(testEnv);
+      const preview = await service.preview(viewer, {
+        resource: "tasks",
+        fileName: "restored-generation.csv",
+        csv: [
+          "id,title,description,targetType,targetId,ownerEmail,status,impact,dueAt",
+          `restored-generation-task,Restored generation,,event,${viewer.eventId},,not_started,medium,`,
+        ].join("\n"),
+      });
+
+      await expect(
+        testEnv.DB.prepare(
+          "SELECT status FROM operation_jobs WHERE id = ? AND type = 'data.import'",
+        )
+          .bind(preview.operationId)
+          .first(),
+      ).resolves.toEqual({ status: "received" });
+      await new OperationService(testEnv).cancel(viewer, preview.operationId);
+    });
+
     it("rejects invalid task lifecycle changes and task IDs owned by another event", async () => {
       const suffix = crypto.randomUUID().slice(0, 8);
       const otherEventId = `event-import-task-${suffix}`;

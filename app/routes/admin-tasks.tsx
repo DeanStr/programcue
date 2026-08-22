@@ -182,6 +182,7 @@ export async function action({ request, context }: Route.ActionArgs) {
           fixedDueDate: form.get("fixedDueDate"),
           destinationUrl: form.get("destinationUrl"),
           fileScope: form.get("fileScope"),
+          fileKind: form.get("fileKind"),
           autoAssignOnAcceptance: form.get("autoAssignOnAcceptance") === "true",
           dependencyIds: form.getAll("dependencyIds").map(String),
         }
@@ -270,7 +271,12 @@ export async function action({ request, context }: Route.ActionArgs) {
                   ),
                 }
               : taskTemplateInput.taskType === "file_upload"
-                ? { fileScope: taskTemplateInput.fileScope }
+                ? {
+                    fileScope: taskTemplateInput.fileScope,
+                    ...(taskTemplateInput.fileKind
+                      ? { fileKind: taskTemplateInput.fileKind }
+                      : {}),
+                  }
                 : {},
         },
         String(form.get("intentId") ?? ""),
