@@ -39,6 +39,38 @@ describe("calendar delivery workflows", () => {
     ).resolves.toEqual({ operationCount: 0, invitationCount: 0 });
   });
 
+  it("rejects reserved production recipients before persisting calendar email work", async () => {
+    const { testEnv, queued, sessionId } = await scheduledSpeakerEnvironment();
+    const idempotencyKey = `calendar-reserved-recipient-${crypto.randomUUID()}`;
+    const productionEnvironment = {
+      ...testEnv,
+      APP_ENV: "production",
+    } as unknown as CloudflareEnvironment;
+
+    await expect(
+      new CalendarService(productionEnvironment).queueLifecycle(viewer, {
+        sessionId,
+        personId: "person-demo-speaker",
+        method: "REQUEST",
+        provider: "email_ics",
+        idempotencyKey,
+      }),
+    ).rejects.toThrow(
+      "Calendar email cannot be delivered to this speaker: Reserved or local-only domain.",
+    );
+    expect(queued).toEqual([]);
+    await expect(
+      testEnv.DB.prepare(
+        `SELECT
+             (SELECT COUNT(*) FROM operation_jobs WHERE idempotency_key = ?) AS operationCount,
+             (SELECT COUNT(*) FROM calendar_invitations
+               WHERE event_id = ? AND session_id = ?) AS invitationCount`,
+      )
+        .bind(idempotencyKey, viewer.eventId, sessionId)
+        .first(),
+    ).resolves.toEqual({ operationCount: 0, invitationCount: 0 });
+  });
+
   it("persists an email-ICS operation before queueing and records the provider result", async () => {
     const { testEnv, queued, realtime, sessionId } =
       await scheduledSpeakerEnvironment();
@@ -183,6 +215,63 @@ describe("calendar delivery workflows", () => {
       operationStatus: "failed",
       lastError:
         "The calendar email delivery provider does not match its durable intent.",
+    });
+  });
+
+  it("rejects unsafe durable calendar recipients before calling the provider", async () => {
+    const { testEnv, queued, sessionId } = await scheduledSpeakerEnvironment();
+    const service = new CalendarService(testEnv);
+    const result = await service.queueLifecycle(viewer, {
+      sessionId,
+      personId: "person-demo-speaker",
+      method: "REQUEST",
+      provider: "email_ics",
+      idempotencyKey: `calendar-durable-reserved-${crypto.randomUUID()}`,
+    });
+    let providerCalls = 0;
+    const provider = new ResendEmailProvider(
+      "calendar-reserved-recipient-key",
+      async () => {
+        providerCalls += 1;
+        return Response.json({ id: "must-not-send-reserved-calendar-email" });
+      },
+    );
+    const productionEnvironment = {
+      ...testEnv,
+      APP_ENV: "production",
+    } as unknown as CloudflareEnvironment;
+
+    await processCalendarSync(queued[0], productionEnvironment, {
+      email: provider,
+    });
+
+    expect(providerCalls).toBe(0);
+    await expect(
+      testEnv.DB.prepare(
+        `SELECT invitation.status, attempt.status AS attemptStatus,
+                delivery.status AS deliveryStatus,
+                operation.status AS operationStatus,
+                operation.last_error AS lastError
+           FROM calendar_invitations invitation
+           JOIN calendar_sync_attempts attempt
+             ON attempt.id = invitation.current_attempt_id
+           JOIN communication_deliveries delivery
+             ON delivery.id = invitation.delivery_id
+           JOIN communications communication
+             ON communication.id = delivery.communication_id
+           JOIN operation_jobs operation
+             ON operation.id = communication.operation_id
+          WHERE invitation.id = ?`,
+      )
+        .bind(result.invitationId)
+        .first(),
+    ).resolves.toEqual({
+      status: "failed",
+      attemptStatus: "failed",
+      deliveryStatus: "failed",
+      operationStatus: "failed",
+      lastError:
+        "Calendar email cannot be delivered to this speaker: Reserved or local-only domain.",
     });
   });
 

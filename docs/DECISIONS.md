@@ -767,6 +767,14 @@ The authenticated destructive evaluation reset allows ten attempts per IP in a
 one-hour window. Exact event-name confirmation, reset ownership and active-work
 checks remain authoritative independently of this abuse limit.
 
+Production calendar email delivery rejects invalid, reserved and local-only
+recipient domains before durable work is created and rechecks the immutable
+recipient at the Queue provider boundary. The production evaluation reset gives
+the populated Alex Morgan and Priya Shah showcase identities separate
+operator-controlled routeable addresses so publishing their seeded schedule can
+exercise real email-ICS delivery. These addresses are not SBEK aliases and are
+never mapped to the clean scenario identities.
+
 The signed, activated evaluation applicant may perform an accepted-submission
 co-speaker invitation while its fixture mailbox deliberately remains
 unverified. The ordinary participant path still requires a verified email.

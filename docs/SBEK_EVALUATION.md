@@ -33,7 +33,7 @@ secrets for the evaluation period:
   characters. Never give this value to an evaluator.
 
 Keep the two evaluation-session values in the ignored
-`.env.production-evaluation` file and the six reset-only values below in the
+`.env.production-evaluation` file and the eight reset-only values below in the
 ignored `.env.production-evaluation-reset` file. Both files must have mode
 `0600`. Source them only in the operator shell and never commit them; each value
 still has to cross the Worker boundary through `wrangler secret put`.
@@ -62,13 +62,19 @@ Temporarily install these additional reset secrets before seeding:
 - `EVALUATOR_SPEAKER_EMAIL`: Priya Raman's routeable email address.
 - `EVALUATOR_SECOND_SPEAKER_EMAIL`: Marcus Okafor's routeable email address.
 - `EVALUATOR_REVIEWER_EMAIL`: Sam Whitfield's routeable email address.
+- `EVALUATOR_SHOWCASE_SUBMITTER_EMAIL`: Alex Morgan's routeable showcase email
+  address for email-based calendar invitations.
+- `EVALUATOR_SHOWCASE_SPEAKER_EMAIL`: Priya Shah's routeable showcase email
+  address for email-based calendar invitations.
 
-The four addresses must be distinct, must not use reserved domains and must be
-controlled by the evaluation operator if live delivery evidence will be
-captured. Evaluators do not need mailbox access to use `/evaluate` or enter the
-documented SBEK aliases. Source the reset-only file, install the values without
-placing a literal secret in shell history, and run the reset from that same
-shell:
+The six addresses must be distinct, must not use reserved domains and must be
+controlled by the evaluation operator. Alex and Priya Shah are populated
+showcase identities rather than SBEK aliases; their addresses allow publishing
+the showcase schedule to exercise real email-ICS delivery without sending
+reserved-domain mail. Evaluators do not need mailbox access to use `/evaluate`
+or enter the documented four SBEK aliases. Source the reset-only file, install
+the values without placing a literal secret in shell history, and run the reset
+from that same shell:
 
 ```bash
 set -a
@@ -87,6 +93,10 @@ printf '%s' "$EVALUATOR_SECOND_SPEAKER_EMAIL" | \
   wrangler secret put EVALUATOR_SECOND_SPEAKER_EMAIL -c wrangler.jsonc
 printf '%s' "$EVALUATOR_REVIEWER_EMAIL" | \
   wrangler secret put EVALUATOR_REVIEWER_EMAIL -c wrangler.jsonc
+printf '%s' "$EVALUATOR_SHOWCASE_SUBMITTER_EMAIL" | \
+  wrangler secret put EVALUATOR_SHOWCASE_SUBMITTER_EMAIL -c wrangler.jsonc
+printf '%s' "$EVALUATOR_SHOWCASE_SPEAKER_EMAIL" | \
+  wrangler secret put EVALUATOR_SHOWCASE_SPEAKER_EMAIL -c wrangler.jsonc
 
 npm run evaluation:fixture:reset -- --yes
 ```
@@ -120,10 +130,10 @@ and restores the previous completed generation. Once destructive work starts, a
 failure or malformed state invalidates evaluator sessions and keeps evaluation
 unavailable until a successful operator reset. The in-product reset is
 inaccessible in that state: recreate the protected reset environment with a
-fresh operator secret, a temporary full-access Resend key and the four persisted
-evaluator addresses; install those six credentials, run the operator reset,
+fresh operator secret, a temporary full-access Resend key and the six persisted
+fixture addresses; install those eight credentials, run the operator reset,
 then repeat the removal and provider-key revocation steps below. Immediately
-after every successful operator reset, delete all six temporary Worker secrets:
+after every successful operator reset, delete all eight temporary Worker secrets:
 
 ```bash
 wrangler secret delete EVALUATION_FIXTURE_SECRET -c wrangler.jsonc
@@ -132,19 +142,22 @@ wrangler secret delete EVALUATOR_ORGANIZER_EMAIL -c wrangler.jsonc
 wrangler secret delete EVALUATOR_SPEAKER_EMAIL -c wrangler.jsonc
 wrangler secret delete EVALUATOR_SECOND_SPEAKER_EMAIL -c wrangler.jsonc
 wrangler secret delete EVALUATOR_REVIEWER_EMAIL -c wrangler.jsonc
+wrangler secret delete EVALUATOR_SHOWCASE_SUBMITTER_EMAIL -c wrangler.jsonc
+wrangler secret delete EVALUATOR_SHOWCASE_SPEAKER_EMAIL -c wrangler.jsonc
 ```
 
 Also revoke the temporary full-access API key in Resend itself; deleting its
-Worker binding does not revoke the provider credential. The four routeable
+Worker binding does not revoke the provider credential. The six routeable
 addresses persist on the seeded D1 people and are no longer needed as Worker
-secrets. After the provider-side revocation, clear the six exported values and
+secrets. After the provider-side revocation, clear the eight exported values and
 remove their reset-only file; keep `.env.production-evaluation` because its
 access code and signing secret remain active for the evaluation period:
 
 ```bash
 unset EVALUATION_FIXTURE_SECRET EVALUATION_RESEND_API_KEY \
   EVALUATOR_ORGANIZER_EMAIL EVALUATOR_SPEAKER_EMAIL \
-  EVALUATOR_SECOND_SPEAKER_EMAIL EVALUATOR_REVIEWER_EMAIL
+  EVALUATOR_SECOND_SPEAKER_EMAIL EVALUATOR_REVIEWER_EMAIL \
+  EVALUATOR_SHOWCASE_SUBMITTER_EMAIL EVALUATOR_SHOWCASE_SPEAKER_EMAIL
 rm -- .env.production-evaluation-reset
 ```
 
@@ -242,7 +255,7 @@ After initial operator provisioning, an unlocked evaluator can expand
 `Reset evaluation data` on `/evaluate`, type `Future of Events 2027` and reset
 the dedicated fixture before a separate LLM or human run. This routine action
 uses the already-provisioned D1 identities and verified sender, not the removed
-four address secrets or temporary full-access Resend key. It retains the same
+six address secrets or temporary full-access Resend key. It retains the same
 tenant-dedication, active-work, retention, R2 and reset-owner fences, and is
 limited to ten attempts per IP in a one-hour window. It resets the whole
 shared evaluation workspace, invalidates everyone's saved evaluator cookies
@@ -466,8 +479,8 @@ pnpm run sbek -- plan --url https://app.programcue.com --scenarios CFP-S1
 
 If the pilot mutates production, use `Reset evaluation data` on the unlocked
 guide and recapture all three saved persona states. Every reset invalidates
-previously saved evaluator cookies. Reinstall the reset-only secret and four
-evaluator-address secrets and create a new temporary full-access Resend key only
+previously saved evaluator cookies. Reinstall the reset-only secret and six
+fixture-address secrets and create a new temporary full-access Resend key only
 when routine reset reports provisioning drift or the fixture has never been
 provisioned; perform the full cleanup above immediately afterward. Restore the
 intended `headless` setting, start a new full run, and only then begin the

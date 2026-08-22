@@ -40,12 +40,20 @@ const EVALUATION_ORGANISATION_SLUG = "future-events-association";
 const EVALUATION_EVENT_SLUG = "future-of-events-2027";
 const EVALUATION_ORGANIZER_MEMBERSHIP_ID =
   "membership-production-evaluation-organizer-org";
+const EVALUATION_FIXTURE_EMAIL_PEOPLE = {
+  organizer: SBEK_FIXTURE_PEOPLE.organizer,
+  speaker: SBEK_FIXTURE_PEOPLE.speaker,
+  speaker2: SBEK_FIXTURE_PEOPLE.speaker2,
+  reviewer: SBEK_FIXTURE_PEOPLE.reviewer,
+  showcaseSubmitter: DEMO_IDENTITIES.submitter,
+  showcaseSpeaker: DEMO_IDENTITIES.speaker,
+} as const;
 const deliverableEmailSchema = z
   .email()
   .transform((value) => value.trim().toLowerCase())
   .refine((value) => emailDeliveryIssue(value, "production") === null, {
     message:
-      "Evaluator addresses must not use a reserved or local-only domain.",
+      "Evaluation fixture addresses must not use a reserved or local-only domain.",
   });
 
 const fixtureEmailSchema = z
@@ -54,12 +62,14 @@ const fixtureEmailSchema = z
     speaker: deliverableEmailSchema,
     speaker2: deliverableEmailSchema,
     reviewer: deliverableEmailSchema,
+    showcaseSubmitter: deliverableEmailSchema,
+    showcaseSpeaker: deliverableEmailSchema,
   })
   .superRefine((value, context) => {
-    if (new Set(Object.values(value)).size !== 4) {
+    if (new Set(Object.values(value)).size !== 6) {
       context.addIssue({
         code: "custom",
-        message: "The four evaluator email addresses must be distinct.",
+        message: "The six evaluation fixture email addresses must be distinct.",
       });
     }
   });
@@ -118,6 +128,8 @@ function productionFixtureEmails(env: CloudflareEnvironment) {
     speaker: env.EVALUATOR_SPEAKER_EMAIL,
     speaker2: env.EVALUATOR_SECOND_SPEAKER_EMAIL,
     reviewer: env.EVALUATOR_REVIEWER_EMAIL,
+    showcaseSubmitter: env.EVALUATOR_SHOWCASE_SUBMITTER_EMAIL,
+    showcaseSpeaker: env.EVALUATOR_SHOWCASE_SPEAKER_EMAIL,
   });
 }
 
@@ -277,7 +289,10 @@ async function assertDedicatedFixtureIdentity(
   for (const [key, email] of Object.entries(emails) as Array<
     [keyof EvaluationFixtureEmails, string]
   >) {
-    expectedEmailOwners.set(email, SBEK_FIXTURE_PEOPLE[key].personId);
+    expectedEmailOwners.set(
+      email,
+      EVALUATION_FIXTURE_EMAIL_PEOPLE[key].personId,
+    );
   }
   const emailPlaceholders = [...expectedEmailOwners].map(() => "?").join(",");
   const emailOwners = await env.DB.prepare(
@@ -734,30 +749,34 @@ async function persistedFixtureConfiguration(env: CloudflareEnvironment) {
     throw new Error("The production evaluation fixture requires Resend.");
   }
   const configuredSender = parseSender(env.AUTH_EMAIL_FROM);
+  const fixtureEmailKeys = Object.keys(
+    EVALUATION_FIXTURE_EMAIL_PEOPLE,
+  ) as Array<keyof EvaluationFixtureEmails>;
   const identities = await env.DB.prepare(
     `SELECT id, email
        FROM people
-      WHERE id IN (?, ?, ?, ?)`,
+      WHERE id IN (${fixtureEmailKeys.map(() => "?").join(",")})`,
   )
     .bind(
-      SBEK_FIXTURE_PEOPLE.organizer.personId,
-      SBEK_FIXTURE_PEOPLE.speaker.personId,
-      SBEK_FIXTURE_PEOPLE.speaker2.personId,
-      SBEK_FIXTURE_PEOPLE.reviewer.personId,
+      ...fixtureEmailKeys.map(
+        (key) => EVALUATION_FIXTURE_EMAIL_PEOPLE[key].personId,
+      ),
     )
     .all<{ id: string; email: string }>();
   const byId = new Map(identities.results.map((row) => [row.id, row.email]));
   let emails: EvaluationFixtureEmails;
   try {
-    emails = fixtureEmailSchema.parse({
-      organizer: byId.get(SBEK_FIXTURE_PEOPLE.organizer.personId),
-      speaker: byId.get(SBEK_FIXTURE_PEOPLE.speaker.personId),
-      speaker2: byId.get(SBEK_FIXTURE_PEOPLE.speaker2.personId),
-      reviewer: byId.get(SBEK_FIXTURE_PEOPLE.reviewer.personId),
-    });
+    emails = fixtureEmailSchema.parse(
+      Object.fromEntries(
+        fixtureEmailKeys.map((key) => [
+          key,
+          byId.get(EVALUATION_FIXTURE_EMAIL_PEOPLE[key].personId),
+        ]),
+      ),
+    );
   } catch {
     throw new Error(
-      "The provisioned evaluator identities are missing, unsafe or no longer distinct. Run the operator fixture reset.",
+      "The provisioned evaluation fixture identities are missing, unsafe or no longer distinct. Run the operator fixture reset.",
     );
   }
   const persistedSender = await env.DB.prepare(
@@ -817,7 +836,7 @@ async function productionEvidence(
     [keyof EvaluationFixtureEmails, string]
   >;
   const routedIds = routedIdentities.map(
-    ([key]) => SBEK_FIXTURE_PEOPLE[key].personId,
+    ([key]) => EVALUATION_FIXTURE_EMAIL_PEOPLE[key].personId,
   );
   const ids = allSeedIdentities().map((identity) => identity.personId);
   const tokenEmails = [
@@ -829,28 +848,63 @@ async function productionEvidence(
       ].map((email) => email.toLowerCase()),
     ),
   ];
-  const row = await env.DB.prepare(
+  const identityRow = await env.DB.prepare(
     `SELECT
        (SELECT COUNT(*) FROM people
          WHERE ${routedIdentities.map(() => "(id = ? AND email = ? COLLATE NOCASE)").join(" OR ")}) AS fixturePeople,
        (SELECT COUNT(*) FROM people
          WHERE id IN (${routedIds.map(() => "?").join(",")})
-           AND email_verified = 1) AS fixtureVerifiedPeople,
+           AND email_verified = 1) AS fixtureVerifiedPeople`,
+  )
+    .bind(
+      ...routedIdentities.flatMap(([key, email]) => [
+        EVALUATION_FIXTURE_EMAIL_PEOPLE[key].personId,
+        email,
+      ]),
+      ...routedIds,
+    )
+    .first<
+      Pick<
+        ProductionEvaluationFixtureEvidence,
+        "fixturePeople" | "fixtureVerifiedPeople"
+      >
+    >();
+  if (!identityRow) {
+    throw new Error(
+      "The production evaluation fixture identity evidence could not be verified.",
+    );
+  }
+  const verificationTokenEvidence = await env.DB.prepare(
+    `SELECT COUNT(*) AS count
+       FROM verification_tokens
+      WHERE identifier COLLATE NOCASE IN (${tokenEmails.map(() => "?").join(",")})
+         OR CASE WHEN json_valid(value)
+                 THEN json_extract(value, '$.email') END COLLATE NOCASE
+            IN (${tokenEmails.map(() => "?").join(",")})
+         OR CASE WHEN json_valid(value)
+                 THEN json_extract(value, '$.link.email') END COLLATE NOCASE
+            IN (${tokenEmails.map(() => "?").join(",")})
+         OR CASE WHEN json_valid(value)
+                 THEN json_extract(value, '$.link.userId') END
+            IN (${ids.map(() => "?").join(",")})`,
+  )
+    .bind(...tokenEmails, ...tokenEmails, ...tokenEmails, ...ids)
+    .first<{ count: number }>();
+  const fixtureVerificationTokens = Number(verificationTokenEvidence?.count);
+  if (
+    !Number.isSafeInteger(fixtureVerificationTokens) ||
+    fixtureVerificationTokens < 0
+  ) {
+    throw new Error(
+      "The production evaluation verification-token evidence could not be verified.",
+    );
+  }
+  const row = await env.DB.prepare(
+    `SELECT
        (SELECT COUNT(*) FROM auth_sessions WHERE person_id IN (${ids.map(() => "?").join(",")})) AS fixtureSessions,
        (SELECT COUNT(*) FROM auth_accounts WHERE person_id IN (${ids.map(() => "?").join(",")})) AS fixtureAccounts,
        (SELECT COUNT(*) FROM calendar_connections
          WHERE person_id IN (${ids.map(() => "?").join(",")})) AS fixtureCalendarConnections,
-       (SELECT COUNT(*) FROM verification_tokens
-         WHERE identifier COLLATE NOCASE IN (${tokenEmails.map(() => "?").join(",")})
-            OR CASE WHEN json_valid(value)
-                    THEN json_extract(value, '$.email') END COLLATE NOCASE
-               IN (${tokenEmails.map(() => "?").join(",")})
-            OR CASE WHEN json_valid(value)
-                    THEN json_extract(value, '$.link.email') END COLLATE NOCASE
-               IN (${tokenEmails.map(() => "?").join(",")})
-            OR CASE WHEN json_valid(value)
-                    THEN json_extract(value, '$.link.userId') END
-               IN (${ids.map(() => "?").join(",")})) AS fixtureVerificationTokens,
        (SELECT COUNT(*) FROM sender_profiles
          WHERE event_id = ? AND provider = 'resend'
            AND status = 'verified') AS verifiedSenders,
@@ -869,17 +923,8 @@ async function productionEvidence(
            AND activation_status <> 'discarded') AS nonDiscardedExtraEvents`,
   )
     .bind(
-      ...routedIdentities.flatMap(([key, email]) => [
-        SBEK_FIXTURE_PEOPLE[key].personId,
-        email,
-      ]),
-      ...routedIds,
       ...ids,
       ...ids,
-      ...ids,
-      ...tokenEmails,
-      ...tokenEmails,
-      ...tokenEmails,
       ...ids,
       DEMO_EVENT_ID,
       DEMO_ORGANISATION_ID,
@@ -897,6 +942,9 @@ async function productionEvidence(
   const evidence = Object.fromEntries(
     Object.entries(row).map(([key, value]) => [key, Number(value)]),
   ) as ProductionEvaluationFixtureEvidence;
+  evidence.fixturePeople = Number(identityRow.fixturePeople);
+  evidence.fixtureVerifiedPeople = Number(identityRow.fixtureVerifiedPeople);
+  evidence.fixtureVerificationTokens = fixtureVerificationTokens;
   const auxiliaryMembershipEvidence = await env.DB.prepare(
     `SELECT COUNT(*) AS count
        FROM memberships
@@ -920,7 +968,7 @@ async function productionEvidence(
 
 function fixtureIsComplete(evidence: ProductionEvaluationFixtureEvidence) {
   return (
-    evidence.fixturePeople === 4 &&
+    evidence.fixturePeople === 6 &&
     evidence.fixtureVerifiedPeople === 0 &&
     evidence.fixtureSessions === 0 &&
     evidence.fixtureAccounts === 0 &&
@@ -1134,7 +1182,7 @@ async function resetProductionEvaluationFixtureWithAuthority(
         env.DB.prepare(
           `UPDATE people SET email = ?, email_verified = 0, updated_at = unixepoch()
           WHERE id = ?`,
-        ).bind(email, SBEK_FIXTURE_PEOPLE[key].personId),
+        ).bind(email, EVALUATION_FIXTURE_EMAIL_PEOPLE[key].personId),
       ),
       env.DB.prepare(
         `DELETE FROM auth_sessions WHERE person_id IN (${fixtureIds.map(() => "?").join(",")})`,

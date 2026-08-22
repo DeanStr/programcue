@@ -53,6 +53,9 @@ async function provisionEvaluationFixture(environment: CloudflareEnvironment) {
       EVALUATOR_SPEAKER_EMAIL: "eval-speaker@programcue.com",
       EVALUATOR_SECOND_SPEAKER_EMAIL: "eval-speaker-2@programcue.com",
       EVALUATOR_REVIEWER_EMAIL: "eval-reviewer@programcue.com",
+      EVALUATOR_SHOWCASE_SUBMITTER_EMAIL:
+        "eval-showcase-submitter@programcue.com",
+      EVALUATOR_SHOWCASE_SPEAKER_EMAIL: "eval-showcase-speaker@programcue.com",
     } as CloudflareEnvironment,
     "Future of Events 2027",
     {
@@ -593,7 +596,11 @@ describe("production evaluation guide", () => {
       environment.EVALUATOR_SPEAKER_EMAIL,
       environment.EVALUATOR_SECOND_SPEAKER_EMAIL,
       environment.EVALUATOR_REVIEWER_EMAIL,
+      environment.EVALUATOR_SHOWCASE_SUBMITTER_EMAIL,
+      environment.EVALUATOR_SHOWCASE_SPEAKER_EMAIL,
     ]).toEqual([
+      undefined,
+      undefined,
       undefined,
       undefined,
       undefined,

@@ -36,6 +36,9 @@ function productionEnvironment() {
     EVALUATOR_SPEAKER_EMAIL: "eval-speaker@programcue.com",
     EVALUATOR_SECOND_SPEAKER_EMAIL: "eval-speaker-2@programcue.com",
     EVALUATOR_REVIEWER_EMAIL: "eval-reviewer@programcue.com",
+    EVALUATOR_SHOWCASE_SUBMITTER_EMAIL:
+      "eval-showcase-submitter@programcue.com",
+    EVALUATOR_SHOWCASE_SPEAKER_EMAIL: "eval-showcase-speaker@programcue.com",
   } as CloudflareEnvironment;
 }
 

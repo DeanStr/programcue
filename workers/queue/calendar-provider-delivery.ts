@@ -6,6 +6,7 @@ import {
 } from "../../app/modules/calendars/calendar-providers.server";
 import type { CalendarQueueMessage } from "../../app/modules/calendars/calendar-schema";
 import { generateInvitationIcs } from "../../app/modules/calendars/ics.server";
+import { emailDeliveryIssue } from "../../app/modules/communications/email-deliverability";
 import { TRACKED_DELIVERY_EMAIL_TAG } from "../../app/modules/communications/email-provider";
 import { createEmailProvider } from "../../app/modules/communications/email-provider.server";
 import { renderProgramCueEmail } from "../../app/modules/communications/email-templates/render-email.server";
@@ -107,6 +108,12 @@ export async function deliverCalendarProvider(input: {
       }>();
     if (!delivery)
       throw new Error("Calendar email sender or delivery is unavailable.");
+    const recipientIssue = emailDeliveryIssue(delivery.address, env.APP_ENV);
+    if (recipientIssue) {
+      throw new Error(
+        `Calendar email cannot be delivered to this speaker: ${recipientIssue}.`,
+      );
+    }
     if (delivery.status === "sent" && delivery.providerMessageId) {
       providerEventId = delivery.providerMessageId;
     } else {

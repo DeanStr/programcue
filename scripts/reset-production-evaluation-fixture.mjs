@@ -9,7 +9,7 @@ function usage() {
   return `Usage: npm run evaluation:fixture:reset -- --yes
 
 Requires EVALUATION_FIXTURE_SECRET in the invoking shell. The matching secret,
-temporary EVALUATION_RESEND_API_KEY and all four EVALUATOR_*_EMAIL values must
+temporary EVALUATION_RESEND_API_KEY and all six EVALUATOR_*_EMAIL values must
 already be installed on the ordinary production Worker.`;
 }
 
@@ -85,7 +85,7 @@ export async function resetProductionEvaluationFixture({
     !result ||
     typeof result !== "object" ||
     !result.evidence ||
-    result.evidence.fixturePeople !== 4 ||
+    result.evidence.fixturePeople !== 6 ||
     result.evidence.fixtureVerifiedPeople !== 0 ||
     result.evidence.fixtureSessions !== 0 ||
     result.evidence.fixtureAccounts !== 0 ||
@@ -114,7 +114,7 @@ async function main() {
     secret: process.env.EVALUATION_FIXTURE_SECRET,
   });
   console.log(
-    `Reset ${RESET_CONFIRMATION}: ${result.evidence.fixturePeople} clean scenario identities, ${result.evidence.verifiedSenders} verified sender, Workers AI configuration seeded.`,
+    `Reset ${RESET_CONFIRMATION}: ${result.evidence.fixturePeople} controlled fixture recipients, ${result.evidence.verifiedSenders} verified sender, Workers AI configuration seeded.`,
   );
   console.log(
     "Open /evaluate with the shared access code and save only the organizer, clean applicant and clean invited reviewer starting states; activate the clean applicant explicitly. Marcus remains in-scenario co-speaker input. No evaluator mailbox is required for persona access.",

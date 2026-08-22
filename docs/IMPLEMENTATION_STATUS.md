@@ -664,6 +664,13 @@ expired pre-destructive attempt is cancelled and restores that matched prior
 generation, while malformed state and failures after mutation begins keep
 evaluation unavailable. Focused Worker coverage exercises the active-work race,
 expired pre-destructive recovery and post-mutation storage failure.
+Repository coverage now makes production email-ICS calendar lifecycle creation
+and the Queue provider boundary reject reserved or otherwise invalid recipient
+addresses before calling the provider. Production evaluation provisioning
+requires separate controlled routeable addresses for Alex Morgan and Priya
+Shah, preventing the seeded five-entry schedule from manufacturing predictable
+Resend failures after the revised fixture is next deployed and reset. Live
+delivery through those addresses is not yet claimed.
 Assistant request, success, failure and cancellation transitions now commit
 atomically with their matching audit evidence. Contextual reminder creation and
 reminder revision stage their exact preview before a guarded batch commits the

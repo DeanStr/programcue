@@ -49,6 +49,9 @@ function productionEnvironment(overrides: Partial<CloudflareEnvironment> = {}) {
     EVALUATOR_SPEAKER_EMAIL: "eval-speaker@programcue.com",
     EVALUATOR_SECOND_SPEAKER_EMAIL: "eval-speaker-2@programcue.com",
     EVALUATOR_REVIEWER_EMAIL: "eval-reviewer@programcue.com",
+    EVALUATOR_SHOWCASE_SUBMITTER_EMAIL:
+      "eval-showcase-submitter@programcue.com",
+    EVALUATOR_SHOWCASE_SPEAKER_EMAIL: "eval-showcase-speaker@programcue.com",
     ...overrides,
   } as CloudflareEnvironment;
 }
@@ -118,7 +121,7 @@ describe("production evaluation fixture", () => {
     );
 
     expect(result.evidence).toEqual({
-      fixturePeople: 4,
+      fixturePeople: 6,
       fixtureVerifiedPeople: 0,
       fixtureSessions: 0,
       fixtureAccounts: 0,
@@ -151,6 +154,24 @@ describe("production evaluation fixture", () => {
       .first<{ email: string; emailVerified: number }>();
     expect(organizer?.email).toBe("eval-organizer@programcue.com");
     expect(organizer?.emailVerified).toBe(0);
+    const showcaseRecipients = await environment.DB.prepare(
+      `SELECT id, email, email_verified AS emailVerified
+         FROM people
+        WHERE id IN ('person-demo-submitter', 'person-demo-speaker')
+        ORDER BY id`,
+    ).all<{ id: string; email: string; emailVerified: number }>();
+    expect(showcaseRecipients.results).toEqual([
+      {
+        id: "person-demo-speaker",
+        email: "eval-showcase-speaker@programcue.com",
+        emailVerified: 0,
+      },
+      {
+        id: "person-demo-submitter",
+        email: "eval-showcase-submitter@programcue.com",
+        emailVerified: 0,
+      },
+    ]);
     const resetAudit = await environment.DB.prepare(
       `SELECT action, actor_person_id AS actorPersonId, actor_id AS actorId,
               json_extract(metadata_json, '$.status') AS resetStatus
@@ -210,6 +231,88 @@ describe("production evaluation fixture", () => {
     await expect(
       readEvaluationSession(sessionRequest, environment),
     ).resolves.toBeNull();
+  });
+
+  it("completes when all six fixture addresses rotate and remains resettable", async () => {
+    const environment = productionEnvironment();
+    await resetProductionEvaluationFixture(
+      environment,
+      "Future of Events 2027",
+      verifiedDomains,
+    );
+    const priorCookie = await evaluationSessionCookie(environment, "organizer");
+    const priorRequest = new Request("https://app.programcue.com/evaluate", {
+      headers: { cookie: priorCookie.split(";", 1)[0]! },
+    });
+    const rotatedAddresses = [
+      "rotated-organizer@programcue.com",
+      "rotated-speaker@programcue.com",
+      "rotated-speaker-2@programcue.com",
+      "rotated-reviewer@programcue.com",
+      "rotated-showcase-submitter@programcue.com",
+      "rotated-showcase-speaker@programcue.com",
+    ] as const;
+    const rotatedEnvironment = productionEnvironment({
+      DB: environment.DB,
+      FILES: environment.FILES,
+      EVALUATOR_ORGANIZER_EMAIL: rotatedAddresses[0],
+      EVALUATOR_SPEAKER_EMAIL: rotatedAddresses[1],
+      EVALUATOR_SECOND_SPEAKER_EMAIL: rotatedAddresses[2],
+      EVALUATOR_REVIEWER_EMAIL: rotatedAddresses[3],
+      EVALUATOR_SHOWCASE_SUBMITTER_EMAIL: rotatedAddresses[4],
+      EVALUATOR_SHOWCASE_SPEAKER_EMAIL: rotatedAddresses[5],
+    });
+
+    const rotatedReset = await resetProductionEvaluationFixture(
+      rotatedEnvironment,
+      "Future of Events 2027",
+      verifiedDomains,
+    );
+
+    expect(rotatedReset.evidence.fixturePeople).toBe(6);
+    await expect(
+      readEvaluationSession(priorRequest, rotatedEnvironment),
+    ).resolves.toBeNull();
+    const rotatedPeople = await rotatedEnvironment.DB.prepare(
+      `SELECT COUNT(*) AS count
+         FROM people
+        WHERE email IN (${rotatedAddresses.map(() => "?").join(",")})`,
+    )
+      .bind(...rotatedAddresses)
+      .first<{ count: number }>();
+    expect(rotatedPeople?.count).toBe(6);
+
+    const rotatedCookie = await evaluationSessionCookie(
+      rotatedEnvironment,
+      "organizer",
+    );
+    const rotatedRequest = new Request("https://app.programcue.com/evaluate", {
+      headers: { cookie: rotatedCookie.split(";", 1)[0]! },
+    });
+    await expect(
+      readEvaluationSession(rotatedRequest, rotatedEnvironment),
+    ).resolves.toMatchObject({ identityKey: "organizer" });
+
+    await resetProductionEvaluationFixture(
+      rotatedEnvironment,
+      "Future of Events 2027",
+      verifiedDomains,
+    );
+    await expect(
+      readEvaluationSession(rotatedRequest, rotatedEnvironment),
+    ).resolves.toBeNull();
+    const currentCookie = await evaluationSessionCookie(
+      rotatedEnvironment,
+      "organizer",
+    );
+    await expect(
+      readEvaluationSession(
+        new Request("https://app.programcue.com/evaluate", {
+          headers: { cookie: currentCookie.split(";", 1)[0]! },
+        }),
+        rotatedEnvironment,
+      ),
+    ).resolves.toMatchObject({ identityKey: "organizer" });
   });
 
   it("supersedes every assistant proposal from the prior fixture generation", async () => {
@@ -1508,6 +1611,16 @@ describe("production evaluation fixture", () => {
         verifiedDomains,
       ),
     ).rejects.toThrow(/reserved/u);
+
+    await expect(
+      resetProductionEvaluationFixture(
+        productionEnvironment({
+          EVALUATOR_SHOWCASE_SPEAKER_EMAIL: undefined,
+        }),
+        "Future of Events 2027",
+        verifiedDomains,
+      ),
+    ).rejects.toThrow();
   });
 
   it("verifies the live sender domain before destructive work", async () => {
@@ -2336,6 +2449,8 @@ describe("production evaluation fixture", () => {
           EVALUATOR_SPEAKER_EMAIL: undefined,
           EVALUATOR_SECOND_SPEAKER_EMAIL: undefined,
           EVALUATOR_REVIEWER_EMAIL: undefined,
+          EVALUATOR_SHOWCASE_SUBMITTER_EMAIL: undefined,
+          EVALUATOR_SHOWCASE_SPEAKER_EMAIL: undefined,
           EVALUATION_RESEND_API_KEY: undefined,
         } as CloudflareEnvironment,
         "Future of Events 2027",

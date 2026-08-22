@@ -27,7 +27,7 @@ describe("production evaluation fixture reset command", () => {
         captured = { request: request.toString(), init };
         return Response.json({
           evidence: {
-            fixturePeople: 4,
+            fixturePeople: 6,
             fixtureVerifiedPeople: 0,
             fixtureSessions: 0,
             fixtureAccounts: 0,
@@ -56,7 +56,7 @@ describe("production evaluation fixture reset command", () => {
     assert.deepEqual(JSON.parse(captured.init.body), {
       confirmation: "Future of Events 2027",
     });
-    assert.equal(result.evidence.fixturePeople, 4);
+    assert.equal(result.evidence.fixturePeople, 6);
   });
 
   it("fails instead of accepting a partial reset result", async () => {

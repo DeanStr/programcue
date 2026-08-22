@@ -1,3 +1,4 @@
+import { emailDeliveryIssue } from "~/modules/communications/email-deliverability";
 import {
   type EmailProviderConfiguration,
   requireEmailProviderConfiguration,
@@ -573,6 +574,15 @@ export class CalendarLifecycleService {
     let emailProvider: EmailProviderConfiguration | null = null;
     let sender: SenderRow | null = null;
     if (parsed.provider === "email_ics") {
+      const recipientIssue = emailDeliveryIssue(
+        session.attendeeEmail,
+        this.env.APP_ENV,
+      );
+      if (recipientIssue) {
+        throw new CalendarStateError(
+          `Calendar email cannot be delivered to this speaker: ${recipientIssue}.`,
+        );
+      }
       try {
         emailProvider = requireEmailProviderConfiguration(this.env);
       } catch (error) {
