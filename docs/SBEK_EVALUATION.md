@@ -244,12 +244,12 @@ the dedicated fixture before a separate LLM or human run. This routine action
 uses the already-provisioned D1 identities and verified sender, not the removed
 four address secrets or temporary full-access Resend key. It retains the same
 tenant-dedication, active-work, retention, R2 and reset-owner fences, and is
-IP-rate-limited. It resets the whole shared evaluation workspace, invalidates
-everyone's saved evaluator cookies and returns the initiating browser to the
-unlocked role picker with no persona. Recapture all three starting states after
-it completes. If the persisted identities or sender have drifted, the action
-fails and an operator must repeat the separately authenticated provisioning
-procedure above.
+limited to ten attempts per IP in a one-hour window. It resets the whole
+shared evaluation workspace, invalidates everyone's saved evaluator cookies
+and returns the initiating browser to the unlocked role picker with no persona.
+Recapture all three starting states after it completes. If the persisted
+identities or sender have drifted, the action fails and an operator must repeat
+the separately authenticated provisioning procedure above.
 
 The only production Turnstile exception is creation of the first anonymous
 personal itinerary for the exact canonical fixture event while evaluation mode

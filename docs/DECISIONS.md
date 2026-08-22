@@ -763,6 +763,10 @@ invalid request fails closed if that attempt cannot be recorded. The D1 limit
 controls invalid-request abuse; the enforced 128-bit bearer secret, rather than
 the mutable attempt bucket, is the credential-guessing boundary.
 
+The authenticated destructive evaluation reset allows ten attempts per IP in a
+one-hour window. Exact event-name confirmation, reset ownership and active-work
+checks remain authoritative independently of this abuse limit.
+
 The signed, activated evaluation applicant may perform an accepted-submission
 co-speaker invitation while its fixture mailbox deliberately remains
 unverified. The ordinary participant path still requires a verified email.

@@ -91,7 +91,7 @@ const policies = {
     { dimension: "ip", limit: 20, windowSeconds: 3_600, blockSeconds: 3_600 },
   ],
   evaluation_reset: [
-    { dimension: "ip", limit: 5, windowSeconds: 3_600, blockSeconds: 3_600 },
+    { dimension: "ip", limit: 10, windowSeconds: 3_600, blockSeconds: 3_600 },
   ],
   programme_preview: [
     { dimension: "ip", limit: 60, windowSeconds: 60, blockSeconds: 60 },

@@ -237,6 +237,23 @@ describe("public abuse protection", () => {
     expect(provider).not.toHaveBeenCalled();
   });
 
+  it("allows ten evaluation resets per IP in an hour", async () => {
+    const unique = crypto.randomUUID();
+    const call = () =>
+      enforcePublicRateLimit({
+        env: productionEnvironment(),
+        request: protectedRequest("203.0.113.44"),
+        action: "evaluation_reset",
+        tenantId: `event-${unique}`,
+        email: "evaluation-reset",
+      });
+
+    for (let attempt = 0; attempt < 10; attempt += 1) {
+      await expect(call()).resolves.toEqual({ mode: "protected" });
+    }
+    await expect(call()).rejects.toBeInstanceOf(AbuseRateLimitError);
+  });
+
   it("binds successful Turnstile validation to the route action and hostname", async () => {
     const tokenValidation = successfulSiteverify("application_request_code");
     vi.stubGlobal("fetch", tokenValidation);
