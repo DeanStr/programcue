@@ -22,6 +22,14 @@ test("evaluation guide prioritizes the repeatable reviewer invitation", async ({
     page.getByRole("heading", { name: "Reviewer invitation" }),
   ).toBeVisible();
   await expect(
+    page.getByText("Sam's evaluation alias (not an inbox)", { exact: true }),
+  ).toBeVisible();
+  await expect(
+    page.getByText(
+      /routes it to Sam's controlled @programcue\.com fixture inbox/,
+    ),
+  ).toBeVisible();
+  await expect(
     page.getByText("sam.reviewer@sbek-test.example.com", { exact: true }),
   ).toBeVisible();
 

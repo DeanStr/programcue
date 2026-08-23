@@ -188,6 +188,10 @@ describe("evaluation persona board", () => {
     const markup = render();
 
     expect(markup).toContain("Reviewer invitation");
+    expect(markup).toContain("Sam&#x27;s evaluation alias (not an inbox)");
+    expect(markup).toContain(
+      "controlled @programcue.com fixture inbox and fixed persona",
+    );
     expect(markup).toContain("sam.reviewer@sbek-test.example.com");
     expect(markup).toContain("Copy email");
     expect(markup).toContain("Optional: test your own inbox");

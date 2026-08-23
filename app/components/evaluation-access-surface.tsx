@@ -706,13 +706,15 @@ export function EvaluationAccessSurface({
             <h2 id="reviewer-invitation-paths-title">Reviewer invitation</h2>
             <p>
               For the repeatable scenario, open as Event organiser and invite
-              Sam using this exact address. Return here, select Clean reviewer
-              and explicitly accept the pending invitation. You do not need
-              access to Sam&apos;s inbox.
+              Sam using the evaluation alias below. Program Cue routes it to
+              Sam&apos;s controlled @programcue.com fixture inbox and fixed
+              persona. Return here, select Clean reviewer and explicitly accept
+              the pending invitation. You do not need access to that inbox.
             </p>
           </div>
         </div>
         <div className="pc-eval-invitation-email">
+          <strong>Sam&apos;s evaluation alias (not an inbox)</strong>
           <code>{FIXTURE_REVIEWER_EMAIL}</code>
           <button
             aria-live="polite"
