@@ -158,6 +158,28 @@ test("task status bulk actions require an exact preview and can be cancelled", a
   await expect(unchangedTask).toContainText("Revision 1");
 });
 
+test("an unavailable task preview returns to the bulk workspace", async ({
+  page,
+}) => {
+  await waitForInterface(
+    page,
+    "/admin/tasks/bulk?operation=00000000-0000-4000-8000-000000000000",
+  );
+  const unavailable = page.getByRole("alert");
+  await expect(unavailable).toContainText(
+    "This preview is no longer available",
+  );
+  await expect(unavailable).toContainText(
+    "Create a new preview before confirming any changes.",
+  );
+  await expect(
+    page.getByRole("heading", { name: "1. Configure a task action" }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("heading", { name: "This page could not load" }),
+  ).toHaveCount(0);
+});
+
 test("a speaker can undo a reversible task completion from its status notice", async ({
   page,
 }) => {

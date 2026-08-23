@@ -41,11 +41,19 @@ export async function loader({ request, context }: Route.LoaderArgs) {
   const url = new URL(request.url);
   const operationId = url.searchParams.get("operation") ?? "";
   const service = new TaskBulkService(env);
-  const [workspace, operation] = await Promise.all([
+  const [workspace, operationResult] = await Promise.all([
     service.workspace(viewer),
     operationId
-      ? service.operation(viewer, operationId)
-      : Promise.resolve(null),
+      ? service
+          .operation(viewer, operationId)
+          .then((operation) => ({ operation, unavailable: false as const }))
+          .catch((error: unknown) => {
+            if (error instanceof TaskBulkStateError) {
+              return { operation: null, unavailable: true as const };
+            }
+            throw error;
+          })
+      : Promise.resolve({ operation: null, unavailable: false as const }),
   ]);
   const notices: Record<string, string> = {
     completed:
@@ -60,7 +68,8 @@ export async function loader({ request, context }: Route.LoaderArgs) {
   };
   return {
     workspace,
-    operation,
+    operation: operationResult.operation,
+    previewUnavailable: operationResult.unavailable,
     notice: notices[url.searchParams.get("notice") ?? ""] ?? null,
   };
 }
@@ -208,6 +217,15 @@ export default function AdminTaskBulk({ loaderData }: Route.ComponentProps) {
         <div className="validation-item ok card pad mb" role="status">
           <strong>Bulk workflow updated</strong>
           <span>{loaderData.notice}</span>
+        </div>
+      ) : null}
+      {loaderData.previewUnavailable ? (
+        <div className="validation-item error card pad mb" role="alert">
+          <strong>This preview is no longer available</strong>
+          <span>
+            It may have been cleared by an evaluation reset or belong to a
+            different event. Create a new preview before confirming any changes.
+          </span>
         </div>
       ) : null}
       {actionData ? (
