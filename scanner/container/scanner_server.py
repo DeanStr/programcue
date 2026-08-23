@@ -89,6 +89,11 @@ def clamav_ready() -> bool:
     return READINESS_FILE.is_file() and any(path.exists() for path in sockets)
 
 
+def require_unprivileged_runtime() -> None:
+    if os.geteuid() == 0:
+        raise SystemExit("The scanner HTTP adapter must not run as root.")
+
+
 class NoRedirect(urllib.request.HTTPRedirectHandler):
     def redirect_request(self, req, fp, code, msg, headers, newurl):  # noqa: ANN001
         raise ObjectFetchError("R2 object downloads must not redirect.")
@@ -446,6 +451,7 @@ class ScannerHandler(BaseHTTPRequestHandler):
 
 
 def main() -> None:
+    require_unprivileged_runtime()
     expected_host = os.environ.get("EXPECTED_R2_HOST", "")
     expected_bucket = os.environ.get("EXPECTED_R2_BUCKET", "")
     if not re.fullmatch(r"[0-9a-f]{32}\.r2\.cloudflarestorage\.com", expected_host):

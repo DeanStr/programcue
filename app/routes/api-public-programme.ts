@@ -17,7 +17,10 @@ import {
   publishedProgrammeNotModified,
   requirePublishedProgramme,
 } from "~/platform/api/api-public-programme.server";
-import { getCloudflareContext } from "~/platform/cloudflare-context";
+import {
+  cspNonceContext,
+  getCloudflareContext,
+} from "~/platform/cloudflare-context";
 import type { Route } from "./+types/api-public-programme";
 
 function escapeHtml(value: string) {
@@ -33,7 +36,10 @@ function escapeHtml(value: string) {
   });
 }
 
-export function staticProgrammeHtml(programme: PublishedProgramme) {
+export function staticProgrammeHtml(
+  programme: PublishedProgramme,
+  cspNonce: string,
+) {
   const accent = programmeAccentPalette(programme.event.brandAccent).accent;
   const dateTime = new Intl.DateTimeFormat("en", {
     dateStyle: "medium",
@@ -69,7 +75,7 @@ export function staticProgrammeHtml(programme: PublishedProgramme) {
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <title>${escapeHtml(programme.event.name)} programme</title>
-  <style>body{font:16px/1.5 system-ui,sans-serif;max-width:72rem;margin:auto;padding:2rem;color:#182522}header{border-bottom:3px solid ${accent};margin-bottom:2rem}article{padding:1rem 0;border-bottom:1px solid #e0e1d8}h1,h2{line-height:1.2}small{color:#61716c}@media(max-width:40rem){body{padding:1rem}}</style>
+  <style nonce="${escapeHtml(cspNonce)}">body{font:16px/1.5 system-ui,sans-serif;max-width:72rem;margin:auto;padding:2rem;color:#182522}header{border-bottom:3px solid ${accent};margin-bottom:2rem}article{padding:1rem 0;border-bottom:1px solid #e0e1d8}h1,h2{line-height:1.2}small{color:#61716c}@media(max-width:40rem){body{padding:1rem}}</style>
 </head>
 <body>
   <header><h1>${escapeHtml(programme.event.name)}</h1><p>${escapeHtml(programme.event.startDate)}–${escapeHtml(programme.event.endDate)} · ${escapeHtml(programme.event.timezone)}</p></header>
@@ -81,6 +87,7 @@ export function staticProgrammeHtml(programme: PublishedProgramme) {
 
 export async function loader({ request, params, context }: Route.LoaderArgs) {
   const { env } = getCloudflareContext(context);
+  const cspNonce = context.get(cspNonceContext);
   const requestCorrelationId = correlationId(request);
   try {
     const rawFormat = new URL(request.url).searchParams.get("format");
@@ -99,8 +106,21 @@ export async function loader({ request, params, context }: Route.LoaderArgs) {
     const programme = requirePublishedProgramme(
       await new PublicProgrammeService(env).getPublished(params.slug ?? ""),
     );
+    const programmeCacheHeaders = await publishedProgrammeCacheHeaders(
+      request,
+      programme,
+      "",
+      "live",
+    );
     const cacheHeaders = {
-      ...(await publishedProgrammeCacheHeaders(request, programme, "", "live")),
+      ...programmeCacheHeaders,
+      // The HTML representation contains a fresh CSP nonce on every response.
+      // Its programme content is equivalent, but its bytes are not, so its
+      // validator must be weak rather than claiming byte-for-byte identity.
+      etag:
+        input.format === "html"
+          ? `W/${programmeCacheHeaders.etag}`
+          : programmeCacheHeaders.etag,
       "access-control-allow-origin": "*",
     };
     if (publishedProgrammeNotModified(request, cacheHeaders.etag)) {
@@ -121,13 +141,16 @@ export async function loader({ request, params, context }: Route.LoaderArgs) {
         response.sessions.map((session) => session.id),
       );
       return new Response(
-        staticProgrammeHtml({
-          ...programme,
-          sessions: programme.sessions.filter((session) =>
-            sessionIds.has(session.id),
-          ),
-          speakers: response.speakers,
-        }),
+        staticProgrammeHtml(
+          {
+            ...programme,
+            sessions: programme.sessions.filter((session) =>
+              sessionIds.has(session.id),
+            ),
+            speakers: response.speakers,
+          },
+          cspNonce,
+        ),
         {
           headers: {
             "content-type": "text/html; charset=utf-8",

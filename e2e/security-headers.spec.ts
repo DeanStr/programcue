@@ -3,6 +3,8 @@ import { expect, test } from "@playwright/test";
 test("a per-response CSP nonce authorises hydration without inline-script fallback", async ({
   page,
 }) => {
+  const pageErrors: string[] = [];
+  page.on("pageerror", (error) => pageErrors.push(error.message));
   await page.addInitScript(() => {
     const violations: string[] = [];
     Object.assign(window, { __programCueCspViolations: violations });
@@ -20,6 +22,8 @@ test("a per-response CSP nonce authorises hydration without inline-script fallba
   expect(nonce).toMatch(/^[A-Za-z0-9_-]{16,128}$/u);
   expect(policy).not.toContain("script-src 'self' 'unsafe-inline'");
   expect(policy).toContain("script-src-attr 'none'");
+  expect(policy).toContain("style-src 'self' 'unsafe-inline'");
+  expect(policy).not.toContain("require-trusted-types-for 'script'");
 
   const inlineNonces = await page
     .locator("script:not([src])")
@@ -41,6 +45,7 @@ test("a per-response CSP nonce authorises hydration without inline-script fallba
   expect(
     violations.filter((violation) => violation !== "script-src:eval"),
   ).toEqual([]);
+  expect(pageErrors).toEqual([]);
 
   const nextResponse = await page.request.get("/admin/review");
   const nextPolicy = nextResponse.headers()["content-security-policy"] ?? "";
@@ -54,6 +59,8 @@ test("a per-response CSP nonce authorises hydration without inline-script fallba
 test("conditional embed navigation retains the cached representation nonce", async ({
   page,
 }) => {
+  const pageErrors: string[] = [];
+  page.on("pageerror", (error) => pageErrors.push(error.message));
   await page.addInitScript(() => {
     const violations: string[] = [];
     Object.assign(window, { __programCueCspViolations: violations });
@@ -84,4 +91,5 @@ test("conditional embed navigation retains the cached representation nonce", asy
   expect(
     violations.filter((violation) => violation !== "script-src:eval"),
   ).toEqual([]);
+  expect(pageErrors).toEqual([]);
 });

@@ -48,11 +48,15 @@ describe("static programme HTML", () => {
       contentRevision: "test-revision",
     };
 
-    const html = staticProgrammeHtml(programme);
+    const html = staticProgrammeHtml(
+      programme,
+      "test-response-nonce-1234567890",
+    );
 
     expect(html).toContain('<article id="speaker-speaker-1">');
     expect(html).toContain("<p>A biography.</p>");
     expect(html).toContain("border-bottom:3px solid #4f46e5");
+    expect(html).toContain('<style nonce="test-response-nonce-1234567890">');
     expect(html).not.toContain("<p></p>");
     expect(html).not.toContain("not provided");
   });

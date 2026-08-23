@@ -449,6 +449,13 @@ test.describe
           name: "2. Verify the authoritative preview",
         }),
       ).toBeInViewport();
+      await expect(
+        page
+          .frameLocator(
+            'iframe[title="Representative merged email · desktop preview"]',
+          )
+          .locator("body"),
+      ).toContainText("Sent with Program Cue");
       const mergedPreview = page.getByRole("heading", {
         name: "Representative merged email",
       });

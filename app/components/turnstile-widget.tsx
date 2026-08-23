@@ -80,6 +80,9 @@ function loadTurnstile() {
       script = document.createElement("script");
       created = true;
       script.id = SCRIPT_ID;
+      const cspNonce =
+        document.querySelector<HTMLScriptElement>("script[nonce]")?.nonce;
+      if (cspNonce) script.nonce = cspNonce;
       script.src =
         "https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit";
       script.async = true;

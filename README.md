@@ -151,11 +151,15 @@ project.
 `npm test` runs both projects; focused commands do not replace the complete
 merge or release gate.
 
-The checked-in `Core gate` GitHub Actions workflow runs independent dependency
-audit, dependency review, core and compact browser jobs for pull requests;
-dependency audit, core and browser also run on `main`. The local core command is
-network-independent; the complete release gate and dedicated CI job fail closed
-on high/critical dependency advisories or an unavailable advisory service.
+The checked-in `Core gate` GitHub Actions workflow runs independent secret scan,
+dependency audit, dependency review, core and compact browser jobs for pull
+requests; secret scan, dependency audit, core and browser also run on `main`.
+The secret scan uses a commit-pinned TruffleHog action and fixed CLI release over
+the event-relevant Git history; only its noisy URL detector is excluded because
+repository fixtures intentionally contain fake credential-shaped URLs. The local core
+command is network-independent; the complete release gate and dedicated CI job
+fail closed on high/critical dependency advisories or an unavailable advisory
+service.
 The compact browser job uploads its Playwright results and Wrangler logs for
 seven days when it fails, so an exited local Worker is distinguishable from an
 application assertion. That hosted job explicitly uses one Worker/Chromium

@@ -23,6 +23,9 @@ function isPrivateWorkspacePath(pathname: string) {
     pathname === "/participant" ||
     pathname === "/participant.data" ||
     pathname.startsWith("/participant/") ||
+    pathname === "/apply" ||
+    pathname === "/apply.data" ||
+    pathname.startsWith("/apply/") ||
     pathname === "/events/select" ||
     pathname === "/events/select.data" ||
     pathname === "/ai/context" ||

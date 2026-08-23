@@ -1,5 +1,5 @@
 export const DRAFT_RECOVERY_SCHEMA_VERSION = 1;
-export const DRAFT_RECOVERY_TTL_MS = 7 * 24 * 60 * 60 * 1_000;
+export const DRAFT_RECOVERY_TTL_MS = 24 * 60 * 60 * 1_000;
 export const DRAFT_RECOVERY_CHANNEL_NAME = "program-cue-draft-recovery-v1";
 
 export type DraftRecoveryScope = {
@@ -108,7 +108,6 @@ export type UseDraftRecoveryOptions<T> = {
   isPayloadCompatible?(payload: unknown): payload is T;
   enabled?: boolean;
   debounceMs?: number;
-  ttlMs?: number;
 };
 
 export type DraftRecoveryController<T> = {
@@ -141,17 +140,23 @@ export function draftRecoveryKey(scope: DraftRecoveryScope) {
 export function assessDraftSnapshot(
   snapshot: Pick<
     DraftSnapshot<unknown>,
-    "schemaVersion" | "serverRevision" | "expiresAt"
+    "schemaVersion" | "serverRevision" | "savedAt" | "expiresAt"
   >,
   currentServerRevision: string | number,
   now = Date.now(),
 ): DraftSnapshotAssessment {
-  if (snapshot.expiresAt <= now) return "expired";
+  if (draftSnapshotExpiry(snapshot) <= now) return "expired";
   if (snapshot.schemaVersion !== DRAFT_RECOVERY_SCHEMA_VERSION)
     return "incompatible";
   return snapshot.serverRevision === String(currentServerRevision)
     ? "restore_available"
     : "conflict";
+}
+
+function draftSnapshotExpiry(
+  snapshot: Pick<DraftSnapshot<unknown>, "savedAt" | "expiresAt">,
+) {
+  return Math.min(snapshot.expiresAt, snapshot.savedAt + DRAFT_RECOVERY_TTL_MS);
 }
 
 export function isDraftSnapshot(
@@ -179,7 +184,7 @@ export function isDraftSnapshot(
 export function shouldPruneDraftSnapshot(value: unknown, now = Date.now()) {
   return (
     !isDraftSnapshot(value) ||
-    value.expiresAt <= now ||
+    draftSnapshotExpiry(value) <= now ||
     value.schemaVersion !== DRAFT_RECOVERY_SCHEMA_VERSION
   );
 }

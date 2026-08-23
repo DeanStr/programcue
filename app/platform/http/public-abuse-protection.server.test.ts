@@ -89,6 +89,28 @@ describe("public abuse protection", () => {
       mode: "demo",
       turnstileSiteKey: null,
     });
+    const e2eRequest = new Request("http://localhost/apply/form", {
+      headers: { "x-program-cue-e2e-turnstile": "true" },
+    });
+    const e2eEnvironment = {
+      ...demoEnvironment,
+      PROGRAM_CUE_E2E_FIXTURES: "true",
+      TURNSTILE_SITE_KEY: "test-turnstile-site-key",
+    };
+    expect(publicAbuseClientConfiguration(e2eEnvironment)).toEqual({
+      mode: "demo",
+      turnstileSiteKey: null,
+    });
+    expect(
+      publicAbuseClientConfiguration(
+        { ...e2eEnvironment, PROGRAM_CUE_E2E_FIXTURES: "false" },
+        e2eRequest,
+      ),
+    ).toEqual({ mode: "demo", turnstileSiteKey: null });
+    expect(publicAbuseClientConfiguration(e2eEnvironment, e2eRequest)).toEqual({
+      mode: "demo",
+      turnstileSiteKey: "test-turnstile-site-key",
+    });
     await expect(
       enforcePublicAbuseProtection({
         env: demoEnvironment,

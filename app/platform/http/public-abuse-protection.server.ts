@@ -166,9 +166,17 @@ function rateLimitConfiguration(env: AbuseEnvironment) {
   return rateLimitPepper;
 }
 
-export function publicAbuseClientConfiguration(env: AbuseEnvironment) {
+export function publicAbuseClientConfiguration(
+  env: AbuseEnvironment,
+  request?: Request,
+) {
   if (!requiresProductionSecurity(env.APP_ENV)) {
-    return { mode: "demo" as const, turnstileSiteKey: null };
+    const turnstileSiteKey =
+      env.PROGRAM_CUE_E2E_FIXTURES === "true" &&
+      request?.headers.get("x-program-cue-e2e-turnstile") === "true"
+        ? configuredValue(env.TURNSTILE_SITE_KEY, "TURNSTILE_SITE_KEY")
+        : null;
+    return { mode: "demo" as const, turnstileSiteKey };
   }
   const configuration = productionConfiguration(env);
   return {

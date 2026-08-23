@@ -29,6 +29,12 @@ describe("Worker security headers", () => {
     expect(production.get("content-security-policy")).toContain(
       "script-src-attr 'none'",
     );
+    expect(production.get("content-security-policy")).toContain(
+      "style-src 'self' 'unsafe-inline'",
+    );
+    expect(production.get("content-security-policy")).not.toContain(
+      "require-trusted-types-for 'script'",
+    );
     expect(production.get("content-security-policy")).not.toContain(
       "script-src 'self' 'unsafe-inline'",
     );
@@ -101,6 +107,11 @@ describe("Worker security headers", () => {
       "/participant.data",
       "/participant/dashboard",
       "/participant/files/asset-1",
+      "/apply",
+      "/apply.data",
+      "/apply/future-of-events-2027",
+      "/apply/future-of-events-2027.data",
+      "/apply/future-of-events-2027/files/multipart/initiate",
       "/events/select",
       "/events/select.data",
       "/ai/context",

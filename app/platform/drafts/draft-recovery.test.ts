@@ -4,12 +4,17 @@ import {
   assessDraftSnapshot,
   createDraftRecoveryOperationGuard,
   DRAFT_RECOVERY_SCHEMA_VERSION,
+  DRAFT_RECOVERY_TTL_MS,
   draftRecoveryKey,
   indexedDbDraftSnapshotStore,
   shouldPruneDraftSnapshot,
 } from "./draft-recovery";
 
 describe("draft recovery boundaries", () => {
+  it("limits browser recovery retention to one day", () => {
+    expect(DRAFT_RECOVERY_TTL_MS).toBe(24 * 60 * 60 * 1_000);
+  });
+
   it("isolates snapshots by event, person, record type and record id", () => {
     const base = {
       eventId: "event-1",
@@ -35,6 +40,7 @@ describe("draft recovery boundaries", () => {
     const snapshot = {
       schemaVersion: DRAFT_RECOVERY_SCHEMA_VERSION,
       serverRevision: "7",
+      savedAt: now - 1_000,
       expiresAt: now + 60_000,
     };
 
@@ -49,6 +55,7 @@ describe("draft recovery boundaries", () => {
         {
           schemaVersion: DRAFT_RECOVERY_SCHEMA_VERSION,
           serverRevision: "1",
+          savedAt: now - 1_000,
           expiresAt: now,
         },
         1,
@@ -60,12 +67,40 @@ describe("draft recovery boundaries", () => {
         {
           schemaVersion: DRAFT_RECOVERY_SCHEMA_VERSION + 1,
           serverRevision: "1",
+          savedAt: now - 1_000,
           expiresAt: now + 1,
         },
         1,
         now,
       ),
     ).toBe("incompatible");
+  });
+
+  it("applies the current one-day limit to snapshots written under the old policy", () => {
+    const now = 1_800_000_000_000;
+    const legacySnapshot = {
+      schemaVersion: DRAFT_RECOVERY_SCHEMA_VERSION,
+      serverRevision: "1",
+      savedAt: now - DRAFT_RECOVERY_TTL_MS - 1,
+      expiresAt: now + 6 * DRAFT_RECOVERY_TTL_MS,
+    };
+
+    expect(assessDraftSnapshot(legacySnapshot, 1, now)).toBe("expired");
+    expect(
+      shouldPruneDraftSnapshot(
+        {
+          ...legacySnapshot,
+          key: "legacy-key",
+          eventId: "event-1",
+          personId: "person-1",
+          recordType: "review",
+          recordId: "assignment-1",
+          payload: { notes: "expired" },
+          writerId: "writer-1",
+        },
+        now,
+      ),
+    ).toBe(true);
   });
 
   it("marks expired, incompatible and malformed stored payloads for pruning", () => {

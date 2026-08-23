@@ -10,59 +10,9 @@ type MockTurnstileOptions = {
   callback(token: string): void;
 };
 
-function withMockSiteKeyPayload(payload: string) {
-  const flattened = JSON.parse(payload) as unknown[];
-  const keyIndex = flattened.indexOf("turnstileSiteKey");
-  if (keyIndex < 0) throw new Error("Turnstile loader field not found.");
-  const loaderData = flattened.find(
-    (value): value is Record<string, unknown> =>
-      typeof value === "object" &&
-      value !== null &&
-      Object.hasOwn(value, `_${keyIndex}`),
-  );
-  if (!loaderData) throw new Error("Application loader record not found.");
-
-  flattened.push("test-turnstile-site-key");
-  loaderData[`_${keyIndex}`] = flattened.length - 1;
-  return JSON.stringify(flattened);
-}
-
-function withMockSiteKey(document: string) {
-  const marker = "window.__reactRouterContext.streamController.enqueue(";
-  const argumentStart = document.indexOf(marker) + marker.length;
-  const argumentEnd = document.indexOf(");</script>", argumentStart);
-  if (argumentStart < marker.length || argumentEnd < 0)
-    throw new Error("Application loader payload not found.");
-
-  const payload = JSON.parse(
-    document.slice(argumentStart, argumentEnd),
-  ) as string;
-  const replacement = JSON.stringify(withMockSiteKeyPayload(payload));
-  return `${document.slice(0, argumentStart)}${replacement}${document.slice(argumentEnd)}`;
-}
-
 export async function installApplicationTurnstileMock(page: Page) {
-  await page.route("**/apply/form", async (route) => {
-    if (route.request().resourceType() !== "document") {
-      await route.continue();
-      return;
-    }
-    const response = await route.fetch();
-    await route.fulfill({
-      response,
-      body: withMockSiteKey(await response.text()),
-    });
-  });
-  await page.route("**/apply/form.data*", async (route) => {
-    if (route.request().method() !== "GET") {
-      await route.continue();
-      return;
-    }
-    const response = await route.fetch();
-    await route.fulfill({
-      response,
-      body: withMockSiteKeyPayload(await response.text()),
-    });
+  await page.setExtraHTTPHeaders({
+    "x-program-cue-e2e-turnstile": "true",
   });
   await page.route(
     "https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit",

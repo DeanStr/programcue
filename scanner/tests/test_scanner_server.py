@@ -104,6 +104,14 @@ class ScannerServerContractTests(unittest.TestCase):
                 socket_file.touch()
                 self.assertTrue(scanner.clamav_ready())
 
+    def test_scanner_adapter_refuses_root_privileges(self):
+        with mock.patch.object(scanner.os, "geteuid", return_value=0):
+            with self.assertRaisesRegex(SystemExit, "must not run as root"):
+                scanner.require_unprivileged_runtime()
+
+        with mock.patch.object(scanner.os, "geteuid", return_value=1000):
+            scanner.require_unprivileged_runtime()
+
     def test_download_passes_exact_identity_to_r2_binding_proxy(self):
         object_input = self.job()["object"]
         object_input["sizeBytes"] = 4

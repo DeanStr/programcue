@@ -3,7 +3,10 @@ import { serializeSignedCookie } from "better-call";
 import { RouterContextProvider } from "react-router";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { cloudflareContext } from "~/platform/cloudflare-context";
+import {
+  cloudflareContext,
+  cspNonceContext,
+} from "~/platform/cloudflare-context";
 import { ensureDemoData } from "~/platform/demo/seed.server";
 import { evaluationSessionCookie } from "~/platform/evaluation/evaluation-session.server";
 import { loader as publicCalendarLoader } from "~/routes/api-public-calendar";
@@ -705,6 +708,7 @@ describe("published programme and itinerary", () => {
       env: env as unknown as CloudflareEnvironment,
       ctx: {} as ExecutionContext,
     });
+    context.set(cspNonceContext, "test-response-nonce-1234567890");
     const response = await publicProgrammeLoader({
       request: new Request(
         "https://programcue.test/api/v1/public/events/future-of-events-2027/programme",
@@ -729,16 +733,19 @@ describe("published programme and itinerary", () => {
       env: env as unknown as CloudflareEnvironment,
       ctx: {} as ExecutionContext,
     });
-    const args = (format: string) =>
+    context.set(cspNonceContext, "test-response-nonce-1234567890");
+    const args = (format: string, headers?: HeadersInit) =>
       ({
         request: new Request(
           `https://programcue.test/api/v1/public/events/future-of-events-2027/programme?format=${format}`,
+          { headers },
         ),
         params: { slug: "future-of-events-2027" },
         context,
       }) as never;
 
     const json = await publicProgrammeLoader(args("json"));
+    expect(json.headers.get("etag")).toMatch(/^"program-cue-publication-/u);
     expect(json.headers.get("content-disposition")).toContain(
       "future-of-events-2027-programme.json",
     );
@@ -749,11 +756,18 @@ describe("published programme and itinerary", () => {
     });
 
     const html = await publicProgrammeLoader(args("html"));
+    const htmlEtag = html.headers.get("etag");
+    expect(htmlEtag).toMatch(/^W\/"program-cue-publication-/u);
     expect(html.headers.get("content-type")).toContain("text/html");
     expect(html.headers.get("content-disposition")).toContain(
       "future-of-events-2027-programme.html",
     );
     expect(await html.text()).toContain("<!doctype html>");
+    const htmlNotModified = await publicProgrammeLoader(
+      args("html", { "if-none-match": htmlEtag ?? "" }),
+    );
+    expect(htmlNotModified.status).toBe(304);
+    expect(await htmlNotModified.text()).toBe("");
 
     const invalid = await publicProgrammeLoader(args("xml"));
     expect(invalid.status).toBe(400);

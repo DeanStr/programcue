@@ -39,4 +39,7 @@ rm -f "$readiness_file"
     --stdout --user=clamav
 ) &
 
-exec python3 /opt/program-cue-scanner/scanner_server.py
+# The image initializer needs root, but the request-facing adapter processes
+# hostile files and must not retain those privileges.
+exec setpriv --reuid=clamav --regid=clamav --init-groups --no-new-privs \
+  python3 /opt/program-cue-scanner/scanner_server.py

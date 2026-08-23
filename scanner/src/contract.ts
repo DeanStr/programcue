@@ -11,6 +11,7 @@ export const SCANNER_BUSY_ATTEMPT_LIMIT = 40;
 // but persistent readiness failure surfaces in under eight minutes.
 export const SCANNER_NOT_READY_ATTEMPT_LIMIT = 6;
 export const SCANNER_DISPATCH_MAXIMUM_AGE_SECONDS = 300;
+export const SCANNER_CALLBACK_REQUEST_TIMEOUT_MS = 30_000;
 
 const scannerContainerErrorSchema = z
   .object({
@@ -293,5 +294,23 @@ export async function signScannerCallback(input: {
     callbackId: input.callbackId,
     timestamp,
     signature: `v1,${base64(signature)}`,
+  };
+}
+
+export function scannerCallbackRequestInit(input: {
+  rawBody: string;
+  signed: Awaited<ReturnType<typeof signScannerCallback>>;
+}): RequestInit {
+  return {
+    method: "POST",
+    redirect: "manual",
+    headers: {
+      "content-type": "application/json",
+      "x-program-cue-scanner-id": input.signed.callbackId,
+      "x-program-cue-scanner-timestamp": input.signed.timestamp,
+      "x-program-cue-scanner-signature": input.signed.signature,
+    },
+    body: input.rawBody,
+    signal: AbortSignal.timeout(SCANNER_CALLBACK_REQUEST_TIMEOUT_MS),
   };
 }

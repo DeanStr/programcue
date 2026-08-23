@@ -14,6 +14,7 @@ import {
   type ScannerContainerFailure,
   type ScannerContractConfiguration,
   type ScannerJob,
+  scannerCallbackRequestInit,
   scannerCapacityDelaySeconds,
   scannerCapacityShouldWait,
   scannerContainerInstanceName,
@@ -424,16 +425,10 @@ async function deliverCallback(
     rawBody,
     secret: callbackSecret,
   });
-  const response = await fetch(job.callback.url, {
-    method: "POST",
-    headers: {
-      "content-type": "application/json",
-      "x-program-cue-scanner-id": signed.callbackId,
-      "x-program-cue-scanner-timestamp": signed.timestamp,
-      "x-program-cue-scanner-signature": signed.signature,
-    },
-    body: rawBody,
-  });
+  const response = await fetch(
+    job.callback.url,
+    scannerCallbackRequestInit({ rawBody, signed }),
+  );
   if (!response.ok) {
     await response.body?.cancel().catch(() => undefined);
     throw new Error(`Program Cue callback returned HTTP ${response.status}.`);

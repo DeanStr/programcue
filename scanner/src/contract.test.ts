@@ -2,6 +2,8 @@ import { describe, expect, it } from "vitest";
 
 import {
   classifyScannerContainerFailure,
+  SCANNER_CALLBACK_REQUEST_TIMEOUT_MS,
+  scannerCallbackRequestInit,
   scannerCapacityDelaySeconds,
   scannerCapacityShouldWait,
   scannerContainerInstanceName,
@@ -176,6 +178,33 @@ describe("file scanner provider contract", () => {
       timestamp: "1800000000",
       signature: "v1,9+liCDx+WGmwKwjFMsR3+gl6VlLyvDG0TFEdAkca5Ik=",
     });
+  });
+
+  it("does not follow callback redirects and bounds each delivery attempt", () => {
+    const rawBody = JSON.stringify({ verdict: "clean" });
+    const request = scannerCallbackRequestInit({
+      rawBody,
+      signed: {
+        callbackId: "scanner-callback-1",
+        timestamp: "1800000000",
+        signature: "v1,signature",
+      },
+    });
+
+    expect(request.method).toBe("POST");
+    expect(request.redirect).toBe("manual");
+    expect(request.body).toBe(rawBody);
+    expect(new Headers(request.headers)).toEqual(
+      new Headers({
+        "content-type": "application/json",
+        "x-program-cue-scanner-id": "scanner-callback-1",
+        "x-program-cue-scanner-timestamp": "1800000000",
+        "x-program-cue-scanner-signature": "v1,signature",
+      }),
+    );
+    expect(request.signal).toBeInstanceOf(AbortSignal);
+    expect(request.signal?.aborted).toBe(false);
+    expect(SCANNER_CALLBACK_REQUEST_TIMEOUT_MS).toBe(30_000);
   });
 
   it("authenticates the exact dispatch envelope and rejects tampering or expiry", async () => {

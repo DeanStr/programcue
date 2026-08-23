@@ -69,7 +69,6 @@ export function useDraftRecovery<T>({
   isPayloadCompatible,
   enabled = true,
   debounceMs = 500,
-  ttlMs = DRAFT_RECOVERY_TTL_MS,
 }: UseDraftRecoveryOptions<T>): DraftRecoveryController<T> {
   const key = useMemo(
     () => (scope && enabled ? draftRecoveryKey(scope) : null),
@@ -295,7 +294,7 @@ export function useDraftRecovery<T>({
         serverRevision: revision,
         payload: payloadRef.current,
         savedAt: now,
-        expiresAt: now + ttlMs,
+        expiresAt: now + DRAFT_RECOVERY_TTL_MS,
         writerId: writerId.current,
       };
       void indexedDbDraftSnapshotStore
@@ -330,7 +329,6 @@ export function useDraftRecovery<T>({
     currentPayloadFingerprint,
     operationGuard,
     revision,
-    ttlMs,
   ]);
 
   const discard = useCallback(async () => {

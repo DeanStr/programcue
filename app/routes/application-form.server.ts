@@ -100,7 +100,7 @@ export async function loader({ request, context, params }: Route.LoaderArgs) {
       );
     const abuseConfiguration =
       needsAccessChallenge || needsUploadChallenge
-        ? publicAbuseClientConfiguration(env)
+        ? publicAbuseClientConfiguration(env, request)
         : null;
     const turnstileSiteKey = needsAccessChallenge
       ? (abuseConfiguration?.turnstileSiteKey ?? null)
