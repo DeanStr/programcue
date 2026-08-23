@@ -462,7 +462,7 @@
 }
 .pc-eval-invitation-details {
   max-width: 78ch;
-  border-top: 1px solid var(--border-subtle);
+  border-top: 1px solid var(--line);
   padding-top: var(--space-3);
 }
 .pc-eval-invitation-details p {
