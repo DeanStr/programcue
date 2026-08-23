@@ -177,6 +177,15 @@ const displayMetadataByAction: Readonly<
     ["revision"],
     z.object({ revision: displayRevision }),
   ),
+  "submission.draft.discarded": displayMetadataContract(
+    ["revision"],
+    z.object({
+      revision: displayRevision,
+      anonymous: z.boolean(),
+      formId: displayString,
+      formVersionId: displayString,
+    }),
+  ),
   "submission.submitted": displayMetadataContract(
     ["version"],
     z.object({ version: displayRevision }),

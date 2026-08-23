@@ -539,12 +539,16 @@ export function SpeakerTasksPanel({
                                 {field.type === "long_text" ? (
                                   <textarea
                                     className="textarea"
+                                    maxLength={4_000}
                                     name={name}
                                     required={field.required}
                                   />
                                 ) : (
                                   <input
                                     className="field"
+                                    maxLength={
+                                      field.type === "date" ? undefined : 4_000
+                                    }
                                     name={name}
                                     type={
                                       field.type === "date" ? "date" : "text"
@@ -562,7 +566,12 @@ export function SpeakerTasksPanel({
                       ) : task.taskType === "short_form" ? (
                         <label className="label">
                           Response
-                          <textarea className="textarea" name="text" required />
+                          <textarea
+                            className="textarea"
+                            maxLength={4_000}
+                            name="text"
+                            required
+                          />
                         </label>
                       ) : task.taskType === "link_visit" ? (
                         <div className="stack">

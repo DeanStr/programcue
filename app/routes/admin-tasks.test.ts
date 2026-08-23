@@ -380,6 +380,172 @@ describe("administrator task filters", () => {
     expect(result.data).toMatchObject({ ok: false });
     expect(result.init?.status).toBe(422);
   });
+
+  it("retains a non-structured template draft after validation fails", async () => {
+    const result = await action({
+      request: adminPost({
+        intent: "create-template",
+        intentId: crypto.randomUUID(),
+        name: "x",
+        description: "Retain these entered checklist details.",
+        targetType: "speaker",
+        taskType: "checklist",
+        impact: "medium",
+        evidenceMode: "checkbox",
+        dueAnchor: "none",
+        dueOffsetDays: "",
+        fixedDueDate: "",
+        formFieldsJson: "[]",
+      }),
+      params: {},
+      context: context(),
+    } as never);
+
+    expect(result.init?.status).toBe(422);
+    expect(result.data).toMatchObject({
+      ok: false,
+      draft: {
+        name: "x",
+        description: "Retain these entered checklist details.",
+        targetType: "speaker",
+        taskType: "checklist",
+        impact: "medium",
+        evidenceMode: "checkbox",
+      },
+    });
+  });
+
+  it("rejects a select question with more than 20 visible options", async () => {
+    const result = await action({
+      request: adminPost({
+        intent: "create-template",
+        intentId: crypto.randomUUID(),
+        name: "Overlong option list",
+        description: "Reject options that cannot be saved as shown.",
+        targetType: "speaker",
+        taskType: "short_form",
+        impact: "medium",
+        evidenceMode: "text",
+        dueAnchor: "none",
+        dueOffsetDays: "",
+        fixedDueDate: "",
+        formFieldsJson: JSON.stringify([
+          {
+            id: "support_level",
+            label: "Support level",
+            type: "select",
+            required: true,
+            help: "",
+            options: Array.from(
+              { length: 21 },
+              (_value, index) => `Option ${index + 1}`,
+            ),
+          },
+        ]),
+      }),
+      params: {},
+      context: context(),
+    } as never);
+
+    expect(result.init?.status).toBe(422);
+    expect(result.data).toMatchObject({
+      ok: false,
+      message: "Select fields support at most 20 options.",
+    });
+  });
+
+  it("creates an organiser-authored structured short-form task", async () => {
+    const intentId = crypto.randomUUID();
+    const fields = [
+      {
+        id: "needs_av",
+        label: "Do you need event AV support?",
+        type: "boolean",
+        required: true,
+        help: "Confirm whether the production team should contact you.",
+        options: [],
+      },
+      {
+        id: "av_details",
+        label: "Describe the required support",
+        type: "long_text",
+        required: false,
+        help: "Include connectors or playback requirements.",
+        options: [],
+        requiredWhen: { fieldId: "needs_av", equals: true },
+      },
+    ];
+    const result = await action({
+      request: adminPost({
+        intent: "create-template",
+        intentId,
+        name: "Audio visual requirements",
+        description: "Collect the participant's AV requirements.",
+        targetType: "speaker",
+        taskType: "short_form",
+        impact: "high",
+        evidenceMode: "text",
+        dueAnchor: "acceptance",
+        dueOffsetDays: "7",
+        fixedDueDate: "",
+        formFieldsJson: JSON.stringify(fields),
+      }),
+      params: {},
+      context: context(),
+    } as never);
+
+    expect(result.data).toMatchObject({
+      committed: true,
+      intent: "create-template",
+    });
+    await expect(
+      workerEnv.DB.prepare(
+        `SELECT configuration_json AS configurationJson
+           FROM task_templates
+          WHERE event_id = ? AND name = ?`,
+      )
+        .bind(eventId, "Audio visual requirements")
+        .first<{ configurationJson: string }>(),
+    ).resolves.toEqual({
+      configurationJson: JSON.stringify({ form: { fields } }),
+    });
+  });
+
+  it("does not replace client-held task questions when their JSON is invalid", async () => {
+    const result = await action({
+      request: adminPost({
+        intent: "create-template",
+        intentId: crypto.randomUUID(),
+        name: "Audio visual requirements",
+        description: "Collect the participant's AV requirements.",
+        targetType: "speaker",
+        taskType: "short_form",
+        impact: "high",
+        evidenceMode: "text",
+        dueAnchor: "acceptance",
+        dueOffsetDays: "7",
+        fixedDueDate: "",
+        formFieldsJson: JSON.stringify([
+          {
+            id: "needs_av",
+            label: "",
+            type: "boolean",
+            required: true,
+            help: "",
+            options: [],
+          },
+        ]),
+      }),
+      params: {},
+      context: context(),
+    } as never);
+
+    expect(result.init?.status).toBe(422);
+    expect(result.data).toMatchObject({ ok: false });
+    expect(
+      "draft" in result.data ? result.data.draft : undefined,
+    ).toBeUndefined();
+  });
 });
 
 describe("administrator task actions", () => {

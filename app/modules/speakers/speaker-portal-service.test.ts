@@ -2,6 +2,7 @@ import { env } from "cloudflare:test";
 import { describe, expect, it } from "vitest";
 
 import type { Viewer } from "~/platform/auth/authorize.server";
+import { getAdminParticipantPreview } from "./admin-participant-preview.server";
 import { ensureDemoSpeakerData } from "./demo.server";
 import { SpeakerService } from "./speaker-service.server";
 
@@ -15,7 +16,151 @@ const speaker: Viewer = {
   demo: true,
 };
 
+const administrator: Viewer = {
+  personId: "person-demo-admin",
+  name: "Olivia Bennett",
+  email: "olivia@example.com",
+  role: "administrator",
+  organisationId: "org-future-events",
+  eventId: "evt-foe-2025",
+  demo: true,
+};
+
 describe("speaker portal file integrity", () => {
+  it("builds an administrator preview from participant-authorised projections", async () => {
+    const testEnv = env as unknown as CloudflareEnvironment;
+    await ensureDemoSpeakerData(testEnv);
+    const privateAvailabilityNote = `Private preview note ${crypto.randomUUID()}`;
+    await testEnv.DB.prepare(
+      `INSERT INTO speaker_blackout_windows (
+         id, event_id, person_id, starts_at, ends_at, note, created_at, updated_at
+       ) VALUES (?, ?, ?, 1800000000, 1800003600, ?, unixepoch(), unixepoch())`,
+    )
+      .bind(
+        crypto.randomUUID(),
+        speaker.eventId,
+        speaker.personId,
+        privateAvailabilityNote,
+      )
+      .run();
+
+    const preview = await getAdminParticipantPreview(
+      testEnv,
+      administrator,
+      speaker.personId,
+    );
+
+    expect(preview).toMatchObject({
+      available: true,
+      portal: {
+        profile: { id: speaker.personId, name: speaker.name },
+        event: { name: expect.any(String) },
+      },
+      applications: expect.any(Array),
+      tasks: expect.any(Array),
+      resources: expect.any(Array),
+      availabilityCount: 1,
+    });
+    if (!preview.available) throw new Error("Expected participant preview.");
+    expect(preview.tasks.every((task) => !("comments" in task))).toBe(true);
+    expect(
+      preview.applications.every((application) => !("answers" in application)),
+    ).toBe(true);
+    expect(JSON.stringify(preview)).not.toContain(privateAvailabilityNote);
+  });
+
+  it("previews an accepted submitter without requiring speaker state", async () => {
+    const testEnv = env as unknown as CloudflareEnvironment;
+    await ensureDemoSpeakerData(testEnv);
+    const personId = `preview-submitter-${crypto.randomUUID()}`;
+    await testEnv.DB.batch([
+      testEnv.DB.prepare(
+        `INSERT INTO people (id, email, display_name, email_verified)
+         VALUES (?, ?, 'Submitter Only', 1)`,
+      ).bind(personId, `${personId}@example.test`),
+      testEnv.DB.prepare(
+        `INSERT INTO memberships (
+           id, organisation_id, event_id, person_id, role,
+           invited_at, accepted_at, created_at
+         ) VALUES (?, ?, ?, ?, 'submitter', unixepoch(), unixepoch(), unixepoch())`,
+      ).bind(
+        crypto.randomUUID(),
+        administrator.organisationId,
+        administrator.eventId,
+        personId,
+      ),
+    ]);
+
+    const preview = await getAdminParticipantPreview(
+      testEnv,
+      administrator,
+      personId,
+    );
+
+    expect(preview).toMatchObject({
+      available: true,
+      participantRole: "submitter",
+      portal: { profile: { id: personId, name: "Submitter Only" } },
+      applications: [],
+      tasks: [],
+    });
+  });
+
+  it("lists pending and confirmed co-participants without contact details or declined people", async () => {
+    const testEnv = env as unknown as CloudflareEnvironment;
+    await ensureDemoSpeakerData(testEnv);
+    const suffix = crypto.randomUUID();
+    const pendingId = `portal-pending-${suffix}`;
+    const declinedId = `portal-declined-${suffix}`;
+    await testEnv.DB.batch([
+      testEnv.DB.prepare(
+        `INSERT INTO people (id, email, display_name, email_verified)
+         VALUES (?, ?, 'Pending Collaborator', 1),
+                (?, ?, 'Declined Collaborator', 1)`,
+      ).bind(
+        pendingId,
+        `${pendingId}@example.test`,
+        declinedId,
+        `${declinedId}@example.test`,
+      ),
+      testEnv.DB.prepare(
+        `INSERT INTO session_speakers (
+           session_id, event_id, person_id, position, role_label,
+           participation_status, visibility
+         ) VALUES ('session-demo-speaker', ?, ?, 10, 'Moderator', 'pending', 'private')`,
+      ).bind(speaker.eventId, pendingId),
+      testEnv.DB.prepare(
+        `INSERT INTO session_speakers (
+           session_id, event_id, person_id, position, role_label,
+           participation_status, participation_declined_at,
+           participation_decline_reason, visibility
+         ) VALUES ('session-demo-speaker', ?, ?, 11, 'Panelist', 'declined',
+                   unixepoch(), 'Private reason', 'public')`,
+      ).bind(speaker.eventId, declinedId),
+    ]);
+
+    const portal = await new SpeakerService(testEnv).getPortal(speaker);
+    const session = portal.sessions.find(
+      (candidate) => candidate.id === "session-demo-speaker",
+    );
+    expect(session?.participants).toContainEqual({
+      sessionId: "session-demo-speaker",
+      position: 10,
+      name: "Pending Collaborator",
+      roleLabel: "Moderator",
+      participationStatus: "pending",
+    });
+    expect(session?.participants).not.toContainEqual(
+      expect.objectContaining({ name: "Declined Collaborator" }),
+    );
+    expect(JSON.stringify(session?.participants)).not.toContain(
+      "@example.test",
+    );
+    expect(JSON.stringify(session?.participants)).not.toContain(
+      "Private reason",
+    );
+  });
+
   it("derives a deliverable's session through its exact task", async () => {
     const testEnv = env as unknown as CloudflareEnvironment;
     await ensureDemoSpeakerData(testEnv);

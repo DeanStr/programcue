@@ -264,6 +264,31 @@
   color: var(--text-tertiary);
   font-size: var(--text-2xs);
 }
+.speaker-session-participants {
+  display: grid;
+  gap: var(--space-1);
+  margin-top: var(--space-2);
+  color: var(--text-secondary);
+  font-size: var(--text-2xs);
+}
+.speaker-session-participants ul {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.speaker-session-participants li {
+  display: grid;
+  padding: var(--space-1) var(--space-2);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--surface-sunken);
+}
+.speaker-session-participants small {
+  color: var(--text-tertiary);
+}
 .speaker-task-done {
   margin: 2px 0 0;
   color: var(--text-tertiary);

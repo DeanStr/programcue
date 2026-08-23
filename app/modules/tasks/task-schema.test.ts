@@ -22,6 +22,7 @@ describe("task template form values", () => {
       destinationUrl: "",
       fileScope: "",
       fileKind: "",
+      formFields: [],
       autoAssignOnAcceptance: false,
       dependencyIds: [],
     });

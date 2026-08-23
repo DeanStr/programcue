@@ -28,6 +28,11 @@ export class ParticipantTaskWorkflows {
   ) {
     return this.queries.listParticipantTasks(...args);
   }
+  listParticipantTaskSnapshot(
+    ...args: Parameters<ParticipantTaskQueries["listParticipantTaskSnapshot"]>
+  ) {
+    return this.queries.listParticipantTaskSnapshot(...args);
+  }
   assertFileEvidenceUploadAllowed(
     ...args: Parameters<
       ParticipantTaskQueries["assertFileEvidenceUploadAllowed"]

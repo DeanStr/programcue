@@ -26,7 +26,10 @@ export const taskFormFieldSchema = z
     type: z.enum(["short_text", "long_text", "date", "boolean", "select"]),
     required: z.boolean().default(false),
     help: z.string().trim().max(300).default(""),
-    options: z.array(z.string().trim().min(1).max(100)).max(20).default([]),
+    options: z
+      .array(z.string().trim().min(1).max(100))
+      .max(20, "Select fields support at most 20 options.")
+      .default([]),
     requiredWhen: z
       .object({
         fieldId: z.string().regex(/^[a-z][a-z0-9_]{1,39}$/),
@@ -50,6 +53,21 @@ export const taskFormFieldSchema = z
       });
     }
   });
+
+export const taskFormFieldsJsonSchema = z
+  .string()
+  .transform((value, context) => {
+    try {
+      return JSON.parse(value) as unknown;
+    } catch {
+      context.addIssue({
+        code: "custom",
+        message: "Structured task-form fields could not be read.",
+      });
+      return z.NEVER;
+    }
+  })
+  .pipe(z.array(taskFormFieldSchema).min(1).max(20));
 
 export const taskTemplatePresetSchema = z.enum([
   "speaker_travel_hotel_v1",
@@ -371,6 +389,7 @@ export type TaskTemplateDraftValues = {
   destinationUrl: string;
   fileScope: "" | z.infer<typeof taskFileScopeSchema>;
   fileKind: "" | z.infer<typeof taskFileKindSchema>;
+  formFields: TaskFormField[];
   autoAssignOnAcceptance: boolean;
   dependencyIds: string[];
 };
@@ -388,6 +407,7 @@ const taskTemplateDraftSchema = z.object({
   destinationUrl: z.string().catch(""),
   fileScope: z.union([z.literal(""), taskFileScopeSchema]).catch(""),
   fileKind: z.union([z.literal(""), taskFileKindSchema]).catch(""),
+  formFields: z.array(taskFormFieldSchema).catch([]),
   autoAssignOnAcceptance: z.boolean().catch(false),
   dependencyIds: z.array(z.string()).catch([]),
 });

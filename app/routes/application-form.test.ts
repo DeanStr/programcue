@@ -16,6 +16,7 @@ import {
   evaluationApplicantContextMessage,
   loader,
 } from "./application-form";
+import { applicationNoticeQuery } from "./application-form-intents.server";
 
 function context(
   environment: CloudflareEnvironment = env as unknown as CloudflareEnvironment,
@@ -78,6 +79,35 @@ beforeEach(async () => {
 
 describe("public application mutations", () => {
   describe("applicant and co-speaker access", () => {
+    it("returns a discarded-draft notice without selecting the deleted record", async () => {
+      const query = await applicationNoticeQuery(
+        env as unknown as CloudflareEnvironment,
+        {
+          slug: "form",
+          kind: "discarded",
+          submissionId: "deleted-draft",
+          webhookWarning: false,
+          realtimeWarning: true,
+        },
+      );
+      expect(query.has("draft")).toBe(false);
+
+      const result = await loader({
+        request: new Request(`http://localhost/apply/form?${query}`),
+        params: { slug: "form" },
+        context: context(),
+      } as never);
+      if (result instanceof Response) {
+        throw new Error("Discard notice unexpectedly failed to load.");
+      }
+      expect(result).toMatchObject({
+        discardedDraftRecoveryId: "deleted-draft",
+        noticeWarning: true,
+        notice:
+          "The application draft was permanently discarded, but other open views could not be updated automatically. Refresh them before continuing.",
+      });
+    });
+
     it("routes accepted participant management through the exact event selector", () => {
       expect(
         acceptedParticipantManagementHref(

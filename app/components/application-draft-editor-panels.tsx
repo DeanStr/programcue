@@ -1,4 +1,4 @@
-import type { Dispatch, Ref, SetStateAction } from "react";
+import { type Dispatch, type Ref, type SetStateAction, useRef } from "react";
 import { Link, type useNavigation } from "react-router";
 
 import {
@@ -602,6 +602,7 @@ export function ApplicationLifecycleActions({
   saveDraftButtonType = "submit",
   onSaveDraft,
 }: ApplicationLifecycleProps) {
+  const discardConfirmationRef = useRef<HTMLInputElement>(null);
   return (
     <>
       {!readOnly ? (
@@ -755,6 +756,55 @@ export function ApplicationLifecycleActions({
                 {navigation.formData?.get("_intent") === "withdraw"
                   ? "Withdrawing…"
                   : "Withdraw application"}
+              </button>
+            </details>
+          ) : null}
+          {!revisionMode && !persistenceOnly ? (
+            <details className="card pad pc-disclosure">
+              <summary>
+                <strong>Discard draft</strong>
+              </summary>
+              <p className="help mt">
+                Permanently delete this unsubmitted application and its saved
+                answers. Submitted applications use withdrawal instead.
+              </p>
+              <input
+                ref={discardConfirmationRef}
+                type="hidden"
+                name="confirmDiscard"
+                defaultValue="no"
+              />
+              <button
+                className="btn danger mt"
+                type="submit"
+                name="_intent"
+                value="discard_draft"
+                formNoValidate
+                disabled={navigation.state !== "idle" || transferBlocked}
+                onClick={(event) => {
+                  event.preventDefault();
+                  const button = event.currentTarget;
+                  const form = button.form;
+                  if (!form) return;
+                  confirm(
+                    {
+                      title: "Permanently discard this draft?",
+                      description:
+                        "The saved answers, browser recovery copy and any private upload will be deleted. This cannot be undone.",
+                      records: [draft.title],
+                      confirmLabel: "Discard draft",
+                    },
+                    () => {
+                      if (!discardConfirmationRef.current) return;
+                      discardConfirmationRef.current.value = "yes";
+                      form.requestSubmit(button);
+                    },
+                  );
+                }}
+              >
+                {navigation.formData?.get("_intent") === "discard_draft"
+                  ? "Discarding…"
+                  : "Discard draft"}
               </button>
             </details>
           ) : null}

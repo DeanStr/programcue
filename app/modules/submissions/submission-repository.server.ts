@@ -68,6 +68,14 @@ export class D1SubmissionRepository {
     return this.forms.getSubmittedApplicationForm(...args);
   }
 
+  getDraftDiscardApplicationForm(
+    ...args: Parameters<
+      SubmissionFormRepository["getDraftDiscardApplicationForm"]
+    >
+  ) {
+    return this.forms.getDraftDiscardApplicationForm(...args);
+  }
+
   getCoSpeakerClaimForm(
     ...args: Parameters<SubmissionFormRepository["getCoSpeakerClaimForm"]>
   ) {
@@ -116,6 +124,30 @@ export class D1SubmissionRepository {
 
   saveDraft(...args: Parameters<SubmissionApplicantRepository["saveDraft"]>) {
     return this.applicants.saveDraft(...args);
+  }
+
+  beginDraftDiscard(
+    ...args: Parameters<SubmissionApplicantRepository["beginDraftDiscard"]>
+  ) {
+    return this.applicants.beginDraftDiscard(...args);
+  }
+
+  findDraftDiscardReplay(
+    ...args: Parameters<SubmissionApplicantRepository["findDraftDiscardReplay"]>
+  ) {
+    return this.applicants.findDraftDiscardReplay(...args);
+  }
+
+  getDraftFileAssets(
+    ...args: Parameters<SubmissionApplicantRepository["getDraftFileAssets"]>
+  ) {
+    return this.applicants.getDraftFileAssets(...args);
+  }
+
+  completeDraftDiscard(
+    ...args: Parameters<SubmissionApplicantRepository["completeDraftDiscard"]>
+  ) {
+    return this.applicants.completeDraftDiscard(...args);
   }
 
   withdrawSubmission(

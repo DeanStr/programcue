@@ -1,4 +1,4 @@
-import type { CSSProperties } from "react";
+import { type CSSProperties, useEffect, useState } from "react";
 import {
   Form,
   Link,
@@ -9,7 +9,12 @@ import {
 import { claimApplicantVideoUploadOperation } from "~/components/applicant-video-upload";
 import { PublicApplicationLanding } from "~/components/application-public-landing";
 import { BrandMark } from "~/components/brand-mark";
+import { StatusNotice } from "~/components/ui/status-notice";
 import { programmeAccentPalette } from "~/modules/programme/programme-presentation";
+import {
+  clearDraftRecoveryScope,
+  type DraftRecoveryScope,
+} from "~/platform/drafts/draft-recovery";
 import type { Route } from "./+types/application-form";
 import type { ActionResult, action } from "./application-form.server";
 import {
@@ -60,6 +65,44 @@ export const meta: Route.MetaFunction = ({ loaderData }) => {
   return [{ title: "Call for Speakers · Program Cue" }];
 };
 
+function CommittedDraftRecoveryCleanup({
+  scopes,
+}: {
+  scopes: DraftRecoveryScope[];
+}) {
+  const [failed, setFailed] = useState(false);
+  const cleanupKey = JSON.stringify(scopes);
+  useEffect(() => {
+    const exactScopes = JSON.parse(cleanupKey) as DraftRecoveryScope[];
+    setFailed(false);
+    if (exactScopes.length === 0) return;
+    let current = true;
+    void Promise.all(
+      exactScopes.map((scope) => clearDraftRecoveryScope(scope)),
+    ).catch((error: unknown) => {
+      console.error("Committed draft discard recovery cleanup failed", {
+        errorName: error instanceof Error ? error.name : "UnknownError",
+      });
+      if (current) setFailed(true);
+    });
+    return () => {
+      current = false;
+    };
+  }, [cleanupKey]);
+  if (!failed) return null;
+  return (
+    <StatusNotice
+      className="mb"
+      tone="danger"
+      title="Browser recovery copy still needs deletion"
+    >
+      The server draft was permanently discarded, but this browser could not
+      clear its private recovery copy. Reload this page to retry before leaving
+      this browser.
+    </StatusNotice>
+  );
+}
+
 export default function ApplicationForm({ loaderData }: Route.ComponentProps) {
   const actionData = useActionData<typeof action>() as ActionResult | undefined;
   const navigation = useNavigation();
@@ -105,6 +148,21 @@ export default function ApplicationForm({ loaderData }: Route.ComponentProps) {
   );
   const isEvaluationApplicant =
     applicant?.verified === true && applicant.evaluation === true;
+  const discardedDraftId =
+    loaderData.discardedDraftRecoveryId ?? actionData?.discardedDraftId ?? null;
+  const discardedDraftRecoveryScopes: DraftRecoveryScope[] = discardedDraftId
+    ? [applicant?.personId, `anonymous:${discardedDraftId}`]
+        .filter((personId): personId is string => Boolean(personId))
+        .filter(
+          (personId, index, personIds) => personIds.indexOf(personId) === index,
+        )
+        .map((personId) => ({
+          eventId: form.eventId,
+          personId,
+          recordType: "submission" as const,
+          recordId: discardedDraftId,
+        }))
+    : [];
   const accentPalette = programmeAccentPalette(form.brandAccent);
   const brandStyle = {
     "--event-accent": accentPalette.accent,
@@ -159,6 +217,16 @@ export default function ApplicationForm({ loaderData }: Route.ComponentProps) {
           programmeUrl={programmeUrl}
           accessPanel={
             <>
+              <CommittedDraftRecoveryCleanup
+                scopes={discardedDraftRecoveryScopes}
+              />
+              {loaderData.notice ? (
+                <StatusNotice
+                  className="mb"
+                  tone={loaderData.noticeWarning ? "warning" : "success"}
+                  title={loaderData.notice}
+                />
+              ) : null}
               <EvaluationApplicantContextNotice
                 accessMode={form.accessMode}
                 context={loaderData.evaluationApplicantContext}
@@ -228,6 +296,7 @@ export default function ApplicationForm({ loaderData }: Route.ComponentProps) {
           padding: "0 16px",
         }}
       >
+        <CommittedDraftRecoveryCleanup scopes={discardedDraftRecoveryScopes} />
         <EvaluationApplicantContextNotice
           accessMode={form.accessMode}
           context={loaderData.evaluationApplicantContext}

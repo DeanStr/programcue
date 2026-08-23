@@ -235,11 +235,13 @@ async function resolveAnonymousApplicantSession(
   env: CloudflareEnvironment,
   form: PublicForm,
   identifier: string,
+  committedDiscardId?: string,
 ) {
   const anonymousPrefix = await anonymousSessionIdentifierPrefix(form);
   if (!identifier.startsWith(anonymousPrefix)) return null;
   const draftId = identifier.slice(anonymousPrefix.length);
   if (!draftId) return null;
+  if (draftId === committedDiscardId) return anonymousApplicant(draftId);
   const ownedDraft = await env.DB.prepare(
     `SELECT submission.id
        FROM submissions submission
@@ -334,7 +336,11 @@ export async function evaluationApplicantSessionContext(
 export class ApplicantSessionService {
   constructor(private readonly env: CloudflareEnvironment) {}
 
-  async get(request: Request, form: PublicForm): Promise<Applicant | null> {
+  async get(
+    request: Request,
+    form: PublicForm,
+    options: { committedDiscardId?: string } = {},
+  ): Promise<Applicant | null> {
     const evaluationContext = await evaluationApplicantSessionContext(
       this.env,
       request,
@@ -374,6 +380,7 @@ export class ApplicantSessionService {
         this.env,
         form,
         token.identifier,
+        options.committedDiscardId,
       );
       if (anonymous) return anonymous;
       if (!evaluationContext.fixtureForm) return null;
@@ -419,6 +426,7 @@ export class ApplicantSessionService {
       this.env,
       form,
       token.identifier,
+      options.committedDiscardId,
     );
     if (anonymous) return anonymous;
     const prefix = await applicationSessionIdentifierPrefix(form);

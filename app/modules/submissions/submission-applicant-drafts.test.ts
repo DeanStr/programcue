@@ -134,6 +134,7 @@ async function insertReadySubmissionVideo(
 ) {
   const assetId = `video-asset-${crypto.randomUUID()}`;
   const versionId = `video-version-${crypto.randomUUID()}`;
+  const objectKey = `private/test/${versionId}`;
   await testEnv.DB.batch([
     testEnv.DB.prepare(
       `INSERT INTO file_assets (
@@ -150,13 +151,7 @@ async function insertReadySubmissionVideo(
        ) VALUES (?, ?, ?, 1, ?, 'pitch.mp4', 'video/mp4', 'video/mp4', 1024,
                  'test-etag', 'uploaded', 'valid', 'clean', ?,
                  unixepoch(), unixepoch(), unixepoch(), unixepoch())`,
-    ).bind(
-      versionId,
-      input.eventId,
-      assetId,
-      `private/test/${versionId}`,
-      input.ownerPersonId,
-    ),
+    ).bind(versionId, input.eventId, assetId, objectKey, input.ownerPersonId),
     testEnv.DB.prepare(
       `UPDATE file_assets SET current_version_id = ?, status = 'active',
               updated_at = unixepoch()
@@ -667,6 +662,413 @@ describe("Submissions D1 vertical slice", () => {
           "video",
         ),
       ).rejects.toMatchObject({ status: 404 });
+    });
+
+    it("permanently discards an owned draft and removes its draft-created access", async () => {
+      const { service, id, slug, testEnv } = await publishedForm();
+      const applicant = await verifiedApplicant(service, slug);
+      const submissionId = await service.createDraft(slug, applicant);
+      const draft = (
+        await service.repository.getApplicantDrafts(id, applicant)
+      ).find((candidate) => candidate.id === submissionId)!;
+
+      await testEnv.DB.prepare(
+        "UPDATE form_definitions SET status = 'closed' WHERE id = ? AND event_id = ?",
+      )
+        .bind(id, viewer.eventId)
+        .run();
+      await expect(
+        service.discardDraft(slug, applicant, {
+          submissionId,
+          revision: draft.revision,
+        }),
+      ).resolves.toMatchObject({ submissionId, eventId: viewer.eventId });
+      await expect(
+        service.discardDraft(slug, applicant, {
+          submissionId,
+          revision: draft.revision,
+        }),
+      ).resolves.toMatchObject({ submissionId, eventId: viewer.eventId });
+
+      await expect(
+        testEnv.DB.prepare("SELECT id FROM submissions WHERE id = ?")
+          .bind(submissionId)
+          .first(),
+      ).resolves.toBeNull();
+      await expect(
+        testEnv.DB.prepare(
+          `SELECT id FROM memberships
+            WHERE event_id = ? AND person_id = ? AND role = 'submitter'`,
+        )
+          .bind(viewer.eventId, applicant.personId)
+          .first(),
+      ).resolves.toBeNull();
+      await expect(
+        testEnv.DB.prepare(
+          `SELECT actor_person_id AS actorPersonId, metadata_json AS metadataJson
+             FROM audit_events
+            WHERE action = 'submission.draft.discarded'
+              AND entity_type = 'submission' AND entity_id = ?`,
+        )
+          .bind(submissionId)
+          .first<{ actorPersonId: string; metadataJson: string }>(),
+      ).resolves.toEqual({
+        actorPersonId: applicant.personId,
+        metadataJson: JSON.stringify({
+          revision: draft.revision,
+          anonymous: false,
+          formId: id,
+          formVersionId: draft.formVersionId,
+        }),
+      });
+    });
+
+    it("uses the draft's access policy after a newer form version is published", async () => {
+      const { service, id, slug } = await publishedForm({
+        accessMode: "password_protected",
+        accessPassword: "initial-password",
+      });
+      const initialForm = await service.getPublicForm(slug);
+      const email = `historical-discard-${crypto.randomUUID()}@example.com`;
+      await service.applicants.requestCode(
+        initialForm,
+        email,
+        "initial-password",
+      );
+      const verified = await service.applicants.verifyCode(
+        initialForm,
+        email,
+        "424242",
+      );
+      const request = new Request(`https://example.com/apply/${slug}`, {
+        headers: { cookie: verified.cookie.split(";")[0] },
+      });
+      const applicant = await service.applicants.get(request, initialForm);
+      expect(applicant).not.toBeNull();
+      const submissionId = await service.createDraft(slug, applicant!);
+      const draft = (
+        await service.repository.getApplicantDrafts(id, applicant!)
+      ).find((candidate) => candidate.id === submissionId)!;
+
+      const workspace = await service.getAdminWorkspace(viewer, id);
+      await service.saveForm(viewer, {
+        ...SubmissionService.workspaceToInput(workspace!),
+        accessPassword: "rotated-password",
+      });
+      const updatedWorkspace = await service.getAdminWorkspace(viewer, id);
+      await service.publishForm(
+        viewer,
+        id,
+        updatedWorkspace!.revision,
+        updatedWorkspace!.draftVersion.revision,
+      );
+
+      const discardForm = await service.getDraftDiscardAccessForm(
+        slug,
+        submissionId,
+        draft.revision,
+      );
+      expect(discardForm.version.id).toBe(draft.formVersionId);
+      await expect(
+        service.applicants.get(request, discardForm),
+      ).resolves.toMatchObject({ personId: applicant!.personId });
+
+      await service.discardDraft(slug, applicant!, {
+        submissionId,
+        revision: draft.revision,
+      });
+      const replayForm = await service.getDraftDiscardAccessForm(
+        slug,
+        submissionId,
+        draft.revision,
+      );
+      expect(replayForm.version.id).toBe(draft.formVersionId);
+      await expect(
+        service.applicants.get(request, replayForm, {
+          committedDiscardId: submissionId,
+        }),
+      ).resolves.toMatchObject({ personId: applicant!.personId });
+    });
+
+    it("removes draft-created access after the last of several drafts is discarded", async () => {
+      const { service, id, slug, testEnv } = await publishedForm();
+      const applicant = await verifiedApplicant(service, slug);
+      const firstSubmissionId = await service.createDraft(slug, applicant);
+      const secondSubmissionId = await service.createDraft(slug, applicant);
+      const drafts = await service.repository.getApplicantDrafts(id, applicant);
+      const firstDraft = drafts.find(
+        (candidate) => candidate.id === firstSubmissionId,
+      )!;
+      const secondDraft = drafts.find(
+        (candidate) => candidate.id === secondSubmissionId,
+      )!;
+
+      await service.discardDraft(slug, applicant, {
+        submissionId: firstSubmissionId,
+        revision: firstDraft.revision,
+      });
+      await expect(
+        testEnv.DB.prepare(
+          `SELECT id FROM memberships
+            WHERE event_id = ? AND person_id = ? AND role = 'submitter'`,
+        )
+          .bind(viewer.eventId, applicant.personId)
+          .first(),
+      ).resolves.not.toBeNull();
+
+      await service.discardDraft(slug, applicant, {
+        submissionId: secondSubmissionId,
+        revision: secondDraft.revision,
+      });
+      await expect(
+        testEnv.DB.prepare(
+          `SELECT id FROM memberships
+            WHERE event_id = ? AND person_id = ? AND role = 'submitter'`,
+        )
+          .bind(viewer.eventId, applicant.personId)
+          .first(),
+      ).resolves.toBeNull();
+    });
+
+    it("preserves submitter access that predates the discarded draft", async () => {
+      const { service, id, slug, testEnv } = await publishedForm();
+      const applicant = await verifiedApplicant(service, slug);
+      const membershipId = crypto.randomUUID();
+      await testEnv.DB.prepare(
+        `INSERT INTO memberships (
+           id, organisation_id, event_id, person_id, role, invited_at,
+           accepted_at, last_operation_id, created_at
+         ) VALUES (?, ?, ?, ?, 'submitter', unixepoch(), unixepoch(),
+                   'preexisting-access', unixepoch())`,
+      )
+        .bind(
+          membershipId,
+          viewer.organisationId,
+          viewer.eventId,
+          applicant.personId,
+        )
+        .run();
+      const submissionId = await service.createDraft(slug, applicant);
+      const draft = (
+        await service.repository.getApplicantDrafts(id, applicant)
+      ).find((candidate) => candidate.id === submissionId)!;
+
+      await service.discardDraft(slug, applicant, {
+        submissionId,
+        revision: draft.revision,
+      });
+
+      await expect(
+        testEnv.DB.prepare(
+          `SELECT id, last_operation_id AS lastOperationId
+             FROM memberships WHERE id = ?`,
+        )
+          .bind(membershipId)
+          .first(),
+      ).resolves.toEqual({
+        id: membershipId,
+        lastOperationId: "preexisting-access",
+      });
+    });
+
+    it("preserves draft-created access while a claimed co-speaker application remains", async () => {
+      const { service, id, slug, testEnv } = await publishedForm();
+      const submitter = await verifiedApplicant(service, slug);
+      const sharedDraftId = await service.createDraft(slug, submitter);
+      const sharedDraft = (
+        await service.repository.getApplicantDrafts(id, submitter)
+      ).find((candidate) => candidate.id === sharedDraftId)!;
+      const coSpeakerEmail = `claimed-${crypto.randomUUID()}@example.com`;
+      await service.saveDraft(slug, submitter, {
+        submissionId: sharedDraftId,
+        revision: sharedDraft.revision,
+        answers: validAnswers,
+        speakers: [
+          { name: submitter.name, email: submitter.email },
+          { name: "Claimed co-speaker", email: coSpeakerEmail },
+        ],
+      });
+
+      const coSpeaker = await verifiedApplicant(service, slug, coSpeakerEmail);
+      const ownedDraftId = await service.createDraft(slug, coSpeaker);
+      const ownedDraft = (
+        await service.repository.getApplicantDrafts(id, coSpeaker)
+      ).find((candidate) => candidate.id === ownedDraftId)!;
+      const invitation = (
+        await service.repository.getCoSpeakerInvitations(id, coSpeaker)
+      ).find((candidate) => candidate.submissionId === sharedDraftId)!;
+      await service.claimCoSpeaker(slug, coSpeaker, invitation.id);
+
+      await service.discardDraft(slug, coSpeaker, {
+        submissionId: ownedDraftId,
+        revision: ownedDraft.revision,
+      });
+
+      await expect(
+        testEnv.DB.prepare(
+          `SELECT membership.id, membership.last_operation_id AS lastOperationId,
+                  audit.action AS lastOperationAction
+             FROM memberships membership
+             JOIN audit_events audit ON audit.id = membership.last_operation_id
+            WHERE membership.event_id = ? AND membership.person_id = ?
+              AND membership.role = 'submitter'
+              AND membership.accepted_at IS NOT NULL
+              AND membership.revoked_at IS NULL`,
+        )
+          .bind(viewer.eventId, coSpeaker.personId)
+          .first<{ id: string; lastOperationId: string }>(),
+      ).resolves.toMatchObject({
+        id: expect.any(String),
+        lastOperationId: expect.any(String),
+        lastOperationAction: "submission.draft.created",
+      });
+      await expect(
+        testEnv.DB.prepare(
+          `SELECT invitation_status AS invitationStatus
+             FROM submission_speakers
+            WHERE submission_id = ? AND event_id = ? AND person_id = ?`,
+        )
+          .bind(sharedDraftId, viewer.eventId, coSpeaker.personId)
+          .first(),
+      ).resolves.toEqual({ invitationStatus: "claimed" });
+    });
+
+    it("locks the exact draft revision before erasing private uploads", async () => {
+      const { service, id, slug, testEnv } = await publishedForm();
+      const applicant = await verifiedApplicant(service, slug);
+      const submissionId = await service.createDraft(slug, applicant);
+      const draft = (
+        await service.repository.getApplicantDrafts(id, applicant)
+      ).find((candidate) => candidate.id === submissionId)!;
+      const upload = await insertReadySubmissionVideo(testEnv, {
+        eventId: viewer.eventId,
+        submissionId,
+        ownerPersonId: applicant.personId,
+      });
+      const objectKey = `private/test/${upload.versionId}`;
+      await testEnv.FILES.put(objectKey, new Uint8Array([1, 2, 3]));
+      const form = await service.getPublicForm(slug);
+
+      const lock = await service.repository.beginDraftDiscard(
+        form,
+        applicant,
+        submissionId,
+        draft.revision,
+        crypto.randomUUID(),
+      );
+
+      await expect(
+        testEnv.DB.prepare(
+          `UPDATE submissions SET title = 'Concurrent save', revision = revision + 1
+            WHERE id = ? AND event_id = ? AND revision = ?`,
+        )
+          .bind(submissionId, viewer.eventId, draft.revision)
+          .run(),
+      ).rejects.toThrow("application draft discard is in progress");
+      await expect(testEnv.FILES.get(objectKey)).resolves.not.toBeNull();
+      await expect(
+        testEnv.DB.prepare(
+          `SELECT expected_revision AS expectedRevision,
+                  operation_id AS operationId
+             FROM submission_draft_discards WHERE submission_id = ?`,
+        )
+          .bind(submissionId)
+          .first(),
+      ).resolves.toEqual({
+        expectedRevision: draft.revision,
+        operationId: lock.operationId,
+      });
+
+      await service.discardDraft(slug, applicant, {
+        submissionId,
+        revision: draft.revision,
+      });
+      await expect(testEnv.FILES.get(objectKey)).resolves.toBeNull();
+      await expect(
+        testEnv.DB.prepare(
+          "SELECT id FROM submissions WHERE id = ? AND event_id = ?",
+        )
+          .bind(submissionId, viewer.eventId)
+          .first(),
+      ).resolves.toBeNull();
+    });
+
+    it("erases a draft video before deletion and fails closed for anonymous uploads", async () => {
+      const { service, id, slug, testEnv } = await publishedForm();
+      const applicant = await verifiedApplicant(service, slug);
+      const submissionId = await service.createDraft(slug, applicant);
+      const draft = (
+        await service.repository.getApplicantDrafts(id, applicant)
+      ).find((candidate) => candidate.id === submissionId)!;
+      const upload = await insertReadySubmissionVideo(testEnv, {
+        eventId: viewer.eventId,
+        submissionId,
+        ownerPersonId: applicant.personId,
+      });
+      const objectKey = `private/test/${upload.versionId}`;
+      await testEnv.FILES.put(objectKey, new Uint8Array([1, 2, 3]));
+
+      await service.discardDraft(slug, applicant, {
+        submissionId,
+        revision: draft.revision,
+      });
+
+      await expect(testEnv.FILES.get(objectKey)).resolves.toBeNull();
+      await expect(
+        testEnv.DB.prepare(
+          `SELECT asset.status, asset.current_version_id AS currentVersionId,
+                  version.deleted_at AS deletedAt
+             FROM file_assets asset
+             JOIN file_versions version
+               ON version.asset_id = asset.id AND version.event_id = asset.event_id
+            WHERE asset.id = ? AND version.id = ?`,
+        )
+          .bind(upload.assetId, upload.versionId)
+          .first(),
+      ).resolves.toMatchObject({
+        status: "deleted",
+        currentVersionId: null,
+        deletedAt: expect.any(Number),
+      });
+
+      const anonymousStart = await service.startAnonymousDraft(slug, "");
+      const form = await service.getPublicForm(slug);
+      const anonymousRequest = new Request(
+        `https://example.com/apply/${slug}`,
+        {
+          headers: { cookie: anonymousStart.cookie.split(";")[0] },
+        },
+      );
+      const anonymous = await service.applicants.get(anonymousRequest, form);
+      const anonymousDraft = (
+        await service.repository.getApplicantDrafts(id, anonymous!)
+      ).find((candidate) => candidate.id === anonymousStart.draftId)!;
+      await insertReadySubmissionVideo(testEnv, {
+        eventId: viewer.eventId,
+        submissionId: anonymousStart.draftId,
+        ownerPersonId: null,
+      });
+
+      await expect(
+        service.discardDraft(slug, anonymous!, {
+          submissionId: anonymousStart.draftId,
+          revision: anonymousDraft.revision,
+        }),
+      ).rejects.toThrow(
+        "Verify your email before discarding a draft that contains an uploaded video.",
+      );
+      await expect(
+        testEnv.DB.prepare("SELECT status FROM submissions WHERE id = ?")
+          .bind(anonymousStart.draftId)
+          .first(),
+      ).resolves.toEqual({ status: "draft" });
+      await expect(
+        testEnv.DB.prepare(
+          "SELECT operation_id FROM submission_draft_discards WHERE submission_id = ?",
+        )
+          .bind(anonymousStart.draftId)
+          .first(),
+      ).resolves.toBeNull();
     });
 
     it("submits only a clean owned native video version and snapshots its immutable reference", async () => {

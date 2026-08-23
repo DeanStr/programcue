@@ -93,6 +93,13 @@ export class SubmissionService {
   ) {
     return this.shared.getApplicantAccessForm(...args);
   }
+  getDraftDiscardAccessForm(
+    ...args: Parameters<
+      SubmissionServiceFoundation["getDraftDiscardAccessForm"]
+    >
+  ) {
+    return this.shared.getDraftDiscardAccessForm(...args);
+  }
   requireClaimedCoSpeakerContext(
     ...args: Parameters<
       SubmissionServiceFoundation["requireClaimedCoSpeakerContext"]
@@ -223,6 +230,11 @@ export class SubmissionService {
   }
   saveDraft(...args: Parameters<SubmissionApplicantWorkflows["saveDraft"]>) {
     return this.applicantWorkflows.saveDraft(...args);
+  }
+  discardDraft(
+    ...args: Parameters<SubmissionApplicantWorkflows["discardDraft"]>
+  ) {
+    return this.applicantWorkflows.discardDraft(...args);
   }
   submitDraft(
     ...args: Parameters<SubmissionApplicantWorkflows["submitDraft"]>

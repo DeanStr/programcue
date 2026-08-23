@@ -546,6 +546,15 @@ export class SubmissionAdminRepository {
              s.submitted_at AS submittedAt, s.updated_at AS updatedAt,
              COALESCE(p.display_name, s.submitter_email) AS submitterName,
              COALESCE(p.email, s.submitter_email) AS submitterEmail,
+             CASE WHEN EXISTS (
+               SELECT 1 FROM memberships participant_membership
+                WHERE participant_membership.event_id = s.event_id
+                  AND participant_membership.organisation_id = e.organisation_id
+                  AND participant_membership.person_id = s.submitter_person_id
+                  AND participant_membership.role IN ('speaker','submitter')
+                  AND participant_membership.accepted_at IS NOT NULL
+                  AND participant_membership.revoked_at IS NULL
+             ) THEN s.submitter_person_id ELSE NULL END AS participantPreviewPersonId,
              s.form_version_id AS formVersionId,
              fv.version_number AS versionNumber, fv.schema_json AS schemaJson,
              json_extract(fv.settings_snapshot_json, '$.name') AS formName,
@@ -596,6 +605,7 @@ export class SubmissionAdminRepository {
         updatedAt: number;
         submitterName: string | null;
         submitterEmail: string | null;
+        participantPreviewPersonId: string | null;
         formVersionId: string | null;
         versionNumber: number | null;
         formName: string | null;

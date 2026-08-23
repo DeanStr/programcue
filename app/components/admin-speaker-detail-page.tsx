@@ -2,6 +2,7 @@ import {
   ArrowLeft,
   CalendarClock,
   Download,
+  Eye,
   FileCheck2,
   ListChecks,
   LockKeyhole,
@@ -156,6 +157,9 @@ export function AdminSpeakerDetailPage({
             </Link>
             <Link className="btn" to="/admin/tasks">
               <ListChecks aria-hidden size={15} /> Manage tasks
+            </Link>
+            <Link className="btn" to={`/admin/speakers/${profile.id}/preview`}>
+              <Eye aria-hidden size={15} /> Preview participant view
             </Link>
           </div>
         </div>

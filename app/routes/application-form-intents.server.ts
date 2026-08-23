@@ -8,6 +8,7 @@ import {
 } from "~/modules/submissions/applicant-session.server";
 import {
   type ApplicationNotice,
+  type ApplicationNoticeInput,
   createApplicationNotice,
 } from "~/modules/submissions/application-notice.server";
 import {
@@ -42,6 +43,7 @@ export type ActionResult = {
   message: string;
   committed?: boolean;
   submissionId?: string;
+  discardedDraftId?: string;
   revision?: number;
   errors?: Record<string, string[]>;
   conflict?: boolean;
@@ -59,6 +61,13 @@ function appendApplicantCookies(headers: Headers, cookies: readonly string[]) {
   }
 }
 
+function isDraftDiscardLockError(error: unknown) {
+  return (
+    error instanceof Error &&
+    error.message.includes("application draft discard is in progress")
+  );
+}
+
 function redirectWithApplicantCookies(
   location: string,
   cookies: readonly string[],
@@ -74,6 +83,7 @@ export function applicationNoticeMatchesPortal(
   selected: { id: string; status: string } | null | undefined,
 ) {
   if (!notice) return false;
+  if (notice.kind === "discarded") return notice.submissionId !== null;
   if (notice.submissionId === null)
     return notice.kind === "claimed" || notice.kind === "profile_updated";
   if (!selected || selected.id !== notice.submissionId) return false;
@@ -86,12 +96,14 @@ export function applicationNoticeMatchesPortal(
   return false;
 }
 
-async function applicationNoticeQuery(
+export async function applicationNoticeQuery(
   env: CloudflareEnvironment,
-  input: Omit<ApplicationNotice, "version" | "expiresAt">,
+  input: ApplicationNoticeInput,
 ) {
   return new URLSearchParams({
-    ...(input.submissionId ? { draft: input.submissionId } : {}),
+    ...(input.submissionId && input.kind !== "discarded"
+      ? { draft: input.submissionId }
+      : {}),
     notice: await createApplicationNotice(env, input),
   });
 }
@@ -299,6 +311,7 @@ export async function translateApplicationActionError(input: {
   slug: string;
 }) {
   const { error, intent, formData, env, slug } = input;
+  const draftDiscardLocked = isDraftDiscardLockError(error);
   if (error instanceof Response) throw error;
   if (error instanceof ZodError) {
     return data<ActionResult>(
@@ -376,12 +389,17 @@ export async function translateApplicationActionError(input: {
   if (
     error instanceof SubmissionRevisionConflictError ||
     error instanceof SubmissionStateError ||
-    error instanceof PublicFormUnavailableError
+    error instanceof PublicFormUnavailableError ||
+    draftDiscardLocked
   ) {
     return data<ActionResult>(
       {
         ok: false,
-        message: error.message,
+        message: draftDiscardLocked
+          ? "This application draft is being permanently discarded. Retry the discard to finish private-file erasure."
+          : error instanceof Error
+            ? error.message
+            : "The application could not be changed.",
         conflict: error instanceof SubmissionRevisionConflictError,
       },
       { status: 409 },
@@ -656,6 +674,38 @@ export async function handleAuthenticatedApplicationIntent({
       kind: "withdrawn",
       submissionId: result.submissionId,
       webhookWarning: false,
+    });
+    return redirect(`/apply/${encodeURIComponent(slug)}?${query}`);
+  }
+  if (intent === "discard_draft") {
+    if (formData.get("confirmDiscard") !== "yes") {
+      return data<ActionResult>(
+        {
+          ok: false,
+          message: "Confirm that you want to permanently discard this draft.",
+        },
+        { status: 422 },
+      );
+    }
+    const result = await service.discardDraft(slug, applicant, {
+      submissionId: formData.get("submissionId"),
+      revision: formData.get("revision"),
+    });
+    const realtimeFailure = await recordRouteChange(
+      env,
+      { organisationId: result.organisationId, eventId: result.eventId },
+      {
+        entityType: "submission",
+        entityId: result.submissionId,
+        changeType: "deleted",
+      },
+    );
+    const query = await applicationNoticeQuery(env, {
+      slug,
+      kind: "discarded",
+      submissionId: result.submissionId,
+      webhookWarning: false,
+      realtimeWarning: Boolean(realtimeFailure),
     });
     return redirect(`/apply/${encodeURIComponent(slug)}?${query}`);
   }

@@ -73,6 +73,14 @@ export function SubmissionAdminDetailPanel({
           </p>
         </div>
         <div className="page-actions">
+          {submission.participantPreviewPersonId ? (
+            <Link
+              className="btn"
+              to={`/admin/speakers/${encodeURIComponent(submission.participantPreviewPersonId)}/preview`}
+            >
+              Preview participant view
+            </Link>
+          ) : null}
           {submission.status !== "draft" && submission.hasEvaluationPlan ? (
             <Link
               className="btn"

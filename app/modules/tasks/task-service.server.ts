@@ -60,6 +60,12 @@ export class TaskService {
     return this.participants.listParticipantTasks(...args);
   }
 
+  listParticipantTaskSnapshot(
+    ...args: Parameters<ParticipantTaskWorkflows["listParticipantTaskSnapshot"]>
+  ) {
+    return this.participants.listParticipantTaskSnapshot(...args);
+  }
+
   assertFileEvidenceUploadAllowed(
     ...args: Parameters<
       ParticipantTaskWorkflows["assertFileEvidenceUploadAllowed"]

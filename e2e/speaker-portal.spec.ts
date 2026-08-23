@@ -522,6 +522,21 @@ test("organiser speaker detail shows the event-scoped record for a seeded speake
     "accept",
     "image/jpeg,image/png,image/webp",
   );
+
+  await page.getByRole("link", { name: "Preview participant view" }).click();
+  await expect(page).toHaveURL(
+    /\/admin\/speakers\/person-demo-speaker\/preview$/u,
+  );
+  await expect(
+    page.getByRole("heading", { name: "Priya Shah", level: 1 }),
+  ).toBeVisible();
+  const preview = page.getByRole("region", {
+    name: "Participant workspace preview",
+  });
+  await expect(preview).toContainText("My sessions");
+  await expect(preview).toContainText("Designing inclusive event technology");
+  await expect(preview.locator("form")).toHaveCount(0);
+  await expect(preview.getByRole("button")).toHaveCount(0);
 });
 
 test("organiser speaker detail edits organisation and event fields without rewriting the canonical identity", async ({

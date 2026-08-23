@@ -120,25 +120,30 @@ export async function loader({ request, context, params }: Route.LoaderArgs) {
       ? noticeReceipt
       : null;
     const webhookWarning = applicationNotice?.webhookWarning ?? false;
+    const realtimeWarning = applicationNotice?.realtimeWarning ?? false;
     const notice = webhookWarning
       ? "Your change was saved, but the organisers' systems could not be notified. They can retry the notification from Operations."
-      : applicationNotice?.kind === "withdrawn"
-        ? "This application was withdrawn. Its submitted snapshot remains in the audit history."
-        : applicationNotice?.kind === "claimed"
-          ? "Co-speaker invitation claimed. You now own this speaker profile."
-          : applicationNotice?.kind === "profile_updated"
-            ? "Your speaker profile was updated."
-            : applicationNotice?.kind === "submission_blocked"
-              ? "Your latest changes were saved, but the draft was not submitted because a required form, routing or invitation setting changed. Review the current notice before trying again."
-              : applicationNotice?.kind === "submitted"
-                ? "Your application has been submitted."
-                : applicationNotice?.kind === "revised"
-                  ? "Your revised application has been submitted."
-                  : applicationNotice?.kind === "saved"
-                    ? "Your draft has been saved."
-                    : applicationNotice?.kind === "created"
-                      ? "Your private draft has been created."
-                      : "";
+      : realtimeWarning
+        ? "The application draft was permanently discarded, but other open views could not be updated automatically. Refresh them before continuing."
+        : applicationNotice?.kind === "withdrawn"
+          ? "This application was withdrawn. Its submitted snapshot remains in the audit history."
+          : applicationNotice?.kind === "discarded"
+            ? "The application draft was permanently discarded."
+            : applicationNotice?.kind === "claimed"
+              ? "Co-speaker invitation claimed. You now own this speaker profile."
+              : applicationNotice?.kind === "profile_updated"
+                ? "Your speaker profile was updated."
+                : applicationNotice?.kind === "submission_blocked"
+                  ? "Your latest changes were saved, but the draft was not submitted because a required form, routing or invitation setting changed. Review the current notice before trying again."
+                  : applicationNotice?.kind === "submitted"
+                    ? "Your application has been submitted."
+                    : applicationNotice?.kind === "revised"
+                      ? "Your revised application has been submitted."
+                      : applicationNotice?.kind === "saved"
+                        ? "Your draft has been saved."
+                        : applicationNotice?.kind === "created"
+                          ? "Your private draft has been created."
+                          : "";
     const participantWorkspaceHref = await compatibleParticipantWorkspaceHref(
       env,
       request,
@@ -165,7 +170,7 @@ export async function loader({ request, context, params }: Route.LoaderArgs) {
       evaluationApplicantContext,
       turnstileSiteKey,
       uploadTurnstileSiteKey,
-      noticeWarning: webhookWarning,
+      noticeWarning: webhookWarning || realtimeWarning,
       noticeKind: applicationNotice?.kind ?? null,
       participantWorkspaceHref,
       intentId: crypto.randomUUID(),
@@ -176,6 +181,10 @@ export async function loader({ request, context, params }: Route.LoaderArgs) {
           applicationNotice.kind,
         )
           ? portal.selected.id
+          : null,
+      discardedDraftRecoveryId:
+        applicationNotice?.kind === "discarded"
+          ? applicationNotice.submissionId
           : null,
       notice,
     };
@@ -219,6 +228,7 @@ export async function action({ request, context, params }: Route.ActionArgs) {
       "submit",
       "revise_submission",
       "withdraw",
+      "discard_draft",
       "update_profile",
     ].includes(intent)
   ) {
@@ -236,6 +246,7 @@ export async function action({ request, context, params }: Route.ActionArgs) {
       "submit",
       "revise_submission",
       "withdraw",
+      "discard_draft",
       "update_profile",
     ].includes(intent)
   ) {
@@ -266,9 +277,24 @@ export async function action({ request, context, params }: Route.ActionArgs) {
           )
         : null;
     const requestedSubmissionId = actionUrl.searchParams.get("draft");
+    const discardSubmissionId =
+      intent === "discard_draft"
+        ? String(formData.get("submissionId") ?? "")
+        : null;
+    const discardRevision =
+      intent === "discard_draft" ? Number(formData.get("revision")) : null;
     const form =
       claimedSignOutContext?.form ??
-      (await service.getApplicantAccessForm(slug, requestedSubmissionId));
+      (discardSubmissionId &&
+      discardRevision !== null &&
+      Number.isSafeInteger(discardRevision) &&
+      discardRevision > 0
+        ? await service.getDraftDiscardAccessForm(
+            slug,
+            discardSubmissionId,
+            discardRevision,
+          )
+        : await service.getApplicantAccessForm(slug, requestedSubmissionId));
     const publicIntentResponse = await handlePublicApplicationIntent({
       intent,
       formData,
@@ -282,7 +308,11 @@ export async function action({ request, context, params }: Route.ActionArgs) {
       claimedSpeakerId,
     });
     if (publicIntentResponse) return publicIntentResponse;
-    const applicant = await service.applicants.get(request, form);
+    const applicant = await service.applicants.get(request, form, {
+      ...(discardSubmissionId
+        ? { committedDiscardId: discardSubmissionId }
+        : {}),
+    });
     if (!applicant)
       throw new Response("Verify your email before changing an application.", {
         status: 401,

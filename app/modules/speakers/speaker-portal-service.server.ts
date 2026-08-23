@@ -40,6 +40,14 @@ export type SessionRow = {
   sessionDetailsReviewTaskId: string | null;
 };
 
+export type SessionParticipantRow = {
+  sessionId: string;
+  position: number;
+  name: string;
+  roleLabel: string | null;
+  participationStatus: "pending" | "confirmed";
+};
+
 export type FileRow = {
   id: string;
   kind: string;
@@ -95,10 +103,16 @@ export class SpeakerPortalService {
   async getPortal(viewer: Viewer) {
     await this.airtable.assertReadable(viewer);
     await this.assertParticipant(viewer);
-    const [profile, event, sessions, files, profileHistory] = await Promise.all(
-      [
-        this.env.DB.prepare(
-          `
+    const [
+      profile,
+      event,
+      sessions,
+      sessionParticipants,
+      files,
+      profileHistory,
+    ] = await Promise.all([
+      this.env.DB.prepare(
+        `
         SELECT id, email, display_name AS name, biography, pronunciation,
                organisation_name AS organisationName, job_title AS jobTitle,
                linkedin_url AS linkedinUrl, x_handle AS xHandle,
@@ -111,11 +125,11 @@ export class SpeakerPortalService {
            AND event_profile.person_id = person.id
          WHERE person.id = ?
       `,
-        )
-          .bind(viewer.eventId, viewer.organisationId, viewer.personId)
-          .first<ProfileRow>(),
-        this.env.DB.prepare(
-          `
+      )
+        .bind(viewer.eventId, viewer.organisationId, viewer.personId)
+        .first<ProfileRow>(),
+      this.env.DB.prepare(
+        `
         SELECT name, slug, timezone, starts_at AS startsAt, ends_at AS endsAt,
                revision,
                venue_name AS venue, city, brand_accent AS brandAccent,
@@ -128,25 +142,25 @@ export class SpeakerPortalService {
                file_policy_json AS filePolicyJson
           FROM events WHERE id = ? AND organisation_id = ?
       `,
-        )
-          .bind(viewer.eventId, viewer.organisationId)
-          .first<{
-            name: string;
-            slug: string;
-            timezone: string;
-            startsAt: number;
-            endsAt: number;
-            revision: number;
-            venue: string | null;
-            city: string | null;
-            brandAccent: string;
-            participantLogoUrl: string | null;
-            participantWelcomeText: string | null;
-            participantSupportUrl: string | null;
-            filePolicyJson: string;
-          }>(),
-        this.env.DB.prepare(
-          `
+      )
+        .bind(viewer.eventId, viewer.organisationId)
+        .first<{
+          name: string;
+          slug: string;
+          timezone: string;
+          startsAt: number;
+          endsAt: number;
+          revision: number;
+          venue: string | null;
+          city: string | null;
+          brandAccent: string;
+          participantLogoUrl: string | null;
+          participantWelcomeText: string | null;
+          participantSupportUrl: string | null;
+          filePolicyJson: string;
+        }>(),
+      this.env.DB.prepare(
+        `
         SELECT s.id, s.title, s.description, s.format, s.duration_minutes AS durationMinutes,
                s.status, ss.role_label AS roleLabel,
                track.name AS trackName,
@@ -183,11 +197,37 @@ export class SpeakerPortalService {
          WHERE ss.event_id = ? AND ss.person_id = ? AND s.status <> 'archived'
          ORDER BY se.starts_at IS NULL, se.starts_at, s.title
       `,
-        )
-          .bind(viewer.eventId, viewer.personId)
-          .all<SessionRow & { sessionDetailsReviewTaskCount: number }>(),
-        this.env.DB.prepare(
-          `
+      )
+        .bind(viewer.eventId, viewer.personId)
+        .all<SessionRow & { sessionDetailsReviewTaskCount: number }>(),
+      this.env.DB.prepare(
+        `
+        SELECT participant.session_id AS sessionId,
+               participant.position,
+               person.display_name AS name,
+               participant.role_label AS roleLabel,
+               participant.participation_status AS participationStatus
+          FROM session_speakers viewer_relationship
+          JOIN sessions session
+            ON session.id = viewer_relationship.session_id
+           AND session.event_id = viewer_relationship.event_id
+          JOIN session_speakers participant
+            ON participant.session_id = viewer_relationship.session_id
+           AND participant.event_id = viewer_relationship.event_id
+           AND participant.person_id <> viewer_relationship.person_id
+          JOIN people person ON person.id = participant.person_id
+         WHERE viewer_relationship.event_id = ?
+           AND viewer_relationship.person_id = ?
+           AND viewer_relationship.participation_status IN ('pending','confirmed')
+           AND participant.participation_status IN ('pending','confirmed')
+           AND session.status <> 'archived'
+         ORDER BY participant.session_id, participant.position, person.display_name
+      `,
+      )
+        .bind(viewer.eventId, viewer.personId)
+        .all<SessionParticipantRow>(),
+      this.env.DB.prepare(
+        `
         SELECT fa.id, fa.asset_kind AS kind,
                fa.target_type AS targetType, fa.target_id AS targetId,
                fa.status,
@@ -324,30 +364,29 @@ export class SpeakerPortalService {
            )
          ORDER BY fa.updated_at DESC
       `,
+      )
+        .bind(
+          viewer.personId,
+          viewer.personId,
+          viewer.personId,
+          viewer.personId,
+          viewer.eventId,
+          viewer.personId,
+          viewer.personId,
+          viewer.personId,
         )
-          .bind(
-            viewer.personId,
-            viewer.personId,
-            viewer.personId,
-            viewer.personId,
-            viewer.eventId,
-            viewer.personId,
-            viewer.personId,
-            viewer.personId,
-          )
-          .all<
-            FileRow & {
-              assetCurrentVersionId: string | null;
-              resolvedCurrentVersionId: string | null;
-            }
-          >(),
-        readSpeakerProfileHistory(this.env, {
-          organisationId: viewer.organisationId,
-          eventId: viewer.eventId,
-          personId: viewer.personId,
-        }),
-      ],
-    );
+        .all<
+          FileRow & {
+            assetCurrentVersionId: string | null;
+            resolvedCurrentVersionId: string | null;
+          }
+        >(),
+      readSpeakerProfileHistory(this.env, {
+        organisationId: viewer.organisationId,
+        eventId: viewer.eventId,
+        personId: viewer.personId,
+      }),
+    ]);
     if (!profile || !event)
       throw new Response("Speaker workspace not found.", { status: 404 });
     const duplicateSessionReview = sessions.results.find(
@@ -501,7 +540,12 @@ export class SpeakerPortalService {
         filePolicy: parseEventFilePolicy(filePolicyJson),
       },
       sessions: sessions.results.map(
-        ({ sessionDetailsReviewTaskCount: _taskCount, ...session }) => session,
+        ({ sessionDetailsReviewTaskCount: _taskCount, ...session }) => ({
+          ...session,
+          participants: sessionParticipants.results.filter(
+            (participant) => participant.sessionId === session.id,
+          ),
+        }),
       ),
       files: files.results.map(
         ({

@@ -27,6 +27,11 @@ export class ParticipantTaskQueries extends ParticipantTaskWorkflowFoundation {
     return this.listParticipantTasksD1(viewer);
   }
 
+  async listParticipantTaskSnapshot(viewer: Viewer) {
+    await this.airtable.assertReadable(viewer);
+    return this.listParticipantTasksD1(viewer);
+  }
+
   protected async listParticipantTasksD1(viewer: Viewer) {
     const tasks = await this.env.DB.prepare(
       `

@@ -930,6 +930,119 @@ export class SubmissionFormRepository {
     };
   }
 
+  async getDraftDiscardApplicationForm(
+    publicSlug: string,
+    submissionId: string,
+    expectedRevision: number,
+  ): Promise<(FormSummary & { version: FormVersion }) | null> {
+    const form = await this.env.DB.prepare(
+      `WITH discard_target AS (
+         SELECT submission.event_id AS eventId,
+                version.form_id AS formId,
+                submission.form_version_id AS formVersionId,
+                0 AS sourcePriority
+           FROM submissions submission
+           JOIN form_versions version
+             ON version.id = submission.form_version_id
+            AND version.event_id = submission.event_id
+          WHERE submission.id = ? AND submission.status = 'draft'
+            AND submission.revision = ?
+         UNION ALL
+         SELECT audit.event_id AS eventId,
+                json_extract(audit.metadata_json, '$.formId') AS formId,
+                json_extract(audit.metadata_json, '$.formVersionId') AS formVersionId,
+                1 AS sourcePriority
+           FROM audit_events audit
+          WHERE audit.id = ? AND audit.action = 'submission.draft.discarded'
+            AND audit.entity_type = 'submission' AND audit.entity_id = ?
+            AND audit.origin = 'public_form' AND audit.metadata_version = 1
+            AND json_valid(audit.metadata_json)
+            AND json_extract(audit.metadata_json, '$.revision') = ?
+       )
+       SELECT f.id, f.revision, f.event_id AS eventId, e.name AS eventName,
+              e.slug AS eventSlug, e.timezone AS eventTimezone,
+              e.allow_anonymous_drafts AS allowAnonymousDrafts,
+              e.starts_at AS eventStartsAt, e.ends_at AS eventEndsAt,
+              e.venue_name AS eventVenue, e.city AS eventCity,
+              e.description AS eventDescription,
+              e.brand_accent AS brandAccent,
+              CASE WHEN e.brand_logo_asset_id IS NOT NULL
+                THEN '/public/brand/' || e.slug || '/logo'
+                ELSE e.participant_logo_url
+              END AS participantLogoUrl,
+              e.participant_welcome_text AS participantWelcomeText,
+              e.participant_support_url AS participantSupportUrl,
+              e.file_policy_json AS filePolicyJson,
+              f.name, f.kind, f.status, f.public_slug AS publicSlug,
+              f.closes_at AS closesAt, f.submission_limit AS submissionLimit,
+              f.min_speakers AS minSpeakers, f.max_speakers AS maxSpeakers,
+              f.access_mode AS accessMode,
+              f.access_password_hash AS accessPasswordHash,
+              (SELECT COUNT(*) FROM submissions submitted
+                JOIN form_versions submitted_version
+                  ON submitted_version.id = submitted.form_version_id
+                 AND submitted_version.event_id = submitted.event_id
+               WHERE submitted_version.form_id = f.id
+                 AND submitted.status <> 'draft') AS submittedCount,
+              version.id AS versionId, version.revision AS versionRevision,
+              version.version_number AS versionNumber,
+              version.schema_json AS schemaJson,
+              version.routing_json AS routingJson,
+              version.settings_snapshot_json AS settingsSnapshotJson,
+              version.status AS versionStatus,
+              version.published_at AS publishedAt
+         FROM discard_target target
+         JOIN form_definitions f
+           ON f.id = target.formId AND f.event_id = target.eventId
+         JOIN form_versions version
+           ON version.id = target.formVersionId
+          AND version.form_id = f.id AND version.event_id = f.event_id
+         JOIN events e ON e.id = f.event_id AND e.activation_status = 'active'
+        WHERE f.public_slug = ?
+        ORDER BY target.sourcePriority
+        LIMIT 1`,
+    )
+      .bind(
+        submissionId,
+        expectedRevision,
+        `submission-draft-discarded:${submissionId}`,
+        submissionId,
+        expectedRevision,
+        publicSlug,
+      )
+      .first<
+        FormRow & {
+          versionId: string;
+          versionRevision: number;
+          versionNumber: number;
+          schemaJson: string;
+          routingJson: string;
+          settingsSnapshotJson: string;
+          versionStatus: FormVersion["status"];
+          publishedAt: number | null;
+        }
+      >();
+    if (!form) return null;
+    const version = mapVersion({
+      id: form.versionId,
+      revision: form.versionRevision,
+      versionNumber: form.versionNumber,
+      schemaJson: form.schemaJson,
+      routingJson: form.routingJson,
+      settingsSnapshotJson: form.settingsSnapshotJson,
+      status: form.versionStatus,
+      publishedAt: form.publishedAt,
+    });
+    const summary = mapForm(form);
+    return {
+      ...summary,
+      ...version.settings,
+      publicSlug: summary.publicSlug,
+      accessPasswordHash: version.routing.passwordHash,
+      version,
+    };
+  }
+
   async getCoSpeakerClaimForm(
     publicSlug: string,
     speakerId: string,

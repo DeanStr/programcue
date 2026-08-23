@@ -2,6 +2,7 @@ import { GitBranch, Plus } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Form } from "react-router";
 
+import { AdminTaskFormFieldBuilder } from "~/components/admin-task-form-field-builder";
 import { CharacterCount } from "~/components/ui/character-count";
 import {
   normalizeTaskTemplateDraft,
@@ -64,6 +65,7 @@ export function AdminTaskPlanPanel({
     destinationUrl,
     fileScope,
     fileKind,
+    formFields,
     description,
   } = templateDraft;
   const compatibleEvidenceModes =
@@ -313,7 +315,7 @@ export function AdminTaskPlanPanel({
                 </select>
               </label>
               <label className="label">
-                Type
+                Task type
                 <select
                   className="select"
                   name="taskType"
@@ -331,6 +333,9 @@ export function AdminTaskPlanPanel({
                     if (next !== "file_upload") {
                       updateTemplateDraft("fileScope", "");
                       updateTemplateDraft("fileKind", "");
+                    }
+                    if (next !== "short_form") {
+                      updateTemplateDraft("formFields", []);
                     }
                   }}
                 >
@@ -461,6 +466,23 @@ export function AdminTaskPlanPanel({
                 <input type="hidden" name="fileScope" value="" />
                 <input type="hidden" name="fileKind" value="" />
               </>
+            )}
+            {taskType === "short_form" ? (
+              <>
+                <AdminTaskFormFieldBuilder
+                  fields={formFields}
+                  onChange={(fields) =>
+                    updateTemplateDraft("formFields", fields)
+                  }
+                />
+                <input
+                  name="formFieldsJson"
+                  type="hidden"
+                  value={JSON.stringify(formFields)}
+                />
+              </>
+            ) : (
+              <input name="formFieldsJson" type="hidden" value="[]" />
             )}
             <div className="form-row">
               <label className="label">

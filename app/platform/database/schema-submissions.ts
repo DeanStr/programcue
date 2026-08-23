@@ -171,6 +171,33 @@ export const submissions = sqliteTable(
   ],
 );
 
+export const submissionDraftDiscards = sqliteTable(
+  "submission_draft_discards",
+  {
+    submissionId: text("submission_id").primaryKey(),
+    eventId: text("event_id").notNull(),
+    expectedRevision: integer("expected_revision").notNull(),
+    requestedByPersonId: text("requested_by_person_id").references(
+      () => people.id,
+    ),
+    operationId: text("operation_id").notNull(),
+    createdAt: integer("created_at").notNull().default(epochNow),
+  },
+  (table) => [
+    check(
+      "submission_draft_discards_revision_check",
+      sql`${table.expectedRevision} > 0`,
+    ),
+    uniqueIndex("submission_draft_discards_operation_unique").on(
+      table.operationId,
+    ),
+    foreignKey({
+      columns: [table.submissionId, table.eventId],
+      foreignColumns: [submissions.id, submissions.eventId],
+    }).onDelete("cascade"),
+  ],
+);
+
 export const submissionRevisions = sqliteTable(
   "submission_revisions",
   {

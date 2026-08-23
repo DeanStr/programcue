@@ -70,6 +70,28 @@ test("task dashboard filters visible work and keeps template creation open", asy
   await expect(
     templateCreation.getByRole("button", { name: "Create template" }),
   ).toBeVisible();
+  await templateCreation.getByLabel("Task type").selectOption("short_form");
+  await expect(
+    templateCreation.getByText("Add at least one question"),
+  ).toBeVisible();
+  await templateCreation.getByRole("button", { name: "Add question" }).click();
+  await templateCreation
+    .getByLabel("Question label")
+    .fill("Accessibility requirements");
+  await templateCreation.getByLabel("Answer type").selectOption("select");
+  const options = templateCreation.getByLabel("Options");
+  await options.pressSequentially("Standard support");
+  await options.press("Enter");
+  await options.pressSequentially("Premium support");
+  await options.press("Enter");
+  await options.pressSequentially("Not required");
+  await expect(options).toHaveValue(
+    "Standard support\nPremium support\nNot required",
+  );
+  await templateCreation.getByLabel("Answer type").selectOption("long_text");
+  await expect(
+    templateCreation.getByText("Question 1", { exact: true }),
+  ).toBeVisible();
 
   const handbookTask = assignedWork.getByRole("row").filter({
     has: page.getByText("Read the speaker handbook", { exact: true }),

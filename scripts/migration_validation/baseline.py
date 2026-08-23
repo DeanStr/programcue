@@ -13,7 +13,7 @@ def validate_baseline(connection: sqlite3.Connection, schema_source: str) -> Non
         "organisations", "people", "organisation_ai_settings", "events", "event_participant_profiles", "memberships",
         "organisation_contacts", "organisation_contact_profiles", "organisation_contact_tags", "organisation_contact_notes",
         "crm_segments", "crm_pipeline_entries", "crm_pipeline_activity",
-        "form_definitions", "form_versions", "submissions", "submission_revisions",
+        "form_definitions", "form_versions", "submissions", "submission_draft_discards", "submission_revisions",
         "submission_track_selections", "submission_routing_teams",
         "submission_email_verifications", "submission_speakers",
         "evaluation_plans", "evaluation_teams", "evaluation_team_members", "evaluation_rounds",
@@ -72,6 +72,7 @@ def validate_baseline(connection: sqlite3.Connection, schema_source: str) -> Non
         "crm_pipeline_activity": {"organisation_id", "pipeline_entry_id", "kind", "from_stage", "to_stage"},
         "form_versions": {"event_id", "schema_json", "routing_json", "settings_snapshot_json", "revision"},
         "submissions": {"submitted_snapshot_json", "revision", "last_operation_id"},
+        "submission_draft_discards": {"submission_id", "event_id", "expected_revision", "requested_by_person_id", "operation_id", "created_at"},
         "submission_track_selections": {"submission_id", "event_id", "track_id", "track_name_snapshot", "position"},
         "submission_routing_teams": {"submission_id", "event_id", "team_id"},
         "submission_decisions": {"notification_feedback_json", "effect_preview_json"},
@@ -544,6 +545,11 @@ def validate_baseline(connection: sqlite3.Connection, schema_source: str) -> Non
         "reviewer_ai_suggestions_dismiss_requires_unreferenced",
         "review_revisions_ai_suggestion_provenance_insert",
         "review_revisions_ai_suggestion_provenance_update",
+        "submissions_draft_discard_lock_update",
+        "submission_speakers_draft_discard_lock_insert",
+        "submission_speakers_draft_discard_lock_update",
+        "file_assets_draft_discard_lock_insert",
+        "file_versions_draft_discard_lock_insert",
     }
     if required_triggers - triggers:
         raise SystemExit(f"Migration triggers are missing: {sorted(required_triggers - triggers)}")

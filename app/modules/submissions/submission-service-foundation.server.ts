@@ -97,6 +97,11 @@ export const withdrawSubmissionSchema = z.object({
   revision: z.coerce.number().int().positive(),
 });
 
+export const discardDraftSchema = z.object({
+  submissionId: z.string().min(1).max(100),
+  revision: z.coerce.number().int().positive(),
+});
+
 export function slugify(value: string) {
   return (
     value
@@ -246,6 +251,29 @@ export class SubmissionServiceFoundation {
       await this.publicScope(form.eventId),
     );
     return freshness === null ? form : readHistoricalForm();
+  }
+
+  async getDraftDiscardAccessForm(
+    publicSlug: string,
+    submissionId: string,
+    expectedRevision: number,
+  ) {
+    const readDraftDiscardForm = async () => {
+      const form = await this.repository.getDraftDiscardApplicationForm(
+        publicSlug,
+        submissionId,
+        expectedRevision,
+      );
+      if (!form) {
+        throw new Response("Application form not found", { status: 404 });
+      }
+      return form;
+    };
+    const form = await readDraftDiscardForm();
+    const freshness = await this.airtable.assertReadable(
+      await this.publicScope(form.eventId),
+    );
+    return freshness === null ? form : readDraftDiscardForm();
   }
 
   protected applicationRevisionAvailability(

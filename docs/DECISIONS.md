@@ -339,6 +339,39 @@ API task creation repeats target and owner eligibility in the atomic insert;
 when participation changes after preflight, the batch rolls back its task and
 idempotency claim and reports a conflict instead of committing orphan work.
 
+Participant collaboration and organiser support remain bounded rather than
+becoming a configurable portal system. A participant's session view may name
+other pending or confirmed participants on that same session and show their
+role and response state. It never exposes their email address, private decline
+reason or a declined relationship. Organisers may open a read-only participant
+workspace preview assembled from the same participant-authorised portal,
+application, task and resource projections. That preview does not impersonate
+the participant, create a participant session or expose mutation/download
+controls; the organiser remains visibly signed in under ordinary administrator
+authority.
+
+Organisers may author bounded structured questions for `short_form` task
+templates using the existing typed task-form schema. Answers remain task
+evidence and do not silently update participant profiles or session records.
+This is deliberately not a second general form builder, portal-policy layer or
+field-binding system.
+
+An applicant may permanently discard only an owned, unsubmitted draft at its
+exact revision. D1 persists that exact-revision discard intent and blocks
+concurrent draft, co-speaker and new-upload mutations before any private native
+upload is revoked or erased. The final D1 deletion requires that same durable
+intent and succeeds only after every private version is erased; an anonymous
+uploaded draft must first be transferred to a verified identity so file erasure
+has an attributable owner. Browser recovery is retained until the server
+confirms deletion, then cleared from the committed response rather than before
+the request. Response-loss retries replay only the exact scoped discard audit
+fact, including applicant identity, form and revision. The accepted
+submitter membership is removed only when its `last_operation_id` proves that
+a draft-creation fact granted it and no other owned application still needs it.
+The submitted lifecycle remains withdrawal with immutable history, not
+deletion. Draft discard preserves one redacted append-only audit fact and emits
+no invented webhook event.
+
 External active-participation consumers fail closed consistently. Accelevents
 exports only confirmed speaker relationships. Calendar administration offers a
 new request only for confirmed participation but retains an existing invitation

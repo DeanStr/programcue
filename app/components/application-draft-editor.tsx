@@ -428,7 +428,12 @@ export function DraftEditor({
           ? submitter.value
           : null
         : null;
-    if (intent === "save_draft" || intent === "withdraw") return;
+    if (
+      intent === "save_draft" ||
+      intent === "withdraw" ||
+      intent === "discard_draft"
+    )
+      return;
     event.preventDefault();
     if (ignoreNextImplicitContinue.current) {
       ignoreNextImplicitContinue.current = false;

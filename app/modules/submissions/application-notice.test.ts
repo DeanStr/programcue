@@ -29,6 +29,7 @@ describe("application action notices", () => {
     ).resolves.toMatchObject({
       kind: "submitted",
       submissionId: "submission-1",
+      realtimeWarning: false,
     });
     await expect(
       verifyApplicationNotice(env, token, "another-form", 1_100),

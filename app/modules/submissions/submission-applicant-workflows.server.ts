@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { requireValue } from "~/lib/required-value";
+import { FileService } from "~/modules/files/file-service.server";
 import type { PublicForm } from "./applicant-session.server";
 import { routeEvaluationCoSpeakerEmails } from "./evaluation-co-speaker-email-routing.server";
 import { SubmissionApplicantEventService } from "./submission-applicant-events.server";
@@ -20,6 +21,7 @@ import {
   type ApplicantVideoUploadRow,
   answerValidationError,
   applicantFormView,
+  discardDraftSchema,
   intentBoundDraftId,
   PublicFormUnavailableError,
   SubmissionServiceFoundation,
@@ -549,6 +551,106 @@ export class SubmissionApplicantWorkflows extends SubmissionServiceFoundation {
       { publicSlug, applicant, rawPayload },
       () => this.submitDraftD1(currentForm, applicant, rawPayload),
     );
+  }
+
+  async discardDraft(
+    publicSlug: string,
+    applicant: Applicant,
+    rawInput: unknown,
+  ) {
+    this.assertApplicationManagementAccess(applicant);
+    const input = discardDraftSchema.parse(rawInput);
+    const currentForm = await this.getDraftDiscardAccessForm(
+      publicSlug,
+      input.submissionId,
+      input.revision,
+    );
+    const scope = await this.publicScope(currentForm.eventId);
+    const findReplay = () =>
+      this.repository.findDraftDiscardReplay(
+        currentForm,
+        applicant,
+        input.submissionId,
+        input.revision,
+        scope.organisationId,
+      );
+    const replay = await findReplay();
+    if (replay) return replay;
+    try {
+      const form = await this.repository.getApplicantDraftForm(
+        currentForm,
+        applicant,
+        input.submissionId,
+      );
+      return await this.projectCommand(
+        { ...scope, personId: applicant.personId },
+        "submission.draft.discard",
+        { publicSlug, input },
+        async () => {
+          const lock = await this.repository.beginDraftDiscard(
+            form,
+            applicant,
+            input.submissionId,
+            input.revision,
+            crypto.randomUUID(),
+          );
+          const assets = await this.repository.getDraftFileAssets(
+            form,
+            applicant,
+            input.submissionId,
+            input.revision,
+            lock.operationId,
+          );
+          const pendingAssets = assets.filter((asset) => asset.requiresErasure);
+          if (applicant.verified) {
+            const fileService = new FileService(this.env);
+            for (const asset of pendingAssets) {
+              try {
+                await fileService.eraseAsset(
+                  {
+                    personId: applicant.personId,
+                    name: applicant.name,
+                    email: applicant.email,
+                    role: "submitter",
+                    organisationId: scope.organisationId,
+                    eventId: form.eventId,
+                    demo: false,
+                    evaluation: applicant.evaluation,
+                  },
+                  {
+                    assetId: asset.id,
+                    confirmed: true,
+                    reason: "application_draft_discarded",
+                  },
+                );
+              } catch (error) {
+                throw new SubmissionStateError(
+                  error instanceof Error
+                    ? error.message
+                    : "The draft upload could not be erased. Retry the discard.",
+                );
+              }
+            }
+          }
+          return this.repository.completeDraftDiscard(
+            form,
+            applicant,
+            input.submissionId,
+            input.revision,
+            {
+              organisationId: scope.organisationId,
+              operationId: lock.operationId,
+            },
+          );
+        },
+      );
+    } catch (error) {
+      if (error instanceof Response && error.status === 404) {
+        const committed = await findReplay();
+        if (committed) return committed;
+      }
+      throw error;
+    }
   }
 
   async submitDraftForParticipantApi(

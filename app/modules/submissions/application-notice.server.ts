@@ -9,6 +9,7 @@ export const applicationNoticeKindSchema = z.enum([
   "submitted",
   "revised",
   "withdrawn",
+  "discarded",
   "claimed",
   "profile_updated",
   "submission_blocked",
@@ -20,10 +21,17 @@ const applicationNoticePayloadSchema = z.object({
   kind: applicationNoticeKindSchema,
   submissionId: z.string().min(1).max(160).nullable(),
   webhookWarning: z.boolean(),
+  realtimeWarning: z.boolean(),
   expiresAt: z.number().int().positive(),
 });
 
 export type ApplicationNotice = z.infer<typeof applicationNoticePayloadSchema>;
+export type ApplicationNoticeInput = Omit<
+  ApplicationNotice,
+  "version" | "expiresAt" | "realtimeWarning"
+> & {
+  realtimeWarning?: boolean;
+};
 
 export class ApplicationNoticeConfigurationError extends Error {
   constructor() {
@@ -81,12 +89,13 @@ async function hmacKey(secret: string, usage: KeyUsage[]) {
 
 export async function createApplicationNotice(
   env: CloudflareEnvironment,
-  input: Omit<ApplicationNotice, "version" | "expiresAt">,
+  input: ApplicationNoticeInput,
   nowSeconds = Math.floor(Date.now() / 1_000),
 ) {
   const payload = applicationNoticePayloadSchema.parse({
     version: 1,
     ...input,
+    realtimeWarning: input.realtimeWarning ?? false,
     expiresAt: nowSeconds + NOTICE_LIFETIME_SECONDS,
   });
   const encoded = encodeBase64Url(

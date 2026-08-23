@@ -6,6 +6,7 @@ import { ensureDemoSpeakerData } from "~/modules/speakers/demo.server";
 import {
   normalizeTaskTemplateDraft,
   type TaskTemplateDraftValues,
+  taskFormFieldsJsonSchema,
 } from "~/modules/tasks/task-schema";
 import {
   TaskService,
@@ -168,6 +169,12 @@ export async function action({ request, context }: Route.ActionArgs) {
   const form = await request.formData();
   const intent = String(form.get("intent") ?? "");
   const service = new TaskService(env);
+  const formFieldsJson = String(form.get("formFieldsJson") ?? "[]");
+  const structuredFormRequired =
+    intent === "create-template" && form.get("taskType") === "short_form";
+  const formFieldsDraft = structuredFormRequired
+    ? taskFormFieldsJsonSchema.safeParse(formFieldsJson)
+    : { success: true as const, data: [] };
   const taskTemplateInput =
     intent === "create-template"
       ? {
@@ -183,6 +190,7 @@ export async function action({ request, context }: Route.ActionArgs) {
           destinationUrl: form.get("destinationUrl"),
           fileScope: form.get("fileScope"),
           fileKind: form.get("fileKind"),
+          formFields: formFieldsDraft.success ? formFieldsDraft.data : [],
           autoAssignOnAcceptance: form.get("autoAssignOnAcceptance") === "true",
           dependencyIds: form.getAll("dependencyIds").map(String),
         }
@@ -191,6 +199,9 @@ export async function action({ request, context }: Route.ActionArgs) {
     taskTemplateInput
       ? normalizeTaskTemplateDraft(taskTemplateInput)
       : undefined;
+  const retainedTaskTemplateDraft = formFieldsDraft.success
+    ? taskTemplateDraft
+    : undefined;
   try {
     if (intent === "create-travel-onboarding") {
       const templates = await service.createTravelOnboardingTemplates(
@@ -249,35 +260,52 @@ export async function action({ request, context }: Route.ActionArgs) {
       if (!draft || !taskTemplateInput) {
         throw new Error("The task template draft is unavailable.");
       }
+      const structuredFields =
+        taskTemplateInput.taskType === "short_form"
+          ? taskFormFieldsJsonSchema.parse(formFieldsJson)
+          : null;
+      const templateInput = {
+        name: taskTemplateInput.name,
+        description: taskTemplateInput.description,
+        targetType: taskTemplateInput.targetType,
+        taskType: taskTemplateInput.taskType,
+        impact: taskTemplateInput.impact,
+        evidenceMode: taskTemplateInput.evidenceMode,
+        dueAnchor: taskTemplateInput.dueAnchor,
+        dueOffsetDays:
+          taskTemplateInput.dueOffsetDays === "" ||
+          taskTemplateInput.dueOffsetDays === null
+            ? null
+            : taskTemplateInput.dueOffsetDays,
+        fixedDueDate:
+          taskTemplateInput.fixedDueDate === "" ||
+          taskTemplateInput.fixedDueDate === null
+            ? null
+            : taskTemplateInput.fixedDueDate,
+        autoAssignOnAcceptance: taskTemplateInput.autoAssignOnAcceptance,
+        dependencyIds: taskTemplateInput.dependencyIds,
+      };
       const templateId = await service.createTemplate(
         viewer,
         {
-          ...taskTemplateInput,
-          dueOffsetDays:
-            taskTemplateInput.dueOffsetDays === "" ||
-            taskTemplateInput.dueOffsetDays === null
-              ? null
-              : taskTemplateInput.dueOffsetDays,
-          fixedDueDate:
-            taskTemplateInput.fixedDueDate === "" ||
-            taskTemplateInput.fixedDueDate === null
-              ? null
-              : taskTemplateInput.fixedDueDate,
+          ...templateInput,
           configuration:
-            taskTemplateInput.taskType === "link_visit"
-              ? {
-                  destinationUrl: String(
-                    taskTemplateInput.destinationUrl ?? "",
-                  ),
-                }
-              : taskTemplateInput.taskType === "file_upload"
+            taskTemplateInput.taskType === "short_form"
+              ? { form: { fields: structuredFields ?? [] } }
+              : taskTemplateInput.taskType === "link_visit"
                 ? {
-                    fileScope: taskTemplateInput.fileScope,
-                    ...(taskTemplateInput.fileKind
-                      ? { fileKind: taskTemplateInput.fileKind }
-                      : {}),
+                    destinationUrl: String(
+                      taskTemplateInput.destinationUrl ?? "",
+                    ),
                   }
-                : {},
+                : taskTemplateInput.taskType === "file_upload"
+                  ? {
+                      fileScope: taskTemplateInput.fileScope,
+                      ...(taskTemplateInput.fileKind
+                        ? { fileKind: taskTemplateInput.fileKind }
+                        : {}),
+                    }
+                  : {},
         },
         String(form.get("intentId") ?? ""),
       );
@@ -445,7 +473,7 @@ export async function action({ request, context }: Route.ActionArgs) {
         {
           ok: false,
           message: error.issues[0]?.message ?? "Review the task details.",
-          draft: taskTemplateDraft,
+          draft: retainedTaskTemplateDraft,
           errors: Object.entries(error.flatten().fieldErrors).reduce(
             (fieldErrors, [key, value]) => {
               if (Array.isArray(value)) fieldErrors[key] = value.map(String);
@@ -459,7 +487,7 @@ export async function action({ request, context }: Route.ActionArgs) {
     }
     if (error instanceof TaskStateError) {
       return data(
-        { ok: false, message: error.message, draft: taskTemplateDraft },
+        { ok: false, message: error.message, draft: retainedTaskTemplateDraft },
         { status: 409 },
       );
     }

@@ -169,6 +169,10 @@ export default [
     route("admin/speakers", "routes/admin-speakers.tsx"),
     route("admin/people/search", "routes/admin-person-search.ts"),
     route(
+      "admin/speakers/:personId/preview",
+      "routes/admin-participant-preview.tsx",
+    ),
+    route(
       "admin/speakers/:personId/files/:assetId",
       "routes/admin-speaker-file-download.ts",
     ),

@@ -53,7 +53,7 @@ export async function installApplicationTurnstileMock(page: Page) {
       body: withMockSiteKey(await response.text()),
     });
   });
-  await page.route("**/apply/form.data", async (route) => {
+  await page.route("**/apply/form.data*", async (route) => {
     if (route.request().method() !== "GET") {
       await route.continue();
       return;

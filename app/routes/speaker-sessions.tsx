@@ -186,6 +186,25 @@ export default function SpeakerSessions(_props: Route.ComponentProps) {
                           {session.durationMinutes} min
                         </span>
                       </p>
+                      {session.participants.length ? (
+                        <div className="speaker-session-participants">
+                          <strong>Other session participants</strong>
+                          <ul>
+                            {session.participants.map((participant) => (
+                              <li key={`${session.id}:${participant.position}`}>
+                                <span>{participant.name}</span>
+                                <small>
+                                  {participant.roleLabel ?? "Speaker"} ·{" "}
+                                  {participant.participationStatus ===
+                                  "confirmed"
+                                    ? "Confirmed"
+                                    : "Awaiting response"}
+                                </small>
+                              </li>
+                            ))}
+                          </ul>
+                        </div>
+                      ) : null}
                     </div>
                     <div className="speaker-session-measure">
                       <span

@@ -184,6 +184,7 @@ export const DEMO_RESET_EVENT_TABLES = [
   "event_ai_review_settings",
   "evaluator_assignments",
   "evaluator_conflicts",
+  "submission_draft_discards",
   "submission_speakers",
   "submission_email_verifications",
   "submission_revisions",

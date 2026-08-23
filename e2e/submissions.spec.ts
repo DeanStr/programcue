@@ -1,5 +1,5 @@
 import { expect, type Locator, type Page, test } from "@playwright/test";
-
+import { acceptConfirm } from "./support/confirm-dialog";
 import {
   applicationTurnstileAppearances,
   completeApplicationTurnstile,
@@ -465,6 +465,148 @@ test.describe
       ).toBeEnabled();
     });
 
+    test("applicant can permanently discard an unsubmitted draft", async ({
+      page,
+    }) => {
+      await installApplicationTurnstileMock(page);
+      await page.goto("/apply/form");
+      await page.getByRole("link", { name: "Continue to application" }).click();
+      await waitForApplicationTurnstileActions(page, [
+        "application_start_anonymous",
+      ]);
+      await completeApplicationTurnstile(
+        page,
+        "application_start_anonymous",
+        "discard-draft-token",
+      );
+      await page.getByRole("button", { name: "Start application" }).click();
+      await expect(
+        page
+          .locator("#submitted-application")
+          .getByRole("heading", { name: "Untitled application", level: 1 }),
+      ).toBeVisible();
+      await page
+        .getByLabel("Session title")
+        .fill("Private browser recovery to discard");
+      await expect(
+        page.getByText("Saved locally", { exact: true }),
+      ).toBeVisible();
+      await expect
+        .poll(() =>
+          page.evaluate(async () => {
+            return new Promise<number>((resolve, reject) => {
+              const request = indexedDB.open("program-cue-draft-recovery", 2);
+              request.onerror = () => reject(request.error);
+              request.onsuccess = () => {
+                const database = request.result;
+                const transaction = database.transaction(
+                  "snapshots",
+                  "readonly",
+                );
+                const count = transaction.objectStore("snapshots").count();
+                count.onsuccess = () => resolve(count.result);
+                count.onerror = () => reject(count.error);
+                transaction.oncomplete = () => database.close();
+              };
+            });
+          }),
+        )
+        .toBeGreaterThan(0);
+
+      await waitForApplicationTurnstileActions(page, [
+        "application_request_code",
+      ]);
+      await completeApplicationTurnstile(
+        page,
+        "application_request_code",
+        "discard-request-token",
+      );
+      const email = `discard-draft-${Date.now()}@example.com`;
+      await page.getByLabel("Email address").fill(email);
+      await page
+        .getByRole("button", { name: "Send verification code" })
+        .click();
+      await waitForApplicationTurnstileActions(page, [
+        "application_verify_code",
+      ]);
+      await completeApplicationTurnstile(
+        page,
+        "application_verify_code",
+        "discard-verify-token",
+      );
+      await page.getByLabel("Six-digit code").fill("424242");
+      await page.getByRole("button", { name: "Verify email" }).click();
+      await expect(
+        page.getByRole("button", { name: `Sign out ${email}` }),
+      ).toBeVisible();
+      await page
+        .getByLabel("Session title")
+        .fill("Verified browser recovery to discard");
+      await expect
+        .poll(() =>
+          page.evaluate(async () => {
+            return new Promise<number>((resolve, reject) => {
+              const request = indexedDB.open("program-cue-draft-recovery", 2);
+              request.onerror = () => reject(request.error);
+              request.onsuccess = () => {
+                const database = request.result;
+                const transaction = database.transaction(
+                  "snapshots",
+                  "readonly",
+                );
+                const count = transaction.objectStore("snapshots").count();
+                count.onsuccess = () => resolve(count.result);
+                count.onerror = () => reject(count.error);
+                transaction.oncomplete = () => database.close();
+              };
+            });
+          }),
+        )
+        .toBe(2);
+
+      const discard = page.locator("details").filter({
+        has: page.getByText("Discard draft", { exact: true }),
+      });
+      await discard.locator("summary").click();
+      await expect(discard.locator('input[name="confirmDiscard"]')).toHaveValue(
+        "no",
+      );
+      await discard.getByRole("button", { name: "Discard draft" }).click();
+      await acceptConfirm(page);
+
+      await expect(
+        page.getByRole("status").filter({
+          hasText: "The application draft was permanently discarded.",
+        }),
+      ).toBeVisible();
+      await expect(
+        page
+          .locator("#submitted-application")
+          .getByRole("heading", { name: "Untitled application", level: 1 }),
+      ).toHaveCount(0);
+      await expect
+        .poll(() =>
+          page.evaluate(async () => {
+            return new Promise<number>((resolve, reject) => {
+              const request = indexedDB.open("program-cue-draft-recovery", 2);
+              request.onerror = () => reject(request.error);
+              request.onsuccess = () => {
+                const database = request.result;
+                const transaction = database.transaction(
+                  "snapshots",
+                  "readonly",
+                );
+                const count = transaction.objectStore("snapshots").count();
+                count.onsuccess = () => resolve(count.result);
+                count.onerror = () => reject(count.error);
+                transaction.oncomplete = () => database.close();
+              };
+            });
+          }),
+        )
+        .toBe(0);
+    });
+
     test("applicant verifies email, saves a multi-speaker draft, submits it and appears in the admin queue", async ({
       browser,
       page,
@@ -700,6 +842,9 @@ test.describe
       await expect(
         page.getByRole("link", { name: "View activity" }),
       ).toHaveAttribute("href", /panel=activity&activityQuery=/);
+      await expect(
+        page.getByRole("link", { name: "Preview participant view" }),
+      ).toHaveAttribute("href", /\/admin\/speakers\/[^/]+\/preview$/u);
       await expect(
         page.getByRole("link", { name: "Return to filtered queue" }),
       ).toBeVisible();
