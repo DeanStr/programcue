@@ -49,7 +49,11 @@ export function RouteProgress() {
   }, [active]);
 
   useEffect(() => {
-    if (active || announcedLocation.current === currentLocationKey) return;
+    if (
+      navigation.state !== "idle" ||
+      announcedLocation.current === currentLocationKey
+    )
+      return;
     announcedLocation.current = currentLocationKey;
     /* <Meta> sets the new document title while the destination renders, so it
        is settled by the time this commit's frame runs. */
@@ -57,7 +61,7 @@ export function RouteProgress() {
       setAnnouncement(document.title || "Page loaded"),
     );
     return () => cancelAnimationFrame(frame);
-  }, [active, currentLocationKey]);
+  }, [currentLocationKey, navigation.state]);
 
   return (
     <>
