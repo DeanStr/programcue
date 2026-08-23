@@ -187,20 +187,20 @@ describe("evaluation persona board", () => {
   it("keeps the guided Sam and controlled-inbox reviewer journeys separate", () => {
     const markup = render();
 
-    expect(markup).toContain("Reviewer invitation: choose one path");
-    expect(markup).toContain("Guided fixture journey");
+    expect(markup).toContain("Reviewer invitation");
     expect(markup).toContain("sam.reviewer@sbek-test.example.com");
-    expect(markup).toContain("Real email-delivery journey");
+    expect(markup).toContain("Copy email");
+    expect(markup).toContain("Optional: test your own inbox");
+    expect(markup).toContain('<details class="pc-disclosure');
     expect(markup).toContain(
-      "select Lock evaluation before opening its magic link in this browser",
+      "Before opening its magic link in this browser, select Lock evaluation",
     );
+    expect(markup).toContain("Do not select Clean reviewer.");
     expect(markup).toContain(
-      "Do not select Clean reviewer for this invitation.",
+      "removes its event access but does not delete the account.",
     );
-    expect(markup).toContain(
-      "reset removes its evaluation access, not the identity.",
-    );
-    expect(markup).toContain("An address you control is never mapped to Sam.");
+    expect(markup).not.toContain("Real email-delivery journey");
+    expect(markup).not.toContain("retained global Program Cue identity");
   });
 
   it("submits each persona with its own intent and identity", () => {

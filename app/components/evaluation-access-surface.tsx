@@ -4,9 +4,11 @@ import {
   Building2,
   CalendarClock,
   CalendarDays,
+  Check,
   ClipboardCheck,
   Code,
   Contact,
+  Copy,
   Eye,
   EyeOff,
   FileText,
@@ -74,6 +76,8 @@ export type EvaluationAccessSurfaceProps = {
   busy: boolean;
   resetBusy: boolean;
 };
+
+const FIXTURE_REVIEWER_EMAIL = "sam.reviewer@sbek-test.example.com";
 
 const PERSONA_ICONS: Record<string, LucideIcon> = {
   owner: Building2,
@@ -506,6 +510,9 @@ export function EvaluationAccessSurface({
   resetBusy,
 }: EvaluationAccessSurfaceProps) {
   const [resetConfirmation, setResetConfirmation] = useState("");
+  const [reviewerEmailCopyStatus, setReviewerEmailCopyStatus] = useState<
+    "idle" | "copied" | "failed"
+  >("idle");
   const noticeRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
     if (actionData) noticeRef.current?.focus();
@@ -516,6 +523,19 @@ export function EvaluationAccessSurface({
     (identity) =>
       identity.group === "scenario" && identity.progress?.clean === false,
   );
+
+  async function copyFixtureReviewerEmail() {
+    if (!navigator.clipboard?.writeText) {
+      setReviewerEmailCopyStatus("failed");
+      return;
+    }
+    try {
+      await navigator.clipboard.writeText(FIXTURE_REVIEWER_EMAIL);
+      setReviewerEmailCopyStatus("copied");
+    } catch {
+      setReviewerEmailCopyStatus("failed");
+    }
+  }
 
   if (!unlocked) {
     return (
@@ -683,39 +703,52 @@ export function EvaluationAccessSurface({
       >
         <div className="pc-admin-section-head">
           <div className="pc-admin-section-head-copy">
-            <h2 id="reviewer-invitation-paths-title">
-              Reviewer invitation: choose one path
-            </h2>
+            <h2 id="reviewer-invitation-paths-title">Reviewer invitation</h2>
             <p>
-              The fixed Sam scenario and a real inbox use separate identities.
-              An address you control is never mapped to Sam.
+              For the repeatable scenario, open as Event organiser and invite
+              Sam using this exact address. Return here, select Clean reviewer
+              and explicitly accept the pending invitation. You do not need
+              access to Sam&apos;s inbox.
             </p>
           </div>
         </div>
-        <ol className="stack">
-          <li>
-            <strong>Guided fixture journey</strong>
-            <div className="help">
-              Open as Event organiser and invite Sam using exactly{" "}
-              <code>sam.reviewer@sbek-test.example.com</code>. Program Cue saves
-              the pending invitation and calls the real email provider; you do
-              not need access to Sam&apos;s inbox. Return here, select Clean
-              reviewer and accept the invitation explicitly.
-            </div>
-          </li>
-          <li>
-            <strong>Real email-delivery journey</strong>
-            <div className="help">
-              Open as Event organiser and invite an address you control. Program
-              Cue creates or reuses its ordinary identity. Return here and
-              select Lock evaluation before opening its magic link in this
-              browser. Follow the link as that address and accept its pending
-              invitation explicitly. Do not select Clean reviewer for this
-              invitation. Treat the address as a retained global Program Cue
-              identity: reset removes its evaluation access, not the identity.
-            </div>
-          </li>
-        </ol>
+        <div className="pc-eval-invitation-email">
+          <code>{FIXTURE_REVIEWER_EMAIL}</code>
+          <button
+            aria-live="polite"
+            className="btn small"
+            onClick={() => void copyFixtureReviewerEmail()}
+            type="button"
+          >
+            {reviewerEmailCopyStatus === "copied" ? (
+              <Check aria-hidden size={14} />
+            ) : (
+              <Copy aria-hidden size={14} />
+            )}{" "}
+            {reviewerEmailCopyStatus === "copied" ? "Copied" : "Copy email"}
+          </button>
+        </div>
+        {reviewerEmailCopyStatus === "failed" ? (
+          <p className="help" role="alert">
+            Copy is unavailable. Select and copy the address instead.
+          </p>
+        ) : null}
+        <details className="pc-disclosure pc-eval-invitation-details mt">
+          <summary>Optional: test your own inbox</summary>
+          <div className="stack mt">
+            <p>
+              Invite a fresh email address you control. Before opening its magic
+              link in this browser, select Lock evaluation. Open the link, then
+              accept the invitation as that email address. Do not select Clean
+              reviewer.
+            </p>
+            <p className="help">
+              This creates or reuses a real Program Cue account. Resetting
+              evaluation data removes its event access but does not delete the
+              account.
+            </p>
+          </div>
+        </details>
       </section>
 
       <section aria-labelledby="showcase-personas-title" className="mb">

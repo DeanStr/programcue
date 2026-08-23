@@ -9,6 +9,39 @@ const accessCode =
   process.env.PROGRAM_CUE_EVALUATION_E2E_ACCESS_CODE ??
   "0123456789abcdef0123456789abcdef";
 
+test("evaluation guide prioritizes the repeatable reviewer invitation", async ({
+  context,
+  page,
+}) => {
+  await context.grantPermissions(["clipboard-read", "clipboard-write"]);
+  await page.goto("/evaluate");
+  await page.getByRole("textbox", { name: "Access code" }).fill(accessCode);
+  await page.getByRole("button", { name: "Unlock evaluation" }).click();
+
+  await expect(
+    page.getByRole("heading", { name: "Reviewer invitation" }),
+  ).toBeVisible();
+  await expect(
+    page.getByText("sam.reviewer@sbek-test.example.com", { exact: true }),
+  ).toBeVisible();
+
+  await page.getByRole("button", { name: "Copy email" }).click();
+  await expect(page.getByRole("button", { name: "Copied" })).toBeVisible();
+  await expect
+    .poll(() => page.evaluate(() => navigator.clipboard.readText()))
+    .toBe("sam.reviewer@sbek-test.example.com");
+
+  const optionalJourney = page.locator("details").filter({
+    has: page.getByText("Optional: test your own inbox", { exact: true }),
+  });
+  await expect(optionalJourney).not.toHaveAttribute("open", "");
+  await optionalJourney.locator("summary").click();
+  await expect(optionalJourney).toHaveAttribute("open", "");
+  await expect(optionalJourney).toContainText(
+    "Resetting evaluation data removes its event access but does not delete the account.",
+  );
+});
+
 test("locking evaluation returns the same browser to the ordinary authentication realm", async ({
   page,
 }) => {

@@ -451,6 +451,23 @@
   font-size: var(--text-2xs);
   line-height: var(--leading-snug);
 }
+.pc-eval-invitation-email {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+.pc-eval-invitation-email code {
+  overflow-wrap: anywhere;
+}
+.pc-eval-invitation-details {
+  max-width: 78ch;
+  border-top: 1px solid var(--border-subtle);
+  padding-top: var(--space-3);
+}
+.pc-eval-invitation-details p {
+  margin: 0;
+}
 
 /* --- Persona cards -------------------------------------------------------
    Every card is a role, a person and a destination. The old cards were three
