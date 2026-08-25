@@ -356,6 +356,28 @@ describe("published pages", () => {
     );
   });
 
+  test("film captions and the accessible transcript cannot drift", () => {
+    const captionIssues = brokenSite(({ replace }) =>
+      replace(
+        "program-cue-product-film-en.vtt",
+        "Readiness is 75 percent",
+        "Readiness is 76 percent",
+      ),
+    );
+    const transcriptIssues = brokenSite(({ replace }) =>
+      replace(
+        "product-film-transcript.html",
+        "Picture fades.",
+        "The film ends.",
+      ),
+    );
+
+    assert.ok(reports(captionIssues, "must match the canonical film VTT"));
+    assert.ok(
+      reports(transcriptIssues, "must exactly match the canonical VTT"),
+    );
+  });
+
   test("a malformed social sharing image is rejected", () => {
     const issues = brokenSite(({ write }) =>
       write("social-card.png", Buffer.alloc(24)),

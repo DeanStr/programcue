@@ -1689,6 +1689,11 @@ domain is required because `r2.dev` is a development endpoint; the landing page
 uses a native, metadata-preloaded video element, a local poster and a local
 picture-locked caption sidecar. The public-site Worker retains `script-src` and
 `connect-src` as `none` and grants only the exact media origin through
-`media-src`. R2 is preferred over Stream for this single low-bitrate film while
-its storage and request volume remain inside the included allowance; adaptive
-encoding can move to Stream later without changing the Remotion master.
+`media-src`. A visible HTML transcript beside the player provides the complete
+visual narrative to people who cannot use the video or its optional caption
+track. The public-site release validator requires both the checked-in caption
+sidecar and every transcript cue to match the canonical picture-locked VTT, so
+these static delivery assets cannot drift silently. R2 is preferred over Stream
+for this single low-bitrate film while its storage and request volume remain
+inside the included allowance; adaptive encoding can move to Stream later
+without changing the Remotion master.

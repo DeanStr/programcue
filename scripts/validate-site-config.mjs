@@ -22,6 +22,10 @@ import { repositoryRoot } from "./e2e-runtime.mjs";
 
 const SITE_CONFIG_FILE = "./site/wrangler.jsonc";
 const ASSET_ROOT = join(repositoryRoot, "site/public");
+const CANONICAL_FILM_CAPTIONS = join(
+  repositoryRoot,
+  "video/delivery/program-cue-launch-descriptions.vtt",
+);
 
 const CONTACT_EMAIL = "support@programcue.com";
 const SIGN_IN_URL = "https://app.programcue.com/sign-in";
@@ -59,6 +63,10 @@ const PNG_SIGNATURE = Buffer.from("89504e470d0a1a0a", "hex");
    one owes the other two. */
 export const PUBLISHED_PAGES = Object.freeze([
   { path: "/", file: "index.html" },
+  {
+    path: "/product-film-transcript",
+    file: "product-film-transcript.html",
+  },
   { path: "/guide", file: "guide.html" },
   { path: "/guide/accounts", file: "guide/accounts.html" },
   { path: "/guide/reviewers", file: "guide/reviewers.html" },
@@ -237,6 +245,31 @@ function guideArticleFiles(assetRoot) {
   return files;
 }
 
+function filmCaptionCues(vtt) {
+  return vtt
+    .trim()
+    .split(/\r?\n\r?\n/)
+    .slice(1)
+    .map((block) => {
+      const lines = block.split(/\r?\n/);
+      const timingLine = lines.findIndex((line) => line.includes(" --> "));
+      return timingLine >= 0
+        ? lines
+            .slice(timingLine + 1)
+            .join(" ")
+            .trim()
+        : "";
+    })
+    .filter(Boolean);
+}
+
+function filmTranscriptCueText(html) {
+  return Array.from(
+    html.matchAll(/<p\s+data-film-cues>([\s\S]*?)<\/p>/gi),
+    ([, cues]) => documentText(cues),
+  ).join(" ");
+}
+
 export function validateSitePages(assetRoot = ASSET_ROOT) {
   const issues = [];
   const add = (message) => issues.push(message);
@@ -261,6 +294,24 @@ export function validateSitePages(assetRoot = ASSET_ROOT) {
       existsSync(join(assetRoot, file)) ? readAsset(file) : "",
     ]),
   );
+
+  const publicFilmCaptions = join(assetRoot, "program-cue-product-film-en.vtt");
+  if (!existsSync(CANONICAL_FILM_CAPTIONS))
+    add("Canonical product-film captions are missing.");
+  else if (!existsSync(publicFilmCaptions))
+    add("Published product-film captions are missing.");
+  else {
+    const canonicalCaptions = readFileSync(CANONICAL_FILM_CAPTIONS, "utf8");
+    if (readFileSync(publicFilmCaptions, "utf8") !== canonicalCaptions)
+      add("Published product-film captions must match the canonical film VTT.");
+
+    const canonicalCueText = filmCaptionCues(canonicalCaptions).join(" ");
+    const transcriptCueText = filmTranscriptCueText(
+      sources.get("product-film-transcript.html") ?? "",
+    );
+    if (transcriptCueText !== canonicalCueText)
+      add("Product-film transcript cues must exactly match the canonical VTT.");
+  }
 
   const brandMarkPath = join(assetRoot, BRAND_MARK);
   if (!existsSync(brandMarkPath))

@@ -65,6 +65,21 @@ test("published pages and the account journey are reachable", {
     "src",
     "/program-cue-product-film-en.vtt",
   );
+  const transcriptAction = page.getByRole("link", {
+    name: "Read the film transcript",
+  });
+  await expect(transcriptAction).toHaveAttribute(
+    "href",
+    "/product-film-transcript",
+  );
+  await transcriptAction.click();
+  await expect(page).toHaveURL(/\/product-film-transcript\/?$/);
+  await expect(
+    page.getByRole("heading", { level: 1, name: "Product film transcript" }),
+  ).toBeVisible();
+  await expect(page.locator("main")).toContainText(
+    "One programme. Every workflow. Fully connected.",
+  );
 
   await openReady(page, "/terms");
   await expect(page.locator("main")).toContainText(

@@ -6,21 +6,38 @@ import { fileURLToPath } from "node:url";
 
 const scriptDirectory = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(scriptDirectory, "..");
-const buildSecretsPath = path.join(repoRoot, "build", "server", ".dev.vars");
+const buildRoot = path.join(repoRoot, "build");
 
-if (fs.existsSync(buildSecretsPath)) {
-  fs.chmodSync(buildSecretsPath, 0o600);
-
-  if (process.platform !== "win32") {
-    const mode = fs.statSync(buildSecretsPath).mode & 0o777;
-    if (mode !== 0o600) {
-      throw new Error(
-        `Expected ${path.relative(repoRoot, buildSecretsPath)} to have mode 600; received ${mode.toString(8)}.`,
-      );
-    }
+function findCopiedBuildSecrets(directory) {
+  if (!fs.existsSync(directory)) return [];
+  const matches = [];
+  for (const entry of fs.readdirSync(directory, { withFileTypes: true })) {
+    const entryPath = path.join(directory, entry.name);
+    if (entry.name === ".dev.vars") matches.push(entryPath);
+    else if (entry.isDirectory())
+      matches.push(...findCopiedBuildSecrets(entryPath));
   }
+  return matches;
+}
 
-  console.log(
-    `[build] Restricted ${path.relative(repoRoot, buildSecretsPath)} to its owner.`,
-  );
+export function removeCopiedBuildSecrets(directory) {
+  const copiedSecrets = findCopiedBuildSecrets(directory);
+  for (const filePath of copiedSecrets)
+    fs.rmSync(filePath, { recursive: true });
+
+  const remaining = findCopiedBuildSecrets(directory);
+  if (remaining.length) {
+    throw new Error(
+      `Failed to remove copied build secrets: ${remaining.join(", ")}.`,
+    );
+  }
+  return copiedSecrets;
+}
+
+if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {
+  const removed = removeCopiedBuildSecrets(buildRoot);
+  if (removed.length)
+    console.log(
+      `[build] Removed ${removed.length} copied .dev.vars file${removed.length === 1 ? "" : "s"} from the distributable output.`,
+    );
 }

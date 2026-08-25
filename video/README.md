@@ -44,6 +44,12 @@ comparison gate renders current stills, checks decoded scene canaries and
 writes contact sheets under the ignored `.artifacts/encoded-review/` directory
 for visual inspection.
 
+The public site retains a checked-in copy because Cloudflare deploys its static
+asset directory directly. `scripts/validate-site-config.mjs` compares that copy
+byte-for-byte with this canonical VTT and requires every cue in the public HTML
+transcript, failing site validation and deployment if either representation
+drifts.
+
 ## Optional ElevenLabs auditions
 
 The 13 picture-locked chunks in `video/eleven-music-plan.json` define an
