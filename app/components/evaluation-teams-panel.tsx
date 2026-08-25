@@ -1,4 +1,5 @@
-import { Form } from "react-router";
+import { useEffect, useState } from "react";
+import { Form, useLocation, useNavigate } from "react-router";
 
 import { useEvaluationAdminModel } from "~/components/evaluation-admin-model";
 import { useConfirm } from "~/components/ui/confirm-dialog";
@@ -8,6 +9,14 @@ export function EvaluationTeamsPanel() {
   const { loaderData, navigation, invitationRole, setInvitationRole } =
     useEvaluationAdminModel();
   const { confirm, dialog } = useConfirm();
+  const location = useLocation();
+  const navigate = useNavigate();
+  const [accessOpen, setAccessOpen] = useState(
+    location.hash === "#evaluation-access",
+  );
+  useEffect(() => {
+    setAccessOpen(location.hash === "#evaluation-access");
+  }, [location.hash]);
   return (
     <section className="card pad mb pc-eval-teams">
       {dialog}
@@ -21,7 +30,21 @@ export function EvaluationTeamsPanel() {
         </div>
         <span className="status info right">{loaderData.teams.length}</span>
       </div>
-      <details id="evaluation-access" className="card pad mb pc-disclosure">
+      <details
+        id="evaluation-access"
+        className="card pad mb pc-disclosure"
+        open={accessOpen}
+        onToggle={(event) => {
+          const open = event.currentTarget.open;
+          setAccessOpen(open);
+          if (!open && location.hash === "#evaluation-access") {
+            void navigate(`${location.pathname}${location.search}`, {
+              replace: true,
+              preventScrollReset: true,
+            });
+          }
+        }}
+      >
         <summary>Manage evaluation access</summary>
         <div className="stack mt">
           <p className="help">

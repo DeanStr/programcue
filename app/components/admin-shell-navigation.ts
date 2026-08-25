@@ -19,6 +19,7 @@ import {
   UsersRound,
 } from "lucide-react";
 import type { AdminRecordBreadcrumbHandle } from "~/modules/administration/admin-route-breadcrumb";
+import { AI_ASSISTANT_PROMPT_MAX_LENGTH } from "~/modules/ai/ai-types";
 import type { CommandRecord } from "~/platform/operations/command-palette-service.server";
 import type { SavedViewArea } from "~/platform/operations/saved-view-service.server";
 
@@ -162,7 +163,99 @@ export function primaryNavigationChildren(
 }
 
 export function canOpenAdminAssistant(role: string) {
-  return role !== "committee_chair";
+  return role === "owner" || role === "administrator";
+}
+
+export function adminAssistantIntent(query: string) {
+  return /^ask(?:\s|:|$)/iu.test(query.trim());
+}
+
+export type AdminAssistantDraft =
+  | { status: "none" }
+  | { status: "ready"; prompt: string }
+  | { status: "invalid"; message: string };
+
+// Cloudflare limits an incoming Worker URL to 16 KiB. Reserve more than 1 KiB
+// for the scheme, host, route and query key so a valid palette handoff cannot
+// be rejected before the assistant loader runs.
+const ADMIN_ASSISTANT_MAX_ENCODED_PROMPT_LENGTH = 15_000;
+
+function normalizedCommandText(value: string) {
+  return value
+    .normalize("NFKD")
+    .replaceAll(/\p{Diacritic}/gu, "")
+    .toLocaleLowerCase()
+    .replaceAll(/[^\p{L}\p{N}]+/gu, " ")
+    .trim();
+}
+
+/**
+ * Match command intent as words instead of one exact substring.
+ *
+ * Operators commonly remember the right concepts in the wrong order (for
+ * example, "admin invite" rather than "invite administrator"). Requiring
+ * every normalized query word keeps the result set predictable without
+ * introducing fuzzy near-matches that are risky in an action launcher.
+ */
+export function adminCommandMatches(query: string, candidate: string) {
+  const queryWords = normalizedCommandText(query).split(/\s+/u).filter(Boolean);
+  if (!queryWords.length) return true;
+  const normalizedCandidate = normalizedCommandText(candidate);
+  return queryWords.every((word) => normalizedCandidate.includes(word));
+}
+
+/**
+ * Treat `ask …`, `ask: …` and `ask assistant: …` as an explicit assistant
+ * handoff. The prompt remains a draft on the assistant page; parsing it here
+ * never executes a model request or a domain command.
+ */
+export function adminAssistantDraft(query: string): AdminAssistantDraft {
+  const trimmed = query.trim();
+  const assistantPrefixed = trimmed.match(
+    /^ask\s+assistant(?:\s*:\s*|\s+)(.+)$/iu,
+  );
+  const direct = trimmed.match(/^ask(?:\s*:\s*|\s+)(.+)$/iu);
+  const prompt = (assistantPrefixed?.[1] ?? direct?.[1] ?? "").trim();
+  if (!prompt || prompt.toLowerCase() === "assistant") {
+    return { status: "none" };
+  }
+  if (prompt.length > AI_ASSISTANT_PROMPT_MAX_LENGTH) {
+    return {
+      status: "invalid",
+      message: `Assistant requests are limited to ${AI_ASSISTANT_PROMPT_MAX_LENGTH.toLocaleString("en")} characters. Shorten this draft before continuing.`,
+    };
+  }
+  for (let index = 0; index < prompt.length; index += 1) {
+    const codeUnit = prompt.charCodeAt(index);
+    if (codeUnit >= 0xd800 && codeUnit <= 0xdbff) {
+      const next = prompt.charCodeAt(index + 1);
+      if (next >= 0xdc00 && next <= 0xdfff) {
+        index += 1;
+        continue;
+      }
+      return {
+        status: "invalid",
+        message: "The assistant request contains invalid text characters.",
+      };
+    }
+    if (codeUnit >= 0xdc00 && codeUnit <= 0xdfff) {
+      return {
+        status: "invalid",
+        message: "The assistant request contains invalid text characters.",
+      };
+    }
+  }
+  if (
+    encodeURIComponent(prompt).length >
+    ADMIN_ASSISTANT_MAX_ENCODED_PROMPT_LENGTH
+  ) {
+    return {
+      status: "invalid",
+      message:
+        "This assistant draft is too large to hand off in a URL. Shorten it before continuing.",
+    };
+  }
+  return { status: "ready", prompt };
 }
 
 export function savedViewArea(pathname: string): SavedViewArea | null {
@@ -315,6 +408,7 @@ export function adminCommandSearchKey(
   eventId: string,
 ) {
   const normalizedQuery = query.trim();
+  if (adminAssistantIntent(normalizedQuery)) return null;
   return normalizedQuery.length >= 2
     ? JSON.stringify([eventId, scope, normalizedQuery])
     : null;

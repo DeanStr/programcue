@@ -4,17 +4,21 @@ import {
   Activity,
   BookOpen,
   CalendarDays,
+  CalendarPlus,
   CircleHelp,
   CornerDownLeft,
   Files,
   Grid3X3,
   ListChecks,
   Mail,
+  Palette,
   Save,
   Search,
   Sparkles,
   Tags,
+  UserPlus,
   UserRound,
+  UsersRound,
   X,
 } from "lucide-react";
 import type { RefObject } from "react";
@@ -27,6 +31,10 @@ import type {
   AdminShellCommandPalette,
   AdminShellDialog,
 } from "./admin-shell";
+import {
+  adminAssistantDraft,
+  adminAssistantIntent,
+} from "./admin-shell-navigation";
 import { Dialog } from "./dialog";
 
 function recordIcon(kind: CommandRecord["kind"]) {
@@ -149,6 +157,7 @@ export function AdminCommandDialog({
   setDialog,
   viewArea,
   viewerRole,
+  canCreateEvents,
   assistantAvailable,
   returnFocus,
 }: {
@@ -169,14 +178,32 @@ export function AdminCommandDialog({
   setDialog: (dialog: AdminShellDialog) => void;
   viewArea: string | null;
   viewerRole: string;
+  canCreateEvents: boolean;
   assistantAvailable: boolean;
   returnFocus: RefObject<HTMLElement | null>;
 }) {
   if (!open) return null;
   const trimmedQuery = commandQuery.trim();
-  const canRunCommands = viewerRole !== "committee_chair";
+  const canRunCommands =
+    viewerRole === "owner" || viewerRole === "administrator";
+  const assistantIntent = adminAssistantIntent(commandQuery);
+  const assistantDraft = adminAssistantDraft(commandQuery);
+  const assistantPrompt =
+    assistantDraft.status === "ready" ? assistantDraft.prompt : null;
 
   const createCommands: StaticCommand[] = [
+    ...(canCreateEvents
+      ? [
+          {
+            value: "create new event conference workspace",
+            icon: CalendarPlus,
+            label: "New event",
+            description: "Start with a blank event or an event template",
+            meta: "Create",
+            run: () => selectCommand("/admin/events/new"),
+          },
+        ]
+      : []),
     {
       value: "create direct session proposal application",
       icon: Files,
@@ -203,6 +230,43 @@ export function AdminCommandDialog({
     },
   ];
   const actionCommands: StaticCommand[] = [
+    {
+      value: "build edit application call for speakers cfp form builder",
+      icon: Files,
+      label: "Application form builder",
+      description: "Edit questions and preview the applicant experience",
+      meta: "Open",
+      run: () => selectCommand("/admin/submissions/form"),
+    },
+    {
+      value: "brand branding event logo colours colors typography",
+      icon: Palette,
+      label: "Brand this event",
+      description: "Set the event logo, colours and typography",
+      meta: "Open",
+      run: () => selectCommand("/admin/branding"),
+    },
+    {
+      value: "invite add administrator admin event access role",
+      icon: UserPlus,
+      label: "Invite administrator",
+      description:
+        viewerRole === "owner"
+          ? "Grant event or organisation administration access"
+          : "Grant administration access to this event",
+      meta: "Invite",
+      run: () =>
+        selectCommand("/admin/event?invite=administrator#event-setup-access"),
+    },
+    {
+      value:
+        "manage create invite evaluation review team evaluator committee access",
+      icon: UsersRound,
+      label: "Manage evaluation team",
+      description: "Create teams and invite evaluators or committee chairs",
+      meta: "Open",
+      run: () => selectCommand("/admin/review?view=setup#evaluation-access"),
+    },
     {
       value: "prepare targeted reminder follow up",
       icon: Mail,
@@ -275,18 +339,36 @@ export function AdminCommandDialog({
       },
     },
   ];
-  const assistantCommands: StaticCommand[] = assistantAvailable
-    ? [
-        {
-          value: "ask assistant event help ai",
-          icon: Sparkles,
-          label: "Ask about this event",
-          description: "Answers are grounded in the current records",
-          meta: "Open assistant",
-          run: () => selectCommand("/admin/assistant"),
-        },
-      ]
-    : [];
+  const assistantCommands: StaticCommand[] =
+    !assistantAvailable || assistantDraft.status === "invalid"
+      ? []
+      : assistantPrompt
+        ? [
+            {
+              value: `ask assistant ${assistantPrompt}`,
+              icon: Sparkles,
+              label: "Ask assistant",
+              description:
+                assistantPrompt.length > 140
+                  ? `${assistantPrompt.slice(0, 139)}…`
+                  : assistantPrompt,
+              meta: "Editable draft",
+              run: () =>
+                selectCommand(
+                  `/admin/assistant?prompt=${encodeURIComponent(assistantPrompt)}`,
+                ),
+            },
+          ]
+        : [
+            {
+              value: "ask assistant event help ai",
+              icon: Sparkles,
+              label: "Ask about this event",
+              description: "Answers are grounded in the current records",
+              meta: "Open assistant",
+              run: () => selectCommand("/admin/assistant"),
+            },
+          ];
 
   const matching = (commands: StaticCommand[], allowed = true) =>
     allowed
@@ -317,14 +399,26 @@ export function AdminCommandDialog({
     savedViewMatches.length +
     recentMatches.length;
 
-  /* The record search is asynchronous and the rest of the list is not, so the
-     palette states one thing at a time. Deriving the empty state from cmdk's
-     own item count printed "Nothing matches" beside "Searching authorised
-     records…", and again beside the answer that search came back with. */
-  const searchingRecords = trimmedQuery.length >= 2 && recordSearchPending;
-  const searchesRecords = trimmedQuery.length >= 2;
+  /* Record search is asynchronous while commands are local. Suppress a
+     no-record message when a local command already answers the query; showing
+     "No records" above an exact action made a successful match read as a
+     failure. */
+  const searchingRecords =
+    !assistantIntent && trimmedQuery.length >= 2 && recordSearchPending;
+  const searchesRecords = !assistantIntent && trimmedQuery.length >= 2;
+  const recordMatches = currentRecordSearchResult ?? [];
+  const showRecordSearchStatus = searchingRecords && staticMatchCount === 0;
+  const showNoRecordMatches =
+    !assistantIntent &&
+    !searchingRecords &&
+    recordMatches.length === 0 &&
+    staticMatchCount === 0;
+  const showRecords =
+    searchesRecords &&
+    (recordMatches.length > 0 || showRecordSearchStatus || showNoRecordMatches);
   const showNothingMatches =
     !searchesRecords && !searchingRecords && staticMatchCount === 0;
+  const waitingForRecordQuery = trimmedQuery.length === 1;
 
   return (
     <Dialog
@@ -373,7 +467,7 @@ export function AdminCommandDialog({
             <X aria-hidden size={17} />
           </button>
         </div>
-        {commandPalette.organisationSearchAllowed ? (
+        {commandPalette.organisationSearchAllowed && !assistantIntent ? (
           <fieldset className="pc-palette-scope">
             <legend className="sr-only">Search scope</legend>
             <div className="pc-segmented">
@@ -395,25 +489,37 @@ export function AdminCommandDialog({
           </fieldset>
         ) : null}
         <Command.List className="command-results">
-          {showNothingMatches ? (
+          {assistantIntent && !assistantAvailable ? (
+            <div className="pc-palette-empty" role="status">
+              The event assistant is not available for this role.
+            </div>
+          ) : assistantDraft.status === "invalid" ? (
+            <div className="pc-palette-empty" role="status">
+              {assistantDraft.message}
+            </div>
+          ) : waitingForRecordQuery && staticMatchCount === 0 ? (
+            <div className="pc-palette-empty" role="status">
+              Type one more character to search authorised records.
+            </div>
+          ) : showNothingMatches ? (
             <div className="pc-palette-empty">
               Nothing matches “{trimmedQuery}”.
             </div>
           ) : null}
-          {searchesRecords ? (
+          {showRecords ? (
             <Command.Group heading="Records">
-              {searchingRecords ? (
+              {showRecordSearchStatus ? (
                 <div className="pc-palette-status" role="status">
                   <span className="pc-spin" aria-hidden /> Searching authorised
                   records…
                 </div>
               ) : null}
-              {!searchingRecords && !currentRecordSearchResult?.length ? (
+              {showNoRecordMatches ? (
                 <div className="pc-palette-status">
                   No authorised records match “{trimmedQuery}”.
                 </div>
               ) : null}
-              {currentRecordSearchResult?.map((record) => (
+              {recordMatches.map((record) => (
                 <Command.Item
                   key={`${record.eventId}:${record.kind}:${record.id}`}
                   value={`${record.label} ${record.description} ${record.aliases.join(" ")}`}

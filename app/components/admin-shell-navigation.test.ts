@@ -2,6 +2,9 @@ import { describe, expect, it } from "vitest";
 import { adminRecordBreadcrumbHandle } from "~/modules/administration/admin-route-breadcrumb";
 import type { CommandRecord } from "~/platform/operations/command-palette-service.server";
 import {
+  adminAssistantDraft,
+  adminAssistantIntent,
+  adminCommandMatches,
   adminCommandRecordSelection,
   adminCommandRecordsForKey,
   adminCommandSearchKey,
@@ -16,6 +19,81 @@ import {
 } from "./admin-shell";
 
 describe("administrator navigation context", () => {
+  it("extracts explicit assistant drafts without treating them as record searches", () => {
+    expect(adminAssistantDraft("ask Which speakers are incomplete?")).toEqual({
+      status: "ready",
+      prompt: "Which speakers are incomplete?",
+    });
+    expect(
+      adminAssistantDraft(" ASK assistant:  Summarise readiness "),
+    ).toEqual({ status: "ready", prompt: "Summarise readiness" });
+    expect(adminAssistantDraft("ask assistant")).toEqual({ status: "none" });
+    expect(adminAssistantDraft("find assistant proposals")).toEqual({
+      status: "none",
+    });
+    expect(adminAssistantIntent("ask")).toBe(true);
+    expect(adminAssistantIntent("ask:")).toBe(true);
+    expect(adminAssistantIntent("askassistant status")).toBe(false);
+    expect(
+      adminCommandSearchKey(
+        "ask Which speakers are incomplete?",
+        "event",
+        "event-1",
+      ),
+    ).toBeNull();
+    expect(adminCommandSearchKey("ask:", "event", "event-1")).toBeNull();
+
+    const boundaryPrompt = `ask ${"a".repeat(3_998)}😀`;
+    const boundaryDraft = adminAssistantDraft(boundaryPrompt);
+    expect(boundaryDraft).toEqual({
+      status: "ready",
+      prompt: `${"a".repeat(3_998)}😀`,
+    });
+    if (boundaryDraft.status !== "ready") {
+      throw new Error("Expected the boundary assistant draft to be valid.");
+    }
+    expect(() => encodeURIComponent(boundaryDraft.prompt)).not.toThrow();
+
+    expect(adminAssistantDraft(`ask ${"a".repeat(4_001)}`)).toEqual({
+      status: "invalid",
+      message:
+        "Assistant requests are limited to 4,000 characters. Shorten this draft before continuing.",
+    });
+    expect(adminAssistantDraft("ask valid\ud800")).toEqual({
+      status: "invalid",
+      message: "The assistant request contains invalid text characters.",
+    });
+    expect(adminAssistantDraft(`ask ${"界".repeat(1_666)}`)).toEqual({
+      status: "ready",
+      prompt: "界".repeat(1_666),
+    });
+    expect(adminAssistantDraft(`ask ${"界".repeat(1_667)}`)).toEqual({
+      status: "invalid",
+      message:
+        "This assistant draft is too large to hand off in a URL. Shorten it before continuing.",
+    });
+  });
+
+  it("matches command intent by normalized words in any order", () => {
+    expect(
+      adminCommandMatches(
+        "admin invite",
+        "invite add administrator admin event access role",
+      ),
+    ).toBe(true);
+    expect(
+      adminCommandMatches(
+        "FORM build",
+        "build edit application call for speakers cfp form builder",
+      ),
+    ).toBe(true);
+    expect(adminCommandMatches("equipe", "Équipe evaluator access")).toBe(true);
+    expect(adminCommandMatches("invite speaker", "invite administrator")).toBe(
+      false,
+    );
+    expect(adminCommandMatches("", "anything")).toBe(true);
+  });
+
   it("keeps an event section and current workflow in detail breadcrumbs", () => {
     expect(adminPageBreadcrumbs("/admin/submissions/form")).toEqual([
       { label: "Applications", href: "/admin/submissions" },
@@ -148,6 +226,8 @@ describe("administrator navigation context", () => {
     expect(canOpenAdminAssistant("owner")).toBe(true);
     expect(canOpenAdminAssistant("administrator")).toBe(true);
     expect(canOpenAdminAssistant("committee_chair")).toBe(false);
+    expect(canOpenAdminAssistant("evaluator")).toBe(false);
+    expect(canOpenAdminAssistant("unexpected_role")).toBe(false);
   });
 
   it("keeps seven stable workspace families and their tools at the second level", () => {

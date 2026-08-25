@@ -1,3 +1,5 @@
+export const AI_ASSISTANT_PROMPT_MAX_LENGTH = 4_000;
+
 export type AiEvidence = {
   id: string;
   label: string;

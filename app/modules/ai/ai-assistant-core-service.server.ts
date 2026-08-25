@@ -41,13 +41,14 @@ import {
   aiToolClass,
   availableAiTools,
 } from "./ai-tools.server";
-import type {
-  AiAssistantResult,
-  AiAttribution,
-  AiEvidence,
-  AiProposalPreview,
-  AiReadinessAdvisory,
-  ContextualAiResult,
+import {
+  AI_ASSISTANT_PROMPT_MAX_LENGTH,
+  type AiAssistantResult,
+  type AiAttribution,
+  type AiEvidence,
+  type AiProposalPreview,
+  type AiReadinessAdvisory,
+  type ContextualAiResult,
 } from "./ai-types";
 import {
   type AiModelProvider,
@@ -61,7 +62,11 @@ const MAX_CONTEXT_CHARACTERS = 60_000;
 const ASSISTANT_AI_MAX_OUTPUT_TOKENS = 4_000;
 const CONTEXTUAL_AI_MAX_OUTPUT_TOKENS = 4_000;
 
-const promptSchema = z.string().trim().min(2).max(4_000);
+const promptSchema = z
+  .string()
+  .trim()
+  .min(2)
+  .max(AI_ASSISTANT_PROMPT_MAX_LENGTH);
 export const focusSchema = z.string().trim().max(500).nullable();
 export const identifierSchema = z.string().uuid();
 export const generatedReminderDraftSchema = z

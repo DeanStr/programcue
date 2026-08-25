@@ -18,7 +18,10 @@ import { StatusNotice } from "~/components/ui/status-notice";
 import type { AiAssistantService } from "~/modules/ai/ai-assistant-service.server";
 import { assistantSuggestedPrompts } from "~/modules/ai/ai-assistant-suggestions";
 import { WORKERS_AI_MODEL } from "~/modules/ai/ai-provider.server";
-import type { AiAssistantResult } from "~/modules/ai/ai-types";
+import {
+  AI_ASSISTANT_PROMPT_MAX_LENGTH,
+  type AiAssistantResult,
+} from "~/modules/ai/ai-types";
 import {
   AssistantResultPanel,
   ProposalApproval,
@@ -32,6 +35,17 @@ import "~/styles/workspace-assistant.css";
 export const meta: MetaFunction = () => [
   { title: "Event Assistant · Program Cue" },
 ];
+
+export function assistantPromptFromRequest(request: Request) {
+  const prompt = new URL(request.url).searchParams.get("prompt") ?? "";
+  if (prompt.length > AI_ASSISTANT_PROMPT_MAX_LENGTH) {
+    throw new Response(
+      `Assistant requests are limited to ${AI_ASSISTANT_PROMPT_MAX_LENGTH.toLocaleString("en")} characters.`,
+      { status: 400 },
+    );
+  }
+  return prompt;
+}
 
 async function administrator(
   request: Request,
@@ -47,6 +61,7 @@ async function administrator(
 
 export async function loader({ request, context }: LoaderFunctionArgs) {
   const { env, viewer } = await administrator(request, context);
+  const prompt = assistantPromptFromRequest(request);
   const agent = await getProgramCueEventAgent(env, viewer);
   const workspace = await agent.getWorkspace(viewer);
   const provider = workspace.provider;
@@ -55,8 +70,7 @@ export async function loader({ request, context }: LoaderFunctionArgs) {
     provider,
     workersAiModel: WORKERS_AI_MODEL,
     canConfigureProvider: workspace.canConfigureProvider,
-    prompt:
-      new URL(request.url).searchParams.get("prompt")?.slice(0, 4_000) ?? "",
+    prompt,
     proposals: await agent.listRecentProposals(viewer),
   };
 }

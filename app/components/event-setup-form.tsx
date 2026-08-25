@@ -266,6 +266,11 @@ export function EventSetupForm({
   // state — a new resource, track or format that was typed but never added.
   // Remounting them is the only reset that covers those too.
   const [panelGeneration, setPanelGeneration] = useState(0);
+  const [inviteResult, setInviteResult] = useState<
+    ActionResponse | undefined
+  >();
+  const inviteRequested =
+    new URLSearchParams(location.search).get("invite") === "administrator";
   const focusedRecordId = focusedRecord?.id ?? null;
   const focusedRecordKind = focusedRecord?.kind ?? null;
   const saving =
@@ -285,6 +290,25 @@ export function EventSetupForm({
     },
     [location.pathname, location.search, navigate],
   );
+  const clearInviteRequest = useCallback(() => {
+    if (!inviteRequested) return;
+    const search = new URLSearchParams(location.search);
+    search.delete("invite");
+    void navigate(
+      {
+        pathname: location.pathname,
+        search: search.size ? `?${search.toString()}` : "",
+        hash: location.hash,
+      },
+      { replace: true, preventScrollReset: true },
+    );
+  }, [
+    inviteRequested,
+    location.hash,
+    location.pathname,
+    location.search,
+    navigate,
+  ]);
 
   // Invitation fetchers revalidate this route without changing the persisted
   // event revision. Preserve local room edits across that revalidation and only
@@ -330,9 +354,34 @@ export function EventSetupForm({
     );
   }, [focusedRecordId, location.hash]);
   useEffect(() => {
-    if (inviteFetcher.data && (inviteFetcher.data as ActionResponse).ok)
+    if (inviteRequested) {
+      setActivePanel("access");
+      setInviteOpen(true);
+    } else {
       setInviteOpen(false);
-  }, [inviteFetcher.data]);
+    }
+  }, [inviteRequested]);
+  useEffect(() => {
+    if (inviteFetcher.state === "submitting") {
+      setInviteResult(undefined);
+      return;
+    }
+    if (inviteFetcher.state !== "idle" || !inviteFetcher.data) return;
+    const response = inviteFetcher.data as ActionResponse;
+    setInviteResult(response);
+    if (response.ok) {
+      setInviteOpen(false);
+      clearInviteRequest();
+      // Preserve the result notice in component state, but clear the fetcher so
+      // React Router cannot replay this success after a later route navigation.
+      inviteFetcher.reset();
+    }
+  }, [
+    clearInviteRequest,
+    inviteFetcher.data,
+    inviteFetcher.reset,
+    inviteFetcher.state,
+  ]);
   useEffect(() => {
     const response = repositoryFetcher.data as ActionResponse | undefined;
     if (response?.ok && response.intent === "configure_airtable")
@@ -363,7 +412,8 @@ export function EventSetupForm({
     () => sessionFormats.map((format, position) => ({ ...format, position })),
     [sessionFormats],
   );
-  const inviteData = inviteFetcher.data as ActionResponse | undefined;
+  const inviteData =
+    (inviteFetcher.data as ActionResponse | undefined) ?? inviteResult;
   const repositoryData = repositoryFetcher.data as ActionResponse | undefined;
   const errorFieldIds: Record<string, string> = {
     name: "event-setup-name",
@@ -857,7 +907,10 @@ export function EventSetupForm({
       />
       <AdministratorInvitationDialog
         open={inviteOpen}
-        setOpen={setInviteOpen}
+        setOpen={(open) => {
+          setInviteOpen(open);
+          if (!open) clearInviteRequest();
+        }}
         fetcher={inviteFetcher}
         data={inviteData}
         canManageOrganisationAdministrators={

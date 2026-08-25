@@ -30,6 +30,7 @@ import {
   type AdminCommandSearchResult,
   type AdminCommandSearchScope,
   type AdminNavigationItem,
+  adminCommandMatches,
   adminCommandRecordSelection,
   adminCommandRecordsForKey,
   adminCommandSearchKey,
@@ -52,6 +53,9 @@ export {
   type AdminCommandSearchScope,
   type AdminNavigationItem,
   type AdminRecordBreadcrumb,
+  adminAssistantDraft,
+  adminAssistantIntent,
+  adminCommandMatches,
   adminCommandRecordSelection,
   adminCommandRecordsForKey,
   adminCommandSearchKey,
@@ -586,6 +590,11 @@ export function AdminShell({
       document.activeElement instanceof HTMLElement
         ? document.activeElement
         : commandTriggerRef.current;
+    // Every invocation is a new intent. Reopening stale text or an
+    // organisation-wide scope made the palette look broken and could search a
+    // broader boundary than the operator expected.
+    setCommandQuery("");
+    setCommandScope("event");
     setDialog("command");
   }, []);
   const initials = viewer.name
@@ -729,8 +738,7 @@ export function AdminShell({
   }
 
   const staticMatch = (value: string) =>
-    !commandQuery.trim() ||
-    value.toLocaleLowerCase().includes(commandQuery.trim().toLocaleLowerCase());
+    adminCommandMatches(commandQuery, value);
 
   return (
     <div
@@ -797,6 +805,7 @@ export function AdminShell({
         setDialog={setDialog}
         viewArea={viewArea}
         viewerRole={viewer.role}
+        canCreateEvents={viewer.canCreateEvents}
         assistantAvailable={canOpenAdminAssistant(viewer.role)}
         returnFocus={commandReturnFocusRef}
       />
