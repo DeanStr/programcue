@@ -23,6 +23,7 @@ const CONTENT_SECURITY_POLICY = [
   "script-src 'none'",
   `style-src 'self' ${BRAND_MARK_STYLE_HASH}`,
   "img-src 'self' data:",
+  "media-src 'self' https://media.programcue.com",
   "font-src 'self'",
   "connect-src 'none'",
   "object-src 'none'",

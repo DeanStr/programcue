@@ -102,7 +102,9 @@
               <a class="btn" href="https://app.programcue.com/sign-in"
                 >Sign in or create an account</a
               >
-              <a class="btn btn-secondary" href="#workflow">See how it works</a>
+              <a class="btn btn-secondary" href="#product-film"
+                >Watch the product film</a
+              >
             </div>
           </div>
 
@@ -118,6 +120,62 @@
               Conference programme planning in progress.
             </figcaption>
           </figure>
+        </div>
+      </section>
+
+      <section
+        class="section film-section"
+        id="product-film"
+        aria-labelledby="product-film-title"
+      >
+        <div class="shell">
+          <div class="film-intro">
+            <div>
+              <p class="eyebrow eyebrow-dark">Six-minute product film</p>
+              <h2 id="product-film-title">
+                See the whole programme come together.
+              </h2>
+            </div>
+            <p>
+              Follow one event from its first proposal through review, speaker
+              readiness, AI-assisted operations, scheduling and a published
+              programme.
+            </p>
+          </div>
+
+          <div class="film-stage">
+            <video
+              id="program-cue-product-film"
+              controls
+              preload="metadata"
+              playsinline
+              poster="/images/program-cue-product-film-poster.webp"
+              width="1920"
+              height="1080"
+              aria-labelledby="product-film-title"
+              aria-describedby="product-film-details"
+            >
+              <source
+                src="https://media.programcue.com/films/program-cue-launch-92cab554.mp4"
+                type="video/mp4"
+              />
+              <track
+                kind="captions"
+                src="/program-cue-product-film-en.vtt"
+                srclang="en"
+                label="English"
+              />
+              Your browser does not support embedded video. You can
+              <a
+                href="https://media.programcue.com/films/program-cue-launch-92cab554.mp4"
+                >open the product film directly</a
+              >.
+            </video>
+          </div>
+          <p class="film-details" id="product-film-details">
+            Six minutes <span aria-hidden="true">·</span> Full product journey
+            <span aria-hidden="true">·</span> Music-led with captions
+          </p>
         </div>
       </section>
 
@@ -812,6 +870,7 @@
         <nav aria-label="Footer product">
           <h2>Product</h2>
           <ul>
+            <li><a href="/#product-film">Product film</a></li>
             <li><a href="/#workflow">How it works</a></li>
             <li><a href="/#capabilities">Capabilities</a></li>
             <li><a href="/#roles">For your team</a></li>

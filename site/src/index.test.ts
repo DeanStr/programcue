@@ -73,6 +73,7 @@ describe("public site Worker", () => {
     const response = await get("https://programcue.com/privacy");
     const policy = response.headers.get("content-security-policy") ?? "";
     expect(policy).toContain("script-src 'none'");
+    expect(policy).toContain("media-src 'self' https://media.programcue.com");
     expect(policy).toContain("frame-ancestors 'none'");
     expect(response.headers.get("x-content-type-options")).toBe("nosniff");
     expect(response.headers.get("referrer-policy")).toBe(

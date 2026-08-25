@@ -9,19 +9,21 @@ async function readJson(path) {
 }
 
 test("no-emit typechecking avoids declaration-producing composite builds", async () => {
-  const [packageJson, rootConfig, nodeConfig, cloudflareConfig] =
+  const [packageJson, rootConfig, nodeConfig, cloudflareConfig, videoConfig] =
     await Promise.all([
       readJson("package.json"),
       readJson("tsconfig.json"),
       readJson("tsconfig.node.json"),
       readJson("tsconfig.cloudflare.json"),
+      readJson("tsconfig.video.json"),
     ]);
 
   assert.equal(
     packageJson.scripts["typecheck:generated"],
-    "tsc -p tsconfig.node.json && tsc -p tsconfig.cloudflare.json",
+    "tsc -p tsconfig.node.json && tsc -p tsconfig.cloudflare.json && tsc -p tsconfig.video.json",
   );
   assert.equal(rootConfig.references, undefined);
   assert.notEqual(nodeConfig.compilerOptions.composite, true);
   assert.notEqual(cloudflareConfig.compilerOptions.composite, true);
+  assert.notEqual(videoConfig.compilerOptions.composite, true);
 });

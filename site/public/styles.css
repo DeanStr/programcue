@@ -589,6 +589,83 @@ a.wordmark:hover .wordmark-accent {
   object-position: center top;
 }
 
+/* --- product film ------------------------------------------------------ */
+
+.film-section {
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+  background:
+    radial-gradient(
+      42rem 26rem at 100% 0,
+      rgb(233 162 125 / 18%),
+      transparent 72%
+    ),
+    var(--canvas);
+}
+
+.film-intro {
+  display: grid;
+  grid-template-columns: minmax(0, 0.95fr) minmax(20rem, 1.05fr);
+  gap: var(--space-6);
+  align-items: end;
+  margin-bottom: var(--space-5);
+}
+
+.film-intro h2 {
+  max-width: 18ch;
+  margin: 0;
+}
+
+.film-intro > p {
+  max-width: 52ch;
+  margin: 0 0 0.2rem;
+  color: var(--text-secondary);
+  font-size: 1.0625rem;
+  line-height: 1.65;
+}
+
+.film-stage {
+  position: relative;
+  padding: clamp(0.375rem, 0.25rem + 0.5vw, 0.75rem);
+  overflow: hidden;
+  border: 1px solid rgb(54 80 74 / 65%);
+  border-radius: var(--radius-xl);
+  background: var(--nav);
+  box-shadow:
+    0 0 0 1px rgb(255 255 255 / 7%) inset,
+    0 2.75rem 6rem -2.5rem rgb(19 32 31 / 65%);
+}
+
+.film-stage::before {
+  content: "";
+  position: absolute;
+  z-index: -1;
+  inset: -20%;
+  background: radial-gradient(circle, rgb(217 128 92 / 22%), transparent 62%);
+}
+
+.film-stage video {
+  display: block;
+  width: 100%;
+  height: auto;
+  aspect-ratio: 16 / 9;
+  border-radius: calc(var(--radius-xl) - 0.55rem);
+  background: #0c1413;
+}
+
+.film-details {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 0.45rem;
+  margin: var(--space-3) 0 0;
+  color: var(--text-tertiary);
+  font-size: 0.875rem;
+  font-weight: 560;
+  letter-spacing: 0.01em;
+}
+
 /* --- sections ----------------------------------------------------------- */
 
 /* Sections alternate between the plain surface, the tinted canvas and the dark
@@ -638,6 +715,8 @@ a.wordmark:hover .wordmark-accent {
 @supports (animation-timeline: view()) {
   @media (prefers-reduced-motion: no-preference) {
     .section-intro,
+    .film-intro,
+    .film-stage,
     .outcome-grid > li,
     .capability,
     .role,
@@ -1749,6 +1828,7 @@ blockquote p:last-child {
 
 @media (max-width: 60rem) {
   .hero-layout,
+  .film-intro,
   .trust-layout,
   .integration-layout,
   .access-layout {
@@ -1766,6 +1846,10 @@ blockquote p:last-child {
 
   .hero-image:hover {
     translate: none;
+  }
+
+  .film-intro {
+    gap: var(--space-3);
   }
 
   .integration-strip {

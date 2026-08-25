@@ -1675,6 +1675,20 @@ manifest. A scene-timed ElevenLabs voice-over audition may be retained as
 optional review evidence, but is not mounted in either master merely because
 generation succeeded. Any narrated alternate needs a fresh picture-locked
 editorial, lossless mix and encoded-output gate. API credentials are process-only
-secrets and are never stored in the repository. Commercial publication remains
-blocked until a release owner records that the applicable Remotion and
-ElevenLabs licences permit the selected delivery.
+secrets and are never stored in the repository. The release owner's 25 August
+2026 instruction to publish selects the pinned Eleven Music master and records
+the commercial release approval required for that delivery.
+
+The public website delivers that approved master as one immutable progressive
+MP4 from the dedicated `programcue-media` R2 bucket at
+`media.programcue.com`. Its versioned object key includes the accepted master
+hash prefix, and the remote object must hash to the accepted local master before
+the landing page may reference it. This public marketing bucket is deliberately
+separate from the application's private `program-cue-files` bucket. A custom
+domain is required because `r2.dev` is a development endpoint; the landing page
+uses a native, metadata-preloaded video element, a local poster and a local
+picture-locked caption sidecar. The public-site Worker retains `script-src` and
+`connect-src` as `none` and grants only the exact media origin through
+`media-src`. R2 is preferred over Stream for this single low-bitrate film while
+its storage and request volume remain inside the included allowance; adaptive
+encoding can move to Stream later without changing the Remotion master.

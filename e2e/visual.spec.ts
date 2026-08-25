@@ -271,16 +271,26 @@ async function expectMobileCommandOverlaysContained(page: Page) {
   await expect(
     commandDialog.getByText("Event settings", { exact: true }).first(),
   ).toBeVisible();
+  // A useful local command suppresses remote-record progress and empty-state
+  // copy so the successful match does not read like a failed search.
   await expect(
     commandDialog.getByText("Searching authorised records…"),
-  ).toBeVisible();
+  ).toHaveCount(0);
   await expect(commandDialog.getByText(/Nothing matches/)).toHaveCount(0);
   await expect(
     commandDialog.getByText(/No authorised records match/),
   ).toHaveCount(0);
+
+  await commandDialog
+    .getByRole("combobox", { name: "Program Cue commands" })
+    .fill("zz-record-query");
+  await expect(
+    commandDialog.getByText("Searching authorised records…"),
+  ).toBeVisible();
+  await expect(commandDialog.getByText(/Nothing matches/)).toHaveCount(0);
   releaseRecordSearch();
   await expect(
-    commandDialog.getByText("No authorised records match “settings”."),
+    commandDialog.getByText("No authorised records match “zz-record-query”."),
   ).toBeVisible();
   await expect(
     commandDialog.getByText("Searching authorised records…"),

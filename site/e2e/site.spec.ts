@@ -46,6 +46,25 @@ test("published pages and the account journey are reachable", {
       name: "Program Cue schedule planner showing sessions placed across rooms and times.",
     }),
   ).toBeVisible();
+  const filmAction = page.getByRole("link", {
+    name: "Watch the product film",
+  });
+  await expect(filmAction).toHaveAttribute("href", "#product-film");
+  const film = page.locator("#program-cue-product-film");
+  await expect(film).toHaveAttribute("controls", "");
+  await expect(film).toHaveAttribute("preload", "metadata");
+  await expect(film).toHaveAttribute(
+    "poster",
+    "/images/program-cue-product-film-poster.webp",
+  );
+  await expect(film.locator("source")).toHaveAttribute(
+    "src",
+    "https://media.programcue.com/films/program-cue-launch-92cab554.mp4",
+  );
+  await expect(film.locator("track")).toHaveAttribute(
+    "src",
+    "/program-cue-product-film-en.vtt",
+  );
 
   await openReady(page, "/terms");
   await expect(page.locator("main")).toContainText(
@@ -61,6 +80,7 @@ test("the local Worker enforces the static-site security contract", {
   const policy = response?.headers()["content-security-policy"] ?? "";
   expect(policy).toContain("script-src 'none'");
   expect(policy).toContain("connect-src 'none'");
+  expect(policy).toContain("media-src 'self' https://media.programcue.com");
   expect(response?.headers()["set-cookie"]).toBeUndefined();
   await expect(page.locator("script")).toHaveCount(0);
 
