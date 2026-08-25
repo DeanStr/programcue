@@ -175,10 +175,9 @@ export type AdminAssistantDraft =
   | { status: "ready"; prompt: string }
   | { status: "invalid"; message: string };
 
-// Cloudflare limits an incoming Worker URL to 16 KiB. Reserve more than 1 KiB
-// for the scheme, host, route and query key so a valid palette handoff cannot
-// be rejected before the assistant loader runs.
-const ADMIN_ASSISTANT_MAX_ENCODED_PROMPT_LENGTH = 15_000;
+export type AdminAssistantNavigationState = {
+  assistantDraft: string;
+};
 
 function normalizedCommandText(value: string) {
   return value
@@ -225,37 +224,29 @@ export function adminAssistantDraft(query: string): AdminAssistantDraft {
       message: `Assistant requests are limited to ${AI_ASSISTANT_PROMPT_MAX_LENGTH.toLocaleString("en")} characters. Shorten this draft before continuing.`,
     };
   }
-  for (let index = 0; index < prompt.length; index += 1) {
-    const codeUnit = prompt.charCodeAt(index);
-    if (codeUnit >= 0xd800 && codeUnit <= 0xdbff) {
-      const next = prompt.charCodeAt(index + 1);
-      if (next >= 0xdc00 && next <= 0xdfff) {
-        index += 1;
-        continue;
-      }
-      return {
-        status: "invalid",
-        message: "The assistant request contains invalid text characters.",
-      };
-    }
-    if (codeUnit >= 0xdc00 && codeUnit <= 0xdfff) {
-      return {
-        status: "invalid",
-        message: "The assistant request contains invalid text characters.",
-      };
-    }
+  return { status: "ready", prompt };
+}
+
+export function adminAssistantDraftFromNavigationState(
+  state: unknown,
+): AdminAssistantDraft {
+  if (!state || typeof state !== "object" || !("assistantDraft" in state)) {
+    return { status: "none" };
   }
-  if (
-    encodeURIComponent(prompt).length >
-    ADMIN_ASSISTANT_MAX_ENCODED_PROMPT_LENGTH
-  ) {
+  const prompt = state.assistantDraft;
+  if (typeof prompt !== "string") {
     return {
       status: "invalid",
-      message:
-        "This assistant draft is too large to hand off in a URL. Shorten it before continuing.",
+      message: "The assistant draft navigation state is invalid.",
     };
   }
-  return { status: "ready", prompt };
+  if (prompt.length > AI_ASSISTANT_PROMPT_MAX_LENGTH) {
+    return {
+      status: "invalid",
+      message: `Assistant requests are limited to ${AI_ASSISTANT_PROMPT_MAX_LENGTH.toLocaleString("en")} characters. Shorten this draft before continuing.`,
+    };
+  }
+  return prompt ? { status: "ready", prompt } : { status: "none" };
 }
 
 export function savedViewArea(pathname: string): SavedViewArea | null {

@@ -154,6 +154,7 @@ export function AdminCommandDialog({
   staticMatch,
   selectRecord,
   selectCommand,
+  selectAssistantDraft,
   setDialog,
   viewArea,
   viewerRole,
@@ -175,6 +176,7 @@ export function AdminCommandDialog({
   staticMatch: (value: string) => boolean;
   selectRecord: (record: CommandRecord) => void;
   selectCommand: (href: string) => void;
+  selectAssistantDraft: (prompt: string) => void;
   setDialog: (dialog: AdminShellDialog) => void;
   viewArea: string | null;
   viewerRole: string;
@@ -353,10 +355,7 @@ export function AdminCommandDialog({
                   ? `${assistantPrompt.slice(0, 139)}…`
                   : assistantPrompt,
               meta: "Editable draft",
-              run: () =>
-                selectCommand(
-                  `/admin/assistant?prompt=${encodeURIComponent(assistantPrompt)}`,
-                ),
+              run: () => selectAssistantDraft(assistantPrompt),
             },
           ]
         : [

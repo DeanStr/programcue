@@ -27,6 +27,7 @@ import { AdminCommandDialog } from "./admin-shell-command-dialog";
 
 import { AdminAuxiliaryDialogs } from "./admin-shell-dialogs";
 import {
+  type AdminAssistantNavigationState,
   type AdminCommandSearchResult,
   type AdminCommandSearchScope,
   type AdminNavigationItem,
@@ -49,11 +50,13 @@ import { Dialog } from "./dialog";
 import { Button } from "./ui/button";
 
 export {
+  type AdminAssistantNavigationState,
   type AdminCommandSearchResult,
   type AdminCommandSearchScope,
   type AdminNavigationItem,
   type AdminRecordBreadcrumb,
   adminAssistantDraft,
+  adminAssistantDraftFromNavigationState,
   adminAssistantIntent,
   adminCommandMatches,
   adminCommandRecordSelection,
@@ -724,6 +727,15 @@ export function AdminShell({
     void navigate(href);
   }
 
+  function selectAssistantDraft(prompt: string) {
+    closeDialog();
+    void navigate("/admin/assistant", {
+      state: {
+        assistantDraft: prompt,
+      } satisfies AdminAssistantNavigationState,
+    });
+  }
+
   function selectRecord(record: CommandRecord) {
     const selection = adminCommandRecordSelection(record, event.id);
     closeDialog();
@@ -802,6 +814,7 @@ export function AdminShell({
         staticMatch={staticMatch}
         selectRecord={selectRecord}
         selectCommand={selectCommand}
+        selectAssistantDraft={selectAssistantDraft}
         setDialog={setDialog}
         viewArea={viewArea}
         viewerRole={viewer.role}

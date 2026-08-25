@@ -805,10 +805,25 @@ test("the command palette matches intent words and opens setup work directly", a
 });
 
 test("the command palette opens evaluation team access", async ({ page }) => {
-  await page.goto("/admin/review?view=setup");
+  const browserErrors: string[] = [];
+  page.on("console", (message) => {
+    if (message.type() === "error") browserErrors.push(message.text());
+  });
+  page.on("pageerror", (error) => browserErrors.push(error.message));
+
+  await page.goto("/admin/review?view=setup#evaluation-access");
   await page.locator("body[data-hydrated='true']").waitFor();
   const accessDisclosure = page.locator("#evaluation-access");
+  await expect(accessDisclosure).toHaveAttribute("open", "");
+  await page.reload();
+  await page.locator("body[data-hydrated='true']").waitFor();
+  await expect(accessDisclosure).toHaveAttribute("open", "");
+  await accessDisclosure
+    .getByText("Manage evaluation access", { exact: true })
+    .click();
+  await expect(page).toHaveURL(/\/admin\/review\?view=setup$/);
   await expect(accessDisclosure).not.toHaveAttribute("open", "");
+
   await page.getByRole("button", { name: /Search or run a command/ }).click();
   await page
     .getByRole("combobox", { name: "Program Cue commands" })
@@ -849,6 +864,7 @@ test("the command palette opens evaluation team access", async ({ page }) => {
   await expect(
     accessDisclosure.getByLabel("Name", { exact: true }),
   ).toBeVisible();
+  expect(browserErrors).toEqual([]);
 });
 
 test("the command palette hands an editable question to the assistant without running it", async ({
@@ -875,11 +891,31 @@ test("the command palette hands an editable question to the assistant without ru
   await expect(
     page.getByRole("heading", { name: "Event Assistant", level: 1 }),
   ).toBeVisible();
-  expect(new URL(page.url()).searchParams.get("prompt")).toBe(prompt);
+  expect(new URL(page.url()).searchParams.has("prompt")).toBe(false);
+  await expect
+    .poll(() =>
+      page.evaluate(
+        (draft) => JSON.stringify(window.history.state).includes(draft),
+        prompt,
+      ),
+    )
+    .toBe(false);
   const request = page.getByLabel("Request");
   await expect(request).toHaveValue(prompt);
   await request.fill(`${prompt} Rank the results by urgency.`);
   await expect(request).toHaveValue(`${prompt} Rank the results by urgency.`);
+
+  const replacementPrompt = "Which schedule conflicts are still blocking?";
+  await page.getByRole("button", { name: /Search or run a command/ }).click();
+  await page
+    .getByRole("combobox", { name: "Program Cue commands" })
+    .fill(`ask ${replacementPrompt}`);
+  await page.getByRole("option").filter({ hasText: replacementPrompt }).click();
+  await expect(request).toHaveValue(replacementPrompt);
+  expect(new URL(page.url()).searchParams.has("prompt")).toBe(false);
+  await page.reload();
+  await page.locator("body[data-hydrated='true']").waitFor();
+  await expect(request).toHaveValue("");
   expect(streamRequests).toBe(0);
 });
 
@@ -908,18 +944,6 @@ test("the command palette rejects an oversized assistant draft instead of trunca
     }),
   ).toBeVisible();
 
-  await page
-    .getByRole("combobox", { name: "Program Cue commands" })
-    .fill(`ask ${"界".repeat(1_667)}`);
-  await expect(page.getByRole("option", { name: /Ask assistant/ })).toHaveCount(
-    0,
-  );
-  await expect(
-    page.getByRole("status").filter({
-      hasText:
-        "This assistant draft is too large to hand off in a URL. Shorten it before continuing.",
-    }),
-  ).toBeVisible();
   await expect(page).toHaveURL(/\/admin\/command$/);
   expect(streamRequests).toBe(0);
 });

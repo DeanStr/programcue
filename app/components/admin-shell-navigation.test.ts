@@ -3,6 +3,7 @@ import { adminRecordBreadcrumbHandle } from "~/modules/administration/admin-rout
 import type { CommandRecord } from "~/platform/operations/command-palette-service.server";
 import {
   adminAssistantDraft,
+  adminAssistantDraftFromNavigationState,
   adminAssistantIntent,
   adminCommandMatches,
   adminCommandRecordSelection,
@@ -52,25 +53,47 @@ describe("administrator navigation context", () => {
     if (boundaryDraft.status !== "ready") {
       throw new Error("Expected the boundary assistant draft to be valid.");
     }
-    expect(() => encodeURIComponent(boundaryDraft.prompt)).not.toThrow();
 
     expect(adminAssistantDraft(`ask ${"a".repeat(4_001)}`)).toEqual({
       status: "invalid",
       message:
         "Assistant requests are limited to 4,000 characters. Shorten this draft before continuing.",
     });
-    expect(adminAssistantDraft("ask valid\ud800")).toEqual({
-      status: "invalid",
-      message: "The assistant request contains invalid text characters.",
-    });
-    expect(adminAssistantDraft(`ask ${"界".repeat(1_666)}`)).toEqual({
-      status: "ready",
-      prompt: "界".repeat(1_666),
-    });
     expect(adminAssistantDraft(`ask ${"界".repeat(1_667)}`)).toEqual({
+      status: "ready",
+      prompt: "界".repeat(1_667),
+    });
+  });
+
+  it("validates ephemeral assistant navigation drafts", () => {
+    expect(adminAssistantDraftFromNavigationState(null)).toEqual({
+      status: "none",
+    });
+    expect(
+      adminAssistantDraftFromNavigationState({ unrelated: "state" }),
+    ).toEqual({ status: "none" });
+    expect(
+      adminAssistantDraftFromNavigationState({
+        assistantDraft: "Which tasks are overdue?",
+      }),
+    ).toEqual({
+      status: "ready",
+      prompt: "Which tasks are overdue?",
+    });
+    expect(
+      adminAssistantDraftFromNavigationState({ assistantDraft: 42 }),
+    ).toEqual({
+      status: "invalid",
+      message: "The assistant draft navigation state is invalid.",
+    });
+    expect(
+      adminAssistantDraftFromNavigationState({
+        assistantDraft: "a".repeat(4_001),
+      }),
+    ).toEqual({
       status: "invalid",
       message:
-        "This assistant draft is too large to hand off in a URL. Shorten it before continuing.",
+        "Assistant requests are limited to 4,000 characters. Shorten this draft before continuing.",
     });
   });
 

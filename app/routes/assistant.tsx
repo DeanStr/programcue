@@ -9,10 +9,13 @@ import {
   type MetaFunction,
   useActionData,
   useLoaderData,
+  useLocation,
+  useNavigate,
   useNavigation,
   useRevalidator,
 } from "react-router";
 import { ZodError } from "zod";
+import { adminAssistantDraftFromNavigationState } from "~/components/admin-shell-navigation";
 import { PageHeader } from "~/components/ui/page-header";
 import { StatusNotice } from "~/components/ui/status-notice";
 import type { AiAssistantService } from "~/modules/ai/ai-assistant-service.server";
@@ -36,17 +39,6 @@ export const meta: MetaFunction = () => [
   { title: "Event Assistant · Program Cue" },
 ];
 
-export function assistantPromptFromRequest(request: Request) {
-  const prompt = new URL(request.url).searchParams.get("prompt") ?? "";
-  if (prompt.length > AI_ASSISTANT_PROMPT_MAX_LENGTH) {
-    throw new Response(
-      `Assistant requests are limited to ${AI_ASSISTANT_PROMPT_MAX_LENGTH.toLocaleString("en")} characters.`,
-      { status: 400 },
-    );
-  }
-  return prompt;
-}
-
 async function administrator(
   request: Request,
   context: LoaderFunctionArgs["context"],
@@ -61,7 +53,6 @@ async function administrator(
 
 export async function loader({ request, context }: LoaderFunctionArgs) {
   const { env, viewer } = await administrator(request, context);
-  const prompt = assistantPromptFromRequest(request);
   const agent = await getProgramCueEventAgent(env, viewer);
   const workspace = await agent.getWorkspace(viewer);
   const provider = workspace.provider;
@@ -70,7 +61,6 @@ export async function loader({ request, context }: LoaderFunctionArgs) {
     provider,
     workersAiModel: WORKERS_AI_MODEL,
     canConfigureProvider: workspace.canConfigureProvider,
-    prompt,
     proposals: await agent.listRecentProposals(viewer),
   };
 }
@@ -285,14 +275,16 @@ export async function action({ request, context }: ActionFunctionArgs) {
 }
 
 function StreamingAssistantWorkspace({
-  defaultPrompt,
+  draftPrompt,
+  setDraftPrompt,
   disabled,
   eventName,
   result,
   setResult,
   onAcceptedResult,
 }: {
-  defaultPrompt: string;
+  draftPrompt: string;
+  setDraftPrompt: (prompt: string) => void;
   disabled: boolean;
   eventName: string;
   result: AiAssistantResult | null;
@@ -435,10 +427,11 @@ function StreamingAssistantWorkspace({
                 className="textarea"
                 name="prompt"
                 minLength={2}
-                maxLength={4_000}
+                maxLength={AI_ASSISTANT_PROMPT_MAX_LENGTH}
                 rows={6}
                 required
-                defaultValue={defaultPrompt}
+                value={draftPrompt}
+                onChange={(event) => setDraftPrompt(event.currentTarget.value)}
                 placeholder="What is blocking event readiness, and what should I address first?"
               />
             </label>
@@ -497,8 +490,21 @@ function StreamingAssistantWorkspace({
 export default function AssistantRoute() {
   const loaderData = useLoaderData<typeof loader>();
   const actionData = useActionData<typeof action>();
+  const location = useLocation();
+  const navigate = useNavigate();
   const navigation = useNavigation();
   const revalidator = useRevalidator();
+  const navigationDraft = adminAssistantDraftFromNavigationState(
+    location.state,
+  );
+  const [draftPrompt, setDraftPrompt] = useState(() =>
+    navigationDraft.status === "ready" ? navigationDraft.prompt : "",
+  );
+  const [draftNavigationError, setDraftNavigationError] = useState<
+    string | null
+  >(() =>
+    navigationDraft.status === "invalid" ? navigationDraft.message : null,
+  );
   const actionResult =
     actionData?.ok && actionData.intent === "ask" ? actionData.result : null;
   const [streamedResult, setStreamedResult] =
@@ -522,6 +528,32 @@ export default function AssistantRoute() {
     ).length;
   const hasProposalHistory =
     streamedProposals.length > 0 || recentProposals.length > 0;
+
+  useEffect(() => {
+    const draft = adminAssistantDraftFromNavigationState(location.state);
+    if (draft.status === "none") return;
+    if (draft.status === "ready") {
+      setDraftPrompt(draft.prompt);
+      setDraftNavigationError(null);
+    } else {
+      setDraftPrompt("");
+      setDraftNavigationError(draft.message);
+    }
+    void navigate(
+      {
+        pathname: location.pathname,
+        search: location.search,
+        hash: location.hash,
+      },
+      { replace: true, state: null, preventScrollReset: true },
+    );
+  }, [
+    location.hash,
+    location.pathname,
+    location.search,
+    location.state,
+    navigate,
+  ]);
 
   useEffect(() => {
     if (actionData?.ok && actionData.intent === "ask") {
@@ -646,8 +678,13 @@ export default function AssistantRoute() {
         />
       ) : null}
 
+      {draftNavigationError ? (
+        <StatusNotice title={draftNavigationError} tone="danger" />
+      ) : null}
+
       <StreamingAssistantWorkspace
-        defaultPrompt={loaderData.prompt}
+        draftPrompt={draftPrompt}
+        setDraftPrompt={setDraftPrompt}
         disabled={busy || !loaderData.provider.configured}
         eventName={loaderData.eventName}
         result={streamedResult}

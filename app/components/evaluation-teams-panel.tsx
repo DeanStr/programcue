@@ -11,11 +11,12 @@ export function EvaluationTeamsPanel() {
   const { confirm, dialog } = useConfirm();
   const location = useLocation();
   const navigate = useNavigate();
-  const [accessOpen, setAccessOpen] = useState(
-    location.hash === "#evaluation-access",
-  );
+  const [accessOpen, setAccessOpen] = useState(false);
+  // biome-ignore lint/correctness/useExhaustiveDependencies: React Router location changes are the trigger for rereading the browser-only fragment after hydration and Back/Forward navigation.
   useEffect(() => {
-    setAccessOpen(location.hash === "#evaluation-access");
+    // Fragments never reach the server. Read the browser URL after hydration so
+    // direct loads match the closed server markup before opening the target.
+    setAccessOpen(window.location.hash === "#evaluation-access");
   }, [location.hash]);
   return (
     <section className="card pad mb pc-eval-teams">
@@ -37,7 +38,7 @@ export function EvaluationTeamsPanel() {
         onToggle={(event) => {
           const open = event.currentTarget.open;
           setAccessOpen(open);
-          if (!open && location.hash === "#evaluation-access") {
+          if (!open && window.location.hash === "#evaluation-access") {
             void navigate(`${location.pathname}${location.search}`, {
               replace: true,
               preventScrollReset: true,
