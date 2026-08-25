@@ -378,8 +378,12 @@ export function AdminCommandDialog({
         )
       : [];
 
-  const navigateMatches = navigationItems.filter(([, , label, description]) =>
-    staticMatch(`navigate ${label} ${description ?? ""}`),
+  const navigateMatches = navigationItems.filter(
+    ([id, , label, description]) =>
+      // The dedicated assistant command preserves the `ask …` draft handoff
+      // and gives this destination a single, unambiguous palette result.
+      id !== "assistant" &&
+      staticMatch(`navigate ${label} ${description ?? ""}`),
   );
   const createMatches = matching(createCommands, canRunCommands);
   const actionMatches = matching(actionCommands, canRunCommands);

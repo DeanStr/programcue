@@ -281,6 +281,7 @@ describe("administrator navigation context", () => {
         "site",
         "integrations",
         "settings",
+        "assistant",
       ]),
     );
   });
@@ -322,7 +323,16 @@ describe("administrator navigation context", () => {
     );
   });
 
-  it("opens the speaker family's second level anywhere inside that family", () => {
+  it("opens each workspace's second level anywhere inside that family", () => {
+    expect(primaryNavigationItemExpanded("command", "/admin/assistant")).toBe(
+      true,
+    );
+    expect(primaryNavigationItemActive("assistant", "/admin/assistant")).toBe(
+      true,
+    );
+    expect(
+      primaryNavigationChildren("command", NAV_ITEMS).map(([id]) => id),
+    ).toEqual(["assistant"]);
     expect(primaryNavigationItemExpanded("speakers", "/admin/speakers")).toBe(
       true,
     );

@@ -628,7 +628,9 @@ export function AdminShell({
     viewer.role === "committee_chair"
       ? NAV_ITEMS.filter(([id]) => id === "review")
       : NAV_ITEMS.filter(
-          ([id]) => id !== "crm" || viewer.canCreateEvents || viewer.demo,
+          ([id]) =>
+            (id !== "assistant" || canOpenAdminAssistant(viewer.role)) &&
+            (id !== "crm" || viewer.canCreateEvents || viewer.demo),
         );
   const navigationGroups = primaryNavigationGroups(navigationItems);
   const demoRoleLabel = viewer.role.replaceAll("_", " ");

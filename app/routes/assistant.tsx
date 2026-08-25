@@ -583,15 +583,7 @@ export default function AssistantRoute() {
           {loaderData.provider.problem} The assistant will not simulate a
           response or fall back to static copy.
         </p>
-      ) : (
-        <StatusNotice
-          title={`${loaderData.provider.providerLabel} ${loaderData.provider.model} is configured`}
-        >
-          Requests use the selected provider with strict allow-listed tools.
-          Reads may run immediately; writes stop at a saved preview until you
-          approve the exact effect.
-        </StatusNotice>
-      )}
+      ) : null}
 
       <details className="pc-assist-provider">
         <summary>
@@ -647,11 +639,19 @@ export default function AssistantRoute() {
             </div>
           </Form>
         ) : (
-          <p className="help">
-            Organisation owners select the provider and model. Event
-            administrators can inspect readiness and use the configured
-            provider.
-          </p>
+          <>
+            {loaderData.provider.selection ? (
+              <p className="help">
+                Current provider: {loaderData.provider.providerLabel} ·{" "}
+                <code>{loaderData.provider.model}</code>
+              </p>
+            ) : null}
+            <p className="help">
+              Organisation owners select the provider and model. Event
+              administrators can inspect readiness and use the configured
+              provider.
+            </p>
+          </>
         )}
         <p className="help">
           Provider credentials are held in the deployment environment and are

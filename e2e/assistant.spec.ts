@@ -28,6 +28,36 @@ test("assistant fails explicitly when the OpenAI credential is unavailable", asy
   await expect(
     page.getByRole("heading", { name: "Event Assistant" }),
   ).toBeVisible();
+  const navigation = page.getByRole("complementary", {
+    name: "Primary navigation",
+  });
+  await expect(
+    navigation.getByRole("link", { name: "Event assistant" }),
+  ).toHaveAttribute("aria-current", "page");
+  await expect(
+    navigation.getByRole("link", { name: "Home", exact: true }),
+  ).toHaveAttribute("data-family-current", "");
+  await page.getByRole("button", { name: /Search or run a command/ }).click();
+  const commandDialog = page.getByRole("dialog", {
+    name: "Search or run a command",
+  });
+  await commandDialog
+    .getByRole("combobox", { name: "Program Cue commands" })
+    .fill("assistant");
+  await expect(
+    commandDialog.getByRole("option", { name: /^Ask about this event\b/ }),
+  ).toHaveCount(1);
+  await expect(
+    commandDialog.getByRole("option", { name: /^Event assistant\b/ }),
+  ).toHaveCount(0);
+  await page.keyboard.press("Escape");
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.getByRole("button", { name: "Open navigation" }).click();
+  const mobileNavigation = page.getByRole("dialog", { name: "Navigation" });
+  await expect(
+    mobileNavigation.getByRole("link", { name: "Event assistant" }),
+  ).toHaveAttribute("aria-current", "page");
+  await mobileNavigation.getByRole("button", { name: "Close" }).click();
   const providerStatus = page.getByRole("status").filter({
     hasText: /not configured/i,
   });

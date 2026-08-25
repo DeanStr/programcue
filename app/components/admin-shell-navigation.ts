@@ -16,6 +16,7 @@ import {
   Palette,
   PanelTop,
   Settings,
+  Sparkles,
   UsersRound,
 } from "lucide-react";
 import type { AdminRecordBreadcrumbHandle } from "~/modules/administration/admin-route-breadcrumb";
@@ -32,6 +33,12 @@ export type AdminNavigationItem = readonly [
 
 export const NAV_ITEMS = [
   ["command", LayoutDashboard, "Home"],
+  [
+    "assistant",
+    Sparkles,
+    "Event assistant",
+    "Ask questions grounded in the current event records",
+  ],
   ["event", CalendarCog, "Event settings"],
   ["branding", Palette, "Branding"],
   [
@@ -82,6 +89,7 @@ const NAV_GROUPS = [
    breadcrumb printed directly below it. They are the speaker family's second
    level and appear whenever that family is where you are. */
 const NAV_CHILDREN: Record<string, ReadonlyArray<string>> = {
+  command: ["assistant"],
   submissions: ["review"],
   speakers: ["crm", "resources"],
   schedule: ["content", "programme"],
