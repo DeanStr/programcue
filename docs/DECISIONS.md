@@ -1622,3 +1622,58 @@ persisted `position` values without a migration. The demo fixture works within
 the current rule by naming its tiers Headline, Major and Supporting, which read
 in their own hierarchy alphabetically; `demo-reset-fixtures.ts` records that
 constraint where a maintainer adding a tier will meet it.
+
+## Launch-film evidence and delivery contract
+
+The long-form product film is a six-minute, 1920 × 1080, 30 fps Remotion
+composition kept in `video/`. It is a pre-release deep dive, not a customer
+testimonial or production-provider demonstration. Audience-facing copy leads
+with outcomes and product capability; provenance, fixture identity and release
+boundaries stay in the production notes rather than appearing as repeated
+engineering disclaimers. A state label remains only when removing it would
+materially change the represented outcome—for example, the Accelevents sequence
+is an export preview and never a completed provider sync. The canonical demo
+event is the film's primary factual anchor. Fictional scenario records may
+demonstrate verified behaviour without a warning badge when the film does not
+present them as customer evidence. API examples use documented paths; the film
+must never invent provider success, customer metrics or performance claims to
+improve the story.
+
+Reviewed seeded-product behaviour and Playwright evidence remain the factual
+source for application UI. The film imports static captures directly where they
+tell the story clearly. Product-faithful code-native reconstructions may show a
+verified seeded state or connect those states with continuous motion, but they
+must preserve the real workflow, permissions, state boundaries and product
+language; they cannot invent a second interface or unsupported outcome. One
+generated editorial event image may be used as event context without an
+on-screen provenance label; internal provenance remains recorded and the film
+must not claim that Program Cue delivered the depicted event. The
+default score is generated deterministically from repository-owned code and
+local assets. The delivery master is H.264/AAC in an MP4 container, progressive
+1080p30, 4:2:0, limited-range BT.709 and 48 kHz stereo. Curated stills, media
+validation and rendered masters live under the ignored `.artifacts/` directory;
+implementation status is unchanged by the existence of a marketing film.
+
+Master acceptance is a decoded-output contract, not a metadata-only check. The
+release gate fully decodes picture and sound, counts 10,800 readable frames,
+requires one constant-rate H.264 video stream and one 48 kHz AAC stream,
+compares the full decoded soundtrack with its selected reference, measures the
+encoded music master, rejects excessive black, frozen or silent spans, and
+requires the exact picture-locked VTT sidecar. A separate canary pass compares
+39 curated scene frames and 64 boundary frames with the current Remotion review
+renders and produces both contact sheets. Visual inspection remains required
+for truth-label legibility, transitions and motion quality because stream
+metadata and image similarity cannot prove those editorial properties.
+
+The normal Remotion render uses the deterministic procedural score. A selected,
+pinned Eleven Music v2 candidate has a separate offline mastering recipe and
+produces an explicitly named alternate master; it never replaces the score or
+picture source implicitly. Provider IDs, source hashes, plan hash, exact sample
+trim, mastering recipe and derived hashes remain in its ignored provenance
+manifest. A scene-timed ElevenLabs voice-over audition may be retained as
+optional review evidence, but is not mounted in either master merely because
+generation succeeded. Any narrated alternate needs a fresh picture-locked
+editorial, lossless mix and encoded-output gate. API credentials are process-only
+secrets and are never stored in the repository. Commercial publication remains
+blocked until a release owner records that the applicable Remotion and
+ElevenLabs licences permit the selected delivery.

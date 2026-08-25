@@ -1,0 +1,37 @@
+{
+  "schemaVersion": 1,
+  "assets": [
+    {
+      "path": "video/public/video/illustrative-event-moment.png",
+      "sha256": "873def412d83237ef11572f2daccbd1ea4b496d93bb583e40b1d74dc4b3f41e5",
+      "origin": "generated editorial image",
+      "generator": "OpenAI Media Service / gpt-image 2.0",
+      "embeddedC2pa": true,
+      "useBoundary": "Illustrative event context only; never product or customer evidence."
+    },
+    {
+      "path": "video/public/fonts/inter-latin-var.woff2",
+      "sha256": "3100e775e8616cd2611beecfa23a4263d7037586789b43f035236a2e6fbd4c62",
+      "origin": "bundled Inter variable font",
+      "licensePath": "video/public/fonts/OFL.txt"
+    },
+    {
+      "path": "video/public/fonts/OFL.txt",
+      "sha256": "3b0a5fca3d17942cde889069889dedbbbd075e9b599968c82a95f4d944e9b345",
+      "origin": "SIL Open Font License text bundled with Inter"
+    },
+    {
+      "path": "video/delivery/program-cue-launch-descriptions.vtt",
+      "sha256": "3e3d24bf73f5b849dd0a4d091d7462d4640c8bed9dcf976c5214e724d544264f",
+      "origin": "Program Cue editorial accessibility track",
+      "useBoundary": "Picture-locked visual descriptions for the music-led master."
+    },
+    {
+      "path": "video/public/video/program-cue-score.wav",
+      "sha256": "137c0ea93117059b54657ea014d1e7514c0c2c2020978815ce6f6ee60744e903",
+      "origin": "deterministic Program Cue procedural score",
+      "generator": "video/scripts/generate-score.mjs",
+      "useBoundary": "Ignored derived asset; recreated from current repository source before every workflow that consumes the procedural score."
+    }
+  ]
+}

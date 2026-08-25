@@ -1,0 +1,20 @@
+{
+  "fps": 30,
+  "width": 1920,
+  "height": 1080,
+  "scenes": [
+    { "key": "opening", "durationInFrames": 450 },
+    { "key": "reveal", "durationInFrames": 480 },
+    { "key": "command", "durationInFrames": 690 },
+    { "key": "setup", "durationInFrames": 690 },
+    { "key": "collect", "durationInFrames": 990 },
+    { "key": "decide", "durationInFrames": 1080 },
+    { "key": "prepare", "durationInFrames": 990 },
+    { "key": "assist", "durationInFrames": 1050 },
+    { "key": "communicate", "durationInFrames": 780 },
+    { "key": "place", "durationInFrames": 1200 },
+    { "key": "publish", "durationInFrames": 1080 },
+    { "key": "operate", "durationInFrames": 780 },
+    { "key": "closing", "durationInFrames": 540 }
+  ]
+}

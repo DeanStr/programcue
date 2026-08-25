@@ -1,0 +1,294 @@
+{
+  "chunks": [
+    {
+      "text": "[Act I — Signal: Opening]\n{instrumental}",
+      "duration_ms": 15000,
+      "positive_styles": [
+        "instrumental cinematic electronic score for a premium product film",
+        "sophisticated tactile sound design, never stock corporate",
+        "restrained 120 BPM pulse with a poised half-time feel",
+        "D minor harmony with a later lift toward F major",
+        "recurring D–F–A–E four-note glass-marimba and muted-piano motif",
+        "warm analog synth bass",
+        "close detailed percussion with strong transient definition",
+        "wide dimensional mix with a focused mono-compatible center",
+        "high-end contemporary production"
+      ],
+      "negative_styles": [
+        "vocals, lyrics, choir, humming, or spoken word",
+        "generic corporate music",
+        "ukulele, whistling, or cheerful handclaps",
+        "festival EDM drop",
+        "trap hi-hat rolls",
+        "trailer braams",
+        "melodramatic orchestra",
+        "lo-fi, muddy, or heavily compressed mix"
+      ],
+      "context_adherence": "high"
+    },
+    {
+      "text": "[Act I — Signal: Reveal]\n{instrumental}",
+      "duration_ms": 16000,
+      "positive_styles": [
+        "continue the exact four-note glass and muted-piano identity",
+        "filtered pulse coming into focus",
+        "subtle low kick and brushed electronic percussion enter",
+        "dark negative space opening into quiet confidence",
+        "precise logo-reveal impact without a giant drop",
+        "D minor cinematic electronica",
+        "premium detailed mix"
+      ],
+      "negative_styles": [
+        "vocals, lyrics, choir, humming, or spoken word",
+        "abrupt genre change",
+        "generic corporate uplift",
+        "oversized trailer hit",
+        "festival EDM",
+        "busy lead melody"
+      ],
+      "context_adherence": "high"
+    },
+    {
+      "text": "[Act II — Orientation: Command]\n{instrumental}",
+      "duration_ms": 23000,
+      "positive_styles": [
+        "same cinematic electronic identity and recurring four-note motif",
+        "crisp controlled groove at 120 BPM",
+        "muted synth plucks and tight acoustic-electronic percussion",
+        "warm analog bass with restrained forward motion",
+        "clear confident product-demo energy",
+        "small edit accents that preserve continuity",
+        "polished spacious production"
+      ],
+      "negative_styles": [
+        "vocals, lyrics, choir, humming, or spoken word",
+        "stock corporate advertising music",
+        "funk slap bass",
+        "rock guitars",
+        "EDM risers and drops",
+        "overly dense arrangement"
+      ],
+      "context_adherence": "high"
+    },
+    {
+      "text": "[Act II — Orientation: Setup]\n{instrumental}",
+      "duration_ms": 23000,
+      "positive_styles": [
+        "continue the established 120 BPM premium electronica",
+        "lighter clockwork percussion and soft woodblock detail",
+        "muted-piano motif answered by warm synth plucks",
+        "calm purposeful motion",
+        "subtle harmonic color toward F major",
+        "clean space for interface detail",
+        "seamless transition from the previous section"
+      ],
+      "negative_styles": [
+        "vocals, lyrics, choir, humming, or spoken word",
+        "new genre",
+        "playful cartoon sound",
+        "generic tech-commercial arpeggio",
+        "large drums",
+        "saccharine major-key mood"
+      ],
+      "context_adherence": "high"
+    },
+    {
+      "text": "[Act III — Momentum: Collect]\n{instrumental}",
+      "duration_ms": 33000,
+      "positive_styles": [
+        "established four-note motif now moving through layered plucks",
+        "propulsive precise percussion with tactile clicks and deep kick",
+        "warm bass sequence at 120 BPM",
+        "growing rhythmic momentum in three clear waves",
+        "sophisticated cinematic product-film energy",
+        "subtle counterpoint without crowding the interface",
+        "dimensional premium mix"
+      ],
+      "negative_styles": [
+        "vocals, lyrics, choir, humming, or spoken word",
+        "generic corporate pop",
+        "trap rhythm",
+        "four-on-the-floor club beat",
+        "comedy percussion",
+        "constant maximum intensity"
+      ],
+      "context_adherence": "high"
+    },
+    {
+      "text": "[Act III — Momentum: Decide]\n{instrumental}",
+      "duration_ms": 36000,
+      "positive_styles": [
+        "first decisive emotional peak of the established score",
+        "four-note motif stated clearly by glass mallet and piano octave",
+        "confident syncopated drums and grounded analog bass",
+        "restrained string harmonics widening the image",
+        "rising harmonic tension resolving with editorial certainty",
+        "two clean impact moments and a controlled final lift",
+        "cinematic high-end production"
+      ],
+      "negative_styles": [
+        "vocals, lyrics, choir, humming, or spoken word",
+        "triumphant corporate anthem",
+        "epic trailer orchestra",
+        "dubstep or EDM drop",
+        "distorted rock guitars",
+        "wall-to-wall percussion"
+      ],
+      "context_adherence": "high"
+    },
+    {
+      "text": "[Act IV — Human Intelligence: Prepare]\n{instrumental}",
+      "duration_ms": 33000,
+      "positive_styles": [
+        "intentional human-scale breath after the first peak",
+        "intimate felt piano carrying the established four-note motif",
+        "warm cello harmonics and soft analog air",
+        "percussion nearly absent at first then gently returning",
+        "empathetic sophisticated restraint",
+        "D minor warmth with suspended add-nine harmony",
+        "close natural detail inside a wide quiet room"
+      ],
+      "negative_styles": [
+        "vocals, lyrics, choir, humming, or spoken word",
+        "sentimental solo piano ballad",
+        "sad melodrama",
+        "generic inspirational swell",
+        "heavy drums",
+        "complete silence or disconnected interlude"
+      ],
+      "context_adherence": "high"
+    },
+    {
+      "text": "[Act IV — Human Intelligence: Assist]\n{instrumental}",
+      "duration_ms": 35000,
+      "positive_styles": [
+        "felt-piano motif transformed into intelligent granular glass pulses",
+        "warm human core beneath precise futuristic detail",
+        "restrained 120 BPM groove re-entering in stages",
+        "shimmering micro-textures and soft sub bass",
+        "curiosity becoming assured momentum",
+        "cinematic technology without science-fiction cliché",
+        "high-definition spatial production"
+      ],
+      "negative_styles": [
+        "vocals, lyrics, choir, humming, or spoken word",
+        "robot beeps or novelty AI sounds",
+        "cyberpunk aggression",
+        "generic corporate synthwave",
+        "glitch overload",
+        "ominous technology mood"
+      ],
+      "context_adherence": "high"
+    },
+    {
+      "text": "[Act V — Connection: Communicate]\n{instrumental}",
+      "duration_ms": 26000,
+      "positive_styles": [
+        "established motif exchanged between piano, glass mallet, and synth",
+        "interlocking signal-like percussion with organic touch",
+        "confident warm analog bass",
+        "brightening F-major color without sentimentality",
+        "clean conversational call-and-response phrasing",
+        "controlled forward drive at 120 BPM",
+        "premium product-film polish"
+      ],
+      "negative_styles": [
+        "vocals, lyrics, choir, humming, or spoken word",
+        "notification sound effects",
+        "cheerful corporate jingle",
+        "funk or disco pastiche",
+        "busy arpeggio wall",
+        "abrupt breakdown"
+      ],
+      "context_adherence": "high"
+    },
+    {
+      "text": "[Act V — Connection: Place]\n{instrumental}",
+      "duration_ms": 40000,
+      "positive_styles": [
+        "long-form motoric build using the established 120 BPM groove",
+        "precise layered percussion suggesting complex pieces locking together",
+        "four-note motif developing through elegant harmonic variations",
+        "deep warm bass and restrained cinematic strings",
+        "three-stage rise with breathing room between edit accents",
+        "tension turning into clarity rather than spectacle",
+        "expansive dimensional mix with premium transient detail"
+      ],
+      "negative_styles": [
+        "vocals, lyrics, choir, humming, or spoken word",
+        "festival EDM build and drop",
+        "action trailer drums",
+        "mechanical monotony",
+        "constant arpeggio",
+        "overwhelming interface detail"
+      ],
+      "context_adherence": "high"
+    },
+    {
+      "text": "[Act VI — Release: Publish]\n{instrumental}",
+      "duration_ms": 36000,
+      "positive_styles": [
+        "emotional release and brightest statement of the established theme",
+        "four-note motif blooming across felt piano, glass mallet, and warm synth strings",
+        "F-major lift grounded by the familiar analog bass",
+        "confident full percussion with refined cinematic scale",
+        "radiant spacious harmony without advertising sentimentality",
+        "one memorable publication impact followed by sustained momentum",
+        "luxurious contemporary mix"
+      ],
+      "negative_styles": [
+        "vocals, lyrics, choir, humming, or spoken word",
+        "generic inspirational corporate anthem",
+        "heroic brass fanfare",
+        "festival EDM climax",
+        "saccharine melody",
+        "trailer-style excess"
+      ],
+      "context_adherence": "high"
+    },
+    {
+      "text": "[Act VII — Control: Operate]\n{instrumental}",
+      "duration_ms": 26000,
+      "positive_styles": [
+        "controlled confident comedown from the publication peak",
+        "precise low groove and reduced percussion at 120 BPM",
+        "four-note motif in low muted piano and glass overtones",
+        "assured operational focus rather than fading energy",
+        "D-minor and F-major colors held in balance",
+        "subtle final-chapter anticipation",
+        "clean authoritative premium production"
+      ],
+      "negative_styles": [
+        "vocals, lyrics, choir, humming, or spoken word",
+        "dark ominous ending",
+        "abrupt loss of energy",
+        "corporate background loop",
+        "heavy drums",
+        "new melodic theme"
+      ],
+      "context_adherence": "high"
+    },
+    {
+      "text": "[Act VII — Control: Closing]\n{instrumental}",
+      "duration_ms": 18000,
+      "positive_styles": [
+        "final distilled statement of the recurring four-note brand motif",
+        "felt piano, glass mallet, warm analog pad, and restrained low bass",
+        "confident D-minor add-nine resolution with a trace of F-major light",
+        "percussion falls away while harmonic presence remains",
+        "precise logo sting in the final three seconds",
+        "clean intentional ending with a short natural tail",
+        "timeless high-end sonic identity"
+      ],
+      "negative_styles": [
+        "vocals, lyrics, choir, humming, or spoken word",
+        "generic corporate resolve",
+        "fade to silence before the logo",
+        "abrupt cutoff",
+        "epic trailer ending",
+        "unresolved tension"
+      ],
+      "context_adherence": "high"
+    }
+  ]
+}

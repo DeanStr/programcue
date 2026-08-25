@@ -76,6 +76,23 @@ local harness workflow.
 
 Event slugs are globally unique. Public programme and calendar-session links always include the event slug. Unpublished draft-review links use a token-only `/programme-preview/:token` route and are not published programme URLs.
 
+## Launch film
+
+The repository includes a six-minute Remotion product film built from reviewed
+seeded-product states, Playwright captures, product-faithful code-native motion
+and editorial event-context imagery. Run
+`npm run video:studio` to preview it,
+`npm run video:frames` for the curated visual-review sheet, and
+`npm run video:render && npm run video:validate && npm run video:compare` for
+the BT.709 H.264/AAC master and decoded-canary gate. Audience-facing copy leads
+with product outcomes; source provenance and external-provider boundaries stay
+in the production notes instead of appearing as repeated disclaimer badges.
+Its chronological cut covers setup, applications, review, accepted-speaker
+onboarding, a permissioned assistant reminder with preview and approval,
+communications, scheduling, publication, public surfaces and the unified
+operation/API/integration boundary.
+See [the film production notes](video/README.md).
+
 ## Validation
 
 ```bash

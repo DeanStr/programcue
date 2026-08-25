@@ -1,0 +1,163 @@
+{
+  "title": "Program Cue launch film voice-over",
+  "version": 5,
+  "language": "en-GB",
+  "totalDurationSeconds": 360,
+  "sceneCount": 13,
+  "voice": {
+    "provider": "elevenlabs",
+    "voiceId": "Xb7hH8MSUJpSbSDYk0k2",
+    "voiceName": "Alice",
+    "modelId": "eleven_multilingual_v2",
+    "outputFormat": "mp3_44100_128",
+    "settings": {
+      "stability": 0.62,
+      "similarity_boost": 0.82,
+      "style": 0.18,
+      "use_speaker_boost": true,
+      "speed": 1
+    }
+  },
+  "mix": {
+    "voiceTargetLufs": -16,
+    "finalTargetLufs": -14,
+    "finalTruePeakDb": -1,
+    "sidechainDuckDb": "6-10",
+    "preservedBreathingSpaceSeconds": {
+      "start": 177,
+      "end": 180
+    }
+  },
+  "segments": [
+    {
+      "id": "01-opening",
+      "sceneKey": "opening",
+      "scene": "Program Cue",
+      "sceneStartSeconds": 0,
+      "sceneDurationSeconds": 15,
+      "voiceStartSeconds": 1,
+      "voiceEndSeconds": 13,
+      "text": "Program Cue connects event readiness, schedule revalidation and the public programme, carrying one coherent journey from the first proposal through speaker preparation to a published timetable. Run the programme, not the spreadsheet."
+    },
+    {
+      "id": "02-reveal",
+      "sceneKey": "reveal",
+      "scene": "Workflow overview",
+      "sceneStartSeconds": 15,
+      "sceneDurationSeconds": 16,
+      "voiceStartSeconds": 16,
+      "voiceEndSeconds": 29,
+      "text": "One workspace maps the programme lifecycle: shape the brief, call for speakers and collection; decide through review and preparation; then share through communication, placement and explicit publication, with current status kept visible."
+    },
+    {
+      "id": "03-command",
+      "sceneKey": "command",
+      "scene": "Command Centre",
+      "sceneStartSeconds": 31,
+      "sceneDurationSeconds": 23,
+      "voiceStartSeconds": 32,
+      "voiceEndSeconds": 52,
+      "text": "The Command Centre reads current programme records. Seventy-five percent readiness summarises six workflows, while two named blocking conditions open the source tasks, owners, impact and available actions for follow-up."
+    },
+    {
+      "id": "04-set-event",
+      "sceneKey": "setup",
+      "scene": "Event setup",
+      "sceneStartSeconds": 54,
+      "sceneDurationSeconds": 23,
+      "voiceStartSeconds": 55,
+      "voiceEndSeconds": 75,
+      "text": "Define identity, dates, venue, timezone and access once across every participant-facing surface. Choose Program Cue or Airtable for event data, with clear file and retention policies. Branding stays private through saved preview, then publishing confirms the public identity."
+    },
+    {
+      "id": "05-collect",
+      "sceneKey": "collect",
+      "scene": "Collect",
+      "sceneStartSeconds": 77,
+      "sceneDurationSeconds": 33,
+      "voiceStartSeconds": 78,
+      "voiceEndSeconds": 108,
+      "text": "Build the application, preview desktop and mobile routes, then publish immutable form version one. A verified applicant can save a private draft and submit against that exact version unchanged."
+    },
+    {
+      "id": "06-decide",
+      "sceneKey": "decide",
+      "scene": "Review decisions",
+      "sceneStartSeconds": 110,
+      "sceneDurationSeconds": 36,
+      "voiceStartSeconds": 111,
+      "voiceEndSeconds": 144,
+      "text": "Reviewers keep source answers, form version, conflicts and weighted rubric together. An advisory panel cites evidence and suggests values; reviewers choose what to import, submit their recommendation, and organisers make the final decision with communication status visible."
+    },
+    {
+      "id": "07-prepare",
+      "sceneKey": "prepare",
+      "scene": "Prepare speakers",
+      "sceneStartSeconds": 146,
+      "sceneDurationSeconds": 33,
+      "voiceStartSeconds": 147,
+      "voiceEndSeconds": 177,
+      "text": "An accepted session opens the speaker workspace and onboarding plan. One task is complete, two remain open and every next action stays connected as the team moves from speaker preparation to show day."
+    },
+    {
+      "id": "08-assist",
+      "sceneKey": "assist",
+      "scene": "Event assistant",
+      "sceneStartSeconds": 179,
+      "sceneDurationSeconds": 35,
+      "voiceStartSeconds": 180,
+      "voiceEndSeconds": 212,
+      "text": "Ask: ‘Find speakers with incomplete tasks and draft a reminder for my approval.’ The assistant finds Priya’s speaker task, separates session deliverables and prepares an editable, targeted reminder ready for the organiser to approve and queue."
+    },
+    {
+      "id": "09-communicate",
+      "sceneKey": "communicate",
+      "scene": "Communicate",
+      "sceneStartSeconds": 214,
+      "sceneDurationSeconds": 26,
+      "voiceStartSeconds": 215,
+      "voiceEndSeconds": 238,
+      "text": "Version a speaker welcome and preview Alex Morgan’s personalised message. Confirm the recipient and template, queue the welcome and follow its recorded handoff result, while calendar work keeps its own status."
+    },
+    {
+      "id": "10-place",
+      "sceneKey": "place",
+      "scene": "Place sessions",
+      "sceneStartSeconds": 240,
+      "sceneDurationSeconds": 40,
+      "voiceStartSeconds": 241,
+      "voiceEndSeconds": 278,
+      "text": "Program Cue detects a blocking room overlap, proposes valid placements and lets the organiser choose the best path. Public content, publication changes and dependencies come together before the approved schedule goes live."
+    },
+    {
+      "id": "11-publish",
+      "sceneKey": "publish",
+      "scene": "Publish",
+      "sceneStartSeconds": 280,
+      "sceneDurationSeconds": 36,
+      "voiceStartSeconds": 281,
+      "voiceEndSeconds": 314,
+      "text": "One approved programme revision powers programme, timetable, day, speaker and embed views. A personal itinerary and managed embed complete an event site built from the same connected published source."
+    },
+    {
+      "id": "12-operate",
+      "sceneKey": "operate",
+      "scene": "Operate",
+      "sceneStartSeconds": 316,
+      "sceneDurationSeconds": 26,
+      "voiceStartSeconds": 317,
+      "voiceEndSeconds": 340,
+      "text": "Make Program Cue part of your event stack through thirty-three documented API paths. Follow Priya’s reminder to its result, recover the failed operation with its original audience, and prepare an Accelevents export-ready package."
+    },
+    {
+      "id": "13-closing",
+      "sceneKey": "closing",
+      "scene": "Product summary",
+      "sceneStartSeconds": 342,
+      "sceneDurationSeconds": 18,
+      "voiceStartSeconds": 343,
+      "voiceEndSeconds": 358,
+      "text": "From first proposal to published programme, Program Cue links submissions, decisions, speaker work, scheduling and operations in one event workspace. One programme. Every workflow. Fully connected at Program Cue dot com."
+    }
+  ]
+}
