@@ -165,6 +165,9 @@ describe("onboarding task service", () => {
           (row) => JSON.parse(row.configurationJson).form.fields.length >= 4,
         ),
       ).toBe(true);
+      await expect(service.getAdminWorkspace(admin)).resolves.toMatchObject({
+        travelOnboardingReady: true,
+      });
       await testEnv.DB.prepare(
         `UPDATE task_templates
             SET due_anchor = 'none', due_offset_minutes = NULL
@@ -172,6 +175,9 @@ describe("onboarding task service", () => {
       )
         .bind(templates.hotelTemplateId, admin.eventId)
         .run();
+      await expect(service.getAdminWorkspace(admin)).resolves.toMatchObject({
+        travelOnboardingReady: false,
+      });
 
       const { taskId } = await service.assignTemplate(
         admin,

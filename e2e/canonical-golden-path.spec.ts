@@ -200,19 +200,17 @@ test.describe
       await expectStatus(page, "Published a new immutable form version");
 
       await waitForInterface(page, "/admin/tasks");
-      await page.getByText("Plan and onboarding", { exact: true }).click();
+      await page.getByRole("button", { name: "Plans & onboarding" }).click();
       await page.getByLabel(/I confirm these forms should be created/i).check();
       await page.getByRole("button", { name: "Create travel forms" }).click();
       await expectStatus(
         page,
         "Hotel stay and flight reimbursement forms are ready",
       );
-      await page.getByLabel(/I confirm these forms should be created/i).check();
-      await page.getByRole("button", { name: "Create travel forms" }).click();
-      await expectStatus(
-        page,
-        "were already ready. No duplicates were created",
-      );
+      await expect(page.getByText("Travel onboarding ready")).toBeVisible();
+      await expect(
+        page.getByText(/Existing speakers are unchanged/i),
+      ).toBeVisible();
 
       await waitForInterface(page, "/apply/form");
       await expect(

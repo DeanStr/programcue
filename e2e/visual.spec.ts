@@ -181,7 +181,9 @@ async function waitForSurfaceReady(page: Page, name: string) {
     await expect(
       page.getByRole("heading", { name: "Filter assigned work" }),
     ).toBeVisible();
-    await expect(page.locator(".tasks-layout")).toBeVisible();
+    await expect(
+      page.getByRole("navigation", { name: "Task workspace views" }),
+    ).toBeVisible();
   } else if (name === "programme-admin") {
     await expect(
       page.getByRole("heading", { name: "Current programme records" }),
@@ -414,7 +416,7 @@ test.describe
       await captureLaptopViewport(page, "form-builder");
     });
 
-    test("Tasks & Readiness keeps assigned work and plan controls legible", async ({
+    test("Tasks & Readiness keeps each workspace view legible", async ({
       page,
     }) => {
       await openHydrated(page, "/admin/tasks");
@@ -422,8 +424,27 @@ test.describe
       await expect(
         page.getByRole("heading", { name: "Tasks & readiness", level: 1 }),
       ).toBeInViewport();
-      await expect(page.locator(".tasks-layout")).toBeInViewport();
+      await expect(
+        page.getByRole("region", { name: "Assigned work", exact: true }),
+      ).toBeInViewport();
       await captureLaptopViewport(page, "tasks-readiness");
+
+      await page
+        .getByRole("button", { name: "Plans & onboarding", exact: true })
+        .click();
+      await expect(
+        page.getByRole("region", {
+          name: "Plans & onboarding",
+          exact: true,
+        }),
+      ).toBeInViewport();
+      await captureLaptopViewport(page, "tasks-readiness-plans");
+
+      await page.getByRole("button", { name: /Templates/ }).click();
+      await expect(
+        page.getByRole("region", { name: "Templates", exact: true }),
+      ).toBeInViewport();
+      await captureLaptopViewport(page, "tasks-readiness-templates");
     });
 
     test("Schedule Planner keeps the focused planning canvas visible", async ({

@@ -19,7 +19,7 @@ export function AdminTaskPlanPanel({
   data,
   busy,
   actionNotice,
-  mode = "all",
+  mode,
 }: {
   data: AdminTasksData;
   busy: boolean;
@@ -30,7 +30,7 @@ export function AdminTaskPlanPanel({
     draft?: TaskTemplateDraftValues;
     errors?: Record<string, string[]>;
   };
-  mode?: "all" | "plan" | "create";
+  mode: "plan" | "create";
 }) {
   const assignableTemplates = data.templates.filter(
     (template) => template.status === "active",
@@ -88,8 +88,8 @@ export function AdminTaskPlanPanel({
       : selectedTemplate?.targetType === "event"
         ? "Event"
         : "Speaker";
-  const showPlan = mode === "all" || mode === "plan";
-  const showCreate = mode === "all" || mode === "create";
+  const showPlan = mode === "plan";
+  const showCreate = mode === "create";
   const sessionDetailsReviewReady = data.templates.some(
     (template) =>
       template.status === "active" &&
@@ -105,9 +105,9 @@ export function AdminTaskPlanPanel({
       template.dependencies.length === 0,
   );
   return (
-    <aside className="tasks-side stack">
+    <div className={`tasks-plan-panel is-${mode}`}>
       {showPlan ? (
-        <section className="tasks-plan-block">
+        <section className="card pad tasks-plan-block">
           <div className="card-title">
             <h2>Session-detail review</h2>
           </div>
@@ -151,7 +151,7 @@ export function AdminTaskPlanPanel({
         </section>
       ) : null}
       {showPlan ? (
-        <section className="tasks-plan-block">
+        <section className="card pad tasks-plan-block">
           <div className="card-title">
             <h2>Speaker travel onboarding</h2>
           </div>
@@ -164,30 +164,40 @@ export function AdminTaskPlanPanel({
             <li>Hotel stay requirements</li>
             <li>Flight reimbursement</li>
           </ul>
-          <Form method="post" className="stack">
-            <input
-              type="hidden"
-              name="intent"
-              value="create-travel-onboarding"
-            />
-            <label className="speaker-confirm">
+          {data.travelOnboardingReady ? (
+            <div className="tasks-preset-ready">
+              <p className="status success">Travel onboarding ready</p>
+              <p className="help">
+                These templates are assigned on future submission acceptances.
+                Existing speakers are unchanged and can be assigned below.
+              </p>
+            </div>
+          ) : (
+            <Form method="post" className="stack">
               <input
-                type="checkbox"
-                name="confirmed"
+                type="hidden"
+                name="intent"
                 value="create-travel-onboarding"
-                required
-              />{" "}
-              I confirm these forms should be created and automatically assigned
-              to speakers when a submission is accepted.
-            </label>
-            <Button type="submit" disabled={busy}>
-              <Plus aria-hidden size={15} /> Create travel forms
-            </Button>
-          </Form>
+              />
+              <label className="speaker-confirm">
+                <input
+                  type="checkbox"
+                  name="confirmed"
+                  value="create-travel-onboarding"
+                  required
+                />{" "}
+                I confirm these forms should be created and automatically
+                assigned to speakers when a submission is accepted.
+              </label>
+              <Button type="submit" disabled={busy}>
+                <Plus aria-hidden size={15} /> Create travel forms
+              </Button>
+            </Form>
+          )}
         </section>
       ) : null}
       {showPlan ? (
-        <section className="tasks-plan-block">
+        <section className="card pad tasks-plan-block tasks-plan-assignment">
           <div className="card-title">
             <h2>Assign a plan</h2>
             <GitBranch aria-hidden className="subtle" size={18} />
@@ -242,7 +252,7 @@ export function AdminTaskPlanPanel({
       ) : null}
       {showCreate ? (
         <section
-          className="tasks-plan-block"
+          className="card pad tasks-plan-block"
           aria-labelledby="create-task-template"
         >
           <div className="card-title">
@@ -685,6 +695,6 @@ export function AdminTaskPlanPanel({
           </Form>
         </section>
       ) : null}
-    </aside>
+    </div>
   );
 }

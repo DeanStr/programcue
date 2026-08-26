@@ -699,13 +699,6 @@ body.dark-mode .program-cue-api-reference .scalar-api-reference {
   }
 }
 
-/* Keep the task table's intrinsic width inside its scroll container on narrow screens. */
-.tasks-layout > * {
-  min-width: 0;
-}
-.tasks-layout .table-wrap {
-  max-width: 100%;
-}
 .programme-records {
   min-width: 0;
 }

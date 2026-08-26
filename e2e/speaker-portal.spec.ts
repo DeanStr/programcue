@@ -242,7 +242,7 @@ test.describe("optional session-details review", () => {
     test.slow();
     await page.goto("/admin/tasks");
     await page.locator("body[data-hydrated='true']").waitFor();
-    await page.getByText("Plan and onboarding", { exact: true }).click();
+    await page.getByRole("button", { name: "Plans & onboarding" }).click();
     const preset = page.locator("section.tasks-plan-block").filter({
       has: page.getByRole("heading", { name: "Session-detail review" }),
     });

@@ -8,8 +8,188 @@ import {
   TaskStateError,
   type TemplateRow,
   TRAVEL_ONBOARDING_TEMPLATE_INTENTS,
+  taskConfiguration,
 } from "./task-service-foundation.server";
 import { TaskTemplateWorkflows } from "./task-template-workflows.server";
+
+const travelOnboardingCommon = {
+  targetType: "speaker" as const,
+  taskType: "short_form" as const,
+  impact: "high" as const,
+  evidenceMode: "text" as const,
+  dueAnchor: "acceptance" as const,
+  dueOffsetDays: 7,
+  fixedDueDate: null,
+  autoAssignOnAcceptance: true,
+  dependencyIds: [],
+};
+
+const travelOnboardingPresets = [
+  {
+    preset: "speaker_travel_hotel_v1" as const,
+    intent: TRAVEL_ONBOARDING_TEMPLATE_INTENTS.hotel,
+    input: {
+      ...travelOnboardingCommon,
+      name: "Hotel stay requirements",
+      description:
+        "Confirm whether you need event-arranged accommodation and provide the dates and room requirements the team needs.",
+      configuration: {
+        preset: "speaker_travel_hotel_v1" as const,
+        form: {
+          fields: [
+            {
+              id: "requires_hotel",
+              label: "Do you need event-arranged accommodation?",
+              type: "boolean",
+              required: true,
+              help: "Choose no if you are arranging your own stay.",
+            },
+            {
+              id: "check_in",
+              label: "Check-in date",
+              type: "date",
+              required: false,
+              requiredWhen: {
+                fieldId: "requires_hotel",
+                equals: true,
+              },
+              help: "Required when event-arranged accommodation is needed.",
+            },
+            {
+              id: "check_out",
+              label: "Check-out date",
+              type: "date",
+              required: false,
+              requiredWhen: {
+                fieldId: "requires_hotel",
+                equals: true,
+              },
+              help: "Required when event-arranged accommodation is needed.",
+            },
+            {
+              id: "room_requirements",
+              label: "Accessibility, room or arrival requirements",
+              type: "long_text",
+              required: false,
+              help: "Share only details the event team needs to arrange your stay.",
+            },
+          ],
+        },
+      },
+    },
+  },
+  {
+    preset: "speaker_travel_flight_v1" as const,
+    intent: TRAVEL_ONBOARDING_TEMPLATE_INTENTS.flight,
+    input: {
+      ...travelOnboardingCommon,
+      name: "Flight reimbursement",
+      description:
+        "Tell the event team whether you plan to claim flight reimbursement and provide the booking details needed for approval.",
+      configuration: {
+        preset: "speaker_travel_flight_v1" as const,
+        form: {
+          fields: [
+            {
+              id: "requires_reimbursement",
+              label: "Will you request flight reimbursement?",
+              type: "boolean",
+              required: true,
+              help: "Choose no if no flight reimbursement is needed.",
+            },
+            {
+              id: "traveller_name",
+              label: "Traveller name used for booking",
+              type: "short_text",
+              required: false,
+              requiredWhen: {
+                fieldId: "requires_reimbursement",
+                equals: true,
+              },
+              help: "Required when reimbursement is requested. Use the name that will appear on the booking.",
+            },
+            {
+              id: "departure_airport",
+              label: "Departure airport",
+              type: "short_text",
+              required: false,
+              requiredWhen: {
+                fieldId: "requires_reimbursement",
+                equals: true,
+              },
+              help: "Required when reimbursement is requested. Enter a city or IATA airport code.",
+            },
+            {
+              id: "estimated_fare",
+              label: "Estimated round-trip fare and currency",
+              type: "short_text",
+              required: false,
+              requiredWhen: {
+                fieldId: "requires_reimbursement",
+                equals: true,
+              },
+              help: "Required when reimbursement is requested. For example, USD 450. Do not enter payment-card details.",
+            },
+            {
+              id: "reimbursement_notes",
+              label: "Route or reimbursement notes",
+              type: "long_text",
+              required: false,
+              help: "Include constraints or approval questions for the event team.",
+            },
+          ],
+        },
+      },
+    },
+  },
+] as const;
+
+function storedTravelOnboardingInput(template: TemplateRow) {
+  return taskTemplateInputSchema.parse({
+    name: template.name,
+    description: template.description ?? "",
+    targetType: template.targetType,
+    taskType: template.taskType,
+    impact: template.impact,
+    evidenceMode: template.evidenceMode,
+    dueAnchor: template.dueAnchor,
+    dueOffsetDays:
+      template.dueOffsetMinutes === null
+        ? null
+        : template.dueOffsetMinutes / 1_440,
+    fixedDueDate: null,
+    autoAssignOnAcceptance: Boolean(template.autoAssignOnAcceptance),
+    dependencyIds: [],
+    configuration: JSON.parse(template.configurationJson),
+  });
+}
+
+export function travelOnboardingTemplatesAreReady(
+  templates: ReadonlyArray<TemplateRow & { dependencies: readonly string[] }>,
+) {
+  try {
+    return travelOnboardingPresets.every((preset) => {
+      const matches = templates.filter(
+        (template) =>
+          taskConfiguration(template.configurationJson).preset ===
+          preset.preset,
+      );
+      if (matches.length !== 1) return false;
+      const template = matches[0];
+      const stored = JSON.stringify(storedTravelOnboardingInput(template));
+      const expected = JSON.stringify(
+        taskTemplateInputSchema.parse(preset.input),
+      );
+      return (
+        template.status === "active" &&
+        template.dependencies.length === 0 &&
+        stored === expected
+      );
+    });
+  } catch {
+    return false;
+  }
+}
 
 export class TaskTravelOnboardingWorkflows extends TaskTemplateWorkflows {
   async createTravelOnboardingTemplates(viewer: Viewer, confirmed: unknown) {
@@ -18,136 +198,7 @@ export class TaskTravelOnboardingWorkflows extends TaskTemplateWorkflows {
         "Review and confirm the two automatically assigned travel onboarding forms before creating them.",
       );
     }
-    const common = {
-      targetType: "speaker" as const,
-      taskType: "short_form" as const,
-      impact: "high" as const,
-      evidenceMode: "text" as const,
-      dueAnchor: "acceptance" as const,
-      dueOffsetDays: 7,
-      fixedDueDate: null,
-      autoAssignOnAcceptance: true,
-      dependencyIds: [],
-    };
-    const presets = [
-      {
-        preset: "speaker_travel_hotel_v1" as const,
-        intent: TRAVEL_ONBOARDING_TEMPLATE_INTENTS.hotel,
-        input: {
-          ...common,
-          name: "Hotel stay requirements",
-          description:
-            "Confirm whether you need event-arranged accommodation and provide the dates and room requirements the team needs.",
-          configuration: {
-            preset: "speaker_travel_hotel_v1" as const,
-            form: {
-              fields: [
-                {
-                  id: "requires_hotel",
-                  label: "Do you need event-arranged accommodation?",
-                  type: "boolean",
-                  required: true,
-                  help: "Choose no if you are arranging your own stay.",
-                },
-                {
-                  id: "check_in",
-                  label: "Check-in date",
-                  type: "date",
-                  required: false,
-                  requiredWhen: {
-                    fieldId: "requires_hotel",
-                    equals: true,
-                  },
-                  help: "Required when event-arranged accommodation is needed.",
-                },
-                {
-                  id: "check_out",
-                  label: "Check-out date",
-                  type: "date",
-                  required: false,
-                  requiredWhen: {
-                    fieldId: "requires_hotel",
-                    equals: true,
-                  },
-                  help: "Required when event-arranged accommodation is needed.",
-                },
-                {
-                  id: "room_requirements",
-                  label: "Accessibility, room or arrival requirements",
-                  type: "long_text",
-                  required: false,
-                  help: "Share only details the event team needs to arrange your stay.",
-                },
-              ],
-            },
-          },
-        },
-      },
-      {
-        preset: "speaker_travel_flight_v1" as const,
-        intent: TRAVEL_ONBOARDING_TEMPLATE_INTENTS.flight,
-        input: {
-          ...common,
-          name: "Flight reimbursement",
-          description:
-            "Tell the event team whether you plan to claim flight reimbursement and provide the booking details needed for approval.",
-          configuration: {
-            preset: "speaker_travel_flight_v1" as const,
-            form: {
-              fields: [
-                {
-                  id: "requires_reimbursement",
-                  label: "Will you request flight reimbursement?",
-                  type: "boolean",
-                  required: true,
-                  help: "Choose no if no flight reimbursement is needed.",
-                },
-                {
-                  id: "traveller_name",
-                  label: "Traveller name used for booking",
-                  type: "short_text",
-                  required: false,
-                  requiredWhen: {
-                    fieldId: "requires_reimbursement",
-                    equals: true,
-                  },
-                  help: "Required when reimbursement is requested. Use the name that will appear on the booking.",
-                },
-                {
-                  id: "departure_airport",
-                  label: "Departure airport",
-                  type: "short_text",
-                  required: false,
-                  requiredWhen: {
-                    fieldId: "requires_reimbursement",
-                    equals: true,
-                  },
-                  help: "Required when reimbursement is requested. Enter a city or IATA airport code.",
-                },
-                {
-                  id: "estimated_fare",
-                  label: "Estimated round-trip fare and currency",
-                  type: "short_text",
-                  required: false,
-                  requiredWhen: {
-                    fieldId: "requires_reimbursement",
-                    equals: true,
-                  },
-                  help: "Required when reimbursement is requested. For example, USD 450. Do not enter payment-card details.",
-                },
-                {
-                  id: "reimbursement_notes",
-                  label: "Route or reimbursement notes",
-                  type: "long_text",
-                  required: false,
-                  help: "Include constraints or approval questions for the event team.",
-                },
-              ],
-            },
-          },
-        },
-      },
-    ] as const;
+    const presets = travelOnboardingPresets;
     const existingTemplates = await this.env.DB.prepare(
       `SELECT id, name, description, target_type AS targetType,
               task_type AS taskType, impact, evidence_mode AS evidenceMode,
@@ -199,23 +250,7 @@ export class TaskTravelOnboardingWorkflows extends TaskTemplateWorkflows {
       }
       let storedInput: ReturnType<typeof taskTemplateInputSchema.parse>;
       try {
-        storedInput = taskTemplateInputSchema.parse({
-          name: existing.name,
-          description: existing.description ?? "",
-          targetType: existing.targetType,
-          taskType: existing.taskType,
-          impact: existing.impact,
-          evidenceMode: existing.evidenceMode,
-          dueAnchor: existing.dueAnchor,
-          dueOffsetDays:
-            existing.dueOffsetMinutes === null
-              ? null
-              : existing.dueOffsetMinutes / 1_440,
-          fixedDueDate: null,
-          autoAssignOnAcceptance: Boolean(existing.autoAssignOnAcceptance),
-          dependencyIds: [],
-          configuration: JSON.parse(existing.configurationJson),
-        });
+        storedInput = storedTravelOnboardingInput(existing);
       } catch {
         throw new TaskStateError(
           "A travel onboarding preset has invalid stored configuration.",

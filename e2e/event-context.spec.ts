@@ -188,7 +188,7 @@ test("an invited speaker can explicitly choose the created event and see its tas
 
   await page.goto("/admin/tasks");
   await page.locator("body[data-hydrated='true']").waitFor();
-  await page.getByText("Create a template", { exact: true }).click();
+  await page.getByRole("button", { name: /Templates/ }).click();
   const createTemplate = page.getByRole("region", {
     name: "Create task template",
   });
@@ -200,7 +200,7 @@ test("an invited speaker can explicitly choose the created event and see its tas
   await createTemplate.getByRole("button", { name: "Create template" }).click();
   await expect(page.getByText("Task template created.")).toBeVisible();
   await expect(createTemplate.getByLabel("Name")).toHaveValue("");
-  await page.getByText("Plan and onboarding", { exact: true }).click();
+  await page.getByRole("button", { name: "Plans & onboarding" }).click();
   const assignment = page.locator("section").filter({
     has: page.getByRole("heading", { name: "Assign a plan" }),
   });

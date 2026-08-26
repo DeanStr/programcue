@@ -57,10 +57,11 @@ test("task dashboard filters visible work and keeps template creation open", asy
   await selectAdministrator(page);
   await waitForInterface(page, "/admin/tasks");
   const filters = page.getByRole("region", { name: "Filter assigned work" });
-  const assignedWork = page.locator("section").filter({
-    has: page.getByRole("heading", { name: "Assigned work" }),
+  const assignedWork = page.getByRole("region", {
+    name: "Assigned work",
+    exact: true,
   });
-  await page.getByText("Create a template", { exact: true }).click();
+  await page.getByRole("button", { name: /Templates/ }).click();
   const templateCreation = page.getByRole("region", {
     name: "Create task template",
   });
@@ -93,6 +94,8 @@ test("task dashboard filters visible work and keeps template creation open", asy
     templateCreation.getByText("Question 1", { exact: true }),
   ).toBeVisible();
 
+  await page.getByRole("button", { name: /Assigned work/ }).click();
+
   const handbookTask = assignedWork.getByRole("row").filter({
     has: page.getByText("Read the speaker handbook", { exact: true }),
   });
@@ -122,6 +125,20 @@ test("task dashboard filters visible work and keeps template creation open", asy
   await filters.getByRole("button", { name: "Apply filters" }).click();
   await expect(page).toHaveURL(/state=not_started/u);
   await expect(page).toHaveURL(/type=file_upload/u);
+  await expect(
+    assignedWork.getByText("Upload presentation slides", { exact: true }),
+  ).toBeVisible();
+  await expect(
+    assignedWork.getByText("Complete your speaker profile", { exact: true }),
+  ).toHaveCount(0);
+
+  await page.getByRole("button", { name: /Templates/ }).click();
+  await expect(templateCreation.getByLabel("Question label")).toHaveValue(
+    "Accessibility requirements",
+  );
+  await page.getByRole("button", { name: /Assigned work/ }).click();
+  await expect(filters.getByLabel("Status")).toHaveValue("not_started");
+  await expect(filters.getByLabel("Task type")).toHaveValue("file_upload");
   await expect(
     assignedWork.getByText("Upload presentation slides", { exact: true }),
   ).toBeVisible();
@@ -207,7 +224,7 @@ test("a speaker can undo a reversible task completion from its status notice", a
 }) => {
   await selectAdministrator(page);
   await waitForInterface(page, "/admin/tasks");
-  await page.getByText("Create a template", { exact: true }).click();
+  await page.getByRole("button", { name: /Templates/ }).click();
   const creation = page.getByRole("region", {
     name: "Create task template",
   });
@@ -221,7 +238,7 @@ test("a speaker can undo a reversible task completion from its status notice", a
     "Task template created",
   );
 
-  await page.getByText("Plan and onboarding", { exact: true }).click();
+  await page.getByRole("button", { name: "Plans & onboarding" }).click();
   const assignment = page.locator("section.tasks-plan-block").filter({
     has: page.getByRole("heading", { name: "Assign a plan" }),
   });
@@ -277,7 +294,7 @@ test("a link task opens the organiser destination and requires acknowledgement",
 }) => {
   await selectAdministrator(page);
   await waitForInterface(page, "/admin/tasks");
-  await page.getByText("Create a template", { exact: true }).click();
+  await page.getByRole("button", { name: /Templates/ }).click();
   const creation = page.getByRole("region", {
     name: "Create task template",
   });
@@ -292,7 +309,7 @@ test("a link task opens the organiser destination and requires acknowledgement",
     "Task template created",
   );
 
-  await page.getByText("Plan and onboarding", { exact: true }).click();
+  await page.getByRole("button", { name: "Plans & onboarding" }).click();
   const assignment = page.locator("section.tasks-plan-block").filter({
     has: page.getByRole("heading", { name: "Assign a plan" }),
   });

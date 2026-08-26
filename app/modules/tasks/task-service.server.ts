@@ -2,7 +2,10 @@ import { AirtableProviderBoundary } from "~/modules/airtable/airtable-provider-b
 import { ParticipantTaskWorkflows } from "./participant-task-workflows.server";
 import { TaskAdministrationWorkflows } from "./task-administration-workflows.server";
 import type { TaskTemplateWorkflows } from "./task-template-workflows.server";
-import { TaskTravelOnboardingWorkflows } from "./task-travel-onboarding-workflows.server";
+import {
+  TaskTravelOnboardingWorkflows,
+  travelOnboardingTemplatesAreReady,
+} from "./task-travel-onboarding-workflows.server";
 
 export {
   fixedDateEndEpoch,
@@ -96,10 +99,16 @@ export class TaskService {
     return this.participants.addComment(...args);
   }
 
-  getAdminWorkspace(
+  async getAdminWorkspace(
     ...args: Parameters<TaskAdministrationWorkflows["getAdminWorkspace"]>
   ) {
-    return this.administration.getAdminWorkspace(...args);
+    const workspace = await this.administration.getAdminWorkspace(...args);
+    return {
+      ...workspace,
+      travelOnboardingReady: travelOnboardingTemplatesAreReady(
+        workspace.templates,
+      ),
+    };
   }
 
   administerTask(

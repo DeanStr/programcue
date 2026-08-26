@@ -47,6 +47,10 @@ const taskFiltersSchema = z
   })
   .strict();
 
+const taskWorkspaceViewSchema = z.enum(["assigned", "plans", "templates"]);
+
+export type TaskWorkspaceView = z.infer<typeof taskWorkspaceViewSchema>;
+
 function exactSearchValue(search: URLSearchParams, key: string) {
   const values = search.getAll(key);
   if (values.length > 1) {
@@ -69,6 +73,15 @@ export function parseTaskFilters(search: URLSearchParams) {
   return parsed.data;
 }
 
+export function parseTaskWorkspaceView(search: URLSearchParams) {
+  const value = exactSearchValue(search, "view");
+  const parsed = taskWorkspaceViewSchema.safeParse(value || "assigned");
+  if (!parsed.success) {
+    throw new Response("Invalid task workspace view", { status: 400 });
+  }
+  return parsed.data;
+}
+
 async function administrator(
   request: Request,
   context: Route.LoaderArgs["context"],
@@ -84,7 +97,9 @@ async function administrator(
 
 export async function loader({ request, context }: Route.LoaderArgs) {
   const { env, viewer } = await administrator(request, context);
-  const filters = parseTaskFilters(new URL(request.url).searchParams);
+  const search = new URL(request.url).searchParams;
+  const filters = parseTaskFilters(search);
+  const view = parseTaskWorkspaceView(search);
   const workspace = await new TaskService(env).getAdminWorkspace(viewer);
   const requestedTaskId = filters.task;
   if (
@@ -150,6 +165,7 @@ export async function loader({ request, context }: Route.LoaderArgs) {
   const filterSignature = JSON.stringify(filters);
   return {
     ...workspace,
+    view,
     tasks,
     filters,
     filterSignature,

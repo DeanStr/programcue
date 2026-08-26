@@ -115,6 +115,14 @@ beforeEach(async () => {
 });
 
 describe("administrator task filters", () => {
+  it("defaults to assigned work and validates URL-addressable workspace views", async () => {
+    await expect(load()).resolves.toMatchObject({ view: "assigned" });
+    await expect(load("?view=plans")).resolves.toMatchObject({ view: "plans" });
+    await expect(load("?view=templates")).resolves.toMatchObject({
+      view: "templates",
+    });
+  });
+
   it("applies the supported status, scope, type and impact filters", async () => {
     const completed = await load(
       "?state=completed&target=speaker&type=short_form&impact=high",
@@ -243,6 +251,8 @@ describe("administrator task filters", () => {
   });
 
   it.each([
+    "?view=unknown",
+    "?view=plans&view=templates",
     "?state=incomplete",
     "?state=unknown",
     "?target=person",

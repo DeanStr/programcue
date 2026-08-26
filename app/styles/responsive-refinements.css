@@ -56,14 +56,6 @@
     grid-template-columns: 1fr 1fr;
     gap: var(--space-3);
   }
-  .tasks-layout {
-    grid-template-columns: 1fr;
-  }
-  .tasks-side {
-    display: grid;
-    grid-template-columns: repeat(3, 1fr);
-    gap: var(--space-3);
-  }
   .public-main {
     grid-template-columns: 1fr;
   }
@@ -324,7 +316,6 @@
   }
   .conflict-side,
   .comms-side,
-  .tasks-side,
   .task-bottom {
     grid-template-columns: 1fr;
   }

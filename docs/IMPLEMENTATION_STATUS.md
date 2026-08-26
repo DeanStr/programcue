@@ -211,6 +211,11 @@ require a stable browser intent whose exact replay converges on one comment,
 audit and prepared webhook; changed content under the same intent fails.
 Task-filter forms remount from their authoritative URL signature after
 navigation, including truthful empty Overdue results.
+Organiser task administration separates Assigned work, Plans & onboarding and
+Templates into validated, URL-addressable full-width views. Switching views
+preserves an unfinished template draft, while the travel preset reports when
+both forms are already active and makes clear that automatic assignment affects
+future acceptances rather than existing speakers.
 
 Assigned tasks now persist their evidence mode and validated configuration
 snapshot instead of joining mutable template configuration at read time.
