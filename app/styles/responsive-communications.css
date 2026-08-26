@@ -1,6 +1,6 @@
 /* Communications breakpoints. Keep the template list as a list — never a
    two-up card grid that shears names. */
-@media (max-width: 1079px) {
+@media (max-width: 1000px) {
   .comms-workbench .template-list {
     display: grid;
     grid-auto-flow: row;

@@ -1,6 +1,7 @@
 import { Form, Link } from "react-router";
 
 import { useEvaluationAdminModel } from "~/components/evaluation-admin-model";
+import { Button, ButtonLink } from "~/components/ui/button";
 import { useConfirm } from "~/components/ui/confirm-dialog";
 import { EventDateTime } from "~/components/ui/event-date-time";
 import { EmptyState } from "~/components/ui/states";
@@ -55,9 +56,9 @@ export function EvaluationSubmissionQueue() {
           {activeRound &&
           assignmentTargets.length > 0 &&
           bulkAssignableSubmissions.length > 0 ? (
-            <button
+            <Button
               type="button"
-              className="btn small"
+              size="small"
               onClick={() => {
                 setBulkSubmissionIds(new Set());
                 setBulkAssignmentTarget(assignmentTargets[0]?.value ?? "");
@@ -66,7 +67,7 @@ export function EvaluationSubmissionQueue() {
               }}
             >
               Bulk assign
-            </button>
+            </Button>
           ) : null}
         </div>
       </div>
@@ -233,7 +234,7 @@ export function EvaluationSubmissionQueue() {
                                   <label className="label">
                                     Human assessment score
                                     <input
-                                      className="input"
+                                      className="field"
                                       name="score"
                                       type="number"
                                       min="1"
@@ -259,8 +260,8 @@ export function EvaluationSubmissionQueue() {
                                       required
                                     />
                                   </label>
-                                  <button
-                                    className="btn small"
+                                  <Button
+                                    size="small"
                                     type="button"
                                     onClick={(event) => {
                                       const form = event.currentTarget.form;
@@ -300,7 +301,7 @@ export function EvaluationSubmissionQueue() {
                                     }}
                                   >
                                     Review human assessment
-                                  </button>
+                                  </Button>
                                 </Form>
                               ) : null}
                             </div>
@@ -385,23 +386,23 @@ export function EvaluationSubmissionQueue() {
                                           aiAssessmentGenerationAttempt.operationId
                                         }
                                       />
-                                      <button
-                                        className="btn small"
+                                      <Button
+                                        size="small"
                                         type="submit"
                                         disabled={pendingAiReconciliation}
                                       >
                                         {pendingAiReconciliation
                                           ? "Reconciling…"
                                           : "Reconcile AI attempt"}
-                                      </button>
+                                      </Button>
                                     </Form>
                                   ) : null}
-                                  <Link
-                                    className="btn small"
+                                  <ButtonLink
+                                    size="small"
                                     to={`/admin/operations?operation=${encodeURIComponent(aiAssessmentGenerationAttempt.operationId)}`}
                                   >
                                     View operation
-                                  </Link>
+                                  </ButtonLink>
                                 </div>
                               </>
                             ) : null}
@@ -467,8 +468,8 @@ export function EvaluationSubmissionQueue() {
                                 name="confirmed"
                                 value="true"
                               />
-                              <button
-                                className="btn small"
+                              <Button
+                                size="small"
                                 type="button"
                                 onClick={(event) => {
                                   const form = event.currentTarget.form;
@@ -495,7 +496,7 @@ export function EvaluationSubmissionQueue() {
                                 }}
                               >
                                 Retry failed AI first pass
-                              </button>
+                              </Button>
                             </Form>
                           </div>
                         ) : loaderData.canManageAiAssessments &&
@@ -531,8 +532,8 @@ export function EvaluationSubmissionQueue() {
                               name="confirmed"
                               value="true"
                             />
-                            <button
-                              className="btn small"
+                            <Button
+                              size="small"
                               type="button"
                               onClick={(event) => {
                                 const form = event.currentTarget.form;
@@ -557,7 +558,7 @@ export function EvaluationSubmissionQueue() {
                               }}
                             >
                               Review AI first pass
-                            </button>
+                            </Button>
                           </Form>
                         ) : null}
                       </div>

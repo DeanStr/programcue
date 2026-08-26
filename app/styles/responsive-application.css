@@ -26,7 +26,7 @@
 .application-drafts .queue-card h3 {
   margin: var(--space-2) 0 var(--space-1);
 }
-.application-drafts .queue-card.active .subtle {
+:where(.application-drafts .queue-card.active) .subtle {
   color: var(--text-secondary);
 }
 .field-error {
@@ -49,7 +49,7 @@
 .application-form-step-nav {
   margin-top: var(--space-2);
 }
-@media (max-width: 1024px) {
+@media (max-width: 1000px) {
   /* Restores the event name that `.brand span` hides for the application
      sidebar. It must not be a flex container: `text-overflow: ellipsis` has no
      effect on one, so at 390px "Future of Events 2027" was sliced through the
@@ -64,7 +64,6 @@
     height: auto;
     flex-wrap: wrap;
   }
-  /* biome-ignore lint/style/noDescendingSpecificity: These selectors target independent application header and draft contexts, so their declarations do not compete. */
   .application-top > .subtle {
     flex: 1 1 120px;
     min-width: 0;

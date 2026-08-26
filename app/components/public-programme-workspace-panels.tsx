@@ -24,6 +24,7 @@ import {
   SessionTime,
 } from "~/components/public-programme-parts";
 import { TurnstileWidget } from "~/components/turnstile-widget";
+import { Button, ButtonAnchor, ButtonLink } from "~/components/ui/button";
 import { requireValue } from "~/lib/required-value";
 import {
   formatProgrammeDuration,
@@ -171,13 +172,13 @@ export function PublicProgrammeHero({
         </p>
         {embedded ? null : (
           <div className="hero-actions">
-            <a
-              className="btn hero-action"
+            <ButtonAnchor
+              className="hero-action"
               href={`/api/v1/public/events/${encodeURIComponent(programme.event.slug)}/calendar.ics`}
             >
               <CalendarDays aria-hidden="true" size={15} />
               Add to calendar
-            </a>
+            </ButtonAnchor>
           </div>
         )}
       </div>
@@ -258,8 +259,8 @@ export function PublicSpeakerCard({
               {speaker.sessionIds.length === 1 ? "" : "s"}
             </span>
           ) : null}
-          <a
-            className="btn small"
+          <ButtonAnchor
+            size="small"
             id={`speaker-profile-link-${speaker.id}`}
             href={publicSpeakerProfilePath(
               model.programme.event.slug,
@@ -272,7 +273,7 @@ export function PublicSpeakerCard({
             }}
           >
             View profile and sessions
-          </a>
+          </ButtonAnchor>
         </div>
       ) : null}
     </article>
@@ -396,14 +397,14 @@ export function PublicProgrammeFilters({
           session{programme.sessions.length === 1 ? "" : "s"}
           {filtersActive ? " for the current filters" : ""}.
         </p>
-        <button
+        <Button
           type="button"
-          className="btn small"
+          size="small"
           onClick={clearFilters}
           disabled={!clearableFiltersActive}
         >
           Clear filters
-        </button>
+        </Button>
       </div>
     </div>
   );
@@ -516,9 +517,9 @@ export function ProgrammeSessionList({
         <h2>No matching sessions</h2>
         <p className="subtle">Clear a filter or broaden the search.</p>
         {clearableFiltersActive ? (
-          <button type="button" className="btn" onClick={clearFilters}>
+          <Button type="button" onClick={clearFilters}>
             Clear filters
-          </button>
+          </Button>
         ) : null}
       </section>
     );
@@ -702,34 +703,31 @@ export function ItineraryPanel({ model }: { model: PublicProgrammeModel }) {
           </div>
           {!shared ? (
             <div className="page-actions mt">
-              <a
-                className="btn primary"
+              <ButtonAnchor
+                variant="primary"
                 href={calendarExportHref}
                 download
                 onClick={() => setCalendarDownloadRequested(true)}
               >
                 <CalendarDays aria-hidden size={15} /> Export itinerary
-              </a>
+              </ButtonAnchor>
               <fetcher.Form method="post">
                 <input type="hidden" name="intent" value="share" />
-                <button
-                  className="btn"
-                  type="submit"
-                  disabled={fetcher.state !== "idle"}
-                >
+                <Button type="submit" disabled={fetcher.state !== "idle"}>
                   Create read-only share link
-                </button>
+                </Button>
               </fetcher.Form>
             </div>
           ) : (
-            <a
-              className="btn primary mt"
+            <ButtonAnchor
+              variant="primary"
+              className="mt"
               href={calendarExportHref}
               download
               onClick={() => setCalendarDownloadRequested(true)}
             >
               <CalendarDays aria-hidden size={15} /> Export itinerary
-            </a>
+            </ButtonAnchor>
           )}
           {calendarDownloadRequested ? (
             <p className="validation-item ok mt" role="status">
@@ -951,9 +949,9 @@ export function SessionDetailPanel({ model }: { model: PublicProgrammeModel }) {
           failedMessage="This browser could not share the session. Copy the address from the address bar instead."
         />
         {onSessionPage ? null : (
-          <Link className="btn small" to={sessionPagePath}>
+          <ButtonLink size="small" to={sessionPagePath}>
             Open session page
-          </Link>
+          </ButtonLink>
         )}
       </div>
     </section>
@@ -1086,13 +1084,9 @@ export function OverviewSpeakers({ model }: { model: PublicProgrammeModel }) {
               {!model.embedded ? (
                 <PublicSpeakerShareActions model={model} />
               ) : null}
-              <button
-                type="button"
-                className="btn small"
-                onClick={closeSpeakerProfile}
-              >
+              <Button type="button" size="small" onClick={closeSpeakerProfile}>
                 Close profile
-              </button>
+              </Button>
             </div>
           </div>
           {model.showEmbedField("biography") &&

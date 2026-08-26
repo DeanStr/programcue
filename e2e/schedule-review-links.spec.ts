@@ -59,13 +59,21 @@ test("creates a one-time confidential review URL and invalidates it on revoke an
     "private or hidden speaker listings",
   );
   await expect(createDialog).toContainText("Community and Connection");
-  await expect(createDialog.getByLabel("Expires in")).toHaveValue("7");
-  await createDialog.getByLabel("Purpose").fill("Programme committee");
+  const purposeField = createDialog.getByLabel("Purpose");
+  const expiryField = createDialog.getByLabel("Expires in");
+  await expect(purposeField).toHaveClass("field");
+  await expect(expiryField).toHaveClass("select");
+  await expect(expiryField).toHaveValue("7");
+  await expect(createDialog).toHaveScreenshot(
+    "schedule-review-link-create-dialog.png",
+  );
+  await purposeField.fill("Programme committee");
   await createDialog
     .getByRole("button", { name: "Create confidential link" })
     .click();
   const urlField = createDialog.getByLabel("Confidential preview URL");
   await expect(urlField).toBeVisible();
+  await expect(urlField).toHaveClass("field");
   const reviewUrl = await urlField.inputValue();
   expect(reviewUrl).toMatch(
     new RegExp(

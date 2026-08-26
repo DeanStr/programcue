@@ -19,6 +19,7 @@ import {
   PublicationSettingsFields,
 } from "~/components/form-builder-panels";
 import { FormBuilderVisualCanvas } from "~/components/form-builder-visual-canvas";
+import { Button } from "~/components/ui/button";
 import { useConfirm } from "~/components/ui/confirm-dialog";
 import { DerivedSlugField } from "~/components/ui/derived-slug-field";
 import { ensureDemoSubmissionForm } from "~/modules/submissions/demo-submissions.server";
@@ -297,22 +298,22 @@ export default function FormBuilder({ loaderData }: Route.ComponentProps) {
       className="fb-dock-switch pc-plain-fieldset"
       aria-label="Inspector pane"
     >
-      <button
-        className="btn small"
+      <Button
+        size="small"
         type="button"
         aria-pressed={!previewOpen}
         onClick={() => setPreviewOpen(false)}
       >
         Settings
-      </button>
-      <button
-        className="btn small"
+      </Button>
+      <Button
+        size="small"
         type="button"
         aria-pressed={previewOpen}
         onClick={() => setPreviewOpen(true)}
       >
         Preview
-      </button>
+      </Button>
     </fieldset>
   );
   const publishedPublicSlug =
@@ -386,15 +387,11 @@ export default function FormBuilder({ loaderData }: Route.ComponentProps) {
           onClose={() => setPublishOpen(false)}
           footer={
             <>
-              <button
-                className="btn"
-                type="button"
-                onClick={() => setPublishOpen(false)}
-              >
+              <Button type="button" onClick={() => setPublishOpen(false)}>
                 Keep as draft
-              </button>
-              <button
-                className="btn primary"
+              </Button>
+              <Button
+                variant="primary"
                 type="submit"
                 form="form-builder"
                 name="_intent"
@@ -404,7 +401,7 @@ export default function FormBuilder({ loaderData }: Route.ComponentProps) {
                 {pendingIntent === "publish"
                   ? "Publishing…"
                   : "Confirm publication"}
-              </button>
+              </Button>
             </>
           }
         >
@@ -473,8 +470,8 @@ export default function FormBuilder({ loaderData }: Route.ComponentProps) {
             before explicitly loading the newer server revision.
           </span>
           <span className="row-actions right">
-            <button
-              className="btn small"
+            <Button
+              size="small"
               type="button"
               onClick={() => {
                 const blob = new Blob(
@@ -492,9 +489,9 @@ export default function FormBuilder({ loaderData }: Route.ComponentProps) {
               }}
             >
               Export local edits
-            </button>
-            <button
-              className="btn small"
+            </Button>
+            <Button
+              size="small"
               type="button"
               onClick={() =>
                 confirm(
@@ -511,7 +508,7 @@ export default function FormBuilder({ loaderData }: Route.ComponentProps) {
               }
             >
               Load server version
-            </button>
+            </Button>
           </span>
         </div>
       ) : null}
@@ -557,17 +554,18 @@ export default function FormBuilder({ loaderData }: Route.ComponentProps) {
             <DraftRecoveryStatus state={recovery.state} />
           </span>
           <span className="fb-toolbar-actions">
-            <button
-              className="btn small"
+            <Button
+              size="small"
               type="submit"
               name="_intent"
               value="save"
               disabled={!clientReady || navigationState !== "idle"}
             >
               {pendingIntent === "save" ? "Saving…" : "Save draft"}
-            </button>
-            <button
-              className="btn small primary"
+            </Button>
+            <Button
+              variant="primary"
+              size="small"
               type="button"
               onClick={() => setPublishOpen(true)}
               disabled={
@@ -579,7 +577,7 @@ export default function FormBuilder({ loaderData }: Route.ComponentProps) {
               }
             >
               {pendingIntent === "publish" ? "Publishing…" : "Publish version"}
-            </button>
+            </Button>
           </span>
           {publicUrl ? (
             <span className="fb-toolbar-links">
@@ -638,30 +636,30 @@ export default function FormBuilder({ loaderData }: Route.ComponentProps) {
           className="fb-mobile-surfaces pc-plain-fieldset"
           aria-label="Editor surface"
         >
-          <button
-            className="btn small"
+          <Button
+            size="small"
             type="button"
             aria-pressed={mobileSurface === "structure"}
             onClick={() => setMobileSurface("structure")}
           >
             Structure
-          </button>
-          <button
-            className="btn small"
+          </Button>
+          <Button
+            size="small"
             type="button"
             aria-pressed={mobileSurface === "canvas"}
             onClick={() => setMobileSurface("canvas")}
           >
             Canvas
-          </button>
-          <button
-            className="btn small"
+          </Button>
+          <Button
+            size="small"
             type="button"
             aria-pressed={mobileSurface === "settings"}
             onClick={() => setMobileSurface("settings")}
           >
             Settings
-          </button>
+          </Button>
         </fieldset>
         <div
           className={`fb-workbench${previewOpen ? " is-previewing" : ""} fb-surface-${mobileSurface}`}

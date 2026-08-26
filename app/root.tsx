@@ -1,7 +1,6 @@
 import { useEffect } from "react";
 import {
   isRouteErrorResponse,
-  Link,
   Links,
   Meta,
   Outlet,
@@ -17,6 +16,7 @@ import {
   evaluationBannerHiddenFromCookieHeader,
 } from "~/components/evaluation-banner";
 import { RouteProgress } from "~/components/ui/route-progress";
+import { PRODUCT_THEME_COLOUR } from "~/lib/product-colours";
 import {
   routeErrorCopy,
   routeErrorMessage,
@@ -43,6 +43,7 @@ import {
 import { requireRuntimeMode } from "~/platform/runtime-environment.server";
 import type { Route } from "./+types/root";
 import "./styles/index.css";
+import { Button, ButtonLink } from "~/components/ui/button";
 
 export const links: Route.LinksFunction = () => [
   {
@@ -66,7 +67,7 @@ export const meta: Route.MetaFunction = () => [
     content:
       "Conference programme operations, submissions, reviews, speaker readiness, communications and scheduling.",
   },
-  { name: "theme-color", content: "#13201f" },
+  { name: "theme-color", content: PRODUCT_THEME_COLOUR },
 ];
 
 export async function loader({ request, context }: Route.LoaderArgs) {
@@ -203,17 +204,13 @@ export function ErrorBoundary({ error }: Route.ErrorBoundaryProps) {
           <p className="subtle">{message}</p>
           <div className="page-actions mt">
             {showRetry ? (
-              <button
-                className="btn"
-                onClick={() => window.location.reload()}
-                type="button"
-              >
+              <Button onClick={() => window.location.reload()} type="button">
                 Try again
-              </button>
+              </Button>
             ) : null}
-            <Link className="btn primary" to={recovery.href}>
+            <ButtonLink variant="primary" to={recovery.href}>
               {recovery.label}
-            </Link>
+            </ButtonLink>
           </div>
         </section>
       </main>

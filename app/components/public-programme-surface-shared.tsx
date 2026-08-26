@@ -1,4 +1,5 @@
 import { type ReactNode, useRef } from "react";
+import { Button } from "~/components/ui/button";
 import type {
   PublishedSession,
   PublishedSpeaker,
@@ -34,9 +35,9 @@ export function PublicDayTabs({
   return (
     <fieldset className="public-day-tabs pc-plain-fieldset" aria-label={label}>
       {model.days.map((day) => (
-        <button
+        <Button
           type="button"
-          className="btn small"
+          size="small"
           aria-pressed={activeDay === day}
           ref={(element) => {
             tabRefs.current[model.days.indexOf(day)] = element;
@@ -63,7 +64,7 @@ export function PublicDayTabs({
           }}
         >
           {day}
-        </button>
+        </Button>
       ))}
     </fieldset>
   );
@@ -180,16 +181,16 @@ export function SessionCardDescription({
         {expanded ? description : snippet || "Description not provided."}
       </p>
       {snippet !== description ? (
-        <button
+        <Button
           type="button"
-          className="btn small"
+          size="small"
           aria-expanded={expanded}
           aria-controls={`public-${session.id}-description`}
           aria-label={`${expanded ? "Show less" : "Show more"} of the ${session.title} description`}
           onClick={() => model.toggleDescription(session.id)}
         >
           {expanded ? "Show less" : "Show more"}
-        </button>
+        </Button>
       ) : null}
     </div>
   );

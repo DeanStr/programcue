@@ -9,6 +9,7 @@ import { data, Form, Link, useActionData, useNavigation } from "react-router";
 
 import { ResourceDocument } from "~/components/resource-document";
 import { useSpeakerWorkspace } from "~/components/speaker-workspace-context";
+import { Button } from "~/components/ui/button";
 import {
   ResourceRevisionConflictError,
   ResourceService,
@@ -215,15 +216,15 @@ export default function SpeakerResources({ loaderData }: Route.ComponentProps) {
                   <input name="confirmed" type="checkbox" required /> I have
                   read and understood this published resource
                 </label>
-                <button
+                <Button
                   type="submit"
-                  className="btn primary"
+                  variant="primary"
                   disabled={navigation.state !== "idle"}
                 >
                   {navigation.state === "submitting"
                     ? "Recording…"
                     : "Acknowledge version"}
-                </button>
+                </Button>
               </Form>
             ) : selected.acknowledged ? (
               <p className="speaker-task-note is-ok">

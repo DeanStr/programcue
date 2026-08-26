@@ -1,17 +1,12 @@
 import { ExternalLink } from "lucide-react";
 import { type FormEvent, useEffect, useMemo, useRef, useState } from "react";
-import {
-  data,
-  Link,
-  useActionData,
-  useNavigation,
-  useSubmit,
-} from "react-router";
+import { data, useActionData, useNavigation, useSubmit } from "react-router";
 import { ZodError } from "zod";
 import { AdminPublicSiteEditor } from "~/components/admin-public-site-editor";
 import { AdminPublicSitePreview } from "~/components/admin-public-site-preview";
 import { AdminPublicSiteRecordings } from "~/components/admin-public-site-recordings";
 import { AdminPublicSiteSponsors } from "~/components/admin-public-site-sponsors";
+import { Button, ButtonLink } from "~/components/ui/button";
 import { ConfirmDialog, useConfirm } from "~/components/ui/confirm-dialog";
 import { useUnsavedChanges } from "~/components/ui/use-unsaved-changes";
 import { requireValue } from "~/lib/required-value";
@@ -618,14 +613,13 @@ export default function AdminPublicSite({ loaderData }: Route.ComponentProps) {
         </div>
         <div className="page-actions">
           {loaderData.published ? (
-            <Link
-              className="btn"
+            <ButtonLink
               to={`/public/programme/${loaderData.event.slug}`}
               target="_blank"
               rel="noreferrer"
             >
               Open event website <ExternalLink aria-hidden size={13} />
-            </Link>
+            </ButtonLink>
           ) : null}
         </div>
       </div>
@@ -754,8 +748,8 @@ export default function AdminPublicSite({ loaderData }: Route.ComponentProps) {
                     ? "No draft yet"
                     : `Draft ${draftBase.revision} saved`}
               </span>
-              <button
-                className="btn primary"
+              <Button
+                variant="primary"
                 type="submit"
                 form={DRAFT_FORM_ID}
                 disabled={!unsaved || busy}
@@ -765,7 +759,7 @@ export default function AdminPublicSite({ loaderData }: Route.ComponentProps) {
                   : draftBase.revision === 0
                     ? "Create website draft"
                     : "Save website draft"}
-              </button>
+              </Button>
             </div>
           </div>
 

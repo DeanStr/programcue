@@ -1,6 +1,7 @@
 import { Sparkles } from "lucide-react";
 import { Link, useFetcher } from "react-router";
 import { useReviewWorkbenchModel } from "~/components/review-workbench-model";
+import { Button } from "~/components/ui/button";
 import { buildUnansweredReviewerAiImport } from "~/modules/evaluations/reviewer-ai-import";
 import type { action } from "~/routes/review-workbench.server";
 
@@ -210,8 +211,8 @@ function ReviewerAiSuggestionPanel() {
           suggestion.status === "offered" &&
           suggestionImport.suggestionId !== suggestion.id ? (
             <div className="cluster">
-              <button
-                className="btn primary"
+              <Button
+                variant="primary"
                 type="button"
                 disabled={
                   pending || suggestion.stale || !hasUnansweredClosedSuggestion
@@ -219,7 +220,7 @@ function ReviewerAiSuggestionPanel() {
                 onClick={applyReviewerAiSuggestion}
               >
                 Fill unanswered criteria
-              </button>
+              </Button>
               <fetcher.Form method="post">
                 <input
                   type="hidden"
@@ -231,9 +232,9 @@ function ReviewerAiSuggestionPanel() {
                   name="suggestionId"
                   value={suggestion.id}
                 />
-                <button type="submit" className="btn" disabled={pending}>
+                <Button type="submit" disabled={pending}>
                   Dismiss suggestions
-                </button>
+                </Button>
               </fetcher.Form>
               {!hasUnansweredClosedSuggestion ? (
                 <span className="help">
@@ -286,14 +287,14 @@ function ReviewerAiSuggestionPanel() {
               </label>
             </>
           ) : null}
-          <button type="submit" className="btn" disabled={pending}>
+          <Button type="submit" disabled={pending}>
             <Sparkles aria-hidden size={14} />
             {pending
               ? "Generating criterion suggestions…"
               : workspace.reviewerAiRetry
                 ? "Retry criterion suggestions"
                 : "Generate criterion suggestions"}
-          </button>
+          </Button>
         </fetcher.Form>
       )}
       {fetcher.data && "error" in fetcher.data ? (
@@ -350,9 +351,9 @@ export function ReviewSubmissionPanel() {
               <kbd>J</kbd>
             </span>
           ) : null}
-          <button
+          <Button
             type="button"
-            className="btn small"
+            size="small"
             disabled={!previousAssignment || saveFailed}
             onClick={() => {
               if (previousAssignment) {
@@ -363,10 +364,10 @@ export function ReviewSubmissionPanel() {
             }}
           >
             Previous
-          </button>
-          <button
+          </Button>
+          <Button
             type="button"
-            className="btn small"
+            size="small"
             disabled={!nextAssignment || saveFailed}
             onClick={() => {
               if (nextAssignment) {
@@ -377,7 +378,7 @@ export function ReviewSubmissionPanel() {
             }}
           >
             Next
-          </button>
+          </Button>
         </div>
       </div>
       <div className="divider" />

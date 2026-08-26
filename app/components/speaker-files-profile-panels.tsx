@@ -1,9 +1,15 @@
 import { Download, FileCheck2, LockKeyhole, Trash2 } from "lucide-react";
 import { useEffect, useState } from "react";
-import { Form, Link, useSubmit } from "react-router";
+import { Form, useSubmit } from "react-router";
 import { DirectMultipartUpload } from "~/components/direct-multipart-upload";
 import type { SpeakerPortal } from "~/components/speaker-dashboard-panel-shared";
 import { SpeakerProfileHistory } from "~/components/speaker-profile-history";
+import {
+  Button,
+  ButtonLink,
+  IconButton,
+  IconButtonAnchor,
+} from "~/components/ui/button";
 import { CharacterCount } from "~/components/ui/character-count";
 import { ConfirmDialog, useConfirm } from "~/components/ui/confirm-dialog";
 import { DomainStatusBadge } from "~/components/ui/domain-status-badge";
@@ -121,8 +127,7 @@ export function SpeakerFilesPanel({
               />
               <span className="speaker-file-actions">
                 {file.currentVersionId && file.downloadReleasedAt ? (
-                  <a
-                    className="icon-btn"
+                  <IconButtonAnchor
                     href={speakerFileDownloadHref(
                       file.id,
                       file.targetType,
@@ -131,7 +136,7 @@ export function SpeakerFilesPanel({
                     aria-label={`Download ${file.downloadFilename}`}
                   >
                     <Download aria-hidden size={15} />
-                  </a>
+                  </IconButtonAnchor>
                 ) : (
                   <LockKeyhole
                     aria-label="Download locked pending scan"
@@ -166,14 +171,14 @@ export function SpeakerFilesPanel({
                       name="confirm"
                       value="erase-all-versions"
                     />
-                    <button
-                      className="icon-btn danger"
+                    <IconButton
+                      className="danger"
                       type="submit"
                       disabled={busy}
                       aria-label={`Permanently delete ${file.filename} and all versions`}
                     >
                       <Trash2 aria-hidden size={15} />
-                    </button>
+                    </IconButton>
                   </Form>
                 ) : null}
               </span>
@@ -295,9 +300,9 @@ export function SpeakerProfilePanel({
                     : "Upload a JPG, PNG or WebP file for organiser review and your published profile."}
             </p>
           </div>
-          <Link className="btn" to="/participant/files#headshot-upload">
+          <ButtonLink to="/participant/files#headshot-upload">
             {headshot ? "Replace headshot" : "Upload headshot"}
-          </Link>
+          </ButtonLink>
         </div>
       </div>
       <Form
@@ -425,9 +430,9 @@ export function SpeakerProfilePanel({
             />{" "}
             Publish this profile when saved
           </label>
-          <button type="submit" className="btn primary" disabled={busy}>
+          <Button type="submit" variant="primary" disabled={busy}>
             Save profile
-          </button>
+          </Button>
           <span className={`status ${dirty ? "warning" : "success"}`}>
             {dirty ? "Unsaved changes" : "Saved"}
           </span>

@@ -1,5 +1,5 @@
 import { type Dispatch, type Ref, type SetStateAction, useRef } from "react";
-import { Link, type useNavigation } from "react-router";
+import type { useNavigation } from "react-router";
 
 import {
   ApplicantVideoUpload,
@@ -8,6 +8,7 @@ import {
 } from "~/components/applicant-video-upload";
 import { DraftRecoveryStatus } from "~/components/draft-recovery-feedback";
 import { SessionizeProfileImport } from "~/components/sessionize-profile-import";
+import { Button, ButtonLink, IconButton } from "~/components/ui/button";
 import { CharacterCount } from "~/components/ui/character-count";
 import type { useConfirm } from "~/components/ui/confirm-dialog";
 import type { ApplicantDraft } from "~/modules/submissions/submission-repository.server";
@@ -473,9 +474,7 @@ export function ApplicationSpeakers({
               !readOnly &&
               (!revisionMode || index >= originalSpeakerCount) &&
               speaker.invitationStatus !== "claimed" ? (
-                <button
-                  className="icon-btn"
-                  type="button"
+                <IconButton
                   aria-label={`Remove speaker ${index + 1}`}
                   onClick={() => {
                     setSpeakers(
@@ -485,7 +484,7 @@ export function ApplicationSpeakers({
                   }}
                 >
                   ×
-                </button>
+                </IconButton>
               ) : null}
             </div>
           </label>
@@ -521,8 +520,8 @@ export function ApplicationSpeakers({
         </div>
       ))}
       {!readOnly && speakers.length < effectiveMaximumSpeakers ? (
-        <button
-          className="btn small"
+        <Button
+          size="small"
           type="button"
           onClick={() => {
             setSpeakers([
@@ -538,7 +537,7 @@ export function ApplicationSpeakers({
           }}
         >
           + Add co-speaker
-        </button>
+        </Button>
       ) : !readOnly ? (
         <span className="help">
           This form allows at most {effectiveMaximumSpeakers} speaker
@@ -638,8 +637,7 @@ export function ApplicationLifecycleActions({
             </span>
             <DraftRecoveryStatus state={recovery.state} />
             {!revisionMode ? (
-              <button
-                className="btn"
+              <Button
                 type={saveDraftButtonType}
                 name="_intent"
                 value="save_draft"
@@ -652,11 +650,11 @@ export function ApplicationLifecycleActions({
                 {navigation.formData?.get("_intent") === "save_draft"
                   ? "Saving…"
                   : "Save draft"}
-              </button>
+              </Button>
             ) : null}
             {persistenceOnly ? null : (
-              <button
-                className="btn primary"
+              <Button
+                variant="primary"
                 type="submit"
                 name="_intent"
                 value={revisionMode ? "revise_submission" : "submit"}
@@ -673,7 +671,7 @@ export function ApplicationLifecycleActions({
                     : revisionMode
                       ? "Save revised application"
                       : "Submit application"}
-              </button>
+              </Button>
             )}
           </div>
           {conflict ? (
@@ -684,8 +682,8 @@ export function ApplicationLifecycleActions({
                 load the newer server revision; nothing was overwritten.
               </span>
               <span className="row-actions right">
-                <button
-                  className="btn small"
+                <Button
+                  size="small"
                   type="button"
                   onClick={() => {
                     const blob = new Blob(
@@ -701,9 +699,9 @@ export function ApplicationLifecycleActions({
                   }}
                 >
                   Export local edits
-                </button>
-                <button
-                  className="btn small"
+                </Button>
+                <Button
+                  size="small"
                   type="button"
                   onClick={() =>
                     confirm(
@@ -723,7 +721,7 @@ export function ApplicationLifecycleActions({
                   }
                 >
                   Load server version
-                </button>
+                </Button>
               </span>
             </div>
           ) : null}
@@ -745,8 +743,9 @@ export function ApplicationLifecycleActions({
                 />{" "}
                 I understand this application will be withdrawn.
               </label>
-              <button
-                className="btn danger mt"
+              <Button
+                variant="danger"
+                className="mt"
                 type="submit"
                 name="_intent"
                 value="withdraw"
@@ -756,7 +755,7 @@ export function ApplicationLifecycleActions({
                 {navigation.formData?.get("_intent") === "withdraw"
                   ? "Withdrawing…"
                   : "Withdraw application"}
-              </button>
+              </Button>
             </details>
           ) : null}
           {!revisionMode && !persistenceOnly ? (
@@ -774,8 +773,9 @@ export function ApplicationLifecycleActions({
                 name="confirmDiscard"
                 defaultValue="no"
               />
-              <button
-                className="btn danger mt"
+              <Button
+                variant="danger"
+                className="mt"
                 type="submit"
                 name="_intent"
                 value="discard_draft"
@@ -805,7 +805,7 @@ export function ApplicationLifecycleActions({
                 {navigation.formData?.get("_intent") === "discard_draft"
                   ? "Discarding…"
                   : "Discard draft"}
-              </button>
+              </Button>
             </details>
           ) : null}
         </>
@@ -847,9 +847,9 @@ export function ApplicationLifecycleActions({
                 Add or review accepted-session speakers in the participant
                 workspace without changing this submitted answer snapshot.
               </span>
-              <Link className="btn small" to={acceptedParticipantsHref}>
+              <ButtonLink size="small" to={acceptedParticipantsHref}>
                 Manage participants
-              </Link>
+              </ButtonLink>
             </div>
           ) : null}
           {!forceReadOnly &&
@@ -871,8 +871,9 @@ export function ApplicationLifecycleActions({
                 />{" "}
                 I understand this application will be withdrawn.
               </label>
-              <button
-                className="btn danger mt"
+              <Button
+                variant="danger"
+                className="mt"
                 type="submit"
                 name="_intent"
                 value="withdraw"
@@ -882,7 +883,7 @@ export function ApplicationLifecycleActions({
                 {navigation.formData?.get("_intent") === "withdraw"
                   ? "Withdrawing…"
                   : "Withdraw application"}
-              </button>
+              </Button>
             </details>
           ) : null}
         </>

@@ -1,6 +1,7 @@
 import { AlertTriangle, Database, RotateCcw, Trash2 } from "lucide-react";
-import { data, Form, Link, useActionData, useNavigation } from "react-router";
+import { data, Form, useActionData, useNavigation } from "react-router";
 import { ZodError } from "zod";
+import { Button, ButtonLink } from "~/components/ui/button";
 import { useConfirm } from "~/components/ui/confirm-dialog";
 import { fieldLabel } from "~/lib/record-labels";
 import { EventRepositoryProvisioningError } from "~/modules/events/event-repository-provisioning.server";
@@ -166,9 +167,7 @@ export default function AdminEventRepositoryRecovery({
                 : "This event cannot be opened until its Airtable connection is completed, or you choose to keep it in Program Cue instead."}
           </p>
         </div>
-        <Link className="btn" to="/admin/event">
-          Back to Event settings
-        </Link>
+        <ButtonLink to="/admin/event">Back to Event settings</ButtonLink>
       </div>
 
       {actionData ? (
@@ -194,9 +193,9 @@ export default function AdminEventRepositoryRecovery({
                   value={actionData.result.eventId}
                 />
                 <input type="hidden" name="returnTo" value="/admin/event" />
-                <button className="btn small" type="submit">
+                <Button size="small" type="submit">
                   Open recovered event
-                </button>
+                </Button>
               </Form>
             ) : null}
           </div>
@@ -246,8 +245,8 @@ export default function AdminEventRepositoryRecovery({
           </p>
           <Form method="post">
             <input type="hidden" name="intent" value="fail_stalled_creation" />
-            <button
-              className="btn danger"
+            <Button
+              variant="danger"
               type="button"
               disabled={busy}
               onClick={(event) => {
@@ -265,7 +264,7 @@ export default function AdminEventRepositoryRecovery({
               }}
             >
               Move stalled creation to recovery
-            </button>
+            </Button>
           </Form>
         </section>
       ) : null}
@@ -317,9 +316,9 @@ export default function AdminEventRepositoryRecovery({
                     Rooms table
                     <input className="field" name="tableName" required />
                   </label>
-                  <button className="btn primary" type="submit" disabled={busy}>
+                  <Button variant="primary" type="submit" disabled={busy}>
                     Retry Airtable
-                  </button>
+                  </Button>
                 </Form>
               </>
             )}
@@ -332,8 +331,7 @@ export default function AdminEventRepositoryRecovery({
             </div>
             <Form method="post">
               <input type="hidden" name="intent" value="keep_d1" />
-              <button
-                className="btn"
+              <Button
                 type="button"
                 disabled={busy}
                 onClick={(event) => {
@@ -352,7 +350,7 @@ export default function AdminEventRepositoryRecovery({
                 }}
               >
                 Keep this event in Program Cue
-              </button>
+              </Button>
             </Form>
             <p>
               This activates the event with Program Cue holding its data, and
@@ -360,8 +358,8 @@ export default function AdminEventRepositoryRecovery({
             </p>
             <Form method="post">
               <input type="hidden" name="intent" value="discard" />
-              <button
-                className="btn danger"
+              <Button
+                variant="danger"
                 type="button"
                 disabled={busy}
                 onClick={(event) => {
@@ -379,7 +377,7 @@ export default function AdminEventRepositoryRecovery({
                 }}
               >
                 <Trash2 aria-hidden size={16} /> Discard incomplete event
-              </button>
+              </Button>
             </Form>
           </section>
         </div>

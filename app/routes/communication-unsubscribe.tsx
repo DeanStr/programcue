@@ -6,6 +6,7 @@ import {
   useNavigation,
 } from "react-router";
 import { BrandMark } from "~/components/brand-mark";
+import { Button } from "~/components/ui/button";
 import type { CommunicationCategory } from "~/modules/communications/communication-schema";
 import {
   describeCommunicationUnsubscribe,
@@ -127,13 +128,14 @@ export default function CommunicationUnsubscribe() {
               necessary to operate the event.
             </p>
             <Form method="post">
-              <button
-                className="btn primary mt"
+              <Button
+                variant="primary"
+                className="mt"
                 type="submit"
                 disabled={submitting}
               >
                 {submitting ? "Updating…" : "Unsubscribe"}
-              </button>
+              </Button>
             </Form>
           </>
         )}

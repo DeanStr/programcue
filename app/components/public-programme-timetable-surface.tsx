@@ -5,6 +5,7 @@ import {
   useRef,
   useState,
 } from "react";
+import { Button, ButtonAnchor } from "~/components/ui/button";
 import {
   formatProgrammeDuration,
   formatProgrammeTimeRange,
@@ -264,14 +265,9 @@ function PublicTimetableSessionDetail({
             />
           ) : null}
         </div>
-        <button
-          type="button"
-          className="btn small"
-          ref={closeButtonRef}
-          onClick={close}
-        >
+        <Button type="button" size="small" ref={closeButtonRef} onClick={close}>
           Close session details
-        </button>
+        </Button>
       </header>
 
       {model.showEmbedField("time") || model.showEmbedField("location") ? (
@@ -347,15 +343,15 @@ function PublicTimetableSessionDetail({
           {model.shared ? null : (
             <SaveSessionButton session={session} model={model} />
           )}
-          <a
-            className="btn small"
+          <ButtonAnchor
+            size="small"
             href={publicSessionDetailPath(
               model.programme.event.slug,
               session.id,
             )}
           >
             Open session page
-          </a>
+          </ButtonAnchor>
         </footer>
       )}
     </article>

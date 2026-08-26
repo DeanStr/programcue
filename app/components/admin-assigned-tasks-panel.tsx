@@ -1,7 +1,7 @@
 import { ListChecks } from "lucide-react";
 import { useEffect } from "react";
 import { Form } from "react-router";
-
+import { Button, ButtonAnchor } from "~/components/ui/button";
 import { DomainStatusBadge } from "~/components/ui/domain-status-badge";
 import { EventDateTime } from "~/components/ui/event-date-time";
 import type { AdminTasksData } from "~/routes/admin-tasks";
@@ -177,12 +177,12 @@ export function AdminAssignedTasksPanel({
                         {task.evidence[0].fileAssetId &&
                         task.evidence[0].details.fileVersionId ? (
                           task.evidence[0].downloadAvailable ? (
-                            <a
-                              className="btn small"
+                            <ButtonAnchor
+                              size="small"
                               href={`/admin/tasks/files/${encodeURIComponent(task.evidence[0].fileAssetId)}/${encodeURIComponent(task.evidence[0].details.fileVersionId)}`}
                             >
                               Download evidence
-                            </a>
+                            </ButtonAnchor>
                           ) : (
                             <small className="subtle">
                               Download remains unavailable until the exact
@@ -335,15 +335,16 @@ export function AdminAssignedTasksPanel({
                             required
                           />
                         </label>
-                        <button
+                        <Button
                           type="submit"
-                          className="btn small danger"
+                          variant="danger"
+                          size="small"
                           name="intent"
                           value="waive"
                           disabled={busy}
                         >
                           Confirm waiver
-                        </button>
+                        </Button>
                       </details>
                     ) : null}
                   </Form>
@@ -383,13 +384,9 @@ export function AdminAssignedTasksPanel({
                             required
                           />
                         </label>
-                        <button
-                          type="submit"
-                          className="btn small"
-                          disabled={busy}
-                        >
+                        <Button type="submit" size="small" disabled={busy}>
                           Confirm extension
-                        </button>
+                        </Button>
                       </Form>
                     </details>
                   ) : null}
@@ -416,13 +413,9 @@ export function AdminAssignedTasksPanel({
                         <input type="checkbox" name="administratorOnly" /> Keep
                         this note administrator-only
                       </label>
-                      <button
-                        type="submit"
-                        className="btn small"
-                        disabled={busy}
-                      >
+                      <Button type="submit" size="small" disabled={busy}>
                         Send comment
-                      </button>
+                      </Button>
                     </Form>
                   </details>
                 </td>

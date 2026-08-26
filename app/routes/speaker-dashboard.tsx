@@ -13,6 +13,7 @@ import {
   SpeakerUpdatesRail,
 } from "~/components/speaker-dashboard-overview";
 import { useSpeakerWorkspace } from "~/components/speaker-workspace-context";
+import { ButtonLink } from "~/components/ui/button";
 import { ResourceService } from "~/modules/resources/resource-service.server";
 import { requireSpeakerWorkspace } from "~/modules/speakers/speaker-workspace.server";
 import { ParticipantApplicationSummaryService } from "~/modules/submissions/participant-application-summary.server";
@@ -85,9 +86,9 @@ export default function SpeakerDashboard({ loaderData }: Route.ComponentProps) {
             >
               <div className="card-title">
                 <h2 id="speaker-apps-heading">Your applications</h2>
-                <Link className="btn small" to="/participant/applications">
+                <ButtonLink size="small" to="/participant/applications">
                   View applications
-                </Link>
+                </ButtonLink>
               </div>
               <ul className="list-clean stack">
                 {loaderData.applications.map((application) => (

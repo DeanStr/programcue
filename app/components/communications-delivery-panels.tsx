@@ -1,4 +1,5 @@
-import { Form, Link } from "react-router";
+import { Form } from "react-router";
+import { Button, ButtonLink, ButtonSummary } from "~/components/ui/button";
 import type { CommunicationsCentreLoaderData } from "~/routes/communications-centre";
 import {
   communicationCategoryLabel as categoryLabel,
@@ -71,9 +72,7 @@ export function DeliveryReadiness({
               : "Every requirement for sending email from this event is met."}
           </p>
         </div>
-        <Link className="btn" to="?view=setup">
-          Delivery settings
-        </Link>
+        <ButtonLink to="?view=setup">Delivery settings</ButtonLink>
       </header>
       <p className="comms-readiness-line">
         <span className="comms-readiness-state">
@@ -159,13 +158,13 @@ export function DeliveryConfiguration({
                 <input className="field" name="replyToEmail" type="email" />
               </label>
             </div>
-            <button type="submit" className="btn" disabled={working}>
+            <Button type="submit" disabled={working}>
               {working && pendingIntent === "save-sender"
                 ? "Saving…"
                 : localCapture
                   ? "Save verified local sender"
                   : "Save unverified sender"}
-            </button>
+            </Button>
           </Form>
           {/* No empty state here: the create form above is the empty state, and
               an illustrated box 40px below it explaining that form was the
@@ -215,13 +214,13 @@ export function DeliveryConfiguration({
                                 name="senderProfileId"
                                 value={sender.id}
                               />
-                              <button
+                              <Button
                                 type="submit"
-                                className="btn small"
+                                size="small"
                                 disabled={working}
                               >
                                 Check Resend
-                              </button>
+                              </Button>
                             </Form>
                           ) : null}
                           <Form method="post">
@@ -239,18 +238,18 @@ export function DeliveryConfiguration({
                               name="senderProfileId"
                               value={sender.id}
                             />
-                            <button
+                            <Button
                               type="submit"
-                              className="btn small"
+                              size="small"
                               disabled={working}
                             >
                               {sender.status === "disabled"
                                 ? "Enable"
                                 : "Disable"}
-                            </button>
+                            </Button>
                           </Form>
                           <details className="pc-disclosure">
-                            <summary className="btn small">Edit</summary>
+                            <ButtonSummary size="small">Edit</ButtonSummary>
                             <Form method="post" className="stack mt">
                               <input
                                 type="hidden"
@@ -299,13 +298,13 @@ export function DeliveryConfiguration({
                                   defaultValue={sender.replyToEmail ?? ""}
                                 />
                               </label>
-                              <button
+                              <Button
                                 type="submit"
-                                className="btn small"
+                                size="small"
                                 disabled={working}
                               >
                                 Save changes
-                              </button>
+                              </Button>
                             </Form>
                           </details>
                         </div>
@@ -361,15 +360,15 @@ export function DeliveryConfiguration({
               {testSendBlocker ? (
                 <span className="help">{testSendBlocker}</span>
               ) : null}
-              <button
+              <Button
                 type="submit"
-                className="btn primary"
+                variant="primary"
                 disabled={working || Boolean(testSendBlocker)}
               >
                 {working && pendingIntent === "test-send"
                   ? "Queueing…"
                   : "Send real test email"}
-              </button>
+              </Button>
             </div>
           </Form>
         </div>
@@ -475,15 +474,11 @@ export function CommunicationAutomation({
               Publish a task-reminder template before enabling a trigger.
             </span>
           )}
-          <button
-            type="submit"
-            className="btn"
-            disabled={working || !reminderTemplates.length}
-          >
+          <Button type="submit" disabled={working || !reminderTemplates.length}>
             {working && pendingIntent === "save-trigger"
               ? "Saving…"
               : "Enable reminder trigger"}
-          </button>
+          </Button>
         </div>
       </Form>
       {loaderData.triggers.length ? (
@@ -528,13 +523,9 @@ export function CommunicationAutomation({
                         name="triggerId"
                         value={trigger.id}
                       />
-                      <button
-                        type="submit"
-                        className="btn small"
-                        disabled={working}
-                      >
+                      <Button type="submit" size="small" disabled={working}>
                         {trigger.enabled ? "Disable" : "Enable"}
-                      </button>
+                      </Button>
                     </Form>
                   </td>
                 </tr>

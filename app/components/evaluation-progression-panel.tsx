@@ -5,6 +5,7 @@ export function bindEvalDateTime(event: React.FormEvent<HTMLInputElement>) {
 }
 
 import { useEvaluationAdminModel } from "~/components/evaluation-admin-model";
+import { Button } from "~/components/ui/button";
 import { encodeScorecardSelection } from "~/modules/evaluations/evaluation-scorecard-selection";
 
 export function EvaluationProgressionPanel() {
@@ -37,7 +38,7 @@ export function EvaluationProgressionPanel() {
           <input type="hidden" name="planId" value={plan.id} />
           <input type="hidden" name="planRevision" value={plan.revision} />
           <input
-            className="input"
+            className="field"
             name="name"
             placeholder={`Round ${plan.rounds.length + 1} name`}
             aria-label="Next round name"
@@ -85,7 +86,7 @@ export function EvaluationProgressionPanel() {
             <label className="label">
               Opens ({loaderData.eventTimezone})
               <input
-                className="input pc-eval-datetime"
+                className="field pc-eval-datetime"
                 type="datetime-local"
                 name="roundOpensAt"
                 data-empty=""
@@ -95,7 +96,7 @@ export function EvaluationProgressionPanel() {
             <label className="label">
               Closes ({loaderData.eventTimezone})
               <input
-                className="input pc-eval-datetime"
+                className="field pc-eval-datetime"
                 type="datetime-local"
                 name="roundClosesAt"
                 data-empty=""
@@ -109,13 +110,9 @@ export function EvaluationProgressionPanel() {
               Hide author and co-author identity from reviewers in this round
             </span>
           </label>
-          <button
-            type="submit"
-            className="btn"
-            disabled={navigation.state !== "idle"}
-          >
+          <Button type="submit" disabled={navigation.state !== "idle"}>
             Add next round
-          </button>
+          </Button>
         </Form>
       ) : null}
       {activeRound && nextRound ? (
@@ -129,9 +126,10 @@ export function EvaluationProgressionPanel() {
             Advancing closes and locks the current round, activates the next
             round and creates the new assignments together.
           </span>
-          <button
+          <Button
             type="button"
-            className="btn small primary"
+            variant="primary"
+            size="small"
             disabled={
               unfinishedAssignmentCount > 0 ||
               advanceableSubmissions.length === 0 ||
@@ -140,7 +138,7 @@ export function EvaluationProgressionPanel() {
             onClick={() => setAdvanceOpen(true)}
           >
             Review advancement
-          </button>
+          </Button>
           {nextRoundAssignmentTargets.length === 0 ? (
             <small className="subtle">
               Add at least one reviewer to {nextRound.name}'s pool before

@@ -1,3 +1,4 @@
+import { Button } from "~/components/ui/button";
 import type { ApplicantFormStep } from "~/modules/submissions/submission-schema";
 
 export function ApplicantFormStepStatus({
@@ -39,23 +40,18 @@ export function ApplicantFormStepNav({
   const isLast = index === steps.length - 1;
   return (
     <div className="page-actions application-form-step-nav">
-      <button
-        className="btn"
-        type="button"
-        onClick={onBack}
-        disabled={isFirst || backDisabled}
-      >
+      <Button type="button" onClick={onBack} disabled={isFirst || backDisabled}>
         Back
-      </button>
+      </Button>
       {showContinue && !isLast ? (
-        <button
-          className="btn primary"
+        <Button
+          variant="primary"
           type="button"
           onClick={onContinue}
           disabled={continueDisabled}
         >
           Continue
-        </button>
+        </Button>
       ) : null}
     </div>
   );

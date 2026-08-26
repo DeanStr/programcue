@@ -11,6 +11,7 @@ import {
 import { useState } from "react";
 import { data, Form, Link, useActionData, useNavigation } from "react-router";
 import { ZodError } from "zod";
+import { Button, ButtonLink } from "~/components/ui/button";
 import { useConfirm } from "~/components/ui/confirm-dialog";
 import {
   DomainStatusBadge,
@@ -323,9 +324,7 @@ export default function ApiSettings({ loaderData }: Route.ComponentProps) {
           </p>
         </div>
         <div className="page-actions">
-          <Link className="btn" to="/api/docs">
-            API reference
-          </Link>
+          <ButtonLink to="/api/docs">API reference</ButtonLink>
         </div>
       </div>
       {actionData ? (
@@ -345,14 +344,14 @@ export default function ApiSettings({ loaderData }: Route.ComponentProps) {
               <>
                 <div className="settings-secret">
                   <code>{actionData.token}</code>
-                  <button
-                    className="btn small"
+                  <Button
+                    size="small"
                     type="button"
                     onClick={() => void copyToken()}
                   >
                     <Copy aria-hidden size={13} />{" "}
                     {copyState === "copied" ? "Copied" : "Copy"}
-                  </button>
+                  </Button>
                 </div>
                 {copyState === "failed" ? (
                   <span className="field-error" role="alert">
@@ -365,14 +364,14 @@ export default function ApiSettings({ loaderData }: Route.ComponentProps) {
               <>
                 <div className="settings-secret">
                   <code>{actionData.webhookSecret}</code>
-                  <button
-                    className="btn small"
+                  <Button
+                    size="small"
                     type="button"
                     onClick={() => void copyWebhookSecret()}
                   >
                     <Copy aria-hidden size={13} />{" "}
                     {webhookCopyState === "copied" ? "Copied" : "Copy"}
-                  </button>
+                  </Button>
                 </div>
                 {webhookCopyState === "failed" ? (
                   <span className="field-error" role="alert">
@@ -445,13 +444,13 @@ export default function ApiSettings({ loaderData }: Route.ComponentProps) {
                 <option value="365">1 year</option>
                 <option value="">No expiry</option>
               </select>
-              <button
+              <Button
                 type="submit"
-                className="btn primary"
+                variant="primary"
                 disabled={navigation.state !== "idle"}
               >
                 <KeyRound aria-hidden size={14} /> Create key
-              </button>
+              </Button>
             </div>
           </div>
         </Form>
@@ -491,8 +490,9 @@ export default function ApiSettings({ loaderData }: Route.ComponentProps) {
                       <Form method="post">
                         <input type="hidden" name="intent" value="revoke" />
                         <input type="hidden" name="keyId" value={key.id} />
-                        <button
-                          className="btn small danger"
+                        <Button
+                          variant="danger"
+                          size="small"
                           aria-label={`Revoke ${key.name}`}
                           type="button"
                           disabled={navigation.state !== "idle"}
@@ -513,7 +513,7 @@ export default function ApiSettings({ loaderData }: Route.ComponentProps) {
                           }}
                         >
                           <Trash2 aria-hidden size={13} /> Revoke
-                        </button>
+                        </Button>
                       </Form>
                     ) : null}
                   </div>
@@ -560,7 +560,7 @@ export default function ApiSettings({ loaderData }: Route.ComponentProps) {
             </div>
             <textarea
               id="settings-webhook-url"
-              className="field settings-url-field"
+              className="textarea settings-url-field"
               name="url"
               inputMode="url"
               autoComplete="url"
@@ -596,13 +596,13 @@ export default function ApiSettings({ loaderData }: Route.ComponentProps) {
               <span className="sr-only">Create webhook</span>
             </div>
             <div className="page-actions">
-              <button
-                className="btn primary"
+              <Button
+                variant="primary"
                 type="submit"
                 disabled={navigation.state !== "idle"}
               >
                 <Webhook aria-hidden size={14} /> Create endpoint
-              </button>
+              </Button>
             </div>
           </div>
         </Form>
@@ -663,8 +663,8 @@ export default function ApiSettings({ loaderData }: Route.ComponentProps) {
                         name="endpointId"
                         value={endpoint.id}
                       />
-                      <button
-                        className="btn small"
+                      <Button
+                        size="small"
                         type="button"
                         disabled={navigation.state !== "idle"}
                         onClick={(event) => {
@@ -681,7 +681,7 @@ export default function ApiSettings({ loaderData }: Route.ComponentProps) {
                         }}
                       >
                         <Send aria-hidden size={13} /> Test
-                      </button>
+                      </Button>
                     </Form>
                   ) : null}
                   {endpoint.credentialsErased ? null : (
@@ -700,13 +700,16 @@ export default function ApiSettings({ loaderData }: Route.ComponentProps) {
                         name="endpointId"
                         value={endpoint.id}
                       />
-                      <button
-                        className={`btn small${endpoint.status === "disabled" ? "" : " danger"}`}
+                      <Button
+                        size="small"
+                        variant={
+                          endpoint.status === "disabled" ? undefined : "danger"
+                        }
                         type="submit"
                         disabled={navigation.state !== "idle"}
                       >
                         {endpoint.status === "disabled" ? "Enable" : "Disable"}
-                      </button>
+                      </Button>
                     </Form>
                   )}
                 </div>

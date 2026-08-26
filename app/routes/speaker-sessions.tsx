@@ -1,8 +1,9 @@
 import { Mic2 } from "lucide-react";
-import { data, Form, Link, useActionData, useNavigation } from "react-router";
+import { data, Form, useActionData, useNavigation } from "react-router";
 import { ZodError } from "zod";
 import { SpeakerActionNotice } from "~/components/speaker-action-notice";
 import { useSpeakerWorkspace } from "~/components/speaker-workspace-context";
+import { Button, ButtonAnchor, ButtonLink } from "~/components/ui/button";
 import { useConfirm } from "~/components/ui/confirm-dialog";
 import { DomainStatusBadge } from "~/components/ui/domain-status-badge";
 import { EventDateTime } from "~/components/ui/event-date-time";
@@ -241,8 +242,8 @@ export default function SpeakerSessions(_props: Route.ComponentProps) {
                               name="confirmation"
                               value="confirmed"
                             />
-                            <button
-                              className="btn primary"
+                            <Button
+                              variant="primary"
                               type="button"
                               disabled={busy}
                               aria-label={`Accept participation in ${session.title}`}
@@ -263,7 +264,7 @@ export default function SpeakerSessions(_props: Route.ComponentProps) {
                               }}
                             >
                               Accept session
-                            </button>
+                            </Button>
                           </Form>
                           <details className="speaker-task-comment">
                             <summary>Decline this session</summary>
@@ -301,8 +302,8 @@ export default function SpeakerSessions(_props: Route.ComponentProps) {
                                 name="declineConfirmation"
                                 value="declined"
                               />
-                              <button
-                                className="btn danger"
+                              <Button
+                                variant="danger"
                                 type="button"
                                 disabled={busy}
                                 onClick={(event) => {
@@ -322,18 +323,18 @@ export default function SpeakerSessions(_props: Route.ComponentProps) {
                                 }}
                               >
                                 Decline session
-                              </button>
+                              </Button>
                             </Form>
                           </details>
                         </div>
                       ) : session.participationStatus === "confirmed" ? (
                         portal.event.participantSupportUrl ? (
-                          <a
-                            className="btn small"
+                          <ButtonAnchor
+                            size="small"
                             href={portal.event.participantSupportUrl}
                           >
                             Contact the event team to withdraw
-                          </a>
+                          </ButtonAnchor>
                         ) : (
                           <p className="subtle">
                             Contact the event team if you need to withdraw.
@@ -348,19 +349,19 @@ export default function SpeakerSessions(_props: Route.ComponentProps) {
                       {session.participationStatus !== "declined" &&
                       session.status !== "cancelled" ? (
                         session.sessionDetailsReviewTaskId ? (
-                          <Link
-                            className="btn small"
+                          <ButtonLink
+                            size="small"
                             to={`/participant/tasks?task=${encodeURIComponent(session.sessionDetailsReviewTaskId)}&compose=comment#task-${encodeURIComponent(session.sessionDetailsReviewTaskId)}`}
                           >
                             Request a correction
-                          </Link>
+                          </ButtonLink>
                         ) : portal.event.participantSupportUrl ? (
-                          <a
-                            className="btn small"
+                          <ButtonAnchor
+                            size="small"
                             href={portal.event.participantSupportUrl}
                           >
                             Request a correction
-                          </a>
+                          </ButtonAnchor>
                         ) : null
                       ) : null}
                     </div>

@@ -19,6 +19,7 @@ import { EvaluationRoundsPanel } from "~/components/evaluation-rounds-panel";
 import { RubricFields } from "~/components/evaluation-rubric-fields";
 import { EvaluationTeamsPanel } from "~/components/evaluation-teams-panel";
 import { AdminPageSection } from "~/components/ui/admin-page-sections";
+import { Button } from "~/components/ui/button";
 import { defaultRecommendationChoices } from "~/modules/evaluations/evaluation-recommendation-choices";
 
 const defaultRubric = [
@@ -97,13 +98,9 @@ function ReviewerAiSettingCard() {
             </span>
           </span>
         </label>
-        <button
-          type="submit"
-          className="btn"
-          disabled={navigation.state !== "idle"}
-        >
+        <Button type="submit" disabled={navigation.state !== "idle"}>
           Save reviewer AI setting
-        </button>
+        </Button>
       </Form>
     </section>
   );
@@ -129,7 +126,7 @@ export function EvaluationPlanState() {
           <label className="label">
             Plan name
             <input
-              className="input"
+              className="field"
               name="planName"
               defaultValue="Programme committee review"
               required
@@ -138,7 +135,7 @@ export function EvaluationPlanState() {
           <label className="label">
             First round name
             <input
-              className="input"
+              className="field"
               name="roundName"
               defaultValue="Initial review"
               required
@@ -148,7 +145,7 @@ export function EvaluationPlanState() {
             <label className="label">
               Opens ({loaderData.eventTimezone})
               <input
-                className="input pc-eval-datetime"
+                className="field pc-eval-datetime"
                 type="datetime-local"
                 name="roundOpensAt"
               />
@@ -156,7 +153,7 @@ export function EvaluationPlanState() {
             <label className="label">
               Closes ({loaderData.eventTimezone})
               <input
-                className="input pc-eval-datetime"
+                className="field pc-eval-datetime"
                 type="datetime-local"
                 name="roundClosesAt"
               />
@@ -200,13 +197,13 @@ export function EvaluationPlanState() {
               description: criterion.description,
             }))}
           />
-          <button
+          <Button
             type="submit"
-            className="btn primary"
+            variant="primary"
             disabled={navigation.state !== "idle"}
           >
             Create review plan
-          </button>
+          </Button>
         </Form>
       </section>
     </AdminPageSection>

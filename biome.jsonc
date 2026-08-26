@@ -42,6 +42,7 @@
       "preset": "recommended",
       // Explicit pre-adoption debt. Remove entries in focused, tested batches.
       "style": {
+        "noDescendingSpecificity": "error",
         "noNonNullAssertion": "off",
       },
     },

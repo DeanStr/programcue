@@ -8,6 +8,7 @@ import {
   SiteRecordDisclosure,
 } from "~/components/admin-public-site-panels";
 import { RestrictedMarkdownEditor } from "~/components/restricted-markdown-editor";
+import { Button } from "~/components/ui/button";
 import type { PublishedProgramme } from "~/modules/programme/public-programme-types";
 import type { PublicRecordingWorkspaceItem } from "~/modules/public-site/public-recording-service.server";
 import type { PublicSiteDraft } from "~/modules/public-site/public-site";
@@ -249,15 +250,16 @@ export function AdminPublicSiteRecordings({
                   disabled={!programmeFeaturesAvailable}
                 />
                 <div className="page-actions">
-                  <button
-                    className="btn small"
+                  <Button
+                    size="small"
                     type="submit"
                     disabled={blocked || busy || !programmeFeaturesAvailable}
                   >
                     Save recording draft
-                  </button>
-                  <button
-                    className="btn small primary"
+                  </Button>
+                  <Button
+                    variant="primary"
+                    size="small"
                     type="button"
                     disabled={
                       blocked ||
@@ -270,16 +272,17 @@ export function AdminPublicSiteRecordings({
                     {recording.publishedAt
                       ? "Publish update"
                       : "Publish recording"}
-                  </button>
+                  </Button>
                   {recording.publishedAt ? (
-                    <button
-                      className="btn small danger"
+                    <Button
+                      variant="danger"
+                      size="small"
                       type="button"
                       disabled={busy}
                       onClick={() => onUnpublish(recording)}
                     >
                       Withdraw
-                    </button>
+                    </Button>
                   ) : null}
                 </div>
               </Form>
@@ -298,7 +301,12 @@ export function AdminPublicSiteRecordings({
           <h3 className="public-site-panel-title">Add a recording draft</h3>
           <label className="label">
             Published session
-            <select className="field" name="sessionId" required defaultValue="">
+            <select
+              className="select"
+              name="sessionId"
+              required
+              defaultValue=""
+            >
               <option value="" disabled>
                 Select a session
               </option>
@@ -311,13 +319,13 @@ export function AdminPublicSiteRecordings({
           </label>
           <RecordingFields disabled={false} />
           <div className="page-actions">
-            <button
-              className="btn small"
+            <Button
+              size="small"
               type="submit"
               disabled={blocked || busy || !availableSessions.length}
             >
               <Plus aria-hidden size={14} /> Create recording draft
-            </button>
+            </Button>
           </div>
           {availableSessions.length ? null : (
             <p className="help">

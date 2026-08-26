@@ -160,6 +160,11 @@
   --state-good-solid: #3a5f42;
   --state-good-text: #2a4a32;
   --state-good-surface: #e7efe8;
+  --state-good-border: color-mix(
+    in srgb,
+    var(--state-good-solid) 24%,
+    var(--border)
+  );
   /* Warning is deliberately gold rather than orange-brown. Copper owns brand
      and informational emphasis; a separate hue keeps operational risk legible
      at a glance without borrowing the red family used for failures. */
@@ -193,6 +198,10 @@
   --focus-halo: #fff;
   --focus-width: 2px;
   --focus-halo-width: 2px;
+  --focus-halo-shadow: 0 0 0 var(--focus-halo-width) var(--focus-halo);
+  --focus-error-halo: 0 0 0 3px
+    color-mix(in srgb, var(--state-bad-solid) 16%, transparent);
+  --focus-selection: 0 0 0 2px var(--surface), 0 0 0 4px var(--ink);
 
   /* --- Elevation ---------------------------------------------------------
      border contains, tint groups, shadow floats.
@@ -203,6 +212,7 @@
   --elev-2: 0 2px 4px rgba(19, 32, 31, 0.06), 0 4px 10px rgba(19, 32, 31, 0.05);
   --elev-3:
     0 4px 8px rgba(19, 32, 31, 0.07), 0 12px 24px rgba(19, 32, 31, 0.08);
+  --elev-top-3: 0 -8px 24px rgba(19, 32, 31, 0.1);
   --elev-4:
     0 8px 16px rgba(19, 32, 31, 0.08), 0 24px 48px rgba(19, 32, 31, 0.12);
   --shadow: var(--elev-3);

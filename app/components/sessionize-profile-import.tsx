@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { Button } from "~/components/ui/button";
 
 type ImportedProfile = {
   name: string;
@@ -130,14 +131,13 @@ export function SessionizeProfileImport({
               }
             }}
           />
-          <button
-            className="btn"
+          <Button
             type="button"
             disabled={disabled || state.kind === "loading" || !profile.trim()}
             onClick={() => void importProfile()}
           >
             {state.kind === "loading" ? "Importing…" : "Import profile"}
-          </button>
+          </Button>
         </span>
       </label>
       {state.kind === "success" ? (

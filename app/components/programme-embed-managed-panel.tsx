@@ -1,5 +1,6 @@
 import { ExternalLink } from "lucide-react";
 import { Form } from "react-router";
+import { Button } from "~/components/ui/button";
 import { DerivedSlugField } from "~/components/ui/derived-slug-field";
 import { EventDateTime } from "~/components/ui/event-date-time";
 import type { ProgrammeEmbedBuilderController } from "./use-programme-embed-builder";
@@ -95,9 +96,9 @@ export function ManagedEmbedWorkflow({
             </p>
           </div>
           {selectedEmbed ? (
-            <button className="btn small" type="button" onClick={reset}>
+            <Button size="small" type="button" onClick={reset}>
               New draft
-            </button>
+            </Button>
           ) : null}
         </div>
         <div className="grid grid-2">
@@ -178,9 +179,9 @@ export function ManagedEmbedWorkflow({
           </>
         ) : null}
         <div className="page-actions">
-          <button
+          <Button
             type="submit"
-            className="btn primary"
+            variant="primary"
             disabled={
               outputConfiguration === null ||
               !managedName.trim() ||
@@ -189,7 +190,7 @@ export function ManagedEmbedWorkflow({
             }
           >
             {selectedEmbed ? "Confirm update" : "Save draft"}
-          </button>
+          </Button>
         </div>
       </Form>
 
@@ -274,8 +275,8 @@ export function ManagedEmbedWorkflow({
                     <td>
                       <div className="stack">
                         {embed.status !== "revoked" ? (
-                          <button
-                            className="btn small"
+                          <Button
+                            size="small"
                             type="button"
                             onClick={() => {
                               loadManagedEmbed(embed);
@@ -283,7 +284,7 @@ export function ManagedEmbedWorkflow({
                             }}
                           >
                             Load in builder
-                          </button>
+                          </Button>
                         ) : null}
                         {nextStatus ? (
                           <Form
@@ -318,9 +319,9 @@ export function ManagedEmbedWorkflow({
                                 ? "I previewed this configuration."
                                 : "I confirm visitors will see an unavailable response."}
                             </label>
-                            <button
+                            <Button
                               type="submit"
-                              className="btn small"
+                              size="small"
                               disabled={
                                 nextStatus === "active" &&
                                 (selectedEmbedId !== embed.id ||
@@ -332,7 +333,7 @@ export function ManagedEmbedWorkflow({
                                   ? "Resume"
                                   : "Activate"
                                 : "Pause"}
-                            </button>
+                            </Button>
                             {nextStatus === "active" &&
                             (selectedEmbedId !== embed.id ||
                               changedConfigurationFields.length > 0) ? (
@@ -374,9 +375,9 @@ export function ManagedEmbedWorkflow({
                               />
                               I understand this URL will permanently return 410.
                             </label>
-                            <button type="submit" className="btn small danger">
+                            <Button type="submit" variant="danger" size="small">
                               Revoke
-                            </button>
+                            </Button>
                           </Form>
                         ) : (
                           <span className="help">

@@ -12,6 +12,7 @@ import {
   TaskCompletionUndoControl,
   type TaskCompletionUndoNotice,
 } from "~/components/task-completion-undo-control";
+import { Button, ButtonLink } from "~/components/ui/button";
 import { ReadinessWeightingCard } from "~/components/ui/readiness-weighting";
 import type { TaskTemplateDraftValues } from "~/modules/tasks/task-schema";
 import type { AdminTasksData } from "~/routes/admin-tasks";
@@ -44,9 +45,9 @@ export function AdminTasksWorkspace({
           </p>
         </div>
         <div className="page-actions">
-          <Link className="btn primary" to="/admin/tasks/bulk">
+          <ButtonLink variant="primary" to="/admin/tasks/bulk">
             Bulk actions
-          </Link>
+          </ButtonLink>
         </div>
       </div>
       <section
@@ -122,12 +123,8 @@ export function AdminTasksWorkspace({
             </select>
           </label>
           <div className="page-actions" style={{ alignItems: "end" }}>
-            <button className="btn" type="submit">
-              Apply filters
-            </button>
-            <Link className="btn" to="/admin/tasks">
-              Clear
-            </Link>
+            <Button type="submit">Apply filters</Button>
+            <ButtonLink to="/admin/tasks">Clear</ButtonLink>
           </div>
         </Form>
       </section>

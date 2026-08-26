@@ -25,6 +25,7 @@ import {
 import { ZodError } from "zod";
 import { BrandMark } from "~/components/brand-mark";
 import { AdminWorkspaceTabs } from "~/components/ui/admin-workspace-tabs";
+import { Button } from "~/components/ui/button";
 import { useConfirm } from "~/components/ui/confirm-dialog";
 import { DEFAULT_EVENT_BRAND_ACCENT } from "~/lib/brand";
 import {
@@ -489,22 +490,23 @@ function AssetUpload({
             )}
             <p className="branding-dropzone-prompt">{prompt}</p>
           </div>
-          <button
-            className={selectedName ? "btn small" : "sr-only"}
+          <Button
+            size="small"
+            className={selectedName ? undefined : "sr-only"}
             type="submit"
             disabled={disabled || !selectedName}
           >
             {asset ? `Replace ${kind}` : `Upload ${kind}`}
-          </button>
+          </Button>
           {asset && onRemove && !selectedName ? (
-            <button
-              className="btn small"
+            <Button
+              size="small"
               type="button"
               onClick={onRemove}
               disabled={removeDisabled}
             >
               Remove {kind} from draft
-            </button>
+            </Button>
           ) : null}
         </div>
         {asset ? (
@@ -722,15 +724,15 @@ export default function AdminBranding({ loaderData }: Route.ComponentProps) {
                   ? "Unsaved draft changes"
                   : "Draft matches the last save"}
               </p>
-              <button
-                className="btn primary"
+              <Button
+                variant="primary"
                 type="submit"
                 disabled={!unsaved || busy}
               >
                 {busy && navigation.formData?.get("_intent") === "save_draft"
                   ? "Saving…"
                   : "Save draft"}
-              </button>
+              </Button>
             </div>
           </Form>
 
@@ -783,8 +785,8 @@ export default function AdminBranding({ loaderData }: Route.ComponentProps) {
             footer={
               <div className="branding-preview-commit">
                 <p className="help">Publishing is explicit and audited.</p>
-                <button
-                  className="btn primary"
+                <Button
+                  variant="primary"
                   type="button"
                   disabled={
                     unsaved || busy || !loaderData.hasUnpublishedChanges
@@ -792,7 +794,7 @@ export default function AdminBranding({ loaderData }: Route.ComponentProps) {
                   onClick={publish}
                 >
                   Publish branding
-                </button>
+                </Button>
               </div>
             }
           />

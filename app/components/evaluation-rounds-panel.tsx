@@ -3,6 +3,7 @@ import { Form, Link } from "react-router";
 import { useEvaluationAdminModel } from "~/components/evaluation-admin-model";
 import { RecommendationChoiceFields } from "~/components/evaluation-recommendation-choice-fields";
 import { RubricFields } from "~/components/evaluation-rubric-fields";
+import { Button } from "~/components/ui/button";
 import { useConfirm } from "~/components/ui/confirm-dialog";
 import { EventDateTime } from "~/components/ui/event-date-time";
 import { communicationScheduledLocalValue } from "~/modules/communications/communication-time";
@@ -132,7 +133,7 @@ export function EvaluationRoundsPanel() {
                   <label className="label">
                     Round name
                     <input
-                      className="input"
+                      className="field"
                       name="name"
                       defaultValue={round.name}
                       required
@@ -142,7 +143,7 @@ export function EvaluationRoundsPanel() {
                     <label className="label">
                       Opens ({loaderData.eventTimezone})
                       <input
-                        className="input pc-eval-datetime"
+                        className="field pc-eval-datetime"
                         type="datetime-local"
                         name="roundOpensAt"
                         defaultValue={communicationScheduledLocalValue(
@@ -154,7 +155,7 @@ export function EvaluationRoundsPanel() {
                     <label className="label">
                       Closes ({loaderData.eventTimezone})
                       <input
-                        className="input pc-eval-datetime"
+                        className="field pc-eval-datetime"
                         type="datetime-local"
                         name="roundClosesAt"
                         defaultValue={communicationScheduledLocalValue(
@@ -191,13 +192,9 @@ export function EvaluationRoundsPanel() {
                     choices={round.recommendationChoices}
                   />
                   <RubricFields criteria={round.criteria} />
-                  <button
-                    type="submit"
-                    className="btn"
-                    disabled={navigation.state !== "idle"}
-                  >
+                  <Button type="submit" disabled={navigation.state !== "idle"}>
                     Save round
-                  </button>
+                  </Button>
                 </Form>
               </details>
             ) : null}
@@ -227,8 +224,9 @@ export function EvaluationRoundsPanel() {
                   />
                 ))}
                 <input type="hidden" name="confirmed" value="true" />
-                <button
-                  className="btn small danger"
+                <Button
+                  variant="danger"
+                  size="small"
                   type="button"
                   disabled={navigation.state !== "idle"}
                   onClick={(event) => {
@@ -249,7 +247,7 @@ export function EvaluationRoundsPanel() {
                   }}
                 >
                   Delete unused round
-                </button>
+                </Button>
               </Form>
             ) : null}
             <div className="divider" />
@@ -284,8 +282,8 @@ export function EvaluationRoundsPanel() {
                       />
                       <input type="hidden" name="operation" value="remove" />
                       <input type="hidden" name="confirmed" value="true" />
-                      <button
-                        className="btn small"
+                      <Button
+                        size="small"
                         disabled={navigation.state !== "idle"}
                         type="button"
                         onClick={(event) => {
@@ -304,7 +302,7 @@ export function EvaluationRoundsPanel() {
                         }}
                       >
                         Remove
-                      </button>
+                      </Button>
                     </Form>
                   </li>
                 ))}
@@ -331,15 +329,15 @@ export function EvaluationRoundsPanel() {
                     </option>
                   ))}
                 </select>
-                <button
+                <Button
                   type="submit"
-                  className="btn small"
+                  size="small"
                   name="operation"
                   value="add"
                   disabled={navigation.state !== "idle"}
                 >
                   Add reviewer
-                </button>
+                </Button>
               </Form>
             ) : null}
             <div className="divider" />
@@ -424,13 +422,13 @@ export function EvaluationRoundsPanel() {
                           ),
                         )}
                       </select>
-                      <button
+                      <Button
                         type="submit"
-                        className="btn small"
+                        size="small"
                         disabled={navigation.state !== "idle"}
                       >
                         Prepare selected reminders
-                      </button>
+                      </Button>
                     </div>
                   ) : (
                     <p className="help">

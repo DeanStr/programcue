@@ -1,6 +1,6 @@
 import { ArrowDown, ArrowUp, MapPin, Play, Trash2 } from "lucide-react";
 import { useState } from "react";
-
+import { Button } from "~/components/ui/button";
 import {
   replaceResourceDocumentEmbeds,
   resourceDocumentEmbeds,
@@ -108,13 +108,14 @@ export function ResourceExternalEmbedEditor({
           <strong>External content needs attention</strong>
           <span>{documentError}</span>
         </div>
-        <button
-          className="btn danger small"
+        <Button
+          variant="danger"
+          size="small"
           type="button"
           onClick={() => commit([])}
         >
           Remove invalid external blocks
-        </button>
+        </Button>
       </aside>
     );
   }
@@ -132,8 +133,8 @@ export function ResourceExternalEmbedEditor({
           className="resource-embed-kind pc-plain-fieldset"
           aria-label="External content type"
         >
-          <button
-            className="btn small"
+          <Button
+            size="small"
             type="button"
             aria-pressed={kind === "video"}
             onClick={() => {
@@ -146,9 +147,9 @@ export function ResourceExternalEmbedEditor({
             }}
           >
             <Play aria-hidden size={15} /> Video
-          </button>
-          <button
-            className="btn small"
+          </Button>
+          <Button
+            size="small"
             type="button"
             aria-pressed={kind === "map"}
             onClick={() => {
@@ -161,7 +162,7 @@ export function ResourceExternalEmbedEditor({
             }}
           >
             <MapPin aria-hidden size={15} /> Map
-          </button>
+          </Button>
         </fieldset>
       </div>
 
@@ -228,8 +229,9 @@ export function ResourceExternalEmbedEditor({
         </>
       )}
 
-      <button
-        className="btn primary small"
+      <Button
+        variant="primary"
+        size="small"
         type="button"
         onClick={addEmbed}
         disabled={
@@ -240,7 +242,7 @@ export function ResourceExternalEmbedEditor({
         }
       >
         Add {kind}
-      </button>
+      </Button>
       {error ? (
         <div className="validation-item error" role="alert">
           {error}
@@ -260,26 +262,29 @@ export function ResourceExternalEmbedEditor({
                 <small>{description(embed)}</small>
               </span>
               <span className="resource-embed-row-actions">
-                <button
-                  className="btn icon small"
+                <Button
+                  size="small"
+                  className="icon"
                   type="button"
                   aria-label={`Move ${providerLabel(embed.provider)} block up`}
                   disabled={index === 0}
                   onClick={() => move(index, -1)}
                 >
                   <ArrowUp aria-hidden size={14} />
-                </button>
-                <button
-                  className="btn icon small"
+                </Button>
+                <Button
+                  size="small"
+                  className="icon"
                   type="button"
                   aria-label={`Move ${providerLabel(embed.provider)} block down`}
                   disabled={index === embeds.length - 1}
                   onClick={() => move(index, 1)}
                 >
                   <ArrowDown aria-hidden size={14} />
-                </button>
-                <button
-                  className="btn icon small"
+                </Button>
+                <Button
+                  size="small"
+                  className="icon"
                   type="button"
                   aria-label={`Remove ${providerLabel(embed.provider)} block`}
                   onClick={() =>
@@ -287,7 +292,7 @@ export function ResourceExternalEmbedEditor({
                   }
                 >
                   <Trash2 aria-hidden size={14} />
-                </button>
+                </Button>
               </span>
             </li>
           ))}

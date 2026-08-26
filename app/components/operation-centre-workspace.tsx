@@ -1,7 +1,7 @@
 import { RefreshCw } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Link, useActionData, useRevalidator } from "react-router";
-
+import { ButtonLink } from "~/components/ui/button";
 import {
   type RealtimeTransportStatus,
   subscribeToEventChanges,
@@ -102,12 +102,10 @@ export function OperationCentreWorkspace({
             eventId={loaderData.eventId}
             cursor={loaderData.cursor}
           />
-          <Link className="btn" to="/admin/sessions/bulk">
-            Bulk sessions
-          </Link>
-          <Link className="btn primary" to="/admin/operations?panel=activity">
+          <ButtonLink to="/admin/sessions/bulk">Bulk sessions</ButtonLink>
+          <ButtonLink variant="primary" to="/admin/operations?panel=activity">
             Activity timeline
-          </Link>
+          </ButtonLink>
         </div>
       </div>
       {actionData ? (

@@ -1,6 +1,6 @@
 import { ArrowDown, ArrowUp, Plus, Trash2 } from "lucide-react";
 import { useState } from "react";
-
+import { Button } from "~/components/ui/button";
 import type { TaskFormField } from "~/modules/tasks/task-schema";
 
 function nextFieldId(fields: TaskFormField[]) {
@@ -131,8 +131,8 @@ export function AdminTaskFormFieldBuilder({
             participant profile or session record.
           </p>
         </div>
-        <button
-          className="btn small"
+        <Button
+          size="small"
           disabled={fields.length >= 20}
           onClick={() =>
             onChange([
@@ -150,7 +150,7 @@ export function AdminTaskFormFieldBuilder({
           type="button"
         >
           <Plus aria-hidden size={14} /> Add question
-        </button>
+        </Button>
       </div>
       {fields.length === 0 ? (
         <div className="validation-item info" role="status">
@@ -168,27 +168,31 @@ export function AdminTaskFormFieldBuilder({
             <div className="task-form-field-card-head">
               <strong>Question {index + 1}</strong>
               <div className="page-actions">
-                <button
+                <Button
                   aria-label={`Move question ${index + 1} up`}
-                  className="btn small icon-only"
+                  size="small"
+                  className="icon-only"
                   disabled={index === 0}
                   onClick={() => moveField(index, -1)}
                   type="button"
                 >
                   <ArrowUp aria-hidden size={14} />
-                </button>
-                <button
+                </Button>
+                <Button
                   aria-label={`Move question ${index + 1} down`}
-                  className="btn small icon-only"
+                  size="small"
+                  className="icon-only"
                   disabled={index === fields.length - 1}
                   onClick={() => moveField(index, 1)}
                   type="button"
                 >
                   <ArrowDown aria-hidden size={14} />
-                </button>
-                <button
+                </Button>
+                <Button
                   aria-label={`Remove question ${index + 1}`}
-                  className="btn small icon-only danger"
+                  variant="danger"
+                  size="small"
+                  className="icon-only"
                   onClick={() =>
                     onChange(
                       normalizeConditions(
@@ -202,7 +206,7 @@ export function AdminTaskFormFieldBuilder({
                   type="button"
                 >
                   <Trash2 aria-hidden size={14} />
-                </button>
+                </Button>
               </div>
             </div>
             <div className="form-row">

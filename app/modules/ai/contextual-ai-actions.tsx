@@ -1,5 +1,6 @@
 import { Sparkles } from "lucide-react";
 import { useFetcher } from "react-router";
+import { Button } from "~/components/ui/button";
 import type { AiProposalPreview, ContextualAiResult } from "./ai-types";
 import {
   ContextualAiResultPanel,
@@ -52,10 +53,10 @@ function ContextAction({
           </label>
         ) : null}
         <p className="help">{description}</p>
-        <button className="btn" type="submit" disabled={pending}>
+        <Button type="submit" disabled={pending}>
           <Sparkles aria-hidden size={14} />
           {pending ? pendingLabel : buttonLabel}
-        </button>
+        </Button>
       </fetcher.Form>
       {fetcher.data?.ok ? (
         <ContextualAiResultPanel result={fetcher.data.result} />
@@ -174,16 +175,12 @@ export function ReminderDraftAction({
         ) : (
           <p className="help">Delivery sender: {options.sender}</p>
         )}
-        <button
-          className="btn"
-          type="submit"
-          disabled={pending || !options.configured}
-        >
+        <Button type="submit" disabled={pending || !options.configured}>
           <Sparkles aria-hidden size={14} />
           {pending
             ? "Drafting and resolving recipients…"
             : "Draft exact reminder preview"}
-        </button>
+        </Button>
       </fetcher.Form>
       {fetcher.data?.ok ? (
         <>
@@ -229,10 +226,10 @@ export function SessionCopyAction({ sessionId }: { sessionId: string }) {
           Draft editable public copy from this session’s authorised record. AI
           cannot change or publish the session.
         </p>
-        <button className="btn" type="submit" disabled={pending}>
+        <Button type="submit" disabled={pending}>
           <Sparkles aria-hidden size={14} />
           {pending ? "Drafting session copy…" : "Draft public session copy"}
-        </button>
+        </Button>
       </fetcher.Form>
       {fetcher.data?.ok ? (
         <ContextualAiResultPanel result={fetcher.data.result} />

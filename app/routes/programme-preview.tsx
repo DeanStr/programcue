@@ -1,5 +1,6 @@
 import { data, Form, isRouteErrorResponse } from "react-router";
 import { BrandMark } from "~/components/brand-mark";
+import { Button } from "~/components/ui/button";
 import { routeErrorCopy, routeErrorMessage } from "~/lib/route-error-copy";
 import {
   ScheduleReviewLinkService,
@@ -229,9 +230,9 @@ export default function ProgrammePreview({ actionData }: Route.ComponentProps) {
           unpublished timetable.
         </p>
         <Form method="post" className="page-actions mt">
-          <button className="btn primary" type="submit">
+          <Button variant="primary" type="submit">
             View programme
-          </button>
+          </Button>
         </Form>
       </section>
     </main>

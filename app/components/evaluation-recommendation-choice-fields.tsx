@@ -1,5 +1,5 @@
 import { useState } from "react";
-
+import { Button } from "~/components/ui/button";
 import type { RecommendationChoice } from "~/modules/evaluations/evaluation-recommendation-choices";
 
 export function RecommendationChoiceFields({
@@ -51,7 +51,7 @@ export function RecommendationChoiceFields({
                     value={choice.id}
                   />
                   <input
-                    className="input"
+                    className="field"
                     name="recommendationChoiceLabel"
                     aria-label={`Recommendation choice ${index + 1}`}
                     value={choice.label}
@@ -69,26 +69,27 @@ export function RecommendationChoiceFields({
                 </td>
                 <td>
                   <div className="inline-form">
-                    <button
-                      className="btn small"
+                    <Button
+                      size="small"
                       type="button"
                       disabled={index === 0}
                       aria-label={`Move ${choice.label || `choice ${index + 1}`} up`}
                       onClick={() => move(index, -1)}
                     >
                       Move up
-                    </button>
-                    <button
-                      className="btn small"
+                    </Button>
+                    <Button
+                      size="small"
                       type="button"
                       disabled={index === rows.length - 1}
                       aria-label={`Move ${choice.label || `choice ${index + 1}`} down`}
                       onClick={() => move(index, 1)}
                     >
                       Move down
-                    </button>
-                    <button
-                      className="btn small danger"
+                    </Button>
+                    <Button
+                      variant="danger"
+                      size="small"
                       type="button"
                       disabled={rows.length <= 2}
                       aria-label={`Remove ${choice.label || `choice ${index + 1}`}`}
@@ -99,7 +100,7 @@ export function RecommendationChoiceFields({
                       }
                     >
                       Remove
-                    </button>
+                    </Button>
                   </div>
                 </td>
               </tr>
@@ -107,8 +108,8 @@ export function RecommendationChoiceFields({
           </tbody>
         </table>
       </div>
-      <button
-        className="btn small"
+      <Button
+        size="small"
         type="button"
         disabled={rows.length >= 7}
         onClick={() =>
@@ -119,7 +120,7 @@ export function RecommendationChoiceFields({
         }
       >
         Add recommendation choice
-      </button>
+      </Button>
     </fieldset>
   );
 }

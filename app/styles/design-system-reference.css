@@ -97,3 +97,23 @@
   grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
   gap: var(--space-3);
 }
+.pc-reference-panel {
+  min-height: 96px;
+  margin-top: var(--space-3);
+  padding: var(--space-4);
+  border-radius: var(--radius-sm);
+  background: var(--surface-sunken);
+}
+.pc-reference-panel p {
+  max-width: var(--measure-prose);
+  margin: var(--space-1) 0 0;
+  color: var(--text-tertiary);
+  line-height: var(--leading-snug);
+}
+.pc-reference-table {
+  margin: 0;
+}
+.pc-reference-table th[scope="row"] {
+  color: var(--text-primary);
+  font-weight: var(--weight-semibold);
+}

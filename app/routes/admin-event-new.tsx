@@ -1,7 +1,8 @@
 import { Database, Plus } from "lucide-react";
 import { useState } from "react";
-import { data, Form, Link, useActionData, useNavigation } from "react-router";
+import { data, Form, useActionData, useNavigation } from "react-router";
 import { ZodError } from "zod";
+import { Button, ButtonLink } from "~/components/ui/button";
 import { useConfirm } from "~/components/ui/confirm-dialog";
 import { DerivedSlugField } from "~/components/ui/derived-slug-field";
 import { ErrorSummary } from "~/components/ui/error-summary";
@@ -204,9 +205,7 @@ export default function AdminEventNew({ loaderData }: Route.ComponentProps) {
         title="New event"
         description="Start with Program Cue defaults and no rooms, tracks, forms, submissions, schedules or reusable templates."
         actions={
-          <Link className="btn" to="/admin/event">
-            Back to Event settings
-          </Link>
+          <ButtonLink to="/admin/event">Back to Event settings</ButtonLink>
         }
       />
       {actionData ? (
@@ -245,9 +244,9 @@ export default function AdminEventNew({ loaderData }: Route.ComponentProps) {
                         name="returnTo"
                         value={`/admin/operations?operation=${encodeURIComponent(actionData.result.operationId)}`}
                       />
-                      <button className="btn small" type="submit">
+                      <Button size="small" type="submit">
                         View creation operation
-                      </button>
+                      </Button>
                     </Form>
                     <Form method="post" action="/events/select">
                       <input
@@ -260,20 +259,20 @@ export default function AdminEventNew({ loaderData }: Route.ComponentProps) {
                         name="returnTo"
                         value="/admin/event"
                       />
-                      <button className="btn small" type="submit">
+                      <Button size="small" type="submit">
                         Open new event
-                      </button>
+                      </Button>
                     </Form>
                   </>
                 ) : (
-                  <Link
-                    className="btn small"
+                  <ButtonLink
+                    size="small"
                     to={`/admin/events/${encodeURIComponent(actionData.result.eventId)}/repository-recovery`}
                   >
                     {actionData.inProgress
                       ? "View provisioning status"
                       : "Recover incomplete event"}
-                  </Link>
+                  </ButtonLink>
                 )}
               </>
             ) : null}
@@ -372,7 +371,7 @@ export default function AdminEventNew({ loaderData }: Route.ComponentProps) {
                 <label className="label">
                   Reuse verified sender
                   <select
-                    className="field"
+                    className="select"
                     name="reuseSenderProfileId"
                     value={reuseSenderProfileId}
                     onChange={(event) =>
@@ -446,10 +445,11 @@ export default function AdminEventNew({ loaderData }: Route.ComponentProps) {
                 value={loaderData.airtableTableName}
               />
             )}
-            <button
-              className="btn primary"
+            <Button
+              variant="primary"
               type="button"
-              disabled={navigation.state !== "idle"}
+              pending={navigation.state !== "idle"}
+              pendingLabel="Creating event…"
               onClick={(event) => {
                 const form = event.currentTarget.form;
                 if (!form?.reportValidity()) return;
@@ -465,7 +465,7 @@ export default function AdminEventNew({ loaderData }: Route.ComponentProps) {
               }}
             >
               <Plus aria-hidden size={14} /> Create blank event
-            </button>
+            </Button>
           </Form>
         </section>
         <aside className="event-setup-create-aside">

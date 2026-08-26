@@ -1,27 +1,45 @@
 /*
  * CSS hygiene gate.
  *
- * The design system is expressed as tokens in app/styles/base.css. These four
- * rules stop the codebase drifting back to literals, which is how it accreted
- * 123 hex colours, 29 font sizes and 29 spacing values in the first place.
+ * The design system is expressed as tokens in app/styles/tokens.css. These
+ * rules stop literals and cascade contracts drifting.
  *
- *   1. No hex literal that already has a token.
+ *   1. No non-system hex literal outside the token layer.
  *   2. No var(--x) without a definition.
  *   3. No font-size below the 12px floor.
  *   4. No raw px padding/margin/gap outside the token layer.
+ *   5. No raw shadows outside the semantic elevation/focus roles.
+ *   6. Breakpoints use the shared responsive vocabulary.
+ *   7. Core selectors have one owning stylesheet.
+ *   8. Descending-specificity diagnostics cannot be suppressed.
  *
- * base.css is the token layer and is exempt from 1, 3 and 4 by design.
+ * tokens.css is exempt from literal rules by design.
  */
-import { readdirSync, readFileSync, writeFileSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 
+import {
+  hasSpecificitySuppression,
+  isTokenizedShadow,
+  withoutCssComments,
+} from "./design-system-checks.mjs";
 import { repositoryRoot } from "./e2e-runtime.mjs";
 
 const STYLE_DIR = join(repositoryRoot, "app/styles");
 const TOKEN_FILE = "tokens.css";
 const MIN_FONT_PX = 12;
-const BASELINE_PATH = join(repositoryRoot, "scripts/css-literal-baseline.json");
-const UPDATE_BASELINE = process.argv.includes("--update-baseline");
+const CANONICAL_BREAKPOINTS = new Set([
+  360, 400, 560, 600, 760, 761, 900, 1_000, 1_001, 1_180, 1_181, 1_350, 1_351,
+]);
+const CORE_SELECTOR_OWNERS = new Map([
+  ["btn", "base.css"],
+  ["icon-btn", "base.css"],
+  ["field", "form-controls.css"],
+  ["select", "form-controls.css"],
+  ["textarea", "form-controls.css"],
+  ["pill", "form-controls.css"],
+  ["status", "design-primitives.css"],
+]);
 
 /* Values that are legitimately not tokens. */
 const ALLOWED_HEX = new Set(["#fff", "#ffffff", "#000", "#000000"]);
@@ -76,23 +94,23 @@ const failures = [];
 const record = (file, line, rule, detail) =>
   failures.push({ file, line, rule, detail });
 
-/* Every hex literal seen outside the token layer, and where it appeared. */
-const observed = {};
-const literalLines = [];
-let baseline = {};
-try {
-  baseline = JSON.parse(readFileSync(BASELINE_PATH, "utf8")).literals ?? {};
-} catch {
-  baseline = {};
-}
-
 for (const [file, source] of sources) {
   const isTokenFile = file === TOKEN_FILE;
   const lines = source.split("\n");
+  const cssWithoutComments = withoutCssComments(source);
+  const codeLines = cssWithoutComments.split("\n");
 
   lines.forEach((text, index) => {
     const line = index + 1;
-    const code = text.split("/*")[0];
+    if (hasSpecificitySuppression(text)) {
+      record(
+        file,
+        line,
+        "specificity-suppression",
+        "resolve the cascade instead of suppressing noDescendingSpecificity",
+      );
+    }
+    const code = codeLines[index];
     if (!code.trim()) return;
 
     /* 2. undefined custom properties — applies everywhere including base.css */
@@ -104,18 +122,35 @@ for (const [file, source] of sources) {
 
     if (isTokenFile) return;
 
-    /* 1. hex literals that duplicate a token, and any literal not already
-       recorded in the baseline. The baseline is a ceiling: removing literals
-       never fails, introducing one always does. */
+    const coreSelector = code.match(
+      /^\s*\.(btn|icon-btn|field|select|textarea|pill|status)\s*(?:,|\{)/,
+    )?.[1];
+    if (coreSelector) {
+      const owner = CORE_SELECTOR_OWNERS.get(coreSelector);
+      if (file !== owner) {
+        record(
+          file,
+          line,
+          "selector-owner",
+          `.${coreSelector} is owned by ${owner}`,
+        );
+      }
+    }
+
+    /* 1. Every non-system hex belongs in the token layer. */
     for (const [, hex] of code.matchAll(/(#[0-9a-f]{3,8})\b/gi)) {
       const value = hex.toLowerCase();
       if (ALLOWED_HEX.has(value)) continue;
-      observed[file] ??= {};
-      observed[file][value] = (observed[file][value] ?? 0) + 1;
-      literalLines.push({ file, line, value });
       const token = tokenValues.get(value);
       if (token) {
         record(file, line, "retyped-token", `${hex} is var(${token})`);
+      } else {
+        record(
+          file,
+          line,
+          "colour-literal",
+          `${hex} must be declared in ${TOKEN_FILE}`,
+        );
       }
     }
 
@@ -150,56 +185,43 @@ for (const [file, source] of sources) {
       }
     }
   });
-}
 
-if (UPDATE_BASELINE) {
-  const sorted = {};
-  for (const file of Object.keys(observed).sort()) {
-    sorted[file] = Object.fromEntries(
-      Object.entries(observed[file]).sort(([a], [b]) => a.localeCompare(b)),
-    );
-  }
-  const total = Object.values(observed).reduce(
-    (sum, values) => sum + Object.values(values).reduce((a, b) => a + b, 0),
-    0,
-  );
-  writeFileSync(
-    BASELINE_PATH,
-    `${JSON.stringify(
-      {
-        note: "Hex literals outside app/styles/tokens.css that predate the token layer. This is a ceiling: removing literals passes, introducing one fails. Regenerate with: node scripts/check-css-hygiene.mjs --update-baseline",
-        total,
-        literals: sorted,
-      },
-      null,
-      2,
-    )}\n`,
-  );
-  console.log(`CSS hygiene: baseline written with ${total} recorded literals.`);
-  process.exit(0);
-}
-
-/* Any literal beyond what the baseline records is new and must be a token. */
-for (const { file, line, value } of literalLines) {
-  const allowed = baseline[file]?.[value] ?? 0;
-  if (allowed === 0) {
+  /* 5. Match complete declarations so multiline and mixed recipes cannot
+     evade the raw-shadow gate. A declaration is tokenized only when the whole
+     value is a semantic elevation or focus token; merely including one token
+     beside a raw layer is not sufficient. */
+  for (const match of cssWithoutComments.matchAll(
+    /box-shadow\s*:\s*([^;{}]+)/gi,
+  )) {
+    const value = match[1];
+    if (isTokenizedShadow(value)) {
+      continue;
+    }
     record(
       file,
-      line,
-      "new-literal",
-      `${value} is not a token; declare it in ${TOKEN_FILE}`,
+      source.slice(0, match.index).split("\n").length,
+      "raw-shadow",
+      "use a semantic --elev-* or --focus-* shadow token",
     );
   }
-}
-for (const [file, values] of Object.entries(observed)) {
-  for (const [value, count] of Object.entries(values)) {
-    const allowed = baseline[file]?.[value] ?? 0;
-    if (allowed > 0 && count > allowed) {
+
+  /* 6. Paired min-width boundaries one pixel above a max-width are explicit
+     members of the vocabulary rather than hidden exceptions. */
+  for (const mediaMatch of cssWithoutComments.matchAll(
+    /@media\b([^{}]*)\{/gi,
+  )) {
+    for (const widthMatch of mediaMatch[1].matchAll(
+      /\((?:min|max)-width:\s*(\d+)px\)/gi,
+    )) {
+      const value = Number(widthMatch[1]);
+      if (CANONICAL_BREAKPOINTS.has(value)) continue;
+      const key = `${value}px`;
+      const index = mediaMatch.index + widthMatch.index;
       record(
         file,
-        0,
-        "new-literal",
-        `${value} appears ${count} times, baseline allows ${allowed}`,
+        source.slice(0, index).split("\n").length,
+        "non-canonical-breakpoint",
+        `${key} is outside ${[...CANONICAL_BREAKPOINTS].join(", ")}px`,
       );
     }
   }

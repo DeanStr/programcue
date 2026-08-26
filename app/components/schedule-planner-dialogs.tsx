@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Link, useFetcher, useRevalidator } from "react-router";
 import { Dialog } from "~/components/dialog";
+import { Button } from "~/components/ui/button";
 import type { AutoPlacementPreview } from "~/modules/schedule/schedule-auto-placement";
 import type {
   SchedulePublicationContentField,
@@ -59,21 +60,16 @@ export function ScheduleDraftDialog({
       dismissible={!creating}
       footer={
         <>
-          <button
-            className="btn"
-            type="button"
-            onClick={close}
-            disabled={creating}
-          >
+          <Button type="button" onClick={close} disabled={creating}>
             {draftCreatedWithWarning ? "Close" : "Cancel"}
-          </button>
+          </Button>
           {draftCreatedWithWarning ? null : (
             <fetcher.Form method="post">
               <input type="hidden" name="intent" value="create-draft" />
               <input type="hidden" name="intentId" value={workspace.intentId} />
-              <button type="submit" className="btn primary" disabled={creating}>
+              <Button type="submit" variant="primary" disabled={creating}>
                 {creating ? "Creating draft…" : "Confirm new draft"}
-              </button>
+              </Button>
             </fetcher.Form>
           )}
         </>
@@ -139,19 +135,18 @@ export function AutoPlacementPreviewDialog({
       }}
       footer={
         <>
-          <button
-            className="btn"
+          <Button
             type="button"
             disabled={fetcher.state !== "idle"}
             onClick={dismiss}
           >
             Cancel
-          </button>
+          </Button>
           <fetcher.Form method="post" onSubmit={clearError}>
             <input type="hidden" name="intent" value="auto-place-confirm" />
             <input type="hidden" name="proposal" value={proposal} />
-            <button
-              className="btn primary"
+            <Button
+              variant="primary"
               type="submit"
               disabled={
                 selectedSessionIds.length === 0 || fetcher.state !== "idle"
@@ -160,7 +155,7 @@ export function AutoPlacementPreviewDialog({
               {fetcher.state === "idle"
                 ? `Apply ${selectedSessionIds.length} selected placement${selectedSessionIds.length === 1 ? "" : "s"}`
                 : "Applying placements…"}
-            </button>
+            </Button>
           </fetcher.Form>
         </>
       }
@@ -194,8 +189,9 @@ export function AutoPlacementPreviewDialog({
           <div className="card-title">
             <h3 id="auto-placement-proposed-heading">Proposed placements</h3>
             {preview.placements.length ? (
-              <button
-                className="btn small right"
+              <Button
+                size="small"
+                className="right"
                 type="button"
                 onClick={() =>
                   setSelectedSessionIds(
@@ -210,7 +206,7 @@ export function AutoPlacementPreviewDialog({
                 {selectedSessionIds.length === preview.placements.length
                   ? "Clear selection"
                   : "Select all"}
-              </button>
+              </Button>
             ) : null}
           </div>
           {preview.placements.length ? (
@@ -384,14 +380,9 @@ export function SchedulePublicationDialog({
       skipReturnFocus={skipReturnFocusRef}
       footer={
         <>
-          <button
-            className="btn"
-            type="button"
-            onClick={close}
-            disabled={publishing}
-          >
+          <Button type="button" onClick={close} disabled={publishing}>
             Cancel
-          </button>
+          </Button>
           <fetcher.Form
             method="post"
             onSubmit={(event) => {
@@ -414,13 +405,13 @@ export function SchedulePublicationDialog({
               name="scheduleRevision"
               value={workspace.version.revision}
             />
-            <button
+            <Button
               type="submit"
-              className="btn primary"
+              variant="primary"
               disabled={blockerCount > 0 || publishing}
             >
               {publishing ? "Publishing…" : "Confirm publication"}
-            </button>
+            </Button>
           </fetcher.Form>
         </>
       }
@@ -570,8 +561,8 @@ export function SchedulePublicationDialog({
         {preview.blockers.emptySchedule ? (
           <div className="validation-item error">
             Place at least one session before publishing.
-            <button
-              className="btn small"
+            <Button
+              size="small"
               type="button"
               onClick={() => {
                 returnFocusRef.current = document.getElementById(
@@ -581,7 +572,7 @@ export function SchedulePublicationDialog({
               }}
             >
               Return to unscheduled sessions
-            </button>
+            </Button>
           </div>
         ) : null}
         {preview.blockers.contentVisibility.length ? (
@@ -657,8 +648,8 @@ export function SchedulePublicationDialog({
                   // biome-ignore lint/suspicious/noArrayIndexKey: Deterministic conflict messages have no persisted identifier in this projection.
                   <li key={index}>
                     {entryIds.length ? (
-                      <button
-                        className="btn small"
+                      <Button
+                        size="small"
                         type="button"
                         onClick={() => {
                           skipReturnFocusRef.current = true;
@@ -667,7 +658,7 @@ export function SchedulePublicationDialog({
                         }}
                       >
                         Reveal conflict in planner
-                      </button>
+                      </Button>
                     ) : null}{" "}
                     {conflict.message}
                   </li>
@@ -697,8 +688,8 @@ export function SchedulePublicationDialog({
           </strong>
           <span>{actionError.message}</span>
           {actionError.conflict ? (
-            <button
-              className="btn small"
+            <Button
+              size="small"
               type="button"
               disabled={revalidator.state !== "idle" || publishing}
               onClick={() => {
@@ -709,7 +700,7 @@ export function SchedulePublicationDialog({
               {revalidator.state === "idle"
                 ? "Refresh publication preview"
                 : "Refreshing preview…"}
-            </button>
+            </Button>
           ) : null}
         </div>
       ) : null}

@@ -1,6 +1,7 @@
 import { CheckCircle2, History, RotateCcw } from "lucide-react";
 import { data, Form, Link, useActionData } from "react-router";
 import { ZodError } from "zod";
+import { Button, ButtonLink } from "~/components/ui/button";
 import { DomainStatusBadge } from "~/components/ui/domain-status-badge";
 import { EventDateTime } from "~/components/ui/event-date-time";
 import { adminRecordBreadcrumbHandle } from "~/modules/administration/admin-route-breadcrumb";
@@ -139,12 +140,12 @@ export default function AdminContentSession({
           <Link className="content-text-action" to="/admin/content">
             Content &amp; files
           </Link>
-          <Link
-            className="btn primary"
+          <ButtonLink
+            variant="primary"
             to={`/admin/schedule?session=${encodeURIComponent(current.sessionId)}`}
           >
             Open schedule
-          </Link>
+          </ButtonLink>
         </div>
       </div>
 
@@ -227,9 +228,9 @@ export default function AdminContentSession({
               <input type="checkbox" name="confirmed" value="true" required />
               Apply this exact status to the current content revision
             </label>
-            <button type="submit" className="btn primary">
+            <Button type="submit" variant="primary">
               <CheckCircle2 aria-hidden size={15} /> Change status
-            </button>
+            </Button>
           </Form>
         ) : (
           <div className="validation-item info mt">
@@ -358,9 +359,9 @@ export default function AdminContentSession({
                         Restore exactly this title, description, track, format,
                         duration, visibility and resource set
                       </label>
-                      <button type="submit" className="btn">
+                      <Button type="submit">
                         <RotateCcw aria-hidden size={15} /> Restore as new draft
-                      </button>
+                      </Button>
                     </Form>
                   </details>
                 ) : null}
@@ -379,12 +380,11 @@ export default function AdminContentSession({
         )}
         {loaderData.nextHistoryCursor ? (
           <div className="page-actions mt">
-            <Link
-              className="btn"
+            <ButtonLink
               to={`?history=${encodeURIComponent(loaderData.nextHistoryCursor)}`}
             >
               Older revisions
-            </Link>
+            </ButtonLink>
           </div>
         ) : null}
       </section>

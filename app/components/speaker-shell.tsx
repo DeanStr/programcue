@@ -8,9 +8,10 @@ import {
   Mic2,
   UserRound,
 } from "lucide-react";
-import { Form, Link, NavLink, useLocation } from "react-router";
+import { Form, NavLink, useLocation } from "react-router";
 
 import { BrandMark } from "~/components/brand-mark";
+import { Button, ButtonAnchor, ButtonLink } from "~/components/ui/button";
 import { PRODUCT_GUIDE_URL } from "~/lib/product-guide";
 import { programmeAccentPalette } from "~/modules/programme/programme-presentation";
 
@@ -84,27 +85,27 @@ export function SpeakerShell({
           </div>
         </div>
         <div className="right">
-          <Link className="btn small" to={eventSelectionHref} reloadDocument>
+          <ButtonLink size="small" to={eventSelectionHref} reloadDocument>
             Switch event
-          </Link>
-          <a
-            className="btn small"
+          </ButtonLink>
+          <ButtonAnchor
+            size="small"
             href={PRODUCT_GUIDE_URL}
             target="_blank"
             rel="noopener noreferrer"
             aria-label="Product guide"
           >
             Guide
-          </a>
+          </ButtonAnchor>
           {event.participantSupportUrl ? (
-            <a
-              className="btn small"
+            <ButtonAnchor
+              size="small"
               href={event.participantSupportUrl}
               target="_blank"
               rel="noreferrer"
             >
               Support
-            </a>
+            </ButtonAnchor>
           ) : null}
           <span className="speaker-identity">
             <span className="avatar">{initials}</span>
@@ -116,9 +117,9 @@ export function SpeakerShell({
             </span>
           </span>
           <Form method="post" action="/sign-out">
-            <button className="btn small" type="submit">
+            <Button size="small" type="submit">
               Sign out
-            </button>
+            </Button>
           </Form>
         </div>
       </header>

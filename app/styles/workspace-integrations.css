@@ -434,7 +434,7 @@
   }
 }
 
-@media (max-width: 390px) {
+@media (max-width: 400px) {
   .settings-secret {
     align-items: stretch;
     flex-direction: column;

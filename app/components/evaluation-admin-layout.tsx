@@ -9,6 +9,7 @@ import {
 } from "~/components/evaluation-admin-dialogs";
 import { useEvaluationAdminModel } from "~/components/evaluation-admin-model";
 import { AdminPageSectionNavigation } from "~/components/ui/admin-page-sections";
+import { Button, ButtonLink } from "~/components/ui/button";
 
 export function EvaluationHeader() {
   return (
@@ -20,9 +21,7 @@ export function EvaluationHeader() {
         </p>
       </div>
       <div className="page-actions">
-        <Link className="btn" to="/review/workbench">
-          Open reviewer workspace
-        </Link>
+        <ButtonLink to="/review/workbench">Open reviewer workspace</ButtonLink>
       </div>
     </div>
   );
@@ -80,9 +79,9 @@ export function EvaluationAssignmentUndo() {
           value={assignmentUndo.operationId}
         />
         <input type="hidden" name="confirmed" value="true" />
-        <button className="btn small" type="submit">
+        <Button size="small" type="submit">
           Undo assignments
-        </button>
+        </Button>
       </Form>
     </div>
   ) : null;

@@ -7,6 +7,7 @@ import {
   PublicSiteHome,
   PublicSitePageContent,
 } from "~/components/public-site-content";
+import { Button } from "~/components/ui/button";
 import {
   defaultProgrammeEmbedConfiguration,
   programmeEmbedUrl,
@@ -82,37 +83,39 @@ function PromotionTools({
         Public event URL
         <div className="public-site-copy-row">
           <input className="field" readOnly value={publicUrl} />
-          <button
+          <Button
             type="button"
-            className="btn small"
+            size="small"
             onClick={() => void copy("URL", publicUrl)}
           >
             <ClipboardCopy aria-hidden size={14} /> Copy
-          </button>
+          </Button>
         </div>
       </label>
       <label className="label mt">
         Suggested announcement
         <textarea className="textarea" readOnly value={announcement} rows={3} />
-        <button
+        <Button
           type="button"
-          className="btn small mt"
+          size="small"
+          className="mt"
           onClick={() => void copy("announcement", announcement)}
         >
           <ClipboardCopy aria-hidden size={14} /> Copy text
-        </button>
+        </Button>
       </label>
       {embed ? (
         <label className="label mt">
           Programme embed
           <textarea className="textarea code" readOnly value={embed} rows={5} />
-          <button
+          <Button
             type="button"
-            className="btn small mt"
+            size="small"
+            className="mt"
             onClick={() => void copy("embed", embed)}
           >
             <ClipboardCopy aria-hidden size={14} /> Copy embed
-          </button>
+          </Button>
         </label>
       ) : null}
       {programme?.speakers.length ? (
@@ -131,13 +134,13 @@ function PromotionTools({
                     readOnly
                     value={value}
                   />
-                  <button
+                  <Button
                     type="button"
-                    className="btn small"
+                    size="small"
                     onClick={() => void copy(speaker.displayName, value)}
                   >
                     <ClipboardCopy aria-hidden size={14} /> Copy
-                  </button>
+                  </Button>
                 </div>
               );
             })}
@@ -235,7 +238,7 @@ export function AdminPublicSitePreview({
           <label className="public-site-preview-content-control">
             <span>Preview</span>
             <select
-              className="field"
+              className="select"
               aria-label="Preview content"
               value={previewContent}
               onChange={(event) =>
@@ -299,14 +302,14 @@ export function AdminPublicSitePreview({
             Publishing snapshots editorial configuration and sponsors. Programme
             data remains canonical.
           </p>
-          <button
-            className="btn primary"
+          <Button
+            variant="primary"
             type="button"
             disabled={!canPublish}
             onClick={onPublish}
           >
             Publish event website
-          </button>
+          </Button>
         </div>
       </section>
       {published ? (

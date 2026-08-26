@@ -1,7 +1,7 @@
 import { Heart } from "lucide-react";
 import { useRef } from "react";
 import { Link } from "react-router";
-
+import { ButtonAnchor, ButtonSummary } from "~/components/ui/button";
 import {
   type PublicProgrammeSurface,
   publicProgrammeSurfacePath,
@@ -202,7 +202,7 @@ export function PublicEventHeader({
         ) : null}
       </nav>
       <details className="public-mobile-nav" ref={mobileNavigationRef}>
-        <summary className="btn small">Browse</summary>
+        <ButtonSummary size="small">Browse</ButtonSummary>
         <nav aria-label={site ? "Event navigation" : "Programme sections"}>
           {programmePrimaryLinks.map((link) =>
             navigationLink(link, () =>
@@ -218,8 +218,8 @@ export function PublicEventHeader({
         </nav>
       </details>
       {itinerary ? (
-        <a
-          className="btn public-itinerary-link"
+        <ButtonAnchor
+          className="public-itinerary-link"
           href={itineraryHref}
           aria-label={`${
             itinerary.shared
@@ -236,7 +236,7 @@ export function PublicEventHeader({
           <span className="status info" aria-hidden="true">
             {itinerary.savedCount}
           </span>
-        </a>
+        </ButtonAnchor>
       ) : null}
     </header>
   );
@@ -271,12 +271,12 @@ export function PublicEventFooter({
       </div>
       <div className="public-footer-actions">
         {programmeVersion ? (
-          <a
-            className="btn small"
+          <ButtonAnchor
+            size="small"
             href={`/api/v1/public/events/${encodeURIComponent(event.slug)}/calendar.ics`}
           >
             Add to calendar
-          </a>
+          </ButtonAnchor>
         ) : null}
         <p className="public-footer-secondary">Powered by Program Cue</p>
       </div>

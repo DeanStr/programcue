@@ -1,5 +1,6 @@
 import { Send } from "lucide-react";
 import { Form, Link, useSubmit } from "react-router";
+import { Button, ButtonLink } from "~/components/ui/button";
 import { useConfirm } from "~/components/ui/confirm-dialog";
 import { DomainStatusBadge } from "~/components/ui/domain-status-badge";
 import { EmptyState } from "~/components/ui/states";
@@ -66,12 +67,13 @@ export function RecentCommunications({
               </div>
               <div className="comms-activity-actions">
                 {item.status === "draft" ? (
-                  <Link
-                    className="btn small primary"
+                  <ButtonLink
+                    variant="primary"
+                    size="small"
                     to={`/admin/communications/compose/${item.id}`}
                   >
                     Resume
-                  </Link>
+                  </ButtonLink>
                 ) : ["scheduled", "queued", "failed"].includes(item.status) ? (
                   <>
                     <Form
@@ -97,32 +99,28 @@ export function RecentCommunications({
                         name="communicationId"
                         value={item.id}
                       />
-                      <button
-                        type="submit"
-                        className="btn small"
-                        disabled={working}
-                      >
+                      <Button type="submit" size="small" disabled={working}>
                         {working && pendingIntent === "cancel"
                           ? "Cancelling…"
                           : "Cancel"}
-                      </button>
+                      </Button>
                     </Form>
                     {item.status === "failed" && item.operationId ? (
-                      <Link
-                        className="btn small"
+                      <ButtonLink
+                        size="small"
                         to={`/admin/operations?operation=${encodeURIComponent(item.operationId)}`}
                       >
                         Retry in Operations
-                      </Link>
+                      </ButtonLink>
                     ) : null}
                   </>
                 ) : item.operationId ? (
-                  <Link
-                    className="btn small"
+                  <ButtonLink
+                    size="small"
                     to={`/admin/operations?operation=${encodeURIComponent(item.operationId)}`}
                   >
                     Details
-                  </Link>
+                  </ButtonLink>
                 ) : null}
                 <Link
                   className="comms-activity-link"
@@ -141,9 +139,9 @@ export function RecentCommunications({
           title="No sends have been confirmed"
           description="Confirmed and scheduled communications appear here with their delivery progress."
           action={
-            <Link className="btn primary" to="/admin/communications/compose">
+            <ButtonLink variant="primary" to="/admin/communications/compose">
               Compose a communication
-            </Link>
+            </ButtonLink>
           }
         />
       )}
@@ -246,34 +244,34 @@ export function CommunicationDeliveryHealth({
           {selected ? (
             <>
               {selected.operationId ? (
-                <Link
-                  className="btn small"
+                <ButtonLink
+                  size="small"
                   to={`/admin/operations?operation=${encodeURIComponent(selected.operationId)}`}
                 >
                   Exact operation
-                </Link>
+                </ButtonLink>
               ) : null}
-              <Link
-                className="btn small"
+              <ButtonLink
+                size="small"
                 to="/admin/communications#communications-health"
               >
                 Event summary
-              </Link>
+              </ButtonLink>
             </>
           ) : eventPeriod === "lifetime" ? (
-            <Link
-              className="btn small"
+            <ButtonLink
+              size="small"
               to="/admin/communications#communications-health"
             >
               Last 90 days
-            </Link>
+            </ButtonLink>
           ) : (
-            <Link
-              className="btn small"
+            <ButtonLink
+              size="small"
               to="/admin/communications?deliveryPeriod=lifetime#communications-health"
             >
               Event lifetime
-            </Link>
+            </ButtonLink>
           )}
         </div>
       </div>
@@ -341,20 +339,20 @@ export function CommunicationDeliveryHealth({
               aria-label="Recipient delivery pages"
             >
               {health.deliveryPage.hasPrevious ? (
-                <Link
-                  className="btn small"
+                <ButtonLink
+                  size="small"
                   to={pageQuery(Math.max(0, health.deliveryPage.offset - 50))}
                 >
                   Previous 50
-                </Link>
+                </ButtonLink>
               ) : null}
               {health.deliveryPage.hasNext ? (
-                <Link
-                  className="btn small"
+                <ButtonLink
+                  size="small"
                   to={pageQuery(health.deliveryPage.offset + 50)}
                 >
                   Next 50
-                </Link>
+                </ButtonLink>
               ) : null}
             </nav>
           ) : null}

@@ -2,6 +2,7 @@ import { Copy } from "lucide-react";
 import { useEffect, useId, useRef, useState } from "react";
 import { useFetcher, useRevalidator } from "react-router";
 import { Dialog } from "~/components/dialog";
+import { Button } from "~/components/ui/button";
 import {
   SCHEDULE_REVIEW_LINK_ACKNOWLEDGEMENT,
   SCHEDULE_REVIEW_LINK_DEFAULT_TTL_DAYS,
@@ -164,9 +165,9 @@ export function ScheduleReviewLinksPanel({
               : null}
           </p>
         </div>
-        <button
+        <Button
           ref={createButtonRef}
-          className="btn ghost"
+          variant="ghost"
           type="button"
           disabled={
             !draft || !workspace.reviewLinkSummary.canCreate || createRefreshing
@@ -181,7 +182,7 @@ export function ScheduleReviewLinksPanel({
           }}
         >
           {createRefreshing ? "Refreshing snapshot…" : "Create review link"}
-        </button>
+        </Button>
       </div>
       {workspace.reviewLinkSummary.blockedReason ? (
         <div
@@ -221,8 +222,8 @@ export function ScheduleReviewLinksPanel({
                 ) : null}
               </div>
               {link.status === "active" ? (
-                <button
-                  className="btn ghost"
+                <Button
+                  variant="ghost"
                   type="button"
                   aria-label={`Revoke ${link.purpose}`}
                   onClick={(event) => {
@@ -235,7 +236,7 @@ export function ScheduleReviewLinksPanel({
                   }}
                 >
                   Revoke
-                </button>
+                </Button>
               ) : null}
             </li>
           ))}
@@ -267,14 +268,9 @@ export function ScheduleReviewLinksPanel({
           dismissible={!creating}
           footer={
             <>
-              <button
-                className="btn"
-                type="button"
-                onClick={closeCreate}
-                disabled={creating}
-              >
+              <Button type="button" onClick={closeCreate} disabled={creating}>
                 {showCreatedUrl ? "Close" : "Cancel"}
-              </button>
+              </Button>
               {showCreatedUrl || !draft ? null : (
                 <createFetcher.Form id={createFormId} method="post">
                   <input
@@ -307,13 +303,13 @@ export function ScheduleReviewLinksPanel({
                     name="createIntentId"
                     value={workspace.reviewLinkCreateIntentId}
                   />
-                  <button
-                    className="btn primary"
+                  <Button
+                    variant="primary"
                     type="submit"
                     disabled={creating || !createReady}
                   >
                     {creating ? "Creating link…" : "Create confidential link"}
-                  </button>
+                  </Button>
                 </createFetcher.Form>
               )}
             </>
@@ -331,12 +327,13 @@ export function ScheduleReviewLinksPanel({
                   <input
                     ref={urlInputRef}
                     id={urlFieldId}
+                    className="field"
                     readOnly
                     value={created.reviewUrl}
                     onFocus={(event) => event.currentTarget.select()}
                   />
-                  <button
-                    className="btn small"
+                  <Button
+                    size="small"
                     type="button"
                     onClick={() => {
                       if (!navigator.clipboard?.writeText) {
@@ -351,7 +348,7 @@ export function ScheduleReviewLinksPanel({
                   >
                     <Copy aria-hidden size={13} />{" "}
                     {copyState === "copied" ? "Copied" : "Copy"}
-                  </button>
+                  </Button>
                 </div>
                 <span className="sr-only" role="status" aria-live="polite">
                   {copyState === "copied"
@@ -420,6 +417,7 @@ export function ScheduleReviewLinksPanel({
                 <label htmlFor={purposeFieldId}>Purpose</label>
                 <input
                   id={purposeFieldId}
+                  className="field"
                   form={createFormId}
                   name="purpose"
                   required
@@ -434,6 +432,7 @@ export function ScheduleReviewLinksPanel({
                 <label htmlFor={ttlFieldId}>Expires in</label>
                 <select
                   id={ttlFieldId}
+                  className="select"
                   form={createFormId}
                   name="ttlDays"
                   defaultValue={String(SCHEDULE_REVIEW_LINK_DEFAULT_TTL_DAYS)}
@@ -487,8 +486,7 @@ export function ScheduleReviewLinksPanel({
           dismissible={!revoking}
           footer={
             <>
-              <button
-                className="btn"
+              <Button
                 type="button"
                 onClick={() => {
                   setRevokeSubmitted(false);
@@ -497,7 +495,7 @@ export function ScheduleReviewLinksPanel({
                 disabled={revoking}
               >
                 Cancel
-              </button>
+              </Button>
               <revokeFetcher.Form method="post">
                 <input type="hidden" name="intent" value="revoke-review-link" />
                 <input type="hidden" name="linkId" value={revokeId} />
@@ -506,13 +504,9 @@ export function ScheduleReviewLinksPanel({
                   name="confirmation"
                   value="revoke-draft-review-link"
                 />
-                <button
-                  className="btn primary"
-                  type="submit"
-                  disabled={revoking}
-                >
+                <Button variant="primary" type="submit" disabled={revoking}>
                   {revoking ? "Revoking…" : "Revoke link"}
-                </button>
+                </Button>
               </revokeFetcher.Form>
             </>
           }

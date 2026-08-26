@@ -4,7 +4,6 @@ import {
   type ActionFunctionArgs,
   data,
   Form,
-  Link,
   type LoaderFunctionArgs,
   type MetaFunction,
   useActionData,
@@ -16,6 +15,7 @@ import {
 } from "react-router";
 import { ZodError } from "zod";
 import { adminAssistantDraftFromNavigationState } from "~/components/admin-shell-navigation";
+import { Button, ButtonLink } from "~/components/ui/button";
 import { PageHeader } from "~/components/ui/page-header";
 import { StatusNotice } from "~/components/ui/status-notice";
 import type { AiAssistantService } from "~/modules/ai/ai-assistant-service.server";
@@ -439,14 +439,16 @@ function StreamingAssistantWorkspace({
               The assistant sees only records returned by event-scoped tools.
               Provider or validation failures are reported explicitly.
             </p>
-            <button
-              className="btn primary"
+            <Button
+              variant="primary"
               type="submit"
-              disabled={pending || disabled}
+              disabled={disabled}
+              pending={pending}
+              pendingLabel="Streaming authorised analysis…"
             >
               <Sparkles aria-hidden size={14} />
-              {pending ? "Streaming authorised analysis…" : "Ask assistant"}
-            </button>
+              Ask assistant
+            </Button>
           </form>
           {pending && partial ? (
             <section aria-live="polite" className="pc-assist-stream">
@@ -572,9 +574,7 @@ export default function AssistantRoute() {
         title="Event Assistant"
         description={`Ask about ${loaderData.eventName}, inspect the exact source records and preview safe actions before approval.`}
         actions={
-          <Link className="btn" to="/admin/command">
-            Open Command Centre
-          </Link>
+          <ButtonLink to="/admin/command">Open Command Centre</ButtonLink>
         }
       />
 
@@ -617,7 +617,7 @@ export default function AssistantRoute() {
             <label className="label">
               Explicit model
               <input
-                className="input"
+                className="field"
                 name="model"
                 maxLength={100}
                 required
@@ -633,9 +633,13 @@ export default function AssistantRoute() {
             </label>
             <div className="label">
               Apply selection
-              <button className="btn" type="submit" disabled={busy}>
+              <Button
+                type="submit"
+                pending={busy}
+                pendingLabel="Saving provider…"
+              >
                 Save provider
-              </button>
+              </Button>
             </div>
           </Form>
         ) : (
@@ -666,13 +670,13 @@ export default function AssistantRoute() {
           tone={actionData.ok ? "success" : "danger"}
           action={
             actionData.ok && actionData.approval ? (
-              <Link className="btn small" to={actionData.approval.href}>
+              <ButtonLink size="small" to={actionData.approval.href}>
                 {actionData.approval.kind === "communication"
                   ? "Open operation"
                   : actionData.approval.kind === "task"
                     ? "Open task"
                     : "Open approved result"}
-              </Link>
+              </ButtonLink>
             ) : undefined
           }
         />

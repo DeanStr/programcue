@@ -1,5 +1,6 @@
 import { Form, redirect, useRouteLoaderData } from "react-router";
 import { BrandMark } from "~/components/brand-mark";
+import { Button } from "~/components/ui/button";
 import type { ViewerRole } from "~/platform/auth/authorize.server";
 import {
   chooseInitialEvent,
@@ -88,9 +89,9 @@ export default function Home({ loaderData }: Route.ComponentProps) {
           {evaluation ? null : (
             <input type="hidden" name="returnTo" value="/" />
           )}
-          <button className="btn" type="submit">
+          <Button type="submit">
             {evaluation ? "Change persona" : "Sign out"}
-          </button>
+          </Button>
         </Form>
       </section>
     </main>

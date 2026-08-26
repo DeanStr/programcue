@@ -1,6 +1,7 @@
 import { ChevronDown, ChevronUp } from "lucide-react";
 import { useLayoutEffect, useRef, useState } from "react";
-import { Form, Link, useLocation } from "react-router";
+import { Form, useLocation } from "react-router";
+import { Button, ButtonLink } from "~/components/ui/button";
 
 export const EVALUATION_BANNER_COOKIE = "program_cue_eval_banner";
 
@@ -133,24 +134,24 @@ export function EvaluationBanner({
         <strong>Evaluation:</strong> {evaluation.label} · {evaluation.name}
       </span>
       <span className="pc-eval-banner-actions">
-        <Link className="btn small" to="/evaluate">
+        <ButtonLink size="small" to="/evaluate">
           Evaluation guide
-        </Link>
+        </ButtonLink>
         <Form method="post" action="/sign-out">
-          <button className="btn small" type="submit">
+          <Button size="small" type="submit">
             Change persona
-          </button>
+          </Button>
         </Form>
-        <button
+        <Button
           ref={hideButtonRef}
-          className="btn small"
+          size="small"
           type="button"
           aria-label="Hide evaluation bar"
           onClick={() => setBannerHidden(true)}
         >
           <ChevronUp aria-hidden size={14} strokeWidth={2} />
           Hide
-        </button>
+        </Button>
       </span>
     </aside>
   );

@@ -1,8 +1,9 @@
 import { DndContext, DragOverlay, type DragStartEvent } from "@dnd-kit/core";
 import { PanelRightClose } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
-import { Form, Link } from "react-router";
+import { Form } from "react-router";
 import { ScheduleContentWorkflows } from "~/components/schedule-content-workflows";
+import { Button, ButtonLink, IconButton } from "~/components/ui/button";
 import { statusPresentation } from "~/components/ui/domain-status-badge";
 import { StatusNotice } from "~/components/ui/status-notice";
 import { ScheduleCanvasPanel } from "./schedule-planner-canvas-panel";
@@ -19,7 +20,6 @@ import {
   sessionFormatLabel,
 } from "./schedule-planner-workspace-helpers";
 import { ScheduleReviewLinksPanel } from "./schedule-review-links-panel";
-
 import { useSchedulePlannerController } from "./use-schedule-planner-controller";
 
 export {
@@ -152,21 +152,21 @@ export function SchedulePlannerWorkspace({
         </div>
         <div className="page-actions schedule-page-actions">
           {workspace.event.programmePublishedAt ? (
-            <Link
-              className="btn ghost"
+            <ButtonLink
+              variant="ghost"
               to={`/public/programme/${workspace.event.publicSlug}`}
               target="_blank"
               rel="noreferrer"
             >
               Open public programme
-            </Link>
+            </ButtonLink>
           ) : null}
-          <Link className="btn ghost" to="/admin/sessions/new">
+          <ButtonLink variant="ghost" to="/admin/sessions/new">
             Create direct session
-          </Link>
+          </ButtonLink>
           {showAutoPlaceButton ? (
-            <button
-              className="btn ghost"
+            <Button
+              variant="ghost"
               type="button"
               disabled={
                 !workspace.autoPlacementReadiness.canPreview ||
@@ -186,7 +186,7 @@ export function SchedulePlannerWorkspace({
               {autoPlacementFetcher.state === "idle"
                 ? "Auto-place unscheduled sessions"
                 : "Preparing auto-place preview…"}
-            </button>
+            </Button>
           ) : null}
           {workspace.version ? (
             <span className="schedule-page-version">
@@ -195,34 +195,34 @@ export function SchedulePlannerWorkspace({
             </span>
           ) : null}
           {placementAvailable ? (
-            <button
-              className="btn primary"
+            <Button
+              variant="primary"
               type="button"
               disabled={publishRefreshing || placementBusy}
               onClick={requestPublish}
             >
               {publishRefreshing ? "Refreshing preview…" : "Publish schedule"}
-            </button>
+            </Button>
           ) : workspace.version ? (
-            <button
-              className="btn primary"
+            <Button
+              variant="primary"
               type="button"
               disabled={navigation.state !== "idle"}
               onClick={() => setDraftOpen(true)}
             >
               Create next draft
-            </button>
+            </Button>
           ) : (
             <Form method="post">
               <input type="hidden" name="intent" value="create-draft" />
               <input type="hidden" name="intentId" value={workspace.intentId} />
-              <button
+              <Button
                 type="submit"
-                className="btn primary"
+                variant="primary"
                 disabled={navigation.state !== "idle"}
               >
                 Create schedule
-              </button>
+              </Button>
             </Form>
           )}
         </div>
@@ -338,9 +338,9 @@ export function SchedulePlannerWorkspace({
             {visibleSessions.length === 1 ? "" : "s"} match{" "}
             {workspace.activeFilter.replaceAll("_", " ")}.
           </span>
-          <Link className="btn small" to="/admin/schedule">
+          <ButtonLink size="small" to="/admin/schedule">
             Clear filter
-          </Link>
+          </ButtonLink>
         </div>
       ) : null}
       {workspace.focusedSessionId ? (
@@ -350,9 +350,9 @@ export function SchedulePlannerWorkspace({
             {sessionById.get(workspace.focusedSessionId)?.title ??
               "Named session"}
           </span>
-          <Link className="btn small" to="/admin/schedule">
+          <ButtonLink size="small" to="/admin/schedule">
             Clear focus
-          </Link>
+          </ButtonLink>
         </div>
       ) : null}
       {placementBusy ? (
@@ -392,13 +392,13 @@ export function SchedulePlannerWorkspace({
                 name="undoToken"
                 value={undoAvailable.token}
               />
-              <button
-                className="btn small"
+              <Button
+                size="small"
                 type="submit"
                 disabled={fetcher.state !== "idle"}
               >
                 Undo
-              </button>
+              </Button>
             </fetcher.Form>
           ) : null}
         </div>
@@ -433,13 +433,13 @@ export function SchedulePlannerWorkspace({
                 name="undoToken"
                 value={undoAvailable.token}
               />
-              <button
-                className="btn small"
+              <Button
+                size="small"
                 type="submit"
                 disabled={fetcher.state !== "idle"}
               >
                 Undo
-              </button>
+              </Button>
             </fetcher.Form>
           ) : null}
         </div>
@@ -576,9 +576,8 @@ export function SchedulePlannerWorkspace({
                   truncating the session name in a 320px column. */}
               {/* An icon: the head is 320px at its narrowest, and a spelled-out
                   label crowds the session name it sits beside. */}
-              <button
-                type="button"
-                className="icon-btn schedule-inspector-hide"
+              <IconButton
+                className="schedule-inspector-hide"
                 aria-expanded={inspectorOpen}
                 aria-controls="schedule-inspector"
                 aria-label="Hide panel"
@@ -586,7 +585,7 @@ export function SchedulePlannerWorkspace({
                 onClick={() => toggleInspector(false)}
               >
                 <PanelRightClose aria-hidden size={16} />
-              </button>
+              </IconButton>
             </div>
             <div className="schedule-inspector-body">
               <ScheduleContentWorkflows

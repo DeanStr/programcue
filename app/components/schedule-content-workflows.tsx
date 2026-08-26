@@ -4,6 +4,7 @@ import {
   DraftRecoveryFeedback,
   DraftRecoveryStatus,
 } from "~/components/draft-recovery-feedback";
+import { Button } from "~/components/ui/button";
 import { CharacterCount } from "~/components/ui/character-count";
 import { requireValue } from "~/lib/required-value";
 import {
@@ -204,13 +205,14 @@ function ScheduleNotesEditor({
         <div className="validation-item error mb" role="alert">
           <strong>Retry required</strong>
           <span>{serverError}</span>
-          <button
-            className="btn small right"
+          <Button
+            size="small"
+            className="right"
             type="button"
             onClick={() => submit()}
           >
             Retry the same save
-          </button>
+          </Button>
         </div>
       ) : null}
       {conflict ? (
@@ -220,17 +222,17 @@ function ScheduleNotesEditor({
             The draft changed after these notes loaded. Nothing was overwritten.
           </span>
           <span className="row-actions right">
-            <button
-              className="btn small"
+            <Button
+              size="small"
               type="button"
               onClick={() =>
                 downloadRecovery("schedule-notes-recovery.json", { notes })
               }
             >
               Export local notes
-            </button>
-            <button
-              className="btn small"
+            </Button>
+            <Button
+              size="small"
               type="button"
               onClick={() => {
                 setNotes(conflict.notes);
@@ -243,9 +245,10 @@ function ScheduleNotesEditor({
               }}
             >
               Load server notes
-            </button>
-            <button
-              className="btn small primary"
+            </Button>
+            <Button
+              variant="primary"
+              size="small"
               type="button"
               onClick={() => {
                 const revision = conflict.revision;
@@ -256,7 +259,7 @@ function ScheduleNotesEditor({
               }}
             >
               Save my notes
-            </button>
+            </Button>
           </span>
         </div>
       ) : null}

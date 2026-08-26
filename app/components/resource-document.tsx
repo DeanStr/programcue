@@ -1,6 +1,6 @@
 import { ExternalLink, MapPin, Play } from "lucide-react";
 import { Fragment, type ReactNode, useState } from "react";
-
+import { Button } from "~/components/ui/button";
 import {
   ResourceContentError,
   type TiptapNode,
@@ -83,13 +83,14 @@ function ExternalEmbedBlock({
             </p>
           </div>
           {presentation.enabled ? (
-            <button
-              className="btn primary small"
+            <Button
+              variant="primary"
+              size="small"
               type="button"
               onClick={() => setLoaded(true)}
             >
               {presentation.loadLabel}
-            </button>
+            </Button>
           ) : null}
         </div>
       )}

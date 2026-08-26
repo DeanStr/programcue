@@ -197,7 +197,7 @@
 .speaker-task + .speaker-task {
   border-top: 1px solid var(--border);
 }
-.speaker-task[data-state="done"] h3 {
+.speaker-task:where([data-state="done"]) h3 {
   color: var(--text-secondary);
 }
 .speaker-task-row,
@@ -1039,7 +1039,7 @@
   border-top: 4px solid var(--event-accent);
   border-radius: var(--radius);
   background: var(--surface);
-  box-shadow: var(--shadow);
+  box-shadow: var(--elev-3);
 }
 .resource-preview-device.is-mobile {
   max-width: 390px;
@@ -1057,7 +1057,7 @@
 .resource-preview-device > header small {
   color: var(--muted);
 }
-.resource-preview-device .speaker-resource-content {
+:where(.resource-preview-device) .speaker-resource-content {
   padding: var(--space-6);
 }
 .task-admin-actions {
@@ -1074,7 +1074,7 @@
   border: 1px solid var(--line);
   border-radius: var(--radius-sm);
   background: var(--surface);
-  box-shadow: var(--shadow);
+  box-shadow: var(--elev-3);
 }
 .task-dependency-list {
   display: grid;
@@ -1085,7 +1085,7 @@
   border: 1px solid var(--line);
   border-radius: var(--radius-sm);
 }
-@media (max-width: 1050px) {
+@media (max-width: 1180px) {
   .speaker-task-row,
   .speaker-session-row {
     grid-template-columns: 20px minmax(0, 1fr);
@@ -1166,7 +1166,6 @@
     grid-column: 2;
     justify-self: start;
   }
-  /* biome-ignore lint/style/noDescendingSpecificity: The mobile content rule and device-preview rule apply distinct layout concerns despite sharing the content class. */
   .speaker-resource-content {
     overflow: hidden;
   }

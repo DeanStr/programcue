@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { Form, useLocation, useNavigate } from "react-router";
 
 import { useEvaluationAdminModel } from "~/components/evaluation-admin-model";
+import { Button } from "~/components/ui/button";
 import { useConfirm } from "~/components/ui/confirm-dialog";
 import { EventDateTime } from "~/components/ui/event-date-time";
 
@@ -61,11 +62,11 @@ export function EvaluationTeamsPanel() {
             />
             <label className="label">
               Name
-              <input className="input" name="name" required />
+              <input className="field" name="name" required />
             </label>
             <label className="label">
               Email
-              <input className="input" name="email" type="email" required />
+              <input className="field" name="email" type="email" required />
             </label>
             <label className="label">
               Access role
@@ -102,13 +103,13 @@ export function EvaluationTeamsPanel() {
                   ))}
               </select>
             </label>
-            <button
+            <Button
               type="submit"
-              className="btn primary"
+              variant="primary"
               disabled={navigation.state !== "idle"}
             >
               Send invitation
-            </button>
+            </Button>
           </Form>
           {loaderData.evaluationInvitations.length ? (
             <div>
@@ -176,9 +177,10 @@ export function EvaluationTeamsPanel() {
                           name="operation"
                           value={isChair ? "revoke" : "promote"}
                         />
-                        <button
+                        <Button
                           type="button"
-                          className={`btn small ${isChair ? "danger" : ""}`}
+                          size="small"
+                          variant={isChair ? "danger" : undefined}
                           disabled={navigation.state !== "idle"}
                           onClick={(event) => {
                             const form = event.currentTarget.form;
@@ -204,7 +206,7 @@ export function EvaluationTeamsPanel() {
                           }}
                         >
                           {isChair ? "Revoke chair" : "Promote to chair"}
-                        </button>
+                        </Button>
                       </Form>
                     </li>
                   );
@@ -256,15 +258,15 @@ export function EvaluationTeamsPanel() {
                         name="memberRole"
                         value={member.role}
                       />
-                      <button
+                      <Button
                         type="submit"
-                        className="btn small"
+                        size="small"
                         name="operation"
                         value="remove"
                         disabled={navigation.state !== "idle"}
                       >
                         Remove
-                      </button>
+                      </Button>
                     </Form>
                   </li>
                 ))}
@@ -295,15 +297,15 @@ export function EvaluationTeamsPanel() {
                   <option value="evaluator">Evaluator</option>
                   <option value="chair">Chair</option>
                 </select>
-                <button
+                <Button
                   type="submit"
-                  className="btn small"
+                  size="small"
                   name="operation"
                   value="add"
                   disabled={navigation.state !== "idle"}
                 >
                   Add or update member
-                </button>
+                </Button>
               </Form>
             ) : null}
             <details className="mt pc-disclosure">
@@ -314,7 +316,7 @@ export function EvaluationTeamsPanel() {
                 <label className="label">
                   Name
                   <input
-                    className="input"
+                    className="field"
                     name="name"
                     defaultValue={team.name}
                     required
@@ -358,13 +360,9 @@ export function EvaluationTeamsPanel() {
                     <option value="archived">Archived</option>
                   </select>
                 </label>
-                <button
-                  type="submit"
-                  className="btn"
-                  disabled={navigation.state !== "idle"}
-                >
+                <Button type="submit" disabled={navigation.state !== "idle"}>
                   Save team
-                </button>
+                </Button>
               </Form>
             </details>
           </article>
@@ -377,7 +375,7 @@ export function EvaluationTeamsPanel() {
           <input type="hidden" name="status" value="active" />
           <label className="label">
             Team name
-            <input className="input" name="name" required />
+            <input className="field" name="name" required />
           </label>
           <label className="label">
             Description
@@ -396,13 +394,13 @@ export function EvaluationTeamsPanel() {
                 ))}
             </select>
           </label>
-          <button
+          <Button
             type="submit"
-            className="btn primary"
+            variant="primary"
             disabled={navigation.state !== "idle"}
           >
             Create team
-          </button>
+          </Button>
         </Form>
       </details>
     </section>

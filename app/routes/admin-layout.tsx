@@ -1,12 +1,12 @@
 import {
   isRouteErrorResponse,
-  Link,
   Outlet,
   useLocation,
   useRevalidator,
   useRouteLoaderData,
 } from "react-router";
 import { AdminShell } from "~/components/admin-shell";
+import { Button, ButtonLink } from "~/components/ui/button";
 import { routeErrorCopy, routeErrorMessage } from "~/lib/route-error-copy";
 import {
   type RouteErrorRecovery,
@@ -197,18 +197,17 @@ export function ErrorBoundary({ error, loaderData }: Route.ErrorBoundaryProps) {
       <p className="subtle">{message}</p>
       <div className="page-actions mt">
         {showRetry ? (
-          <button
-            className="btn"
+          <Button
             disabled={revalidator.state === "loading"}
             onClick={() => revalidator.revalidate()}
             type="button"
           >
             {revalidator.state === "loading" ? "Retrying…" : "Try again"}
-          </button>
+          </Button>
         ) : null}
-        <Link className="btn primary" to={errorReturn.href}>
+        <ButtonLink variant="primary" to={errorReturn.href}>
           {errorReturn.label}
-        </Link>
+        </ButtonLink>
       </div>
     </section>
   );

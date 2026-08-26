@@ -1,6 +1,7 @@
 import { Form, Link, useLocation } from "react-router";
 
 import { BrandMark } from "~/components/brand-mark";
+import { Button, ButtonLink } from "~/components/ui/button";
 
 export function ReviewerShell({
   viewer,
@@ -40,9 +41,9 @@ export function ReviewerShell({
           <small>Evaluation workspace</small>
         </div>
         <div className="review-session-actions">
-          <Link className="btn small" to={eventSelectionHref} reloadDocument>
+          <ButtonLink size="small" to={eventSelectionHref} reloadDocument>
             Switch event
-          </Link>
+          </ButtonLink>
           {viewer.demo ? (
             <form
               method="post"
@@ -50,9 +51,9 @@ export function ReviewerShell({
               className="review-demo-return"
             >
               <input type="hidden" name="identity" value="administrator" />
-              <button type="submit" className="btn small">
+              <Button type="submit" size="small">
                 Return to organizer demo
-              </button>
+              </Button>
             </form>
           ) : null}
         </div>
@@ -69,9 +70,9 @@ export function ReviewerShell({
             {initials}
           </span>
           <Form method="post" action="/sign-out">
-            <button className="btn small" type="submit">
+            <Button size="small" type="submit">
               Sign out
-            </button>
+            </Button>
           </Form>
         </div>
       </header>

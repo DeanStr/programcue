@@ -150,6 +150,7 @@ function FieldControlPreview({ field }: { field: FormField }) {
   if (field.type === "long_text") {
     return (
       <textarea
+        className="fb-canvas-preview-control"
         disabled
         rows={2}
         aria-label={`${field.label} preview`}
@@ -159,7 +160,12 @@ function FieldControlPreview({ field }: { field: FormField }) {
   }
   if (field.type === "select") {
     return (
-      <select disabled defaultValue="" aria-label={`${field.label} preview`}>
+      <select
+        className="fb-canvas-preview-control"
+        disabled
+        defaultValue=""
+        aria-label={`${field.label} preview`}
+      >
         <option value="">Choose…</option>
         {field.options.map((option) => (
           <option key={option}>{option}</option>
@@ -188,6 +194,7 @@ function FieldControlPreview({ field }: { field: FormField }) {
   }
   return (
     <input
+      className="fb-canvas-preview-control"
       disabled
       type={field.type === "url" || field.type === "video" ? "url" : "text"}
       aria-label={`${field.label} preview`}

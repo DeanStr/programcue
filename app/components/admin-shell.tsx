@@ -47,7 +47,7 @@ import {
 } from "./admin-shell-navigation";
 import { BrandMark } from "./brand-mark";
 import { Dialog } from "./dialog";
-import { Button } from "./ui/button";
+import { Button, IconButton } from "./ui/button";
 
 export {
   type AdminAssistantNavigationState,
@@ -316,14 +316,13 @@ function AdminTopbar({
     <header className="topbar">
       {/* The sidebar is display:none below 760px. Without this the whole
             admin product has no navigation at all on a phone. */}
-      <button
-        type="button"
-        className="icon-btn pc-mobile-nav-trigger"
+      <IconButton
+        className="pc-mobile-nav-trigger"
         aria-label="Open navigation"
         onClick={() => setMobileNavOpen(true)}
       >
         <Menu aria-hidden size={18} />
-      </button>
+      </IconButton>
       <button
         type="button"
         className="event-switcher"
@@ -366,15 +365,14 @@ function AdminTopbar({
             <span>New</span>
           </Button>
         ) : null}
-        <button
-          type="button"
-          className={`icon-btn${notificationCount ? " badge-dot" : ""}`}
+        <IconButton
+          className={notificationCount ? "badge-dot" : undefined}
           data-count={notificationCount || undefined}
           aria-label={`${notificationCount} operational notification${notificationCount === 1 ? "" : "s"}`}
           onClick={() => setDialog("notifications")}
         >
           <Bell aria-hidden size={16} />
-        </button>
+        </IconButton>
         <button
           type="button"
           className="avatar"
@@ -522,11 +520,13 @@ function AdminPageFrame({
             ))}
           </ol>
         </nav>
-        <button
+        <Button
           /* Ghost, not a bordered button: a rarely-used utility sitting on
                the same edge and at the same weight as the page's real action
                left the eye no way to rank the two. */
-          className="btn small ghost pc-copy-deep-link"
+          variant="ghost"
+          size="small"
+          className="pc-copy-deep-link"
           type="button"
           onClick={() => void copyDeepLink()}
           aria-label="Copy a deep link to this page"
@@ -537,7 +537,7 @@ function AdminPageFrame({
             : copyState === "unavailable"
               ? "Copy unavailable"
               : "Copy page link"}
-        </button>
+        </Button>
         <span className="sr-only" role="status" aria-live="polite">
           {copyState === "copied"
             ? "Page link copied to the clipboard."

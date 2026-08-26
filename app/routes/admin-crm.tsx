@@ -10,6 +10,7 @@ import {
   useSubmit,
 } from "react-router";
 import { ZodError } from "zod";
+import { Button, ButtonLink } from "~/components/ui/button";
 import { EmptyState } from "~/components/ui/states";
 import {
   type CrmFilters,
@@ -234,12 +235,10 @@ export default function AdminCrm({ loaderData }: Route.ComponentProps) {
           </p>
         </div>
         <div className="page-actions">
-          <Link className="btn" to="/admin/crm/pipeline">
-            Sourcing pipeline
-          </Link>
-          <Link className="btn primary" to="/admin/crm/outreach">
+          <ButtonLink to="/admin/crm/pipeline">Sourcing pipeline</ButtonLink>
+          <ButtonLink variant="primary" to="/admin/crm/outreach">
             Speaker invitations
-          </Link>
+          </ButtonLink>
         </div>
       </div>
 
@@ -391,9 +390,9 @@ export default function AdminCrm({ loaderData }: Route.ComponentProps) {
                   required
                 />
               </label>
-              <button type="submit" className="btn" disabled={busy}>
+              <Button type="submit" disabled={busy}>
                 Save dynamic segment
-              </button>
+              </Button>
             </Form>
           </fieldset>
         ) : null}
@@ -451,9 +450,9 @@ export default function AdminCrm({ loaderData }: Route.ComponentProps) {
                   Biography
                   <textarea className="textarea" name="biography" />
                 </label>
-                <button type="submit" className="btn primary" disabled={busy}>
+                <Button type="submit" variant="primary" disabled={busy}>
                   Create speaker contact
-                </button>
+                </Button>
               </Form>
             </div>
           </details>
@@ -488,9 +487,9 @@ export default function AdminCrm({ loaderData }: Route.ComponentProps) {
                   Accepted columns: name, email, title, company and bio. Import
                   is previewed before it writes.
                 </p>
-                <button type="submit" className="btn" disabled={busy}>
+                <Button type="submit" disabled={busy}>
                   Preview import
-                </button>
+                </Button>
               </Form>
               {actionData?.importPreview ? (
                 <div className="stack mt">
@@ -559,13 +558,9 @@ export default function AdminCrm({ loaderData }: Route.ComponentProps) {
                         name="csv"
                         value={actionData.importPreview.csv}
                       />
-                      <button
-                        type="submit"
-                        className="btn primary"
-                        disabled={busy}
-                      >
+                      <Button type="submit" variant="primary" disabled={busy}>
                         Confirm import
-                      </button>
+                      </Button>
                     </Form>
                   ) : null}
                 </div>
@@ -655,9 +650,9 @@ export default function AdminCrm({ loaderData }: Route.ComponentProps) {
           {directory.contacts.length ? (
             selectedCount > 0 ? (
               <div className="crm-board-foot">
-                <button className="btn" type="submit">
+                <Button type="submit">
                   <Mail aria-hidden size={15} /> Email selected contacts
-                </button>
+                </Button>
               </div>
             ) : null
           ) : (
@@ -668,9 +663,9 @@ export default function AdminCrm({ loaderData }: Route.ComponentProps) {
               description="Clear the filters or add a reusable speaker contact."
               action={
                 filtersActive ? (
-                  <Link className="btn" to="/admin/crm">
+                  <ButtonLink to="/admin/crm">
                     <FilterX aria-hidden size={15} /> Clear filters
-                  </Link>
+                  </ButtonLink>
                 ) : undefined
               }
             />
@@ -682,8 +677,7 @@ export default function AdminCrm({ loaderData }: Route.ComponentProps) {
             aria-label="Speaker Network directory pages"
           >
             {directory.page > 1 ? (
-              <Link
-                className="btn"
+              <ButtonLink
                 to={`/admin/crm?${directoryPageQuery(
                   directory.filters,
                   directory.page - 1,
@@ -691,11 +685,10 @@ export default function AdminCrm({ loaderData }: Route.ComponentProps) {
                 )}`}
               >
                 Previous page
-              </Link>
+              </ButtonLink>
             ) : null}
             {directory.hasNext ? (
-              <Link
-                className="btn"
+              <ButtonLink
                 to={`/admin/crm?${directoryPageQuery(
                   directory.filters,
                   directory.page + 1,
@@ -703,7 +696,7 @@ export default function AdminCrm({ loaderData }: Route.ComponentProps) {
                 )}`}
               >
                 Next page
-              </Link>
+              </ButtonLink>
             ) : null}
           </nav>
         ) : null}

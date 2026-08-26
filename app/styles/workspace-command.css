@@ -13,13 +13,13 @@
 .app-admin .admin-breadcrumbs {
   gap: var(--space-2);
 }
-.app-admin .admin-breadcrumbs a {
+.app-admin :where(.admin-breadcrumbs) a {
   color: var(--text-tertiary);
   font-weight: var(--weight-medium);
   text-decoration: none;
 }
-.app-admin .admin-breadcrumbs a:hover,
-.app-admin .admin-breadcrumbs a:focus-visible {
+.app-admin :where(.admin-breadcrumbs) a:hover,
+.app-admin :where(.admin-breadcrumbs) a:focus-visible {
   color: var(--text-primary);
   text-decoration: none;
 }
@@ -306,6 +306,8 @@
   display: grid;
 }
 .command-blocker {
+  position: relative;
+  z-index: 0;
   align-items: center;
   color: inherit;
   display: grid;
@@ -379,9 +381,33 @@
 .command-blocker:hover,
 .command-blocker:focus-visible {
   background: color-mix(in srgb, var(--blocker-mark) 8%, transparent);
-  box-shadow:
-    -12px 0 0 color-mix(in srgb, var(--blocker-mark) 8%, transparent),
-    12px 0 0 color-mix(in srgb, var(--blocker-mark) 8%, transparent);
+}
+.command-blocker::before,
+.command-workflow-row::before,
+.command-session-row::before,
+.command-ops-row::before {
+  position: absolute;
+  z-index: -1;
+  inset-block: 0;
+  inset-inline: -12px;
+  background: color-mix(in srgb, var(--ink) 3.5%, transparent);
+  content: "";
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity var(--dur-fast) var(--ease-out);
+}
+.command-blocker::before {
+  background: color-mix(in srgb, var(--blocker-mark) 8%, transparent);
+}
+.command-blocker:hover::before,
+.command-blocker:focus-visible::before,
+.command-workflow-row:hover::before,
+.command-workflow-row:focus-visible::before,
+.command-session-row:hover::before,
+.command-session-row:focus-visible::before,
+.command-ops-row:hover::before,
+.command-ops-row:focus-visible::before {
+  opacity: 1;
 }
 @media (forced-colors: active) {
   .command-blocker {
@@ -400,6 +426,8 @@
   display: grid;
 }
 .command-workflow-row {
+  position: relative;
+  z-index: 0;
   align-items: center;
   color: inherit;
   display: grid;
@@ -420,9 +448,6 @@
 .command-workflow-row:hover,
 .command-workflow-row:focus-visible {
   background: color-mix(in srgb, var(--ink) 3.5%, transparent);
-  box-shadow:
-    -12px 0 0 color-mix(in srgb, var(--ink) 3.5%, transparent),
-    12px 0 0 color-mix(in srgb, var(--ink) 3.5%, transparent);
 }
 .command-workflow-row strong {
   font-size: var(--text-sm);
@@ -462,7 +487,8 @@
 }
 .command-meter.is-zero {
   background: var(--state-bad-surface);
-  box-shadow: inset 0 0 0 1px var(--state-bad-border);
+  outline: 1px solid var(--state-bad-border);
+  outline-offset: -1px;
 }
 
 /* --- Draft and delivery -------------------------------------------------
@@ -584,6 +610,8 @@
   padding-top: var(--space-1);
 }
 .command-session-row {
+  position: relative;
+  z-index: 0;
   align-items: baseline;
   display: flex;
   gap: var(--space-3);
@@ -595,9 +623,6 @@
 .command-session-row:hover,
 .command-session-row:focus-visible {
   background: color-mix(in srgb, var(--ink) 3.5%, transparent);
-  box-shadow:
-    -12px 0 0 color-mix(in srgb, var(--ink) 3.5%, transparent),
-    12px 0 0 color-mix(in srgb, var(--ink) 3.5%, transparent);
 }
 .command-session-time {
   flex: none;
@@ -642,6 +667,8 @@
   list-style: none;
 }
 .command-ops-row {
+  position: relative;
+  z-index: 0;
   align-items: center;
   color: inherit;
   display: grid;
@@ -659,9 +686,6 @@
 .command-ops-row:hover,
 .command-ops-row:focus-visible {
   background: color-mix(in srgb, var(--ink) 3.5%, transparent);
-  box-shadow:
-    -12px 0 0 color-mix(in srgb, var(--ink) 3.5%, transparent),
-    12px 0 0 color-mix(in srgb, var(--ink) 3.5%, transparent);
 }
 .command-ops-type {
   font-weight: var(--weight-semibold);

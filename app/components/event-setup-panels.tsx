@@ -7,6 +7,7 @@ import {
   RecordField,
   RecordHead,
 } from "~/components/event-record-row";
+import { Button, ButtonLink, IconButton } from "~/components/ui/button";
 import { CharacterCount } from "~/components/ui/character-count";
 import { EventDateRangeFields } from "~/components/ui/event-date-range-fields";
 import { Field } from "~/components/ui/field";
@@ -102,7 +103,7 @@ export function EventIdentityPanels({
         <div className="event-identity-where">
           <Field label="Venue">
             <textarea
-              className="field event-setup-wrap-field"
+              className="textarea event-setup-wrap-field"
               name="venue"
               defaultValue={event.venue}
               maxLength={200}
@@ -128,7 +129,7 @@ export function EventIdentityPanels({
           <label className="label">
             Venue address
             <textarea
-              className="field event-setup-wrap-field"
+              className="textarea event-setup-wrap-field"
               name="venueAddress"
               defaultValue={event.venueAddress}
               maxLength={300}
@@ -328,9 +329,9 @@ export function EventRoomsPanel({
             A session can only be placed in a room when every resource it
             requires is in that room's inventory.
           </p>
-          <button
+          <Button
             type="button"
-            className="btn small"
+            size="small"
             onClick={onAdd}
             disabled={addDisabled}
             title={
@@ -340,7 +341,7 @@ export function EventRoomsPanel({
             }
           >
             <Plus aria-hidden size={14} /> Add room
-          </button>
+          </Button>
         </div>
         {rooms.length ? (
           <div>
@@ -440,19 +441,17 @@ export function EventRoomsPanel({
                         addResource(room.id);
                       }}
                     />
-                    <button
+                    <Button
                       type="button"
-                      className="btn small"
+                      size="small"
                       disabled={!(resourceDrafts[room.id] ?? "").trim()}
                       onClick={() => addResource(room.id)}
                     >
                       Add resource
-                    </button>
+                    </Button>
                   </div>
                   <div className="event-record-actions">
-                    <button
-                      type="button"
-                      className="icon-btn"
+                    <IconButton
                       aria-label={`Remove ${room.name}`}
                       onClick={() => {
                         setRooms((current) =>
@@ -463,7 +462,7 @@ export function EventRoomsPanel({
                       }}
                     >
                       <X aria-hidden size={15} />
-                    </button>
+                    </IconButton>
                   </div>
                 </fieldset>
               ))}
@@ -590,9 +589,9 @@ export function EventAccessPanels({
             manage every event in this organisation.
           </p>
         </div>
-        <button type="button" className="btn small" onClick={onInvite}>
+        <Button type="button" size="small" onClick={onInvite}>
           Invite administrator
-        </button>
+        </Button>
       </div>
       {/* Organisation owners and evaluators had a titled band each, with a
           rule above and below and nothing in either to change. Two thirds of
@@ -616,9 +615,10 @@ export function EventAccessPanels({
               · {administrator.status}
             </span>
             {canManageAdministrators ? (
-              <button
+              <Button
                 type="button"
-                className="btn small danger"
+                variant="danger"
+                size="small"
                 onClick={() =>
                   onRevoke(
                     administrator.id,
@@ -628,7 +628,7 @@ export function EventAccessPanels({
                 }
               >
                 Revoke
-              </button>
+              </Button>
             ) : null}
           </div>
         ))}
@@ -777,29 +777,28 @@ export function EventRepositoryPanel({
                 : "Not configured"}
             </span>
           </div>
-          <button
+          <Button
             type="button"
-            className="btn small"
+            size="small"
             onClick={onConfigureAirtable}
             disabled={hasUnsavedChanges}
             aria-describedby={hasUnsavedChanges ? unsavedHelpId : undefined}
           >
             {event.repositoryConnection ? "Revalidate" : "Configure"}
-          </button>
+          </Button>
         </div>
       </div>
       {event.repositoryConnection?.status === "connected" ? (
         <div className="mt">
-          <button
+          <Button
             type="button"
-            className="btn"
             onClick={onMigrateRepository}
             disabled={hasUnsavedChanges}
             aria-describedby={hasUnsavedChanges ? unsavedHelpId : undefined}
           >
             Preview handover to{" "}
             {event.repositoryProvider === "d1" ? "Airtable" : "Program Cue"}
-          </button>
+          </Button>
           <p className="help mt">
             The handover runs while you wait, and stops before changing anything
             if more than {AIRTABLE_SYNCHRONOUS_MIGRATION_MAX_CHANGES} records
@@ -834,9 +833,9 @@ export function EventRepositoryPanel({
       </label>
       {canManageFileRetention ? (
         <div className="mt">
-          <Link className="btn small" to="/admin/files/retention">
+          <ButtonLink size="small" to="/admin/files/retention">
             Manage legal hold, erasure and anonymisation
-          </Link>
+          </ButtonLink>
         </div>
       ) : null}
     </section>

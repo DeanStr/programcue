@@ -1,7 +1,8 @@
 import { useDraggable } from "@dnd-kit/core";
 import { CSS } from "@dnd-kit/utilities";
 import { useEffect, useState } from "react";
-import { Link, useSearchParams } from "react-router";
+import { useSearchParams } from "react-router";
+import { Button, ButtonLink } from "~/components/ui/button";
 import { EmptyState } from "~/components/ui/states";
 import { requireValue } from "~/lib/required-value";
 import { SessionCopyAction } from "~/modules/ai/contextual-ai-actions";
@@ -331,8 +332,8 @@ export function ScheduleSourcePanel({
                   required
                 />
               </label>
-              <button
-                className="btn primary"
+              <Button
+                variant="primary"
                 type="submit"
                 disabled={
                   !quickSession ||
@@ -346,20 +347,20 @@ export function ScheduleSourcePanel({
                 {scheduledSessionIds.has(quickSessionId)
                   ? "Move or resize session"
                   : "Place session"}
-              </button>
+              </Button>
               {/* The board card used to carry its own slider and unassign
                 button. Both blew the cell open and gave the same operation a
                 third mental model; the form already names the session it is
                 acting on. */}
               {quickEntry ? (
-                <button
-                  className="btn small"
+                <Button
+                  size="small"
                   type="button"
                   onClick={() => unassign(quickEntry)}
                   disabled={fetcher.state !== "idle"}
                 >
                   Unassign from the board
-                </button>
+                </Button>
               ) : null}
             </fetcher.Form>
           </details>
@@ -443,18 +444,14 @@ export function ScheduleSourcePanel({
                     Configure resource inventory on at least one room in Event
                     settings before assigning session requirements.
                   </span>
-                  <Link className="btn small" to="/admin/event">
+                  <ButtonLink size="small" to="/admin/event">
                     Open Event settings
-                  </Link>
+                  </ButtonLink>
                 </div>
               )}
-              <button
-                className="btn"
-                type="submit"
-                disabled={fetcher.state !== "idle"}
-              >
+              <Button type="submit" disabled={fetcher.state !== "idle"}>
                 Save required resources
-              </button>
+              </Button>
             </fetcher.Form>
           </details>
         ) : null}
@@ -506,9 +503,7 @@ export function ScheduleSourcePanel({
                 one.
               </p>
             )}
-            <button className="btn" type="submit">
-              Create unscheduled break
-            </button>
+            <Button type="submit">Create unscheduled break</Button>
           </fetcher.Form>
         </details>
       </div>

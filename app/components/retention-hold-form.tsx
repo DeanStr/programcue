@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { Form } from "react-router";
+import { Button } from "~/components/ui/button";
 
 export function retentionHoldFormKey(holdAt: number | null) {
   return holdAt == null ? "none" : String(holdAt);
@@ -60,13 +61,12 @@ function RetentionHoldFields({
         />{" "}
         I understand this changes the event-wide retention boundary.
       </label>
-      <button
-        className="btn"
+      <Button
         type="submit"
         disabled={busy || !confirmed || reason.trim().length < 3}
       >
         {holdAt ? "Release retention hold" : "Place retention hold"}
-      </button>
+      </Button>
     </Form>
   );
 }

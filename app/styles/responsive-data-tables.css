@@ -117,7 +117,7 @@
     border: 1px solid var(--line);
     border-radius: var(--radius);
     background: var(--surface);
-    box-shadow: 0 4px 14px rgba(19, 32, 31, 0.06);
+    box-shadow: var(--elev-2);
   }
   .pc-responsive-table td {
     display: grid;

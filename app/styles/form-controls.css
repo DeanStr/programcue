@@ -41,7 +41,7 @@
   border-color: var(--brand-500);
   outline: var(--focus-width) solid var(--focus-ring);
   outline-offset: var(--focus-halo-width);
-  box-shadow: 0 0 0 var(--focus-halo-width) var(--focus-halo);
+  box-shadow: var(--focus-halo-shadow);
 }
 .field {
   /* The 220px floor was global but its neutralising patch was scoped to
@@ -155,12 +155,13 @@
   border: 0;
   border-radius: var(--radius-full);
   background: var(--toggle-off);
-  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--ink) 10%, transparent);
+  outline: 1px solid color-mix(in srgb, var(--ink) 10%, transparent);
+  outline-offset: -1px;
   position: relative;
   cursor: pointer;
   transition:
     background-color var(--dur-base) var(--ease-out),
-    box-shadow var(--dur-base) var(--ease-out);
+    outline-color var(--dur-base) var(--ease-out);
 }
 .toggle input[type="checkbox"]::after {
   content: "";
@@ -171,15 +172,13 @@
   background: var(--surface);
   top: 2px;
   left: 2px;
-  box-shadow:
-    0 1px 2px rgba(19, 32, 31, 0.16),
-    0 0 0 1px rgba(19, 32, 31, 0.04);
+  box-shadow: var(--elev-1);
   /* Transform rather than left: it composites instead of triggering layout. */
   transition: transform var(--dur-base) var(--ease-out);
 }
 .toggle input[type="checkbox"]:checked {
   background: var(--brand-600);
-  box-shadow: none;
+  outline-color: transparent;
 }
 .toggle input[type="checkbox"]:checked::after {
   transform: translateX(16px);
@@ -187,12 +186,12 @@
 .toggle input[type="checkbox"]:focus-visible {
   outline: var(--focus-width) solid var(--focus-ring);
   outline-offset: var(--focus-halo-width);
-  box-shadow: 0 0 0 var(--focus-halo-width) var(--focus-halo);
+  box-shadow: var(--focus-halo-shadow);
 }
 .toggle input[type="checkbox"]:disabled {
   cursor: not-allowed;
   background: var(--border);
-  box-shadow: none;
+  outline-color: var(--border-strong);
 }
 .toggle input[type="checkbox"]:disabled:checked {
   background: var(--text-tertiary);
@@ -297,7 +296,7 @@
   width: min(520px, 94vw);
   background: var(--surface);
   z-index: 220;
-  box-shadow: -16px 0 48px rgba(19, 32, 31, 0.16);
+  box-shadow: var(--elev-overlay);
   overflow: auto;
 }
 .drawer-head {
@@ -392,24 +391,16 @@ input[type="checkbox"]:not(:where(.toggle input)):focus-visible,
 input[type="radio"]:focus-visible {
   outline: var(--focus-width) solid var(--focus-ring);
   outline-offset: var(--focus-halo-width);
-  box-shadow: 0 0 0 var(--focus-halo-width) var(--focus-halo);
+  box-shadow: var(--focus-halo-shadow);
 }
 
 /* Pointer-coarse targets. 38px is comfortable with a mouse and tight with a
    thumb, so the whole control set relaxes on touch. */
 @media (pointer: coarse) {
-  .btn,
-  .icon-btn,
   .field,
   .select,
   .textarea {
     min-height: 44px;
-  }
-  .btn.small {
-    min-height: 36px;
-  }
-  .icon-btn {
-    width: 44px;
   }
   input[type="checkbox"]:not(:where(.toggle input)),
   input[type="radio"] {

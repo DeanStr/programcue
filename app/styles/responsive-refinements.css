@@ -74,7 +74,7 @@
     grid-template-columns: 1fr 1fr;
   }
 }
-@media (max-width: 1024px) {
+@media (max-width: 1180px) {
   :root {
     --sidebar: 76px;
   }
@@ -401,7 +401,7 @@
 /* Programme variants and editorial labels stay in bounded menus. At tablet
    widths the primary destinations also collapse so the event identity and
    itinerary never compete with a variable number of navigation labels. */
-@media (max-width: 960px) {
+@media (max-width: 1000px) {
   .public-top {
     min-width: 0;
     gap: var(--space-3);
@@ -449,7 +449,7 @@
 /* Below this the four header controls leave the event name about 55px, which
    truncates "Future of Events 2027" to "Futur…" and tells a speaker nothing.
    The name takes its own row instead: two short rows beat one unreadable one. */
-@media (max-width: 430px) {
+@media (max-width: 560px) {
   .speaker-top {
     flex-wrap: wrap;
     row-gap: var(--space-1);

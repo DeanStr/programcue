@@ -3,6 +3,7 @@ import { useEvaluationAdminModel } from "~/components/evaluation-admin-model";
 import { bindEvalDateTime } from "~/components/evaluation-progression-panel";
 import { RecommendationChoiceFields } from "~/components/evaluation-recommendation-choice-fields";
 import { RubricFields } from "~/components/evaluation-rubric-fields";
+import { Button } from "~/components/ui/button";
 import { useConfirm } from "~/components/ui/confirm-dialog";
 
 export function EvaluationReviewCyclePanel() {
@@ -74,7 +75,7 @@ export function EvaluationReviewCyclePanel() {
               <label className="label">
                 New plan name
                 <input
-                  className="input"
+                  className="field"
                   name="planName"
                   defaultValue={`${plan.name} · next cycle`}
                   required
@@ -83,7 +84,7 @@ export function EvaluationReviewCyclePanel() {
               <label className="label">
                 First round name
                 <input
-                  className="input"
+                  className="field"
                   name="roundName"
                   defaultValue="Initial review"
                   required
@@ -94,7 +95,7 @@ export function EvaluationReviewCyclePanel() {
               <label className="label">
                 Opens ({loaderData.eventTimezone})
                 <input
-                  className="input pc-eval-datetime"
+                  className="field pc-eval-datetime"
                   type="datetime-local"
                   name="roundOpensAt"
                   data-empty=""
@@ -104,7 +105,7 @@ export function EvaluationReviewCyclePanel() {
               <label className="label">
                 Closes ({loaderData.eventTimezone})
                 <input
-                  className="input pc-eval-datetime"
+                  className="field pc-eval-datetime"
                   type="datetime-local"
                   name="roundClosesAt"
                   data-empty=""
@@ -133,8 +134,8 @@ export function EvaluationReviewCyclePanel() {
               choices={sourceRound.recommendationChoices}
             />
             <RubricFields criteria={sourceRound.criteria} />
-            <button
-              className="btn danger"
+            <Button
+              variant="danger"
               type="button"
               disabled={navigation.state !== "idle" || waitingForAiAssessments}
               onClick={(event) => {
@@ -162,7 +163,7 @@ export function EvaluationReviewCyclePanel() {
               }}
             >
               Review and start new cycle
-            </button>
+            </Button>
           </Form>
         </div>
       </details>

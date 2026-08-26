@@ -14,6 +14,7 @@ import {
 } from "~/components/communications-centre-panels";
 import { DraftRecoveryFeedback } from "~/components/draft-recovery-feedback";
 import { AdminPageSection } from "~/components/ui/admin-page-sections";
+import { Button } from "~/components/ui/button";
 import type { useDraftRecovery } from "~/platform/drafts/draft-recovery";
 import type { CommunicationsCentreLoaderData } from "~/routes/communications-centre.server";
 
@@ -68,9 +69,9 @@ export function CommunicationsSetupView({
                   required
                 />
               </label>
-              <button type="submit" className="btn" disabled={working}>
+              <Button type="submit" disabled={working}>
                 Save organisation address
-              </button>
+              </Button>
             </Form>
           ) : (
             <p className="validation-item info">

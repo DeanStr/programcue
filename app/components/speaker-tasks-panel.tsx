@@ -6,7 +6,7 @@ import {
   LockKeyhole,
 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
-import { Form, Link } from "react-router";
+import { Form } from "react-router";
 
 import {
   DirectMultipartUpload,
@@ -17,6 +17,7 @@ import {
   type SpeakerTask,
   speakerDueLabel,
 } from "~/components/speaker-dashboard-panel-shared";
+import { Button, ButtonAnchor, ButtonLink } from "~/components/ui/button";
 import { DomainStatusBadge } from "~/components/ui/domain-status-badge";
 import { EventDateTime } from "~/components/ui/event-date-time";
 import { requireValue } from "~/lib/required-value";
@@ -128,13 +129,9 @@ function AcknowledgementCompleteControls({
         />{" "}
         {label}
       </label>
-      <button
-        type="submit"
-        className="btn primary"
-        disabled={busy || !confirmed}
-      >
+      <Button type="submit" variant="primary" disabled={busy || !confirmed}>
         Complete task
-      </button>
+      </Button>
     </div>
   );
 }
@@ -392,12 +389,12 @@ export function SpeakerTasksPanel({
                                 </span>
                               ) : null}
                               {version.downloadAvailable ? (
-                                <a
-                                  className="btn small"
+                                <ButtonAnchor
+                                  size="small"
                                   href={`/participant/tasks/files/${encodeURIComponent(version.assetId)}/${encodeURIComponent(version.versionId)}`}
                                 >
                                   Download v{version.versionNumber}
-                                </a>
+                                </ButtonAnchor>
                               ) : (
                                 <small className={`status ${state.tone}`}>
                                   {state.label}
@@ -441,9 +438,9 @@ export function SpeakerTasksPanel({
                 {canComplete && task.resourcePageId ? (
                   <div className="speaker-task-action">
                     {task.resourceHref ? (
-                      <Link className="btn primary" to={task.resourceHref}>
+                      <ButtonLink variant="primary" to={task.resourceHref}>
                         Open resource
-                      </Link>
+                      </ButtonLink>
                     ) : (
                       <p className="speaker-task-note">
                         Acknowledge this requirement from the published
@@ -575,8 +572,7 @@ export function SpeakerTasksPanel({
                         </label>
                       ) : task.taskType === "link_visit" ? (
                         <div className="stack">
-                          <a
-                            className="btn"
+                          <ButtonAnchor
                             href={requireValue(
                               task.destinationUrl,
                               "Link task destination missing after server validation.",
@@ -589,7 +585,7 @@ export function SpeakerTasksPanel({
                               {" "}
                               (opens in a new tab)
                             </span>
-                          </a>
+                          </ButtonAnchor>
                           <AcknowledgementCompleteControls
                             busy={busy}
                             label="I’ve visited this link"
@@ -606,13 +602,9 @@ export function SpeakerTasksPanel({
                         />
                       )}
                       {task.taskType === "short_form" ? (
-                        <button
-                          type="submit"
-                          className="btn primary"
-                          disabled={busy}
-                        >
+                        <Button type="submit" variant="primary" disabled={busy}>
                           Complete task
-                        </button>
+                        </Button>
                       ) : null}
                     </Form>
                   </div>
@@ -644,9 +636,9 @@ export function SpeakerTasksPanel({
                         maxLength={2_000}
                       />
                     </label>
-                    <button className="btn" type="submit" disabled={busy}>
+                    <Button type="submit" disabled={busy}>
                       Send
-                    </button>
+                    </Button>
                   </Form>
                 </details>
               </article>

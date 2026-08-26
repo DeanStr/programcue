@@ -6,6 +6,8 @@ import {
   RecordField,
   RecordHead,
 } from "~/components/event-record-row";
+import { Button, IconButton } from "~/components/ui/button";
+import { DEFAULT_TRACK_COLOUR } from "~/lib/product-colours";
 import type { EventSetup } from "~/modules/events/event-repository.server";
 import type { ActionResponse } from "~/routes/event-setup";
 
@@ -130,7 +132,9 @@ export function EventScheduleConfigurationPanels({
                         meaning, so a repainted or unseen dot loses nothing. */}
                     <span
                       className="event-record-chip-dot"
-                      style={{ background: track.colourToken ?? "#5e6ad2" }}
+                      style={{
+                        background: track.colourToken ?? DEFAULT_TRACK_COLOUR,
+                      }}
                     />
                     {track.name}
                   </span>
@@ -207,7 +211,7 @@ export function EventScheduleConfigurationPanels({
                       <input
                         className="field"
                         type="color"
-                        value={track.colourToken ?? "#5e6ad2"}
+                        value={track.colourToken ?? DEFAULT_TRACK_COLOUR}
                         onChange={(changeEvent) =>
                           setTracks((current) =>
                             current.map((candidate) =>
@@ -265,9 +269,7 @@ export function EventScheduleConfigurationPanels({
                       </label>
                     </div>
                     <div className="event-record-actions">
-                      <button
-                        type="button"
-                        className="icon-btn"
+                      <IconButton
                         onClick={() => {
                           setTracks((current) =>
                             current.filter(
@@ -279,7 +281,7 @@ export function EventScheduleConfigurationPanels({
                         aria-label={`Remove ${track.name}`}
                       >
                         <X aria-hidden size={15} />
-                      </button>
+                      </IconButton>
                     </div>
                   </fieldset>
                 ))}
@@ -306,14 +308,13 @@ export function EventScheduleConfigurationPanels({
                 }}
               />
             </label>
-            <button
+            <Button
               type="button"
-              className="btn"
               onClick={addTrack}
               disabled={!newTrackName.trim()}
             >
               Add track
-            </button>
+            </Button>
           </div>
           <FieldError actionData={actionData} name="tracks" />
         </div>
@@ -427,9 +428,7 @@ export function EventScheduleConfigurationPanels({
                     />
                   </RecordField>
                   <div className="event-record-actions">
-                    <button
-                      type="button"
-                      className="icon-btn"
+                    <IconButton
                       aria-label={`Remove ${format.label}`}
                       disabled={sessionFormats.length === 1}
                       onClick={() =>
@@ -441,7 +440,7 @@ export function EventScheduleConfigurationPanels({
                       }
                     >
                       <X aria-hidden size={15} />
-                    </button>
+                    </IconButton>
                   </div>
                 </fieldset>
               ))}
@@ -465,14 +464,13 @@ export function EventScheduleConfigurationPanels({
                 }}
               />
             </label>
-            <button
+            <Button
               type="button"
-              className="btn"
               onClick={addFormat}
               disabled={!newFormatLabel.trim()}
             >
               Add format
-            </button>
+            </Button>
           </div>
           <FieldError actionData={actionData} name="sessionFormats" />
         </div>

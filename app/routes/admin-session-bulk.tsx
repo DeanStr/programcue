@@ -10,6 +10,7 @@ import {
   useSubmit,
 } from "react-router";
 import { ZodError } from "zod";
+import { Button, ButtonLink } from "~/components/ui/button";
 import { useConfirm } from "~/components/ui/confirm-dialog";
 import {
   DomainStatusBadge,
@@ -190,12 +191,10 @@ export default function AdminSessionBulk({ loaderData }: Route.ComponentProps) {
           </p>
         </div>
         <div className="page-actions">
-          <Link className="btn" to="/admin/schedule">
-            Open schedule
-          </Link>
-          <Link className="btn" to="/admin/operations?type=session.bulk">
+          <ButtonLink to="/admin/schedule">Open schedule</ButtonLink>
+          <ButtonLink to="/admin/operations?type=session.bulk">
             Operation history
-          </Link>
+          </ButtonLink>
         </div>
       </div>
 
@@ -365,14 +364,14 @@ export default function AdminSessionBulk({ loaderData }: Route.ComponentProps) {
               title="No sessions to update"
               description="Accepted or directly created sessions will appear here."
               action={
-                <Link className="btn primary" to="/admin/schedule">
+                <ButtonLink variant="primary" to="/admin/schedule">
                   Open schedule
-                </Link>
+                </ButtonLink>
               }
             />
           ) : null}
-          <button
-            className="btn primary"
+          <Button
+            variant="primary"
             type="submit"
             disabled={
               navigation.state !== "idle" ||
@@ -380,7 +379,7 @@ export default function AdminSessionBulk({ loaderData }: Route.ComponentProps) {
             }
           >
             Preview affected records <ArrowRight aria-hidden size={14} />
-          </button>
+          </Button>
         </Form>
       </section>
 
@@ -478,8 +477,8 @@ export default function AdminSessionBulk({ loaderData }: Route.ComponentProps) {
               >
                 <input type="hidden" name="intent" value="confirm" />
                 <input type="hidden" name="operationId" value={operation.id} />
-                <button
-                  className="btn primary"
+                <Button
+                  variant="primary"
                   type="submit"
                   disabled={!canConfirm || navigation.state !== "idle"}
                 >
@@ -489,7 +488,7 @@ export default function AdminSessionBulk({ loaderData }: Route.ComponentProps) {
                     <Archive aria-hidden size={14} />
                   )}
                   Confirm exact changes
-                </button>
+                </Button>
               </Form>
               <Form
                 method="post"
@@ -509,13 +508,13 @@ export default function AdminSessionBulk({ loaderData }: Route.ComponentProps) {
               >
                 <input type="hidden" name="intent" value="cancel" />
                 <input type="hidden" name="operationId" value={operation.id} />
-                <button
-                  className="btn danger"
+                <Button
+                  variant="danger"
                   type="submit"
                   disabled={navigation.state !== "idle"}
                 >
                   Cancel preview
-                </button>
+                </Button>
               </Form>
               {operation.summary.invalidCount ? (
                 <span className="help">
@@ -545,13 +544,9 @@ export default function AdminSessionBulk({ loaderData }: Route.ComponentProps) {
             >
               <input type="hidden" name="intent" value="prepare-undo" />
               <input type="hidden" name="operationId" value={operation.id} />
-              <button
-                className="btn"
-                type="submit"
-                disabled={navigation.state !== "idle"}
-              >
+              <Button type="submit" disabled={navigation.state !== "idle"}>
                 <RotateCcw aria-hidden size={14} /> Prepare five-minute undo
-              </button>
+              </Button>
             </Form>
           ) : null}
           {operation.summary.undoneBy ? (

@@ -642,6 +642,17 @@ test.describe
           : null;
         try {
           await captureState(page, page.locator("body"), surface.name);
+          if (surface.name === "evaluation-admin") {
+            await page
+              .getByRole("link", { name: "Setup", exact: true })
+              .click();
+            const setup = page.locator("#evaluation-setup");
+            await expect(setup).toBeVisible();
+            await expect(
+              setup.getByRole("heading", { name: "Round 1", exact: true }),
+            ).toBeVisible();
+            await captureState(page, setup, "evaluation-admin-setup");
+          }
         } finally {
           await fullPageCaptureStyle?.evaluate((style) =>
             style.parentNode?.removeChild(style),

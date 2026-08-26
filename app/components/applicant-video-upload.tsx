@@ -4,6 +4,7 @@ import {
   type TurnstileStatus,
   TurnstileWidget,
 } from "~/components/turnstile-widget";
+import { Button } from "~/components/ui/button";
 import { maximumMegabytes } from "~/modules/files/file-policy";
 import {
   createProgramCueMultipartSession,
@@ -466,8 +467,7 @@ export function ApplicantVideoUpload({
         </progress>
       ) : null}
       <div className="page-actions">
-        <button
-          className="btn"
+        <Button
           type="button"
           disabled={uploadBlocked || !turnstileReady}
           onClick={upload}
@@ -479,59 +479,53 @@ export function ApplicantVideoUpload({
             : canReplace
               ? "Upload replacement"
               : "Upload video"}
-        </button>
+        </Button>
         {transferActive ? (
-          <button
-            className="btn"
+          <Button
             type="button"
             disabled={cancellationInFlight}
             onClick={pauseResume}
           >
             {state.status === "paused" ? "Resume upload" : "Pause upload"}
-          </button>
+          </Button>
         ) : null}
         {transferActive ? (
-          <button
-            className="btn danger"
+          <Button
+            variant="danger"
             type="button"
             disabled={cancellationInFlight}
             onClick={cancel}
           >
             {cancellationInFlight ? "Cancelling…" : "Cancel upload"}
-          </button>
+          </Button>
         ) : null}
         {!transferActive &&
         state.status === "error" &&
         uploadSession.current ? (
-          <button
-            className="btn"
+          <Button
             type="button"
             disabled={cancellationInFlight}
             onClick={resumeFailedTransfer}
           >
             Resume upload
-          </button>
+          </Button>
         ) : null}
         {!transferActive &&
         state.status === "error" &&
         uploadSession.current ? (
-          <button
-            className="btn danger"
+          <Button
+            variant="danger"
             type="button"
             disabled={cancellationInFlight}
             onClick={cancel}
           >
             {cancellationInFlight ? "Cancelling…" : "Cancel upload"}
-          </button>
+          </Button>
         ) : null}
         {state.status === "scanning" || state.status === "attached" ? (
-          <button
-            className="btn"
-            type="button"
-            onClick={() => window.location.reload()}
-          >
+          <Button type="button" onClick={() => window.location.reload()}>
             Refresh scan status
-          </button>
+          </Button>
         ) : null}
       </div>
       {state.message ? (

@@ -1,6 +1,7 @@
 import { useEffect, useId, useRef, useState } from "react";
 import { useFetcher } from "react-router";
 
+import { Button } from "~/components/ui/button";
 import { canonicalSlugOnBlur, sanitizeSlugInput, slugify } from "~/lib/slug";
 
 export function DerivedSlugField({
@@ -134,16 +135,16 @@ export function DerivedSlugField({
           ? "Updates from the name until you edit it."
           : "Your custom slug will stay unchanged when the name changes."}
         {!derived && suggestion && suggestion !== value ? (
-          <button
-            className="btn pc-inline-action small"
-            type="button"
+          <Button
+            className="pc-inline-action"
+            size="small"
             onClick={() => {
               setDerived(true);
               onChange(suggestion);
             }}
           >
             Use suggested slug
-          </button>
+          </Button>
         ) : null}
       </span>
       {visibleError ? (

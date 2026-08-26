@@ -1,6 +1,7 @@
 import * as DialogPrimitive from "@radix-ui/react-dialog";
 import { X } from "lucide-react";
 import { type RefObject, useCallback, useEffect, useId, useRef } from "react";
+import { IconButton } from "~/components/ui/button";
 
 /** Width class. The default stays at the historical 680px. */
 type DialogSize = "sm" | "md" | "lg";
@@ -179,11 +180,10 @@ export function Dialog({
                   ) : null}
                 </div>
                 {dismissible ? (
-                  <DialogPrimitive.Close
-                    className="icon-btn modal-close"
-                    aria-label="Close"
-                  >
-                    <X aria-hidden size={16} />
+                  <DialogPrimitive.Close asChild>
+                    <IconButton className="modal-close" aria-label="Close">
+                      <X aria-hidden size={16} />
+                    </IconButton>
                   </DialogPrimitive.Close>
                 ) : null}
               </div>

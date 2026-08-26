@@ -17,7 +17,7 @@ import {
   UserRound,
 } from "lucide-react";
 import { Form, Link } from "react-router";
-
+import { Button, IconButton } from "~/components/ui/button";
 import type { SavedViewArea } from "~/platform/operations/saved-view-service.server";
 import type {
   AdminShellCommandPalette,
@@ -155,9 +155,9 @@ export function AdminAuxiliaryDialogs({
               the columns you are looking at now.
             </p>
             <div className="page-actions">
-              <button className="btn primary" type="submit">
+              <Button variant="primary" type="submit">
                 <Save aria-hidden size={14} /> Save view
-              </button>
+              </Button>
             </div>
           </Form>
           {areaViews.length ? (
@@ -181,13 +181,13 @@ export function AdminAuxiliaryDialogs({
                       </small>
                     </span>
                     <span className="pc-menu-meta">
-                      <button
+                      <Button
                         type="button"
-                        className="btn small"
+                        size="small"
                         onClick={() => selectCommand(view.href)}
                       >
                         Open
-                      </button>
+                      </Button>
                       {view.canDelete ? (
                         <Form method="post" action="/admin/views">
                           <input type="hidden" name="intent" value="delete" />
@@ -197,13 +197,13 @@ export function AdminAuxiliaryDialogs({
                             name="returnTo"
                             value={currentHref}
                           />
-                          <button
-                            className="icon-btn pc-menu-delete"
+                          <IconButton
+                            className="pc-menu-delete"
                             type="submit"
                             aria-label={`Delete the ${view.name} view`}
                           >
                             <Trash2 aria-hidden size={15} />
-                          </button>
+                          </IconButton>
                         </Form>
                       ) : null}
                     </span>
@@ -310,8 +310,9 @@ export function AdminAuxiliaryDialogs({
                       <span className="status success">Current</span>
                     ) : null}
                     {switchable ? (
-                      <button
-                        className={`btn small${isCurrent ? "" : " primary"}`}
+                      <Button
+                        size="small"
+                        variant={isCurrent ? undefined : "primary"}
                         type="submit"
                         /* Without a stated target every shell dialog opens with
                            focus on Close — the one control that undoes opening
@@ -325,7 +326,7 @@ export function AdminAuxiliaryDialogs({
                         {option.pendingInvitationRole
                           ? `Accept ${readableRole(option.pendingInvitationRole)} invitation${isCurrent ? "" : " and switch event"}`
                           : "Switch event"}
-                      </button>
+                      </Button>
                     ) : null}
                   </span>
                 </Form>

@@ -11,7 +11,6 @@ import {
 import {
   data,
   Form,
-  Link,
   useActionData,
   useNavigation,
   useSubmit,
@@ -55,6 +54,7 @@ import {
 } from "~/platform/demo/demo-reset.server";
 import { EventRealtimeService } from "~/platform/realtime/event-realtime.server";
 import "~/styles/workspace-demo.css";
+import { Button, ButtonLink } from "~/components/ui/button";
 import type { Route } from "./+types/demo-guide";
 
 type DemoWalkthroughStep = {
@@ -478,17 +478,17 @@ export default function DemoGuide({ loaderData }: Route.ComponentProps) {
         }
         actions={
           selectedIdentity ? (
-            <Link className="btn primary" to={selectedIdentity.destination}>
+            <ButtonLink variant="primary" to={selectedIdentity.destination}>
               Continue as {selectedIdentity.name}{" "}
               <ArrowRight aria-hidden size={15} />
-            </Link>
+            </ButtonLink>
           ) : (
-            <Link
-              className="btn primary"
+            <ButtonLink
+              variant="primary"
               to="/public/programme/future-of-events-2027"
             >
               Browse anonymously <ArrowRight aria-hidden size={15} />
-            </Link>
+            </ButtonLink>
           )
         }
       />
@@ -578,10 +578,10 @@ export default function DemoGuide({ loaderData }: Route.ComponentProps) {
                             value={loaderData.returnTo}
                           />
                         ) : null}
-                        <button className="btn small" type="submit">
+                        <Button size="small" type="submit">
                           Continue as {identity.name}{" "}
                           <ArrowRight aria-hidden size={13} />
-                        </button>
+                        </Button>
                       </Form>
                     </td>
                   </tr>
@@ -641,10 +641,10 @@ export default function DemoGuide({ loaderData }: Route.ComponentProps) {
                             name="returnTo"
                             value={step.href}
                           />
-                          <button className="btn small" type="submit">
+                          <Button size="small" type="submit">
                             Open as {DEMO_IDENTITIES[step.identityKey].name}{" "}
                             <ArrowRight aria-hidden size={13} />
-                          </button>
+                          </Button>
                         </Form>
                       </li>
                     ))}
@@ -779,14 +779,14 @@ export default function DemoGuide({ loaderData }: Route.ComponentProps) {
                     required
                   />
                 </label>
-                <button
-                  className="btn danger"
+                <Button
+                  variant="danger"
                   type="submit"
                   disabled={busy || activeTotal > 0}
                 >
                   <RefreshCcw aria-hidden size={14} />{" "}
                   {busy ? "Restoring demo…" : "Reset complete demo event"}
-                </button>
+                </Button>
               </Form>
             ) : (
               <p className="help">

@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import { Form } from "react-router";
 
 import { AdminTaskFormFieldBuilder } from "~/components/admin-task-form-field-builder";
+import { Button } from "~/components/ui/button";
 import { CharacterCount } from "~/components/ui/character-count";
 import {
   normalizeTaskTemplateDraft,
@@ -135,9 +136,9 @@ export function AdminTaskPlanPanel({
                 I confirm this optional task should be created and automatically
                 assigned when a submission is accepted.
               </label>
-              <button type="submit" className="btn" disabled={busy}>
+              <Button type="submit" disabled={busy}>
                 <Plus aria-hidden size={15} /> Create session review task
-              </button>
+              </Button>
             </Form>
           )}
           {!sessionDetailsReviewReady && !data.participantSupportUrl ? (
@@ -179,9 +180,9 @@ export function AdminTaskPlanPanel({
               I confirm these forms should be created and automatically assigned
               to speakers when a submission is accepted.
             </label>
-            <button type="submit" className="btn" disabled={busy}>
+            <Button type="submit" disabled={busy}>
               <Plus aria-hidden size={15} /> Create travel forms
-            </button>
+            </Button>
           </Form>
         </section>
       ) : null}
@@ -228,15 +229,14 @@ export function AdminTaskPlanPanel({
                 ))}
               </select>
             </label>
-            <button
+            <Button
               type="submit"
-              className="btn"
               disabled={
                 !assignableTemplates.length || !assignmentTargets.length || busy
               }
             >
               <Plus aria-hidden size={15} /> Assign with prerequisites
-            </button>
+            </Button>
           </Form>
         </section>
       ) : null}
@@ -679,9 +679,9 @@ export function AdminTaskPlanPanel({
                 </div>
               </fieldset>
             ) : null}
-            <button type="submit" className="btn">
+            <Button type="submit">
               <Plus aria-hidden size={15} /> Create template
-            </button>
+            </Button>
           </Form>
         </section>
       ) : null}

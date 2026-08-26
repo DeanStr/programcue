@@ -1,5 +1,6 @@
-import { data, Form, Link, useActionData } from "react-router";
+import { data, Form, useActionData } from "react-router";
 import { SubmissionDataGrid } from "~/components/submission-data-grid";
+import { Button, ButtonLink } from "~/components/ui/button";
 import { statusPresentation } from "~/components/ui/domain-status-badge";
 import { adminRecordBreadcrumbLabelAtPath } from "~/modules/administration/admin-route-breadcrumb";
 import { EvaluationStateError } from "~/modules/evaluations/evaluation-errors";
@@ -233,12 +234,10 @@ export default function SubmissionsAdmin({ loaderData }: Route.ComponentProps) {
           </p>
         </div>
         <div className="page-actions">
-          <Link className="btn" to="/admin/submissions/form">
-            Form Builder
-          </Link>
-          <Link className="btn primary" to="/admin/submissions/new">
+          <ButtonLink to="/admin/submissions/form">Form Builder</ButtonLink>
+          <ButtonLink variant="primary" to="/admin/submissions/new">
             New
-          </Link>
+          </ButtonLink>
         </div>
       </div>
       <ActionNotice result={actionData} />
@@ -357,12 +356,12 @@ export default function SubmissionsAdmin({ loaderData }: Route.ComponentProps) {
             </select>
           </label>
           <div className="submissions-filter-actions">
-            <button className="btn small primary" type="submit">
+            <Button variant="primary" size="small" type="submit">
               Apply
-            </button>
-            <Link className="btn small" to="/admin/submissions">
+            </Button>
+            <ButtonLink size="small" to="/admin/submissions">
               Clear
-            </Link>
+            </ButtonLink>
           </div>
         </Form>
         <SubmissionDataGrid
@@ -376,23 +375,23 @@ export default function SubmissionsAdmin({ loaderData }: Route.ComponentProps) {
         {totalPages > 1 ? (
           <nav className="submissions-pager" aria-label="Submission pages">
             {page > 1 ? (
-              <Link
-                className="btn small"
+              <ButtonLink
+                size="small"
                 to={`?${listSearchParams(view, page - 1)}`}
               >
                 ← Previous
-              </Link>
+              </ButtonLink>
             ) : null}
             <span className="pill">
               Page {page} of {totalPages}
             </span>
             {page < totalPages ? (
-              <Link
-                className="btn small"
+              <ButtonLink
+                size="small"
                 to={`?${listSearchParams(view, page + 1)}`}
               >
                 Next →
-              </Link>
+              </ButtonLink>
             ) : null}
           </nav>
         ) : null}

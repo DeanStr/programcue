@@ -1,6 +1,7 @@
 import { AlertTriangle, Lock, Send } from "lucide-react";
 
 import { useReviewWorkbenchModel } from "~/components/review-workbench-model";
+import { Button } from "~/components/ui/button";
 import { EmptyState } from "~/components/ui/states";
 import { ReviewDiscussionPanel } from "./review-workbench-discussion-panel";
 import {
@@ -252,6 +253,9 @@ export function ReviewScorePanel() {
               {requiredCriterionCount}
               <span className="sr-only"> required criteria complete</span>
             </span>
+            <a className="review-actions-jump" href="#review-actions">
+              Review actions
+            </a>
             <button
               type="button"
               className="review-shortcut-trigger"
@@ -320,17 +324,17 @@ export function ReviewScorePanel() {
                     assignment — nothing you have already typed will be sent to
                     the applicant.
                   </p>
-                  <button
+                  <Button
                     ref={conflictTriggerRef}
-                    className="btn danger small"
-                    type="button"
+                    variant="danger"
+                    size="small"
                     onClick={() => {
                       clearAutosaveTimer();
                       setConflictOpen(true);
                     }}
                   >
                     Declare conflict and return
-                  </button>
+                  </Button>
                 </div>
               ) : conflictChoice === "unanswered" ? (
                 <p className="review-conflict-pending subtle">
@@ -613,7 +617,7 @@ export function ReviewScorePanel() {
             />
           </div>
         </div>
-        <div className="sticky-actions review-actions">
+        <div className="sticky-actions review-actions" id="review-actions">
           {readOnly ? (
             <span className="subtle" role="status">
               This review is submitted and locked.
@@ -635,9 +639,9 @@ export function ReviewScorePanel() {
                         : "No draft yet"}
               </span>
               <div className="review-action-group">
-                <button
+                <Button
                   ref={saveDraftTriggerRef}
-                  className="btn review-save-draft"
+                  className="review-save-draft"
                   type="submit"
                   name="intent"
                   value="save"
@@ -645,11 +649,10 @@ export function ReviewScorePanel() {
                   disabled={fetcher.state !== "idle"}
                 >
                   Save draft
-                </button>
-                <button
+                </Button>
+                <Button
                   ref={submitReviewTriggerRef}
-                  className="btn review-submit-stay"
-                  type="button"
+                  className="review-submit-stay"
                   disabled={fetcher.state !== "idle" || !submitAllowed}
                   title={submitBlockedReason}
                   onClick={() => {
@@ -659,11 +662,10 @@ export function ReviewScorePanel() {
                   }}
                 >
                   Submit review
-                </button>
-                <button
+                </Button>
+                <Button
                   ref={submitNextTriggerRef}
-                  className="btn primary"
-                  type="button"
+                  variant="primary"
                   disabled={fetcher.state !== "idle" || !submitAllowed}
                   title={submitBlockedReason}
                   onClick={() => {
@@ -673,7 +675,7 @@ export function ReviewScorePanel() {
                   }}
                 >
                   Submit and open next
-                </button>
+                </Button>
               </div>
               {submitBlockedReason ? (
                 <p className="review-submit-block subtle" role="status">

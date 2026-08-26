@@ -142,15 +142,16 @@
 }
 .session-card.conflict {
   border-color: var(--state-bad-solid);
-  box-shadow: inset 0 0 0 1px var(--state-bad-solid);
-  background: #fff5f5;
+  background: var(--state-bad-surface);
   color: var(--state-bad-text);
+  outline: 1px solid var(--state-bad-solid);
+  outline-offset: -2px;
 }
 .session-card.conflict.warning {
   border-color: var(--state-warn-solid);
-  box-shadow: inset 0 0 0 1px var(--state-warn-solid);
   background: var(--state-warn-surface-subtle);
   color: var(--state-warn-text);
+  outline-color: var(--state-warn-solid);
 }
 .conflict-panel {
   padding: var(--space-4);
@@ -158,8 +159,8 @@
 .validation-list {
   display: grid;
   gap: var(--space-2);
-  background: #f0fdf4;
-  border: 1px solid #bbf7d0;
+  background: var(--state-good-surface);
+  border: 1px solid var(--state-good-border);
   padding: var(--space-3);
   border-radius: var(--radius-sm);
   color: var(--state-good-text);
@@ -514,7 +515,7 @@
 }
 .schedule-session-source.dragging {
   opacity: 0.45;
-  box-shadow: var(--shadow);
+  box-shadow: var(--elev-3);
   z-index: 10;
 }
 
@@ -650,10 +651,6 @@
   background: var(--surface-sunken);
   overflow: hidden;
 }
-.schedule-room-board > .time.is-hour,
-.schedule-room-board > .schedule-drop.is-hour {
-  box-shadow: inset 0 1px 0 var(--border-strong);
-}
 .schedule-room-scroll {
   flex: 1 1 auto;
   max-width: 100%;
@@ -704,6 +701,10 @@
   white-space: nowrap;
 }
 .schedule-room-board > .time.is-hour {
+  background-image: linear-gradient(var(--border-strong), var(--border-strong));
+  background-position: top;
+  background-repeat: no-repeat;
+  background-size: 100% 1px;
   color: var(--text-secondary);
   font-weight: var(--weight-semibold);
 }
@@ -718,10 +719,14 @@
 }
 .schedule-room-board > .schedule-drop.is-over {
   background: var(--brand-50);
-  box-shadow: inset 0 0 0 2px var(--brand-600);
+  outline: 2px solid var(--brand-600);
+  outline-offset: -2px;
 }
 .schedule-room-board > .schedule-drop.is-hour:not(.is-over) {
-  box-shadow: inset 0 1px 0 var(--border-strong);
+  background-image: linear-gradient(var(--border-strong), var(--border-strong));
+  background-position: top;
+  background-repeat: no-repeat;
+  background-size: 100% 1px;
 }
 
 /* Selection is a designed ring, not a leftover brown outline. */
@@ -729,9 +734,7 @@
 .schedule-room-board .session-card.revealed,
 .schedule-room-board .session-card.focused {
   outline: none;
-  box-shadow:
-    0 0 0 2px var(--surface),
-    0 0 0 4px var(--ink);
+  box-shadow: var(--focus-selection);
   z-index: 8;
 }
 
@@ -896,9 +899,20 @@
   padding: 0 var(--space-4) var(--space-4);
 }
 .schedule-notice.warn {
+  position: relative;
   background: var(--surface);
   border-color: var(--border);
-  box-shadow: inset 3px 0 0 var(--state-warn-solid);
+}
+.schedule-notice.warn::before {
+  position: absolute;
+  inset-block: 0;
+  inset-inline-start: 0;
+  width: 3px;
+  border-start-start-radius: inherit;
+  border-end-start-radius: inherit;
+  background: var(--state-warn-solid);
+  content: "";
+  pointer-events: none;
 }
 .schedule-canvas .schedule-view-tabs {
   margin: 0;

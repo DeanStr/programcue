@@ -67,7 +67,7 @@ a {
 :focus-visible {
   outline: var(--focus-width) solid var(--focus-ring);
   outline-offset: var(--focus-halo-width);
-  box-shadow: 0 0 0 var(--focus-halo-width) var(--focus-halo);
+  box-shadow: var(--focus-halo-shadow);
 }
 .app-admin {
   min-height: 100dvh;
@@ -92,7 +92,7 @@ a {
      own inline padding instead. */
   padding: var(--space-5) 0;
   z-index: 60;
-  box-shadow: 12px 0 32px rgba(19, 32, 31, 0.08);
+  box-shadow: var(--elev-3);
 }
 .brand {
   display: flex;
@@ -124,18 +124,16 @@ a {
 .event-branded .brand-mark {
   --brand-mark-accent: var(--event-accent);
 }
-.event-branded .btn.primary {
-  background: var(--accent-ink, var(--brand-700));
-  border-color: var(--accent-ink, var(--brand-700));
-  color: var(--accent-on-solid, var(--text-inverse));
-}
-.event-branded .btn.primary:hover {
-  background: color-mix(
+.event-branded {
+  --button-primary-background: var(--accent-ink, var(--brand-700));
+  --button-primary-border: var(--accent-ink, var(--brand-700));
+  --button-primary-color: var(--accent-on-solid, var(--text-inverse));
+  --button-primary-hover-background: color-mix(
     in srgb,
     var(--accent-ink, var(--brand-700)) 86%,
     var(--ink)
   );
-  border-color: color-mix(
+  --button-primary-hover-border: color-mix(
     in srgb,
     var(--accent-ink, var(--brand-700)) 86%,
     var(--ink)
@@ -275,7 +273,7 @@ a {
   gap: var(--space-4);
   padding: var(--space-3) var(--space-5);
   z-index: 50;
-  box-shadow: 0 4px 16px rgba(19, 32, 31, 0.04);
+  box-shadow: var(--elev-1);
 }
 .event-switcher {
   display: flex;
@@ -325,27 +323,6 @@ a {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-}
-.event-switcher-option .card-title > div {
-  flex: 1 1 auto;
-  min-width: 0;
-}
-.event-switcher-option .card-title > div > strong {
-  display: block;
-  line-height: 20px;
-}
-.event-switcher-option .subtle {
-  margin: var(--space-1) 0 0;
-  line-height: 20px;
-}
-.event-switcher-option .card-title > .status {
-  align-self: center;
-  flex: 0 0 auto;
-  line-height: 16px;
-  margin-left: auto;
-}
-.event-switcher-option.is-current .card-title {
-  margin-bottom: 0;
 }
 /* Adjacent to the switcher, not pinned to the far right: pinned, it left ~600px
    of empty navy between the two halves of the bar and read as two toolbars. */
@@ -416,20 +393,18 @@ a {
 .icon-btn:active {
   transform: translateY(1px);
 }
-/* biome-ignore lint/style/noDescendingSpecificity: Component and state variants intentionally precede shared primitives; their higher specificity preserves the intended override. */
 .btn.primary {
   /* Flat. A floating primary was the kit-button tell: Linear and Stripe
      paint emphasis with colour, not a drop shadow. */
-  background: var(--brand-600);
-  border-color: transparent;
-  color: var(--text-inverse);
+  background: var(--button-primary-background, var(--brand-600));
+  border-color: var(--button-primary-border, transparent);
+  color: var(--button-primary-color, var(--text-inverse));
   box-shadow: none;
   font-weight: var(--weight-semibold);
 }
-/* biome-ignore lint/style/noDescendingSpecificity: Component and state variants intentionally precede shared primitives; their higher specificity preserves the intended override. */
 .btn.primary:hover {
-  background: var(--brand-700);
-  border-color: transparent;
+  background: var(--button-primary-hover-background, var(--brand-700));
+  border-color: var(--button-primary-hover-border, transparent);
 }
 .btn.primary:active {
   background: var(--brand-900);
@@ -442,11 +417,6 @@ a {
 .btn.danger:hover {
   border-color: var(--state-bad-solid);
   background: var(--state-bad-surface);
-}
-.btn.warning {
-  color: var(--state-warn-text);
-  border-color: var(--state-warn-border);
-  background: var(--state-warn-surface-subtle);
 }
 .btn.ghost {
   border-color: transparent;
@@ -499,6 +469,18 @@ a {
   box-shadow: none;
   cursor: not-allowed;
   transform: none;
+}
+@media (pointer: coarse) {
+  .btn,
+  .icon-btn {
+    min-height: 44px;
+  }
+  .btn.small {
+    min-height: 36px;
+  }
+  .icon-btn {
+    width: 44px;
+  }
 }
 /* Action rows wrap as a group so individual labels never have to. Scoped to
    rows: a standalone button with a long label must still wrap, or it forces
@@ -639,7 +621,7 @@ a {
   border-radius: var(--radius-xs);
   background: var(--ink);
   color: white;
-  box-shadow: var(--shadow);
+  box-shadow: var(--elev-3);
   font-size: var(--text-2xs);
   font-weight: var(--weight-semibold);
   line-height: 1.35;
@@ -732,7 +714,6 @@ a {
 .card h3 {
   margin: 0;
 }
-/* biome-ignore lint/style/noDescendingSpecificity: Component and state variants intentionally precede shared primitives; their higher specificity preserves the intended override. */
 .card-title {
   display: flex;
   align-items: center;
@@ -751,7 +732,6 @@ a {
 .card-title .right {
   margin-left: auto;
 }
-/* biome-ignore lint/style/noDescendingSpecificity: Component and state variants intentionally precede shared primitives; their higher specificity preserves the intended override. */
 .subtle {
   color: var(--muted);
 }
@@ -928,61 +908,6 @@ a {
 .rail-left {
   border-left: 3px solid var(--rail, var(--brand-600));
 }
-/* biome-ignore lint/style/noDescendingSpecificity: Component and state variants intentionally precede shared primitives; their higher specificity preserves the intended override. */
-.status {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--space-2);
-  border: 0;
-  border-radius: 0;
-  padding: 0;
-  background: transparent;
-  font-size: var(--text-2xs);
-  font-weight: var(--weight-medium);
-  white-space: nowrap;
-  color: var(--text-secondary);
-}
-.status::before {
-  content: "";
-  width: 6px;
-  height: 6px;
-  flex: none;
-  border-radius: var(--radius-full);
-  background: currentColor;
-}
-.status:has(svg)::before {
-  display: none;
-}
-.status.success {
-  background: transparent;
-  color: var(--state-good-text);
-  border: 0;
-}
-.status.warning {
-  background: transparent;
-  color: var(--state-warn-text);
-  border: 0;
-}
-.status.danger {
-  background: transparent;
-  color: var(--state-bad-text);
-  border: 0;
-}
-.status.info {
-  background: transparent;
-  color: var(--brand-700);
-  border: 0;
-}
-.status.ai {
-  background: transparent;
-  color: var(--brand-700);
-  border: 0;
-}
-.status.neutral {
-  background: transparent;
-  color: var(--text-secondary);
-  border: 0;
-}
 .progress {
   height: 4px;
   border-radius: var(--radius-full);
@@ -1011,7 +936,8 @@ a {
    page renders as the faintest thing on it. */
 .progress.is-zero {
   background: var(--state-bad-surface);
-  box-shadow: inset 0 0 0 1px var(--state-bad-border);
+  outline: 1px solid var(--state-bad-border);
+  outline-offset: -1px;
 }
 .progress-row {
   display: grid;

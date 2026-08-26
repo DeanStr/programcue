@@ -6,8 +6,8 @@ import {
   Sparkles,
 } from "lucide-react";
 import { Form, Link } from "react-router";
+import { Button, ButtonLink } from "~/components/ui/button";
 import { requireValue } from "~/lib/required-value";
-
 import type {
   AiAssistantResult,
   AiProposalPreview,
@@ -157,9 +157,9 @@ function ReadinessAdvisoryPanel({ result }: { result: ContextualAiResult }) {
                 <p>
                   <strong>Why AI ranked this:</strong> {priority.rationale}
                 </p>
-                <Link className="btn small" to={priority.href}>
+                <ButtonLink size="small" to={priority.href}>
                   {priority.action}
-                </Link>
+                </ButtonLink>
               </li>
             ))}
           </ol>
@@ -309,7 +309,7 @@ export function ProposalApproval({
               <label className="label">
                 Subject
                 <input
-                  className="input"
+                  className="field"
                   type="text"
                   name="subject"
                   minLength={3}
@@ -335,9 +335,7 @@ export function ProposalApproval({
                 immutable template version and re-resolve every recipient before
                 approval.
               </p>
-              <button className="btn" type="submit">
-                Update exact preview
-              </button>
+              <Button type="submit">Update exact preview</Button>
             </Form>
           ) : (
             <div style={{ whiteSpace: "pre-wrap" }}>
@@ -403,23 +401,23 @@ export function ProposalApproval({
         </div>
       ) : null}
       {executedTaskId ? (
-        <Link
-          className="btn primary"
+        <ButtonLink
+          variant="primary"
           to={`/admin/tasks?task=${encodeURIComponent(executedTaskId)}`}
         >
           <CheckCircle2 aria-hidden size={14} /> Open created task
-        </Link>
+        </ButtonLink>
       ) : executedCommunicationId && executedOperationId ? (
-        <Link
-          className="btn primary"
+        <ButtonLink
+          variant="primary"
           to={`/admin/operations?operation=${encodeURIComponent(executedOperationId)}`}
         >
           <CheckCircle2 aria-hidden size={14} /> Open communication operation
-        </Link>
+        </ButtonLink>
       ) : executedDomainEntityId && executedHref ? (
-        <Link className="btn primary" to={executedHref}>
+        <ButtonLink variant="primary" to={executedHref}>
           <CheckCircle2 aria-hidden size={14} /> Open approved result
-        </Link>
+        </ButtonLink>
       ) : expired ? (
         <p className="help">
           Generate a fresh preview so current event validation runs again.
@@ -438,7 +436,7 @@ export function ProposalApproval({
                   : `${requireValue(domainCopy, "Required domainCopy is unavailable.").confirmation} I approve this action.`}
             </span>
           </label>
-          <button className="btn primary" type="submit">
+          <Button variant="primary" type="submit">
             {reminder ? (
               <>
                 <Send aria-hidden size={14} /> Approve and queue reminder
@@ -449,7 +447,7 @@ export function ProposalApproval({
               requireValue(domainCopy, "Required domainCopy is unavailable.")
                 .button
             )}
-          </button>
+          </Button>
         </Form>
       )}
     </section>
@@ -472,12 +470,12 @@ export function AssistantResultPanel({
         </div>
         <div style={{ whiteSpace: "pre-wrap" }}>{result.answer}</div>
         <Attribution attribution={result.attribution} />
-        <Link
-          className="btn small"
+        <ButtonLink
+          size="small"
           to={`/admin/operations?operation=${encodeURIComponent(result.operationId)}`}
         >
           Open assistant operation
-        </Link>
+        </ButtonLink>
       </section>
       {showProposals
         ? result.proposals.map((proposal) => (

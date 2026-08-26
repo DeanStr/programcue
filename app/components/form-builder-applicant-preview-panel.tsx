@@ -10,6 +10,7 @@ import {
   ApplicantFormStepStatus,
 } from "~/components/applicant-form-step-chrome";
 import { BrandMark } from "~/components/brand-mark";
+import { Button } from "~/components/ui/button";
 import { programmeAccentPalette } from "~/modules/programme/programme-presentation";
 import {
   APPLICANT_SPEAKERS_STEP_ID,
@@ -285,31 +286,32 @@ export function ApplicantPreviewPanel({
               className="preview-viewport-controls right pc-plain-fieldset"
               aria-label="Applicant preview size"
             >
-              <button
-                className="btn small"
+              <Button
+                size="small"
                 type="button"
                 aria-pressed={viewport === "mobile"}
                 onClick={() => setViewport("mobile")}
               >
                 Mobile
-              </button>
-              <button
-                className="btn small"
+              </Button>
+              <Button
+                size="small"
                 type="button"
                 aria-pressed={viewport === "desktop"}
                 onClick={() => setViewport("desktop")}
               >
                 Desktop
-              </button>
+              </Button>
             </fieldset>
             {onClose ? (
-              <button
-                className="btn small fb-preview-close"
+              <Button
+                size="small"
+                className="fb-preview-close"
                 type="button"
                 onClick={onClose}
               >
                 Close preview
-              </button>
+              </Button>
             ) : null}
           </div>
           <div className="fb-preview-scroll">
@@ -474,13 +476,13 @@ export function ApplicantPreviewPanel({
                         </span>
                       </div>
                     ) : null}
-                    <button
-                      className="btn primary"
+                    <Button
+                      variant="primary"
                       type="button"
                       onClick={validatePreview}
                     >
                       Validate test submission
-                    </button>
+                    </Button>
                     <small className="help">
                       Test values stay in this preview. No applicant or
                       submission record is saved.

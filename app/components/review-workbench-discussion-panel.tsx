@@ -2,6 +2,7 @@ import { Lock } from "lucide-react";
 import { useFetcher } from "react-router";
 import { useEvaluationDiscussionHistory } from "~/components/evaluation-discussion-history";
 import { useReviewWorkbenchModel } from "~/components/review-workbench-model";
+import { Button } from "~/components/ui/button";
 import { EventDateTime } from "~/components/ui/event-date-time";
 
 export function ReviewDiscussionPanel() {
@@ -53,14 +54,14 @@ export function ReviewDiscussionPanel() {
         <>
           {history.hasEarlier ? (
             <div className="page-actions mb">
-              <button
-                className="btn small"
+              <Button
+                size="small"
                 type="button"
                 disabled={history.loadingEarlier}
                 onClick={history.loadEarlier}
               >
                 {history.loadingEarlier ? "Loading…" : "Load earlier messages"}
-              </button>
+              </Button>
             </div>
           ) : null}
           {history.messages.length ? (
@@ -135,13 +136,13 @@ export function ReviewDiscussionPanel() {
                 />
               </label>
               <div>
-                <button
+                <Button
                   type="submit"
-                  className="btn primary"
+                  variant="primary"
                   disabled={fetcher.state !== "idle"}
                 >
                   {fetcher.state === "idle" ? "Add message" : "Adding…"}
-                </button>
+                </Button>
               </div>
             </fetcher.Form>
           ) : (

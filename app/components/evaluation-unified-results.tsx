@@ -2,6 +2,7 @@ import { Form, Link, useSearchParams } from "react-router";
 
 import { useEvaluationAdminModel } from "~/components/evaluation-admin-model";
 import { EvaluationResultsToolbar } from "~/components/evaluation-results-toolbar";
+import { Button, ButtonLink, ButtonSummary } from "~/components/ui/button";
 import { EventDateTime } from "~/components/ui/event-date-time";
 import { EmptyState } from "~/components/ui/states";
 
@@ -318,7 +319,7 @@ export function EvaluationUnifiedResults() {
                                     <label className="label">
                                       Human assessment score
                                       <input
-                                        className="input"
+                                        className="field"
                                         name="score"
                                         type="number"
                                         min="1"
@@ -356,9 +357,9 @@ export function EvaluationUnifiedResults() {
                                       human assessment without altering the AI
                                       artifact.
                                     </label>
-                                    <button type="submit" className="btn small">
+                                    <Button type="submit" size="small">
                                       Save human assessment
-                                    </button>
+                                    </Button>
                                   </Form>
                                 ) : null}
                               </article>
@@ -783,9 +784,9 @@ export function EvaluationUnifiedResults() {
                                   "running";
                               return (
                                 <details className="mt">
-                                  <summary className="btn small">
+                                  <ButtonSummary size="small">
                                     Reopen released decision
-                                  </summary>
+                                  </ButtonSummary>
                                   {notificationInProgress ? (
                                     <div className="validation-item warn mt">
                                       <strong>
@@ -859,12 +860,13 @@ export function EvaluationUnifiedResults() {
                                               ? "I understand a pending notification will be cancelled and messages already sent cannot be recalled."
                                               : "I understand there is no pending notification to cancel and messages already sent cannot be recalled."}
                                       </label>
-                                      <button
+                                      <Button
                                         type="submit"
-                                        className="btn small danger"
+                                        variant="danger"
+                                        size="small"
                                       >
                                         Confirm reopen
-                                      </button>
+                                      </Button>
                                     </Form>
                                   )}
                                 </details>
@@ -889,20 +891,14 @@ export function EvaluationUnifiedResults() {
       {loaderData.resultsPageCount > 1 ? (
         <nav className="page-actions mt" aria-label="Evaluation results pages">
           {loaderData.resultsPage > 1 ? (
-            <Link
-              className="btn small"
-              to={pageHref(loaderData.resultsPage - 1)}
-            >
+            <ButtonLink size="small" to={pageHref(loaderData.resultsPage - 1)}>
               Previous
-            </Link>
+            </ButtonLink>
           ) : null}
           {loaderData.resultsPage < loaderData.resultsPageCount ? (
-            <Link
-              className="btn small"
-              to={pageHref(loaderData.resultsPage + 1)}
-            >
+            <ButtonLink size="small" to={pageHref(loaderData.resultsPage + 1)}>
               Next
-            </Link>
+            </ButtonLink>
           ) : null}
         </nav>
       ) : null}

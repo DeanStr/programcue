@@ -1,3 +1,4 @@
+import { Button } from "~/components/ui/button";
 import { ScheduleConflictExplanationAction } from "~/modules/ai/contextual-ai-actions";
 import type {
   ScheduleFetcher,
@@ -114,13 +115,9 @@ export function ScheduleValidationPanel({
               required
             />
           </label>
-          <button
-            className="btn"
-            type="submit"
-            disabled={fetcher.state !== "idle"}
-          >
+          <Button type="submit" disabled={fetcher.state !== "idle"}>
             Save policies
-          </button>
+          </Button>
         </fetcher.Form>
       </details>
       {workspace.conflicts.map((conflict) => {
@@ -145,13 +142,13 @@ export function ScheduleValidationPanel({
             <p>{conflict.message}</p>
             <div className="schedule-conflict-actions">
               {entryIds.length ? (
-                <button
-                  className="btn small"
+                <Button
+                  size="small"
                   type="button"
                   onClick={() => revealConflictEntries(entryIds)}
                 >
                   Show on board
-                </button>
+                </Button>
               ) : null}
               <ScheduleConflictExplanationAction conflictId={conflict.id} />
             </div>

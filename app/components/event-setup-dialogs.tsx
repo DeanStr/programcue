@@ -1,5 +1,6 @@
 import type { useFetcher } from "react-router";
 import { Dialog } from "~/components/dialog";
+import { Button } from "~/components/ui/button";
 import type { EventSetup } from "~/modules/events/event-repository.server";
 import type { ActionResponse, action } from "~/routes/event-setup";
 
@@ -36,13 +37,13 @@ export function AddRoomDialog({
           onClose={cancel}
           footer={
             <>
-              <button type="button" className="btn" onClick={cancel}>
+              <Button type="button" onClick={cancel}>
                 Cancel
-              </button>
-              <button
+              </Button>
+              <Button
                 type="submit"
                 form="event-add-room-form"
-                className="btn primary"
+                variant="primary"
                 disabled={
                   fetcher.state !== "idle" ||
                   !newRoomName.trim() ||
@@ -51,7 +52,7 @@ export function AddRoomDialog({
                 }
               >
                 {fetcher.state === "submitting" ? "Adding…" : "Add room"}
-              </button>
+              </Button>
             </>
           }
         >
@@ -170,22 +171,18 @@ export function AdministratorInvitationDialog({
               <p className="validation-item error">{data.message}</p>
             ) : null}
             <div className="modal-foot event-setup-modal-foot">
-              <button
-                type="button"
-                className="btn"
-                onClick={() => setOpen(false)}
-              >
+              <Button type="button" onClick={() => setOpen(false)}>
                 Cancel
-              </button>
-              <button
+              </Button>
+              <Button
                 type="submit"
-                className="btn primary"
+                variant="primary"
                 disabled={fetcher.state !== "idle"}
               >
                 {fetcher.state === "submitting"
                   ? "Creating…"
                   : "Create invitation"}
-              </button>
+              </Button>
             </div>
           </fetcher.Form>
         </Dialog>
@@ -272,16 +269,12 @@ export function EventRepositoryDialogs({
               </p>
             ) : null}
             <div className="modal-foot event-setup-modal-foot">
-              <button
-                type="button"
-                className="btn"
-                onClick={() => setAirtableOpen(false)}
-              >
+              <Button type="button" onClick={() => setAirtableOpen(false)}>
                 Cancel
-              </button>
-              <button
+              </Button>
+              <Button
                 type="submit"
-                className="btn primary"
+                variant="primary"
                 disabled={
                   repositoryFetcher.state !== "idle" || hasUnsavedChanges
                 }
@@ -289,7 +282,7 @@ export function EventRepositoryDialogs({
                 {repositoryFetcher.state === "submitting"
                   ? "Validating…"
                   : "Validate and save"}
-              </button>
+              </Button>
             </div>
           </repositoryFetcher.Form>
         </Dialog>
@@ -354,16 +347,12 @@ export function EventRepositoryDialogs({
                   value={repositoryData.preview.previewId}
                 />
                 <div className="modal-foot event-setup-modal-foot">
-                  <button
-                    type="button"
-                    className="btn"
-                    onClick={() => setMigrationOpen(false)}
-                  >
+                  <Button type="button" onClick={() => setMigrationOpen(false)}>
                     Cancel
-                  </button>
-                  <button
+                  </Button>
+                  <Button
                     type="submit"
-                    className="btn primary"
+                    variant="primary"
                     disabled={
                       repositoryFetcher.state !== "idle" || hasUnsavedChanges
                     }
@@ -371,7 +360,7 @@ export function EventRepositoryDialogs({
                     {repositoryFetcher.state === "submitting"
                       ? "Reconciling…"
                       : "Confirm authority switch"}
-                  </button>
+                  </Button>
                 </div>
               </repositoryFetcher.Form>
             </>
@@ -406,16 +395,12 @@ export function EventRepositoryDialogs({
                 </p>
               ) : null}
               <div className="modal-foot event-setup-modal-foot">
-                <button
-                  type="button"
-                  className="btn"
-                  onClick={() => setMigrationOpen(false)}
-                >
+                <Button type="button" onClick={() => setMigrationOpen(false)}>
                   Cancel
-                </button>
-                <button
+                </Button>
+                <Button
                   type="submit"
-                  className="btn primary"
+                  variant="primary"
                   disabled={
                     repositoryFetcher.state !== "idle" || hasUnsavedChanges
                   }
@@ -423,7 +408,7 @@ export function EventRepositoryDialogs({
                   {repositoryFetcher.state === "submitting"
                     ? "Comparing…"
                     : "Create migration preview"}
-                </button>
+                </Button>
               </div>
             </repositoryFetcher.Form>
           )}

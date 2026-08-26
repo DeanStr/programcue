@@ -6,6 +6,7 @@ import {
   SitePanelHeading,
   SiteRecordDisclosure,
 } from "~/components/admin-public-site-panels";
+import { Button } from "~/components/ui/button";
 import type { PublicSiteSponsor } from "~/modules/public-site/public-site";
 
 function SponsorFields({ sponsor }: { sponsor?: PublicSiteSponsor }) {
@@ -134,21 +135,18 @@ export function AdminPublicSiteSponsors({
                 <input type="hidden" name="revision" value={sponsor.revision} />
                 <SponsorFields sponsor={sponsor} />
                 <div className="page-actions">
-                  <button
-                    className="btn small"
-                    type="submit"
-                    disabled={blocked || busy}
-                  >
+                  <Button size="small" type="submit" disabled={blocked || busy}>
                     Save sponsor
-                  </button>
-                  <button
-                    className="btn small danger"
+                  </Button>
+                  <Button
+                    variant="danger"
+                    size="small"
                     type="button"
                     disabled={blocked || busy}
                     onClick={() => onDelete(sponsor)}
                   >
                     Remove
-                  </button>
+                  </Button>
                 </div>
               </Form>
             </SiteRecordDisclosure>
@@ -165,13 +163,13 @@ export function AdminPublicSiteSponsors({
         <h3 className="public-site-panel-title">Add a sponsor</h3>
         <SponsorFields />
         <div className="page-actions">
-          <button
-            className="btn small"
+          <Button
+            size="small"
             type="submit"
             disabled={!draftCreated || blocked || busy}
           >
             <Plus aria-hidden size={14} /> Add sponsor
-          </button>
+          </Button>
         </div>
         {draftCreated ? null : (
           <p className="help">

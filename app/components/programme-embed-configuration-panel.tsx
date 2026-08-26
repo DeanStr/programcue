@@ -1,4 +1,5 @@
 import { Check, Clipboard, ExternalLink, RotateCcw } from "lucide-react";
+import { Button, ButtonAnchor } from "~/components/ui/button";
 import {
   PROGRAMME_EMBED_CONTROLS,
   PROGRAMME_EMBED_FIELDS,
@@ -75,9 +76,9 @@ export function EmbedConfigurationWorkflow({
           Choose the initial view, preview the published result, then copy
           installation code.
         </p>
-        <button className="btn small" type="button" onClick={reset}>
+        <Button size="small" type="button" onClick={reset}>
           <RotateCcw aria-hidden size={14} /> Reset
-        </button>
+        </Button>
       </div>
 
       <div className="programme-embed-builder-layout">
@@ -331,22 +332,24 @@ export function EmbedConfigurationWorkflow({
               className="segmented pc-plain-fieldset"
               aria-label="Preview width"
             >
-              <button
+              <Button
                 type="button"
-                className={`btn small${previewWidth === "desktop" ? " active" : ""}`}
+                size="small"
+                className={previewWidth === "desktop" ? "active" : undefined}
                 aria-pressed={previewWidth === "desktop"}
                 onClick={() => setPreviewWidth("desktop")}
               >
                 Desktop
-              </button>
-              <button
+              </Button>
+              <Button
                 type="button"
-                className={`btn small${previewWidth === "mobile" ? " active" : ""}`}
+                size="small"
+                className={previewWidth === "mobile" ? "active" : undefined}
                 aria-pressed={previewWidth === "mobile"}
                 onClick={() => setPreviewWidth("mobile")}
               >
                 Mobile
-              </button>
+              </Button>
             </fieldset>
           </div>
           <div
@@ -415,8 +418,8 @@ export function EmbedConfigurationWorkflow({
                       ? "Clipboard access failed. Select and copy the code manually."
                       : "Configuration is kept only in this page until you copy it."}
               </p>
-              <button
-                className="btn primary"
+              <Button
+                variant="primary"
                 type="button"
                 disabled={heightError !== null}
                 onClick={() => void copyCode()}
@@ -427,38 +430,38 @@ export function EmbedConfigurationWorkflow({
                   <Clipboard aria-hidden size={14} />
                 )}
                 {copyState === "copied" ? "Copied" : "Copy code"}
-              </button>
+              </Button>
             </div>
           </div>
 
           <div className="row-main programme-embed-feeds">
-            <a
-              className="btn small"
+            <ButtonAnchor
+              size="small"
               href={`/api/v1/public/events/${publicSlug}/programme?format=json`}
             >
               Static JSON
-            </a>
-            <a
-              className="btn small"
+            </ButtonAnchor>
+            <ButtonAnchor
+              size="small"
               href={`/api/v1/public/events/${publicSlug}/programme?format=html`}
             >
               Static HTML
-            </a>
-            <a
-              className="btn small"
+            </ButtonAnchor>
+            <ButtonAnchor
+              size="small"
               href={`/api/v1/public/events/${publicSlug}/calendar.ics`}
             >
               iCal feed
-            </a>
-            <a
-              className="btn small"
+            </ButtonAnchor>
+            <ButtonAnchor
+              size="small"
               href={previewUrl}
               target="_blank"
               rel="noopener noreferrer"
             >
               Open preview <ExternalLink aria-hidden size={13} />
               <span className="sr-only">(opens in a new tab)</span>
-            </a>
+            </ButtonAnchor>
           </div>
           <p className="help">
             Parent origins remain controlled by the deployment frame-ancestor

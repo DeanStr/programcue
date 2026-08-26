@@ -1,6 +1,7 @@
 import { AlertTriangle, CheckCircle2, ExternalLink } from "lucide-react";
 import { data, Form, Link, useActionData, useNavigation } from "react-router";
 import { ZodError } from "zod";
+import { Button, ButtonLink } from "~/components/ui/button";
 import { useConfirm } from "~/components/ui/confirm-dialog";
 import {
   DomainStatusBadge,
@@ -188,9 +189,9 @@ export default function IntegrationsAdmin({
           </p>
         </div>
         <div className="page-actions">
-          <Link className="btn" to="/admin/operations">
+          <ButtonLink to="/admin/operations">
             Operation history <ExternalLink aria-hidden size={13} />
-          </Link>
+          </ButtonLink>
         </div>
       </div>
 
@@ -326,9 +327,9 @@ export default function IntegrationsAdmin({
                 <option value="VIRTUAL">Virtual</option>
                 <option value="HYBRID">Hybrid</option>
               </select>
-              <button className="btn primary" disabled={busy} type="submit">
+              <Button variant="primary" disabled={busy} type="submit">
                 {busy ? "Verifying…" : "Verify and save"}
-              </button>
+              </Button>
             </div>
           </div>
         </Form>
@@ -434,15 +435,14 @@ export default function IntegrationsAdmin({
                   name="previewFingerprint"
                   value={preview.previewFingerprint}
                 />
-                <button
-                  className="btn"
+                <Button
                   type="submit"
                   name="mode"
                   value="dry_run"
                   disabled={busy}
                 >
                   Record this preview
-                </button>
+                </Button>
               </Form>
               <Form method="post">
                 <input type="hidden" name="intent" value="run" />
@@ -458,8 +458,8 @@ export default function IntegrationsAdmin({
                   name="previewFingerprint"
                   value={preview.previewFingerprint}
                 />
-                <button
-                  className="btn primary"
+                <Button
+                  variant="primary"
                   type="button"
                   disabled={
                     busy ||
@@ -488,13 +488,13 @@ export default function IntegrationsAdmin({
                   {preview.connection.demoNoWriteFixture
                     ? "Live export unavailable in demo"
                     : "Queue live export"}
-                </button>
+                </Button>
               </Form>
               <Form method="post">
                 <input type="hidden" name="intent" value="disconnect" />
                 <input type="hidden" name="connectionId" value={selected.id} />
-                <button
-                  className="btn danger"
+                <Button
+                  variant="danger"
                   type="button"
                   disabled={busy}
                   onClick={(event) => {
@@ -511,7 +511,7 @@ export default function IntegrationsAdmin({
                   }}
                 >
                   Disconnect
-                </button>
+                </Button>
               </Form>
             </div>
           </div>

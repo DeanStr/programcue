@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import { data, Link, useLocation, useNavigate } from "react-router";
 import { ProgrammeEmbedBuilder } from "~/components/programme-embed-builder";
 import { AdminWorkspaceTabs } from "~/components/ui/admin-workspace-tabs";
+import { ButtonLink } from "~/components/ui/button";
 import { DomainStatusBadge } from "~/components/ui/domain-status-badge";
 import { EventDateTime } from "~/components/ui/event-date-time";
 import { EmptyState } from "~/components/ui/states";
@@ -264,9 +265,9 @@ export default function AdminSection({ loaderData }: Route.ComponentProps) {
           </nav>
         </div>
         <div className="page-actions">
-          <Link className="btn primary" to="/admin/schedule">
+          <ButtonLink variant="primary" to="/admin/schedule">
             Open schedule
-          </Link>
+          </ButtonLink>
         </div>
       </div>
       {loaderData.createdSessionId ? (

@@ -1,6 +1,7 @@
 import { Form } from "react-router";
 
 import { useEvaluationAdminModel } from "~/components/evaluation-admin-model";
+import { Button } from "~/components/ui/button";
 import { EventDateTime } from "~/components/ui/event-date-time";
 
 export function AcceptedSpeakerInvitationsPanel() {
@@ -80,13 +81,13 @@ export function AcceptedSpeakerInvitationsPanel() {
                         name="expectedExpiresAt"
                         value={invitation.expiresAt}
                       />
-                      <button
+                      <Button
                         type="submit"
-                        className="btn small"
+                        size="small"
                         disabled={navigation.state !== "idle"}
                       >
                         Renew invitation
-                      </button>
+                      </Button>
                     </Form>
                   ) : (
                     <span className="help">Demo mode sends no email</span>

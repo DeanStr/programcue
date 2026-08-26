@@ -3,6 +3,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { Form, Link } from "react-router";
 
 import { DraftRecoveryStatus } from "~/components/draft-recovery-feedback";
+import { Button } from "~/components/ui/button";
 import { EmptyState } from "~/components/ui/states";
 import {
   type MergeValues,
@@ -199,14 +200,14 @@ export function TemplateEditor({
           <summary>Insert a merge field</summary>
           <div className="comms-merge-field-list">
             {MERGE_FIELDS.map((field) => (
-              <button
+              <Button
                 key={field}
-                className="btn small"
+                size="small"
                 type="button"
                 onClick={() => insertMergeField(field)}
               >
                 {field}
-              </button>
+              </Button>
             ))}
           </div>
         </details>
@@ -315,9 +316,8 @@ export function TemplateEditor({
         </details>
         <div className="row-actions">
           <DraftRecoveryStatus state={recoveryState} />
-          <button
+          <Button
             type="submit"
-            className="btn"
             name="intent"
             value="save-template"
             disabled={working}
@@ -325,11 +325,11 @@ export function TemplateEditor({
             {working && pendingIntent === "save-template"
               ? "Saving…"
               : "Save as new draft version"}
-          </button>
+          </Button>
           {selected?.versionStatus === "draft" ? (
-            <button
+            <Button
               type="submit"
-              className="btn primary"
+              variant="primary"
               name="intent"
               value="publish-template"
               formNoValidate
@@ -340,7 +340,7 @@ export function TemplateEditor({
                 : working && pendingIntent === "publish-template"
                   ? "Publishing…"
                   : "Publish this saved version"}
-            </button>
+            </Button>
           ) : null}
           {selected?.versionStatus === "draft" ? (
             <input type="hidden" name="templateVersionId" value={selected.id} />

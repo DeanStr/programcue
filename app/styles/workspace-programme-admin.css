@@ -242,7 +242,7 @@ a.content-review-title:focus-visible {
   background: var(--surface);
 }
 
-.programme-publishing .programme-records .card-title {
+:where(.programme-publishing .programme-records) .card-title {
   margin: 0;
   padding: var(--space-3) var(--space-4);
   border-bottom: 1px solid var(--border);
@@ -520,7 +520,7 @@ a.content-review-title:focus-visible {
   }
 }
 
-@media (max-width: 390px) {
+@media (max-width: 400px) {
   .content-review-row,
   .content-section-head,
   .programme-publishing .programme-records .card-title,

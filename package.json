@@ -66,6 +66,7 @@
     "deploy:schema": "node scripts/validate-remote-schema.mjs",
     "deploy:smoke": "node scripts/verify-production-health.mjs",
     "test:config": "node --test scripts/*.test.mjs",
+    "design-system:check": "node scripts/check-css-hygiene.mjs && node scripts/check-design-system-adoption.mjs",
     "check": "node scripts/run-checks.mjs --full",
     "check:core": "node scripts/run-checks.mjs --core",
     "check:quick": "node scripts/run-checks.mjs --quick",

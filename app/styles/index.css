@@ -18,7 +18,9 @@
  *
  * A selector should have exactly one owning file. When two files style the same
  * selector, position alone decides the winner, which is fragile — move the rule
- * into its owner rather than adding another override.
+ * into its owner rather than adding another override. The CSS hygiene gate
+ * enforces ownership for the core control and status selectors and ratchets
+ * legacy breakpoint values.
  */
 
 @import "./tokens.css";

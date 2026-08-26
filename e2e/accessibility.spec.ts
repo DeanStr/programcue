@@ -238,6 +238,39 @@ test("shared form errors connect labels, help and corrective links", async ({
   await expect(pendingButton).toHaveAttribute("aria-busy", "true");
 });
 
+test("design-system reference demonstrates navigation and consequential work", async ({
+  page,
+}) => {
+  await waitForInterface(page, "/design/system");
+
+  const scheduleTab = page.getByRole("button", { name: "Schedule 3" });
+  await scheduleTab.click();
+  await expect(scheduleTab).toHaveAttribute("aria-pressed", "true");
+  await expect(
+    page.getByRole("region", { name: "schedule reference panel" }),
+  ).toContainText("Blocking schedule checks");
+
+  const trigger = page.getByRole("button", {
+    name: "Withdraw programme version",
+  });
+  await trigger.click();
+  const dialog = page.getByRole("dialog", {
+    name: "Withdraw programme version?",
+  });
+  await expect(dialog).toContainText("2 records affected");
+  await expect(dialog).toContainText("48 published sessions");
+  await dialog.getByRole("button", { name: "Cancel" }).click();
+  await expect(trigger).toBeFocused();
+
+  await trigger.click();
+  await dialog.getByRole("button", { name: "Withdraw version" }).click();
+  await expect(
+    page.getByRole("status", {
+      name: "Reference confirmation completed",
+    }),
+  ).toBeVisible();
+});
+
 for (const path of ["/admin/submissions/form", "/design/system"] as const) {
   test(`${path} exposes a name for every form control`, async ({ page }) => {
     await waitForInterface(page, path);
@@ -290,6 +323,10 @@ test("review scoring exposes every criterion control at mobile width", async ({
     // dropdown, so the chosen position is visible at rest.
     await expect(page.getByRole("radiogroup", { name })).toBeVisible();
   }
+  const actionJump = page.getByRole("link", { name: "Review actions" });
+  await expect(actionJump).toBeVisible();
+  await actionJump.click();
+  await expect(page.locator("#review-actions")).toBeInViewport();
   await expect(
     page.getByRole("button", { name: "Return to organizer demo" }),
   ).toBeVisible();

@@ -2,6 +2,7 @@ import { CheckCircle2 } from "lucide-react";
 import { Form, redirect } from "react-router";
 import { z } from "zod";
 import { BrandMark } from "~/components/brand-mark";
+import { Button } from "~/components/ui/button";
 import {
   acceptEventInvitation,
   requireEventRole,
@@ -207,8 +208,8 @@ export default function EventSelector({ loaderData }: Route.ComponentProps) {
                           : ""}
                       </p>
                     </div>
-                    <button
-                      className={`btn${current ? "" : " primary"}`}
+                    <Button
+                      variant={current ? undefined : "primary"}
                       type="submit"
                     >
                       {current ? <CheckCircle2 aria-hidden size={14} /> : null}
@@ -217,7 +218,7 @@ export default function EventSelector({ loaderData }: Route.ComponentProps) {
                         : current
                           ? "Continue with current event"
                           : "Use this event"}
-                    </button>
+                    </Button>
                   </Form>
                 </li>
               );

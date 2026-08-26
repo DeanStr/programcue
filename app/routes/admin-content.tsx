@@ -11,6 +11,7 @@ import {
   useNavigation,
 } from "react-router";
 import { ZodError, z } from "zod";
+import { Button, ButtonLink } from "~/components/ui/button";
 import {
   DomainStatusBadge,
   statusPresentation,
@@ -209,13 +210,9 @@ function ZipExportProgress({ operationId }: { operationId: string }) {
             : ""}
         </span>
         {fetcher.data.downloadUrl ? (
-          <Link
-            className="btn small"
-            to={fetcher.data.downloadUrl}
-            reloadDocument
-          >
+          <ButtonLink size="small" to={fetcher.data.downloadUrl} reloadDocument>
             <Download aria-hidden size={14} /> Download ZIP
-          </Link>
+          </ButtonLink>
         ) : null}
       </div>
     );
@@ -303,14 +300,14 @@ function FileVersionHistory({
                 version.signatureStatus === "valid" &&
                 version.scanStatus === "clean" &&
                 version.releasedAt !== null ? (
-                  <Link
-                    className="btn small"
+                  <ButtonLink
+                    size="small"
                     to={`/admin/content/files/${encodeURIComponent(assetId)}/versions/${encodeURIComponent(version.id)}`}
                     reloadDocument
                   >
                     <Download aria-hidden size={14} /> Download v
                     {version.versionNumber}
-                  </Link>
+                  </ButtonLink>
                 ) : (
                   <small className="subtle">Download unavailable</small>
                 )}
@@ -319,23 +316,23 @@ function FileVersionHistory({
           </ol>
           {fetcher.data.hasPrevious || fetcher.data.hasNext ? (
             <div className="page-actions">
-              <button
-                className="btn small"
+              <Button
+                size="small"
                 type="button"
                 disabled={!fetcher.data.hasPrevious || fetcher.state !== "idle"}
                 onClick={() => loadPage(page - 1)}
               >
                 Previous versions
-              </button>
+              </Button>
               <span className="help">Page {page}</span>
-              <button
-                className="btn small"
+              <Button
+                size="small"
                 type="button"
                 disabled={!fetcher.data.hasNext || fetcher.state !== "idle"}
                 onClick={() => loadPage(page + 1)}
               >
                 Next versions
-              </button>
+              </Button>
             </div>
           ) : null}
         </>
@@ -397,9 +394,9 @@ export default function AdminContent({ loaderData }: Route.ComponentProps) {
           <Link className="content-text-action" to="/admin/tasks">
             Deliverable tasks
           </Link>
-          <Link className="btn primary" to="/admin/schedule">
+          <ButtonLink variant="primary" to="/admin/schedule">
             Open schedule
-          </Link>
+          </ButtonLink>
         </div>
       </div>
 
@@ -561,12 +558,12 @@ export default function AdminContent({ loaderData }: Route.ComponentProps) {
                               {asset.speakerName}
                             </small>
                             {asset.targetType === "task" ? (
-                              <Link
-                                className="btn small"
+                              <ButtonLink
+                                size="small"
                                 to={`/admin/tasks?task=${encodeURIComponent(asset.targetId)}`}
                               >
                                 Open task thread
-                              </Link>
+                              </ButtonLink>
                             ) : null}
                           </td>
                           <td>
@@ -584,13 +581,13 @@ export default function AdminContent({ loaderData }: Route.ComponentProps) {
                           </td>
                           <td>
                             {eligible ? (
-                              <Link
-                                className="btn small"
+                              <ButtonLink
+                                size="small"
                                 to={`/admin/content/files/${encodeURIComponent(asset.id)}`}
                                 reloadDocument
                               >
                                 <Download aria-hidden size={14} /> Current
-                              </Link>
+                              </ButtonLink>
                             ) : (
                               <span className="help">Unavailable</span>
                             )}
@@ -613,36 +610,34 @@ export default function AdminContent({ loaderData }: Route.ComponentProps) {
                     <option value="speaker">Group by speaker</option>
                   </select>
                 </label>
-                <button
+                <Button
                   type="submit"
-                  className="btn primary"
+                  variant="primary"
                   disabled={navigation.state !== "idle"}
                 >
                   <ArchiveRestore aria-hidden size={15} /> Preview ZIP export
-                </button>
+                </Button>
               </div>
               {loaderData.filesPagination.hasPrevious ||
               loaderData.filesPagination.hasNext ? (
                 <nav className="page-actions" aria-label="Files pages">
                   {loaderData.filesPagination.hasPrevious ? (
-                    <Link
-                      className="btn"
+                    <ButtonLink
                       to={`?filesPage=${loaderData.filesPagination.page - 1}#content-files-title`}
                     >
                       Previous files
-                    </Link>
+                    </ButtonLink>
                   ) : null}
                   <span className="help">
                     Page {loaderData.filesPagination.page} · up to{" "}
                     {loaderData.filesPagination.pageSize} assets per page
                   </span>
                   {loaderData.filesPagination.hasNext ? (
-                    <Link
-                      className="btn"
+                    <ButtonLink
                       to={`?filesPage=${loaderData.filesPagination.page + 1}#content-files-title`}
                     >
                       Next files
-                    </Link>
+                    </ButtonLink>
                   ) : null}
                 </nav>
               ) : null}
@@ -693,13 +688,13 @@ export default function AdminContent({ loaderData }: Route.ComponentProps) {
               <input type="checkbox" name="confirmed" value="true" required />
               Download exactly these current released versions
             </label>
-            <button
+            <Button
               type="submit"
-              className="btn primary"
+              variant="primary"
               disabled={zipFetcher.state !== "idle"}
             >
               <Download aria-hidden size={15} /> Generate ZIP
-            </button>
+            </Button>
             {zipFetcher.data &&
             "message" in zipFetcher.data &&
             !zipFetcher.data.ok ? (

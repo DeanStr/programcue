@@ -16,7 +16,7 @@
   color: var(--text-tertiary);
   letter-spacing: 0;
 }
-#form-builder > .fb-page-head p {
+:where(#form-builder) > .fb-page-head p {
   display: none;
 }
 
@@ -369,6 +369,7 @@
   list-style: none;
 }
 .fb-field-row {
+  position: relative;
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
   align-items: start;
@@ -387,7 +388,18 @@
 .fb-field-row.is-selected {
   border-color: var(--brand-200);
   background: var(--brand-50);
-  box-shadow: inset 3px 0 0 var(--brand-600);
+}
+.fb-field-row.is-selected::before,
+.fb-canvas-field.is-selected::before {
+  position: absolute;
+  inset-block: 0;
+  inset-inline-start: 0;
+  width: 3px;
+  border-start-start-radius: var(--radius-sm);
+  border-end-start-radius: var(--radius-sm);
+  background: var(--brand-600);
+  content: "";
+  pointer-events: none;
 }
 .fb-field-select {
   display: grid;
@@ -675,7 +687,6 @@
 .fb-canvas-field.is-selected {
   border-color: var(--brand-300);
   background: var(--brand-50);
-  box-shadow: inset 3px 0 0 var(--brand-600);
 }
 .fb-canvas-field-head {
   display: grid;
@@ -745,9 +756,7 @@
 .fb-canvas-control {
   margin: var(--space-2) 0 0 var(--space-8);
 }
-.fb-canvas-control input:not([type="checkbox"]),
-.fb-canvas-control textarea,
-.fb-canvas-control select {
+.fb-canvas-preview-control {
   width: 100%;
   min-height: 36px;
   padding: var(--space-2);
@@ -811,11 +820,6 @@
   border-top: 1px solid var(--border);
   background: var(--surface-sunken);
 }
-.fb-canvas-footer > .fb-disclosure {
-  border-color: transparent;
-  background: transparent;
-  padding: var(--space-1) var(--space-2);
-}
 .schedule-standard-scroll-hint {
   display: none;
 }
@@ -845,6 +849,11 @@
   border-radius: var(--radius-sm);
   background: var(--surface-sunken);
   padding: var(--space-3);
+}
+.fb-canvas-footer > .fb-disclosure {
+  border-color: transparent;
+  background: transparent;
+  padding: var(--space-1) var(--space-2);
 }
 .fb-disclosure > summary {
   cursor: pointer;
@@ -1177,6 +1186,10 @@
     border: 2px solid CanvasText;
     box-shadow: none;
   }
+  .fb-field-row.is-selected::before,
+  .fb-canvas-field.is-selected::before {
+    content: none;
+  }
   .fb-canvas-insertion-target.is-over::after {
     border-color: Highlight;
   }
@@ -1191,7 +1204,7 @@
   }
 }
 
-@media (max-width: 1023px) {
+@media (max-width: 1000px) {
   .fb-mobile-surfaces {
     display: flex;
     gap: var(--space-1);
@@ -1275,7 +1288,7 @@
   }
 }
 
-@media (max-width: 639px) {
+@media (max-width: 600px) {
   .program-cue-form-canvas {
     height: auto;
     min-height: 0;

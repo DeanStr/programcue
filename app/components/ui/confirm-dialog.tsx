@@ -2,6 +2,7 @@ import { AlertTriangle } from "lucide-react";
 import { type ReactNode, useState } from "react";
 
 import { Dialog } from "~/components/dialog";
+import { Button } from "~/components/ui/button";
 
 /**
  * Confirmation for consequential actions.
@@ -48,26 +49,24 @@ export function ConfirmDialog({
       onClose={onCancel}
       footer={
         <>
-          <button
-            className="btn"
+          <Button
             data-dialog-autofocus={tone === "danger" ? true : undefined}
             data-pc-confirm="cancel"
             disabled={busy}
             onClick={onCancel}
-            type="button"
           >
             {cancelLabel}
-          </button>
-          <button
-            className={tone === "danger" ? "btn danger" : "btn primary"}
+          </Button>
+          <Button
+            variant={tone === "danger" ? "danger" : "primary"}
             data-dialog-autofocus={tone === "primary" ? true : undefined}
             data-pc-confirm="accept"
-            disabled={busy}
+            pending={busy}
+            pendingLabel="Working…"
             onClick={onConfirm}
-            type="button"
           >
-            {busy ? "Working…" : confirmLabel}
-          </button>
+            {confirmLabel}
+          </Button>
         </>
       }
     >

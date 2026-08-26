@@ -38,6 +38,7 @@ import { EventService } from "~/modules/events/event-service.server";
 import { requireCurrentEventRole } from "~/platform/auth/current-event.server";
 import { getCloudflareContext } from "~/platform/cloudflare-context";
 import "~/styles/workspace-communication-composer.css";
+import { Button, ButtonLink } from "~/components/ui/button";
 import type { Route } from "./+types/communication-composer";
 
 export const meta = () => [{ title: "Compose Communication · Program Cue" }];
@@ -429,30 +430,30 @@ function DraftFields({
           Leave blank to queue immediately after confirmation.
         </span>
         <span className="row-actions mt">
-          <button
-            className="btn small"
+          <Button
+            size="small"
             type="button"
             onClick={() => setScheduledLocal(tomorrowMorning)}
           >
             Tomorrow at 9:00 AM
-          </button>
+          </Button>
           {weekBeforeEventIsFuture ? (
-            <button
-              className="btn small"
+            <Button
+              size="small"
               type="button"
               onClick={() => setScheduledLocal(weekBeforeEvent)}
             >
               One week before event
-            </button>
+            </Button>
           ) : null}
           {scheduledLocal ? (
-            <button
-              className="btn small"
+            <Button
+              size="small"
               type="button"
               onClick={() => setScheduledLocal("")}
             >
               Queue immediately
-            </button>
+            </Button>
           ) : null}
         </span>
         {scheduledError ? (
@@ -505,9 +506,9 @@ export default function CommunicationComposer({
                 Draft revision {draft.revision}
               </span>
             ) : null}
-            <Link className="btn" to="/admin/communications">
+            <ButtonLink to="/admin/communications">
               Communications Centre
-            </Link>
+            </ButtonLink>
           </>
         }
       />
@@ -562,19 +563,19 @@ export default function CommunicationComposer({
                 eventTimezone={loaderData.eventTimezone}
                 eventStartDate={loaderData.eventStartDate}
               />
-              <button type="submit" className="btn primary" disabled={working}>
+              <Button type="submit" variant="primary" disabled={working}>
                 <FilePenLine aria-hidden size={16} />
                 {working ? "Saving…" : "Create durable draft"}
-              </button>
+              </Button>
             </Form>
           ) : (
             <EmptyState
               title="No published templates"
               description="Publish a template version before composing a communication."
               action={
-                <Link className="btn primary" to="/admin/communications">
+                <ButtonLink variant="primary" to="/admin/communications">
                   Manage templates
-                </Link>
+                </ButtonLink>
               }
             />
           )}
@@ -606,11 +607,11 @@ export default function CommunicationComposer({
                 eventStartDate={loaderData.eventStartDate}
               />
               <div className="row-actions">
-                <button type="submit" className="btn" disabled={working}>
+                <Button type="submit" disabled={working}>
                   {working && pendingIntent === "save-draft"
                     ? "Saving…"
                     : "Save and continue"}
-                </button>
+                </Button>
               </div>
             </Form>
           </section>
@@ -628,16 +629,16 @@ export default function CommunicationComposer({
             </div>
             <Form method="post">
               <input type="hidden" name="intent" value="preview-draft" />
-              <button
+              <Button
                 type="submit"
-                className="btn primary"
+                variant="primary"
                 disabled={working || configurationDirty}
               >
                 <Eye aria-hidden size={16} />
                 {working && pendingIntent === "preview-draft"
                   ? "Querying…"
                   : "Generate current preview"}
-              </button>
+              </Button>
             </Form>
 
             {configurationDirty ? (
@@ -679,9 +680,9 @@ export default function CommunicationComposer({
           >
             <input type="hidden" name="intent" value="discard-draft" />
             <input type="hidden" name="revision" value={draft.revision} />
-            <button type="submit" className="btn danger" disabled={working}>
+            <Button type="submit" variant="danger" disabled={working}>
               <Trash2 aria-hidden size={16} /> Discard draft
-            </button>
+            </Button>
           </Form>
         </div>
       )}

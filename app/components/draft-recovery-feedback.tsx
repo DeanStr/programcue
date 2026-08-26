@@ -1,3 +1,4 @@
+import { Button } from "~/components/ui/button";
 import type {
   DraftRecoveryController,
   DraftRecoveryState,
@@ -64,45 +65,41 @@ export function DraftRecoveryFeedback<T>({
       <span className="row-actions right">
         {needsChoice ? (
           <>
-            <button
-              className="btn small"
-              type="button"
-              onClick={recovery.restore}
-            >
+            <Button size="small" type="button" onClick={recovery.restore}>
               Restore local edits
-            </button>
-            <button
-              className="btn small"
+            </Button>
+            <Button
+              size="small"
               type="button"
               onClick={() => void recovery.discard()}
             >
               Discard recovery copy
-            </button>
+            </Button>
           </>
         ) : incompatible ? (
-          <button
-            className="btn small"
+          <Button
+            size="small"
             type="button"
             onClick={() => void recovery.discard()}
           >
             Discard incompatible copy
-          </button>
+          </Button>
         ) : (
           <>
-            <button
-              className="btn small"
+            <Button
+              size="small"
               type="button"
               onClick={() => void recovery.retry()}
             >
               Retry recovery
-            </button>
-            <button
-              className="btn small"
+            </Button>
+            <Button
+              size="small"
               type="button"
               onClick={() => void recovery.discard()}
             >
               Discard browser copy
-            </button>
+            </Button>
           </>
         )}
       </span>

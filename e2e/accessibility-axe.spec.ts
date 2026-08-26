@@ -21,6 +21,7 @@ async function selectDemoRole(page: Page, role: string) {
 }
 
 const SURFACES = [
+  { role: "administrator", path: "/design/system" },
   { role: "administrator", path: "/admin/command" },
   { role: "administrator", path: "/admin/submissions" },
   { role: "administrator", path: "/admin/submissions/form" },

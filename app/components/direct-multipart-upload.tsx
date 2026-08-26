@@ -1,6 +1,7 @@
 import { Pause, Play, UploadCloud, X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { useRevalidator } from "react-router";
+import { Button } from "~/components/ui/button";
 import { maximumMegabytes } from "~/modules/files/file-policy";
 import {
   createProgramCueMultipartSession,
@@ -400,9 +401,9 @@ export function DirectMultipartUpload({
         </progress>
       ) : null}
       <div className="page-actions">
-        <button
+        <Button
           type="submit"
-          className="btn primary"
+          variant="primary"
           disabled={
             disabled ||
             operationActive ||
@@ -411,56 +412,47 @@ export function DirectMultipartUpload({
           }
         >
           <UploadCloud aria-hidden size={15} /> Upload file
-        </button>
+        </Button>
         {transferActive ? (
-          <button className="btn" type="button" onClick={pauseResumeUpload}>
+          <Button type="button" onClick={pauseResumeUpload}>
             {state.status === "paused" ? (
               <Play aria-hidden size={15} />
             ) : (
               <Pause aria-hidden size={15} />
             )}{" "}
             {state.status === "paused" ? "Resume upload" : "Pause upload"}
-          </button>
+          </Button>
         ) : null}
         {transferActive ? (
-          <button className="btn danger" type="button" onClick={abortUpload}>
+          <Button variant="danger" type="button" onClick={abortUpload}>
             <X aria-hidden size={15} /> Cancel upload
-          </button>
+          </Button>
         ) : null}
         {!transferActive &&
         state.status === "error" &&
         session.current &&
         !completedUpload.current ? (
-          <button className="btn" type="button" onClick={resumeFailedUpload}>
+          <Button type="button" onClick={resumeFailedUpload}>
             <Play aria-hidden size={15} /> Resume upload
-          </button>
+          </Button>
         ) : null}
         {!transferActive &&
         state.status === "error" &&
         session.current &&
         !completedUpload.current ? (
-          <button className="btn danger" type="button" onClick={abortUpload}>
+          <Button variant="danger" type="button" onClick={abortUpload}>
             <X aria-hidden size={15} /> Cancel upload
-          </button>
+          </Button>
         ) : null}
         {state.status === "error" && completedUpload.current ? (
-          <button
-            className="btn"
-            type="button"
-            disabled={disabled}
-            onClick={retryCompletion}
-          >
+          <Button type="button" disabled={disabled} onClick={retryCompletion}>
             Retry attachment
-          </button>
+          </Button>
         ) : null}
         {state.status === "error" && state.reloadRequired ? (
-          <button
-            className="btn"
-            type="button"
-            onClick={() => window.location.reload()}
-          >
+          <Button type="button" onClick={() => window.location.reload()}>
             Reload latest draft
-          </button>
+          </Button>
         ) : null}
       </div>
       {state.message ? (

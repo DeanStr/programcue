@@ -8,6 +8,7 @@ import {
 import { z } from "zod";
 import { BrandMark } from "~/components/brand-mark";
 import { TurnstileWidget } from "~/components/turnstile-widget";
+import { Button, ButtonAnchor } from "~/components/ui/button";
 import {
   createAuth,
   ParticipantOAuthConfigurationError,
@@ -463,8 +464,8 @@ export default function SignIn({ loaderData }: Route.ComponentProps) {
             <input type="hidden" name="_intent" value="link_social_account" />
             <input type="hidden" name="provider" value="microsoft" />
             <input type="hidden" name="returnTo" value={loaderData.returnTo} />
-            <button
-              className="btn primary"
+            <Button
+              variant="primary"
               type="submit"
               disabled={submitting}
               style={{ width: "100%" }}
@@ -472,15 +473,15 @@ export default function SignIn({ loaderData }: Route.ComponentProps) {
               {submitting
                 ? "Opening Microsoft…"
                 : "Link Microsoft and continue"}
-            </button>
+            </Button>
           </Form>
-          <a
-            className="btn mt"
+          <ButtonAnchor
+            className="mt"
             href={loaderData.returnTo}
             style={{ width: "100%" }}
           >
             Continue without Microsoft
-          </a>
+          </ButtonAnchor>
         </section>
       </main>
     );
@@ -525,8 +526,8 @@ export default function SignIn({ loaderData }: Route.ComponentProps) {
                 value={loaderData.returnTo}
               />
               {loaderData.socialProviders.google ? (
-                <button
-                  className="btn auth-wide"
+                <Button
+                  className="auth-wide"
                   name="provider"
                   value="google"
                   type="submit"
@@ -535,11 +536,11 @@ export default function SignIn({ loaderData }: Route.ComponentProps) {
                   {submitting && submittingProvider === "google"
                     ? "Opening Google…"
                     : "Continue with Google"}
-                </button>
+                </Button>
               ) : null}
               {loaderData.socialProviders.microsoft ? (
-                <button
-                  className="btn auth-wide"
+                <Button
+                  className="auth-wide"
                   name="provider"
                   value="microsoft"
                   type="submit"
@@ -548,7 +549,7 @@ export default function SignIn({ loaderData }: Route.ComponentProps) {
                   {submitting && submittingProvider === "microsoft"
                     ? "Opening Microsoft…"
                     : "Continue with Microsoft"}
-                </button>
+                </Button>
               ) : null}
               <TurnstileWidget
                 siteKey={loaderData.turnstileSiteKey}
@@ -590,15 +591,16 @@ export default function SignIn({ loaderData }: Route.ComponentProps) {
             action="sign_in"
             appearance="interaction-only"
           />
-          <button
-            className="btn primary mt auth-wide"
+          <Button
+            variant="primary"
+            className="mt auth-wide"
             type="submit"
             disabled={submitting}
           >
             {submitting && submittingIntent === "email_magic_link"
               ? "Sending…"
               : "Email me a sign-in link"}
-          </button>
+          </Button>
         </Form>
       </section>
     </main>

@@ -82,7 +82,7 @@
 
 /* Icon-only rail: the label is gone, so the row centres on its icon and the
    3px location rail is the only thing still left of it. */
-@media (max-width: 1024px) {
+@media (max-width: 1180px) {
   .app-admin .nav a {
     min-height: 40px;
     padding-inline: 0;

@@ -13,6 +13,7 @@ import {
 } from "~/components/public-event-chrome";
 import { eventHeroImagePath } from "~/components/public-programme-model";
 import { RestrictedMarkdown } from "~/components/restricted-markdown";
+import { ButtonAnchor, type ButtonAnchorProps } from "~/components/ui/button";
 import {
   formatProgrammeEventDay,
   programmeAccentCssVars,
@@ -70,13 +71,33 @@ function PreviewSafeLink({
   href,
   preview,
   className,
+  variant,
+  size,
+  buttonStyle = false,
   children,
-}: {
+}: Pick<ButtonAnchorProps, "children" | "className" | "variant" | "size"> & {
   href: string;
   preview: boolean;
-  className?: string;
-  children: ReactNode;
+  buttonStyle?: boolean;
 }) {
+  if (buttonStyle) {
+    return preview ? (
+      <ButtonAnchor className={className} variant={variant} size={size}>
+        {children}
+      </ButtonAnchor>
+    ) : (
+      <ButtonAnchor
+        className={className}
+        variant={variant}
+        size={size}
+        href={href}
+        rel="noreferrer"
+      >
+        {children}
+      </ButtonAnchor>
+    );
+  }
+
   return preview ? (
     <div className={className}>{children}</div>
   ) : (
@@ -110,7 +131,9 @@ function PublicVenueDetails({
       </div>
       {venueMapUrl ? (
         <PreviewSafeLink
-          className="btn primary public-site-map-link"
+          buttonStyle
+          variant="primary"
+          className="public-site-map-link"
           href={venueMapUrl}
           preview={preview}
         >
@@ -197,7 +220,10 @@ export function PublicSiteHome({
         <div className="public-site-actions">
           {event.application ? (
             <PreviewSafeLink
-              className={`btn${event.application.state === "accepting" ? " primary" : ""}`}
+              buttonStyle
+              variant={
+                event.application.state === "accepting" ? "primary" : undefined
+              }
               href={event.application.url}
               preview={preview}
             >
@@ -208,7 +234,7 @@ export function PublicSiteHome({
           ) : null}
           {programme ? (
             <PreviewSafeLink
-              className="btn"
+              buttonStyle
               href={`/public/programme/${encodeURIComponent(event.slug)}/sessions`}
               preview={preview}
             >
@@ -217,7 +243,7 @@ export function PublicSiteHome({
           ) : null}
           {event.supportUrl ? (
             <PreviewSafeLink
-              className="btn"
+              buttonStyle
               href={event.supportUrl}
               preview={preview}
             >

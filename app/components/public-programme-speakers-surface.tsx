@@ -1,3 +1,4 @@
+import { Button } from "~/components/ui/button";
 import {
   formatProgrammeTimeRange,
   publicSessionDetailPath,
@@ -227,13 +228,13 @@ function SpeakerDetailPanel({
             {!model.embedded ? (
               <PublicSpeakerShareActions model={model} />
             ) : null}
-            <button
+            <Button
               type="button"
-              className="btn small"
+              size="small"
               onClick={model.closeSpeakerProfile}
             >
               Close speaker details
-            </button>
+            </Button>
           </div>
         </div>
       </div>
@@ -244,15 +245,15 @@ function SpeakerDetailPanel({
             {model.expandedSpeakerBiography ? biography : biographySnippet}
           </p>
           {biographyIsLong ? (
-            <button
+            <Button
               type="button"
-              className="btn small"
+              size="small"
               aria-expanded={model.expandedSpeakerBiography}
               aria-controls={biographyId}
               onClick={model.toggleSpeakerBiography}
             >
               {model.expandedSpeakerBiography ? "Show less" : "Show more"}
-            </button>
+            </Button>
           ) : null}
         </>
       ) : null}

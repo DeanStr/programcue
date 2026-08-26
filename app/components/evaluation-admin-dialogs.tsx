@@ -3,6 +3,7 @@ import { Form } from "react-router";
 
 import { Dialog } from "~/components/dialog";
 import { useEvaluationAdminModel } from "~/components/evaluation-admin-model";
+import { Button } from "~/components/ui/button";
 
 export function BulkAssignmentDialog() {
   const [trackFilter, setTrackFilter] = useState("");
@@ -53,26 +54,22 @@ export function BulkAssignmentDialog() {
       footer={
         bulkAssignPreview ? (
           <>
-            <button
-              type="button"
-              className="btn"
-              onClick={() => setBulkAssignPreview(false)}
-            >
+            <Button type="button" onClick={() => setBulkAssignPreview(false)}>
               Back
-            </button>
-            <button
+            </Button>
+            <Button
               type="submit"
               form="evaluation-bulk-assign-form"
-              className="btn primary"
+              variant="primary"
               disabled={navigation.state !== "idle"}
             >
               Confirm assignments
-            </button>
+            </Button>
           </>
         ) : (
-          <button
+          <Button
             type="button"
-            className="btn primary"
+            variant="primary"
             disabled={
               bulkSubmissionIds.size === 0 || !bulkAssignmentTargetLabel
             }
@@ -80,7 +77,7 @@ export function BulkAssignmentDialog() {
           >
             Preview {bulkSubmissionIds.size} assignment target
             {bulkSubmissionIds.size === 1 ? "" : "s"}
-          </button>
+          </Button>
         )
       }
     >
@@ -177,9 +174,9 @@ export function BulkAssignmentDialog() {
           <fieldset className="stack">
             <legend className="label">Affected submissions</legend>
             <div className="page-actions">
-              <button
+              <Button
                 type="button"
-                className="btn small"
+                size="small"
                 onClick={() =>
                   setBulkSubmissionIds(
                     new Set(
@@ -189,14 +186,14 @@ export function BulkAssignmentDialog() {
                 }
               >
                 Select visible
-              </button>
-              <button
+              </Button>
+              <Button
                 type="button"
-                className="btn small"
+                size="small"
                 onClick={() => setBulkSubmissionIds(new Set())}
               >
                 Clear
-              </button>
+              </Button>
             </div>
             {visibleSubmissions.map((submission) => (
               <label key={submission.id} className="pc-eval-bulk-row">
@@ -318,13 +315,13 @@ export function RoundAdvancementDialog() {
             for a final outcome. This is not an undo action.
           </span>
         </div>
-        <button
+        <Button
           type="submit"
-          className="btn primary"
+          variant="primary"
           disabled={navigation.state !== "idle"}
         >
           Close round and advance shortlist
-        </button>
+        </Button>
       </Form>
     </Dialog>
   ) : null;
@@ -414,7 +411,7 @@ export function ModerationDialog() {
         <label className="label">
           Moderated score (optional)
           <input
-            className="input"
+            className="field"
             type="number"
             name="moderatedScore"
             min="1"
@@ -448,25 +445,24 @@ export function ModerationDialog() {
         </label>
         <div className="page-actions">
           {currentModeration?.status === "confirmed" ? null : (
-            <button
+            <Button
               type="submit"
-              className="btn"
               name="moderationStatus"
               value="draft"
               disabled={navigation.state !== "idle"}
             >
               Save draft
-            </button>
+            </Button>
           )}
-          <button
+          <Button
             type="submit"
-            className="btn primary"
+            variant="primary"
             name="moderationStatus"
             value="confirmed"
             disabled={navigation.state !== "idle"}
           >
             Confirm moderation
-          </button>
+          </Button>
         </div>
       </Form>
     </Dialog>
@@ -508,13 +504,13 @@ export function ReviewReopenDialog() {
               : ". The frozen session source remains unchanged."}
           </span>
         </div>
-        <button
+        <Button
           type="submit"
-          className="btn danger"
+          variant="danger"
           disabled={navigation.state !== "idle"}
         >
           Reopen review
-        </button>
+        </Button>
       </Form>
     </Dialog>
   ) : null;
@@ -593,21 +589,20 @@ export function DecisionDialog() {
       size="lg"
       footer={
         <>
-          <button
+          <Button
             type="submit"
             form="evaluation-decision-form"
-            className="btn"
             name="release"
             value="false"
             disabled={navigation.state !== "idle"}
           >
             Save draft
-          </button>
+          </Button>
           {loaderData.canReleaseDecisions ? (
-            <button
+            <Button
               type="submit"
               form="evaluation-decision-form"
-              className="btn primary"
+              variant="primary"
               name="release"
               value="true"
               disabled={
@@ -616,7 +611,7 @@ export function DecisionDialog() {
               }
             >
               Release decision
-            </button>
+            </Button>
           ) : null}
         </>
       }
@@ -763,7 +758,7 @@ export function DecisionDialog() {
         <label className="label">
           Acceptance session duration (minutes)
           <input
-            className="input"
+            className="field"
             type="number"
             name="sessionDurationMinutes"
             min="5"

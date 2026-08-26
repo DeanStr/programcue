@@ -1,7 +1,7 @@
 import { type ReactNode, useEffect, useState } from "react";
 import { Link } from "react-router";
+import { Button } from "~/components/ui/button";
 import { requireValue } from "~/lib/required-value";
-
 import { formFieldTypeLabel } from "~/modules/submissions/form-builder-fields";
 import type {
   FormField,
@@ -342,8 +342,9 @@ export function FieldSettingsPanel({
               ) : null}
               {!["title", "category", "format"].includes(selected.id) ? (
                 <div className="row-actions mt">
-                  <button
-                    className="btn small danger"
+                  <Button
+                    variant="danger"
+                    size="small"
                     type="button"
                     onClick={() => {
                       const fields = input.schema.fields
@@ -361,7 +362,7 @@ export function FieldSettingsPanel({
                     }}
                   >
                     Remove field
-                  </button>
+                  </Button>
                 </div>
               ) : null}
             </div>

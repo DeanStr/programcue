@@ -7,11 +7,12 @@ import {
   useRef,
   useState,
 } from "react";
-import { Link, useFetcher } from "react-router";
+import { useFetcher } from "react-router";
 import {
   DraftRecoveryFeedback,
   DraftRecoveryStatus,
 } from "~/components/draft-recovery-feedback";
+import { Button, ButtonLink } from "~/components/ui/button";
 import { CharacterCount } from "~/components/ui/character-count";
 import { DomainStatusBadge } from "~/components/ui/domain-status-badge";
 import { requireValue } from "~/lib/required-value";
@@ -419,12 +420,12 @@ function SessionContentFieldsPanel() {
           </span>
         </div>
         <span className="row-actions right">
-          <Link
-            className="btn small"
+          <ButtonLink
+            size="small"
             to={`/admin/content/sessions/${encodeURIComponent(session.id)}`}
           >
             Review history
-          </Link>
+          </ButtonLink>
           {status ? <PersistenceStatus {...status} /> : null}
           <DraftRecoveryStatus state={recovery.state} />
         </span>
@@ -435,13 +436,14 @@ function SessionContentFieldsPanel() {
         <div className="validation-item error mb" role="alert">
           <strong>Retry required</strong>
           <span>{serverError}</span>
-          <button
-            className="btn small right"
+          <Button
+            size="small"
+            className="right"
             type="button"
             onClick={() => submit()}
           >
             Retry the same save
-          </button>
+          </Button>
         </div>
       ) : null}
       {warning ? (
@@ -459,25 +461,26 @@ function SessionContentFieldsPanel() {
             then choose which version to keep.
           </span>
           <span className="row-actions right">
-            <button
-              className="btn small"
+            <Button
+              size="small"
               type="button"
               onClick={() =>
                 downloadRecovery(`${session.slug}-session-recovery.json`, draft)
               }
             >
               Export local edits
-            </button>
-            <button className="btn small" type="button" onClick={acceptServer}>
+            </Button>
+            <Button size="small" type="button" onClick={acceptServer}>
               Load server version
-            </button>
-            <button
-              className="btn small primary"
+            </Button>
+            <Button
+              variant="primary"
+              size="small"
               type="button"
               onClick={overwrite}
             >
               Save my version
-            </button>
+            </Button>
           </span>
         </div>
       ) : null}
@@ -676,15 +679,16 @@ function SessionContentPreviewPanel() {
         </div>
         <div className="page-actions">
           {(["desktop", "mobile"] as const).map((option) => (
-            <button
-              className={`btn small${viewport === option ? " primary" : ""}`}
+            <Button
+              size="small"
+              variant={viewport === option ? "primary" : undefined}
               type="button"
               aria-pressed={viewport === option}
               key={option}
               onClick={() => setViewport(option)}
             >
               {option[0].toUpperCase() + option.slice(1)}
-            </button>
+            </Button>
           ))}
         </div>
       </div>
@@ -778,8 +782,8 @@ function SessionContentPreviewPanel() {
                   View the exact calendar file speakers will receive
                 </summary>
                 <pre className="code-block">{calendarPreview.ics}</pre>
-                <button
-                  className="btn small"
+                <Button
+                  size="small"
                   type="button"
                   onClick={() => {
                     const blob = new Blob([calendarPreview.ics], {
@@ -794,7 +798,7 @@ function SessionContentPreviewPanel() {
                   }}
                 >
                   Download generated ICS
-                </button>
+                </Button>
               </details>
             ) : null}
           </article>

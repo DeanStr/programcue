@@ -1,4 +1,5 @@
 import { useEvaluationAdminModel } from "~/components/evaluation-admin-model";
+import { Button } from "~/components/ui/button";
 
 export function EvaluationModerationPanel() {
   const {
@@ -74,13 +75,13 @@ export function EvaluationModerationPanel() {
                           Released decisions cannot be reopened here.
                         </span>
                       ) : (
-                        <button
+                        <Button
                           type="button"
-                          className="btn small"
+                          size="small"
                           onClick={() => setReopenAssignmentId(assignment.id)}
                         >
                           Reopen review
-                        </button>
+                        </Button>
                       )
                     ) : null}
                   </div>
@@ -91,13 +92,12 @@ export function EvaluationModerationPanel() {
                     submission.status,
                   ) && !submission.reviewableInCurrentCycle
                 ) ? (
-                  <button
+                  <Button
                     type="button"
-                    className="btn"
                     onClick={() => setModerationSubmissionId(submission.id)}
                   >
                     {moderation ? "Review moderation" : "Moderate reviews"}
-                  </button>
+                  </Button>
                 ) : null}
               </div>
             </details>

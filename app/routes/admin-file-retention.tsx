@@ -1,5 +1,6 @@
 import { data, Form, useActionData, useNavigation } from "react-router";
 import { RetentionHoldForm } from "~/components/retention-hold-form";
+import { Button } from "~/components/ui/button";
 import {
   FileAccessError,
   FileErasureConfirmationError,
@@ -239,8 +240,8 @@ export default function AdminFileRetention({
                 required
               />
             </label>
-            <button
-              className="btn danger"
+            <Button
+              variant="danger"
               type="submit"
               disabled={
                 busy ||
@@ -250,7 +251,7 @@ export default function AdminFileRetention({
               }
             >
               Permanently erase next batch
-            </button>
+            </Button>
           </Form>
         </section>
       </div>
@@ -380,13 +381,13 @@ export default function AdminFileRetention({
               I understand this permanently removes local participant content
               while retaining the disclosed audit and external-provider records.
             </label>
-            <button
-              className="btn danger"
+            <Button
+              variant="danger"
               type="submit"
               disabled={busy || !participantRetention.canRun}
             >
               Anonymise next participant batch
-            </button>
+            </Button>
           </Form>
         ) : null}
       </section>

@@ -2,12 +2,12 @@ import { ArrowLeft } from "lucide-react";
 import {
   data,
   Form,
-  Link,
   redirect,
   useActionData,
   useNavigation,
 } from "react-router";
 import { ZodError } from "zod";
+import { Button, ButtonLink } from "~/components/ui/button";
 import {
   CommunicationNotFoundError,
   CommunicationStateError,
@@ -122,9 +122,9 @@ export default function AdminCrmOutreach({ loaderData }: Route.ComponentProps) {
             confirmation workflow.
           </p>
         </div>
-        <Link className="btn" to="/admin/crm">
+        <ButtonLink to="/admin/crm">
           <ArrowLeft aria-hidden size={15} /> Speaker Network directory
-        </Link>
+        </ButtonLink>
       </div>
       {actionData ? (
         <div className="validation-item error crm-notice" role="alert">
@@ -217,11 +217,11 @@ export default function AdminCrmOutreach({ loaderData }: Route.ComponentProps) {
             The next screen resolves the exact per-recipient preview before
             anything is queued.
           </p>
-          <button type="submit" className="btn primary" disabled={busy}>
+          <Button type="submit" variant="primary" disabled={busy}>
             {busy
               ? "Creating durable draft…"
               : "Create draft and preview recipients"}
-          </button>
+          </Button>
         </section>
       </Form>
     </div>

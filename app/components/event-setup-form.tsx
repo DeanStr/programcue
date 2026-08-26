@@ -2,7 +2,6 @@ import { CircleAlert, CircleCheck } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Form,
-  Link,
   useBeforeUnload,
   useBlocker,
   useFetcher,
@@ -25,6 +24,7 @@ import {
 } from "~/components/event-setup-panels";
 import { AdminPageSection } from "~/components/ui/admin-page-sections";
 import { AdminWorkspaceTabs } from "~/components/ui/admin-workspace-tabs";
+import { Button, ButtonLink } from "~/components/ui/button";
 import { ConfirmDialog, useConfirm } from "~/components/ui/confirm-dialog";
 import { ErrorSummary } from "~/components/ui/error-summary";
 import type { EventSetup } from "~/modules/events/event-repository.server";
@@ -197,24 +197,25 @@ function EventSetupCommitActions({
         </p>
       )}
       <div className="event-setup-actions-buttons">
-        <button
+        <Button
           type="button"
-          className={`btn${compact ? " small" : ""}`}
+          size={compact ? "small" : undefined}
           onClick={onDiscard}
           disabled={!hasAnyUnsavedChanges || saving}
         >
           {compact ? "Discard" : "Discard changes"}
-        </button>
-        <button
+        </Button>
+        <Button
           type="submit"
-          className={`btn primary${compact ? " small" : ""}`}
+          variant="primary"
+          size={compact ? "small" : undefined}
           disabled={saving || pendingRecordDraftPresent}
           aria-describedby={
             pendingRecordDraftPresent ? pendingHelpId : undefined
           }
         >
           {saving ? "Saving…" : compact ? "Save" : "Save event"}
-        </button>
+        </Button>
       </div>
     </div>
   );
@@ -730,12 +731,13 @@ export function EventSetupForm({
                       <div className="help">{incompleteEvent.lastError}</div>
                     ) : null}
                   </div>
-                  <Link
-                    className="btn small right"
+                  <ButtonLink
+                    size="small"
+                    className="right"
                     to={`/admin/events/${encodeURIComponent(incompleteEvent.id)}/repository-recovery`}
                   >
                     Recover {incompleteEvent.name}
-                  </Link>
+                  </ButtonLink>
                 </div>
               ))}
             </div>

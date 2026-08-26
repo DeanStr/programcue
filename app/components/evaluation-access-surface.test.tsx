@@ -331,7 +331,9 @@ describe("evaluation persona board", () => {
 
     // Server-rendered with an empty confirmation, so the control starts off.
     expect(markup).toContain("Reset evaluation data</button>");
-    expect(markup).toMatch(/<button class="btn danger" disabled=""/u);
+    expect(markup).toMatch(
+      /<button(?=[^>]*class="btn danger")(?=[^>]*disabled="")[^>]*>/u,
+    );
     expect(markup).toContain('name="confirmation"');
     expect(markup).toContain(
       '<span class="pc-eval-phrase">Future of Events 2027</span>',
@@ -351,15 +353,22 @@ describe("evaluation persona board", () => {
       "Evaluation data reset. Choose a fresh starting persona.",
     );
     expect(markup).toMatch(/id="evaluation-reset-confirmation"[^>]*value=""/u);
-    expect(markup).toMatch(/<button class="btn danger" disabled=""/u);
+    expect(markup).toMatch(
+      /<button(?=[^>]*class="btn danger")(?=[^>]*disabled="")[^>]*>/u,
+    );
   });
 
   it("disables every persona control while a submission is in flight", () => {
     const markup = render({ busy: true, resetBusy: true });
 
     expect(markup).toContain("Resetting evaluation data…");
-    expect(markup).not.toMatch(
-      /<button class="btn primary" type="submit">Open as/u,
-    );
+    const personaControls =
+      markup.match(
+        /<button(?=[^>]*class="btn primary")(?=[^>]*type="submit")[^>]*>/gu,
+      ) ?? [];
+    expect(personaControls.length).toBeGreaterThan(0);
+    expect(
+      personaControls.every((control) => control.includes('disabled=""')),
+    ).toBe(true);
   });
 });

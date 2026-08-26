@@ -1,5 +1,6 @@
 import { CalendarPlus, Link2 } from "lucide-react";
-import { Form, Link, useSubmit } from "react-router";
+import { Form, useSubmit } from "react-router";
+import { Button, ButtonLink } from "~/components/ui/button";
 import { useConfirm } from "~/components/ui/confirm-dialog";
 import { DomainStatusBadge } from "~/components/ui/domain-status-badge";
 import { EmptyState } from "~/components/ui/states";
@@ -86,7 +87,7 @@ function CalendarAction({
         name="idempotencyKey"
         value={lifecycleKey(target, method, provider)}
       />
-      <button type="submit" className="btn small" disabled={working}>
+      <Button type="submit" size="small" disabled={working}>
         {method === "CANCEL"
           ? "Cancel invitation"
           : provider === "email_ics"
@@ -94,7 +95,7 @@ function CalendarAction({
               ? "Email the invitation"
               : "Email an update"
             : `${creating ? "Send to" : "Update"} ${provider === "google" ? "Google Calendar" : "Microsoft Outlook"}`}
-      </button>
+      </Button>
     </Form>
   );
 }
@@ -118,12 +119,12 @@ export function CalendarAdministration({
         <span className="help right">Google, Microsoft 365 and email ICS</span>
       </div>
       <div className="row-actions mb">
-        <Link className="btn" to="/oauth/calendar/google">
+        <ButtonLink to="/oauth/calendar/google">
           Connect my Google Calendar
-        </Link>
-        <Link className="btn" to="/oauth/calendar/microsoft">
+        </ButtonLink>
+        <ButtonLink to="/oauth/calendar/microsoft">
           Connect my Microsoft 365 calendar
-        </Link>
+        </ButtonLink>
       </div>
       {loaderData.connections.length ? (
         <section
@@ -185,15 +186,11 @@ export function CalendarAdministration({
                             name="connectionId"
                             value={connection.id}
                           />
-                          <button
-                            type="submit"
-                            className="btn small"
-                            disabled={working}
-                          >
+                          <Button type="submit" size="small" disabled={working}>
                             {working && pendingIntent === "refresh-calendar"
                               ? "Refreshing…"
                               : "Refresh token"}
-                          </button>
+                          </Button>
                         </Form>
                       ) : null}
                       {connection.status === "connected" ||
@@ -228,13 +225,9 @@ export function CalendarAdministration({
                             name="connectionId"
                             value={connection.id}
                           />
-                          <button
-                            type="submit"
-                            className="btn small"
-                            disabled={working}
-                          >
+                          <Button type="submit" size="small" disabled={working}>
                             Disconnect
-                          </button>
+                          </Button>
                         </Form>
                       ) : null}
                     </div>
@@ -363,13 +356,13 @@ export function CalendarAdministration({
                               name="invitationId"
                               value={target.invitationId}
                             />
-                            <button
+                            <Button
                               type="submit"
-                              className="btn small"
+                              size="small"
                               disabled={working}
                             >
                               Reconcile RSVP
-                            </button>
+                            </Button>
                           </Form>
                         ) : null}
                       </div>

@@ -3,13 +3,13 @@ import { useState } from "react";
 import {
   data,
   Form,
-  Link,
   redirect,
   useActionData,
   useNavigation,
   useSubmit,
 } from "react-router";
 import { ZodError } from "zod";
+import { Button, ButtonLink } from "~/components/ui/button";
 import { useConfirm } from "~/components/ui/confirm-dialog";
 import { DomainStatusBadge } from "~/components/ui/domain-status-badge";
 import { EmptyState } from "~/components/ui/states";
@@ -204,12 +204,10 @@ export default function AdminTaskBulk({ loaderData }: Route.ComponentProps) {
           </p>
         </div>
         <div className="page-actions">
-          <Link className="btn" to="/admin/tasks">
-            Tasks &amp; readiness
-          </Link>
-          <Link className="btn" to="/admin/operations?type=task.bulk">
+          <ButtonLink to="/admin/tasks">Tasks &amp; readiness</ButtonLink>
+          <ButtonLink to="/admin/operations?type=task.bulk">
             Operation history
-          </Link>
+          </ButtonLink>
         </div>
       </div>
 
@@ -308,22 +306,22 @@ export default function AdminTaskBulk({ loaderData }: Route.ComponentProps) {
                       : "Tasks appear here once they are in a state this action can change."
                   }
                   action={
-                    <Link className="btn" to="/admin/tasks">
+                    <ButtonLink to="/admin/tasks">
                       Tasks &amp; readiness
-                    </Link>
+                    </ButtonLink>
                   }
                 />
               ) : null}
             </div>
           </fieldset>
           <div className="page-actions">
-            <button
-              className="btn primary"
+            <Button
+              variant="primary"
               type="submit"
               disabled={navigation.state !== "idle" || !candidates.length}
             >
               Preview exact changes <ArrowRight aria-hidden size={15} />
-            </button>
+            </Button>
           </div>
         </Form>
       </section>
@@ -339,18 +337,12 @@ export default function AdminTaskBulk({ loaderData }: Route.ComponentProps) {
             Recipient and content preview remains mandatory before delivery.
           </p>
           <div className="page-actions">
-            <Link
-              className="btn"
-              to="/admin/communications?audience=due_speakers&category=task_reminder"
-            >
+            <ButtonLink to="/admin/communications?audience=due_speakers&category=task_reminder">
               Prepare due reminders
-            </Link>
-            <Link
-              className="btn"
-              to="/admin/communications?audience=overdue_speakers&category=task_reminder"
-            >
+            </ButtonLink>
+            <ButtonLink to="/admin/communications?audience=overdue_speakers&category=task_reminder">
               Prepare overdue reminders
-            </Link>
+            </ButtonLink>
           </div>
         </section>
         <section
@@ -368,15 +360,15 @@ export default function AdminTaskBulk({ loaderData }: Route.ComponentProps) {
             generic bulk switch.
           </p>
           <div className="page-actions">
-            <Link className="btn small" to="/admin/schedule">
+            <ButtonLink size="small" to="/admin/schedule">
               Schedule
-            </Link>
-            <Link className="btn small" to="/admin/submissions/form">
+            </ButtonLink>
+            <ButtonLink size="small" to="/admin/submissions/form">
               Form
-            </Link>
-            <Link className="btn small" to="/admin/resources">
+            </ButtonLink>
+            <ButtonLink size="small" to="/admin/resources">
               Resources
-            </Link>
+            </ButtonLink>
           </div>
         </section>
       </div>
@@ -490,14 +482,14 @@ export default function AdminTaskBulk({ loaderData }: Route.ComponentProps) {
                     name="operationId"
                     value={operation.id}
                   />
-                  <button
-                    className="btn primary"
+                  <Button
+                    variant="primary"
                     type="submit"
                     disabled={navigation.state !== "idle"}
                   >
                     <ListChecks aria-hidden size={15} /> Confirm reviewed
                     changes
-                  </button>
+                  </Button>
                 </Form>
               ) : (
                 <p className="subtle">
@@ -508,13 +500,9 @@ export default function AdminTaskBulk({ loaderData }: Route.ComponentProps) {
               <Form method="post">
                 <input type="hidden" name="intent" value="cancel" />
                 <input type="hidden" name="operationId" value={operation.id} />
-                <button
-                  className="btn"
-                  type="submit"
-                  disabled={navigation.state !== "idle"}
-                >
+                <Button type="submit" disabled={navigation.state !== "idle"}>
                   Cancel preview
-                </button>
+                </Button>
               </Form>
             </div>
           ) : null}

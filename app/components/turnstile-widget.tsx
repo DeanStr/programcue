@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { useNavigation } from "react-router";
+import { Button } from "~/components/ui/button";
 
 const SCRIPT_ID = "program-cue-turnstile-script";
 const SCRIPT_STATE_ATTRIBUTE = "data-program-cue-turnstile-state";
@@ -239,13 +240,13 @@ export function TurnstileWidget({
             Security verification could not load. Check your connection, then
             retry before submitting.
           </span>
-          <button
-            className="btn small"
+          <Button
+            size="small"
             type="button"
             onClick={() => setLoadAttempt((attempt) => attempt + 1)}
           >
             Retry security verification
-          </button>
+          </Button>
         </div>
       ) : null}
       <input type="hidden" name="turnstile-token" value={token} />

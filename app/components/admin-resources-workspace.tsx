@@ -16,6 +16,7 @@ import {
   DraftRecoveryFeedback,
   DraftRecoveryStatus,
 } from "~/components/draft-recovery-feedback";
+import { Button, ButtonLink } from "~/components/ui/button";
 import { useConfirm } from "~/components/ui/confirm-dialog";
 import { DerivedSlugField } from "~/components/ui/derived-slug-field";
 import { PageHeader } from "~/components/ui/page-header";
@@ -327,22 +328,22 @@ function ResourcePreviewPanel() {
           className="preview-viewport-controls right pc-plain-fieldset"
           aria-label="Resource preview size"
         >
-          <button
-            className="btn small"
+          <Button
+            size="small"
             type="button"
             aria-pressed={previewViewport === "mobile"}
             onClick={() => setPreviewViewport("mobile")}
           >
             Mobile
-          </button>
-          <button
-            className="btn small"
+          </Button>
+          <Button
+            size="small"
             type="button"
             aria-pressed={previewViewport === "desktop"}
             onClick={() => setPreviewViewport("desktop")}
           >
             Desktop
-          </button>
+          </Button>
         </fieldset>
       </div>
       {resourcePreview.error ? (
@@ -393,15 +394,15 @@ function ResourceEditorActions() {
       </span>
       <DraftRecoveryStatus state={recovery.state} />
       <span className="spacer" />
-      <button
+      <Button
         type="submit"
-        className="btn primary"
+        variant="primary"
         disabled={navigation.state !== "idle"}
       >
         {navigation.state === "submitting" && pendingIntent === "save"
           ? "Saving…"
           : "Save draft version"}
-      </button>
+      </Button>
     </div>
   );
 }
@@ -432,8 +433,8 @@ function ResourceEditorPanel() {
       </Form>
       {editing ? (
         <div className="resource-secondary-actions">
-          <button
-            className="btn primary"
+          <Button
+            variant="primary"
             type="button"
             onClick={() => setPublishConfirmationOpen(true)}
             disabled={
@@ -443,7 +444,7 @@ function ResourceEditorPanel() {
             }
           >
             <BookOpenCheck aria-hidden size={15} /> Publish current draft
-          </button>
+          </Button>
           {editing.versionId ? (
             <DirectMultipartUpload
               key={`${editing.versionId}:${editing.revision}`}
@@ -516,13 +517,12 @@ function ResourceEditorPanel() {
           onClose={() => setPublishConfirmationOpen(false)}
           footer={
             <>
-              <button
-                className="btn"
+              <Button
                 type="button"
                 onClick={() => setPublishConfirmationOpen(false)}
               >
                 Keep as draft
-              </button>
+              </Button>
               <Form
                 method="post"
                 onSubmit={() => setPublishConfirmationOpen(false)}
@@ -530,15 +530,15 @@ function ResourceEditorPanel() {
                 <input type="hidden" name="intent" value="publish" />
                 <input type="hidden" name="id" value={editing.id} />
                 <input type="hidden" name="revision" value={editing.revision} />
-                <button
-                  className="btn primary"
+                <Button
+                  variant="primary"
                   type="submit"
                   disabled={
                     (editing.publicationImpact?.blockingDependentTasks ?? 0) > 0
                   }
                 >
                   Publish version {editing.versionNumber}
-                </button>
+                </Button>
               </Form>
             </>
           }
@@ -678,17 +678,16 @@ function ResourceAdminHeader() {
       description="Author versioned guidance with a constrained editor, private attachments, optional video or map blocks and audience-scoped publication."
       actions={
         <>
-          <Link
-            className="btn"
+          <ButtonLink
             to="/participant/resources"
             target="_blank"
             rel="noopener noreferrer"
           >
             <ExternalLink aria-hidden size={15} /> Speaker view
             <span className="sr-only"> (opens in a new tab)</span>
-          </Link>
-          <button
-            className="btn primary"
+          </ButtonLink>
+          <Button
+            variant="primary"
             type="button"
             onClick={() => {
               setCreating(true);
@@ -704,7 +703,7 @@ function ResourceAdminHeader() {
             }}
           >
             <Plus aria-hidden size={15} /> New resource
-          </button>
+          </Button>
         </>
       }
     />
@@ -764,8 +763,8 @@ function ResourceDraftConflictNotice() {
         explicitly load the latest server version.
       </span>
       <span className="row-actions right">
-        <button
-          className="btn small"
+        <Button
+          size="small"
           type="button"
           onClick={() => {
             const blob = new Blob([JSON.stringify(recoveryPayload, null, 2)], {
@@ -780,9 +779,9 @@ function ResourceDraftConflictNotice() {
           }}
         >
           Export local edits
-        </button>
-        <button
-          className="btn small"
+        </Button>
+        <Button
+          size="small"
           type="button"
           onClick={() =>
             confirm(
@@ -799,7 +798,7 @@ function ResourceDraftConflictNotice() {
           }
         >
           Load server version
-        </button>
+        </Button>
       </span>
     </div>
   ) : null;

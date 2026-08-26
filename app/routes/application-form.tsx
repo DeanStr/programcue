@@ -9,6 +9,7 @@ import {
 import { claimApplicantVideoUploadOperation } from "~/components/applicant-video-upload";
 import { PublicApplicationLanding } from "~/components/application-public-landing";
 import { BrandMark } from "~/components/brand-mark";
+import { Button, ButtonLink } from "~/components/ui/button";
 import { StatusNotice } from "~/components/ui/status-notice";
 import { programmeAccentPalette } from "~/modules/programme/programme-presentation";
 import {
@@ -204,9 +205,9 @@ export default function ApplicationForm({ loaderData }: Route.ComponentProps) {
             </a>
           ) : null}
           {programmeUrl ? (
-            <Link className="btn right" to={programmeUrl}>
+            <ButtonLink className="right" to={programmeUrl}>
               Programme
-            </Link>
+            </ButtonLink>
           ) : null}
         </header>
         <PublicApplicationLanding
@@ -278,11 +279,11 @@ export default function ApplicationForm({ loaderData }: Route.ComponentProps) {
             action={claimScopedAction}
           >
             <input type="hidden" name="_intent" value="sign_out" />
-            <button type="submit" className="btn">
+            <Button type="submit">
               {applicant.verified
                 ? `Sign out ${applicant.email}`
                 : "Discard anonymous session"}
-            </button>
+            </Button>
           </Form>
         ) : null}
       </header>

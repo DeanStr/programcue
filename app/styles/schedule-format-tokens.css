@@ -1,31 +1,6 @@
-/* Format is categorical colour, independent of copper brand emphasis.
-   Fill/ink/line let a block read as an object; the legacy .format-*
-   badges keep the same hues for chips outside the planner. */
-.format-keynote {
-  background: var(--format-keynote-fill);
-  color: var(--format-keynote-accent);
-}
-.format-presentation {
-  background: var(--format-presentation-fill);
-  color: var(--format-presentation-ink);
-}
-.format-panel {
-  background: var(--format-panel-fill);
-  color: var(--format-panel-ink);
-}
-.format-workshop {
-  background: var(--format-workshop-fill);
-  color: var(--format-workshop-ink);
-}
-.format-breakout {
-  background: var(--format-breakout-fill);
-  color: var(--format-breakout-ink);
-}
-.format-break {
-  background: var(--format-break-fill);
-  color: var(--format-break-ink);
-}
-
+/* Format is categorical colour inside the schedule planner, independent of
+   copper brand emphasis. Fill/ink/line let each scheduled object scan as one
+   category while the public programme keeps one generic format treatment. */
 .session-card,
 .schedule-session-source,
 .schedule-fc-event,

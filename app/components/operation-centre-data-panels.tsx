@@ -1,4 +1,5 @@
-import { Form, Link, useNavigation, useSubmit } from "react-router";
+import { Form, useNavigation, useSubmit } from "react-router";
+import { Button, ButtonLink } from "~/components/ui/button";
 import { useConfirm } from "~/components/ui/confirm-dialog";
 import { fieldLabel } from "~/lib/record-labels";
 import { shortReference } from "~/lib/short-reference";
@@ -51,13 +52,13 @@ export function AirtableRecoveryPanel({
                 value="recover-airtable-projection"
               />
               <input type="hidden" name="operationId" value={run.runId} />
-              <button
-                className="btn danger"
+              <Button
+                variant="danger"
                 type="submit"
                 disabled={navigation.state !== "idle"}
               >
                 Retry this Airtable update
-              </button>
+              </Button>
             </Form>
           </div>
         ))}
@@ -111,13 +112,9 @@ export function OperationFiltersPanel({
           </select>
         </label>
         <div className="page-actions">
-          <button className="btn" type="submit">
-            Apply filters
-          </button>
+          <Button type="submit">Apply filters</Button>
           {loaderData.filterActive ? (
-            <Link className="btn" to="/admin/operations">
-              Clear
-            </Link>
+            <ButtonLink to="/admin/operations">Clear</ButtonLink>
           ) : null}
         </div>
       </Form>
@@ -157,9 +154,9 @@ export function DataExportPanel({
               name="idempotencyKey"
               value={loaderData.exportIntents[resource]}
             />
-            <button className="btn" type="submit">
+            <Button type="submit">
               {resource.replace(/^./, (letter) => letter.toUpperCase())} CSV
-            </button>
+            </Button>
           </Form>
         ))}
       </div>
@@ -222,13 +219,13 @@ export function DataImportPanel({
           />
         </label>
         <div className="page-actions" style={{ alignItems: "end" }}>
-          <button
-            className="btn primary"
+          <Button
+            variant="primary"
             type="submit"
             disabled={navigation.state !== "idle"}
           >
             Preview import
-          </button>
+          </Button>
         </div>
       </Form>
       <p className="help mt">
@@ -355,13 +352,13 @@ export function DataImportPanel({
                 name="operationId"
                 value={loaderData.selectedOperation.id}
               />
-              <button
-                className="btn primary"
+              <Button
+                variant="primary"
                 type="submit"
                 disabled={navigation.state !== "idle"}
               >
                 Confirm import
-              </button>
+              </Button>
             </Form>
           ) : null}
         </div>

@@ -6,6 +6,7 @@ import {
   type SpeakerTask,
   speakerStatusClass,
 } from "~/components/speaker-dashboard-panel-shared";
+import { Button, ButtonLink } from "~/components/ui/button";
 import { DomainStatusBadge } from "~/components/ui/domain-status-badge";
 import { EventDateTime } from "~/components/ui/event-date-time";
 
@@ -237,16 +238,16 @@ export function SpeakerDashboardOverview({
                   : "Your task list is clear. Check the preparation stages below for remaining profile, session or resource status."}
           </p>
           {taskAction ? (
-            <Link
-              className="btn primary"
+            <ButtonLink
+              variant="primary"
               to={`/participant/tasks#task-${taskAction.id}`}
             >
               Open task
-            </Link>
+            </ButtonLink>
           ) : resourceAction ? (
-            <Link className="btn primary" to={resourceAction.href}>
+            <ButtonLink variant="primary" to={resourceAction.href}>
               Open resource
-            </Link>
+            </ButtonLink>
           ) : null}
           <p className="speaker-next-facts">
             {completedStages} of {milestones.length} stages complete
@@ -429,14 +430,14 @@ export function SpeakerSessionsPanel({
                     Confirm that you agree to participate in this session and be
                     listed according to its programme visibility.
                   </p>
-                  <button
-                    className="btn primary"
+                  <Button
+                    variant="primary"
                     type="submit"
                     disabled={busy}
                     aria-label={`Confirm participation in ${session.title}`}
                   >
                     Confirm participation
-                  </button>
+                  </Button>
                 </Form>
               ) : null}
             </article>

@@ -7,6 +7,7 @@ import {
   useState,
 } from "react";
 import { Form, Link } from "react-router";
+import { Button, IconButton } from "~/components/ui/button";
 import type { PublishedProgramme } from "~/modules/programme/public-programme-types";
 import {
   PUBLIC_SITE_PAGE_TYPES,
@@ -141,27 +142,22 @@ function OrderedFeaturedPicker({
                 {item.metadata ? <small>{item.metadata}</small> : null}
               </span>
               <div className="public-site-order-actions">
-                <button
-                  type="button"
-                  className="icon-btn"
+                <IconButton
                   disabled={index === 0}
                   aria-label={`Move up ${item.title}`}
                   onClick={() => move(index, -1)}
                 >
                   <ChevronUp aria-hidden size={14} />
-                </button>
-                <button
-                  type="button"
-                  className="icon-btn"
+                </IconButton>
+                <IconButton
                   disabled={index === selected.length - 1}
                   aria-label={`Move down ${item.title}`}
                   onClick={() => move(index, 1)}
                 >
                   <ChevronDown aria-hidden size={14} />
-                </button>
-                <button
-                  type="button"
-                  className="icon-btn danger"
+                </IconButton>
+                <IconButton
+                  className="danger"
                   aria-label={
                     item.unavailable ? item.title : `Remove ${item.title}`
                   }
@@ -172,7 +168,7 @@ function OrderedFeaturedPicker({
                   }
                 >
                   <X aria-hidden size={14} />
-                </button>
+                </IconButton>
               </div>
             </li>
           ))}
@@ -206,9 +202,8 @@ function OrderedFeaturedPicker({
                     <strong>{item.title}</strong>
                     {item.metadata ? <small>{item.metadata}</small> : null}
                   </span>
-                  <button
-                    type="button"
-                    className="btn small"
+                  <Button
+                    size="small"
                     disabled={atCapacity}
                     aria-label={`Add ${item.title}`}
                     onClick={() =>
@@ -216,7 +211,7 @@ function OrderedFeaturedPicker({
                     }
                   >
                     <Plus aria-hidden size={14} /> Add
-                  </button>
+                  </Button>
                 </div>
               ))}
             </div>
@@ -255,27 +250,22 @@ function FaqEditor({
             <div className="public-site-record-head">
               <strong>Question {index + 1}</strong>
               <div className="public-site-order-actions">
-                <button
-                  className="icon-btn"
-                  type="button"
+                <IconButton
                   disabled={index === 0}
                   aria-label={`Move up FAQ item ${index + 1}`}
                   onClick={() => move(index, -1)}
                 >
                   <ChevronUp aria-hidden size={14} />
-                </button>
-                <button
-                  className="icon-btn"
-                  type="button"
+                </IconButton>
+                <IconButton
                   disabled={index === configuration.faqItems.length - 1}
                   aria-label={`Move down FAQ item ${index + 1}`}
                   onClick={() => move(index, 1)}
                 >
                   <ChevronDown aria-hidden size={14} />
-                </button>
-                <button
-                  className="icon-btn danger"
-                  type="button"
+                </IconButton>
+                <IconButton
+                  className="danger"
                   aria-label={`Remove FAQ item ${index + 1}`}
                   onClick={() =>
                     setConfiguration((current) => ({
@@ -287,7 +277,7 @@ function FaqEditor({
                   }
                 >
                   <Trash2 aria-hidden size={14} />
-                </button>
+                </IconButton>
               </div>
             </div>
             <label className="label">
@@ -327,9 +317,8 @@ function FaqEditor({
         ))}
       </div>
       <div className="page-actions">
-        <button
-          className="btn small"
-          type="button"
+        <Button
+          size="small"
           disabled={configuration.faqItems.length >= 12}
           onClick={() =>
             setConfiguration((current) => ({
@@ -342,7 +331,7 @@ function FaqEditor({
           }
         >
           <Plus aria-hidden size={14} /> Add question
-        </button>
+        </Button>
       </div>
     </>
   );
@@ -480,24 +469,20 @@ function HomepageSectionRow({
           <span aria-hidden="true">{visible ? "Shown" : "Hidden"}</span>
         </label>
         <div className="public-site-order-actions">
-          <button
-            type="button"
-            className="icon-btn"
+          <IconButton
             disabled={index === 0}
             aria-label={`Move up ${label}`}
             onClick={() => onMove(-1)}
           >
             <ChevronUp aria-hidden size={14} />
-          </button>
-          <button
-            type="button"
-            className="icon-btn"
+          </IconButton>
+          <IconButton
             disabled={index === total - 1}
             aria-label={`Move down ${label}`}
             onClick={() => onMove(1)}
           >
             <ChevronDown aria-hidden size={14} />
-          </button>
+          </IconButton>
         </div>
       </div>
     </li>
@@ -762,7 +747,7 @@ export function AdminPublicSiteEditor({
           <label className="label">
             Theme
             <select
-              className="field"
+              className="select"
               value={configuration.theme}
               onChange={(event) =>
                 setConfiguration((current) => ({

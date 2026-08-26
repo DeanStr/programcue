@@ -92,7 +92,7 @@
   border-color: var(--brand-500);
   outline: var(--focus-width) solid var(--focus-ring);
   outline-offset: var(--focus-halo-width);
-  box-shadow: 0 0 0 var(--focus-halo-width) var(--focus-halo);
+  box-shadow: var(--focus-halo-shadow);
 }
 
 .branding-accent-swatch {
@@ -533,7 +533,7 @@
   }
 }
 
-@media (max-width: 720px) {
+@media (max-width: 760px) {
   .branding-preview-surfaces {
     display: grid;
     grid-template-columns: 1fr 1fr;
@@ -559,7 +559,7 @@
   }
 }
 
-@media (max-width: 390px) {
+@media (max-width: 400px) {
   .branding-preview-chrome {
     padding-inline: var(--space-3);
   }

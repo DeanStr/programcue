@@ -1,6 +1,7 @@
 import { Form, Link } from "react-router";
 
 import { useEvaluationAdminModel } from "~/components/evaluation-admin-model";
+import { Button } from "~/components/ui/button";
 import { EmptyState } from "~/components/ui/states";
 import { availableEvaluationAssignmentTargets } from "~/modules/evaluations/evaluation-assignment-availability";
 
@@ -138,16 +139,17 @@ export function EvaluationSessionQueue() {
                               </small>
                               {assignment.reviewStatus === "submitted" ||
                               assignment.reviewStatus === "locked" ? (
-                                <button
+                                <Button
                                   type="button"
-                                  className="btn small danger"
+                                  variant="danger"
+                                  size="small"
                                   aria-label={`Reopen ${assignment.evaluatorName}'s review for ${session.title}`}
                                   onClick={() =>
                                     setReopenAssignmentId(assignment.id)
                                   }
                                 >
                                   Reopen review
-                                </button>
+                                </Button>
                               ) : null}
                             </div>
                           ))}

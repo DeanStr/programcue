@@ -6,6 +6,7 @@ import {
   type TurnstileStatus,
   TurnstileWidget,
 } from "~/components/turnstile-widget";
+import { Button, ButtonAnchor, ButtonLink } from "~/components/ui/button";
 import { DomainStatusBadge } from "~/components/ui/domain-status-badge";
 import { StatusNotice } from "~/components/ui/status-notice";
 import type { Route } from "./+types/application-form";
@@ -84,12 +85,12 @@ export function AccessPanel({
             ? "This organiser requires a verified Program Cue account before applications can be created."
             : "New applications are unavailable. Signed-in applicants can still return to existing applications."}
         </p>
-        <Link
-          className="btn primary"
+        <ButtonLink
+          variant="primary"
           to={`/sign-in?${new URLSearchParams({ returnTo })}`}
         >
           Continue to sign in
-        </Link>
+        </ButtonLink>
       </section>
     );
   }
@@ -136,8 +137,8 @@ export function AccessPanel({
             appearance="interaction-only"
             onStatusChange={setVerifySecurityStatus}
           />
-          <button
-            className="btn primary"
+          <Button
+            variant="primary"
             type="submit"
             disabled={pending || !verifySecurityReady}
           >
@@ -148,7 +149,7 @@ export function AccessPanel({
                   ? "Security check unavailable"
                   : "Security check in progress…"
                 : "Verify and open applications"}
-          </button>
+          </Button>
         </Form>
       </section>
     );
@@ -178,8 +179,8 @@ export function AccessPanel({
         appearance="interaction-only"
         onStatusChange={setRequestSecurityStatus}
       />
-      <button
-        className={`btn${form.allowAnonymousDrafts ? "" : " primary"}`}
+      <Button
+        variant={form.allowAnonymousDrafts ? undefined : "primary"}
         type="submit"
         disabled={pending || !requestSecurityReady}
       >
@@ -190,7 +191,7 @@ export function AccessPanel({
               ? "Security check unavailable"
               : "Security check in progress…"
             : "Send verification code"}
-      </button>
+      </Button>
     </Form>
   );
   return (
@@ -245,8 +246,8 @@ export function AccessPanel({
             appearance="interaction-only"
             onStatusChange={setStartSecurityStatus}
           />
-          <button
-            className="btn primary"
+          <Button
+            variant="primary"
             type="submit"
             disabled={pending || !accepting || !startSecurityReady}
           >
@@ -259,7 +260,7 @@ export function AccessPanel({
                     ? "Security check unavailable"
                     : "Security check in progress…"
                   : "Start application"}
-          </button>
+          </Button>
         </Form>
       ) : null}
       {form.allowAnonymousDrafts && accepting ? (
@@ -346,8 +347,8 @@ export function AnonymousVerificationPanel({
             appearance="interaction-only"
             onStatusChange={setVerifySecurityStatus}
           />
-          <button
-            className="btn primary"
+          <Button
+            variant="primary"
             type="submit"
             disabled={pending || !verifySecurityReady}
           >
@@ -358,7 +359,7 @@ export function AnonymousVerificationPanel({
                   ? "Security check unavailable"
                   : "Security check in progress…"
                 : "Verify email"}
-          </button>
+          </Button>
         </Form>
       ) : (
         <Form method="post" className="form-row">
@@ -379,8 +380,8 @@ export function AnonymousVerificationPanel({
             appearance="interaction-only"
             onStatusChange={setRequestSecurityStatus}
           />
-          <button
-            className="btn primary"
+          <Button
+            variant="primary"
             style={{ alignSelf: "end" }}
             type="submit"
             disabled={pending || !requestSecurityReady}
@@ -392,7 +393,7 @@ export function AnonymousVerificationPanel({
                   ? "Security check unavailable"
                   : "Security check in progress…"
                 : "Send verification code"}
-          </button>
+          </Button>
         </Form>
       )}
     </section>
@@ -434,15 +435,15 @@ export function SpeakerProfilePanel({
             defaultValue={profile.biography}
           />
         </label>
-        <button
-          className="btn primary"
+        <Button
+          variant="primary"
           type="submit"
           disabled={navigation.state !== "idle"}
         >
           {navigation.formData?.get("_intent") === "update_profile"
             ? "Saving…"
             : "Save my profile"}
-        </button>
+        </Button>
       </Form>
     </details>
   );
@@ -494,15 +495,15 @@ export function ClaimPanel({
             <Form method="post">
               <input type="hidden" name="_intent" value="claim_token" />
               <input type="hidden" name="speakerId" value={claim.id} />
-              <button
-                className="btn primary"
+              <Button
+                variant="primary"
                 type="submit"
                 disabled={navigation.state !== "idle"}
               >
                 {navigation.state === "submitting"
                   ? "Claiming…"
                   : "Claim speaker profile"}
-              </button>
+              </Button>
             </Form>
           )}
         </>
@@ -585,19 +586,19 @@ export function AuthenticatedApplicationWorkspace({
                 name="intentId"
                 value={`${loaderData.intentId}:authenticated`}
               />
-              <button
-                className="btn primary"
+              <Button
+                variant="primary"
                 type="submit"
                 disabled={
                   navigation.state !== "idle" || !availability.accepting
                 }
               >
                 + New application
-              </button>
+              </Button>
             </Form>
           ) : applicant.claimOnly ? (
-            <Link
-              className="btn primary"
+            <ButtonLink
+              variant="primary"
               to={`/sign-in?${new URLSearchParams({
                 returnTo: applicationPortalPath,
               })}`}
@@ -605,7 +606,7 @@ export function AuthenticatedApplicationWorkspace({
               {historicalPortal
                 ? "Sign in to view applications"
                 : "Sign in to apply"}
-            </Link>
+            </ButtonLink>
           ) : historicalPortal ? (
             <span className="help right">
               Application history is read-only.
@@ -647,22 +648,19 @@ export function AuthenticatedApplicationWorkspace({
             {selected &&
             ["submitted", "revised"].includes(loaderData.noticeKind ?? "") ? (
               <span className="row-actions mt">
-                <a
-                  className="btn primary"
+                <ButtonAnchor
+                  variant="primary"
                   href={`${applicationDraftHref(
                     selected.id,
                     claimedSpeakerId,
                   )}#submitted-application`}
                 >
                   View submitted application
-                </a>
+                </ButtonAnchor>
                 {loaderData.participantWorkspaceHref ? (
-                  <Link
-                    className="btn"
-                    to={loaderData.participantWorkspaceHref}
-                  >
+                  <ButtonLink to={loaderData.participantWorkspaceHref}>
                     Go to participant workspace
-                  </Link>
+                  </ButtonLink>
                 ) : null}
               </span>
             ) : null}
@@ -682,22 +680,19 @@ export function AuthenticatedApplicationWorkspace({
             selected?.id === actionData.submissionId &&
             !["draft", "withdrawn"].includes(selected.status) ? (
               <span className="row-actions mt">
-                <a
-                  className="btn primary"
+                <ButtonAnchor
+                  variant="primary"
                   href={`${applicationDraftHref(
                     actionData.submissionId,
                     claimedSpeakerId,
                   )}#submitted-application`}
                 >
                   View submitted application
-                </a>
+                </ButtonAnchor>
                 {loaderData.participantWorkspaceHref ? (
-                  <Link
-                    className="btn"
-                    to={loaderData.participantWorkspaceHref}
-                  >
+                  <ButtonLink to={loaderData.participantWorkspaceHref}>
                     Go to participant workspace
-                  </Link>
+                  </ButtonLink>
                 ) : null}
               </span>
             ) : null}
@@ -744,9 +739,9 @@ export function AuthenticatedApplicationWorkspace({
                   name="invitationId"
                   value={invitation.id}
                 />
-                <button className="btn small" type="submit">
+                <Button size="small" type="submit">
                   Claim speaker profile
-                </button>
+                </Button>
               </Form>
             </div>
           ))}
@@ -883,14 +878,14 @@ export function AuthenticatedApplicationWorkspace({
                     : "Drafts are private and saved against the current published form version."}
               </p>
               {applicant.claimOnly ? (
-                <Link
-                  className="btn primary"
+                <ButtonLink
+                  variant="primary"
                   to={`/sign-in?${new URLSearchParams({
                     returnTo: applicationPortalPath,
                   })}`}
                 >
                   Continue to sign in
-                </Link>
+                </ButtonLink>
               ) : historicalPortal ? (
                 <p className="help">This form is closed to new applications.</p>
               ) : (
@@ -901,13 +896,13 @@ export function AuthenticatedApplicationWorkspace({
                     name="intentId"
                     value={`${loaderData.intentId}:first`}
                   />
-                  <button
-                    className="btn primary"
+                  <Button
+                    variant="primary"
                     type="submit"
                     disabled={!availability.accepting}
                   >
                     Start application
-                  </button>
+                  </Button>
                 </Form>
               )}
             </div>

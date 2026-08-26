@@ -1,6 +1,7 @@
 import { Dialog } from "~/components/dialog";
 import { DraftRecoveryFeedback } from "~/components/draft-recovery-feedback";
 import { useReviewWorkbenchModel } from "~/components/review-workbench-model";
+import { Button } from "~/components/ui/button";
 import { useConfirm } from "~/components/ui/confirm-dialog";
 
 export function ReviewWorkbenchHeader() {
@@ -84,13 +85,9 @@ export function ReviewShortcutSheet() {
       title="Keyboard shortcuts"
       onClose={() => setShortcutsOpen(false)}
       footer={
-        <button
-          type="button"
-          className="btn"
-          onClick={() => setShortcutsOpen(false)}
-        >
+        <Button type="button" onClick={() => setShortcutsOpen(false)}>
           Close
-        </button>
+        </Button>
       }
     >
       <dl className="shortcut-list review-shortcut-list">
@@ -180,23 +177,19 @@ export function ReviewSubmitDialog() {
             : "You will remain on this submitted review after the server confirms it."}
         </p>
         <div className="page-actions">
-          <button
-            type="button"
-            className="btn"
-            onClick={() => setSubmitMode(null)}
-          >
+          <Button type="button" onClick={() => setSubmitMode(null)}>
             Continue editing
-          </button>
-          <button
+          </Button>
+          <Button
             form="review-score-form"
             type="submit"
             name="intent"
             value="submit"
-            className="btn primary"
+            variant="primary"
             disabled={fetcher.state !== "idle"}
           >
             {submitMode === "next" ? "Submit and open next" : "Submit review"}
-          </button>
+          </Button>
         </div>
       </div>
     </Dialog>
@@ -217,8 +210,8 @@ export function ReviewDraftConflictNotice() {
           load the newer server revision; Program Cue will not overwrite it.
         </span>
         <span className="row-actions right">
-          <button
-            className="btn small"
+          <Button
+            size="small"
             type="button"
             onClick={() => {
               const blob = new Blob(
@@ -234,9 +227,9 @@ export function ReviewDraftConflictNotice() {
             }}
           >
             Export local edits
-          </button>
-          <button
-            className="btn small"
+          </Button>
+          <Button
+            size="small"
             type="button"
             onClick={() =>
               confirm(
@@ -254,7 +247,7 @@ export function ReviewDraftConflictNotice() {
             }
           >
             Load server version
-          </button>
+          </Button>
         </span>
       </div>
     </>
@@ -305,13 +298,13 @@ export function ReviewConflictDialog() {
           The review will be recused and returned to the committee for
           reassignment.
         </p>
-        <button
+        <Button
           type="submit"
-          className="btn danger"
+          variant="danger"
           disabled={fetcher.state !== "idle"}
         >
           {fetcher.state === "submitting" ? "Declaring…" : "Declare and recuse"}
-        </button>
+        </Button>
       </fetcher.Form>
     </Dialog>
   ) : null;

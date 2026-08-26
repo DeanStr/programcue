@@ -16,6 +16,7 @@ import {
 import { Link, useSearchParams } from "react-router";
 import { toast } from "sonner";
 import { submissionReferenceClipboard } from "~/components/operational-ui-rules";
+import { Button, ButtonSummary } from "~/components/ui/button";
 import { DomainStatusBadge } from "~/components/ui/domain-status-badge";
 import {
   ADMIN_SUBMISSION_OPTIONAL_COLUMNS,
@@ -262,15 +263,15 @@ export function SubmissionDataGrid({
               <strong>
                 {selectedRows.length} of {submissions.length} selected
               </strong>
-              <button
-                className="btn small"
+              <Button
+                size="small"
                 type="button"
                 onClick={copySelectedReferences}
               >
                 <ClipboardCopy aria-hidden size={14} /> Copy references
-              </button>
-              <button
-                className="btn small"
+              </Button>
+              <Button
+                size="small"
                 type="button"
                 onClick={() => {
                   table.resetRowSelection(true);
@@ -278,14 +279,14 @@ export function SubmissionDataGrid({
                 }}
               >
                 <X aria-hidden size={14} /> Clear selection
-              </button>
+              </Button>
             </>
           ) : null}
         </div>
         <details className="pc-data-grid-columns">
-          <summary className="btn small">
+          <ButtonSummary size="small">
             <Columns3 aria-hidden size={14} /> Columns
-          </summary>
+          </ButtonSummary>
           <fieldset>
             <legend>Visible columns</legend>
             {table

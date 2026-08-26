@@ -898,6 +898,55 @@ loader data instead of generic detail labels or an additional query.
 Focused unit/Worker and browser coverage records these observable contracts;
 manual assistive-technology acceptance remains external.
 
+**Frontend behaviour; local evidence only:** the application design system now
+owns button, internal-link, external-anchor, disclosure-summary and icon-action
+semantics in one component boundary, including labelled pending states and
+required accessible names. The repository-wide migration routes all 553 former
+raw `btn` strings and all 21 raw `icon-btn` strings through those primitives;
+the class-name composer is private to that boundary. The 10 non-token colour
+literals now use semantic tokens. Floating surfaces use elevation roles; focus
+and selection use focus roles; former inset-shadow borders and rails use
+outlines, background rules or layout-neutral pseudo-elements. All responsive
+CSS uses the shared maximum-width vocabulary and its explicit non-overlapping
+minimum companions. The former design-system compatibility baseline files and
+regeneration paths are removed; literal, shadow, breakpoint and raw action
+occurrences now fail directly. The strengthened CSS gate reads multiline
+declarations and every condition in compound media queries. A syntax-aware
+form-control gate also requires canonical or explicitly specialized chrome and
+prevents invented classes from silently falling back to browser styling;
+conditional class expressions must guarantee canonical chrome on every runtime
+branch. The shared button boundary also preserves an explicit `aria-busy` state
+when no pending operation is active.
+The follow-on source audit moved 32 controls that had nonexistent or generic
+chrome onto canonical control primitives, normalized five selects and four
+textareas to their native design-system roles, and retained only the explicit
+branding, form-builder and browser-native control exceptions. Confirmed-unused
+event-switcher, command-action and direct format-chip aliases, the warning
+action variant, the speculative notice-dismiss branch and unused public prop
+types were removed rather than preserved as dormant alternatives.
+Descending specificity is also zero, all former
+suppression comments are removed, and Biome now treats a regression as an
+error. The reference route exercises mounted workspace navigation, operational
+rows, format/status presentation and a consequential confirmation
+with affected records and focus restoration.
+
+At phone width, the reviewer score heading keeps criterion progress and a
+keyboard-usable jump to the distant commit actions in view. Public programme
+metadata uses the 13px dense-data role and session-save actions meet the 44px
+target minimum without hiding room, track or format context. The focused gate
+passed 288 files/2,473 tests; generated TypeScript and both direct-failure
+design-system hygiene gates passed. The complete 26-case Chromium visual
+inventory passed at desktop, phone and common-laptop widths. The 26-case
+accessibility run passed its keyboard/focus/landmark checks and representative
+WCAG A/AA axe sweeps across phone, tablet and desktop layouts. On 26 August
+2026 the complete local core gate passed the same 288 files/2,473 tests,
+production build, migration/recovery, audit, OpenAPI and zero-vulnerability
+checks. A resource-bounded single-Worker run then passed all 207 runnable
+application browser cases with the two expected skips, all 5 production-shaped
+evaluation cases and all 16 public-site cases. This is repository and browser
+evidence, not deployment or manual screen-reader acceptance; the manual
+accessibility boundary below remains outstanding.
+
 ### Evaluation showcase fixture evidence
 
 - **Production slice; local and production-reset acceptance:** the deterministic reset keeps

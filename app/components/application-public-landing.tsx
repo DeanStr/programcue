@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
 import { Link } from "react-router";
-
+import { ButtonAnchor, ButtonLink } from "~/components/ui/button";
 import { eventBoundaryCalendarDate } from "~/modules/schedule/schedule-time";
 import {
   formFieldsInDisplayOrder,
@@ -142,26 +142,26 @@ export function PublicApplicationLanding({
             </div>
           </dl>
           <div className="cfp-hero-actions">
-            <a className="btn primary" href="#apply">
+            <ButtonAnchor variant="primary" href="#apply">
               {accepting
                 ? "Continue to application"
                 : "View application status"}
-            </a>
+            </ButtonAnchor>
             {programmeUrl ? (
-              <Link className="btn cfp-on-dark" to={programmeUrl}>
+              <ButtonLink className="cfp-on-dark" to={programmeUrl}>
                 View programme
-              </Link>
+              </ButtonLink>
             ) : null}
             {presentation.eventWebsiteUrl ? (
-              <a
-                className="btn cfp-on-dark"
+              <ButtonAnchor
+                className="cfp-on-dark"
                 href={presentation.eventWebsiteUrl}
                 target="_blank"
                 rel="noopener noreferrer"
               >
                 Event website
                 <span className="sr-only"> (opens in a new tab)</span>
-              </a>
+              </ButtonAnchor>
             ) : null}
           </div>
         </div>

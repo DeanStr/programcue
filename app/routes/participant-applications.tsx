@@ -1,6 +1,7 @@
 import { ClipboardList, ExternalLink } from "lucide-react";
 import { data, Form, Link, useActionData, useNavigation } from "react-router";
 import { ZodError, z } from "zod";
+import { Button, ButtonLink } from "~/components/ui/button";
 import { useConfirm } from "~/components/ui/confirm-dialog";
 import { DomainStatusBadge } from "~/components/ui/domain-status-badge";
 import { requireSpeakerWorkspace } from "~/modules/speakers/speaker-workspace.server";
@@ -299,8 +300,8 @@ function ApplicationDetail({
               </label>
             </div>
             <div className="page-actions">
-              <button
-                className="btn primary"
+              <Button
+                variant="primary"
                 type="button"
                 disabled={navigation.state !== "idle"}
                 onClick={(event) => {
@@ -324,7 +325,7 @@ function ApplicationDetail({
                 }}
               >
                 Send co-speaker invitation
-              </button>
+              </Button>
             </div>
           </Form>
         ) : null}
@@ -339,19 +340,17 @@ function ApplicationDetail({
         ) : null}
         <div className="page-actions speaker-application-actions">
           {canOpenForm ? (
-            <Link
-              className="btn primary"
+            <ButtonLink
+              variant="primary"
               to={`/apply/${encodeURIComponent(application.formSlug)}?${new URLSearchParams({ draft: application.id })}`}
             >
               {application.status === "draft"
                 ? "Continue application"
                 : "Open application workflow"}{" "}
               <ExternalLink aria-hidden size={14} />
-            </Link>
+            </ButtonLink>
           ) : null}
-          <Link className="btn" to="/participant/applications">
-            Close detail
-          </Link>
+          <ButtonLink to="/participant/applications">Close detail</ButtonLink>
         </div>
         {!canOpenForm && application.primarySubmitter ? (
           <p className="speaker-task-note">
@@ -468,12 +467,12 @@ export default function ParticipantApplications({
                     </p>
                   </div>
                   <div className="speaker-session-measure">
-                    <Link
-                      className="btn small"
+                    <ButtonLink
+                      size="small"
                       to={`?${new URLSearchParams({ application: application.id })}#participant-application-detail`}
                     >
                       View application
-                    </Link>
+                    </ButtonLink>
                   </div>
                 </div>
               </article>

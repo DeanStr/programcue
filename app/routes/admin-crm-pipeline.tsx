@@ -8,6 +8,7 @@ import {
   useNavigation,
 } from "react-router";
 import { ZodError } from "zod";
+import { Button, ButtonLink } from "~/components/ui/button";
 import { statusPresentation } from "~/components/ui/domain-status-badge";
 import { crmStages } from "~/modules/crm/crm-schema";
 import { CrmService, CrmStateError } from "~/modules/crm/crm-service.server";
@@ -104,9 +105,9 @@ export default function AdminCrmPipeline({ loaderData }: Route.ComponentProps) {
             declined outcomes. Every transition is timestamped.
           </p>
         </div>
-        <Link className="btn" to="/admin/crm">
+        <ButtonLink to="/admin/crm">
           <ArrowLeft aria-hidden size={15} /> Speaker Network directory
-        </Link>
+        </ButtonLink>
       </div>
       {actionData ? (
         <div className="validation-item error crm-notice" role="alert">
@@ -157,9 +158,9 @@ export default function AdminCrmPipeline({ loaderData }: Route.ComponentProps) {
                 <input className="field" name="rationale" />
               </label>
             </div>
-            <button type="submit" className="btn primary" disabled={busy}>
+            <Button type="submit" variant="primary" disabled={busy}>
               Enroll contact
-            </button>
+            </Button>
           </Form>
         ) : (
           <p className="subtle mt">

@@ -27,7 +27,7 @@ function CriterionNameField({
       <label className="label">
         Criterion {index + 1}
         <input
-          className="input"
+          className="field"
           name="criterionName"
           defaultValue={defaultValue}
           onChange={(event) => setName(event.target.value)}
@@ -103,7 +103,7 @@ export function RubricFields({
             <label className="label">
               Weight percent
               <input
-                className="input"
+                className="field"
                 name="criterionWeight"
                 type="number"
                 min="0"
@@ -116,7 +116,7 @@ export function RubricFields({
           <label className="label mt">
             Reviewer guidance
             <input
-              className="input"
+              className="field"
               name="criterionDescription"
               defaultValue={criterion.description ?? ""}
             />
@@ -124,7 +124,7 @@ export function RubricFields({
           <label className="label mt">
             Dropdown options
             <input
-              className="input"
+              className="field"
               name="criterionOptions"
               defaultValue={criterion.options?.join(", ") ?? ""}
               placeholder="Introductory, Intermediate, Advanced"

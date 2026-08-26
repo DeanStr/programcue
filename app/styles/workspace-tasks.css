@@ -48,12 +48,12 @@
 .tasks-layout > * {
   min-width: 0;
 }
-.tasks-layout .tasks-rail,
-.tasks-layout .tasks-side {
+:where(.tasks-layout) .tasks-rail,
+:where(.tasks-layout) .tasks-side {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
 }
-@media (min-width: 1400px) {
+@media (min-width: 1351px) {
   .tasks-layout.tasks-board {
     grid-template-columns: minmax(0, 1fr) minmax(260px, 300px);
   }
@@ -164,13 +164,13 @@
   font-weight: var(--weight-bold);
 }
 .impact.critical {
-  color: #b91c1c;
+  color: var(--state-bad-text);
 }
 .impact.high {
   color: var(--orange);
 }
 .impact.medium {
-  color: #a16207;
+  color: var(--state-warn-text);
 }
 .impact.low {
   color: var(--state-good-solid);

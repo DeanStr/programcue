@@ -79,7 +79,7 @@
   gap: var(--space-2);
   margin-top: var(--space-4);
 }
-.reviewer-shell .review-queue .queue-card {
+.reviewer-shell :where(.review-queue) .queue-card {
   min-width: 0;
   display: grid;
   justify-items: start;
@@ -91,10 +91,10 @@
   text-decoration: none;
   box-shadow: none;
 }
-.reviewer-shell .review-queue .queue-card.active {
+.reviewer-shell :where(.review-queue) .queue-card.active {
   box-shadow: none;
 }
-.reviewer-shell .review-queue .queue-card h3 {
+.reviewer-shell :where(.review-queue) .queue-card h3 {
   max-width: 100%;
   margin: 0;
   overflow-wrap: anywhere;
@@ -260,6 +260,9 @@
   color: var(--text-primary);
   font-weight: var(--weight-bold);
 }
+.reviewer-shell .review-actions-jump {
+  display: none;
+}
 .reviewer-shell .review-page-head {
   align-items: flex-end;
   margin-bottom: var(--space-3);
@@ -387,14 +390,6 @@
 .reviewer-shell .review-scale-input:disabled {
   cursor: not-allowed;
 }
-.reviewer-shell .review-scale-option.is-clear {
-  flex: 0 0 auto;
-}
-.reviewer-shell .review-scale-option.is-clear > span {
-  padding: 0 var(--space-3);
-  color: var(--text-tertiary);
-}
-/* biome-ignore lint/style/noDescendingSpecificity: Base, modifier, and forced-colour rules share element suffixes intentionally; state specificity preserves their distinct behavior. */
 .reviewer-shell .review-scale-option > span {
   position: relative;
   display: flex;
@@ -417,6 +412,13 @@
     border-color var(--dur-fast) var(--ease-out),
     color var(--dur-fast) var(--ease-out),
     box-shadow var(--dur-fast) var(--ease-out);
+}
+.reviewer-shell .review-scale-option.is-clear {
+  flex: 0 0 auto;
+}
+.reviewer-shell .review-scale-option.is-clear > span {
+  padding: 0 var(--space-3);
+  color: var(--text-tertiary);
 }
 .reviewer-shell .review-scale-option:hover:not(:has(input:disabled)) > span {
   border-color: var(--border-strong);
@@ -443,7 +445,7 @@
 .reviewer-shell .review-scale-option input:focus-visible + span {
   outline: var(--focus-width) solid var(--focus-ring);
   outline-offset: var(--focus-halo-width);
-  box-shadow: 0 0 0 var(--focus-halo-width) var(--focus-halo);
+  box-shadow: var(--focus-halo-shadow);
 }
 .reviewer-shell .review-scale-option input:disabled + span {
   background: var(--surface-sunken);
@@ -579,7 +581,6 @@
 .reviewer-shell .review-conflict-option input:disabled {
   cursor: not-allowed;
 }
-/* biome-ignore lint/style/noDescendingSpecificity: Base, modifier, and forced-colour rules share element suffixes intentionally; state specificity preserves their distinct behavior. */
 .reviewer-shell .review-conflict-option > span {
   display: grid;
   gap: 0;
@@ -926,8 +927,28 @@
   .reviewer-shell .review-score-body {
     overflow: visible;
   }
+  .reviewer-shell .review-score-head {
+    position: sticky;
+    top: var(--eval-banner-offset, 0px);
+    z-index: 3;
+    padding: var(--space-2) 0;
+    border-bottom: 1px solid var(--line);
+    background: color-mix(in srgb, var(--surface) 94%, transparent);
+    backdrop-filter: blur(8px);
+  }
+  .reviewer-shell .review-actions-jump {
+    display: inline-flex;
+    align-items: center;
+    min-height: 32px;
+    color: var(--text-accent);
+    font-size: var(--text-2xs);
+    font-weight: var(--weight-bold);
+    text-decoration: underline;
+    text-underline-offset: 3px;
+  }
   .reviewer-shell .sticky-actions.review-actions {
     position: static;
+    scroll-margin-top: calc(var(--eval-banner-offset, 0px) + 64px);
     box-shadow: none;
     border-radius: 0 0 var(--radius) var(--radius);
     padding-bottom: max(var(--space-3), env(safe-area-inset-bottom));
@@ -963,6 +984,9 @@
   }
 }
 @media (max-width: 760px) {
+  .reviewer-shell .review-actions-jump {
+    min-height: 44px;
+  }
   .reviewer-shell .review-choice-scale:not([data-size="5"]) {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -1113,7 +1137,6 @@
 /* The chosen segment is a background fill, and the UA repaints backgrounds in
    High Contrast Mode. Without this the whole rubric reads as unscored. */
 @media (forced-colors: active) {
-  /* biome-ignore lint/style/noDescendingSpecificity: Base, modifier, and forced-colour rules share element suffixes intentionally; state specificity preserves their distinct behavior. */
   .reviewer-shell .review-scale-option > span {
     border: 1px solid CanvasText;
   }

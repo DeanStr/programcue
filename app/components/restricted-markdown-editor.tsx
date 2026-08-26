@@ -10,6 +10,7 @@ import {
   useRef,
   useState,
 } from "react";
+import { Button } from "~/components/ui/button";
 import {
   escapeRestrictedMarkdownText,
   parseRestrictedMarkdown,
@@ -426,13 +427,13 @@ export function RestrictedMarkdownEditor({
               onKeyDown={handleLinkKeyDown}
               placeholder="https://example.com"
             />
-            <button type="button" className="btn small" onClick={applyLink}>
+            <Button type="button" size="small" onClick={applyLink}>
               Apply link
-            </button>
+            </Button>
             {editor.isActive("link") ? (
-              <button
+              <Button
                 type="button"
-                className="btn small"
+                size="small"
                 onClick={() => {
                   const selection = linkSelectionRef.current;
                   if (!selection) return;
@@ -449,7 +450,7 @@ export function RestrictedMarkdownEditor({
                 }}
               >
                 Remove link
-              </button>
+              </Button>
             ) : null}
             {linkError ? (
               <span className="pc-field-error" id={linkErrorId} role="alert">

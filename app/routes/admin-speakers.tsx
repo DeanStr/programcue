@@ -15,6 +15,7 @@ import {
 
 import { PersonDuplicateWarning } from "~/components/person-duplicate-warning";
 import { PersonLookup } from "~/components/person-lookup";
+import { Button, ButtonLink } from "~/components/ui/button";
 import { CharacterCount } from "~/components/ui/character-count";
 import {
   DomainStatusBadge,
@@ -160,22 +161,16 @@ export default function AdminSpeakers({ loaderData }: Route.ComponentProps) {
           <h1>Speakers</h1>
         </div>
         <div className="page-actions">
-          <button
-            className="btn primary"
+          <Button
+            variant="primary"
             type="button"
             onClick={openAddSpeakerRecord}
           >
             Add speaker
-          </button>
-          <Link className="btn" to="/admin/crm">
-            Speaker Network
-          </Link>
-          <Link className="btn" to="/admin/resources">
-            Resources
-          </Link>
-          <Link className="btn" to="/admin/tasks">
-            Manage tasks
-          </Link>
+          </Button>
+          <ButtonLink to="/admin/crm">Speaker Network</ButtonLink>
+          <ButtonLink to="/admin/resources">Resources</ButtonLink>
+          <ButtonLink to="/admin/tasks">Manage tasks</ButtonLink>
         </div>
       </div>
       <div className="crm-pulse">{pulse}</div>
@@ -333,13 +328,9 @@ export default function AdminSpeakers({ loaderData }: Route.ComponentProps) {
                   status. Imported speakers start as prospects unless status is
                   supplied. Preview required; no email is sent.
                 </p>
-                <button
-                  className="btn"
-                  type="submit"
-                  disabled={navigation.state !== "idle"}
-                >
+                <Button type="submit" disabled={navigation.state !== "idle"}>
                   Preview speaker import
-                </button>
+                </Button>
               </Form>
               {actionData?.importPreview ? (
                 <div className="stack mt">
@@ -457,13 +448,13 @@ export default function AdminSpeakers({ loaderData }: Route.ComponentProps) {
                         name="csv"
                         value={actionData.importPreview.csv}
                       />
-                      <button
-                        className="btn primary"
+                      <Button
+                        variant="primary"
                         type="submit"
                         disabled={navigation.state !== "idle"}
                       >
                         Confirm event roster import
-                      </button>
+                      </Button>
                     </Form>
                   ) : null}
                 </div>
@@ -571,7 +562,7 @@ export default function AdminSpeakers({ loaderData }: Route.ComponentProps) {
                 <label className="label">
                   Biography <span className="subtle">Optional</span>
                   <textarea
-                    className="field"
+                    className="textarea"
                     name="biography"
                     maxLength={5000}
                     value={manualBiography}
@@ -588,15 +579,15 @@ export default function AdminSpeakers({ loaderData }: Route.ComponentProps) {
                     truncated={actionData.duplicateCheck.truncated}
                   />
                 ) : null}
-                <button
-                  className="btn primary"
+                <Button
+                  variant="primary"
                   type="submit"
                   disabled={navigation.state !== "idle"}
                 >
                   {navigation.formData?.get("_intent") === "add_manual_speaker"
                     ? "Adding…"
                     : "Add speaker record"}
-                </button>
+                </Button>
               </Form>
             </div>
           </details>
@@ -865,15 +856,11 @@ export default function AdminSpeakers({ loaderData }: Route.ComponentProps) {
         {page > 1 || hasNext ? (
           <nav className="crm-pager" aria-label="Speaker pages">
             {page > 1 ? (
-              <Link className="btn" to={`?${queryParams(page - 1)}`}>
-                Previous
-              </Link>
+              <ButtonLink to={`?${queryParams(page - 1)}`}>Previous</ButtonLink>
             ) : null}
             <span className="subtle">Page {page}</span>
             {hasNext ? (
-              <Link className="btn" to={`?${queryParams(page + 1)}`}>
-                Next
-              </Link>
+              <ButtonLink to={`?${queryParams(page + 1)}`}>Next</ButtonLink>
             ) : null}
           </nav>
         ) : null}

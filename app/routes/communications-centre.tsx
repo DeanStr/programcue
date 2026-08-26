@@ -9,6 +9,7 @@ import {
   CommunicationsWorkView,
 } from "~/components/communications-centre-workspace";
 import { AdminPageSectionNavigation } from "~/components/ui/admin-page-sections";
+import { ButtonLink } from "~/components/ui/button";
 import {
   clearDraftRecoveryScope,
   useDraftRecovery,
@@ -114,17 +115,15 @@ export default function CommunicationsCentre({
         </div>
         <div className="page-actions">
           {setup ? (
-            <Link className="btn" to="/admin/communications">
+            <ButtonLink to="/admin/communications">
               Back to Communications Centre
-            </Link>
+            </ButtonLink>
           ) : (
             <>
-              <Link className="btn primary" to="/admin/communications/compose">
+              <ButtonLink variant="primary" to="/admin/communications/compose">
                 New communication
-              </Link>
-              <Link className="btn" to="/admin/operations">
-                Operation Centre
-              </Link>
+              </ButtonLink>
+              <ButtonLink to="/admin/operations">Operation Centre</ButtonLink>
             </>
           )}
         </div>
@@ -157,9 +156,9 @@ export default function CommunicationsCentre({
             communication{loaderData.communications.length === 1 ? "" : "s"}{" "}
             require attention.
           </span>
-          <Link className="btn small" to="/admin/communications">
+          <ButtonLink size="small" to="/admin/communications">
             Clear filter
-          </Link>
+          </ButtonLink>
         </div>
       ) : null}
 
@@ -186,8 +185,8 @@ export default function CommunicationsCentre({
               : "An audience has been preselected."}{" "}
             Review the exact recipients in preview before confirming delivery.
           </span>
-          <Link
-            className="btn small"
+          <ButtonLink
+            size="small"
             to={`/admin/communications/compose?${new URLSearchParams({
               audience: loaderData.audiencePreset,
               ...(loaderData.categoryPreset
@@ -196,7 +195,7 @@ export default function CommunicationsCentre({
             })}`}
           >
             Start durable draft
-          </Link>
+          </ButtonLink>
         </div>
       ) : null}
       {actionData ? (

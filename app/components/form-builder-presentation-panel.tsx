@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { Button } from "~/components/ui/button";
 import { CharacterCount } from "~/components/ui/character-count";
 import type { SaveFormInput } from "~/modules/submissions/submission-schema";
 
@@ -168,13 +169,13 @@ export function PresentationSettingsPanel({
           <p className="help">
             Based on the current question types, Program Cue suggests about{" "}
             {suggestedMinutes} minutes.{" "}
-            <button
-              className="btn small"
+            <Button
+              size="small"
               type="button"
               onClick={() => update({ estimatedMinutes: suggestedMinutes })}
             >
               Use {suggestedMinutes} minutes
-            </button>
+            </Button>
           </p>
         ) : (
           <p className="help">

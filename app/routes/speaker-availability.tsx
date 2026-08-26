@@ -3,6 +3,7 @@ import { data, Form, useActionData, useNavigation } from "react-router";
 import { ZodError } from "zod";
 import { SpeakerActionNotice } from "~/components/speaker-action-notice";
 import { useSpeakerWorkspace } from "~/components/speaker-workspace-context";
+import { Button } from "~/components/ui/button";
 import { useConfirm } from "~/components/ui/confirm-dialog";
 import { ScheduleRevisionConflictError } from "~/modules/schedule/schedule-errors";
 import {
@@ -207,9 +208,9 @@ export default function SpeakerAvailability({
               Organisers see the unavailable times, not this note.
             </span>
           </label>
-          <button className="btn primary" type="submit" disabled={busy}>
+          <Button variant="primary" type="submit" disabled={busy}>
             {busy ? "Saving…" : "Add unavailable period"}
-          </button>
+          </Button>
         </Form>
       </section>
       <section className="stack mt">
@@ -239,8 +240,7 @@ export default function SpeakerAvailability({
                   />
                   <input type="hidden" name="windowId" value={window.id} />
                   <input type="hidden" name="confirmation" value="delete" />
-                  <button
-                    className="btn"
+                  <Button
                     type="button"
                     disabled={busy}
                     onClick={(clickEvent) => {
@@ -267,7 +267,7 @@ export default function SpeakerAvailability({
                     }}
                   >
                     Remove
-                  </button>
+                  </Button>
                 </Form>
               </li>
             ))}

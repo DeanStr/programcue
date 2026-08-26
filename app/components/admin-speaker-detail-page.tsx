@@ -9,10 +9,11 @@ import {
   UserRound,
 } from "lucide-react";
 import { useEffect, useState } from "react";
-import { Form, Link, useActionData, useNavigation } from "react-router";
+import { Form, useActionData, useNavigation } from "react-router";
 import { DirectMultipartUpload } from "~/components/direct-multipart-upload";
 import { SpeakerActionNotice } from "~/components/speaker-action-notice";
 import { SpeakerProfileHistory } from "~/components/speaker-profile-history";
+import { Button, ButtonAnchor, ButtonLink } from "~/components/ui/button";
 import { ConfirmDialog, useConfirm } from "~/components/ui/confirm-dialog";
 import { DomainStatusBadge } from "~/components/ui/domain-status-badge";
 import { EmptyState } from "~/components/ui/states";
@@ -152,15 +153,15 @@ export function AdminSpeakerDetailPage({
             </div>
           </div>
           <div className="page-actions">
-            <Link className="btn" to="/admin/speakers">
+            <ButtonLink to="/admin/speakers">
               <ArrowLeft aria-hidden size={15} /> Back to roster
-            </Link>
-            <Link className="btn" to="/admin/tasks">
+            </ButtonLink>
+            <ButtonLink to="/admin/tasks">
               <ListChecks aria-hidden size={15} /> Manage tasks
-            </Link>
-            <Link className="btn" to={`/admin/speakers/${profile.id}/preview`}>
+            </ButtonLink>
+            <ButtonLink to={`/admin/speakers/${profile.id}/preview`}>
               <Eye aria-hidden size={15} /> Preview participant view
-            </Link>
+            </ButtonLink>
           </div>
         </div>
         <SpeakerActionNotice notice={actionData} />
@@ -266,9 +267,9 @@ export function AdminSpeakerDetailPage({
                       never shown on the public programme.
                     </span>
                   </label>
-                  <button className="btn primary" type="submit" disabled={busy}>
+                  <Button variant="primary" type="submit" disabled={busy}>
                     {busy ? "Saving…" : "Save organisation and event details"}
-                  </button>
+                  </Button>
                 </fieldset>
               </Form>
             ) : (
@@ -407,9 +408,9 @@ export function AdminSpeakerDetailPage({
                       never shown on the public programme.
                     </span>
                   </label>
-                  <button className="btn primary" type="submit" disabled={busy}>
+                  <Button variant="primary" type="submit" disabled={busy}>
                     {busy ? "Saving…" : "Save profile"}
-                  </button>
+                  </Button>
                 </fieldset>
               </Form>
             )}
@@ -460,12 +461,11 @@ export function AdminSpeakerDetailPage({
                   )}
                 </div>
                 {headshot ? (
-                  <a
-                    className="btn"
+                  <ButtonAnchor
                     href={`/admin/speakers/${profile.id}/files/${headshot.id}`}
                   >
                     <Download aria-hidden size={14} /> Download headshot
-                  </a>
+                  </ButtonAnchor>
                 ) : null}
               </div>
             </div>
@@ -532,8 +532,7 @@ export function AdminSpeakerDetailPage({
                     />
                     <input type="hidden" name="windowId" value={window.id} />
                     <input type="hidden" name="confirmation" value="delete" />
-                    <button
-                      className="btn"
+                    <Button
                       type="button"
                       disabled={busy}
                       onClick={(clickEvent) => {
@@ -563,7 +562,7 @@ export function AdminSpeakerDetailPage({
                       }}
                     >
                       Remove unavailable period
-                    </button>
+                    </Button>
                   </Form>
                 </li>
               ))}
@@ -706,14 +705,14 @@ export function AdminSpeakerDetailPage({
                                 listed according to its visibility.
                               </span>
                             </label>
-                            <button
-                              className="btn small"
+                            <Button
+                              size="small"
                               type="submit"
                               disabled={busy}
                               aria-label={`Record external confirmation for ${session.title}`}
                             >
                               Record external confirmation
-                            </button>
+                            </Button>
                           </Form>
                         ) : session.participationStatus === "declined" &&
                           session.status !== "cancelled" ? (
@@ -738,8 +737,8 @@ export function AdminSpeakerDetailPage({
                               name="resetConfirmation"
                               value="pending"
                             />
-                            <button
-                              className="btn small"
+                            <Button
+                              size="small"
                               type="button"
                               disabled={busy}
                               onClick={(event) => {
@@ -759,7 +758,7 @@ export function AdminSpeakerDetailPage({
                               }}
                             >
                               Reset to awaiting confirmation
-                            </button>
+                            </Button>
                           </Form>
                         ) : session.status === "cancelled" ? (
                           <span className="subtle">Session cancelled</span>
@@ -818,13 +817,13 @@ export function AdminSpeakerDetailPage({
                     <span className="status warning">No scan result</span>
                   )}
                   {file.currentVersionId && file.downloadReleasedAt ? (
-                    <a
-                      className="btn small"
+                    <ButtonAnchor
+                      size="small"
                       href={`/admin/speakers/${profile.id}/files/${file.id}`}
                       aria-label={`Download released ${file.downloadFilename}`}
                     >
                       <Download aria-hidden size={14} /> Download
-                    </a>
+                    </ButtonAnchor>
                   ) : (
                     <span className="status warning">
                       <LockKeyhole aria-hidden size={13} /> Not released
@@ -857,9 +856,9 @@ export function AdminSpeakerDetailPage({
               title="No uploaded files"
               description="Assign an upload task so this speaker can share headshots or slides."
               action={
-                <Link className="btn" to="/admin/tasks">
+                <ButtonLink to="/admin/tasks">
                   <ListChecks aria-hidden size={15} /> Manage tasks
-                </Link>
+                </ButtonLink>
               }
             />
           )}

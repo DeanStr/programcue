@@ -11,6 +11,7 @@ import {
 } from "lucide-react";
 import { Fragment, useEffect, useState } from "react";
 import { Link, useFetcher, useRevalidator } from "react-router";
+import { Button, ButtonLink } from "~/components/ui/button";
 import { DomainStatusBadge } from "~/components/ui/domain-status-badge";
 import { EventDateTime } from "~/components/ui/event-date-time";
 import { PageHeader } from "~/components/ui/page-header";
@@ -253,14 +254,16 @@ function CommandReminderComposer({
           />
         </label>
         <div className="command-composer-actions">
-          <button
-            className="btn primary"
+          <Button
+            variant="primary"
             type="submit"
-            disabled={pending || !canDraft}
+            disabled={!canDraft}
+            pending={pending}
+            pendingLabel="Drafting preview…"
           >
             <Sparkles aria-hidden size={14} />
-            {pending ? "Drafting preview…" : "Draft preview"}
-          </button>
+            Draft preview
+          </Button>
         </div>
         {canDraft ? null : (
           <p className="command-notice" role="status">
@@ -314,10 +317,14 @@ function CommandReadinessCommand() {
           AI prioritisation is advisory and cites the current readiness
           snapshot. No task or message is created.
         </p>
-        <button className="btn" type="submit" disabled={pending}>
+        <Button
+          type="submit"
+          pending={pending}
+          pendingLabel="Inspecting readiness…"
+        >
           <Sparkles aria-hidden size={14} />
-          {pending ? "Inspecting readiness…" : "Summarise readiness blockers"}
-        </button>
+          Summarise readiness blockers
+        </Button>
       </fetcher.Form>
       {fetcher.data?.ok ? (
         <ContextualAiResultPanel result={fetcher.data.result} />
@@ -371,16 +378,14 @@ export default function CommandCentre({ loaderData }: Route.ComponentProps) {
               cursor={loaderData.cursor}
             />
             {hasOverdueTasks ? (
-              <Link
-                className="btn primary"
+              <ButtonLink
+                variant="primary"
                 to="/admin/communications?audience=overdue_speakers&category=task_reminder"
               >
                 Prepare overdue reminder
-              </Link>
+              </ButtonLink>
             ) : null}
-            <Link className="btn" to="/admin/event">
-              Event settings
-            </Link>
+            <ButtonLink to="/admin/event">Event settings</ButtonLink>
           </>
         }
       />

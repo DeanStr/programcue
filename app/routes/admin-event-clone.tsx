@@ -2,6 +2,7 @@ import { Copy, ShieldCheck } from "lucide-react";
 import { useState } from "react";
 import { data, Form, Link, useActionData, useNavigation } from "react-router";
 import { ZodError } from "zod";
+import { Button, ButtonLink } from "~/components/ui/button";
 import { useConfirm } from "~/components/ui/confirm-dialog";
 import { DerivedSlugField } from "~/components/ui/derived-slug-field";
 import { ErrorSummary } from "~/components/ui/error-summary";
@@ -171,9 +172,7 @@ export default function AdminEventClone({ loaderData }: Route.ComponentProps) {
         title={`Clone ${loaderData.source.name}`}
         description="Create a clean event with the published branding settings, rooms, tracks, policies and reusable form, evaluation, task and email templates."
         actions={
-          <Link className="btn" to="/admin/event">
-            Back to Event settings
-          </Link>
+          <ButtonLink to="/admin/event">Back to Event settings</ButtonLink>
         }
       />
       {actionData ? (
@@ -210,17 +209,17 @@ export default function AdminEventClone({ loaderData }: Route.ComponentProps) {
                       value={actionData.result.eventId}
                     />
                     <input type="hidden" name="returnTo" value="/admin/event" />
-                    <button className="btn small" type="submit">
+                    <Button size="small" type="submit">
                       Open cloned event
-                    </button>
+                    </Button>
                   </Form>
                 ) : (
-                  <Link
-                    className="btn small"
+                  <ButtonLink
+                    size="small"
                     to={`/admin/events/${encodeURIComponent(actionData.result.eventId)}/repository-recovery`}
                   >
                     Recover incomplete event
-                  </Link>
+                  </ButtonLink>
                 )}
               </>
             ) : null}
@@ -312,7 +311,7 @@ export default function AdminEventClone({ loaderData }: Route.ComponentProps) {
                 <legend className="label">Email sender</legend>
                 <label className="label">
                   Reuse verified sender
-                  <select className="field" name="reusedSenderProfileId">
+                  <select className="select" name="reusedSenderProfileId">
                     <option value="">None — configure later</option>
                     {loaderData.reusableSenderProfiles.map((profile) => (
                       <option key={profile.id} value={profile.id}>
@@ -373,10 +372,11 @@ export default function AdminEventClone({ loaderData }: Route.ComponentProps) {
                 value={loaderData.defaults.airtableTableName}
               />
             )}
-            <button
-              className="btn primary"
+            <Button
+              variant="primary"
               type="button"
-              disabled={navigation.state !== "idle"}
+              pending={navigation.state !== "idle"}
+              pendingLabel="Cloning event…"
               onClick={(event) => {
                 const form = event.currentTarget.form;
                 if (!form?.reportValidity()) return;
@@ -406,7 +406,7 @@ export default function AdminEventClone({ loaderData }: Route.ComponentProps) {
               }}
             >
               <Copy aria-hidden size={14} /> Create clean clone
-            </button>
+            </Button>
           </Form>
         </section>
         <aside className="event-setup-create-aside">

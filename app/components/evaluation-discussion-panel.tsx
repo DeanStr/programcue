@@ -1,6 +1,7 @@
-import { Form, Link } from "react-router";
+import { Form } from "react-router";
 import { useEvaluationAdminModel } from "~/components/evaluation-admin-model";
 import { useEvaluationDiscussionHistory } from "~/components/evaluation-discussion-history";
+import { Button, ButtonLink } from "~/components/ui/button";
 import { EventDateTime } from "~/components/ui/event-date-time";
 
 export function EvaluationDiscussionPanel() {
@@ -43,14 +44,14 @@ export function EvaluationDiscussionPanel() {
       </div>
       {history.hasEarlier ? (
         <div className="page-actions mb">
-          <button
-            className="btn small"
+          <Button
+            size="small"
             type="button"
             disabled={history.loadingEarlier}
             onClick={history.loadEarlier}
           >
             {history.loadingEarlier ? "Loading…" : "Load earlier messages"}
-          </button>
+          </Button>
         </div>
       ) : null}
       {history.messages.length ? (
@@ -105,11 +106,10 @@ export function EvaluationDiscussionPanel() {
             />
           </label>
           <div className="page-actions">
-            <button type="submit" className="btn primary" disabled={adding}>
+            <Button type="submit" variant="primary" disabled={adding}>
               {adding ? "Adding…" : "Add message"}
-            </button>
-            <Link
-              className="btn"
+            </Button>
+            <ButtonLink
               to={`/admin/review?${new URLSearchParams({
                 resultsRound: discussion.target.roundId,
                 sort: loaderData.resultSort,
@@ -120,7 +120,7 @@ export function EvaluationDiscussionPanel() {
               })}#evaluation-results`}
             >
               Close discussion
-            </Link>
+            </ButtonLink>
           </div>
         </Form>
       ) : (

@@ -9,13 +9,13 @@ import type { FormEvent } from "react";
 import {
   data,
   Form,
-  Link,
   redirect,
   useActionData,
   useNavigation,
   useSubmit,
 } from "react-router";
 import { ZodError } from "zod";
+import { Button, ButtonLink } from "~/components/ui/button";
 import { useConfirm } from "~/components/ui/confirm-dialog";
 import {
   DomainStatusBadge,
@@ -197,12 +197,12 @@ export default function AdminCrmContact({ loaderData }: Route.ComponentProps) {
             </p>
           </div>
           <div className="page-actions">
-            <Link className="btn" to="/admin/crm">
+            <ButtonLink to="/admin/crm">
               <ArrowLeft aria-hidden size={15} /> Speaker Network directory
-            </Link>
-            <Link className="btn" to="/admin/crm/pipeline">
+            </ButtonLink>
+            <ButtonLink to="/admin/crm/pipeline">
               <Network aria-hidden size={15} /> Pipeline
-            </Link>
+            </ButtonLink>
           </div>
         </div>
         <div className="crm-pulse">
@@ -232,9 +232,9 @@ export default function AdminCrmContact({ loaderData }: Route.ComponentProps) {
                     name="returnTo"
                     value={`/admin/speakers?person=${encodeURIComponent(actionData.handoff.personId)}`}
                   />
-                  <button className="btn small" type="submit">
+                  <Button size="small" type="submit">
                     Switch to target event and open prospect
-                  </button>
+                  </Button>
                 </Form>
               ) : null}
             </div>
@@ -280,13 +280,9 @@ export default function AdminCrmContact({ loaderData }: Route.ComponentProps) {
                         name="secondaryId"
                         value={duplicate.personId}
                       />
-                      <button
-                        type="submit"
-                        className="btn danger"
-                        disabled={busy}
-                      >
+                      <Button type="submit" variant="danger" disabled={busy}>
                         Keep {contact.email} as primary
-                      </button>
+                      </Button>
                     </Form>
                     <Form
                       method="post"
@@ -305,13 +301,9 @@ export default function AdminCrmContact({ loaderData }: Route.ComponentProps) {
                         name="secondaryId"
                         value={contact.personId}
                       />
-                      <button
-                        type="submit"
-                        className="btn danger"
-                        disabled={busy}
-                      >
+                      <Button type="submit" variant="danger" disabled={busy}>
                         Keep {duplicate.email} as primary
-                      </button>
+                      </Button>
                     </Form>
                   </div>
                 </div>
@@ -370,9 +362,9 @@ export default function AdminCrmContact({ loaderData }: Route.ComponentProps) {
                 Add tag
                 <input className="field" name="tag" placeholder="AI" required />
               </label>
-              <button type="submit" className="btn" disabled={busy}>
+              <Button type="submit" disabled={busy}>
                 Add tag
-              </button>
+              </Button>
             </Form>
           </section>
         </div>
@@ -390,9 +382,9 @@ export default function AdminCrmContact({ loaderData }: Route.ComponentProps) {
                 placeholder="Met at DevFlow 2026…"
               />
             </label>
-            <button type="submit" className="btn primary" disabled={busy}>
+            <Button type="submit" variant="primary" disabled={busy}>
               Save note
-            </button>
+            </Button>
           </Form>
           <div className="stack mt">
             {contact.notes.map((note) => (
@@ -484,9 +476,9 @@ export default function AdminCrmContact({ loaderData }: Route.ComponentProps) {
                   ))}
                 </select>
               </label>
-              <button type="submit" className="btn primary" disabled={busy}>
+              <Button type="submit" variant="primary" disabled={busy}>
                 Add prospect to event
-              </button>
+              </Button>
             </Form>
           </section>
           <section
@@ -519,9 +511,9 @@ export default function AdminCrmContact({ loaderData }: Route.ComponentProps) {
                     Pipeline note
                     <textarea className="textarea" name="body" required />
                   </label>
-                  <button type="submit" className="btn" disabled={busy}>
+                  <Button type="submit" disabled={busy}>
                     Save pipeline note
-                  </button>
+                  </Button>
                 </Form>
                 <div className="stack">
                   {contact.pipeline.activity.map((activity) => (
@@ -569,9 +561,9 @@ export default function AdminCrmContact({ loaderData }: Route.ComponentProps) {
                   Fit rationale
                   <textarea className="textarea" name="rationale" />
                 </label>
-                <button type="submit" className="btn primary" disabled={busy}>
+                <Button type="submit" variant="primary" disabled={busy}>
                   Enroll contact
-                </button>
+                </Button>
               </Form>
             )}
           </section>

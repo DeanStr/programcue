@@ -5,9 +5,12 @@ import {
   Search,
   Sparkles,
 } from "lucide-react";
-import { Link } from "react-router";
+import { useState } from "react";
 import { BrandMark } from "~/components/brand-mark";
-import { Button } from "~/components/ui/button";
+import { AdminWorkspaceTabs } from "~/components/ui/admin-workspace-tabs";
+import { Button, ButtonLink } from "~/components/ui/button";
+import { ConfirmDialog } from "~/components/ui/confirm-dialog";
+import { DomainStatusBadge } from "~/components/ui/domain-status-badge";
 import { ErrorSummary } from "~/components/ui/error-summary";
 import { Field } from "~/components/ui/field";
 import { PageHeader } from "~/components/ui/page-header";
@@ -60,6 +63,11 @@ const ELEVATION = [
 ] as const;
 
 export default function DesignSystem() {
+  const [referencePanel, setReferencePanel] = useState<
+    "records" | "schedule" | "delivery"
+  >("records");
+  const [confirmOpen, setConfirmOpen] = useState(false);
+  const [confirmed, setConfirmed] = useState(false);
   return (
     <main id="main" className="design-board pc-design-board" tabIndex={-1}>
       <PageHeader
@@ -67,9 +75,9 @@ export default function DesignSystem() {
         title="Program Cue design system"
         description="Accessible, operational patterns shared by administrators, reviewers, speakers and applicants. Status always uses words and symbols—not colour alone."
         actions={
-          <Link className="btn primary" to="/admin/event">
+          <ButtonLink variant="primary" to="/admin/event">
             Open Event Setup <ArrowRight aria-hidden size={15} />
-          </Link>
+          </ButtonLink>
         }
       />
 
@@ -201,13 +209,9 @@ export default function DesignSystem() {
             </p>
           </div>
           <div className="pc-focus-row">
-            <button className="btn" type="button">
-              Tab to me on white
-            </button>
+            <Button>Tab to me on white</Button>
             <span className="pc-focus-dark">
-              <button className="btn primary" type="button">
-                and on a dark ground
-              </button>
+              <Button variant="primary">and on a dark ground</Button>
             </span>
           </div>
           <div className="pc-rail-row mt">
@@ -358,6 +362,144 @@ export default function DesignSystem() {
               ]}
             />
           </div>
+        </section>
+
+        <section className="card design-section pc-design-wide">
+          <div className="pc-section-heading">
+            <div>
+              <span className="pc-section-kicker">Workspace navigation</span>
+              <h2>One route, distinct jobs</h2>
+            </div>
+            <p>
+              Pressed-button navigation keeps mounted draft state without
+              pretending that one page is several browser destinations.
+            </p>
+          </div>
+          <AdminWorkspaceTabs<"records" | "schedule" | "delivery">
+            label="Reference workspace"
+            panels={[
+              { id: "records", label: "Records", meta: 48 },
+              { id: "schedule", label: "Schedule", meta: 3 },
+              { id: "delivery", label: "Delivery" },
+            ]}
+            activePanel={referencePanel}
+            onChange={setReferencePanel}
+          />
+          <section
+            className="pc-reference-panel"
+            aria-label={`${referencePanel} reference panel`}
+          >
+            <strong>
+              {referencePanel === "records"
+                ? "Current programme records"
+                : referencePanel === "schedule"
+                  ? "Blocking schedule checks"
+                  : "Provider delivery evidence"}
+            </strong>
+            <p>
+              {referencePanel === "records"
+                ? "Mounted panels preserve unsaved filters and edits while the operator changes jobs."
+                : referencePanel === "schedule"
+                  ? "Schedule state remains categorical and independent from product emphasis."
+                  : "Delivery labels state only the provider evidence that was actually recorded."}
+            </p>
+          </section>
+        </section>
+
+        <section className="card design-section pc-design-wide">
+          <div className="pc-section-heading">
+            <div>
+              <span className="pc-section-kicker">Operational data</span>
+              <h2>Rows, status and formats</h2>
+            </div>
+            <p>
+              Repeating records share columns. Lifecycle state and schedule
+              category use separate controlled vocabularies.
+            </p>
+          </div>
+          <div className="table-wrap pc-reference-table">
+            <table className="data-table">
+              <thead>
+                <tr>
+                  <th scope="col">Session</th>
+                  <th scope="col">Format</th>
+                  <th scope="col">Publication</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <th scope="row">Designing inclusive attendee journeys</th>
+                  <td>
+                    <span className="pill format">Workshop</span>
+                  </td>
+                  <td>
+                    <DomainStatusBadge domain="session" status="published" />
+                  </td>
+                </tr>
+                <tr>
+                  <th scope="row">The future of attendee engagement</th>
+                  <td>
+                    <span className="pill format">Keynote</span>
+                  </td>
+                  <td>
+                    <DomainStatusBadge domain="session" status="draft" />
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </section>
+
+        <section className="card design-section pc-design-wide">
+          <div className="pc-section-heading">
+            <div>
+              <span className="pc-section-kicker">Consequential work</span>
+              <h2>Show the blast radius</h2>
+            </div>
+            <p>
+              A confirmation names the material change and affected records,
+              then returns focus to the action that opened it.
+            </p>
+          </div>
+          <div className="component-row">
+            <Button
+              variant="danger"
+              onClick={() => {
+                setConfirmed(false);
+                setConfirmOpen(true);
+              }}
+            >
+              Withdraw programme version
+            </Button>
+            <span className="help">
+              Reference interaction only; it changes no product data.
+            </span>
+          </div>
+          {confirmed ? (
+            <StatusNotice
+              className="mt"
+              tone="success"
+              title="Reference confirmation completed"
+            >
+              No records were changed by this design-system example.
+            </StatusNotice>
+          ) : null}
+          {confirmOpen ? (
+            <ConfirmDialog
+              title="Withdraw programme version?"
+              description="Attendees would stop seeing this published programme."
+              records={[
+                "Future of Events 2027 · programme version 3",
+                "48 published sessions",
+              ]}
+              confirmLabel="Withdraw version"
+              onCancel={() => setConfirmOpen(false)}
+              onConfirm={() => {
+                setConfirmOpen(false);
+                setConfirmed(true);
+              }}
+            />
+          ) : null}
         </section>
 
         <section className="card design-section pc-design-wide">

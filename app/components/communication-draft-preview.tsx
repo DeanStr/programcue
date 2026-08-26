@@ -1,7 +1,7 @@
 import { Send } from "lucide-react";
 import { useState } from "react";
 import { Form } from "react-router";
-
+import { Button } from "~/components/ui/button";
 import { EventDateTime } from "~/components/ui/event-date-time";
 import type { CommunicationPreview } from "~/modules/communications/communication-service.server";
 
@@ -108,22 +108,22 @@ export function CommunicationDraftPreview({
               className="preview-viewport-controls right pc-plain-fieldset"
               aria-label="Email preview size"
             >
-              <button
-                className="btn small"
+              <Button
+                size="small"
                 type="button"
                 aria-pressed={viewport === "mobile"}
                 onClick={() => setViewport("mobile")}
               >
                 Mobile
-              </button>
-              <button
-                className="btn small"
+              </Button>
+              <Button
+                size="small"
                 type="button"
                 aria-pressed={viewport === "desktop"}
                 onClick={() => setViewport("desktop")}
               >
                 Desktop
-              </button>
+              </Button>
             </fieldset>
           </div>
           <div className="email-preview-shell">
@@ -230,11 +230,7 @@ export function CommunicationDraftPreview({
           Confirmation recomputes the audience and atomically transitions this
           draft.
         </span>
-        <button
-          type="submit"
-          className="btn primary"
-          disabled={confirmationBlocked}
-        >
+        <Button type="submit" variant="primary" disabled={confirmationBlocked}>
           <Send aria-hidden size={16} />
           {working && pendingIntent === "confirm-draft"
             ? "Recording…"
@@ -242,7 +238,7 @@ export function CommunicationDraftPreview({
                 scheduledAt === null ? "Confirm" : "Schedule",
                 deliveryCount,
               )}
-        </button>
+        </Button>
       </Form>
     </div>
   );

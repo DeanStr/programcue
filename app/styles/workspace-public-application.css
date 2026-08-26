@@ -166,7 +166,7 @@
   display: grid;
 }
 .cfp-organizer small,
-.cfp-organizer span span {
+.cfp-organizer :where(span span) {
   color: var(--text-tertiary);
 }
 .cfp-entry {
@@ -181,7 +181,7 @@
 .cfp-access-card {
   padding: var(--space-6);
   border-top: 4px solid var(--event-accent);
-  box-shadow: 0 16px 45px rgba(25, 32, 48, 0.1);
+  box-shadow: var(--elev-4);
 }
 .cfp-access-kicker {
   margin: 0 0 var(--space-2);
@@ -297,7 +297,6 @@
   color: var(--text-secondary);
   font-size: var(--text-xs);
 }
-/* biome-ignore lint/style/noDescendingSpecificity: These selectors target independent application content structures despite sharing element suffixes. */
 .cfp-example span,
 .cfp-required {
   color: var(--muted-on-surface);
@@ -346,9 +345,8 @@
   );
   color: var(--accent-ink);
   font-weight: var(--weight-extrabold);
-  box-shadow:
-    0 0 0 1px color-mix(in srgb, var(--event-accent) 18%, transparent),
-    var(--elev-2);
+  outline: 1px solid color-mix(in srgb, var(--event-accent) 18%, transparent);
+  box-shadow: var(--elev-2);
 }
 .cfp-speaker-card h3 {
   margin: var(--space-4) 0 3px;
@@ -380,7 +378,7 @@
 .sessionize-import .form-row {
   grid-template-columns: minmax(0, 1fr) auto;
 }
-@media (max-width: 840px) {
+@media (max-width: 900px) {
   .cfp-masthead {
     min-height: 440px;
   }

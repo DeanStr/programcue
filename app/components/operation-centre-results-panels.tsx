@@ -5,6 +5,7 @@ import {
   useNavigation,
   useSubmit,
 } from "react-router";
+import { Button, ButtonLink } from "~/components/ui/button";
 import { useConfirm } from "~/components/ui/confirm-dialog";
 import { DomainStatusBadge } from "~/components/ui/domain-status-badge";
 import { EmptyState } from "~/components/ui/states";
@@ -113,9 +114,9 @@ export function ActivityTimelinePanel({
           />
         </label>
         <div className="page-actions">
-          <button className="btn primary" type="submit">
+          <Button variant="primary" type="submit">
             Filter activity
-          </button>
+          </Button>
         </div>
       </Form>
       {loaderData.canExportData && loaderData.activityScope === "event" ? (
@@ -130,9 +131,7 @@ export function ActivityTimelinePanel({
             name="idempotencyKey"
             value={loaderData.exportIntents.audit}
           />
-          <button className="btn" type="submit">
-            Download audit CSV
-          </button>
+          <Button type="submit">Download audit CSV</Button>
         </Form>
       ) : null}
       {loaderData.activity.length ? (
@@ -192,9 +191,7 @@ export function ActivityTimelinePanel({
       )}
       {olderActivityHref ? (
         <div className="page-actions mt">
-          <Link className="btn" to={olderActivityHref}>
-            Older activity
-          </Link>
+          <ButtonLink to={olderActivityHref}>Older activity</ButtonLink>
         </div>
       ) : null}
     </section>
@@ -397,12 +394,11 @@ export function OperationsListPanel({
         loaderData.failurePagination.hasNext) ? (
         <nav className="page-actions mt" aria-label="Failed operation pages">
           {loaderData.failurePagination.hasPrevious ? (
-            <Link
-              className="btn"
+            <ButtonLink
               to={failurePageHref(loaderData.failurePagination.page - 1)}
             >
               Previous page
-            </Link>
+            </ButtonLink>
           ) : null}
           <span className="help">
             Showing {loaderData.failurePagination.from}–
@@ -410,12 +406,11 @@ export function OperationsListPanel({
             {loaderData.failurePagination.total} failed operations
           </span>
           {loaderData.failurePagination.hasNext ? (
-            <Link
-              className="btn"
+            <ButtonLink
               to={failurePageHref(loaderData.failurePagination.page + 1)}
             >
               Next page
-            </Link>
+            </ButtonLink>
           ) : null}
         </nav>
       ) : loaderData.failurePagination && !loaderData.selectedOperationId ? (
@@ -576,14 +571,14 @@ export function OperationDetailPanel({
                                   name="itemId"
                                   value={item.id}
                                 />
-                                <button
+                                <Button
                                   type="submit"
-                                  className="btn small"
+                                  size="small"
                                   aria-label={`Retry ${label}`}
                                   disabled={navigation.state !== "idle"}
                                 >
                                   Retry item
-                                </button>
+                                </Button>
                               </Form>
                               <Form
                                 method="post"
@@ -633,14 +628,15 @@ export function OperationDetailPanel({
                                     required
                                   />
                                 </label>
-                                <button
+                                <Button
                                   type="submit"
-                                  className="btn small danger"
+                                  variant="danger"
+                                  size="small"
                                   aria-label={`Skip ${label}`}
                                   disabled={navigation.state !== "idle"}
                                 >
                                   Skip item
-                                </button>
+                                </Button>
                               </Form>
                             </div>
                           ) : (

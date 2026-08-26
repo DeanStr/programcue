@@ -1,6 +1,6 @@
 import { Check, Copy, MapPin, Plus, Share2 } from "lucide-react";
 import { useEffect, useState } from "react";
-
+import { Button } from "~/components/ui/button";
 import {
   formatProgrammeDuration,
   formatProgrammeTimeRange,
@@ -85,26 +85,18 @@ export function PublicShareActions({
   }
   return (
     <>
-      <button
-        className="btn small"
-        type="button"
-        onClick={() => void copyLink()}
-      >
+      <Button size="small" type="button" onClick={() => void copyLink()}>
         {status === "copied" ? (
           <Check aria-hidden size={14} />
         ) : (
           <Copy aria-hidden size={14} />
         )}
         {status === "copied" ? "Link copied" : copyLabel}
-      </button>
+      </Button>
       {canUseWebShare ? (
-        <button
-          className="btn small"
-          type="button"
-          onClick={() => void shareRecord()}
-        >
+        <Button size="small" type="button" onClick={() => void shareRecord()}>
           <Share2 aria-hidden size={14} /> {shareLabel}
-        </button>
+        </Button>
       ) : null}
       {status === "failed" ? (
         <span className="help" role="alert">

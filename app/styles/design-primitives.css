@@ -1,13 +1,9 @@
 /* React design-system primitives preserve the established Program Cue visual language.
    The command palette used to be split across this file and
    interaction-surfaces.css, with the cascade order deciding which half won.
-   It now has one owner: interaction-surfaces.css. */
-.btn,
-.status {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--space-2);
-}
+   It now has one owner: interaction-surfaces.css. Buttons are owned by
+   base.css; form controls by form-controls.css; status dots and notices by
+   this file. */
 .nav-icon {
   display: grid;
   place-items: center;
@@ -15,6 +11,46 @@
 
 /* Beat later-equal workspace fills so product rows stay Linear-weight:
    6px dot, no lozenge. A sentence is not a pill — p/div.status is a notice. */
+.status {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  border: 0;
+  border-radius: 0;
+  padding: 0;
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: var(--text-2xs);
+  font-weight: var(--weight-medium);
+  white-space: nowrap;
+}
+.status::before {
+  content: "";
+  width: 6px;
+  height: 6px;
+  flex: none;
+  border-radius: var(--radius-full);
+  background: currentColor;
+}
+.status:has(svg)::before {
+  display: none;
+}
+.status.success {
+  color: var(--state-good-text);
+}
+.status.warning {
+  color: var(--state-warn-text);
+}
+.status.danger {
+  color: var(--state-bad-text);
+}
+.status.info,
+.status.ai {
+  color: var(--brand-700);
+}
+.status.neutral {
+  color: var(--text-secondary);
+}
 .status,
 .card-title .status,
 .template-item .status,
@@ -136,8 +172,7 @@ div.status::before {
 .pc-field-group.has-error > .select:focus,
 .pc-field-group.has-error > .textarea:focus {
   border-color: var(--state-bad-solid);
-  box-shadow: 0 0 0 3px
-    color-mix(in srgb, var(--state-bad-solid) 16%, transparent);
+  box-shadow: var(--focus-error-halo);
 }
 .pc-error-summary {
   display: grid;
@@ -447,7 +482,7 @@ div.status::before {
     grid-template-columns: 1fr;
   }
 }
-@media (max-width: 620px) {
+@media (max-width: 600px) {
   .pc-design-board {
     padding: var(--space-4);
   }

@@ -23,6 +23,7 @@ import {
 } from "lucide-react";
 import type { RefObject } from "react";
 
+import { IconButton } from "~/components/ui/button";
 import { PRODUCT_GUIDE_URL } from "~/lib/product-guide";
 import type { CommandRecord } from "~/platform/operations/command-palette-service.server";
 import type {
@@ -461,14 +462,13 @@ export function AdminCommandDialog({
             onValueChange={setCommandQuery}
             placeholder="Search records, or run a command…"
           />
-          <button
-            type="button"
-            className="icon-btn modal-close"
+          <IconButton
+            className="modal-close"
             aria-label="Close"
             onClick={closeDialog}
           >
             <X aria-hidden size={17} />
-          </button>
+          </IconButton>
         </div>
         {commandPalette.organisationSearchAllowed && !assistantIntent ? (
           <fieldset className="pc-palette-scope">

@@ -34,6 +34,7 @@ import { useEffect, useRef, useState } from "react";
 import { Form, Link } from "react-router";
 
 import { BrandMark } from "~/components/brand-mark";
+import { Button, ButtonLink, IconButton } from "~/components/ui/button";
 
 export type EvaluationPersonaCard = {
   key: string;
@@ -297,13 +298,13 @@ function PersonaCard({
             }
           />
           <input type="hidden" name="identity" value={identity.key} />
-          <button className="btn primary" disabled={busy} type="submit">
+          <Button variant="primary" disabled={busy} type="submit">
             {identity.primaryActionLabel ??
               (identity.requiresAccountActivation
                 ? "Create evaluator submitter account"
                 : `Open as ${identity.label}`)}{" "}
             <ArrowRight aria-hidden size={15} />
-          </button>
+          </Button>
         </Form>
         {identity.requiresAccountActivation ? (
           <>
@@ -318,10 +319,10 @@ function PersonaCard({
                 value="activate_account_and_choose_event"
               />
               <input type="hidden" name="identity" value={identity.key} />
-              <button className="btn" disabled={busy} type="submit">
+              <Button disabled={busy} type="submit">
                 {identity.secondaryActionLabel ??
                   "Activate account and choose event"}
-              </button>
+              </Button>
             </Form>
             <p className="help">
               Opens only events where this fixed identity already has accepted
@@ -462,10 +463,9 @@ function AccessGate({
                 spellCheck={false}
                 type={revealed ? "text" : "password"}
               />
-              <button
+              <IconButton
                 aria-label={revealed ? "Hide access code" : "Show access code"}
                 aria-pressed={revealed}
-                className="icon-btn"
                 onClick={() => setRevealed((value) => !value)}
                 type="button"
               >
@@ -474,12 +474,12 @@ function AccessGate({
                 ) : (
                   <Eye aria-hidden size={16} />
                 )}
-              </button>
+              </IconButton>
             </div>
-            <button className="btn primary" disabled={busy} type="submit">
+            <Button variant="primary" disabled={busy} type="submit">
               {busy ? "Checking…" : "Unlock evaluation"}{" "}
               <ArrowRight aria-hidden size={15} />
-            </button>
+            </Button>
           </Form>
           <hr className="pc-eval-rule" />
           <div>
@@ -575,13 +575,13 @@ export function EvaluationAccessSurface({
           </div>
           <Form className="pc-eval-lock-control" method="post">
             <input type="hidden" name="_intent" value="lock" />
-            <button
+            <Button
               aria-describedby="evaluation-lock-help"
-              className="btn pc-eval-quiet"
+              className="pc-eval-quiet"
               type="submit"
             >
               <ShieldCheck aria-hidden size={15} /> Lock evaluation
-            </button>
+            </Button>
             <p id="evaluation-lock-help">
               Requires the access code again on this browser. Shared data is
               unchanged.
@@ -614,9 +614,9 @@ export function EvaluationAccessSurface({
             )}
           </div>
           {selected ? (
-            <Link className="btn pc-eval-cta" to={selected.destination}>
+            <ButtonLink className="pc-eval-cta" to={selected.destination}>
               Continue as {selected.name} <ArrowRight aria-hidden size={15} />
-            </Link>
+            </ButtonLink>
           ) : null}
         </div>
       </header>
@@ -716,9 +716,9 @@ export function EvaluationAccessSurface({
         <div className="pc-eval-invitation-email">
           <strong>Sam&apos;s evaluation alias (not an inbox)</strong>
           <code>{FIXTURE_REVIEWER_EMAIL}</code>
-          <button
+          <Button
             aria-live="polite"
-            className="btn small"
+            size="small"
             onClick={() => void copyFixtureReviewerEmail()}
             type="button"
           >
@@ -728,7 +728,7 @@ export function EvaluationAccessSurface({
               <Copy aria-hidden size={14} />
             )}{" "}
             {reviewerEmailCopyStatus === "copied" ? "Copied" : "Copy email"}
-          </button>
+          </Button>
         </div>
         {reviewerEmailCopyStatus === "failed" ? (
           <p className="help" role="alert">
@@ -889,8 +889,8 @@ export function EvaluationAccessSurface({
               The reset button stays disabled until the name matches exactly.
             </p>
             <div>
-              <button
-                className="btn danger"
+              <Button
+                variant="danger"
                 disabled={busy || resetConfirmation !== eventName}
                 type="submit"
               >
@@ -898,7 +898,7 @@ export function EvaluationAccessSurface({
                 {resetBusy
                   ? "Resetting evaluation data…"
                   : "Reset evaluation data"}
-              </button>
+              </Button>
             </div>
           </Form>
         </div>

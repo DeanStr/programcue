@@ -7,6 +7,7 @@ import {
   undoRemainingLabel,
   undoRemainingMilliseconds,
 } from "~/components/operational-ui-rules";
+import { Button } from "~/components/ui/button";
 
 export type TaskCompletionUndoNotice = {
   ok?: boolean;
@@ -238,8 +239,8 @@ export function TaskCompletionUndoControl({
           }}
         >
           <input type="hidden" name="undoToken" value={undo.token} />
-          <button
-            className="btn small"
+          <Button
+            size="small"
             type="submit"
             name="intent"
             value="undo-task-completion"
@@ -247,7 +248,7 @@ export function TaskCompletionUndoControl({
           >
             <RotateCcw aria-hidden size={14} />
             {undoSubmitting ? "Undoing…" : "Undo completion"}
-          </button>
+          </Button>
           <span
             className="help"
             title={`Expires ${new Date(undo.expiresAt * 1_000).toISOString()}`}

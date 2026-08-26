@@ -3,6 +3,7 @@ import { Form, Link, useNavigation, useSearchParams } from "react-router";
 
 import { PersonDuplicateWarning } from "~/components/person-duplicate-warning";
 import { PersonLookup } from "~/components/person-lookup";
+import { Button, ButtonAnchor, ButtonLink } from "~/components/ui/button";
 import { CharacterCount } from "~/components/ui/character-count";
 import { DomainStatusBadge } from "~/components/ui/domain-status-badge";
 import { EventDateTime } from "~/components/ui/event-date-time";
@@ -74,28 +75,25 @@ export function SubmissionAdminDetailPanel({
         </div>
         <div className="page-actions">
           {submission.participantPreviewPersonId ? (
-            <Link
-              className="btn"
+            <ButtonLink
               to={`/admin/speakers/${encodeURIComponent(submission.participantPreviewPersonId)}/preview`}
             >
               Preview participant view
-            </Link>
+            </ButtonLink>
           ) : null}
           {submission.status !== "draft" && submission.hasEvaluationPlan ? (
-            <Link
-              className="btn"
+            <ButtonLink
               reloadDocument
               to={`/admin/review?submission=${encodeURIComponent(submission.id)}&view=assignments#review-submission-${encodeURIComponent(submission.id)}`}
             >
               Open in Review
-            </Link>
+            </ButtonLink>
           ) : null}
-          <Link
-            className="btn"
+          <ButtonLink
             to={`/admin/operations?panel=activity&activityQuery=${encodeURIComponent(submission.id)}`}
           >
             View activity
-          </Link>
+          </ButtonLink>
           <DomainStatusBadge domain="submission" status={submission.status} />
           <span className="pill">
             {submission.versionNumber
@@ -107,33 +105,27 @@ export function SubmissionAdminDetailPanel({
       {queueNavigation ? (
         <nav className="page-actions mb" aria-label="Submission working set">
           {queueNavigation.previous ? (
-            <Link
-              className="btn"
+            <ButtonLink
               to={queueNavigation.previous.href}
               aria-label={`Previous submission: ${queueNavigation.previous.title}`}
             >
               ← Previous
-            </Link>
+            </ButtonLink>
           ) : (
-            <span className="btn" aria-disabled="true">
-              ← Previous
-            </span>
+            <ButtonAnchor aria-disabled="true">← Previous</ButtonAnchor>
           )}
-          <Link className="btn" to={queueNavigation.backHref}>
+          <ButtonLink to={queueNavigation.backHref}>
             Return to filtered queue
-          </Link>
+          </ButtonLink>
           {queueNavigation.next ? (
-            <Link
-              className="btn"
+            <ButtonLink
               to={queueNavigation.next.href}
               aria-label={`Next submission: ${queueNavigation.next.title}`}
             >
               Next →
-            </Link>
+            </ButtonLink>
           ) : (
-            <span className="btn" aria-disabled="true">
-              Next →
-            </span>
+            <ButtonAnchor aria-disabled="true">Next →</ButtonAnchor>
           )}
         </nav>
       ) : null}
@@ -333,13 +325,13 @@ export function SubmissionAdminDetailPanel({
                       name="invitationId"
                       value={speaker.id}
                     />
-                    <button
-                      className="btn small"
+                    <Button
+                      size="small"
                       type="submit"
                       disabled={navigation.state !== "idle"}
                     >
                       Resend
-                    </button>
+                    </Button>
                   </Form>
                 ) : null}
               </div>
@@ -503,8 +495,9 @@ function SpeakerFields({
             <CharacterCount value={speaker.biography} maximum={5_000} />
           </label>
           {index > 0 ? (
-            <button
-              className="btn small danger"
+            <Button
+              variant="danger"
+              size="small"
               type="button"
               onClick={() =>
                 setSpeakers(
@@ -513,19 +506,19 @@ function SpeakerFields({
               }
             >
               Remove speaker
-            </button>
+            </Button>
           ) : null}
         </div>
       ))}
-      <button
-        className="btn small"
+      <Button
+        size="small"
         type="button"
         onClick={() =>
           setSpeakers([...speakers, { name: "", email: "", biography: "" }])
         }
       >
         + Add co-speaker
-      </button>
+      </Button>
     </fieldset>
   );
 }
@@ -691,8 +684,8 @@ export function AdminCreationForm(props: AdminCreationFormProps) {
               result={actionResult}
               intent="create_manual_application"
             />
-            <button
-              className="btn primary"
+            <Button
+              variant="primary"
               type="submit"
               disabled={navigation.state !== "idle"}
             >
@@ -700,7 +693,7 @@ export function AdminCreationForm(props: AdminCreationFormProps) {
               "create_manual_application"
                 ? "Creating…"
                 : "Create manual application"}
-            </button>
+            </Button>
           </Form>
         </section>
       ) : null}
@@ -814,15 +807,15 @@ export function AdminCreationForm(props: AdminCreationFormProps) {
               result={actionResult}
               intent="create_direct_session"
             />
-            <button
-              className="btn primary"
+            <Button
+              variant="primary"
               type="submit"
               disabled={navigation.state !== "idle"}
             >
               {navigation.formData?.get("_intent") === "create_direct_session"
                 ? "Creating…"
                 : "Create unscheduled session"}
-            </button>
+            </Button>
           </Form>
         </section>
       ) : null}
