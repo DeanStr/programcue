@@ -105,7 +105,7 @@ test("the evaluator guide exposes honest identities, a walkthrough and a complet
     has: page.getByRole("heading", { name: "1. Create the durable draft" }),
   });
   await expect(draftComposer.getByLabel("Published template")).toHaveValue(
-    "c4be71b7-cf55-4e8a-ac28-73f2c83bde42",
+    "1c48c2c6-868a-4ca5-8b32-4cc4c51d33cd",
   );
   await draftComposer
     .getByRole("button", { name: "Create durable draft" })
