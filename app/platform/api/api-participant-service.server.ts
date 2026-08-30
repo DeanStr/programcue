@@ -3,6 +3,7 @@ import {
   AirtableProviderBoundary,
   airtableIntentCommand,
 } from "~/modules/airtable/airtable-provider-boundary.server";
+import { EventFieldService } from "~/modules/fields/event-field-service.server";
 import {
   ParticipantProfileConflictError,
   ParticipantProfileIntegrityError,
@@ -81,9 +82,15 @@ export type ParticipantQuery = {
 export const participantProfilePatchSchema = z
   .object({
     revision: z.number().int().positive(),
-    name: z.string().trim().min(2).max(120),
-    biography: z.string().trim().min(40).max(5_000),
+    name: z.string().trim().min(2).max(120).optional(),
+    biography: z.string().trim().min(40).max(5_000).optional(),
   })
+  .refine(
+    (input) => input.name !== undefined || input.biography !== undefined,
+    {
+      message: "Provide at least one participant profile field to update",
+    },
+  )
   .strict();
 
 export function parseParticipantResource(value: string | undefined) {
@@ -311,12 +318,12 @@ export class ApiParticipantService {
     if (!profile) {
       throw new ApiError(404, "PARTICIPANT_NOT_FOUND", "Participant not found");
     }
-    return {
+    return new EventFieldService(this.env).participantVisibleProfile(viewer, {
       ...profile,
       emailVerified: Boolean(profile.emailVerified),
       createdAt: isoTimestamp(profile.createdAt),
       updatedAt: isoTimestamp(profile.updatedAt),
-    };
+    });
   }
 
   async updateProfile(

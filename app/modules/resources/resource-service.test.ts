@@ -219,6 +219,15 @@ describe("speaker resource service", () => {
           WHERE event_id = ? AND session_id = 'session-demo-speaker'
             AND person_id = ?`,
       ).bind(admin.eventId, participant.personId),
+      testEnv.DB.prepare(
+        `UPDATE session_participant_roles
+            SET participation_status = 'pending', participation_revision = 1,
+                participation_confirmed_at = NULL,
+                participation_declined_at = NULL,
+                participation_decline_reason = NULL
+          WHERE event_id = ? AND session_id = 'session-demo-speaker'
+            AND person_id = ? AND role = 'speaker'`,
+      ).bind(admin.eventId, participant.personId),
     ]);
     const resources = new ResourceService(testEnv);
     const tasks = new TaskService(testEnv);
@@ -234,10 +243,11 @@ describe("speaker resource service", () => {
     await resources.publish(admin, pageId, draft.revision);
     const taskId = `resource-ack:${pageId}:${participant.personId}`;
 
-    await new SpeakerService(testEnv).declineOwnParticipation(participant, {
+    await new SpeakerService(testEnv).respondOwnRole(participant, {
       sessionId: "session-demo-speaker",
-      participationRevision: 1,
-      declineConfirmation: "declined",
+      role: "speaker",
+      roleRevision: 1,
+      response: "declined",
       reason: "Unavailable for this session.",
     });
 
@@ -1602,16 +1612,25 @@ describe("speaker resource service", () => {
   it("distinguishes accepted and confirmed speaker resource audiences", async () => {
     const testEnv = env as unknown as CloudflareEnvironment;
     await ensureDemoSpeakerData(testEnv);
-    await testEnv.DB.prepare(
-      `UPDATE session_speakers
+    await testEnv.DB.batch([
+      testEnv.DB.prepare(
+        `UPDATE session_speakers
           SET participation_status = 'pending', participation_revision = 1,
               participation_confirmed_at = NULL, participation_declined_at = NULL,
               participation_decline_reason = NULL
         WHERE event_id = ? AND session_id = 'session-demo-speaker'
           AND person_id = ?`,
-    )
-      .bind(admin.eventId, speaker.personId)
-      .run();
+      ).bind(admin.eventId, speaker.personId),
+      testEnv.DB.prepare(
+        `UPDATE session_participant_roles
+            SET participation_status = 'pending', participation_revision = 1,
+                participation_confirmed_at = NULL,
+                participation_declined_at = NULL,
+                participation_decline_reason = NULL
+          WHERE event_id = ? AND session_id = 'session-demo-speaker'
+            AND person_id = ? AND role = 'speaker'`,
+      ).bind(admin.eventId, speaker.personId),
+    ]);
 
     const resources = new ResourceService(testEnv);
     const savePage = (
@@ -1667,10 +1686,12 @@ describe("speaker resource service", () => {
       resources.getParticipantWorkspace(speaker, confirmedDraft.slug),
     ).rejects.toMatchObject({ status: 404 });
 
-    await new SpeakerService(testEnv).confirmOwnParticipation(speaker, {
+    await new SpeakerService(testEnv).respondOwnRole(speaker, {
       sessionId: "session-demo-speaker",
-      participationRevision: 1,
-      confirmation: "confirmed",
+      role: "speaker",
+      roleRevision: 1,
+      response: "confirmed",
+      reason: "",
     });
     await expect(
       testEnv.DB.prepare(
@@ -1693,16 +1714,25 @@ describe("speaker resource service", () => {
   it("revokes and restores a generated acknowledgement task with its accepted-speaker resource audience", async () => {
     const testEnv = env as unknown as CloudflareEnvironment;
     await ensureDemoSpeakerData(testEnv);
-    await testEnv.DB.prepare(
-      `UPDATE session_speakers
+    await testEnv.DB.batch([
+      testEnv.DB.prepare(
+        `UPDATE session_speakers
           SET participation_status = 'pending', participation_revision = 1,
               participation_confirmed_at = NULL, participation_declined_at = NULL,
               participation_decline_reason = NULL
         WHERE event_id = ? AND session_id = 'session-demo-speaker'
           AND person_id = ?`,
-    )
-      .bind(admin.eventId, speaker.personId)
-      .run();
+      ).bind(admin.eventId, speaker.personId),
+      testEnv.DB.prepare(
+        `UPDATE session_participant_roles
+            SET participation_status = 'pending', participation_revision = 1,
+                participation_confirmed_at = NULL,
+                participation_declined_at = NULL,
+                participation_decline_reason = NULL
+          WHERE event_id = ? AND session_id = 'session-demo-speaker'
+            AND person_id = ? AND role = 'speaker'`,
+      ).bind(admin.eventId, speaker.personId),
+    ]);
     const resources = new ResourceService(testEnv);
     const tasks = new TaskService(testEnv);
     const pageId = await resources.save(admin, {
@@ -1730,10 +1760,11 @@ describe("speaker resource service", () => {
     expect(assigned).toBeDefined();
     if (!assigned) throw new Error("Resource acknowledgement task is missing.");
 
-    await new SpeakerService(testEnv).declineOwnParticipation(speaker, {
+    await new SpeakerService(testEnv).respondOwnRole(speaker, {
       sessionId: "session-demo-speaker",
-      participationRevision: 1,
-      declineConfirmation: "declined",
+      role: "speaker",
+      roleRevision: 1,
+      response: "declined",
       reason: "Unavailable for this session.",
     });
     await expect(
@@ -1788,15 +1819,12 @@ describe("speaker resource service", () => {
         .first(),
     ).resolves.toBeNull();
 
-    await new SpeakerService(testEnv).resetDeclinedParticipation(
-      admin,
-      speaker.personId,
-      {
-        sessionId: "session-demo-speaker",
-        participationRevision: 2,
-        resetConfirmation: "pending",
-      },
-    );
+    await new SpeakerService(testEnv).resetRole(admin, speaker.personId, {
+      sessionId: "session-demo-speaker",
+      role: "speaker",
+      roleRevision: 2,
+      resetConfirmation: "pending",
+    });
     await expect(
       resources.getParticipantWorkspace(speaker, draft.slug),
     ).resolves.toHaveProperty("selected.id", pageId);

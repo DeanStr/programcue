@@ -2,7 +2,11 @@ import {
   type EventFilePolicy,
   parseEventFilePolicy,
 } from "~/modules/files/file-policy";
-import { eventLocalExclusiveEndEpoch } from "~/modules/schedule/schedule-time";
+import {
+  eventCalendarDateEpoch,
+  eventLocalExclusiveEndEpoch,
+  eventLocalStartOfDayEpoch,
+} from "~/modules/schedule/schedule-time";
 import {
   type FormRouting,
   routingSchema,
@@ -35,8 +39,10 @@ export type FormSummary = {
   kind: "submission" | "direct_session";
   status: "draft" | "published" | "closed" | "archived";
   publicSlug: string;
+  opensAt: number | null;
   closesAt: number | null;
   submissionLimit: number | null;
+  perPersonSubmissionLimit: number | null;
   minSpeakers: number;
   maxSpeakers: number | null;
   accessMode: "email_verified" | "account_required" | "password_protected";
@@ -58,8 +64,10 @@ export type FormVersion = {
     name?: string;
     kind?: FormSummary["kind"];
     publicSlug?: string;
+    opensAt?: number | null;
     closesAt?: number | null;
     submissionLimit?: number | null;
+    perPersonSubmissionLimit?: number | null;
     minSpeakers?: number;
     maxSpeakers?: number | null;
     accessMode?: FormSummary["accessMode"];
@@ -122,6 +130,13 @@ export type ApplicantDraft = {
     isPrimary: boolean;
     invitationStatus: string;
   }>;
+};
+
+export type ParticipantApplicantDraft = Omit<ApplicantDraft, "speakers"> & {
+  speakers: Array<
+    Omit<ApplicantDraft["speakers"][number], "name" | "biography"> &
+      Partial<Pick<ApplicantDraft["speakers"][number], "name" | "biography">>
+  >;
 };
 
 export type CoSpeakerInvitation = {
@@ -228,13 +243,20 @@ export function closeDateToEpoch(value: string | null, timezone: string) {
   return eventLocalExclusiveEndEpoch(endMarker, timezone) - 1;
 }
 
+export function openDateToEpoch(value: string | null, timezone: string) {
+  if (value === null) return null;
+  return eventLocalStartOfDayEpoch(eventCalendarDateEpoch(value), timezone);
+}
+
 export function settingsSnapshot(input: SaveFormInput, timezone: string) {
   return {
     name: input.name,
     kind: input.kind,
     publicSlug: input.publicSlug,
+    opensAt: openDateToEpoch(input.openDate ?? null, timezone),
     closesAt: closeDateToEpoch(input.closeDate, timezone),
     submissionLimit: input.submissionLimit,
+    perPersonSubmissionLimit: input.perPersonSubmissionLimit ?? null,
     minSpeakers: input.minSpeakers,
     maxSpeakers: input.maxSpeakers,
     accessMode: input.accessMode,
@@ -262,8 +284,10 @@ export type FormRow = {
   kind: FormSummary["kind"];
   status: FormSummary["status"];
   publicSlug: string;
+  opensAt: number | null;
   closesAt: number | null;
   submissionLimit: number | null;
+  perPersonSubmissionLimit: number | null;
   minSpeakers: number;
   maxSpeakers: number | null;
   accessMode: FormSummary["accessMode"];
@@ -305,8 +329,10 @@ export function mapForm(row: FormRow): FormSummary {
     kind: row.kind,
     status: row.status,
     publicSlug: row.publicSlug,
+    opensAt: row.opensAt,
     closesAt: row.closesAt,
     submissionLimit: row.submissionLimit,
+    perPersonSubmissionLimit: row.perPersonSubmissionLimit,
     minSpeakers: row.minSpeakers,
     maxSpeakers: row.maxSpeakers,
     accessMode: row.accessMode,

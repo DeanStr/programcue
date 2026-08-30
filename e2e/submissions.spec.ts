@@ -119,7 +119,10 @@ test.describe
         page.getByRole("button", { name: "Save draft" }),
       ).toBeEnabled();
       await page.getByText("Form properties", { exact: true }).click();
+      await page.getByLabel("Opening date").fill("2020-01-01");
       await page.getByLabel("Closing date").fill("2035-12-31");
+      await page.getByLabel("Total submission capacity").fill("100");
+      await page.getByLabel("Maximum submissions per person").fill("10");
       await expect(
         page.getByText("The closing-date change is still a draft"),
       ).toBeVisible();
@@ -157,6 +160,13 @@ test.describe
       ).toBeEnabled();
       await page.reload();
       await page.getByText("Form properties", { exact: true }).click();
+      await expect(page.getByLabel("Opening date")).toHaveValue("2020-01-01");
+      await expect(page.getByLabel("Total submission capacity")).toHaveValue(
+        "100",
+      );
+      await expect(
+        page.getByLabel("Maximum submissions per person"),
+      ).toHaveValue("10");
       await page.getByText("Public landing page", { exact: true }).click();
       await expect(page.getByLabel("Invitation heading")).toHaveValue(
         invitationHeading,

@@ -73,12 +73,13 @@ export function AdminParticipantPreviewPage({ preview }: { preview: Preview }) {
   }
 
   const { portal } = preview;
+  const participantName = portal.profile.name ?? "Participant";
   return (
     <div className="participant-preview stack">
       <div className="page-head pc-page-header">
         <div>
           <p className="eyebrow">Participant support preview</p>
-          <h1>{portal.profile.name}</h1>
+          <h1>{participantName}</h1>
           <p>
             Read-only view of the data this participant can currently access.
           </p>
@@ -105,7 +106,7 @@ export function AdminParticipantPreviewPage({ preview }: { preview: Preview }) {
         <header className="participant-preview-identity">
           <div>
             <p className="eyebrow">{portal.event.name}</p>
-            <h2>{portal.profile.name}</h2>
+            <h2>{participantName}</h2>
             <p className="subtle">{portal.profile.email}</p>
           </div>
           <span className="status info">{label(preview.participantRole)}</span>

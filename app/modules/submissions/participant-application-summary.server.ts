@@ -124,6 +124,7 @@ export class ParticipantApplicationSummaryService {
                  AND version.event_id = form.event_id
                  AND version.status = 'published'
             )
+            AND (form.opens_at IS NULL OR form.opens_at <= unixepoch())
             AND (form.closes_at IS NULL OR form.closes_at >= unixepoch())
             AND (
               form.submission_limit IS NULL
@@ -138,9 +139,23 @@ export class ParticipantApplicationSummaryService {
                    AND submission.status <> 'draft'
               ) < form.submission_limit
             )
+            AND (
+              form.per_person_submission_limit IS NULL
+              OR (
+                SELECT COUNT(*)
+                  FROM submissions submission
+                  JOIN form_versions submitted_version
+                    ON submitted_version.id = submission.form_version_id
+                   AND submitted_version.event_id = submission.event_id
+                 WHERE submitted_version.form_id = form.id
+                   AND submission.event_id = form.event_id
+                   AND submission.submitter_person_id = ?
+                   AND submission.status <> 'withdrawn'
+              ) < form.per_person_submission_limit
+            )
           ORDER BY form.name, form.id`,
     )
-      .bind(viewer.organisationId, viewer.eventId)
+      .bind(viewer.organisationId, viewer.eventId, viewer.personId)
       .all<ParticipantAvailableForm>();
     return {
       applications,

@@ -181,6 +181,54 @@ describe("administration API reads", () => {
     }
   });
 
+  it("returns effective form admission controls from collection and item reads", async () => {
+    const opensAt = 1_900_000_000;
+    const closesAt = opensAt + 86_400;
+    const form = await testEnv.DB.prepare(
+      `SELECT id FROM form_definitions
+        WHERE event_id = ? ORDER BY id LIMIT 1`,
+    )
+      .bind(principal.eventId)
+      .first<{ id: string }>();
+    if (!form) throw new Error("The API form fixture is unavailable.");
+    await testEnv.DB.prepare(
+      `UPDATE form_definitions
+          SET opens_at = ?, closes_at = ?, submission_limit = 12,
+              per_person_submission_limit = 2
+        WHERE id = ? AND event_id = ?`,
+    )
+      .bind(opensAt, closesAt, form.id, principal.eventId)
+      .run();
+
+    const collection = await new ApiAdministrationService(testEnv).list(
+      principal,
+      "forms",
+      { limit: 100 },
+    );
+    expect(
+      (collection.forms as Array<Record<string, unknown>>).find(
+        (candidate) => candidate.id === form.id,
+      ),
+    ).toMatchObject({
+      opensAt: new Date(opensAt * 1_000).toISOString(),
+      closesAt: new Date(closesAt * 1_000).toISOString(),
+      submissionLimit: 12,
+      perPersonSubmissionLimit: 2,
+    });
+
+    const item = await new ApiAdministrationItemService(testEnv).get(
+      principal,
+      "forms",
+      form.id,
+    );
+    expect(item.item).toMatchObject({
+      opensAt: new Date(opensAt * 1_000).toISOString(),
+      closesAt: new Date(closesAt * 1_000).toISOString(),
+      submissionLimit: 12,
+      perPersonSubmissionLimit: 2,
+    });
+  });
+
   it("returns every ordered submission track in collection and item records", async () => {
     const token = crypto.randomUUID();
     const submissionId = `api-multi-track-${token}`;

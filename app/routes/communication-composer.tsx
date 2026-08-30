@@ -260,6 +260,8 @@ const audienceOptions = [
   ["incomplete_speakers", "Speakers with incomplete tasks"],
   ["due_speakers", "Speakers due within 24 hours"],
   ["overdue_speakers", "Overdue speakers"],
+  ["draft_applicants", "Applicants with unsubmitted drafts"],
+  ["pending_participants", "Participants awaiting a response"],
   ["event_administrators", "Event administrators"],
   ["manual", "Manual addresses"],
 ] as const;

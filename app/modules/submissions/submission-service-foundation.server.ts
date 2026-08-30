@@ -6,6 +6,7 @@ import {
 } from "~/modules/airtable/airtable-provider-boundary.server";
 import { parseSessionFormatsConfiguration } from "~/modules/events/event-configuration";
 import { sessionFormatInputSchema } from "~/modules/events/event-schema";
+import { EventFieldService } from "~/modules/fields/event-field-service.server";
 import type { Viewer } from "~/platform/auth/authorize.server";
 import {
   ApplicantSessionService,
@@ -17,6 +18,10 @@ import {
   D1SubmissionRepository,
   SubmissionStateError,
 } from "./submission-repository.server";
+import {
+  participantDraftPayloadSchema,
+  participantDraftSavePayloadSchema,
+} from "./submission-schema";
 
 export class PublicFormUnavailableError extends Error {
   constructor(message: string) {
@@ -209,6 +214,50 @@ export class SubmissionServiceFoundation {
     return { organisationId: event.organisationId, eventId };
   }
 
+  protected async restoreProtectedParticipantDraftSpeakerFields(
+    form: PublicForm,
+    applicant: Applicant,
+    rawPayload: unknown,
+    allowEmptySpeakers: boolean,
+  ) {
+    const payload = (
+      allowEmptySpeakers
+        ? participantDraftSavePayloadSchema
+        : participantDraftPayloadSchema
+    ).parse(rawPayload);
+    if (!applicant.verified || payload.speakers.length === 0) return rawPayload;
+
+    const policies = await new EventFieldService(this.env).profilePolicies(
+      await this.publicScope(form.eventId),
+    );
+    if (policies.name === "editable" && policies.biography === "editable") {
+      return rawPayload;
+    }
+    const draft = (
+      await this.repository.getApplicantDrafts(form.id, applicant)
+    ).find((candidate) => candidate.id === payload.submissionId);
+    if (!draft) {
+      throw new Response("Application draft not found", { status: 404 });
+    }
+    return {
+      ...payload,
+      speakers: payload.speakers.map((speaker, index) => {
+        const saved = draft.speakers[index];
+        const profileOwned =
+          saved?.personId !== null &&
+          saved?.email.toLowerCase() === speaker.email.toLowerCase();
+        if (!profileOwned) return speaker;
+        return {
+          ...speaker,
+          ...(policies.name !== "editable" ? { name: saved.name } : {}),
+          ...(policies.biography !== "editable"
+            ? { biography: saved.biography }
+            : {}),
+        };
+      }),
+    };
+  }
+
   getApplicationEventScope(eventId: string) {
     return this.publicScope(eventId);
   }
@@ -279,9 +328,20 @@ export class SubmissionServiceFoundation {
   protected applicationRevisionAvailability(
     form: Awaited<ReturnType<SubmissionServiceFoundation["getPublicForm"]>>,
   ) {
+    const now = Math.floor(Date.now() / 1_000);
+    if (
+      form.status === "published" &&
+      form.opensAt !== null &&
+      form.opensAt > now
+    ) {
+      return {
+        accepting: false as const,
+        reason: "Applications for this event are not open yet.",
+      };
+    }
     if (
       form.status !== "published" ||
-      (form.closesAt !== null && form.closesAt < Math.floor(Date.now() / 1_000))
+      (form.closesAt !== null && form.closesAt < now)
     ) {
       return {
         accepting: false as const,

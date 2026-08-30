@@ -126,8 +126,32 @@ describe("speaker portal file integrity", () => {
       testEnv.DB.prepare(
         `INSERT INTO session_speakers (
            session_id, event_id, person_id, position, role_label,
-           participation_status, visibility
-         ) VALUES ('session-demo-speaker', ?, ?, 10, 'Moderator', 'pending', 'private')`,
+           participation_status, participation_confirmed_at, visibility
+         ) VALUES ('session-demo-speaker', ?, ?, 10, 'Speaker', 'confirmed',
+                   unixepoch(), 'private')`,
+      ).bind(speaker.eventId, pendingId),
+      testEnv.DB.prepare(
+        `UPDATE session_participant_roles
+            SET participation_status = 'declined',
+                participation_confirmed_at = NULL,
+                participation_declined_at = unixepoch(),
+                participation_revision = 2
+          WHERE event_id = ? AND session_id = 'session-demo-speaker'
+            AND person_id = ? AND role = 'speaker'`,
+      ).bind(speaker.eventId, pendingId),
+      testEnv.DB.prepare(
+        `INSERT INTO session_participant_roles (
+           event_id, session_id, person_id, role, label, position,
+           participation_status, participation_confirmed_at
+         ) VALUES (?, 'session-demo-speaker', ?, 'moderator', 'Moderator', 1,
+                   'confirmed', unixepoch())`,
+      ).bind(speaker.eventId, pendingId),
+      testEnv.DB.prepare(
+        `INSERT INTO session_participant_roles (
+           event_id, session_id, person_id, role, label, position,
+           participation_status
+         ) VALUES (?, 'session-demo-speaker', ?, 'chair', 'Chair', 2,
+                   'pending')`,
       ).bind(speaker.eventId, pendingId),
       testEnv.DB.prepare(
         `INSERT INTO session_speakers (
@@ -147,9 +171,22 @@ describe("speaker portal file integrity", () => {
       sessionId: "session-demo-speaker",
       position: 10,
       name: "Pending Collaborator",
-      roleLabel: "Moderator",
-      participationStatus: "pending",
+      roles: [
+        {
+          role: "moderator",
+          label: "Moderator",
+          position: 1,
+          participationStatus: "confirmed",
+        },
+        {
+          role: "chair",
+          label: "Chair",
+          position: 2,
+          participationStatus: "pending",
+        },
+      ],
     });
+    expect(JSON.stringify(session?.participants)).not.toContain('"Speaker"');
     expect(session?.participants).not.toContainEqual(
       expect.objectContaining({ name: "Declined Collaborator" }),
     );
@@ -159,6 +196,59 @@ describe("speaker portal file integrity", () => {
     expect(JSON.stringify(session?.participants)).not.toContain(
       "Private reason",
     );
+
+    await testEnv.DB.prepare(
+      `INSERT INTO event_participant_field_policies (
+         event_id, field_key, participant_access, updated_by_person_id,
+         updated_at
+       ) VALUES (?, 'name', 'hidden', ?, unixepoch())
+       ON CONFLICT(event_id, field_key) DO UPDATE SET
+         participant_access = 'hidden',
+         updated_by_person_id = excluded.updated_by_person_id,
+         updated_at = unixepoch()`,
+    )
+      .bind(speaker.eventId, administrator.personId)
+      .run();
+    try {
+      const hiddenNamePortal = await new SpeakerService(testEnv).getPortal(
+        speaker,
+      );
+      expect(hiddenNamePortal.profile).not.toHaveProperty("name");
+      expect(hiddenNamePortal.profileHistory).toEqual(
+        expect.not.arrayContaining([
+          expect.objectContaining({ displayName: expect.any(String) }),
+        ]),
+      );
+      expect(hiddenNamePortal.profileHistory).toEqual(
+        expect.not.arrayContaining([
+          expect.objectContaining({ recordedByName: expect.any(String) }),
+        ]),
+      );
+      const hiddenNameSession = hiddenNamePortal.sessions.find(
+        (candidate) => candidate.id === "session-demo-speaker",
+      );
+      expect(hiddenNameSession?.participants).toContainEqual(
+        expect.objectContaining({
+          sessionId: "session-demo-speaker",
+          roles: expect.any(Array),
+        }),
+      );
+      expect(hiddenNameSession?.participants).toEqual(
+        expect.not.arrayContaining([
+          expect.objectContaining({ name: "Pending Collaborator" }),
+        ]),
+      );
+      expect(JSON.stringify(hiddenNameSession?.participants)).not.toContain(
+        '"name"',
+      );
+    } finally {
+      await testEnv.DB.prepare(
+        `DELETE FROM event_participant_field_policies
+          WHERE event_id = ? AND field_key = 'name'`,
+      )
+        .bind(speaker.eventId)
+        .run();
+    }
   });
 
   it("derives a deliverable's session through its exact task", async () => {

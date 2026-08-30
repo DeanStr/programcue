@@ -11,6 +11,7 @@ import {
 import { useEffect, useState } from "react";
 import { Form, useActionData, useNavigation } from "react-router";
 import { DirectMultipartUpload } from "~/components/direct-multipart-upload";
+import { EventFieldInputs } from "~/components/event-field-inputs";
 import { SpeakerActionNotice } from "~/components/speaker-action-notice";
 import { SpeakerProfileHistory } from "~/components/speaker-profile-history";
 import { Button, ButtonAnchor, ButtonLink } from "~/components/ui/button";
@@ -19,6 +20,7 @@ import { DomainStatusBadge } from "~/components/ui/domain-status-badge";
 import { EmptyState } from "~/components/ui/states";
 import { useUnsavedChanges } from "~/components/ui/use-unsaved-changes";
 import { requireValue } from "~/lib/required-value";
+import type { EventFieldDefinitionValue } from "~/modules/fields/event-field-types";
 import { maximumMegabytes } from "~/modules/files/file-policy";
 import { formatEventLocalAvailabilityWindow } from "~/modules/schedule/schedule-time";
 import {
@@ -31,6 +33,7 @@ import type { action } from "~/routes/admin-speaker-detail";
 type AdminSpeakerDetailLoaderData = {
   detail: Awaited<ReturnType<SpeakerService["getAdminSpeakerDetail"]>>;
   availability: Awaited<ReturnType<SpeakerService["listAdminAvailability"]>>;
+  customFields: EventFieldDefinitionValue[];
 };
 
 function formatTimestamp(epoch: number, timezone: string) {
@@ -59,7 +62,7 @@ export function AdminSpeakerDetailPage({
 }: {
   loaderData: AdminSpeakerDetailLoaderData;
 }) {
-  const { detail, availability } = loaderData;
+  const { detail, availability, customFields } = loaderData;
   const {
     profile,
     profileShared,
@@ -414,6 +417,21 @@ export function AdminSpeakerDetailPage({
                 </fieldset>
               </Form>
             )}
+            {customFields.length ? (
+              <Form method="post" className="stack mt">
+                <input type="hidden" name="_intent" value="save_event_fields" />
+                <div className="card-title">
+                  <div>
+                    <span className="pc-section-kicker">Event-specific</span>
+                    <h3>Additional information</h3>
+                  </div>
+                </div>
+                <EventFieldInputs fields={customFields} />
+                <Button type="submit" variant="primary" disabled={busy}>
+                  Save additional information
+                </Button>
+              </Form>
+            ) : null}
             <SpeakerProfileHistory
               revisions={detail.profileHistory}
               timeZone={event.timezone}
@@ -604,43 +622,36 @@ export function AdminSpeakerDetailPage({
                         </span>
                       </td>
                       <td data-label="Role">
-                        {session.roleLabel ?? "Speaker"}
+                        <span className="pc-record-stack">
+                          {session.roles.map((role) => (
+                            <span key={role.role}>{role.label}</span>
+                          ))}
+                        </span>
                       </td>
                       <td data-label="Participation">
                         <span className="pc-speaker-meta">
-                          <span
-                            className={`status ${session.participationStatus === "confirmed" ? "success" : session.participationStatus === "declined" ? "danger" : session.status === "cancelled" ? "" : "warning"}`}
-                          >
-                            {session.participationStatus === "confirmed"
-                              ? "Confirmed"
-                              : session.participationStatus === "declined"
-                                ? "Declined by participant"
-                                : session.status === "cancelled"
-                                  ? "Not required"
-                                  : "Awaiting confirmation"}
-                          </span>
-                          {session.participationConfirmedAt !== null ? (
-                            <small className="subtle">
-                              {formatTimestamp(
-                                session.participationConfirmedAt,
-                                event.timezone,
-                              )}
-                            </small>
-                          ) : null}
-                          {session.participationDeclinedAt !== null ? (
-                            <small className="subtle">
-                              {formatTimestamp(
-                                session.participationDeclinedAt,
-                                event.timezone,
-                              )}
-                            </small>
-                          ) : null}
-                          {session.participationDeclineReason ? (
-                            <small>
-                              Private reason:{" "}
-                              {session.participationDeclineReason}
-                            </small>
-                          ) : null}
+                          {session.roles.map((role) => (
+                            <span className="pc-record-stack" key={role.role}>
+                              <span
+                                className={`status ${role.participationStatus === "confirmed" ? "success" : role.participationStatus === "declined" ? "danger" : session.status === "cancelled" ? "" : "warning"}`}
+                              >
+                                {role.label}:{" "}
+                                {role.participationStatus === "confirmed"
+                                  ? "Accepted"
+                                  : role.participationStatus === "declined"
+                                    ? "Declined"
+                                    : session.status === "cancelled"
+                                      ? "Not required"
+                                      : "Awaiting response"}
+                              </span>
+                              {role.participationDeclineReason ? (
+                                <small>
+                                  Private reason:{" "}
+                                  {role.participationDeclineReason}
+                                </small>
+                              ) : null}
+                            </span>
+                          ))}
                         </span>
                       </td>
                       <td data-label="Status">
@@ -669,101 +680,182 @@ export function AdminSpeakerDetailPage({
                         )}
                       </td>
                       <td data-label="Action">
-                        {session.participationStatus === "pending" &&
-                        session.status !== "cancelled" ? (
-                          <Form method="post" className="stack">
-                            <input
-                              type="hidden"
-                              name="_intent"
-                              value="confirm_external_participation"
-                            />
-                            <input
-                              type="hidden"
-                              name="sessionId"
-                              value={session.id}
-                            />
-                            <input
-                              type="hidden"
-                              name="participationRevision"
-                              value={session.participationRevision}
-                            />
-                            <input
-                              type="hidden"
-                              name="confirmation"
-                              value="confirmed"
-                            />
-                            <label className="check-row">
-                              <input
-                                type="checkbox"
-                                name="externalConfirmation"
-                                value="confirmed"
-                                required
-                              />
-                              <span>
-                                I confirm {profile.name} agreed outside Program
-                                Cue to participate in “{session.title}” and be
-                                listed according to its visibility.
-                              </span>
-                            </label>
-                            <Button
-                              size="small"
-                              type="submit"
-                              disabled={busy}
-                              aria-label={`Record external confirmation for ${session.title}`}
-                            >
-                              Record external confirmation
-                            </Button>
-                          </Form>
-                        ) : session.participationStatus === "declined" &&
-                          session.status !== "cancelled" ? (
-                          <Form method="post" className="stack">
-                            <input
-                              type="hidden"
-                              name="_intent"
-                              value="reset_declined_participation"
-                            />
-                            <input
-                              type="hidden"
-                              name="sessionId"
-                              value={session.id}
-                            />
-                            <input
-                              type="hidden"
-                              name="participationRevision"
-                              value={session.participationRevision}
-                            />
-                            <input
-                              type="hidden"
-                              name="resetConfirmation"
-                              value="pending"
-                            />
-                            <Button
-                              size="small"
-                              type="button"
-                              disabled={busy}
-                              onClick={(event) => {
-                                const form = event.currentTarget.form;
-                                if (!form) return;
-                                confirmAction(
-                                  {
-                                    title: "Reset to awaiting confirmation?",
-                                    description:
-                                      "This clears the private decline reason and lets the participant respond again. It does not send an invitation or reminder.",
-                                    records: [session.title, profile.name],
-                                    confirmLabel: "Reset status",
-                                    tone: "primary",
-                                  },
-                                  () => form.requestSubmit(),
-                                );
-                              }}
-                            >
-                              Reset to awaiting confirmation
-                            </Button>
-                          </Form>
-                        ) : session.status === "cancelled" ? (
+                        {session.status === "cancelled" ? (
                           <span className="subtle">Session cancelled</span>
                         ) : (
-                          <span className="subtle">No action required</span>
+                          <div className="stack">
+                            {session.roles.map((role) =>
+                              role.participationStatus === "pending" ? (
+                                <Form
+                                  method="post"
+                                  className="stack"
+                                  key={`confirm:${role.role}`}
+                                >
+                                  <input
+                                    type="hidden"
+                                    name="_intent"
+                                    value="confirm_external_participation"
+                                  />
+                                  <input
+                                    type="hidden"
+                                    name="sessionId"
+                                    value={session.id}
+                                  />
+                                  <input
+                                    type="hidden"
+                                    name="role"
+                                    value={role.role}
+                                  />
+                                  <input
+                                    type="hidden"
+                                    name="roleRevision"
+                                    value={role.participationRevision}
+                                  />
+                                  <label className="check-row">
+                                    <input
+                                      type="checkbox"
+                                      name="externalConfirmation"
+                                      value="confirmed"
+                                      required
+                                    />
+                                    <span>
+                                      I confirm {profile.name} accepted the{" "}
+                                      {role.label.toLowerCase()} role outside
+                                      Program Cue.
+                                    </span>
+                                  </label>
+                                  <Button
+                                    size="small"
+                                    type="submit"
+                                    disabled={busy}
+                                  >
+                                    Record {role.label.toLowerCase()} acceptance
+                                  </Button>
+                                </Form>
+                              ) : role.participationStatus === "declined" ? (
+                                <Form
+                                  method="post"
+                                  className="stack"
+                                  key={`reset:${role.role}`}
+                                >
+                                  <input
+                                    type="hidden"
+                                    name="_intent"
+                                    value="reset_declined_participation"
+                                  />
+                                  <input
+                                    type="hidden"
+                                    name="sessionId"
+                                    value={session.id}
+                                  />
+                                  <input
+                                    type="hidden"
+                                    name="role"
+                                    value={role.role}
+                                  />
+                                  <input
+                                    type="hidden"
+                                    name="roleRevision"
+                                    value={role.participationRevision}
+                                  />
+                                  <input
+                                    type="hidden"
+                                    name="resetConfirmation"
+                                    value="pending"
+                                  />
+                                  <Button
+                                    size="small"
+                                    type="button"
+                                    disabled={busy}
+                                    onClick={(event) => {
+                                      const form = event.currentTarget.form;
+                                      if (!form) return;
+                                      confirmAction(
+                                        {
+                                          title: `Reset the ${role.label.toLowerCase()} role?`,
+                                          description:
+                                            "This clears the private decline reason and lets the participant respond again. No message is sent.",
+                                          records: [
+                                            session.title,
+                                            profile.name,
+                                            role.label,
+                                          ],
+                                          confirmLabel: "Reset role",
+                                          tone: "primary",
+                                        },
+                                        () => form.requestSubmit(),
+                                      );
+                                    }}
+                                  >
+                                    Reset {role.label.toLowerCase()}
+                                  </Button>
+                                </Form>
+                              ) : null,
+                            )}
+                            {(["speaker", "moderator", "chair"] as const)
+                              .filter(
+                                (role) =>
+                                  !session.roles.some(
+                                    (assigned) => assigned.role === role,
+                                  ),
+                              )
+                              .map((role) => (
+                                <Form method="post" key={`add:${role}`}>
+                                  <input
+                                    type="hidden"
+                                    name="_intent"
+                                    value="add_participant_role"
+                                  />
+                                  <input
+                                    type="hidden"
+                                    name="sessionId"
+                                    value={session.id}
+                                  />
+                                  <input
+                                    type="hidden"
+                                    name="role"
+                                    value={role}
+                                  />
+                                  <input
+                                    type="hidden"
+                                    name="confirmation"
+                                    value="add"
+                                  />
+                                  <Button
+                                    size="small"
+                                    type="button"
+                                    disabled={busy}
+                                    onClick={(event) => {
+                                      const form = event.currentTarget.form;
+                                      if (!form) return;
+                                      const label =
+                                        role === "chair"
+                                          ? "Chair"
+                                          : role === "moderator"
+                                            ? "Moderator"
+                                            : "Speaker";
+                                      confirmAction(
+                                        {
+                                          title: `Assign the ${label.toLowerCase()} role?`,
+                                          description:
+                                            "The participant will respond to this role independently from any other role in the session.",
+                                          records: [
+                                            session.title,
+                                            profile.name,
+                                            label,
+                                          ],
+                                          confirmLabel: "Assign role",
+                                          tone: "primary",
+                                        },
+                                        () => form.requestSubmit(),
+                                      );
+                                    }}
+                                  >
+                                    Add {role}
+                                  </Button>
+                                </Form>
+                              ))}
+                          </div>
                         )}
                       </td>
                     </tr>

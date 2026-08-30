@@ -352,6 +352,7 @@ export class SubmissionDraftFinalizer {
              SELECT 1 FROM form_definitions current_form
               WHERE current_form.id = ? AND current_form.event_id = ?
                 AND current_form.status = 'published'
+                AND (current_form.opens_at IS NULL OR current_form.opens_at <= unixepoch())
                 AND (current_form.closes_at IS NULL OR current_form.closes_at >= unixepoch())
                 AND (
                   current_form.submission_limit IS NULL OR (
@@ -361,6 +362,18 @@ export class SubmissionDraftFinalizer {
                    WHERE current_version.form_id = current_form.id
                      AND current.status <> 'draft'
                   ) < current_form.submission_limit
+                )
+                AND (
+                  current_form.per_person_submission_limit IS NULL OR (
+                    SELECT COUNT(*) FROM submissions participant_submission
+                    JOIN form_versions participant_version
+                      ON participant_version.id = participant_submission.form_version_id
+                     AND participant_version.event_id = participant_submission.event_id
+                   WHERE participant_version.form_id = current_form.id
+                     AND participant_submission.submitter_person_id = submissions.submitter_person_id
+                     AND participant_submission.id <> submissions.id
+                     AND participant_submission.status <> 'withdrawn'
+                  ) < current_form.per_person_submission_limit
                 )
            )
       `,

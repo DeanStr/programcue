@@ -140,7 +140,9 @@ export class PublicSiteService {
                 SELECT json_object(
                          'url', '/apply/' || form.public_slug,
                          'closesAt', form.closes_at,
+                         'opensAt', form.opens_at,
                          'submissionLimit', form.submission_limit,
+                         'perPersonSubmissionLimit', form.per_person_submission_limit,
                          'submittedCount', (
                            SELECT COUNT(*)
                              FROM submissions submission
@@ -899,7 +901,9 @@ export class PublicSiteService {
                 SELECT json_object(
                          'url', '/apply/' || form.public_slug,
                          'closesAt', form.closes_at,
+                         'opensAt', form.opens_at,
                          'submissionLimit', form.submission_limit,
+                         'perPersonSubmissionLimit', form.per_person_submission_limit,
                          'submittedCount', (
                            SELECT COUNT(*)
                              FROM submissions submission

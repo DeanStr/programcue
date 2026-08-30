@@ -172,6 +172,22 @@ export function eventLocalEndOfDayEpoch(
   return eventLocalExclusiveEndEpoch(boundaryEpoch, timezone) - 1;
 }
 
+export function eventLocalStartOfDayEpoch(
+  boundaryEpoch: number,
+  timezone: string,
+) {
+  const eventDate = eventBoundaryCalendarDate(boundaryEpoch);
+  const previousDayMarker =
+    Date.parse(`${eventDate}T00:00:00Z`) / 1_000 - 24 * 60 * 60;
+  const start = eventLocalExclusiveEndEpoch(previousDayMarker, timezone);
+  if (eventLocalCalendarDate(start, timezone) !== eventDate) {
+    throw new Error(
+      `The start of event date ${eventDate} cannot be resolved in ${timezone}.`,
+    );
+  }
+  return start;
+}
+
 export function eventLocalExclusiveEndEpoch(
   boundaryEpoch: number,
   timezone: string,

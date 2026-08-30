@@ -2,6 +2,7 @@ import { Download, FileCheck2, LockKeyhole, Trash2 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Form, useSubmit } from "react-router";
 import { DirectMultipartUpload } from "~/components/direct-multipart-upload";
+import { EventFieldInputs } from "~/components/event-field-inputs";
 import type { SpeakerPortal } from "~/components/speaker-dashboard-panel-shared";
 import { SpeakerProfileHistory } from "~/components/speaker-profile-history";
 import {
@@ -112,8 +113,13 @@ export function SpeakerFilesPanel({
                 ) : null}
                 {file.downloadFilename && file.downloadUploadedAt ? (
                   <small>
-                    Current released file: {file.downloadFilename} · uploaded by{" "}
-                    {file.downloadUploaderName} ·{" "}
+                    Current released file: {file.downloadFilename} ·{" "}
+                    {file.downloadUploaderName ? (
+                      <>uploaded by {file.downloadUploaderName}</>
+                    ) : (
+                      "uploaded"
+                    )}{" "}
+                    ·{" "}
                     {formatUploadTimestamp(
                       file.downloadUploadedAt,
                       portal.event.timezone,
@@ -221,6 +227,7 @@ export function SpeakerProfilePanel({
   const [travelPreferences, setTravelPreferences] = useState(
     portal.profile.travelPreferences ?? "",
   );
+  const participantName = portal.profile.name ?? "Participant";
   const blocker = useUnsavedChanges(dirty);
   // biome-ignore lint/correctness/useExhaustiveDependencies: The persisted revision is the authoritative reset boundary even when a save normalizes to the same visible profile values.
   useEffect(() => {
@@ -244,9 +251,12 @@ export function SpeakerProfilePanel({
       file.currentVersionId &&
       file.downloadReleasedAt &&
       file.downloadUploadedAt &&
-      file.downloadFilename &&
-      file.downloadUploaderName,
+      file.downloadFilename,
   );
+  const fieldVisible = (key: keyof typeof portal.profileFieldPolicies) =>
+    portal.profileFieldPolicies[key] !== "hidden";
+  const fieldEditable = (key: keyof typeof portal.profileFieldPolicies) =>
+    portal.profileFieldPolicies[key] === "editable";
   return (
     <section className="mt speaker-work speaker-profile" id="profile">
       {blocker.state === "blocked" ? (
@@ -264,13 +274,13 @@ export function SpeakerProfilePanel({
           <img
             className="speaker-headshot-image"
             src={`/participant/files/${headshot.id}?view=headshot`}
-            alt={`${portal.profile.name} headshot`}
+            alt={`${participantName} headshot`}
           />
         ) : portal.profile.programmePortraitUrl ? (
           <img
             className="speaker-headshot-image"
             src={portal.profile.programmePortraitUrl}
-            alt={`${portal.profile.name} programme portrait`}
+            alt={`${participantName} programme portrait`}
           />
         ) : (
           <span className="speaker-headshot-placeholder">
@@ -313,114 +323,138 @@ export function SpeakerProfilePanel({
       >
         <input type="hidden" name="intent" value="save-profile" />
         <input type="hidden" name="revision" value={portal.profile.revision} />
-        <label className="label">
-          <span className="pc-field-label">
-            <span>Display name</span>
-            <span className="pc-required" aria-hidden="true">
-              Required
+        {fieldVisible("name") ? (
+          <label className="label">
+            <span className="pc-field-label">
+              <span>Display name</span>
+              <span className="pc-required" aria-hidden="true">
+                Required
+              </span>
             </span>
-          </span>
-          <input
-            className="field"
-            name="name"
-            defaultValue={portal.profile.name}
-            autoComplete="name"
-            required
-          />
-        </label>
+            <input
+              className="field"
+              name="name"
+              defaultValue={portal.profile.name}
+              autoComplete="name"
+              required={fieldEditable("name")}
+              disabled={!fieldEditable("name")}
+            />
+          </label>
+        ) : null}
         <div className="form-row">
-          <label className="label">
-            Job title
-            <input
-              className="field"
-              name="jobTitle"
-              defaultValue={portal.profile.jobTitle ?? ""}
-              autoComplete="organization-title"
-            />
-          </label>
-          <label className="label">
-            Organisation
-            <input
-              className="field"
-              name="organisationName"
-              defaultValue={portal.profile.organisationName ?? ""}
-              autoComplete="organization"
-            />
-          </label>
+          {fieldVisible("job_title") ? (
+            <label className="label">
+              Job title
+              <input
+                className="field"
+                name="jobTitle"
+                defaultValue={portal.profile.jobTitle ?? ""}
+                autoComplete="organization-title"
+                disabled={!fieldEditable("job_title")}
+              />
+            </label>
+          ) : null}
+          {fieldVisible("organisation_name") ? (
+            <label className="label">
+              Organisation
+              <input
+                className="field"
+                name="organisationName"
+                defaultValue={portal.profile.organisationName ?? ""}
+                autoComplete="organization"
+                disabled={!fieldEditable("organisation_name")}
+              />
+            </label>
+          ) : null}
         </div>
-        <label className="label">
-          Name pronunciation
-          <input
-            className="field"
-            name="pronunciation"
-            defaultValue={portal.profile.pronunciation ?? ""}
-          />
-        </label>
-        <div className="form-row">
+        {fieldVisible("pronunciation") ? (
           <label className="label">
-            LinkedIn profile URL
+            Name pronunciation
             <input
               className="field"
-              name="linkedinUrl"
-              type="url"
-              inputMode="url"
-              value={linkedinUrl}
-              onChange={(event) => setLinkedinUrl(event.currentTarget.value)}
-              onBlur={() =>
-                setLinkedinUrl(normalizeSpeakerLinkedinUrl(linkedinUrl))
+              name="pronunciation"
+              defaultValue={portal.profile.pronunciation ?? ""}
+              disabled={!fieldEditable("pronunciation")}
+            />
+          </label>
+        ) : null}
+        <div className="form-row">
+          {fieldVisible("linkedin_url") ? (
+            <label className="label">
+              LinkedIn profile URL
+              <input
+                className="field"
+                name="linkedinUrl"
+                type="url"
+                inputMode="url"
+                value={linkedinUrl}
+                onChange={(event) => setLinkedinUrl(event.currentTarget.value)}
+                onBlur={() =>
+                  setLinkedinUrl(normalizeSpeakerLinkedinUrl(linkedinUrl))
+                }
+                maxLength={500}
+                disabled={!fieldEditable("linkedin_url")}
+              />
+            </label>
+          ) : null}
+          {fieldVisible("x_handle") ? (
+            <label className="label">
+              X handle
+              <input
+                className="field"
+                name="xHandle"
+                value={xHandle}
+                onChange={(event) => setXHandle(event.currentTarget.value)}
+                onBlur={() => setXHandle(formatSpeakerXHandleInput(xHandle))}
+                maxLength={500}
+                disabled={!fieldEditable("x_handle")}
+              />
+            </label>
+          ) : null}
+        </div>
+        {fieldVisible("biography") ? (
+          <label className="label">
+            <span className="pc-field-label">
+              <span>Biography</span>
+              <span className="pc-required" aria-hidden="true">
+                Required
+              </span>
+            </span>
+            <textarea
+              className="textarea"
+              name="biography"
+              value={biography}
+              onChange={(event) => setBiography(event.currentTarget.value)}
+              minLength={40}
+              maxLength={5_000}
+              required={fieldEditable("biography")}
+              disabled={!fieldEditable("biography")}
+              rows={7}
+            />
+            <CharacterCount value={biography} maximum={5_000} />
+          </label>
+        ) : null}
+        {fieldVisible("travel_preferences") ? (
+          <label className="label">
+            Travel and logistics preferences
+            <textarea
+              className="textarea"
+              name="travelPreferences"
+              value={travelPreferences}
+              onChange={(event) =>
+                setTravelPreferences(event.currentTarget.value)
               }
-              maxLength={500}
+              maxLength={2_000}
+              rows={4}
+              disabled={!fieldEditable("travel_preferences")}
             />
-          </label>
-          <label className="label">
-            X handle
-            <input
-              className="field"
-              name="xHandle"
-              value={xHandle}
-              onChange={(event) => setXHandle(event.currentTarget.value)}
-              onBlur={() => setXHandle(formatSpeakerXHandleInput(xHandle))}
-              maxLength={500}
-            />
-          </label>
-        </div>
-        <label className="label">
-          <span className="pc-field-label">
-            <span>Biography</span>
-            <span className="pc-required" aria-hidden="true">
-              Required
+            <CharacterCount value={travelPreferences} maximum={2_000} />
+            <span className="help">
+              Private to you and authorised organisers; never shown on the
+              public programme.
             </span>
-          </span>
-          <textarea
-            className="textarea"
-            name="biography"
-            value={biography}
-            onChange={(event) => setBiography(event.currentTarget.value)}
-            minLength={40}
-            maxLength={5_000}
-            required
-            rows={7}
-          />
-          <CharacterCount value={biography} maximum={5_000} />
-        </label>
-        <label className="label">
-          Travel and logistics preferences
-          <textarea
-            className="textarea"
-            name="travelPreferences"
-            value={travelPreferences}
-            onChange={(event) =>
-              setTravelPreferences(event.currentTarget.value)
-            }
-            maxLength={2_000}
-            rows={4}
-          />
-          <CharacterCount value={travelPreferences} maximum={2_000} />
-          <span className="help">
-            Private to you and authorised organisers; never shown on the public
-            programme.
-          </span>
-        </label>
+          </label>
+        ) : null}
         <div className="speaker-profile-commit">
           <label className="speaker-confirm">
             <input
@@ -438,6 +472,27 @@ export function SpeakerProfilePanel({
           </span>
         </div>
       </Form>
+      {portal.customPersonFields.length ? (
+        <Form method="post" className="speaker-profile-form mt">
+          <input type="hidden" name="intent" value="save-custom-fields" />
+          <div className="card-title">
+            <div>
+              <span className="pc-section-kicker">Event-specific</span>
+              <h2>Additional information</h2>
+            </div>
+          </div>
+          <EventFieldInputs fields={portal.customPersonFields} participant />
+          {portal.customPersonFields.some(
+            (field) => field.participantAccess === "editable",
+          ) ? (
+            <Button type="submit" variant="primary" disabled={busy}>
+              Save additional information
+            </Button>
+          ) : (
+            <p className="help">These fields are managed by the organiser.</p>
+          )}
+        </Form>
+      ) : null}
       <SpeakerProfileHistory
         revisions={portal.profileHistory}
         timeZone={portal.event.timezone}

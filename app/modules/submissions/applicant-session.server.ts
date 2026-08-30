@@ -336,6 +336,36 @@ export async function evaluationApplicantSessionContext(
 export class ApplicantSessionService {
   constructor(private readonly env: CloudflareEnvironment) {}
 
+  private async perPersonSubmissionLimitReached(
+    form: PublicForm,
+    personId: string,
+    excludeSubmissionId: string,
+  ) {
+    if (form.perPersonSubmissionLimit === null) return false;
+    const row = await this.env.DB.prepare(
+      `SELECT COUNT(*) AS count
+         FROM submissions submission
+         JOIN form_versions version
+           ON version.id = submission.form_version_id
+          AND version.event_id = submission.event_id
+        WHERE version.form_id = ? AND submission.event_id = ?
+          AND submission.submitter_person_id = ?
+          AND submission.status <> 'withdrawn'
+          AND submission.id <> ?`,
+    )
+      .bind(form.id, form.eventId, personId, excludeSubmissionId)
+      .first<{ count: number }>();
+    return (row?.count ?? 0) >= form.perPersonSubmissionLimit;
+  }
+
+  private perPersonSubmissionLimitMessage(form: PublicForm) {
+    const limit = form.perPersonSubmissionLimit;
+    if (limit === null) {
+      throw new Error("A per-person submission limit is required.");
+    }
+    return `This form allows at most ${limit} active application${limit === 1 ? "" : "s"} per person. Withdraw an existing application before claiming this draft.`;
+  }
+
   async get(
     request: Request,
     form: PublicForm,
@@ -771,6 +801,18 @@ export class ApplicantSessionService {
       current && !current.verified ? current.anonymousDraftId : null;
     if (anonymousDraftId) {
       await this.assertAnonymousPrimaryEmail(form, anonymousDraftId, email);
+      if (
+        pendingVerification &&
+        (await this.perPersonSubmissionLimitReached(
+          form,
+          person.personId,
+          anonymousDraftId,
+        ))
+      ) {
+        throw new ApplicantInputError(
+          this.perPersonSubmissionLimitMessage(form),
+        );
+      }
     }
     const rawAnonymousToken = request
       ? await readApplicantToken(request, this.env, form.id)
@@ -803,6 +845,20 @@ export class ApplicantSessionService {
                 (? IS NULL AND evaluation_generation_hash IS NULL)
                 OR evaluation_generation_hash = ?
               )
+              AND (
+                ? IS NULL OR ? IS NULL OR (
+                  SELECT COUNT(*)
+                    FROM submissions active_submission
+                    JOIN form_versions active_version
+                      ON active_version.id = active_submission.form_version_id
+                     AND active_version.event_id = active_submission.event_id
+                   WHERE active_version.form_id = ?
+                     AND active_submission.event_id = ?
+                     AND active_submission.submitter_person_id = ?
+                     AND active_submission.status <> 'withdrawn'
+                     AND active_submission.id <> ?
+                ) < ?
+              )
          )
       `,
       ).bind(
@@ -817,6 +873,13 @@ export class ApplicantSessionService {
         anonymousDraftId,
         evaluationGenerationHash,
         evaluationGenerationHash,
+        anonymousDraftId,
+        form.perPersonSubmissionLimit,
+        form.id,
+        form.eventId,
+        person.personId,
+        anonymousDraftId,
+        form.perPersonSubmissionLimit,
       ),
       this.env.DB.prepare(
         `
@@ -966,6 +1029,19 @@ export class ApplicantSessionService {
       (results[0].meta.changes ?? 0) !== 1 ||
       (results[1].meta.changes ?? 0) !== 1
     ) {
+      if (
+        pendingVerification &&
+        anonymousDraftId &&
+        (await this.perPersonSubmissionLimitReached(
+          form,
+          person.personId,
+          anonymousDraftId,
+        ))
+      ) {
+        throw new ApplicantInputError(
+          this.perPersonSubmissionLimitMessage(form),
+        );
+      }
       await this.env.DB.prepare(
         `
         UPDATE submission_email_verifications

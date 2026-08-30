@@ -36,7 +36,11 @@ type TriggerRow = {
   organisationId: string;
   templateId: string;
   templateVersionId: string;
-  triggerType: "task_due" | "task_overdue";
+  triggerType:
+    | "task_due"
+    | "task_overdue"
+    | "application_draft"
+    | "participation_pending";
   configurationJson: string;
   requestedByPersonId: string;
   requestedByName: string;
@@ -129,7 +133,9 @@ export class CommunicationAutomationService {
          JOIN events event
            ON event.id = trigger.event_id AND event.organisation_id = ?
         WHERE trigger.event_id = ?
-          AND trigger.trigger_type IN ('task_due','task_overdue')
+          AND trigger.trigger_type IN (
+            'task_due','task_overdue','application_draft','participation_pending'
+          )
         ORDER BY trigger.updated_at DESC`,
     )
       .bind(viewer.organisationId, viewer.eventId)
@@ -137,7 +143,7 @@ export class CommunicationAutomationService {
         id: string;
         templateId: string;
         templateName: string;
-        triggerType: "task_due" | "task_overdue";
+        triggerType: TriggerRow["triggerType"];
         configurationJson: string;
         enabled: number;
         updatedAt: number;
@@ -154,19 +160,21 @@ export class CommunicationAutomationService {
 
   async saveTrigger(viewer: Viewer, input: SaveCommunicationTriggerInput) {
     const parsed = saveCommunicationTriggerSchema.parse(input);
-    if (
-      parsed.triggerType === "task_due" &&
-      parsed.audienceType === "overdue_speakers"
-    )
+    const allowedAudiences: Record<
+      typeof parsed.triggerType,
+      ReadonlySet<typeof parsed.audienceType>
+    > = {
+      task_due: new Set(["due_speakers", "event_administrators"]),
+      task_overdue: new Set(["overdue_speakers", "event_administrators"]),
+      application_draft: new Set(["draft_applicants", "event_administrators"]),
+      participation_pending: new Set([
+        "pending_participants",
+        "event_administrators",
+      ]),
+    };
+    if (!allowedAudiences[parsed.triggerType].has(parsed.audienceType))
       throw new CommunicationStateError(
-        "A due-task trigger cannot target the overdue-speaker audience.",
-      );
-    if (
-      parsed.triggerType === "task_overdue" &&
-      parsed.audienceType === "due_speakers"
-    )
-      throw new CommunicationStateError(
-        "An overdue-task trigger cannot target the due-speaker audience.",
+        "Choose the audience that matches this reminder trigger, or notify event administrators.",
       );
     const published = await this.env.DB.prepare(
       `SELECT version.id
@@ -516,7 +524,9 @@ export class CommunicationAutomationService {
           AND version.channel = 'email' AND version.status = 'published'
          JOIN people person ON person.id = template.created_by_person_id
         WHERE trigger.enabled = 1
-          AND trigger.trigger_type IN ('task_due','task_overdue')
+          AND trigger.trigger_type IN (
+            'task_due','task_overdue','application_draft','participation_pending'
+          )
         ORDER BY trigger.id`,
     ).all<TriggerRow>();
     let queued = 0;

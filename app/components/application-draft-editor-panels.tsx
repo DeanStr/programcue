@@ -11,7 +11,7 @@ import { SessionizeProfileImport } from "~/components/sessionize-profile-import"
 import { Button, ButtonLink, IconButton } from "~/components/ui/button";
 import { CharacterCount } from "~/components/ui/character-count";
 import type { useConfirm } from "~/components/ui/confirm-dialog";
-import type { ApplicantDraft } from "~/modules/submissions/submission-repository.server";
+import type { ParticipantApplicantDraft } from "~/modules/submissions/submission-repository.server";
 import type {
   formSectionsForDisplay,
   StoredFormField,
@@ -104,10 +104,14 @@ export function FieldControl({
 }
 
 type EditableSpeaker = Pick<
-  ApplicantDraft["speakers"][number],
-  "name" | "email" | "biography" | "invitationStatus"
+  ParticipantApplicantDraft["speakers"][number],
+  "personId" | "name" | "email" | "biography" | "invitationStatus"
 >;
-type DraftAnswers = ApplicantDraft["answers"];
+type SpeakerFieldAccess = {
+  name: "hidden" | "read_only" | "editable";
+  biography: "hidden" | "read_only" | "editable";
+} | null;
+type DraftAnswers = ParticipantApplicantDraft["answers"];
 type DraftUploads = Record<string, { assetId: string; versionId: string }>;
 
 type ApplicationAnswersProps = {
@@ -121,7 +125,7 @@ type ApplicationAnswersProps = {
   uploads: DraftUploads;
   setUploads: Dispatch<SetStateAction<DraftUploads>>;
   publicSlug: string;
-  draft: ApplicantDraft;
+  draft: ParticipantApplicantDraft;
   currentUpload: ApplicantVideoUploadRecord | null;
   uploadTurnstileSiteKey: string | null;
   maximumVideoBytes: number;
@@ -364,7 +368,8 @@ type ApplicationSpeakersProps = {
   setDirty(value: boolean): void;
   readOnly: boolean;
   revisionMode: boolean;
-  applicant: { name: string; email: string; verified: boolean };
+  applicant: { name?: string; email: string; verified: boolean };
+  speakerFieldAccess: SpeakerFieldAccess;
   publicSlug: string;
   originalSpeakerCount: number;
   effectiveMaximumSpeakers: number;
@@ -380,6 +385,7 @@ export function ApplicationSpeakers({
   readOnly,
   revisionMode,
   applicant,
+  speakerFieldAccess,
   publicSlug,
   originalSpeakerCount,
   effectiveMaximumSpeakers,
@@ -387,6 +393,11 @@ export function ApplicationSpeakers({
   duplicateSpeakerEmails,
   headingRef,
 }: ApplicationSpeakersProps) {
+  const primaryProfileOwned = speakers[0]?.personId !== null;
+  const canImportName =
+    !primaryProfileOwned || speakerFieldAccess?.name === "editable";
+  const canImportBiography =
+    !primaryProfileOwned || speakerFieldAccess?.biography === "editable";
   return (
     <fieldset className="card pad" id="application-speakers" tabIndex={-1}>
       <legend
@@ -400,14 +411,18 @@ export function ApplicationSpeakers({
         The first speaker is primary. Additional speakers receive a pending
         claim relationship and an expiring invitation after final submission.
       </p>
-      {!readOnly && !revisionMode && applicant.verified ? (
+      {!readOnly &&
+      !revisionMode &&
+      applicant.verified &&
+      (canImportName || canImportBiography) ? (
         <SessionizeProfileImport
           publicSlug={publicSlug}
           disabled={readOnly}
           onImport={(profile) => {
             setSpeakers((current) => {
               const primary = current[0] ?? {
-                name: applicant.name,
+                personId: null,
+                name: applicant.name ?? "Primary speaker",
                 email: applicant.email,
                 biography: "",
                 invitationStatus: "pending",
@@ -415,8 +430,10 @@ export function ApplicationSpeakers({
               return [
                 {
                   ...primary,
-                  name: profile.name,
-                  biography: profile.biography,
+                  ...(canImportName ? { name: profile.name } : {}),
+                  ...(canImportBiography
+                    ? { biography: profile.biography }
+                    : {}),
                 },
                 ...current.slice(1),
               ];
@@ -428,26 +445,34 @@ export function ApplicationSpeakers({
       {speakers.map((speaker, index) => (
         // biome-ignore lint/suspicious/noArrayIndexKey: These controlled rows have positional identity; deleting a co-speaker intentionally promotes each following row to the preceding position.
         <div className="form-row mb" key={index}>
-          <label className="label">
-            Speaker {index + 1} name
-            <input
-              className="field"
-              autoComplete={index === 0 ? "name" : "off"}
-              disabled={
-                readOnly ||
-                (revisionMode && index < originalSpeakerCount) ||
-                (index > 0 && speaker.invitationStatus === "claimed")
-              }
-              required
-              value={speaker.name}
-              onChange={(event) => {
-                const next = [...speakers];
-                next[index] = { ...speaker, name: event.target.value };
-                setSpeakers(next);
-                setDirty(true);
-              }}
-            />
-          </label>
+          {speaker.name === undefined ? (
+            <p className="subtle">
+              Speaker {index + 1} name is managed by the organiser.
+            </p>
+          ) : (
+            <label className="label">
+              Speaker {index + 1} name
+              <input
+                className="field"
+                autoComplete={index === 0 ? "name" : "off"}
+                disabled={
+                  readOnly ||
+                  (revisionMode && index < originalSpeakerCount) ||
+                  (speaker.personId !== null &&
+                    speakerFieldAccess?.name !== "editable") ||
+                  (index > 0 && speaker.invitationStatus === "claimed")
+                }
+                required
+                value={speaker.name}
+                onChange={(event) => {
+                  const next = [...speakers];
+                  next[index] = { ...speaker, name: event.target.value };
+                  setSpeakers(next);
+                  setDirty(true);
+                }}
+              />
+            </label>
+          )}
           <label className="label">
             Email
             <div style={{ display: "flex", gap: 6 }}>
@@ -488,35 +513,43 @@ export function ApplicationSpeakers({
               ) : null}
             </div>
           </label>
-          <label className="label">
-            Biography
-            <textarea
-              className="textarea"
-              disabled={
-                readOnly ||
-                (revisionMode && index < originalSpeakerCount) ||
-                (index > 0 && speaker.invitationStatus === "claimed")
-              }
-              maxLength={5_000}
-              value={speaker.biography}
-              onChange={(event) => {
-                const next = [...speakers];
-                next[index] = {
-                  ...speaker,
-                  biography: event.target.value,
-                };
-                setSpeakers(next);
-                setDirty(true);
-              }}
-            />
-            <CharacterCount value={speaker.biography} maximum={5_000} />
-            {index > 0 && speaker.invitationStatus === "claimed" ? (
-              <span className="help">
-                This co-speaker owns their claimed profile. They can update it
-                below.
-              </span>
-            ) : null}
-          </label>
+          {speaker.biography === undefined ? (
+            <p className="subtle">
+              Speaker {index + 1} biography is managed by the organiser.
+            </p>
+          ) : (
+            <label className="label">
+              Biography
+              <textarea
+                className="textarea"
+                disabled={
+                  readOnly ||
+                  (revisionMode && index < originalSpeakerCount) ||
+                  (speaker.personId !== null &&
+                    speakerFieldAccess?.biography !== "editable") ||
+                  (index > 0 && speaker.invitationStatus === "claimed")
+                }
+                maxLength={5_000}
+                value={speaker.biography}
+                onChange={(event) => {
+                  const next = [...speakers];
+                  next[index] = {
+                    ...speaker,
+                    biography: event.target.value,
+                  };
+                  setSpeakers(next);
+                  setDirty(true);
+                }}
+              />
+              <CharacterCount value={speaker.biography} maximum={5_000} />
+              {index > 0 && speaker.invitationStatus === "claimed" ? (
+                <span className="help">
+                  This co-speaker owns their claimed profile. They can update it
+                  below.
+                </span>
+              ) : null}
+            </label>
+          )}
         </div>
       ))}
       {!readOnly && speakers.length < effectiveMaximumSpeakers ? (
@@ -527,6 +560,7 @@ export function ApplicationSpeakers({
             setSpeakers([
               ...speakers,
               {
+                personId: null,
                 name: "",
                 email: "",
                 biography: "",
@@ -569,7 +603,7 @@ type ApplicationLifecycleProps = {
     speakers: EditableSpeaker[];
     uploads: DraftUploads;
   };
-  draft: ApplicantDraft;
+  draft: ParticipantApplicantDraft;
   confirm: ReturnType<typeof useConfirm>["confirm"];
   forceReadOnly: boolean;
   readOnlyNotice?: string;

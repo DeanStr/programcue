@@ -373,8 +373,10 @@ export const saveFormSchema = z
         /^[a-z0-9]+(?:-[a-z0-9]+)*$/,
         "Use lowercase letters, numbers and hyphens",
       ),
+    openDate: z.iso.date().nullable().optional(),
     closeDate: z.iso.date().nullable(),
     submissionLimit: nullablePositiveInteger,
+    perPersonSubmissionLimit: nullablePositiveInteger.optional(),
     minSpeakers: z.coerce.number().int().min(1).max(MAX_SUBMISSION_SPEAKERS),
     maxSpeakers: nullablePositiveInteger.pipe(
       z.number().int().positive().max(MAX_SUBMISSION_SPEAKERS).nullable(),
@@ -404,6 +406,13 @@ export const saveFormSchema = z
         code: "custom",
         path: ["maxSpeakers"],
         message: "Maximum speakers cannot be below the minimum",
+      });
+    }
+    if (input.openDate && input.closeDate && input.openDate > input.closeDate) {
+      context.addIssue({
+        code: "custom",
+        path: ["closeDate"],
+        message: "Closing date cannot be before the opening date",
       });
     }
     input.schema.fields.forEach((field, index) => {
@@ -545,6 +554,27 @@ export const draftPayloadSchema = z.object({
     .default({}),
 });
 
+const participantDraftSpeakerInputSchema = speakerInputSchema.partial({
+  name: true,
+});
+
+export const participantDraftPayloadSchema = draftPayloadSchema.extend({
+  speakers: z
+    .array(participantDraftSpeakerInputSchema)
+    .min(1)
+    .max(MAX_SUBMISSION_SPEAKERS)
+    .superRefine((speakers, context) => {
+      const emails = speakers.map((speaker) => speaker.email);
+      if (new Set(emails).size !== emails.length) {
+        context.addIssue({
+          code: "custom",
+          path: ["speakers"],
+          message: "Each speaker must use a different email address",
+        });
+      }
+    }),
+});
+
 const emptyDraftSpeakerInputSchema = z.object({
   name: z.string().trim().length(0),
   email: z.string().trim().length(0),
@@ -567,6 +597,14 @@ const draftSaveSpeakersSchema = z.union([
 export const draftSavePayloadSchema = draftPayloadSchema.extend({
   speakers: draftSaveSpeakersSchema,
 });
+
+export const participantDraftSavePayloadSchema =
+  participantDraftPayloadSchema.extend({
+    speakers: z.union([
+      participantDraftPayloadSchema.shape.speakers,
+      z.tuple([emptyDraftSpeakerInputSchema]).transform(() => []),
+    ]),
+  });
 
 export type DraftPayload = Omit<
   z.infer<typeof draftPayloadSchema>,

@@ -169,10 +169,11 @@ describe("AI tool authority boundary", () => {
       ]),
     );
 
-    await new SpeakerService(workerEnv).declineOwnParticipation(speaker, {
+    await new SpeakerService(workerEnv).respondOwnRole(speaker, {
       sessionId,
-      participationRevision: 1,
-      declineConfirmation: "declined",
+      role: "speaker",
+      roleRevision: 1,
+      response: "declined",
       reason: "",
     });
 

@@ -4,6 +4,10 @@ import { SpeakerActionNotice } from "~/components/speaker-action-notice";
 import { SpeakerProfilePanel } from "~/components/speaker-files-profile-panels";
 import { useSpeakerWorkspace } from "~/components/speaker-workspace-context";
 import {
+  EventFieldService,
+  EventFieldStateError,
+} from "~/modules/fields/event-field-service.server";
+import {
   SpeakerProfileConflictError,
   SpeakerService,
 } from "~/modules/speakers/speaker-service.server";
@@ -15,23 +19,23 @@ export const meta = () => [{ title: "Participant Profile · Program Cue" }];
 export async function action({ request, context }: Route.ActionArgs) {
   const { env, viewer } = await requireSpeakerWorkspace(request, context);
   const form = await request.formData();
-  if (form.get("intent") !== "save-profile") {
+  const intent = form.get("intent");
+  if (intent !== "save-profile" && intent !== "save-custom-fields") {
     return data(
       { ok: false, message: "Unsupported participant profile action." },
       { status: 400 },
     );
   }
   try {
+    const fields = new EventFieldService(env);
+    if (intent === "save-custom-fields") {
+      await fields.saveValues(viewer, "person", viewer.personId, form, true);
+      return data({ ok: true, message: "Your event fields were saved." });
+    }
+    const protectedProfile = await fields.participantProfileInput(viewer, form);
     const result = await new SpeakerService(env).updateProfile(viewer, {
       revision: form.get("revision"),
-      name: form.get("name"),
-      biography: form.get("biography"),
-      pronunciation: form.get("pronunciation"),
-      organisationName: form.get("organisationName"),
-      jobTitle: form.get("jobTitle"),
-      linkedinUrl: form.get("linkedinUrl"),
-      xHandle: form.get("xHandle"),
-      travelPreferences: form.get("travelPreferences"),
+      ...protectedProfile,
       publish: form.get("publish") ? "true" : "false",
     });
     const warning = [result.webhookWarning, result.realtimeWarning]
@@ -48,13 +52,21 @@ export async function action({ request, context }: Route.ActionArgs) {
     const message =
       error instanceof ZodError
         ? (error.issues[0]?.message ?? "Review the highlighted information.")
-        : error instanceof SpeakerProfileConflictError
+        : error instanceof SpeakerProfileConflictError ||
+            error instanceof EventFieldStateError
           ? error.message
           : null;
     if (message) {
       return data(
         { ok: false, message },
-        { status: error instanceof SpeakerProfileConflictError ? 409 : 422 },
+        {
+          status:
+            error instanceof SpeakerProfileConflictError
+              ? 409
+              : error instanceof EventFieldStateError
+                ? error.status
+                : 422,
+        },
       );
     }
     if (error instanceof Response) throw error;

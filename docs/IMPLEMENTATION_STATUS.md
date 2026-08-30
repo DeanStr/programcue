@@ -1,6 +1,6 @@
 # Verified implementation status
 
-Last verified: 2026-08-27.
+Last verified: 2026-08-29.
 
 This is the canonical implementation audit and requirements traceability record. The product specification remains authoritative for intended scope; this file records observed code, focused tests, deployment evidence and bounded production acceptance.
 
@@ -144,6 +144,40 @@ featured-speaker and relationship-integrity triggers and is covered by local
 migration and remote-schema validation. The migration and application behavior
 are included in the current production release; a fresh live multi-participant
 decision exercise remains external acceptance.
+
+The current, not-yet-deployed candidate deepens participant operations without
+introducing a generic workflow engine. Migration
+`0055_participant_operations_depth.sql` adds independent Speaker, Moderator and
+Chair roles per person/session relationship; each role has its own revisioned
+accept/decline/reset lifecycle while the legacy relationship status remains a
+derived compatibility aggregate. Organisers can assign only those three roles,
+and both participant and administrator surfaces operate on the exact role.
+Focused Worker coverage proves that accepting one role and declining another do
+not overwrite each other. Live production acceptance remains outstanding.
+
+The same candidate adds an optional application opening date and a separate
+per-person submission cap. Form drafts and immutable published settings retain
+both controls, public availability reports not-yet-open forms honestly, and the
+final D1 submission boundary rechecks opening, closing, total capacity and the
+verified participant's active-application count. The daily reminder engine now
+supports two additional fixed cohorts—unsubmitted verified drafts and pending
+participant roles—using the existing sender-readiness, preview, idempotency and
+durable Queue path. This is a production slice with focused local coverage; no
+provider send or deployment acceptance is claimed for the new cohorts.
+
+Event settings now exposes explicit hidden/read-only/editable policies for the
+standard participant profile and constrained event-owned person/session fields.
+Custom fields support text, number, boolean, date and fixed-choice values only;
+there are no formulas, dependencies or conditional rules. Participant writes
+are server-limited to their own person fields marked editable. Organisers edit
+person values from speaker detail and session values from session content.
+Retention remaps participant-owned values and cascades retained identities
+through role rows. The speaker readiness roster now reports outstanding tasks,
+pending role responses, unpublished profiles, missing required person fields
+and quarantined files separately and offers the fixed pending-response reminder
+cohort. This candidate is locally implemented and migration-validated; browser
+acceptance passed for the focused participant workflows, while deployed
+production acceptance remains outstanding.
 
 The speaker roster keeps expanded manual-entry and CSV-import controls above a
 non-sticky roster header so those actions remain operable at the supported

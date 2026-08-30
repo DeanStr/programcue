@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { EventFieldService } from "~/modules/fields/event-field-service.server";
 import type { Viewer } from "~/platform/auth/authorize.server";
 import {
   hashApplicantToken,
@@ -65,11 +66,27 @@ export class SubmissionCoSpeakerWorkflows extends SubmissionServiceFoundation {
     rawInput: unknown,
   ) {
     const scope = await this.publicScope(form.eventId);
+    const submitted = z
+      .object({
+        revision: z.coerce.number().int().positive(),
+        name: z.string().trim().min(1).max(120).optional(),
+        biography: z.string().trim().max(5_000).optional(),
+      })
+      .parse(rawInput);
+    const protectedInput = await new EventFieldService(
+      this.env,
+    ).protectParticipantProfilePatch(scope, applicant.personId, submitted);
+    if (
+      protectedInput.name === undefined &&
+      protectedInput.biography === undefined
+    ) {
+      return;
+    }
     return this.projectCommand(
       { ...scope, personId: applicant.personId },
       "submission.speaker_profile.update",
       { publicSlug, rawInput },
-      () => this.updateClaimedSpeakerProfileD1(form, applicant, rawInput),
+      () => this.updateClaimedSpeakerProfileD1(form, applicant, protectedInput),
     );
   }
 
@@ -81,15 +98,22 @@ export class SubmissionCoSpeakerWorkflows extends SubmissionServiceFoundation {
     const input = z
       .object({
         revision: z.coerce.number().int().positive(),
-        name: z.string().trim().min(1).max(120),
-        biography: z.string().trim().max(5_000),
+        name: z.string().trim().min(1).max(120).optional(),
+        biography: z.string().trim().max(5_000).optional(),
       })
+      .refine(
+        (candidate) =>
+          candidate.name !== undefined || candidate.biography !== undefined,
+        "Provide at least one editable speaker profile field.",
+      )
       .parse(rawInput);
     const operationId = crypto.randomUUID();
     const results = await this.env.DB.batch([
       this.env.DB.prepare(
         `UPDATE people
-            SET display_name = ?, biography = ?, profile_revision = profile_revision + 1,
+            SET display_name = COALESCE(?, display_name),
+                biography = CASE WHEN ? = 1 THEN ? ELSE biography END,
+                profile_revision = profile_revision + 1,
                 last_operation_id = ?, updated_at = unixepoch()
           WHERE id = ? AND profile_revision = ? AND email_verified = 1
             AND EXISTS (
@@ -106,6 +130,7 @@ export class SubmissionCoSpeakerWorkflows extends SubmissionServiceFoundation {
             )`,
       ).bind(
         input.name,
+        input.biography === undefined ? 0 : 1,
         input.biography || null,
         operationId,
         applicant.personId,
@@ -115,11 +140,14 @@ export class SubmissionCoSpeakerWorkflows extends SubmissionServiceFoundation {
       ),
       this.env.DB.prepare(
         `UPDATE submission_speakers
-            SET display_name = ?, updated_at = unixepoch()
+            SET display_name = (
+                  SELECT display_name FROM people WHERE id = ?
+                ),
+                updated_at = unixepoch()
           WHERE person_id = ? AND event_id = ? AND invitation_status = 'claimed'
             AND EXISTS (SELECT 1 FROM people WHERE id = ? AND last_operation_id = ?)`,
       ).bind(
-        input.name,
+        applicant.personId,
         applicant.personId,
         form.eventId,
         applicant.personId,

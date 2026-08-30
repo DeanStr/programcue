@@ -185,7 +185,7 @@ describe("speaker preparation milestones", () => {
     }).find((milestone) => milestone.key === "sessions");
 
     expect(sessions).toMatchObject({
-      detail: "1 of 1 responded · 0 confirmed · 1 declined",
+      detail: "1 of 1 roles responded · 0 accepted · 1 declined",
       state: "complete",
     });
   });
@@ -199,5 +199,27 @@ describe("speaker participation badge", () => {
         status: "scheduled",
       }),
     ).toEqual({ className: "danger", label: "Declined by you" });
+  });
+
+  it("does not request a role response for a cancelled session", () => {
+    expect(
+      speakerParticipationBadge({
+        participationStatus: "pending",
+        status: "cancelled",
+        roles: [
+          {
+            sessionId: "cancelled-session",
+            role: "speaker",
+            label: "Speaker",
+            position: 0,
+            participationStatus: "pending",
+            participationRevision: 1,
+            participationConfirmedAt: null,
+            participationDeclinedAt: null,
+            participationDeclineReason: null,
+          },
+        ],
+      }),
+    ).toEqual({ className: "", label: "Not required" });
   });
 });

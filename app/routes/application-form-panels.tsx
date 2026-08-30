@@ -404,46 +404,67 @@ export function SpeakerProfilePanel({
   profile,
   action,
 }: {
-  profile: { name: string; biography: string; revision: number };
+  profile: {
+    name?: string;
+    biography?: string;
+    revision: number;
+    fieldAccess: {
+      name: "hidden" | "read_only" | "editable";
+      biography: "hidden" | "read_only" | "editable";
+    };
+  };
   action?: string;
 }) {
   const navigation = useNavigation();
+  const canEdit =
+    profile.fieldAccess.name === "editable" ||
+    profile.fieldAccess.biography === "editable";
   return (
     <details className="card pad mb">
       <summary>
         <strong>Your claimed speaker profile</strong>{" "}
-        <span className="subtle">Edit the biography you own</span>
+        <span className="subtle">
+          {canEdit ? "Update the details you own" : "View your details"}
+        </span>
       </summary>
       <Form method="post" action={action} className="stack mt">
         <input type="hidden" name="_intent" value="update_profile" />
         <input type="hidden" name="revision" value={profile.revision} />
-        <label className="label">
-          Display name
-          <input
-            className="field"
-            name="name"
-            defaultValue={profile.name}
-            required
-          />
-        </label>
-        <label className="label">
-          Biography
-          <textarea
-            className="textarea"
-            name="biography"
-            maxLength={5_000}
-            defaultValue={profile.biography}
-          />
-        </label>
-        <Button
-          variant="primary"
-          type="submit"
-          disabled={navigation.state !== "idle"}
-        >
-          {navigation.formData?.get("_intent") === "update_profile"
-            ? "Saving…"
-            : "Save my profile"}
-        </Button>
+        {profile.fieldAccess.name !== "hidden" ? (
+          <label className="label">
+            Display name
+            <input
+              className="field"
+              name="name"
+              defaultValue={profile.name}
+              readOnly={profile.fieldAccess.name === "read_only"}
+              required={profile.fieldAccess.name === "editable"}
+            />
+          </label>
+        ) : null}
+        {profile.fieldAccess.biography !== "hidden" ? (
+          <label className="label">
+            Biography
+            <textarea
+              className="textarea"
+              name="biography"
+              maxLength={5_000}
+              defaultValue={profile.biography}
+              readOnly={profile.fieldAccess.biography === "read_only"}
+            />
+          </label>
+        ) : null}
+        {canEdit ? (
+          <Button
+            variant="primary"
+            type="submit"
+            disabled={navigation.state !== "idle"}
+          >
+            {navigation.formData?.get("_intent") === "update_profile"
+              ? "Saving…"
+              : "Save my profile"}
+          </Button>
+        ) : null}
       </Form>
     </details>
   );
@@ -624,7 +645,9 @@ export function AuthenticatedApplicationWorkspace({
               {availability.reason}{" "}
               {historicalPortal
                 ? "Existing applications remain available to view."
-                : "Existing drafts remain available to view and save."}
+                : loaderData.selectedCanSubmit
+                  ? "You can still save or submit the selected draft."
+                  : "Existing drafts remain available to view and save."}
             </span>
           </div>
         ) : form.closesAt ? (
@@ -823,6 +846,7 @@ export function AuthenticatedApplicationWorkspace({
               }
               schema={selectedForm.version.schema}
               applicant={applicant}
+              speakerFieldAccess={loaderData.draftSpeakerFieldAccess}
               publicSlug={form.publicSlug}
               currentUpload={loaderData.selectedUpload}
               uploadTurnstileSiteKey={loaderData.uploadTurnstileSiteKey}
@@ -843,7 +867,7 @@ export function AuthenticatedApplicationWorkspace({
               conflict={Boolean(actionData?.conflict)}
               maxSpeakers={selectedForm.maxSpeakers}
               errors={actionData?.errors}
-              canSubmit={availability.accepting && applicant.verified}
+              canSubmit={loaderData.selectedCanSubmit}
               canRevise={loaderData.selectedCanRevise}
               forceReadOnly={historicalPortal}
               readOnlyNotice="This application belongs to a closed form and is available for reference only."

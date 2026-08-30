@@ -329,6 +329,58 @@ export const sessionSpeakers = sqliteTable(
   ],
 );
 
+export const sessionParticipantRoles = sqliteTable(
+  "session_participant_roles",
+  {
+    eventId: text("event_id")
+      .notNull()
+      .references(() => events.id, { onDelete: "cascade" }),
+    sessionId: text("session_id").notNull(),
+    personId: text("person_id").notNull(),
+    role: text("role").notNull().$type<"speaker" | "moderator" | "chair">(),
+    label: text("label").notNull(),
+    position: integer("position").notNull().default(0),
+    participationStatus: text("participation_status")
+      .notNull()
+      .default("pending")
+      .$type<"pending" | "confirmed" | "declined">(),
+    participationRevision: integer("participation_revision")
+      .notNull()
+      .default(1),
+    participationConfirmedAt: integer("participation_confirmed_at"),
+    participationDeclinedAt: integer("participation_declined_at"),
+    participationDeclineReason: text("participation_decline_reason"),
+    createdAt: integer("created_at").notNull().default(epochNow),
+    updatedAt: integer("updated_at").notNull().default(epochNow),
+  },
+  (table) => [
+    primaryKey({ columns: [table.sessionId, table.personId, table.role] }),
+    foreignKey({
+      columns: [table.sessionId, table.personId],
+      foreignColumns: [sessionSpeakers.sessionId, sessionSpeakers.personId],
+    }).onDelete("cascade"),
+    index("idx_session_participant_roles_person").on(
+      table.eventId,
+      table.personId,
+      table.participationStatus,
+    ),
+    index("idx_session_participant_roles_session").on(
+      table.eventId,
+      table.sessionId,
+      table.position,
+      table.role,
+    ),
+    check(
+      "session_participant_roles_status_check",
+      sql`${table.participationStatus} IN ('pending','confirmed','declined')`,
+    ),
+    check(
+      "session_participant_roles_revision_check",
+      sql`${table.participationRevision} > 0`,
+    ),
+  ],
+);
+
 export const tags = sqliteTable(
   "tags",
   {

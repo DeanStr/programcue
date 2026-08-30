@@ -621,6 +621,103 @@ describe("participant API resources", () => {
     ).resolves.toEqual({ displayName: body.name });
   });
 
+  it("honours fixed-field policies on participant API reads and writes", async () => {
+    await ensureDemoSpeakerData(testEnv);
+    const viewer = participantViewer("speaker");
+    const before = await testEnv.DB.prepare(
+      `SELECT display_name AS name, biography, profile_revision AS revision
+         FROM people WHERE id = ?`,
+    )
+      .bind(viewer.personId)
+      .first<{ name: string; biography: string | null; revision: number }>();
+    if (!before) throw new Error("The test participant profile is missing.");
+    await testEnv.DB.batch([
+      testEnv.DB.prepare(
+        `INSERT INTO event_participant_field_policies (
+           event_id, field_key, participant_access,
+           updated_by_person_id, updated_at
+         ) VALUES (?, 'name', 'hidden', ?, unixepoch())
+         ON CONFLICT(event_id, field_key) DO UPDATE SET
+           participant_access = excluded.participant_access,
+           updated_by_person_id = excluded.updated_by_person_id,
+           updated_at = excluded.updated_at`,
+      ).bind(eventId, DEMO_IDENTITIES.administrator.personId),
+      testEnv.DB.prepare(
+        `INSERT INTO event_participant_field_policies (
+           event_id, field_key, participant_access,
+           updated_by_person_id, updated_at
+         ) VALUES (?, 'biography', 'editable', ?, unixepoch())
+         ON CONFLICT(event_id, field_key) DO UPDATE SET
+           participant_access = excluded.participant_access,
+           updated_by_person_id = excluded.updated_by_person_id,
+           updated_at = excluded.updated_at`,
+      ).bind(eventId, DEMO_IDENTITIES.administrator.personId),
+    ]);
+    try {
+      const read = await participantResourceLoader({
+        request: new Request(
+          `https://programcue.test/api/v1/events/${eventId}/participant/profile`,
+          { headers: participantHeaders("speaker") },
+        ),
+        params: { eventId, resource: "profile" },
+        context: routeContext(),
+      } as never);
+      const readBody = (await read.json()) as {
+        profile: Record<string, unknown>;
+      };
+      expect(readBody.profile).not.toHaveProperty("name");
+      expect(readBody.profile).toHaveProperty("biography", before.biography);
+
+      const updated = await participantResourceAction({
+        request: new Request(
+          `https://programcue.test/api/v1/events/${eventId}/participant/profile`,
+          {
+            method: "PATCH",
+            headers: participantHeaders("speaker", {
+              origin: "https://programcue.test",
+              "content-type": "application/json",
+              "idempotency-key": `profile-policy-${crypto.randomUUID()}`,
+            }),
+            body: JSON.stringify({
+              revision: before.revision,
+              biography:
+                "Updated biography content that meets the participant API validation contract without fabricating a hidden name.",
+            }),
+          },
+        ),
+        params: { eventId, resource: "profile" },
+        context: routeContext(),
+      } as never);
+      expect(updated.status).toBe(200);
+      const updatedBody = (await updated.json()) as {
+        profile: Record<string, unknown>;
+      };
+      expect(updatedBody.profile).not.toHaveProperty("name");
+      expect(updatedBody.profile).toHaveProperty(
+        "biography",
+        "Updated biography content that meets the participant API validation contract without fabricating a hidden name.",
+      );
+      await expect(
+        testEnv.DB.prepare(
+          "SELECT display_name AS name, biography FROM people WHERE id = ?",
+        )
+          .bind(viewer.personId)
+          .first(),
+      ).resolves.toEqual({
+        name: before.name,
+        biography:
+          "Updated biography content that meets the participant API validation contract without fabricating a hidden name.",
+      });
+    } finally {
+      await testEnv.DB.prepare(
+        `DELETE FROM event_participant_field_policies
+          WHERE event_id = ? AND field_key IN ('name','biography')`,
+      )
+        .bind(eventId)
+        .run();
+    }
+  });
+
   it("projects participant profile updates through the selected repository authority", async () => {
     await ensureDemoSpeakerData(testEnv);
     const viewer = participantViewer("speaker");

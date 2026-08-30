@@ -391,9 +391,46 @@ export function materializePublishedResourceAcknowledgementsForParticipationRese
           SELECT 1 FROM audit_events audit
            WHERE audit.id = ? AND audit.event_id = relationship.event_id
              AND audit.action = 'speaker.participation.reset'
-             AND audit.entity_id = relationship.session_id || ':' || relationship.person_id
+             AND json_extract(audit.metadata_json, '$.sessionId') = relationship.session_id
+             AND json_extract(audit.metadata_json, '$.personId') = relationship.person_id
         )`,
     [eventId, sessionId, personId, participationRevision, resetAuditEventId],
+  );
+}
+
+export function materializePublishedResourceAcknowledgementsForRoleAssignment(
+  env: CloudflareEnvironment,
+  eventId: string,
+  sessionId: string,
+  personId: string,
+  role: string,
+  assignmentAuditEventId: string,
+) {
+  return acknowledgementTaskStatementsForCandidates(
+    env,
+    eventId,
+    `SELECT relationship.person_id
+       FROM session_speakers relationship
+      WHERE relationship.event_id = ?
+        AND relationship.session_id = ?
+        AND relationship.person_id = ?
+        AND relationship.participation_status = 'pending'
+        AND EXISTS (
+          SELECT 1 FROM audit_events audit
+           WHERE audit.id = ? AND audit.event_id = relationship.event_id
+             AND audit.action = 'speaker.role.assigned'
+             AND audit.entity_id = relationship.session_id || ':' || relationship.person_id || ':' || ?
+        )
+        AND EXISTS (
+          SELECT 1 FROM session_participant_roles assigned_role
+           WHERE assigned_role.event_id = relationship.event_id
+             AND assigned_role.session_id = relationship.session_id
+             AND assigned_role.person_id = relationship.person_id
+             AND assigned_role.role = ?
+             AND assigned_role.participation_status = 'pending'
+             AND assigned_role.participation_revision = 1
+        )`,
+    [eventId, sessionId, personId, assignmentAuditEventId, role, role],
   );
 }
 

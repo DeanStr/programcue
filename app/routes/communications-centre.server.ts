@@ -422,10 +422,14 @@ async function handleTemplateAutomationIntent({
       templateId: String(form.get("templateId") ?? ""),
       triggerType: String(form.get("triggerType") ?? "") as
         | "task_due"
-        | "task_overdue",
+        | "task_overdue"
+        | "application_draft"
+        | "participation_pending",
       audienceType: String(form.get("triggerAudience") ?? "") as
         | "due_speakers"
         | "overdue_speakers"
+        | "draft_applicants"
+        | "pending_participants"
         | "event_administrators",
       kind: String(form.get("kind") ?? "") as "transactional" | "optional",
       sendHourUtc: Number(form.get("sendHourUtc")),

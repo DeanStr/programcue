@@ -1,12 +1,12 @@
 import { CheckCircle2, Circle, CircleDot, Megaphone, Mic2 } from "lucide-react";
 import type { CSSProperties } from "react";
-import { Form, Link } from "react-router";
+import { Link } from "react-router";
 import {
   type SpeakerPortal,
   type SpeakerTask,
   speakerStatusClass,
 } from "~/components/speaker-dashboard-panel-shared";
-import { Button, ButtonLink } from "~/components/ui/button";
+import { ButtonLink } from "~/components/ui/button";
 import { DomainStatusBadge } from "~/components/ui/domain-status-badge";
 import { EventDateTime } from "~/components/ui/event-date-time";
 
@@ -35,13 +35,18 @@ export function speakerMilestones({
   const liveSessions = portal.sessions.filter(
     (session) => session.status !== "cancelled",
   );
-  const confirmedSessions = liveSessions.filter(
-    (session) => session.participationStatus === "confirmed",
+  const liveRoles = liveSessions.flatMap((session) =>
+    session.roles?.length
+      ? session.roles
+      : [{ participationStatus: session.participationStatus }],
+  );
+  const confirmedRoles = liveRoles.filter(
+    (role) => role.participationStatus === "confirmed",
   ).length;
-  const declinedSessions = liveSessions.filter(
-    (session) => session.participationStatus === "declined",
+  const declinedRoles = liveRoles.filter(
+    (role) => role.participationStatus === "declined",
   ).length;
-  const decidedSessions = confirmedSessions + declinedSessions;
+  const decidedRoles = confirmedRoles + declinedRoles;
   return [
     {
       key: "profile",
@@ -55,16 +60,16 @@ export function speakerMilestones({
     {
       key: "sessions",
       label: "Sessions",
-      detail: liveSessions.length
-        ? declinedSessions > 0
-          ? `${decidedSessions} of ${liveSessions.length} responded · ${confirmedSessions} confirmed · ${declinedSessions} declined`
-          : `${confirmedSessions} of ${liveSessions.length} confirmed`
+      detail: liveRoles.length
+        ? declinedRoles > 0
+          ? `${decidedRoles} of ${liveRoles.length} roles responded · ${confirmedRoles} accepted · ${declinedRoles} declined`
+          : `${confirmedRoles} of ${liveRoles.length} roles accepted`
         : "No sessions linked yet",
-      state: !liveSessions.length
+      state: !liveRoles.length
         ? "not_started"
-        : decidedSessions === liveSessions.length
+        : decidedRoles === liveRoles.length
           ? "complete"
-          : decidedSessions > 0
+          : decidedRoles > 0
             ? "in_progress"
             : "not_started",
       href: "/participant/sessions",
@@ -118,14 +123,22 @@ export function speakerParticipationBadge(
   session: Pick<
     SpeakerPortal["sessions"][number],
     "participationStatus" | "status"
-  >,
+  > & { roles?: SpeakerPortal["sessions"][number]["roles"] },
 ) {
+  if (session.status === "cancelled")
+    return { className: "", label: "Not required" };
+  const pendingRoles = (session.roles ?? []).filter(
+    (role) => role.participationStatus === "pending",
+  ).length;
+  if (pendingRoles)
+    return {
+      className: "warning",
+      label: `${pendingRoles} ${pendingRoles === 1 ? "role" : "roles"} need a response`,
+    };
   if (session.participationStatus === "confirmed")
     return { className: "success", label: "Confirmed" };
   if (session.participationStatus === "declined")
     return { className: "danger", label: "Declined by you" };
-  if (session.status === "cancelled")
-    return { className: "", label: "Not required" };
   return { className: "warning", label: "Confirmation needed" };
 }
 
@@ -195,7 +208,9 @@ export function SpeakerDashboardOverview({
     <>
       <div className="speaker-portal-head">
         <div>
-          <h1>Welcome back, {portal.profile.name.split(/\s+/)[0]}</h1>
+          <h1>
+            Welcome back, {portal.profile.name?.split(/\s+/)[0] || "there"}
+          </h1>
           <p className="subtle">
             Everything the event team needs from you, with clear privacy and
             review states.
@@ -363,7 +378,7 @@ export function SpeakerUpdatesRail({
 
 export function SpeakerSessionsPanel({
   portal,
-  busy,
+  busy: _busy,
 }: {
   portal: SpeakerPortal;
   busy: boolean;
@@ -389,7 +404,11 @@ export function SpeakerSessionsPanel({
               <dl className="speaker-session-meta">
                 <div>
                   <dt>Role</dt>
-                  <dd>{session.roleLabel ?? "Speaker"}</dd>
+                  <dd>
+                    {session.roles.map((role) => role.label).join(", ") ||
+                      session.roleLabel ||
+                      "Speaker"}
+                  </dd>
                 </div>
                 <div>
                   <dt>Participation</dt>
@@ -416,29 +435,12 @@ export function SpeakerSessionsPanel({
                   <dd>{session.roomName ?? "To be confirmed"}</dd>
                 </div>
               </dl>
-              {session.participationStatus === "pending" &&
-              session.status !== "cancelled" ? (
-                <Form method="post" className="stack mt">
-                  <input
-                    type="hidden"
-                    name="intent"
-                    value="confirm-participation"
-                  />
-                  <input type="hidden" name="sessionId" value={session.id} />
-                  <input type="hidden" name="confirmation" value="confirmed" />
-                  <p className="subtle">
-                    Confirm that you agree to participate in this session and be
-                    listed according to its programme visibility.
-                  </p>
-                  <Button
-                    variant="primary"
-                    type="submit"
-                    disabled={busy}
-                    aria-label={`Confirm participation in ${session.title}`}
-                  >
-                    Confirm participation
-                  </Button>
-                </Form>
+              {session.roles.some(
+                (role) => role.participationStatus === "pending",
+              ) && session.status !== "cancelled" ? (
+                <ButtonLink to="/participant/sessions" size="small">
+                  Respond to roles
+                </ButtonLink>
               ) : null}
             </article>
           ))

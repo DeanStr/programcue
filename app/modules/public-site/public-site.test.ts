@@ -29,8 +29,10 @@ describe("public event site rules", () => {
   it("uses the canonical submission availability rule for public CTA state", () => {
     const base = {
       status: "published" as const,
+      opensAt: null,
       closesAt: null,
       submissionLimit: null,
+      perPersonSubmissionLimit: null,
       submittedCount: 0,
     };
     expect(submissionApplicationAvailability(base, 100).state).toBe(
@@ -45,6 +47,19 @@ describe("public event site rules", () => {
         100,
       ).state,
     ).toBe("full");
+    expect(
+      submissionApplicationAvailability({ ...base, opensAt: 101 }, 100).state,
+    ).toBe("not_open");
+    expect(
+      submissionApplicationAvailability(
+        {
+          ...base,
+          perPersonSubmissionLimit: 1,
+          personSubmissionCount: 1,
+        },
+        100,
+      ).state,
+    ).toBe("person_limit");
   });
 
   it("keeps the homepage to exactly six unique fixed sections", () => {

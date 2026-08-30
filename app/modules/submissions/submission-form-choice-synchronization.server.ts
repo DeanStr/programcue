@@ -15,11 +15,16 @@ export function submissionFormWorkspaceToInput(
     name: workspace.name,
     kind: workspace.kind,
     publicSlug: workspace.publicSlug,
+    openDate: D1SubmissionRepository.closeDateFromEpoch(
+      workspace.opensAt,
+      workspace.eventTimezone,
+    ),
     closeDate: D1SubmissionRepository.closeDateFromEpoch(
       workspace.closesAt,
       workspace.eventTimezone,
     ),
     submissionLimit: workspace.submissionLimit,
+    perPersonSubmissionLimit: workspace.perPersonSubmissionLimit,
     minSpeakers: workspace.minSpeakers,
     maxSpeakers: workspace.maxSpeakers,
     accessMode: workspace.accessMode,

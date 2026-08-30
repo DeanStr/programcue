@@ -145,6 +145,8 @@ export const communicationTriggers = sqliteTable(
         | "decision_published"
         | "task_due"
         | "task_overdue"
+        | "application_draft"
+        | "participation_pending"
         | "schedule_published"
         | "manual"
       >(),

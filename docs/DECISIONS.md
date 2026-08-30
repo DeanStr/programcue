@@ -1701,3 +1701,44 @@ these static delivery assets cannot drift silently. R2 is preferred over Stream
 for this single low-bitrate film while its storage and request volume remain
 inside the included allowance; adaptive encoding can move to Stream later
 without changing the Remotion master.
+
+## Bounded participant-operations depth
+
+Session participation is modelled as a small fixed set of roles—Speaker,
+Moderator and Chair—beneath the existing person/session relationship. Each role
+owns its response and revision; the relationship status is derived for existing
+publication, task and resource rules. This avoids duplicating people or
+inventing configurable role taxonomies while fixing the real ambiguity of one
+response covering several responsibilities.
+
+Event-owned fields are deliberately typed storage, not a form-builder platform.
+They may belong to a person or session and may be text, number, boolean, date or
+fixed choice. Participant access is hidden, read-only or editable. There are no
+formulas, conditional visibility, cross-field rules or arbitrary owner types.
+Standard profile fields use the same three access levels but retain their
+canonical columns and validation.
+
+Event-field value edits use optimistic concurrency independently of definition
+revisions. Forms carry the loaded value revision, cleared values remain as
+revisioned JSON null tombstones, and database triggers reject a stale upsert
+before any field in its D1 batch commits. The upsert transiently carries its
+expected revision in `updated_at`; companion triggers immediately replace that
+sentinel with the real commit timestamp. Keeping cleared rows avoids an
+insert/delete ABA path without adding a separate lock or mutation-log table.
+
+Role response state and person-owned event field values remain participant
+data. Retention finalisation redacts or removes them before setting the durable
+event tombstone, and database triggers reject later writes that could
+reintroduce that participant data.
+
+Application opening and per-person limits are form publication settings and are
+revalidated at final submission. Automated participant follow-up remains a
+fixed daily trigger system: task due, task overdue, unsubmitted draft and
+pending participation response. New trigger types reuse the durable preview and
+delivery path; they do not introduce a generalized automation canvas.
+
+Speaker readiness is an explainable set of operational signals rather than a
+score. A speaker needs attention when a profile is unpublished, a role response
+is pending, a required event field is missing, an accessible task is incomplete
+or a file is quarantined. The UI exposes the reasons and fixed reminder cohorts
+instead of hiding prioritization behind a weighted formula.

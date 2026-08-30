@@ -2,11 +2,30 @@ import { DomainStatusBadge } from "~/components/ui/domain-status-badge";
 import { EventDateTime } from "~/components/ui/event-date-time";
 import type { SpeakerProfileRevision } from "~/modules/speakers/speaker-profile-revision.server";
 
+type ParticipantVisibleRevision = Omit<
+  SpeakerProfileRevision,
+  | "displayName"
+  | "biography"
+  | "pronunciation"
+  | "organisationName"
+  | "jobTitle"
+> &
+  Partial<
+    Pick<
+      SpeakerProfileRevision,
+      | "displayName"
+      | "biography"
+      | "pronunciation"
+      | "organisationName"
+      | "jobTitle"
+    >
+  >;
+
 export function SpeakerProfileHistory({
   revisions,
   timeZone,
 }: {
-  revisions: SpeakerProfileRevision[];
+  revisions: ParticipantVisibleRevision[];
   timeZone: string;
 }) {
   return (
@@ -30,7 +49,8 @@ export function SpeakerProfileHistory({
             <li key={revision.id}>
               <div className="card-title">
                 <strong>
-                  {revision.displayName} · revision {revision.profileRevision}
+                  {revision.displayName ?? "Profile"} · revision{" "}
+                  {revision.profileRevision}
                 </strong>
                 <DomainStatusBadge
                   domain="content"

@@ -1,6 +1,7 @@
 export * from "./schema-auth";
 export * from "./schema-core";
 export * from "./schema-evaluations";
+export * from "./schema-fields";
 export * from "./schema-operations";
 export * from "./schema-participant";
 export * from "./schema-public-site";

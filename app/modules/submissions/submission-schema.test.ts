@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
 
-import { closeDateToEpoch } from "./submission-repository-shared";
+import {
+  closeDateToEpoch,
+  openDateToEpoch,
+} from "./submission-repository-shared";
 import {
   APPLICANT_SPEAKERS_STEP_ID,
   DEFAULT_FORM_PRESENTATION,
@@ -290,6 +293,12 @@ describe("submission form rules", () => {
     ).not.toThrow();
     expect(closeDateToEpoch("2026-09-05", "America/Santiago")).toBe(
       Date.parse("2026-09-06T03:59:59.000Z") / 1_000,
+    );
+  });
+
+  it("opens forms at the first valid instant when local midnight is skipped", () => {
+    expect(openDateToEpoch("2026-09-06", "America/Santiago")).toBe(
+      Date.parse("2026-09-06T04:00:00.000Z") / 1_000,
     );
   });
 

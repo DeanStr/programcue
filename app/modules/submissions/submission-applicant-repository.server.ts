@@ -750,7 +750,19 @@ export class SubmissionApplicantRepository {
         INSERT INTO submissions (
           id, event_id, form_version_id, submitter_person_id, submitter_email,
           public_reference, title, status, answers_json, revision, created_at, updated_at
-        ) VALUES (?, ?, ?, ?, ?, ?, 'Untitled application', 'draft', '{}', 1, unixepoch(), unixepoch())
+        ) SELECT ?, ?, ?, ?, ?, ?, 'Untitled application', 'draft', '{}', 1,
+                 unixepoch(), unixepoch()
+          WHERE ? IS NULL OR ? IS NULL OR (
+            SELECT COUNT(*)
+              FROM submissions existing
+              JOIN form_versions existing_version
+                ON existing_version.id = existing.form_version_id
+               AND existing_version.event_id = existing.event_id
+             WHERE existing_version.form_id = ?
+               AND existing.event_id = ?
+               AND existing.submitter_person_id = ?
+               AND existing.status <> 'withdrawn'
+          ) < ?
       `,
         ).bind(
           id,
@@ -759,6 +771,12 @@ export class SubmissionApplicantRepository {
           applicant.personId,
           applicant.verified ? applicant.email : null,
           publicReference,
+          applicant.personId,
+          form.perPersonSubmissionLimit,
+          form.id,
+          form.eventId,
+          applicant.personId,
+          form.perPersonSubmissionLimit,
         ),
         this.env.DB.prepare(
           `
@@ -768,6 +786,10 @@ export class SubmissionApplicantRepository {
         ) SELECT ?, ?, ?, ?, ?, ?, 'Primary speaker', 0, 'claimed', 1,
                  unixepoch(), unixepoch(), unixepoch()
           WHERE ? IS NOT NULL
+            AND EXISTS (
+              SELECT 1 FROM submissions
+               WHERE id = ? AND event_id = ? AND submitter_person_id = ?
+            )
       `,
         ).bind(
           crypto.randomUUID(),
@@ -776,6 +798,9 @@ export class SubmissionApplicantRepository {
           applicant.personId,
           applicant.email,
           applicant.name,
+          applicant.personId,
+          id,
+          form.eventId,
           applicant.personId,
         ),
         this.env.DB.prepare(
@@ -816,7 +841,11 @@ export class SubmissionApplicantRepository {
         INSERT INTO submission_revisions (
           id, event_id, submission_id, form_version_id, revision_number, answers_json,
           speaker_snapshot_json, save_kind, saved_by_person_id, created_at
-        ) VALUES (?, ?, ?, ?, 1, '{}', ?, 'manual', ?, unixepoch())
+        ) SELECT ?, ?, ?, ?, 1, '{}', ?, 'manual', ?, unixepoch()
+          WHERE EXISTS (
+            SELECT 1 FROM submissions
+             WHERE id = ? AND event_id = ? AND form_version_id = ?
+          )
       `,
         ).bind(
           crypto.randomUUID(),
@@ -836,6 +865,9 @@ export class SubmissionApplicantRepository {
               : [],
           ),
           applicant.personId,
+          id,
+          form.eventId,
+          form.version.id,
         ),
         this.env.DB.prepare(
           `INSERT INTO audit_events (
@@ -869,7 +901,9 @@ export class SubmissionApplicantRepository {
         if (replay) return replay.id;
       }
       throw new SubmissionStateError(
-        "The application draft could not be created for this intent.",
+        applicant.verified && form.perPersonSubmissionLimit !== null
+          ? "You have reached the submission limit for this call for speakers."
+          : "The application draft could not be created for this intent.",
       );
     }
     return id;

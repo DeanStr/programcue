@@ -700,6 +700,11 @@ export function EventSetupForm({
               defaults.
             </p>
           </div>
+          <div className="page-actions">
+            <ButtonLink to="/admin/event/fields">
+              Participant &amp; session fields
+            </ButtonLink>
+          </div>
         </div>
 
         {incompleteEvents.length ? (

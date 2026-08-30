@@ -6,6 +6,7 @@ import {
 } from "./speaker-administration-service.server";
 import { SpeakerAvailabilityService } from "./speaker-availability-service.server";
 import { SpeakerParticipationService } from "./speaker-participation-service.server";
+import { SpeakerRoleService } from "./speaker-role-service.server";
 
 export { ParticipantProfileConflictError as SpeakerProfileConflictError } from "./participant-profile-service.server";
 export type {
@@ -27,6 +28,7 @@ export class SpeakerService {
   private readonly participation: SpeakerParticipationService;
   private readonly administration: SpeakerAdministrationService;
   private readonly availability: SpeakerAvailabilityService;
+  private readonly roles: SpeakerRoleService;
 
   constructor(
     env: CloudflareEnvironment,
@@ -36,6 +38,7 @@ export class SpeakerService {
     this.participation = new SpeakerParticipationService(env, airtable);
     this.administration = new SpeakerAdministrationService(env, { airtable });
     this.availability = new SpeakerAvailabilityService(env, airtable);
+    this.roles = new SpeakerRoleService(env, airtable);
   }
 
   getPortal(viewer: Viewer) {
@@ -46,36 +49,20 @@ export class SpeakerService {
     return this.participation.updateProfile(viewer, rawInput);
   }
 
-  confirmOwnParticipation(viewer: Viewer, rawInput: unknown) {
-    return this.participation.confirmOwnParticipation(viewer, rawInput);
+  respondOwnRole(viewer: Viewer, rawInput: unknown) {
+    return this.roles.respondOwnRole(viewer, rawInput);
   }
 
-  declineOwnParticipation(viewer: Viewer, rawInput: unknown) {
-    return this.participation.declineOwnParticipation(viewer, rawInput);
+  respondExternalRole(viewer: Viewer, rawPersonId: string, rawInput: unknown) {
+    return this.roles.respondExternalRole(viewer, rawPersonId, rawInput);
   }
 
-  confirmExternalParticipation(
-    viewer: Viewer,
-    rawPersonId: string,
-    rawInput: unknown,
-  ) {
-    return this.participation.confirmExternalParticipation(
-      viewer,
-      rawPersonId,
-      rawInput,
-    );
+  resetRole(viewer: Viewer, rawPersonId: string, rawInput: unknown) {
+    return this.roles.resetRole(viewer, rawPersonId, rawInput);
   }
 
-  resetDeclinedParticipation(
-    viewer: Viewer,
-    rawPersonId: string,
-    rawInput: unknown,
-  ) {
-    return this.participation.resetDeclinedParticipation(
-      viewer,
-      rawPersonId,
-      rawInput,
-    );
+  addRole(viewer: Viewer, rawPersonId: string, rawInput: unknown) {
+    return this.roles.addRole(viewer, rawPersonId, rawInput);
   }
 
   canManageAvailability(viewer: Viewer) {

@@ -13,11 +13,25 @@ import type {
 } from "./speaker-administration-contracts.server";
 import type {
   FileRow,
+  ParticipantRoleRow,
   ProfileRow,
   SessionRow,
 } from "./speaker-portal-service.server";
 import { readSpeakerProfileHistory } from "./speaker-profile-revision.server";
 import { SpeakerAdminIntegrityError } from "./speaker-service-errors";
+
+const requiredEventFieldValuePresentSql = `(
+  (definition.field_type IN ('short_text','long_text','date','single_choice')
+    AND json_type(value.value_json) = 'text'
+    AND trim(CAST(json_extract(value.value_json, '$') AS TEXT)) <> '')
+  OR (definition.field_type = 'number'
+    AND json_type(value.value_json) IN ('integer','real'))
+  OR (definition.field_type = 'boolean'
+    AND json_type(value.value_json) IN ('true','false'))
+  OR (definition.field_type = 'multiple_choice'
+    AND json_type(value.value_json) = 'array'
+    AND json_array_length(value.value_json) > 0)
+)`;
 
 export class SpeakerAdminQueryService {
   constructor(
@@ -78,16 +92,23 @@ export class SpeakerAdminQueryService {
       >();
     if (!profile)
       throw new Response("Speaker not found in this event.", { status: 404 });
-    const [event, sessions, files, tasks, profileShared, profileHistory] =
-      await Promise.all([
-        this.env.DB.prepare(
-          `SELECT name, timezone, file_policy_json AS filePolicyJson
+    const [
+      event,
+      sessions,
+      participantRoles,
+      files,
+      tasks,
+      profileShared,
+      profileHistory,
+    ] = await Promise.all([
+      this.env.DB.prepare(
+        `SELECT name, timezone, file_policy_json AS filePolicyJson
            FROM events WHERE id = ? AND organisation_id = ?`,
-        )
-          .bind(viewer.eventId, viewer.organisationId)
-          .first<{ name: string; timezone: string; filePolicyJson: string }>(),
-        this.env.DB.prepare(
-          `
+      )
+        .bind(viewer.eventId, viewer.organisationId)
+        .first<{ name: string; timezone: string; filePolicyJson: string }>(),
+      this.env.DB.prepare(
+        `
         SELECT s.id, s.title, s.description, s.format,
                s.duration_minutes AS durationMinutes, s.status,
                ss.role_label AS roleLabel,
@@ -111,11 +132,28 @@ export class SpeakerAdminQueryService {
          WHERE ss.event_id = ? AND ss.person_id = ? AND s.status <> 'archived'
          ORDER BY se.starts_at IS NULL, se.starts_at, s.title
       `,
-        )
-          .bind(viewer.eventId, personId)
-          .all<SessionRow>(),
-        this.env.DB.prepare(
-          `
+      )
+        .bind(viewer.eventId, personId)
+        .all<Omit<SessionRow, "roles">>(),
+      this.env.DB.prepare(
+        `SELECT role.session_id AS sessionId, role.role, role.label,
+                  role.position,
+                  role.participation_status AS participationStatus,
+                  role.participation_revision AS participationRevision,
+                  role.participation_confirmed_at AS participationConfirmedAt,
+                  role.participation_declined_at AS participationDeclinedAt,
+                  role.participation_decline_reason AS participationDeclineReason
+             FROM session_participant_roles role
+             JOIN sessions session
+               ON session.id = role.session_id AND session.event_id = role.event_id
+            WHERE role.event_id = ? AND role.person_id = ?
+              AND session.status <> 'archived'
+            ORDER BY role.session_id, role.position, role.role`,
+      )
+        .bind(viewer.eventId, personId)
+        .all<ParticipantRoleRow>(),
+      this.env.DB.prepare(
+        `
         SELECT fa.id, fa.asset_kind AS kind,
                fa.target_type AS targetType, fa.target_id AS targetId,
                fa.status,
@@ -144,11 +182,11 @@ export class SpeakerAdminQueryService {
          WHERE fa.event_id = ? AND fa.owner_person_id = ? AND fa.status <> 'deleted'
          ORDER BY fa.updated_at DESC
       `,
-        )
-          .bind(viewer.eventId, personId)
-          .all<FileRow>(),
-        this.env.DB.prepare(
-          `
+      )
+        .bind(viewer.eventId, personId)
+        .all<FileRow>(),
+      this.env.DB.prepare(
+        `
         SELECT
           SUM(CASE WHEN task.status NOT IN ('completed','waived') THEN 1 ELSE 0 END) AS outstanding,
           SUM(CASE WHEN task.status IN ('completed','waived') THEN 1 ELSE 0 END) AS completed
@@ -167,16 +205,16 @@ export class SpeakerAdminQueryService {
              ))
            )
       `,
-        )
-          .bind(viewer.eventId, personId, personId, personId)
-          .first<{ outstanding: number; completed: number }>(),
-        adminProfileIsShared(this.env, viewer, personId),
-        readSpeakerProfileHistory(this.env, {
-          organisationId: viewer.organisationId,
-          eventId: viewer.eventId,
-          personId,
-        }),
-      ]);
+      )
+        .bind(viewer.eventId, personId, personId, personId)
+        .first<{ outstanding: number; completed: number }>(),
+      adminProfileIsShared(this.env, viewer, personId),
+      readSpeakerProfileHistory(this.env, {
+        organisationId: viewer.organisationId,
+        eventId: viewer.eventId,
+        personId,
+      }),
+    ]);
     const assetIds = files.results.map((file) => file.id);
     const brokenCurrentVersion = files.results.find(
       (file) => file.currentVersionId && file.downloadFilename === null,
@@ -228,7 +266,12 @@ export class SpeakerAdminQueryService {
         timezone: event.timezone,
         filePolicy: parseEventFilePolicy(event.filePolicyJson),
       },
-      sessions: sessions.results,
+      sessions: sessions.results.map((session) => ({
+        ...session,
+        roles: participantRoles.results.filter(
+          (role) => role.sessionId === session.id,
+        ),
+      })),
       files: files.results.map((file) => ({
         ...file,
         versions: versions.results.filter(
@@ -384,6 +427,42 @@ export class SpeakerAdminQueryService {
                      AND relationship.participation_status IN ('pending','confirmed')
                      AND task.status NOT IN ('completed','waived')
                  )
+                 OR p.profile_status <> 'published'
+                 OR EXISTS (
+                   SELECT 1 FROM session_participant_roles role
+                   JOIN sessions role_session
+                     ON role_session.id = role.session_id
+                    AND role_session.event_id = role.event_id
+                    WHERE role.event_id = ? AND role.person_id = p.id
+                      AND role.participation_status = 'pending'
+                      AND role_session.status NOT IN ('cancelled','archived')
+                 )
+                 OR EXISTS (
+                   SELECT 1 FROM event_field_definitions definition
+                    WHERE definition.event_id = ?
+                      AND definition.owner_type = 'person'
+                      AND definition.status = 'active' AND definition.required = 1
+                      AND NOT EXISTS (
+                        SELECT 1 FROM event_field_values value
+                         WHERE value.definition_id = definition.id
+                           AND value.event_id = definition.event_id
+                           AND value.person_id = p.id
+                           AND ${requiredEventFieldValuePresentSql}
+                      )
+                 )
+                 OR EXISTS (
+                   SELECT 1 FROM file_assets asset
+                   JOIN file_versions version ON version.id = (
+                     SELECT latest.id FROM file_versions latest
+                      WHERE latest.asset_id = asset.id AND latest.deleted_at IS NULL
+                      ORDER BY latest.version_number DESC LIMIT 1
+                   )
+                    WHERE asset.event_id = ? AND asset.owner_person_id = p.id
+                      AND asset.status <> 'deleted'
+                      AND version.upload_status = 'uploaded'
+                      AND version.signature_status = 'valid'
+                      AND version.scan_status = 'pending'
+                 )
                )
              )
              OR (
@@ -417,6 +496,42 @@ export class SpeakerAdminQueryService {
                      AND relationship.participation_status IN ('pending','confirmed')
                      AND task.status NOT IN ('completed','waived')
                  )
+                 OR p.profile_status <> 'published'
+                 OR EXISTS (
+                   SELECT 1 FROM session_participant_roles role
+                   JOIN sessions role_session
+                     ON role_session.id = role.session_id
+                    AND role_session.event_id = role.event_id
+                    WHERE role.event_id = ? AND role.person_id = p.id
+                      AND role.participation_status = 'pending'
+                      AND role_session.status NOT IN ('cancelled','archived')
+                 )
+                 OR EXISTS (
+                   SELECT 1 FROM event_field_definitions definition
+                    WHERE definition.event_id = ?
+                      AND definition.owner_type = 'person'
+                      AND definition.status = 'active' AND definition.required = 1
+                      AND NOT EXISTS (
+                        SELECT 1 FROM event_field_values value
+                         WHERE value.definition_id = definition.id
+                           AND value.event_id = definition.event_id
+                           AND value.person_id = p.id
+                           AND ${requiredEventFieldValuePresentSql}
+                      )
+                 )
+                 OR EXISTS (
+                   SELECT 1 FROM file_assets asset
+                   JOIN file_versions version ON version.id = (
+                     SELECT latest.id FROM file_versions latest
+                      WHERE latest.asset_id = asset.id AND latest.deleted_at IS NULL
+                      ORDER BY latest.version_number DESC LIMIT 1
+                   )
+                    WHERE asset.event_id = ? AND asset.owner_person_id = p.id
+                      AND asset.status <> 'deleted'
+                      AND version.upload_status = 'uploaded'
+                      AND version.signature_status = 'valid'
+                      AND version.scan_status = 'pending'
+                 )
                )
              )
            )
@@ -443,6 +558,24 @@ export class SpeakerAdminQueryService {
              ) AS portalInvitationPending,
              (SELECT COUNT(*) FROM session_speakers speaker
                WHERE speaker.event_id = ? AND speaker.person_id = person.id) AS sessionCount,
+             (SELECT COUNT(*) FROM session_participant_roles role
+               JOIN sessions role_session
+                 ON role_session.id = role.session_id
+                AND role_session.event_id = role.event_id
+               WHERE role.event_id = ? AND role.person_id = person.id
+                 AND role.participation_status = 'pending'
+                 AND role_session.status NOT IN ('cancelled','archived')) AS pendingRoles,
+             (SELECT COUNT(*) FROM event_field_definitions definition
+               WHERE definition.event_id = ?
+                 AND definition.owner_type = 'person'
+                 AND definition.status = 'active' AND definition.required = 1
+                 AND NOT EXISTS (
+                   SELECT 1 FROM event_field_values value
+                    WHERE value.definition_id = definition.id
+                      AND value.event_id = definition.event_id
+                      AND value.person_id = person.id
+                      AND ${requiredEventFieldValuePresentSql}
+                 )) AS missingRequiredFields,
              (SELECT COUNT(*) FROM task_instances task
                WHERE task.event_id = ?
                  AND task.status NOT IN ('completed','waived')
@@ -509,12 +642,20 @@ export class SpeakerAdminQueryService {
         viewer.eventId,
         viewer.eventId,
         viewer.eventId,
+        viewer.eventId,
+        viewer.eventId,
+        viewer.eventId,
         readiness,
+        viewer.eventId,
+        viewer.eventId,
+        viewer.eventId,
         viewer.eventId,
         viewer.eventId,
         viewer.eventId,
         pageSize + 1,
         (page - 1) * pageSize,
+        viewer.eventId,
+        viewer.eventId,
         viewer.eventId,
         viewer.eventId,
         viewer.eventId,
@@ -565,6 +706,48 @@ export class SpeakerAdminQueryService {
                    AND relationship.participation_status IN ('pending','confirmed')
                    AND task.status NOT IN ('completed','waived')
                )
+               OR EXISTS (
+                 SELECT 1 FROM people person
+                  WHERE person.id = speaker.person_id
+                    AND person.profile_status <> 'published'
+               )
+               OR EXISTS (
+                 SELECT 1 FROM session_participant_roles role
+                 JOIN sessions role_session
+                   ON role_session.id = role.session_id
+                  AND role_session.event_id = role.event_id
+                  WHERE role.event_id = ?
+                    AND role.person_id = speaker.person_id
+                    AND role.participation_status = 'pending'
+                    AND role_session.status NOT IN ('cancelled','archived')
+               )
+               OR EXISTS (
+                 SELECT 1 FROM event_field_definitions definition
+                  WHERE definition.event_id = ?
+                    AND definition.owner_type = 'person'
+                    AND definition.status = 'active' AND definition.required = 1
+                    AND NOT EXISTS (
+                      SELECT 1 FROM event_field_values value
+                       WHERE value.definition_id = definition.id
+                         AND value.event_id = definition.event_id
+                         AND value.person_id = speaker.person_id
+                         AND ${requiredEventFieldValuePresentSql}
+                    )
+               )
+               OR EXISTS (
+                 SELECT 1 FROM file_assets asset
+                 JOIN file_versions version ON version.id = (
+                   SELECT latest.id FROM file_versions latest
+                    WHERE latest.asset_id = asset.id AND latest.deleted_at IS NULL
+                    ORDER BY latest.version_number DESC LIMIT 1
+                 )
+                  WHERE asset.event_id = ?
+                    AND asset.owner_person_id = speaker.person_id
+                    AND asset.status <> 'deleted'
+                    AND version.upload_status = 'uploaded'
+                    AND version.signature_status = 'valid'
+                    AND version.scan_status = 'pending'
+               )
              ) THEN 1 ELSE 0 END) AS readySpeakers,
              (SELECT COUNT(DISTINCT task.id)
                 FROM task_instances task
@@ -582,6 +765,26 @@ export class SpeakerAdminQueryService {
                         AND relationship.participation_status IN ('pending','confirmed')
                    ))
                  )) AS outstandingTasks,
+             (SELECT COUNT(*) FROM session_participant_roles role
+               JOIN sessions role_session
+                 ON role_session.id = role.session_id
+                AND role_session.event_id = role.event_id
+               WHERE role.event_id = ?
+                 AND role.person_id IN (SELECT person_id FROM event_speaker_ids)
+                 AND role.participation_status = 'pending'
+                 AND role_session.status NOT IN ('cancelled','archived')) AS pendingRoles,
+             (SELECT COUNT(*) FROM event_field_definitions definition
+               JOIN event_speaker_ids speaker
+               WHERE definition.event_id = ?
+                 AND definition.owner_type = 'person'
+                 AND definition.status = 'active' AND definition.required = 1
+                 AND NOT EXISTS (
+                   SELECT 1 FROM event_field_values value
+                    WHERE value.definition_id = definition.id
+                      AND value.event_id = definition.event_id
+                      AND value.person_id = speaker.person_id
+                      AND ${requiredEventFieldValuePresentSql}
+                 )) AS missingRequiredFields,
              (SELECT COUNT(*)
                 FROM file_assets asset
                 JOIN file_versions version ON version.id = (
@@ -607,11 +810,18 @@ export class SpeakerAdminQueryService {
           viewer.eventId,
           viewer.eventId,
           viewer.eventId,
+          viewer.eventId,
+          viewer.eventId,
+          viewer.eventId,
+          viewer.eventId,
+          viewer.eventId,
         )
         .first<{
           knownSpeakers: number;
           readySpeakers: number;
           outstandingTasks: number;
+          pendingRoles: number;
+          missingRequiredFields: number;
           quarantinedFiles: number;
         }>(),
       this.env.DB.prepare(
@@ -661,6 +871,8 @@ export class SpeakerAdminQueryService {
         knownSpeakers: Number(summary.knownSpeakers),
         readySpeakers: Number(summary.readySpeakers),
         outstandingTasks: Number(summary.outstandingTasks),
+        pendingRoles: Number(summary.pendingRoles),
+        missingRequiredFields: Number(summary.missingRequiredFields),
         quarantinedFiles: Number(summary.quarantinedFiles),
       },
     };

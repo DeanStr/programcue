@@ -389,24 +389,197 @@ describe("speaker profile service", () => {
     expect(declinedPage.summary.outstandingTasks).toBe(
       beforePage.summary.outstandingTasks,
     );
+    const operationalReadiness = await service.listAdminSpeakerPage(
+      admin,
+      { query: speaker.email },
+      1,
+    );
+    expect(
+      operationalReadiness.speakers.find(
+        (candidate) => candidate.id === speaker.personId,
+      ),
+    ).toMatchObject({
+      outstandingTasks: 0,
+    });
+  });
+
+  it("excludes pending roles in cancelled and archived sessions from readiness", async () => {
+    const testEnv = env as unknown as CloudflareEnvironment;
+    await ensureDemoSpeakerData(testEnv);
+    const service = new SpeakerService(testEnv);
+    const suffix = crypto.randomUUID();
+    const personId = `inactive-role-person-${suffix}`;
+    const cancelledSessionId = `cancelled-role-session-${suffix}`;
+    const archivedSessionId = `archived-role-session-${suffix}`;
+    const before = await service.listAdminSpeakerPage(admin, {}, 1);
+
+    await testEnv.DB.batch([
+      testEnv.DB.prepare(
+        `INSERT INTO people (
+           id, email, display_name, email_verified, profile_status
+         ) VALUES (?, ?, 'Inactive Role Participant', 1, 'published')`,
+      ).bind(personId, `${personId}@example.invalid`),
+      testEnv.DB.prepare(
+        `INSERT INTO memberships (
+           id, organisation_id, event_id, person_id, role, accepted_at
+         ) VALUES (?, ?, ?, ?, 'speaker', unixepoch())`,
+      ).bind(
+        `inactive-role-membership-${suffix}`,
+        admin.organisationId,
+        admin.eventId,
+        personId,
+      ),
+      testEnv.DB.prepare(
+        `INSERT INTO sessions (
+           id, event_id, title, slug, format, duration_minutes, status,
+           visibility
+         ) VALUES (?, ?, 'Cancelled role session', ?, 'presentation', 30,
+                   'cancelled', 'private')`,
+      ).bind(cancelledSessionId, admin.eventId, `cancelled-role-${suffix}`),
+      testEnv.DB.prepare(
+        `INSERT INTO sessions (
+           id, event_id, title, slug, format, duration_minutes, status,
+           visibility
+         ) VALUES (?, ?, 'Archived role session', ?, 'presentation', 30,
+                   'archived', 'private')`,
+      ).bind(archivedSessionId, admin.eventId, `archived-role-${suffix}`),
+      testEnv.DB.prepare(
+        `INSERT INTO session_speakers (
+           session_id, event_id, person_id, position, role_label,
+           participation_status, participation_revision, visibility
+         ) VALUES (?, ?, ?, 0, 'Speaker', 'pending', 1, 'private')`,
+      ).bind(cancelledSessionId, admin.eventId, personId),
+      testEnv.DB.prepare(
+        `INSERT INTO session_speakers (
+           session_id, event_id, person_id, position, role_label,
+           participation_status, participation_revision, visibility
+         ) VALUES (?, ?, ?, 0, 'Speaker', 'pending', 1, 'private')`,
+      ).bind(archivedSessionId, admin.eventId, personId),
+    ]);
+
+    const inactive = await service.listAdminSpeakerPage(admin, { personId }, 1);
+    expect(inactive.speakers).toEqual([
+      expect.objectContaining({ id: personId, pendingRoles: 0 }),
+    ]);
+    expect(inactive.summary.pendingRoles).toBe(before.summary.pendingRoles);
     expect(
       (
         await service.listAdminSpeakerPage(
           admin,
-          { query: speaker.email, readiness: "needs_attention" },
+          { personId, readiness: "ready" },
           1,
         )
-      ).speakers.some((candidate) => candidate.id === speaker.personId),
-    ).toBe(false);
+      ).speakers,
+    ).toEqual([expect.objectContaining({ id: personId })]);
+
+    await testEnv.DB.prepare(
+      "UPDATE sessions SET status = 'unscheduled' WHERE id = ? AND event_id = ?",
+    )
+      .bind(cancelledSessionId, admin.eventId)
+      .run();
+
+    const active = await service.listAdminSpeakerPage(admin, { personId }, 1);
+    expect(active.speakers).toEqual([
+      expect.objectContaining({ id: personId, pendingRoles: 1 }),
+    ]);
+    expect(active.summary.pendingRoles).toBe(before.summary.pendingRoles + 1);
     expect(
       (
         await service.listAdminSpeakerPage(
           admin,
-          { query: speaker.email, readiness: "ready" },
+          { personId, readiness: "needs_attention" },
           1,
         )
-      ).speakers.some((candidate) => candidate.id === speaker.personId),
-    ).toBe(true);
+      ).speakers,
+    ).toEqual([expect.objectContaining({ id: personId })]);
+  });
+
+  it("keeps cleared required event fields in the missing-readiness count", async () => {
+    const testEnv = env as unknown as CloudflareEnvironment;
+    await ensureDemoSpeakerData(testEnv);
+    const service = new SpeakerService(testEnv);
+    const suffix = crypto.randomUUID();
+    const personId = `required-field-person-${suffix}`;
+    const definitionId = `required-field-${suffix}`;
+    await testEnv.DB.batch([
+      testEnv.DB.prepare(
+        `INSERT INTO people (
+           id, email, display_name, email_verified, biography, profile_status
+         ) VALUES (?, ?, 'Required field speaker', 1,
+                   'A complete published biography for required field readiness.',
+                   'published')`,
+      ).bind(personId, `${personId}@example.invalid`),
+      testEnv.DB.prepare(
+        `INSERT INTO memberships (
+           id, organisation_id, event_id, person_id, role, accepted_at
+         ) VALUES (?, ?, ?, ?, 'speaker', unixepoch())`,
+      ).bind(
+        `required-field-membership-${suffix}`,
+        admin.organisationId,
+        admin.eventId,
+        personId,
+      ),
+    ]);
+    const before = (await service.listAdminSpeakerPage(admin, { personId }, 1))
+      .speakers[0]!;
+
+    try {
+      await testEnv.DB.prepare(
+        `INSERT INTO event_field_definitions (
+           id, event_id, owner_type, field_key, label, field_type,
+           participant_access, required, created_by_person_id,
+           updated_by_person_id
+         ) VALUES (?, ?, 'person', ?, 'Required readiness field',
+                   'short_text', 'editable', 1, ?, ?)`,
+      )
+        .bind(
+          definitionId,
+          admin.eventId,
+          `required_${suffix.replaceAll("-", "").slice(0, 12)}`,
+          admin.personId,
+          admin.personId,
+        )
+        .run();
+      const missing = (
+        await service.listAdminSpeakerPage(admin, { personId }, 1)
+      ).speakers[0]!;
+      expect(missing.missingRequiredFields).toBe(
+        before.missingRequiredFields + 1,
+      );
+
+      await testEnv.DB.prepare(
+        `INSERT INTO event_field_values (
+           definition_id, event_id, person_id, value_json, revision,
+           updated_by_person_id, updated_at
+         ) VALUES (?, ?, ?, 'null', 1, ?, 0)`,
+      )
+        .bind(definitionId, admin.eventId, personId, admin.personId)
+        .run();
+      const cleared = (
+        await service.listAdminSpeakerPage(admin, { personId }, 1)
+      ).speakers[0]!;
+      expect(cleared.missingRequiredFields).toBe(
+        before.missingRequiredFields + 1,
+      );
+
+      await testEnv.DB.prepare(
+        `UPDATE event_field_values
+            SET value_json = '"Ready"', revision = 2, updated_at = 1
+          WHERE definition_id = ? AND event_id = ? AND person_id = ?`,
+      )
+        .bind(definitionId, admin.eventId, personId)
+        .run();
+      const complete = (
+        await service.listAdminSpeakerPage(admin, { personId }, 1)
+      ).speakers[0]!;
+      expect(complete.missingRequiredFields).toBe(before.missingRequiredFields);
+    } finally {
+      await testEnv.DB.prepare(
+        "DELETE FROM event_field_definitions WHERE id = ? AND event_id = ?",
+      )
+        .bind(definitionId, admin.eventId)
+        .run();
+    }
   });
 
   it("returns exact current headshot filename, uploader and upload time to both profile surfaces", async () => {
@@ -490,6 +663,35 @@ describe("speaker profile service", () => {
     )
       .bind(speaker.personId, versionId, speaker.eventId)
       .run();
+    await testEnv.DB.prepare(
+      `INSERT INTO event_participant_field_policies (
+         event_id, field_key, participant_access, updated_by_person_id,
+         updated_at
+       ) VALUES (?, 'name', 'hidden', ?, unixepoch())
+       ON CONFLICT(event_id, field_key) DO UPDATE SET
+         participant_access = 'hidden',
+         updated_by_person_id = excluded.updated_by_person_id,
+         updated_at = unixepoch()`,
+    )
+      .bind(speaker.eventId, admin.personId)
+      .run();
+    try {
+      const redactedParticipantHeadshot = (
+        await service.getPortal(speaker)
+      ).files.find((file) => file.id === assetId);
+      expect(redactedParticipantHeadshot).toMatchObject({
+        downloadFilename: "headshot.png",
+        downloadUploaderName: null,
+        downloadUploadedAt: expect.any(Number),
+      });
+    } finally {
+      await testEnv.DB.prepare(
+        `DELETE FROM event_participant_field_policies
+          WHERE event_id = ? AND field_key = 'name'`,
+      )
+        .bind(speaker.eventId)
+        .run();
+    }
   });
 
   it("commits one organiser profile revision and rejects a stale organiser save", async () => {
@@ -881,16 +1083,12 @@ describe("speaker profile service", () => {
       { query: "Paged Speaker", readiness: "needs_attention" },
       1,
     );
-    expect(needsAttention.speakers.map((candidate) => candidate.id)).toEqual([
-      "speaker-page-person-010",
-      "speaker-page-person-020",
-      "speaker-page-person-030",
-      "speaker-page-person-040",
-      "speaker-page-person-050",
-    ]);
+    expect(needsAttention.speakers).toHaveLength(33);
     expect(
       needsAttention.speakers.every(
-        (candidate) => candidate.outstandingTasks === 1,
+        (candidate) =>
+          candidate.outstandingTasks === 1 ||
+          candidate.profileStatus !== "published",
       ),
     ).toBe(true);
 

@@ -1,3 +1,4 @@
+import { EventFieldService } from "~/modules/fields/event-field-service.server";
 import {
   isPublicSiteDatabaseConstraint,
   PUBLIC_SITE_SPEAKER_PROFILE_CONSTRAINT,
@@ -10,6 +11,12 @@ import {
   type SpeakerProfileInput,
   speakerProfileSchema,
 } from "./speaker-schema";
+
+export const participantProfilePatchSchema = speakerProfileSchema
+  .partial()
+  .extend({
+    revision: speakerProfileSchema.shape.revision,
+  });
 
 export class ParticipantProfileConflictError extends Error {
   constructor(
@@ -72,21 +79,38 @@ export class ParticipantProfileService {
     options: ParticipantProfileMutationOptions = {},
   ) {
     const current = await this.currentProfile(viewer);
-    const publishWasSupplied = patch.publish !== undefined;
-    const merged = speakerProfileSchema.parse({
-      revision: patch.revision,
-      name: patch.name ?? current.name,
-      biography: patch.biography ?? current.biography ?? "",
-      pronunciation: patch.pronunciation ?? current.pronunciation ?? "",
+    const protectedPatch = await new EventFieldService(
+      this.env,
+    ).protectParticipantProfilePatch(viewer, viewer.personId, patch);
+    const parsedPatch = participantProfilePatchSchema.parse(protectedPatch);
+    const publishWasSupplied = parsedPatch.publish !== undefined;
+    const candidate = {
+      revision: parsedPatch.revision,
+      name: parsedPatch.name ?? current.name,
+      biography: parsedPatch.biography ?? current.biography,
+      pronunciation: parsedPatch.pronunciation ?? current.pronunciation,
       organisationName:
-        patch.organisationName ?? current.organisationName ?? "",
-      jobTitle: patch.jobTitle ?? current.jobTitle ?? "",
-      linkedinUrl: patch.linkedinUrl ?? current.linkedinUrl ?? "",
-      xHandle: patch.xHandle ?? current.xHandle ?? "",
+        parsedPatch.organisationName ?? current.organisationName,
+      jobTitle: parsedPatch.jobTitle ?? current.jobTitle,
+      linkedinUrl: parsedPatch.linkedinUrl ?? current.linkedinUrl,
+      xHandle: parsedPatch.xHandle ?? current.xHandle,
       travelPreferences:
-        patch.travelPreferences ?? current.travelPreferences ?? "",
-      publish: patch.publish ?? current.profileStatus === "published",
-    });
+        parsedPatch.travelPreferences ?? current.travelPreferences,
+      publish: parsedPatch.publish ?? current.profileStatus === "published",
+    };
+    const merged =
+      parsedPatch.publish === true
+        ? speakerProfileSchema.parse({
+            ...candidate,
+            biography: candidate.biography ?? "",
+            pronunciation: candidate.pronunciation ?? "",
+            organisationName: candidate.organisationName ?? "",
+            jobTitle: candidate.jobTitle ?? "",
+            linkedinUrl: candidate.linkedinUrl ?? "",
+            xHandle: candidate.xHandle ?? "",
+            travelPreferences: candidate.travelPreferences ?? "",
+          })
+        : candidate;
     const nextStatus = publishWasSupplied
       ? merged.publish
         ? "published"

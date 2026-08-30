@@ -366,6 +366,99 @@ export class RecipientQuery {
           RecipientQuery.maximumBatchSize + 1,
         ],
       },
+      draft_applicants: {
+        sql: `
+          SELECT personId, address, name, sourceId
+            FROM (
+              SELECT person.id AS personId, person.email AS address,
+                     person.display_name AS name, submission.id AS sourceId,
+                     ROW_NUMBER() OVER (
+                       PARTITION BY person.id
+                       ORDER BY form.closes_at, submission.updated_at, submission.id
+                     ) AS recipientRank
+                FROM submissions submission
+                JOIN form_versions version
+                  ON version.id = submission.form_version_id
+                 AND version.event_id = submission.event_id
+                JOIN form_definitions form
+                  ON form.id = version.form_id AND form.event_id = version.event_id
+                JOIN people person ON person.id = submission.submitter_person_id
+                JOIN events event
+                  ON event.id = submission.event_id AND event.organisation_id = ?
+               WHERE submission.event_id = ? AND submission.status = 'draft'
+                 AND form.status = 'published'
+                 AND (form.opens_at IS NULL OR form.opens_at <= unixepoch())
+                 AND (form.closes_at IS NULL OR form.closes_at >= unixepoch())
+                 AND (
+                   form.submission_limit IS NULL
+                   OR (
+                     SELECT COUNT(*)
+                       FROM submissions counted_submission
+                       JOIN form_versions counted_version
+                         ON counted_version.id = counted_submission.form_version_id
+                        AND counted_version.event_id = counted_submission.event_id
+                      WHERE counted_version.form_id = form.id
+                        AND counted_submission.event_id = form.event_id
+                        AND counted_submission.status <> 'draft'
+                   ) < form.submission_limit
+                 )
+                 AND (
+                   form.per_person_submission_limit IS NULL
+                   OR (
+                     SELECT COUNT(*)
+                       FROM submissions person_submission
+                       JOIN form_versions person_version
+                         ON person_version.id = person_submission.form_version_id
+                        AND person_version.event_id = person_submission.event_id
+                      WHERE person_version.form_id = form.id
+                        AND person_submission.event_id = form.event_id
+                        AND person_submission.submitter_person_id = person.id
+                        AND person_submission.status <> 'withdrawn'
+                        AND person_submission.id <> submission.id
+                   ) < form.per_person_submission_limit
+                 )
+                 AND trim(person.email) <> ''
+            ) recipients
+           WHERE recipientRank = 1
+           ORDER BY sourceId
+           LIMIT ?
+        `,
+        bindings: [
+          viewer.organisationId,
+          viewer.eventId,
+          RecipientQuery.maximumBatchSize + 1,
+        ],
+      },
+      pending_participants: {
+        sql: `
+          SELECT personId, address, name, sourceId
+            FROM (
+              SELECT person.id AS personId, person.email AS address,
+                     person.display_name AS name, role.session_id AS sourceId,
+                     ROW_NUMBER() OVER (
+                       PARTITION BY person.id
+                       ORDER BY session.title, role.session_id, role.role
+                     ) AS recipientRank
+                FROM session_participant_roles role
+                JOIN people person ON person.id = role.person_id
+                JOIN sessions session
+                  ON session.id = role.session_id AND session.event_id = role.event_id
+                JOIN events event
+                  ON event.id = role.event_id AND event.organisation_id = ?
+               WHERE role.event_id = ? AND role.participation_status = 'pending'
+                 AND session.status IN ('unscheduled','scheduled','published')
+                 AND trim(person.email) <> ''
+            ) recipients
+           WHERE recipientRank = 1
+           ORDER BY sourceId
+           LIMIT ?
+        `,
+        bindings: [
+          viewer.organisationId,
+          viewer.eventId,
+          RecipientQuery.maximumBatchSize + 1,
+        ],
+      },
       event_administrators: {
         sql: `
           SELECT personId, address, name, NULL AS sourceId

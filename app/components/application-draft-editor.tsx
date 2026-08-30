@@ -18,7 +18,7 @@ import { DraftRecoveryFeedback } from "~/components/draft-recovery-feedback";
 import { useConfirm } from "~/components/ui/confirm-dialog";
 import { DomainStatusBadge } from "~/components/ui/domain-status-badge";
 import { ErrorSummary } from "~/components/ui/error-summary";
-import type { ApplicantDraft } from "~/modules/submissions/submission-repository.server";
+import type { ParticipantApplicantDraft } from "~/modules/submissions/submission-repository.server";
 import {
   APPLICANT_SPEAKERS_STEP_ID,
   applicantFormStepIdForHref,
@@ -44,10 +44,21 @@ import {
   ApplicationSpeakers,
 } from "./application-draft-editor-panels";
 
+type EditableSpeaker = Pick<
+  ParticipantApplicantDraft["speakers"][number],
+  "personId" | "name" | "email" | "biography" | "invitationStatus"
+>;
+
+type SpeakerFieldAccess = {
+  name: "hidden" | "read_only" | "editable";
+  biography: "hidden" | "read_only" | "editable";
+} | null;
+
 export function DraftEditor({
   draft,
   schema,
   applicant,
+  speakerFieldAccess,
   publicSlug,
   currentUpload,
   uploadTurnstileSiteKey,
@@ -67,9 +78,10 @@ export function DraftEditor({
   action,
   timezone,
 }: {
-  draft: ApplicantDraft;
+  draft: ParticipantApplicantDraft;
   schema: StoredSubmissionFormSchema;
-  applicant: { name: string; email: string; verified: boolean };
+  applicant: { name?: string; email: string; verified: boolean };
+  speakerFieldAccess: SpeakerFieldAccess;
   publicSlug: string;
   currentUpload: ApplicantVideoUploadRecord | null;
   uploadTurnstileSiteKey: string | null;
@@ -111,17 +123,21 @@ export function DraftEditor({
   >({});
   const [pendingFocusHref, setPendingFocusHref] = useState<string | null>(null);
   const [videoTransferBlocked, setVideoTransferBlocked] = useState(false);
-  const [speakers, setSpeakers] = useState(
+  const [speakers, setSpeakers] = useState<EditableSpeaker[]>(
     draft.speakers.length
-      ? draft.speakers.map(({ name, email, biography, invitationStatus }) => ({
-          name,
-          email,
-          biography,
-          invitationStatus,
-        }))
+      ? draft.speakers.map(
+          ({ personId, name, email, biography, invitationStatus }) => ({
+            personId,
+            name,
+            email,
+            biography,
+            invitationStatus,
+          }),
+        )
       : [
           {
-            name: applicant.name,
+            personId: null,
+            name: applicant.name ?? "Primary speaker",
             email: applicant.email,
             biography: "",
             invitationStatus: "pending",
@@ -154,17 +170,26 @@ export function DraftEditor({
     (payload: typeof recoveryPayload) => {
       setAnswers(payload.answers);
       setSpeakers(
-        applicant.verified && payload.speakers[0]
-          ? [
-              { ...payload.speakers[0], email: applicant.email },
-              ...payload.speakers.slice(1),
-            ]
-          : payload.speakers,
+        payload.speakers.map((speaker, index) => {
+          const authoritative = draft.speakers[index];
+          const restored = {
+            ...speaker,
+            personId: authoritative?.personId ?? null,
+            ...(applicant.verified && index === 0
+              ? { email: applicant.email }
+              : {}),
+          };
+          if (authoritative?.name === undefined) delete restored.name;
+          if (authoritative?.biography === undefined) {
+            delete restored.biography;
+          }
+          return restored;
+        }),
       );
       setUploads(payload.uploads);
       setDirty(true);
     },
-    [applicant.email, applicant.verified],
+    [applicant.email, applicant.verified, draft.speakers],
   );
   const recoveryScope = useMemo(
     () => ({
@@ -195,7 +220,8 @@ export function DraftEditor({
     setSpeakers(
       draft.speakers.length
         ? draft.speakers.map(
-            ({ name, email, biography, invitationStatus }) => ({
+            ({ personId, name, email, biography, invitationStatus }) => ({
+              personId,
               name,
               email,
               biography,
@@ -204,7 +230,8 @@ export function DraftEditor({
           )
         : [
             {
-              name: applicant.name,
+              personId: null,
+              name: applicant.name ?? "Primary speaker",
               email: applicant.email,
               biography: "",
               invitationStatus: "pending",
@@ -316,6 +343,16 @@ export function DraftEditor({
   const duplicateSpeakerEmails = speakers
     .map((speaker) => speaker.email.trim().toLocaleLowerCase())
     .filter((email, index, all) => email && all.indexOf(email) !== index);
+  const speakersForValidation = speakers.map((speaker) => ({
+    ...speaker,
+    name: speaker.name ?? "Participant",
+    biography: speaker.biography ?? "",
+  }));
+  const speakerPayload = speakers.map(({ name, email, biography }) => ({
+    name,
+    email,
+    biography,
+  }));
   const serverSummaryErrors = Object.entries(errors ?? {}).flatMap(
     ([field, messages]) =>
       messages.map((message) => ({
@@ -381,7 +418,7 @@ export function DraftEditor({
           validateFinalAnswers(
             schema,
             answers,
-            speakers,
+            speakersForValidation,
             1,
             effectiveMaximumSpeakers,
             uploads,
@@ -493,7 +530,11 @@ export function DraftEditor({
       <input type="hidden" name="submissionId" value={draft.id} />
       <input type="hidden" name="revision" value={draft.revision} />
       <input type="hidden" name="answers" value={JSON.stringify(answers)} />
-      <input type="hidden" name="speakers" value={JSON.stringify(speakers)} />
+      <input
+        type="hidden"
+        name="speakers"
+        value={JSON.stringify(speakerPayload)}
+      />
       <input type="hidden" name="uploads" value={JSON.stringify(uploads)} />
       {revisionMode ? (
         <input
@@ -583,6 +624,7 @@ export function DraftEditor({
             readOnly={readOnly}
             revisionMode={revisionMode}
             applicant={applicant}
+            speakerFieldAccess={speakerFieldAccess}
             publicSlug={publicSlug}
             originalSpeakerCount={originalSpeakerCount}
             effectiveMaximumSpeakers={effectiveMaximumSpeakers}

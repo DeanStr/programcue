@@ -357,6 +357,21 @@ export function PublicationSettingsFields({
   return (
     <div className="fb-form-settings">
       <label className="label">
+        Opening date
+        <input
+          className="field"
+          name="openDate"
+          type="date"
+          value={input.openDate ?? ""}
+          onInput={(event) =>
+            change({ ...input, openDate: event.currentTarget.value || null })
+          }
+        />
+        <span className="help">
+          Leave blank to accept applications immediately after publication.
+        </span>
+      </label>
+      <label className="label">
         Closing date
         <input
           className="field"
@@ -372,7 +387,7 @@ export function PublicationSettingsFields({
         </span>
       </label>
       <label className="label">
-        Overall limit
+        Total submission capacity
         <input
           className="field"
           name="submissionLimit"
@@ -389,6 +404,29 @@ export function PublicationSettingsFields({
           }
           placeholder="No limit"
         />
+        <span className="help">Across all applicants for this form.</span>
+      </label>
+      <label className="label">
+        Maximum submissions per person
+        <input
+          className="field"
+          name="perPersonSubmissionLimit"
+          type="number"
+          min={1}
+          value={input.perPersonSubmissionLimit ?? ""}
+          onChange={(event) =>
+            change({
+              ...input,
+              perPersonSubmissionLimit: event.target.value
+                ? Number(event.target.value)
+                : null,
+            })
+          }
+          placeholder="No limit"
+        />
+        <span className="help">
+          Counts active drafts and submitted applications by a verified person.
+        </span>
       </label>
       <label className="label">
         Min speakers

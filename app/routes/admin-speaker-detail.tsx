@@ -3,6 +3,10 @@ import { ZodError } from "zod";
 import { AdminSpeakerDetailPage } from "~/components/admin-speaker-detail-page";
 import { statusPresentation } from "~/components/ui/domain-status-badge";
 import { adminRecordBreadcrumbHandle } from "~/modules/administration/admin-route-breadcrumb";
+import {
+  EventFieldService,
+  EventFieldStateError,
+} from "~/modules/fields/event-field-service.server";
 import { ScheduleRevisionConflictError } from "~/modules/schedule/schedule-errors";
 import { ensureDemoSpeakerData } from "~/modules/speakers/demo.server";
 import {
@@ -44,6 +48,11 @@ export async function loader({ request, params, context }: Route.LoaderArgs) {
   return {
     detail: await service.getAdminSpeakerDetail(viewer, params.personId),
     availability: await service.listAdminAvailability(viewer, params.personId),
+    customFields: await new EventFieldService(env).values(
+      viewer,
+      "person",
+      params.personId,
+    ),
   };
 }
 
@@ -60,6 +69,8 @@ export async function action({ request, params, context }: Route.ActionArgs) {
     intent !== "save_speaker_scoped_profile" &&
     intent !== "confirm_external_participation" &&
     intent !== "reset_declined_participation" &&
+    intent !== "add_participant_role" &&
+    intent !== "save_event_fields" &&
     intent !== "delete_speaker_blackout"
   ) {
     return data(
@@ -68,6 +79,52 @@ export async function action({ request, params, context }: Route.ActionArgs) {
     );
   }
   try {
+    if (intent === "save_event_fields") {
+      await new EventFieldService(env).saveValues(
+        viewer,
+        "person",
+        params.personId,
+        form,
+      );
+      const realtimeFailure = await recordRouteChange(env, viewer, {
+        entityType: "person",
+        entityId: params.personId,
+        changeType: "updated",
+      });
+      return data(
+        {
+          ok: true,
+          message: realtimeFailure
+            ? `Event-specific fields saved. ${realtimeFailure.message}`
+            : "Event-specific fields saved.",
+        },
+        { status: realtimeFailure ? 207 : 200 },
+      );
+    }
+    if (intent === "add_participant_role") {
+      const result = await new SpeakerService(env).addRole(
+        viewer,
+        params.personId,
+        {
+          sessionId: form.get("sessionId"),
+          role: form.get("role"),
+          confirmation: form.get("confirmation"),
+        },
+      );
+      const realtimeFailure = result.changed
+        ? await notifyRouteChange(
+            env,
+            viewer,
+            result.changeSequence,
+            result.personId,
+          )
+        : null;
+      if (realtimeFailure) return data(realtimeFailure, { status: 207 });
+      return data({
+        ok: true,
+        message: `${result.label} role assigned. The participant can now respond to it independently.`,
+      });
+    }
     if (intent === "delete_speaker_blackout") {
       const result = await new SpeakerService(env).deleteAdminAvailability(
         viewer,
@@ -97,43 +154,35 @@ export async function action({ request, params, context }: Route.ActionArgs) {
       const service = new SpeakerService(env);
       const result =
         intent === "confirm_external_participation"
-          ? await service.confirmExternalParticipation(
-              viewer,
-              params.personId,
-              {
-                sessionId: form.get("sessionId"),
-                participationRevision: form.get("participationRevision"),
-                confirmation: form.get("confirmation"),
-                externalConfirmation: form.get("externalConfirmation"),
-              },
-            )
-          : await service.resetDeclinedParticipation(viewer, params.personId, {
+          ? await service.respondExternalRole(viewer, params.personId, {
               sessionId: form.get("sessionId"),
-              participationRevision: form.get("participationRevision"),
+              role: form.get("role"),
+              roleRevision: form.get("roleRevision"),
+              response: "confirmed",
+              reason: "",
+              externalConfirmation: form.get("externalConfirmation"),
+            })
+          : await service.resetRole(viewer, params.personId, {
+              sessionId: form.get("sessionId"),
+              role: form.get("role"),
+              roleRevision: form.get("roleRevision"),
               resetConfirmation: form.get("resetConfirmation"),
             });
-      const realtimeFailure =
-        result.changeSequence != null
-          ? await notifyRouteChange(
-              env,
-              viewer,
-              result.changeSequence,
-              result.sessionId,
-            )
-          : result.changed
-            ? await recordRouteChange(env, viewer, {
-                entityType: "session",
-                entityId: result.sessionId,
-                changeType: "updated",
-              })
-            : null;
+      const realtimeFailure = result.changed
+        ? await notifyRouteChange(
+            env,
+            viewer,
+            result.changeSequence,
+            result.sessionId,
+          )
+        : null;
       if (realtimeFailure) return data(realtimeFailure, { status: 207 });
       return data({
         ok: true,
         message:
           intent === "confirm_external_participation"
-            ? `Recorded external participation confirmation for “${result.title}”. Portal invitation acceptance remains separate.`
-            : `Reset “${result.title}” to awaiting confirmation. No message was sent.`,
+            ? `Recorded external acceptance of the ${result.label.toLowerCase()} role for “${result.title}”. Portal invitation acceptance remains separate.`
+            : `Reset the ${result.label.toLowerCase()} role for “${result.title}” to awaiting confirmation. No message was sent.`,
       });
     }
     const speakerService = new SpeakerService(env);
@@ -220,6 +269,12 @@ export async function action({ request, params, context }: Route.ActionArgs) {
       return data({ ok: false, message: error.message }, { status: 409 });
     }
     if (error instanceof SpeakerAdminStateError) {
+      return data(
+        { ok: false, message: error.message },
+        { status: error.status },
+      );
+    }
+    if (error instanceof EventFieldStateError) {
       return data(
         { ok: false, message: error.message },
         { status: error.status },

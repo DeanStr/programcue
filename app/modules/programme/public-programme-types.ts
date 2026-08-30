@@ -56,7 +56,7 @@ export type PublishedProgramme = {
     supportUrl: string | null;
     application: {
       url: string;
-      state: "accepting" | "closed" | "full";
+      state: "accepting" | "not_open" | "closed" | "full";
     } | null;
   };
   version: { id: string; versionNumber: number; publishedAt: number };

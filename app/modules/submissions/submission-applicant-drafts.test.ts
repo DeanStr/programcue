@@ -237,6 +237,150 @@ describe("Submissions D1 vertical slice", () => {
       });
     });
 
+    it("redacts hidden profile fields from linked draft speakers without overwriting them on save", async () => {
+      const { service, id, slug, testEnv } = await publishedForm();
+      const applicant = await verifiedApplicant(service, slug);
+      const submissionId = await service.createDraft(slug, applicant);
+      const created = (
+        await service.repository.getApplicantDrafts(id, applicant)
+      ).find((draft) => draft.id === submissionId)!;
+      const savedName = "Private primary speaker name";
+      const savedBiography = "Private primary speaker biography.";
+      const savedRevision = await service.saveDraft(slug, applicant, {
+        submissionId,
+        revision: created.revision,
+        answers: {},
+        speakers: [
+          {
+            name: savedName,
+            email: applicant.email,
+            biography: savedBiography,
+          },
+        ],
+      });
+      await testEnv.DB.batch([
+        testEnv.DB.prepare(
+          `INSERT INTO event_participant_field_policies (
+             event_id, field_key, participant_access,
+             updated_by_person_id, updated_at
+           ) VALUES (?, 'name', 'hidden', ?, unixepoch())
+           ON CONFLICT(event_id, field_key) DO UPDATE SET
+             participant_access = excluded.participant_access,
+             updated_by_person_id = excluded.updated_by_person_id,
+             updated_at = excluded.updated_at`,
+        ).bind(viewer.eventId, viewer.personId),
+        testEnv.DB.prepare(
+          `INSERT INTO event_participant_field_policies (
+             event_id, field_key, participant_access,
+             updated_by_person_id, updated_at
+           ) VALUES (?, 'biography', 'hidden', ?, unixepoch())
+           ON CONFLICT(event_id, field_key) DO UPDATE SET
+             participant_access = excluded.participant_access,
+             updated_by_person_id = excluded.updated_by_person_id,
+             updated_at = excluded.updated_at`,
+        ).bind(viewer.eventId, viewer.personId),
+      ]);
+      try {
+        const cookie = await authenticatedSessionCookie(applicant.personId!);
+        const portal = await service.getApplicantPortal(
+          slug,
+          new Request(
+            `https://example.com/apply/${slug}?draft=${submissionId}`,
+            {
+              headers: { cookie },
+            },
+          ),
+          submissionId,
+        );
+        const projectedSpeaker = portal.selected?.speakers[0];
+        expect(projectedSpeaker).not.toHaveProperty("name");
+        expect(projectedSpeaker).not.toHaveProperty("biography");
+        expect(JSON.stringify(portal)).not.toContain(savedName);
+        expect(JSON.stringify(portal)).not.toContain(savedBiography);
+
+        await testEnv.DB.prepare(
+          `UPDATE event_participant_field_policies
+              SET participant_access = 'read_only', updated_at = unixepoch()
+            WHERE event_id = ? AND field_key = 'biography'`,
+        )
+          .bind(viewer.eventId)
+          .run();
+        const readOnlyPortal = await service.getApplicantPortal(
+          slug,
+          new Request(
+            `https://example.com/apply/${slug}?draft=${submissionId}`,
+            { headers: { cookie } },
+          ),
+          submissionId,
+        );
+        expect(readOnlyPortal.selected?.speakers[0]).toHaveProperty(
+          "biography",
+          savedBiography,
+        );
+        expect(readOnlyPortal.draftSpeakerFieldAccess).toEqual({
+          name: "hidden",
+          biography: "read_only",
+        });
+
+        await expect(
+          service.saveDraft(slug, applicant, {
+            submissionId,
+            revision: savedRevision,
+            answers: { title: "A safe partial draft save" },
+            speakers: [
+              {
+                name: "Attempted hidden name overwrite",
+                email: applicant.email,
+                biography: "Attempted hidden biography overwrite.",
+              },
+            ],
+          }),
+        ).resolves.toBe(savedRevision + 1);
+        const persisted = (
+          await service.repository.getApplicantDrafts(id, applicant)
+        ).find((draft) => draft.id === submissionId)!;
+        expect(persisted.speakers[0]).toMatchObject({
+          name: savedName,
+          biography: savedBiography,
+        });
+      } finally {
+        await testEnv.DB.prepare(
+          `DELETE FROM event_participant_field_policies
+            WHERE event_id = ? AND field_key IN ('name','biography')`,
+        )
+          .bind(viewer.eventId)
+          .run();
+      }
+    });
+
+    it("allows the selected draft to submit when it occupies the per-person limit", async () => {
+      const { service, slug } = await publishedForm({
+        perPersonSubmissionLimit: 1,
+      });
+      const form = await service.getPublicForm(slug);
+      const email = `limit-${crypto.randomUUID()}@example.com`;
+      await service.applicants.requestCode(form, email, "");
+      const verified = await service.applicants.verifyCode(
+        form,
+        email,
+        "424242",
+      );
+      const request = new Request(`https://example.com/apply/${slug}`, {
+        headers: { cookie: verified.cookie },
+      });
+      const applicant = await service.applicants.get(request, form);
+      expect(applicant).not.toBeNull();
+      const submissionId = await service.createDraft(slug, applicant!);
+
+      await expect(
+        service.getApplicantPortal(slug, request, submissionId),
+      ).resolves.toMatchObject({
+        availability: { accepting: false, state: "person_limit" },
+        selected: { id: submissionId, status: "draft" },
+        selectedCanSubmit: true,
+      });
+    });
+
     it("replays one authenticated draft for the same D1 intent", async () => {
       const { service, id, slug, testEnv } = await publishedForm();
       const applicant = await verifiedApplicant(service, slug);
@@ -303,6 +447,45 @@ describe("Submissions D1 vertical slice", () => {
           "SELECT COUNT(*) AS count FROM submissions WHERE id = ? AND event_id = ?",
         )
           .bind(first, viewer.eventId)
+          .first(),
+      ).resolves.toEqual({ count: 1 });
+    });
+
+    it("admits only one concurrent draft when the applicant has one slot", async () => {
+      const { service, id, slug, testEnv } = await publishedForm({
+        perPersonSubmissionLimit: 1,
+      });
+      const applicant = await verifiedApplicant(service, slug);
+
+      const attempts = await Promise.allSettled([
+        service.createDraft(slug, applicant, crypto.randomUUID()),
+        service.createDraft(slug, applicant, crypto.randomUUID()),
+      ]);
+
+      expect(
+        attempts.filter((attempt) => attempt.status === "fulfilled"),
+      ).toHaveLength(1);
+      const rejected = attempts.find(
+        (attempt) => attempt.status === "rejected",
+      );
+      expect(rejected).toMatchObject({
+        reason: expect.objectContaining({
+          message:
+            "You have reached the submission limit for this call for speakers.",
+        }),
+      });
+      await expect(
+        testEnv.DB.prepare(
+          `SELECT COUNT(*) AS count
+             FROM submissions submission
+             JOIN form_versions version
+               ON version.id = submission.form_version_id
+              AND version.event_id = submission.event_id
+            WHERE version.form_id = ? AND submission.event_id = ?
+              AND submission.submitter_person_id = ?
+              AND submission.status <> 'withdrawn'`,
+        )
+          .bind(id, viewer.eventId, applicant.personId)
           .first(),
       ).resolves.toEqual({ count: 1 });
     });
@@ -1391,6 +1574,49 @@ describe("Submissions D1 vertical slice", () => {
       ).resolves.toEqual([
         expect.objectContaining({ revision: 2, speakers: [] }),
       ]);
+    });
+
+    it("does not let verification claim an anonymous draft above the per-person limit", async () => {
+      const { service, slug, testEnv } = await publishedForm({
+        perPersonSubmissionLimit: 1,
+      });
+      const form = await service.getPublicForm(slug);
+      const email = `anonymous-limit-${crypto.randomUUID()}@example.com`;
+      const existingApplicant = await verifiedApplicant(service, slug, email);
+      await service.createDraft(slug, existingApplicant);
+
+      const started = await service.startAnonymousDraft(slug, "");
+      const anonymousRequest = new Request(
+        `https://example.com/apply/${slug}`,
+        { headers: { cookie: started.cookie.split(";")[0] } },
+      );
+      const anonymous = await service.applicants.get(anonymousRequest, form);
+      expect(anonymous).not.toBeNull();
+      await service.saveDraft(slug, anonymous!, {
+        submissionId: started.draftId,
+        revision: 1,
+        answers: {},
+        speakers: [
+          {
+            name: "Existing Applicant",
+            email,
+            biography: "",
+          },
+        ],
+      });
+      await service.applicants.requestCode(form, email, "", anonymousRequest);
+
+      await expect(
+        service.applicants.verifyCode(form, email, "424242", anonymousRequest),
+      ).rejects.toThrow(/at most 1 active application per person/i);
+      await expect(
+        testEnv.DB.prepare(
+          `SELECT submitter_person_id AS personId, submitter_email AS email
+             FROM submissions WHERE id = ? AND event_id = ?`,
+        )
+          .bind(started.draftId, form.eventId)
+          .first(),
+      ).resolves.toEqual({ personId: null, email: null });
     });
 
     it("keeps an anonymous draft browser-bound until email verification transfers ownership", async () => {

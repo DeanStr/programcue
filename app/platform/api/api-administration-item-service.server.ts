@@ -34,6 +34,7 @@ function serialise(row: ApiRecord) {
   for (const field of [
     "startsAt",
     "endsAt",
+    "opensAt",
     "closesAt",
     "acceptedAt",
     "invitedAt",
@@ -193,8 +194,10 @@ export class ApiAdministrationItemService {
     if (resource === "forms") {
       return this.env.DB.prepare(
         `SELECT form.id, form.name, form.description, form.kind, form.status,
-                form.public_slug AS publicSlug, form.closes_at AS closesAt,
+                form.public_slug AS publicSlug, form.opens_at AS opensAt,
+                form.closes_at AS closesAt,
                 form.submission_limit AS submissionLimit,
+                form.per_person_submission_limit AS perPersonSubmissionLimit,
                 form.min_speakers AS minSpeakers,
                 form.max_speakers AS maxSpeakers,
                 form.access_mode AS accessMode, form.revision,

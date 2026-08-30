@@ -27,8 +27,10 @@ export const formDefinitions = sqliteTable(
       .default("draft")
       .$type<"draft" | "published" | "closed" | "archived">(),
     publicSlug: text("public_slug").notNull(),
+    opensAt: integer("opens_at"),
     closesAt: integer("closes_at"),
     submissionLimit: integer("submission_limit"),
+    perPersonSubmissionLimit: integer("per_person_submission_limit"),
     minSpeakers: integer("min_speakers").notNull().default(1),
     maxSpeakers: integer("max_speakers"),
     accessMode: text("access_mode")

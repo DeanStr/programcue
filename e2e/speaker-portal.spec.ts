@@ -1,6 +1,6 @@
 import { expect, type Page, test } from "@playwright/test";
 
-import { acceptConfirm } from "./support/confirm-dialog";
+import { acceptConfirm, dismissConfirm } from "./support/confirm-dialog";
 import { resetDemoEvent } from "./support/reset-demo-event";
 
 test("speaker profile, sessions and D1 task state render through the production portal", async ({
@@ -60,12 +60,16 @@ test("speaker profile, sessions and D1 task state render through the production 
   await expect(sessionCard).toContainText(
     "Practical patterns for accessible, calm and effective attendee experiences.",
   );
-  await expect(sessionCard).toContainText("Confirmation needed");
-  await sessionCard.getByText("Decline this session", { exact: true }).click();
-  await sessionCard
+  await expect(sessionCard).toContainText("1 role need a response");
+  const speakerRole = sessionCard
+    .locator(".speaker-role-response")
+    .filter({ hasText: "Speaker" });
+  await expect(speakerRole).toBeVisible();
+  await speakerRole.getByText("Decline this role", { exact: true }).click();
+  await speakerRole
     .getByLabel("Reason (optional)")
     .fill("A private scheduling concern");
-  await sessionCard.getByRole("button", { name: "Decline session" }).click();
+  await speakerRole.getByRole("button", { name: "Decline role" }).click();
   await acceptConfirm(page);
   await expect(page.getByRole("status")).toContainText("You declined");
   await expect(sessionCard).toContainText("Declined by you");
@@ -84,19 +88,28 @@ test("speaker profile, sessions and D1 task state render through the production 
   const adminSessionRow = page
     .getByRole("row")
     .filter({ hasText: "Designing inclusive event technology" });
-  await expect(adminSessionRow).toContainText("Declined by participant");
+  await expect(adminSessionRow).toContainText("Speaker: Declined");
   await expect(adminSessionRow).toContainText(
     "Private reason: A private scheduling concern",
   );
-  await adminSessionRow
-    .getByRole("button", { name: "Reset to awaiting confirmation" })
-    .click();
+  await adminSessionRow.getByRole("button", { name: "Reset speaker" }).click();
   await acceptConfirm(page);
   await expect(page.locator(".pc-status-notice")).toContainText(
-    "Reset “Designing inclusive event technology” to awaiting confirmation. No message was sent.",
+    "Reset the speaker role for “Designing inclusive event technology” to awaiting confirmation. No message was sent.",
   );
-  await expect(adminSessionRow).toContainText("Awaiting confirmation");
+  await expect(adminSessionRow).toContainText("Speaker: Awaiting response");
   await expect(adminSessionRow).not.toContainText("Private reason:");
+  await adminSessionRow.getByRole("button", { name: "Add moderator" }).click();
+  const assignmentDialog = page.getByRole("dialog");
+  await expect(assignmentDialog).toContainText("Assign the moderator role?");
+  await expect(assignmentDialog).toContainText(
+    "Designing inclusive event technology",
+  );
+  await expect(assignmentDialog).toContainText("Priya Shah");
+  await dismissConfirm(page);
+  await expect(adminSessionRow).not.toContainText(
+    "Moderator: Awaiting response",
+  );
 
   await page.context().addCookies([
     {
@@ -110,18 +123,20 @@ test("speaker profile, sessions and D1 task state render through the production 
   ]);
   await page.goto("/participant/sessions");
   await sessionCard
-    .getByRole("button", { name: "Accept participation" })
+    .getByRole("button", {
+      name: "Accept Speaker role in Designing inclusive event technology",
+    })
     .click();
   await acceptConfirm(page);
-  await expect(page.getByRole("status")).toContainText(
-    "Participation confirmed",
-  );
-  await expect(sessionCard).toContainText("Confirmed");
+  await expect(page.getByRole("status")).toContainText("Speaker role accepted");
+  await expect(speakerRole).toContainText("Accepted");
   await expect(
-    sessionCard.getByRole("button", { name: "Accept participation" }),
+    sessionCard.getByRole("button", {
+      name: "Accept Speaker role in Designing inclusive event technology",
+    }),
   ).toHaveCount(0);
   await page.reload();
-  await expect(sessionCard).toContainText("Confirmed");
+  await expect(speakerRole).toContainText("Accepted");
   await page.getByRole("link", { name: "Tasks" }).click();
   await expect(page).toHaveURL(/\/participant\/tasks$/u);
   await expect(
@@ -633,8 +648,9 @@ test("administrator speaker filters use the event-scoped server list", async ({
 
   await expect(page).toHaveURL(/readiness=needs_attention/u);
   await expect(readinessFilter).toHaveValue("needs_attention");
-  await expect(page.getByText("Priya Shah", { exact: true })).toBeVisible();
+  const priyaRow = page.getByRole("row").filter({ hasText: "Priya Shah" });
+  await expect(priyaRow).toBeVisible();
   await expect(
-    page.getByRole("cell", { name: "Needs attention", exact: true }),
+    priyaRow.getByRole("cell", { name: "Needs attention", exact: true }),
   ).toBeVisible();
 });

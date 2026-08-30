@@ -195,8 +195,10 @@ export async function action({ request, context }: Route.ActionArgs) {
       name: formData.get("name"),
       kind: formData.get("kind"),
       publicSlug: formData.get("publicSlug"),
+      openDate: String(formData.get("openDate") ?? "") || null,
       closeDate: String(formData.get("closeDate") ?? "") || null,
       submissionLimit: formData.get("submissionLimit"),
+      perPersonSubmissionLimit: formData.get("perPersonSubmissionLimit"),
       minSpeakers: formData.get("minSpeakers"),
       maxSpeakers: formData.get("maxSpeakers"),
       accessMode: formData.get("accessMode"),
@@ -417,10 +419,17 @@ export default function FormBuilder({ loaderData }: Route.ComponentProps) {
             </li>
             <li>
               Access: {input.accessMode.replaceAll("_", " ")}
+              {input.openDate
+                ? `; opens ${input.openDate} (${eventTimezone})`
+                : "; open immediately"}
               {input.closeDate
                 ? `; closes ${input.closeDate} (${eventTimezone})`
                 : "; no close date"}
               .
+            </li>
+            <li>
+              Capacity: {input.submissionLimit ?? "no total limit"};{" "}
+              {input.perPersonSubmissionLimit ?? "no per-person limit"}.
             </li>
           </ul>
           <p className="help">

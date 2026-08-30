@@ -188,10 +188,18 @@ export function useFormBuilderController(
     if (next.kind !== input.kind) setValue("kind", next.kind, options);
     if (next.publicSlug !== input.publicSlug)
       setValue("publicSlug", next.publicSlug, options);
+    if (next.openDate !== input.openDate)
+      setValue("openDate", next.openDate, options);
     if (next.closeDate !== input.closeDate)
       setValue("closeDate", next.closeDate, options);
     if (next.submissionLimit !== input.submissionLimit)
       setValue("submissionLimit", next.submissionLimit, options);
+    if (next.perPersonSubmissionLimit !== input.perPersonSubmissionLimit)
+      setValue(
+        "perPersonSubmissionLimit",
+        next.perPersonSubmissionLimit,
+        options,
+      );
     if (next.minSpeakers !== input.minSpeakers)
       setValue("minSpeakers", next.minSpeakers, options);
     if (next.maxSpeakers !== input.maxSpeakers)

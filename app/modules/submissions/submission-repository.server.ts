@@ -11,6 +11,7 @@ export type {
   FormSummary,
   FormVersion,
   FormWorkspace,
+  ParticipantApplicantDraft,
   SubmittedRevisionCommand,
   SubmittedRevisionCommit,
 } from "./submission-repository-shared";

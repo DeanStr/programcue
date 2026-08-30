@@ -432,6 +432,10 @@ export function CommunicationAutomation({
             >
               <option value="task_due">Due within 24 hours</option>
               <option value="task_overdue">Overdue</option>
+              <option value="application_draft">Unsubmitted drafts</option>
+              <option value="participation_pending">
+                Pending participation responses
+              </option>
             </select>
           </label>
         </div>
@@ -445,6 +449,10 @@ export function CommunicationAutomation({
             >
               <option value="due_speakers">Speakers due within 24 hours</option>
               <option value="overdue_speakers">Overdue speakers</option>
+              <option value="draft_applicants">Applicants with drafts</option>
+              <option value="pending_participants">
+                Participants awaiting a response
+              </option>
               <option value="event_administrators">Event administrators</option>
             </select>
           </label>

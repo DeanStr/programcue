@@ -184,10 +184,46 @@ describe("event cloning", () => {
         "INSERT OR IGNORE INTO evaluation_criteria (id,event_id,round_id,name,input_type,options_json,weight_percent,required,position) VALUES ('clone-criterion',?,'clone-round','Fit','dropdown','[\"Strong\",\"Weak\"]',0,1,0)",
       ).bind(viewer.eventId),
       env.DB.prepare(
-        "INSERT OR IGNORE INTO form_definitions (id,event_id,name,kind,status,public_slug,closes_at,min_speakers,access_mode,access_password_hash,created_by_person_id) VALUES ('clone-form',?,'Call for speakers','submission','published','clone-form-public',unixepoch()+86400,1,'password_protected','source-password-hash',?)",
+        "INSERT OR IGNORE INTO form_definitions (id,event_id,name,kind,status,public_slug,opens_at,closes_at,per_person_submission_limit,min_speakers,access_mode,access_password_hash,created_by_person_id) VALUES ('clone-form',?,'Call for speakers','submission','published','clone-form-public',1893369600,1893456000,2,1,'password_protected','source-password-hash',?)",
       ).bind(viewer.eventId, viewer.personId),
       env.DB.prepare(
-        'INSERT OR IGNORE INTO form_versions (id,event_id,form_id,version_number,schema_json,routing_json,settings_snapshot_json,status,published_at,created_by_person_id) VALUES (\'clone-form-v1\',?,\'clone-form\',1,\'{"components":[]}\',\'{"categories":{},"trackIds":{},"trackNames":{},"teamNames":{},"directSessionDurationMinutes":null,"passwordHash":"source-password-hash"}\',\'{"publicSlug":"clone-form-public","closesAt":1893456000,"accessMode":"password_protected"}\',\'published\',unixepoch(),?)',
+        'INSERT OR IGNORE INTO form_versions (id,event_id,form_id,version_number,schema_json,routing_json,settings_snapshot_json,status,published_at,created_by_person_id) VALUES (\'clone-form-v1\',?,\'clone-form\',1,\'{"components":[]}\',\'{"categories":{},"trackIds":{},"trackNames":{},"teamNames":{},"directSessionDurationMinutes":null,"passwordHash":"source-password-hash"}\',\'{"publicSlug":"clone-form-public","opensAt":1893369600,"closesAt":1893456000,"perPersonSubmissionLimit":2,"accessMode":"password_protected"}\',\'published\',unixepoch(),?)',
+      ).bind(viewer.eventId, viewer.personId),
+      env.DB.prepare(
+        `INSERT OR REPLACE INTO event_participant_field_policies (
+           event_id, field_key, participant_access, updated_by_person_id,
+           updated_at
+         ) VALUES (?, 'biography', 'read_only', ?, unixepoch())`,
+      ).bind(viewer.eventId, viewer.personId),
+      env.DB.prepare(
+        `INSERT OR IGNORE INTO event_field_definitions (
+           id, event_id, owner_type, field_key, label, field_type,
+           options_json, participant_access, required, position, status,
+           created_by_person_id, updated_by_person_id
+         ) VALUES (
+           'clone-field-active', ?, 'person', 'dietary_needs',
+           'Dietary needs', 'short_text', '[]', 'editable', 1, 3, 'active',
+           ?, ?
+         )`,
+      ).bind(viewer.eventId, viewer.personId, viewer.personId),
+      env.DB.prepare(
+        `INSERT OR IGNORE INTO event_field_definitions (
+           id, event_id, owner_type, field_key, label, field_type,
+           options_json, participant_access, required, position, status,
+           created_by_person_id, updated_by_person_id
+         ) VALUES (
+           'clone-field-archived', ?, 'person', 'old-field', 'Old field',
+           'short_text', '[]', 'hidden', 0, 4, 'archived', ?, ?
+         )`,
+      ).bind(viewer.eventId, viewer.personId, viewer.personId),
+      env.DB.prepare(
+        `INSERT OR REPLACE INTO event_field_values (
+           definition_id, event_id, person_id, value_json,
+           updated_by_person_id, updated_at
+         ) VALUES (
+           'clone-field-active', ?, 'person-demo-speaker',
+           '"Vegetarian"', ?, unixepoch()
+         )`,
       ).bind(viewer.eventId, viewer.personId),
       env.DB.prepare(
         "INSERT OR IGNORE INTO form_definitions (id,event_id,name,kind,status,public_slug,min_speakers,access_mode,created_by_person_id) VALUES ('clone-archived-form',?,'Old form','submission','archived','clone-archived-form-public',1,'email_verified',?)",
@@ -394,6 +430,8 @@ describe("event cloning", () => {
       taskTemplates: 2,
       communicationTemplates: 1,
       communicationTemplateVersions: 1,
+      participantFieldPolicies: 1,
+      fieldDefinitions: 1,
       senders: 0,
     });
     const clonedEvent = await env.DB.prepare(
@@ -432,20 +470,24 @@ describe("event cloning", () => {
     ).toEqual(sourceSessionFormats);
     expect(
       await env.DB.prepare(
-        "SELECT status, closes_at AS closesAt, access_mode AS accessMode, access_password_hash AS passwordHash FROM form_definitions WHERE event_id = ?",
+        "SELECT status, opens_at AS opensAt, closes_at AS closesAt, per_person_submission_limit AS perPersonSubmissionLimit, access_mode AS accessMode, access_password_hash AS passwordHash FROM form_definitions WHERE event_id = ?",
       )
         .bind(cloned.eventId)
         .first(),
     ).toEqual({
       status: "draft",
+      opensAt: null,
       closesAt: null,
+      perPersonSubmissionLimit: 2,
       accessMode: "email_verified",
       passwordHash: null,
     });
     expect(
       await env.DB.prepare(
         `SELECT json_extract(v.routing_json, '$.passwordHash') AS passwordHash,
+                json_extract(v.settings_snapshot_json, '$.opensAt') AS opensAt,
                 json_extract(v.settings_snapshot_json, '$.closesAt') AS closesAt,
+                json_extract(v.settings_snapshot_json, '$.perPersonSubmissionLimit') AS perPersonSubmissionLimit,
                 json_extract(v.settings_snapshot_json, '$.accessMode') AS accessMode,
                 json_extract(v.settings_snapshot_json, '$.publicSlug') = f.public_slug AS slugMatches
            FROM form_versions v
@@ -456,10 +498,55 @@ describe("event cloning", () => {
         .first(),
     ).toEqual({
       passwordHash: null,
+      opensAt: null,
       closesAt: null,
+      perPersonSubmissionLimit: 2,
       accessMode: "email_verified",
       slugMatches: 1,
     });
+    expect(
+      await env.DB.prepare(
+        `SELECT field_key AS fieldKey, participant_access AS participantAccess
+           FROM event_participant_field_policies WHERE event_id = ?`,
+      )
+        .bind(cloned.eventId)
+        .all(),
+    ).toMatchObject({
+      results: [{ fieldKey: "biography", participantAccess: "read_only" }],
+    });
+    expect(
+      await env.DB.prepare(
+        `SELECT owner_type AS ownerType, field_key AS fieldKey, label,
+                field_type AS fieldType, options_json AS optionsJson,
+                participant_access AS participantAccess, required, position,
+                status, revision
+           FROM event_field_definitions WHERE event_id = ?`,
+      )
+        .bind(cloned.eventId)
+        .all(),
+    ).toMatchObject({
+      results: [
+        {
+          ownerType: "person",
+          fieldKey: "dietary_needs",
+          label: "Dietary needs",
+          fieldType: "short_text",
+          optionsJson: "[]",
+          participantAccess: "editable",
+          required: 1,
+          position: 3,
+          status: "active",
+          revision: 1,
+        },
+      ],
+    });
+    await expect(
+      env.DB.prepare(
+        "SELECT COUNT(*) AS count FROM event_field_values WHERE event_id = ?",
+      )
+        .bind(cloned.eventId)
+        .first(),
+    ).resolves.toEqual({ count: 0 });
     expect(
       await env.DB.prepare(
         `SELECT status, opens_at AS opensAt, closes_at AS closesAt,

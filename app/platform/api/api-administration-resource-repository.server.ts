@@ -152,8 +152,10 @@ export class ApiAdministrationResourceRepository {
           `SELECT * FROM (
              SELECT form.id, form.created_at AS sort, form.name AS title,
                     form.description, form.kind, form.status,
-                    form.public_slug AS publicSlug, form.closes_at AS closesAt,
+                    form.public_slug AS publicSlug, form.opens_at AS opensAt,
+                    form.closes_at AS closesAt,
                     form.submission_limit AS submissionLimit,
+                    form.per_person_submission_limit AS perPersonSubmissionLimit,
                     form.min_speakers AS minSpeakers,
                     form.max_speakers AS maxSpeakers,
                     form.access_mode AS accessMode, form.revision,
@@ -524,6 +526,7 @@ export class ApiAdministrationResourceRepository {
     for (const field of [
       "startsAt",
       "endsAt",
+      "opensAt",
       "closesAt",
       "submittedAt",
       "withdrawnAt",

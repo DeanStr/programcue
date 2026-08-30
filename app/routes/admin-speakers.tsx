@@ -147,6 +147,10 @@ export default function AdminSpeakers({ loaderData }: Route.ComponentProps) {
     `${summary.knownSpeakers} ${summary.knownSpeakers === 1 ? "speaker" : "speakers"}`,
     `${summary.readySpeakers} ready`,
     summary.outstandingTasks ? `${summary.outstandingTasks} outstanding` : null,
+    summary.pendingRoles ? `${summary.pendingRoles} responses pending` : null,
+    summary.missingRequiredFields
+      ? `${summary.missingRequiredFields} required fields missing`
+      : null,
     summary.quarantinedFiles ? `${summary.quarantinedFiles} quarantined` : null,
     activePendingInvitationCount
       ? `${activePendingInvitationCount} invitations pending`
@@ -171,6 +175,11 @@ export default function AdminSpeakers({ loaderData }: Route.ComponentProps) {
           <ButtonLink to="/admin/crm">Speaker Network</ButtonLink>
           <ButtonLink to="/admin/resources">Resources</ButtonLink>
           <ButtonLink to="/admin/tasks">Manage tasks</ButtonLink>
+          {summary.pendingRoles ? (
+            <ButtonLink to="/admin/communications/compose?audience=pending_participants">
+              Remind pending participants
+            </ButtonLink>
+          ) : null}
         </div>
       </div>
       <div className="crm-pulse">{pulse}</div>
@@ -653,153 +662,97 @@ export default function AdminSpeakers({ loaderData }: Route.ComponentProps) {
             </thead>
             <tbody>
               {speakers.length ? (
-                speakers.map((speaker) => (
-                  <tr
-                    id={`admin-speaker-${speaker.id}`}
-                    key={speaker.id}
-                    tabIndex={
-                      speaker.id === loaderData.focusedPersonId ? -1 : undefined
-                    }
-                  >
-                    <td data-label="Speaker">
-                      <div className="crm-person">
-                        <span className="avatar sm">
-                          {initials(speaker.name)}
-                        </span>
-                        <div className="crm-person-copy">
-                          <Link
-                            to={`/admin/speakers/${encodeURIComponent(speaker.id)}`}
-                          >
-                            {speaker.name}
-                          </Link>
-                          <small>{speaker.email}</small>
-                          <small>
-                            {[speaker.jobTitle, speaker.organisationName]
-                              .filter(Boolean)
-                              .join(" · ") || "Title not provided"}
-                          </small>
-                          <small>
-                            {speaker.sessionCount}{" "}
-                            {speaker.sessionCount === 1
-                              ? "session"
-                              : "sessions"}
-                            {" · "}
-                            {speaker.outstandingTasks
-                              ? `${speaker.outstandingTasks} outstanding`
-                              : `${speaker.completedTasks} complete`}
-                            {speaker.quarantinedFiles
-                              ? ` · ${speaker.quarantinedFiles} quarantined`
-                              : ""}
-                          </small>
-                          <div className="crm-mobile-chips">
-                            <span className="status">
-                              {
-                                statusPresentation(
-                                  "content",
-                                  speaker.profileStatus,
-                                ).label
-                              }
-                            </span>
-                            <span
-                              className={`status ${speaker.outstandingTasks === 0 ? "success" : "warning"}`}
-                            >
-                              {speaker.outstandingTasks === 0
-                                ? "Ready"
-                                : "Attention"}
-                            </span>
-                            {speaker.portalAccessAccepted ? (
-                              <span className="status">Access</span>
-                            ) : null}
-                          </div>
-                        </div>
-                      </div>
-                    </td>
-                    <td data-label="Workflow">
-                      <Form method="post" className="crm-inline-form">
-                        <input
-                          type="hidden"
-                          name="_intent"
-                          value="update_workflow_status"
-                        />
-                        <input
-                          type="hidden"
-                          name="personId"
-                          value={speaker.id}
-                        />
-                        <input
-                          type="hidden"
-                          name="idempotencyKey"
-                          value={loaderData.workflowIdempotencyKeys[speaker.id]}
-                        />
-                        <select
-                          className="select crm-quiet-select"
-                          name="status"
-                          defaultValue={speaker.workflowStatus}
-                          aria-label={`Workflow status for ${speaker.name}`}
-                        >
-                          <option value="prospect">Prospect</option>
-                          <option value="invited">Invited</option>
-                          <option value="confirmed">Confirmed</option>
-                          <option value="declined">Declined</option>
-                          <option value="withdrawn">Withdrawn</option>
-                        </select>
-                        <button
-                          className="crm-text-action"
-                          type="submit"
-                          disabled={navigation.state !== "idle"}
-                        >
-                          Save
-                        </button>
-                      </Form>
-                      <div className="crm-state crm-desktop-only">
-                        <DomainStatusBadge
-                          domain="content"
-                          status={speaker.profileStatus}
-                        />
-                      </div>
-                    </td>
-                    <td className="crm-col-optional" data-label="Sessions">
-                      {speaker.sessionCount}
-                    </td>
-                    <td
-                      className="crm-col-mobile-status"
-                      data-label="Readiness"
-                    >
-                      {speaker.outstandingTasks === 0 ? (
-                        <span className="status success">
-                          <CheckCircle2 aria-hidden size={13} /> Ready
-                        </span>
-                      ) : (
-                        <span className="status warning">Needs attention</span>
-                      )}
-                      {speaker.quarantinedFiles ? (
-                        <div className="status warning">
-                          <AlertTriangle aria-hidden size={13} />{" "}
-                          {speaker.quarantinedFiles} quarantined
-                        </div>
-                      ) : null}
-                    </td>
-                    <td
-                      className={
-                        speaker.portalAccessAccepted
-                          ? "crm-col-mobile-status"
+                speakers.map((speaker) => {
+                  const attentionCount =
+                    speaker.outstandingTasks +
+                    speaker.pendingRoles +
+                    speaker.missingRequiredFields +
+                    speaker.quarantinedFiles +
+                    (speaker.profileStatus === "published" ? 0 : 1);
+                  return (
+                    <tr
+                      id={`admin-speaker-${speaker.id}`}
+                      key={speaker.id}
+                      tabIndex={
+                        speaker.id === loaderData.focusedPersonId
+                          ? -1
                           : undefined
                       }
-                      data-label="Portal"
                     >
-                      {speaker.portalAccessAccepted ? (
-                        <span className="subtle">Access accepted</span>
-                      ) : speaker.workflowStatus === "declined" ||
-                        speaker.workflowStatus === "withdrawn" ? (
-                        <span className="help">
-                          Unavailable while {speaker.workflowStatus}
-                        </span>
-                      ) : (
-                        <Form method="post" className="crm-invite">
+                      <td data-label="Speaker">
+                        <div className="crm-person">
+                          <span className="avatar sm">
+                            {initials(speaker.name)}
+                          </span>
+                          <div className="crm-person-copy">
+                            <Link
+                              to={`/admin/speakers/${encodeURIComponent(speaker.id)}`}
+                            >
+                              {speaker.name}
+                            </Link>
+                            <small>{speaker.email}</small>
+                            <small>
+                              {[speaker.jobTitle, speaker.organisationName]
+                                .filter(Boolean)
+                                .join(" · ") || "Title not provided"}
+                            </small>
+                            {attentionCount ? (
+                              <small>
+                                {[
+                                  speaker.profileStatus !== "published"
+                                    ? "profile not published"
+                                    : null,
+                                  speaker.pendingRoles
+                                    ? `${speaker.pendingRoles} role response${speaker.pendingRoles === 1 ? "" : "s"}`
+                                    : null,
+                                  speaker.missingRequiredFields
+                                    ? `${speaker.missingRequiredFields} required field${speaker.missingRequiredFields === 1 ? "" : "s"}`
+                                    : null,
+                                ]
+                                  .filter(Boolean)
+                                  .join(" · ")}
+                              </small>
+                            ) : null}
+                            <small>
+                              {speaker.sessionCount}{" "}
+                              {speaker.sessionCount === 1
+                                ? "session"
+                                : "sessions"}
+                              {" · "}
+                              {speaker.outstandingTasks
+                                ? `${speaker.outstandingTasks} outstanding`
+                                : `${speaker.completedTasks} complete`}
+                              {speaker.quarantinedFiles
+                                ? ` · ${speaker.quarantinedFiles} quarantined`
+                                : ""}
+                            </small>
+                            <div className="crm-mobile-chips">
+                              <span className="status">
+                                {
+                                  statusPresentation(
+                                    "content",
+                                    speaker.profileStatus,
+                                  ).label
+                                }
+                              </span>
+                              <span
+                                className={`status ${attentionCount === 0 ? "success" : "warning"}`}
+                              >
+                                {attentionCount === 0 ? "Ready" : "Attention"}
+                              </span>
+                              {speaker.portalAccessAccepted ? (
+                                <span className="status">Access</span>
+                              ) : null}
+                            </div>
+                          </div>
+                        </div>
+                      </td>
+                      <td data-label="Workflow">
+                        <Form method="post" className="crm-inline-form">
                           <input
                             type="hidden"
                             name="_intent"
-                            value="send_speaker_invitation"
+                            value="update_workflow_status"
                           />
                           <input
                             type="hidden"
@@ -810,32 +763,117 @@ export default function AdminSpeakers({ loaderData }: Route.ComponentProps) {
                             type="hidden"
                             name="idempotencyKey"
                             value={
-                              loaderData.invitationIdempotencyKeys[speaker.id]
+                              loaderData.workflowIdempotencyKeys[speaker.id]
                             }
                           />
-                          <label>
-                            <input
-                              type="checkbox"
-                              name="confirmation"
-                              value="send"
-                              required
-                            />
-                            <span>Confirm email to {speaker.email}</span>
-                          </label>
+                          <select
+                            className="select crm-quiet-select"
+                            name="status"
+                            defaultValue={speaker.workflowStatus}
+                            aria-label={`Workflow status for ${speaker.name}`}
+                          >
+                            <option value="prospect">Prospect</option>
+                            <option value="invited">Invited</option>
+                            <option value="confirmed">Confirmed</option>
+                            <option value="declined">Declined</option>
+                            <option value="withdrawn">Withdrawn</option>
+                          </select>
                           <button
                             className="crm-text-action"
                             type="submit"
                             disabled={navigation.state !== "idle"}
                           >
-                            {speaker.portalInvitationPending
-                              ? "Resend portal invitation"
-                              : "Send portal invitation"}
+                            Save
                           </button>
                         </Form>
-                      )}
-                    </td>
-                  </tr>
-                ))
+                        <div className="crm-state crm-desktop-only">
+                          <DomainStatusBadge
+                            domain="content"
+                            status={speaker.profileStatus}
+                          />
+                        </div>
+                      </td>
+                      <td className="crm-col-optional" data-label="Sessions">
+                        {speaker.sessionCount}
+                      </td>
+                      <td
+                        className="crm-col-mobile-status"
+                        data-label="Readiness"
+                      >
+                        {attentionCount === 0 ? (
+                          <span className="status success">
+                            <CheckCircle2 aria-hidden size={13} /> Ready
+                          </span>
+                        ) : (
+                          <span className="status warning">
+                            Needs attention
+                          </span>
+                        )}
+                        {speaker.quarantinedFiles ? (
+                          <div className="status warning">
+                            <AlertTriangle aria-hidden size={13} />{" "}
+                            {speaker.quarantinedFiles} quarantined
+                          </div>
+                        ) : null}
+                      </td>
+                      <td
+                        className={
+                          speaker.portalAccessAccepted
+                            ? "crm-col-mobile-status"
+                            : undefined
+                        }
+                        data-label="Portal"
+                      >
+                        {speaker.portalAccessAccepted ? (
+                          <span className="subtle">Access accepted</span>
+                        ) : speaker.workflowStatus === "declined" ||
+                          speaker.workflowStatus === "withdrawn" ? (
+                          <span className="help">
+                            Unavailable while {speaker.workflowStatus}
+                          </span>
+                        ) : (
+                          <Form method="post" className="crm-invite">
+                            <input
+                              type="hidden"
+                              name="_intent"
+                              value="send_speaker_invitation"
+                            />
+                            <input
+                              type="hidden"
+                              name="personId"
+                              value={speaker.id}
+                            />
+                            <input
+                              type="hidden"
+                              name="idempotencyKey"
+                              value={
+                                loaderData.invitationIdempotencyKeys[speaker.id]
+                              }
+                            />
+                            <label>
+                              <input
+                                type="checkbox"
+                                name="confirmation"
+                                value="send"
+                                required
+                              />
+                              <span>Confirm email to {speaker.email}</span>
+                            </label>
+                            <button
+                              className="crm-text-action"
+                              type="submit"
+                              disabled={navigation.state !== "idle"}
+                            >
+                              {speaker.portalInvitationPending
+                                ? "Resend portal invitation"
+                                : "Send portal invitation"}
+                            </button>
+                          </Form>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })
               ) : (
                 <tr>
                   <td className="crm-empty" colSpan={5}>

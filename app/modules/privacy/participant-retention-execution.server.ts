@@ -287,6 +287,13 @@ export abstract class ParticipantRetentionExecution extends ParticipantRetention
                AND ${participantTaskEvidenceAuditSql("participant_task", "task_evidence")}
         )`,
       ),
+      mapStatement(this.env, mappings, "event_field_values", "person_id"),
+      mapStatement(
+        this.env,
+        mappings,
+        "event_field_values",
+        "updated_by_person_id",
+      ),
       mapStatement(this.env, mappings, "session_speakers", "person_id"),
       mapStatement(
         this.env,

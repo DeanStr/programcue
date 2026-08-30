@@ -120,8 +120,21 @@ export function buildParticipantRetentionFinalisationStatements(
     ),
     guarded(
       `UPDATE session_speakers
-          SET participation_decline_reason = NULL
-        WHERE event_id = ? AND participation_decline_reason IS NOT NULL`,
+          SET participation_status = 'pending', participation_revision = 1,
+              participation_confirmed_at = NULL,
+              participation_declined_at = NULL,
+              participation_decline_reason = NULL
+        WHERE event_id = ?`,
+      viewer.eventId,
+    ),
+    guarded(
+      `UPDATE session_participant_roles
+          SET participation_status = 'pending', participation_revision = 1,
+              participation_confirmed_at = NULL,
+              participation_declined_at = NULL,
+              participation_decline_reason = NULL,
+              updated_at = unixepoch()
+        WHERE event_id = ?`,
       viewer.eventId,
     ),
     guarded(
@@ -169,6 +182,11 @@ export function buildParticipantRetentionFinalisationStatements(
     ),
     guarded(
       `DELETE FROM schedule_review_links WHERE event_id = ?`,
+      viewer.eventId,
+    ),
+    guarded(
+      `DELETE FROM event_field_values
+        WHERE event_id = ? AND person_id IS NOT NULL`,
       viewer.eventId,
     ),
     guarded(

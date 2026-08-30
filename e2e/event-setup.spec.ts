@@ -20,6 +20,64 @@ test.afterAll(async ({ request }) => {
   await resetDemoEvent(request);
 });
 
+test("participant-visible session fields flow from event settings to the participant portal", async ({
+  page,
+}) => {
+  await page.goto("/admin/event/fields");
+  await expect(
+    page.getByRole("heading", { name: "Participant & session fields" }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("heading", { name: "Standard profile access" }),
+  ).toBeVisible();
+  await expect(page.getByLabel("Job title")).toHaveValue("editable");
+  await expect(
+    page.getByRole("heading", { name: "Reusable fields" }),
+  ).toBeVisible();
+  await expect(page.getByLabel("Record type")).toHaveValue("person");
+  await expect(page.getByLabel("Field type")).toHaveValue("short_text");
+  await expect(
+    page.getByRole("button", { name: "Create field" }),
+  ).toBeVisible();
+  await page.getByLabel("Record type").selectOption("session");
+  await page.getByLabel("Label", { exact: true }).fill("Speaker arrival note");
+  await page.getByLabel("Stable key").fill("speaker_arrival_note");
+  await page.getByLabel("Participant access").selectOption("read_only");
+  await page.getByRole("button", { name: "Create field" }).click();
+  await expect(page.locator(".validation-item[role='status']")).toContainText(
+    "Reusable event field created.",
+  );
+
+  await page.goto("/admin/content/sessions/session-demo-speaker");
+  await page
+    .getByLabel("Speaker arrival note")
+    .fill("Meet the producer in the green room.");
+  await page
+    .getByRole("button", { name: "Save additional information" })
+    .click();
+  await expect(page.locator(".validation-item[role='status']")).toContainText(
+    "Event-specific session fields saved.",
+  );
+
+  await page.context().addCookies([
+    {
+      name: "program_cue_demo_identity",
+      value: "speaker",
+      domain: "127.0.0.1",
+      path: "/",
+      httpOnly: true,
+      sameSite: "Lax",
+    },
+  ]);
+  await page.goto("/participant/sessions");
+  const session = page
+    .locator(".speaker-session-card")
+    .filter({ hasText: "Designing inclusive event technology" });
+  await expect(session).toContainText("Additional session information");
+  await expect(session).toContainText("Speaker arrival note");
+  await expect(session).toContainText("Meet the producer in the green room.");
+});
+
 async function showEventSettingsPanel(
   page: Page,
   name: "Identity" | "Structure" | "Access" | "Data",
@@ -355,6 +413,9 @@ test("Event Setup keeps save controls in reach on narrow screens", async ({
       page.getByText("Event settings saved.", { exact: true }),
     ).toBeVisible();
     await page.reload();
+    await page.locator("body[data-hydrated='true']").waitFor();
+    await showEventSettingsPanel(page, "Identity");
+    await expect(description).toBeVisible();
     await expect(description).toHaveValue(changed);
   } finally {
     await description.fill(original);

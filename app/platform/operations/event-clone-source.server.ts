@@ -18,6 +18,8 @@ export async function readEventCloneSource(
     communicationTemplates,
     communicationVersions,
     communicationTriggers,
+    participantFieldPolicies,
+    fieldDefinitions,
   ] = await Promise.all([
     env.DB.prepare(
       `SELECT venue_name AS venueName,
@@ -98,7 +100,7 @@ export async function readEventCloneSource(
         isPublic: number;
       }>(),
     env.DB.prepare(
-      "SELECT id, name, description, kind, closes_at AS closesAt, submission_limit AS submissionLimit, min_speakers AS minSpeakers, max_speakers AS maxSpeakers, access_mode AS accessMode, confirmation_template_id AS confirmationTemplateId FROM form_definitions WHERE event_id = ? AND status <> 'archived' ORDER BY created_at, id",
+      "SELECT id, name, description, kind, closes_at AS closesAt, submission_limit AS submissionLimit, per_person_submission_limit AS perPersonSubmissionLimit, min_speakers AS minSpeakers, max_speakers AS maxSpeakers, access_mode AS accessMode, confirmation_template_id AS confirmationTemplateId FROM form_definitions WHERE event_id = ? AND status <> 'archived' ORDER BY created_at, id",
     )
       .bind(viewer.eventId)
       .all<{
@@ -108,6 +110,7 @@ export async function readEventCloneSource(
         kind: string;
         closesAt: number | null;
         submissionLimit: number | null;
+        perPersonSubmissionLimit: number | null;
         minSpeakers: number;
         maxSpeakers: number | null;
         accessMode: string;
@@ -220,6 +223,42 @@ export async function readEventCloneSource(
         triggerType: string;
         configurationJson: string;
       }>(),
+    env.DB.prepare(
+      `SELECT field_key AS fieldKey, participant_access AS participantAccess
+         FROM event_participant_field_policies
+        WHERE event_id = ? ORDER BY field_key`,
+    )
+      .bind(viewer.eventId)
+      .all<{
+        fieldKey: string;
+        participantAccess: "hidden" | "read_only" | "editable";
+      }>(),
+    env.DB.prepare(
+      `SELECT owner_type AS ownerType, field_key AS fieldKey, label,
+              field_type AS fieldType, options_json AS optionsJson,
+              participant_access AS participantAccess, required, position
+         FROM event_field_definitions
+        WHERE event_id = ? AND status = 'active'
+        ORDER BY owner_type, position, field_key`,
+    )
+      .bind(viewer.eventId)
+      .all<{
+        ownerType: "person" | "session";
+        fieldKey: string;
+        label: string;
+        fieldType:
+          | "short_text"
+          | "long_text"
+          | "number"
+          | "boolean"
+          | "date"
+          | "single_choice"
+          | "multiple_choice";
+        optionsJson: string;
+        participantAccess: "hidden" | "read_only" | "editable";
+        required: number;
+        position: number;
+      }>(),
   ]);
   return {
     source,
@@ -235,6 +274,8 @@ export async function readEventCloneSource(
     communicationTemplates,
     communicationVersions,
     communicationTriggers,
+    participantFieldPolicies,
+    fieldDefinitions,
   };
 }
 

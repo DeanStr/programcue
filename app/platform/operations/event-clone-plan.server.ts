@@ -240,6 +240,8 @@ export function buildEventClonePlan(
     communicationTemplates,
     communicationVersions,
     communicationTriggers,
+    participantFieldPolicies,
+    fieldDefinitions,
   } = data;
   if (
     source.participantLogoUrl ||
@@ -307,6 +309,8 @@ export function buildEventClonePlan(
     communicationTemplates.results.length +
     communicationVersions.results.length +
     communicationTriggers.results.length +
+    participantFieldPolicies.results.length +
+    fieldDefinitions.results.length +
     reusedSenderCount;
   if (recordCount > 500) {
     throw new Error(
@@ -474,6 +478,38 @@ export function buildEventClonePlan(
         row.isPublic,
       ),
     ),
+    ...participantFieldPolicies.results.map((row) =>
+      env.DB.prepare(
+        `INSERT INTO event_participant_field_policies (
+           event_id, field_key, participant_access, updated_by_person_id,
+           updated_at
+         ) VALUES (?, ?, ?, ?, unixepoch())`,
+      ).bind(eventId, row.fieldKey, row.participantAccess, viewer.personId),
+    ),
+    ...fieldDefinitions.results.map((row) =>
+      env.DB.prepare(
+        `INSERT INTO event_field_definitions (
+           id, event_id, owner_type, field_key, label, field_type,
+           options_json, participant_access, required, position, status,
+           revision, created_by_person_id, updated_by_person_id, created_at,
+           updated_at
+         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'active', 1, ?, ?,
+                   unixepoch(), unixepoch())`,
+      ).bind(
+        crypto.randomUUID(),
+        eventId,
+        row.ownerType,
+        row.fieldKey,
+        row.label,
+        row.fieldType,
+        row.optionsJson,
+        row.participantAccess,
+        row.required,
+        row.position,
+        viewer.personId,
+        viewer.personId,
+      ),
+    ),
     ...communicationTemplates.results.map((row) =>
       env.DB.prepare(
         "INSERT INTO communication_templates (id,event_id,name,category,status,last_operation_id,created_by_person_id,created_at,updated_at) VALUES (?,?,?,?, 'draft',?,?,unixepoch(),unixepoch())",
@@ -521,7 +557,7 @@ export function buildEventClonePlan(
         row.id,
       );
       return env.DB.prepare(
-        "INSERT INTO form_definitions (id,event_id,name,description,kind,status,public_slug,closes_at,submission_limit,min_speakers,max_speakers,access_mode,confirmation_template_id,revision,last_operation_id,created_by_person_id,created_at,updated_at) VALUES (?,?,?,?,?,'draft',?,NULL,?,?,?,?,?,1,?,?,unixepoch(),unixepoch())",
+        "INSERT INTO form_definitions (id,event_id,name,description,kind,status,public_slug,opens_at,closes_at,submission_limit,per_person_submission_limit,min_speakers,max_speakers,access_mode,confirmation_template_id,revision,last_operation_id,created_by_person_id,created_at,updated_at) VALUES (?,?,?,?,?,'draft',?,NULL,NULL,?,?,?,?,?,?,1,?,?,unixepoch(),unixepoch())",
       ).bind(
         formIds.get(row.id),
         eventId,
@@ -530,6 +566,7 @@ export function buildEventClonePlan(
         row.kind,
         formSlugs.get(row.id),
         row.submissionLimit,
+        row.perPersonSubmissionLimit,
         row.minSpeakers,
         row.maxSpeakers,
         row.accessMode === "password_protected"
@@ -556,6 +593,7 @@ export function buildEventClonePlan(
       const settings = {
         ...jsonObject(row.settingsJson, `Form version ${row.id} settings`),
         publicSlug: formSlugs.get(row.formId),
+        opensAt: null,
         closesAt: null,
         accessMode,
       };
@@ -652,6 +690,8 @@ export function buildEventClonePlan(
     taskTemplates: clonedTaskTemplates.length,
     communicationTemplates: communicationTemplates.results.length,
     communicationTemplateVersions: communicationVersions.results.length,
+    participantFieldPolicies: participantFieldPolicies.results.length,
+    fieldDefinitions: fieldDefinitions.results.length,
     senders: reusedSenderCount,
   };
   statements.push(

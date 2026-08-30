@@ -2,10 +2,13 @@ import { env } from "cloudflare:test";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import type { AirtableProviderBoundary } from "~/modules/airtable/airtable-provider-boundary.server";
+import { ensureDemoSpeakerData } from "~/modules/speakers/demo.server";
+import { ensureDemoSubmissionForm } from "~/modules/submissions/demo-submissions.server";
 import type { Viewer } from "~/platform/auth/authorize.server";
 import { ensureDemoData } from "~/platform/demo/seed.server";
 import { CommunicationAutomationService } from "./communication-automation-service.server";
 import { CommunicationService } from "./communication-service.server";
+import { RecipientQuery } from "./recipient-query.server";
 
 const viewer: Viewer = {
   personId: "person-demo-admin",
@@ -309,6 +312,227 @@ describe("communication scheduling and reminder automation", () => {
     )
       .bind(trigger.id, viewer.eventId)
       .run();
+  });
+
+  it("runs fixed reminders for unsubmitted drafts and pending participant roles", async () => {
+    const { testEnv, queued } = await environment();
+    const service = new CommunicationService(testEnv);
+    const automation = new CommunicationAutomationService(testEnv);
+    const now = Math.floor(Date.now() / 1_000);
+    await ensureDemoSubmissionForm(testEnv);
+    await ensureDemoSpeakerData(testEnv);
+    const template = await publishedTemplate(
+      service,
+      "task_reminder",
+      "Hello {{recipient.firstName}}, your event action is still pending.",
+    );
+    const setup = await testEnv.DB.batch([
+      testEnv.DB.prepare(
+        `INSERT INTO session_participant_roles (
+           event_id, session_id, person_id, role, label, position,
+           participation_status, participation_revision,
+           created_at, updated_at
+         )
+         SELECT relationship.event_id, relationship.session_id,
+                relationship.person_id, 'speaker', 'Speaker', 0,
+                'pending', 1, unixepoch(), unixepoch()
+           FROM session_speakers relationship
+          WHERE relationship.event_id = ?
+            AND relationship.session_id = 'session-demo-speaker'
+            AND relationship.person_id = 'person-demo-speaker'
+         ON CONFLICT(session_id, person_id, role) DO UPDATE SET
+           participation_status = 'pending',
+           participation_revision = session_participant_roles.participation_revision + 1,
+           participation_confirmed_at = NULL,
+           participation_declined_at = NULL,
+           participation_decline_reason = NULL,
+           updated_at = unixepoch()`,
+      ).bind(viewer.eventId),
+      testEnv.DB.prepare(
+        `INSERT INTO submissions (
+           id, event_id, form_version_id, submitter_person_id,
+           public_reference, title, status, answers_json,
+           revision, created_at, updated_at
+         )
+         SELECT ?, form.event_id, version.id, 'person-demo-submitter',
+                ?, 'Reminder draft', 'draft', '{}', 1, unixepoch(), unixepoch()
+           FROM form_definitions form
+           JOIN form_versions version
+             ON version.form_id = form.id AND version.event_id = form.event_id
+            AND version.status = 'published'
+          WHERE form.event_id = ? AND form.status = 'published'
+          LIMIT 1`,
+      ).bind(
+        crypto.randomUUID(),
+        `PC-${crypto.randomUUID().slice(0, 8)}`,
+        viewer.eventId,
+      ),
+    ]);
+    expect(setup[0]?.meta.changes).toBeGreaterThanOrEqual(1);
+    expect(setup[1]?.meta.changes).toBe(1);
+    const applicationTrigger = await service.saveTrigger(viewer, {
+      templateId: template.templateId,
+      triggerType: "application_draft",
+      audienceType: "draft_applicants",
+      kind: "transactional",
+      sendHourUtc: new Date(now * 1_000).getUTCHours(),
+      enabled: true,
+    });
+    const participationTrigger = await service.saveTrigger(viewer, {
+      templateId: template.templateId,
+      triggerType: "participation_pending",
+      audienceType: "pending_participants",
+      kind: "transactional",
+      sendHourUtc: new Date(now * 1_000).getUTCHours(),
+      enabled: true,
+    });
+
+    const reminders = await automation.runReminderTriggers(now);
+    await testEnv.DB.prepare(
+      `UPDATE communication_triggers SET enabled = 0
+        WHERE event_id = ? AND id IN (?, ?)`,
+    )
+      .bind(viewer.eventId, applicationTrigger.id, participationTrigger.id)
+      .run();
+    expect(reminders).toEqual({
+      queued: 2,
+      noRecipients: 0,
+      failed: 0,
+    });
+    expect(queued).toHaveLength(2);
+  });
+
+  it("does not remind applicants about drafts blocked by form capacity", async () => {
+    const { testEnv } = await environment();
+    await ensureDemoSubmissionForm(testEnv);
+    const token = crypto.randomUUID();
+    const personId = `blocked-draft-person-${token}`;
+    const address = `blocked-draft-${token}@example.com`;
+    const firstDraftId = `blocked-draft-one-${token}`;
+    const secondDraftId = `blocked-draft-two-${token}`;
+    const submittedId = `blocked-draft-submitted-${token}`;
+    const form = await testEnv.DB.prepare(
+      `SELECT form.id, version.id AS versionId,
+              form.submission_limit AS submissionLimit,
+              form.per_person_submission_limit AS perPersonSubmissionLimit
+         FROM form_definitions form
+         JOIN form_versions version
+           ON version.form_id = form.id AND version.event_id = form.event_id
+          AND version.status = 'published'
+        WHERE form.event_id = ? AND form.status = 'published'
+        ORDER BY form.id LIMIT 1`,
+    )
+      .bind(viewer.eventId)
+      .first<{
+        id: string;
+        versionId: string;
+        submissionLimit: number | null;
+        perPersonSubmissionLimit: number | null;
+      }>();
+    if (!form) throw new Error("Published reminder test form is missing.");
+    await testEnv.DB.batch([
+      testEnv.DB.prepare(
+        `INSERT INTO people (
+           id, email, display_name, email_verified, created_at, updated_at
+         ) VALUES (?, ?, 'Capacity blocked applicant', 1, unixepoch(), unixepoch())`,
+      ).bind(personId, address),
+      testEnv.DB.prepare(
+        `INSERT INTO submissions (
+           id, event_id, form_version_id, submitter_person_id,
+           public_reference, title, status, answers_json, revision,
+           created_at, updated_at
+         ) VALUES (?, ?, ?, ?, ?, 'Capacity draft', 'draft', '{}', 1,
+                   unixepoch(), unixepoch())`,
+      ).bind(
+        firstDraftId,
+        viewer.eventId,
+        form.versionId,
+        personId,
+        `CAPACITY-DRAFT-${token}`,
+      ),
+    ]);
+    try {
+      const preview = () =>
+        new RecipientQuery(testEnv).preview(viewer, {
+          audienceType: "draft_applicants",
+          manualRecipients: "",
+          category: "task_reminder",
+          kind: "transactional",
+        });
+
+      await expect(preview()).resolves.toMatchObject({
+        deliverable: expect.arrayContaining([
+          expect.objectContaining({ address, sourceId: firstDraftId }),
+        ]),
+      });
+
+      await testEnv.DB.batch([
+        testEnv.DB.prepare(
+          `UPDATE form_definitions SET submission_limit = 1
+          WHERE id = ? AND event_id = ?`,
+        ).bind(form.id, viewer.eventId),
+        testEnv.DB.prepare(
+          `INSERT INTO submissions (
+           id, event_id, form_version_id, submitter_person_id,
+           public_reference, title, status, answers_json,
+           submitted_snapshot_json, revision, submitted_at,
+           created_at, updated_at
+         ) VALUES (?, ?, ?, ?, ?, 'Submitted capacity use', 'submitted', '{}',
+                   '{"answers":{},"speakers":[]}', 1, unixepoch(),
+                   unixepoch(), unixepoch())`,
+        ).bind(
+          submittedId,
+          viewer.eventId,
+          form.versionId,
+          personId,
+          `CAPACITY-SUBMITTED-${token}`,
+        ),
+      ]);
+      expect((await preview()).deliverable).not.toEqual(
+        expect.arrayContaining([expect.objectContaining({ address })]),
+      );
+
+      await testEnv.DB.batch([
+        testEnv.DB.prepare(
+          `DELETE FROM submissions WHERE id = ? AND event_id = ?`,
+        ).bind(submittedId, viewer.eventId),
+        testEnv.DB.prepare(
+          `UPDATE form_definitions
+            SET submission_limit = NULL, per_person_submission_limit = 1
+          WHERE id = ? AND event_id = ?`,
+        ).bind(form.id, viewer.eventId),
+        testEnv.DB.prepare(
+          `INSERT INTO submissions (
+           id, event_id, form_version_id, submitter_person_id,
+           public_reference, title, status, answers_json, revision,
+           created_at, updated_at
+         ) VALUES (?, ?, ?, ?, ?, 'Second capacity draft', 'draft', '{}', 1,
+                   unixepoch(), unixepoch())`,
+        ).bind(
+          secondDraftId,
+          viewer.eventId,
+          form.versionId,
+          personId,
+          `CAPACITY-DRAFT-TWO-${token}`,
+        ),
+      ]);
+      expect((await preview()).deliverable).not.toEqual(
+        expect.arrayContaining([expect.objectContaining({ address })]),
+      );
+    } finally {
+      await testEnv.DB.prepare(
+        `UPDATE form_definitions
+            SET submission_limit = ?, per_person_submission_limit = ?
+          WHERE id = ? AND event_id = ?`,
+      )
+        .bind(
+          form.submissionLimit,
+          form.perPersonSubmissionLimit,
+          form.id,
+          viewer.eventId,
+        )
+        .run();
+    }
   });
 
   it("marks a no-recipient reminder day complete instead of retrying all day", async () => {

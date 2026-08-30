@@ -190,6 +190,22 @@ describe("participant retention", () => {
         fileTaskId,
         JSON.stringify({ evidenceId: fileTaskEvidenceId }),
       ),
+      seeded.testEnv.DB.prepare(
+        `UPDATE session_participant_roles
+            SET participation_status = 'declined', participation_revision = 3,
+                participation_confirmed_at = NULL,
+                participation_declined_at = unixepoch(),
+                participation_decline_reason = 'Private response reason'
+          WHERE event_id = ? AND session_id = ? AND person_id = ?`,
+      ).bind(seeded.eventId, seeded.sessionId, seeded.exclusiveId),
+      seeded.testEnv.DB.prepare(
+        `UPDATE session_speakers
+            SET participation_status = 'declined', participation_revision = 3,
+                participation_confirmed_at = NULL,
+                participation_declined_at = unixepoch(),
+                participation_decline_reason = 'Private response reason'
+          WHERE event_id = ? AND session_id = ? AND person_id = ?`,
+      ).bind(seeded.eventId, seeded.sessionId, seeded.exclusiveId),
     ]);
     const service = new ParticipantRetentionService(seeded.testEnv);
     const preview = await service.preview(seeded.owner);
@@ -405,6 +421,40 @@ describe("participant retention", () => {
         { personId: "person-demo-owner" },
       ]),
     );
+    const retainedResponses = await seeded.testEnv.DB.prepare(
+      `SELECT participation_status AS status,
+              participation_revision AS revision,
+              participation_confirmed_at AS confirmedAt,
+              participation_declined_at AS declinedAt,
+              participation_decline_reason AS declineReason
+         FROM session_speakers
+        WHERE event_id = ?
+        UNION ALL
+       SELECT participation_status, participation_revision,
+              participation_confirmed_at, participation_declined_at,
+              participation_decline_reason
+         FROM session_participant_roles
+        WHERE event_id = ?`,
+    )
+      .bind(seeded.eventId, seeded.eventId)
+      .all<{
+        status: string;
+        revision: number;
+        confirmedAt: number | null;
+        declinedAt: number | null;
+        declineReason: string | null;
+      }>();
+    expect(retainedResponses.results.length).toBeGreaterThan(0);
+    expect(
+      retainedResponses.results.every(
+        (response) =>
+          response.status === "pending" &&
+          response.revision === 1 &&
+          response.confirmedAt === null &&
+          response.declinedAt === null &&
+          response.declineReason === null,
+      ),
+    ).toBe(true);
     const workflowRows = await seeded.testEnv.DB.prepare(
       `SELECT person_id AS personId
          FROM event_speaker_workflows
@@ -1152,6 +1202,26 @@ describe("participant retention", () => {
 
   it("rejects participant PII writes after the durable completion tombstone", async () => {
     const seeded = await seedExpiredRetentionEvent();
+    const fieldDefinitionId = id("post-retention-person-field-definition");
+    await seeded.testEnv.DB.prepare(
+      `INSERT INTO event_field_definitions (
+         id, event_id, owner_type, field_key, label, field_type,
+         participant_access, created_by_person_id, updated_by_person_id
+       ) VALUES (?, ?, 'person', 'private_follow_up', 'Private follow-up',
+                 'short_text', 'editable', 'person-demo-owner',
+                 'person-demo-owner')`,
+    )
+      .bind(fieldDefinitionId, seeded.eventId)
+      .run();
+    await seeded.testEnv.DB.prepare(
+      `INSERT INTO event_field_values (
+         definition_id, event_id, person_id, value_json,
+         updated_by_person_id, updated_at
+       ) VALUES (?, ?, ?, '"Private value to remove"',
+                 'person-demo-owner', 0)`,
+    )
+      .bind(fieldDefinitionId, seeded.eventId, seeded.exclusiveId)
+      .run();
     const service = new ParticipantRetentionService(seeded.testEnv);
     await service.anonymiseExpiredParticipants(seeded.owner, {
       confirmation: "Expired privacy event",
@@ -1164,8 +1234,37 @@ describe("participant retention", () => {
       .bind(seeded.exclusiveSubmissionId)
       .first<{ personId: string }>();
     expect(retained?.personId).toMatch(/^retained-participant-/);
+    await expect(
+      seeded.testEnv.DB.prepare(
+        `SELECT COUNT(*) AS total FROM event_field_values
+          WHERE event_id = ? AND definition_id = ?`,
+      )
+        .bind(seeded.eventId, fieldDefinitionId)
+        .first(),
+    ).resolves.toEqual({ total: 0 });
     const lockMessage =
       "event participant retention is complete; participant PII is read-only";
+
+    await expect(
+      seeded.testEnv.DB.prepare(
+        `INSERT INTO session_participant_roles (
+           event_id, session_id, person_id, role, label
+         ) VALUES (?, ?, ?, 'moderator', 'Moderator')`,
+      )
+        .bind(seeded.eventId, seeded.sessionId, retained!.personId)
+        .run(),
+    ).rejects.toThrow(lockMessage);
+    await expect(
+      seeded.testEnv.DB.prepare(
+        `INSERT INTO event_field_values (
+           definition_id, event_id, person_id, value_json,
+           updated_by_person_id, updated_at
+         ) VALUES (?, ?, ?, '"Restored private field value"',
+                   'person-demo-owner', 0)`,
+      )
+        .bind(fieldDefinitionId, seeded.eventId, retained!.personId)
+        .run(),
+    ).rejects.toThrow(lockMessage);
 
     await expect(
       seeded.testEnv.DB.prepare(

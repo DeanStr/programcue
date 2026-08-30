@@ -278,8 +278,10 @@ export async function handleClaimedSpeakerIntent(input: {
       request,
       {
         revision: formData.get("revision"),
-        name: formData.get("name"),
-        biography: formData.get("biography"),
+        name: formData.has("name") ? formData.get("name") : undefined,
+        biography: formData.has("biography")
+          ? formData.get("biography")
+          : undefined,
       },
     );
     const query = await applicationNoticeQuery(env, {
@@ -611,8 +613,10 @@ export async function handleAuthenticatedApplicationIntent({
   if (intent === "update_profile") {
     await service.updateClaimedSpeakerProfile(slug, applicant, {
       revision: formData.get("revision"),
-      name: formData.get("name"),
-      biography: formData.get("biography"),
+      name: formData.has("name") ? formData.get("name") : undefined,
+      biography: formData.has("biography")
+        ? formData.get("biography")
+        : undefined,
     });
     const query = await applicationNoticeQuery(env, {
       slug,

@@ -21,6 +21,8 @@ export const audienceTypeSchema = z.enum([
   "incomplete_speakers",
   "due_speakers",
   "overdue_speakers",
+  "draft_applicants",
+  "pending_participants",
   "event_administrators",
   "manual",
 ]);
@@ -139,15 +141,26 @@ export const testCommunicationSchema = z.object({
   idempotencyKey: z.string().trim().min(8).max(128),
 });
 
+const reminderTriggerTypeSchema = z.enum([
+  "task_due",
+  "task_overdue",
+  "application_draft",
+  "participation_pending",
+]);
+
+const reminderAudienceTypeSchema = z.enum([
+  "due_speakers",
+  "overdue_speakers",
+  "draft_applicants",
+  "pending_participants",
+  "event_administrators",
+]);
+
 export const saveCommunicationTriggerSchema = z.object({
   id: z.uuid().optional(),
   templateId: z.uuid(),
-  triggerType: z.enum(["task_due", "task_overdue"]),
-  audienceType: z.enum([
-    "due_speakers",
-    "overdue_speakers",
-    "event_administrators",
-  ]),
+  triggerType: reminderTriggerTypeSchema,
+  audienceType: reminderAudienceTypeSchema,
   kind: z.enum(["transactional", "optional"]),
   sendHourUtc: z.coerce.number().int().min(0).max(23),
   enabled: z.boolean(),
@@ -155,11 +168,7 @@ export const saveCommunicationTriggerSchema = z.object({
 
 export const communicationTriggerConfigurationSchema = z
   .object({
-    audienceType: z.enum([
-      "due_speakers",
-      "overdue_speakers",
-      "event_administrators",
-    ]),
+    audienceType: reminderAudienceTypeSchema,
     kind: z.enum(["transactional", "optional"]),
     sendHourUtc: z.number().int().min(0).max(23),
     lastRunBucket: z.string().optional(),

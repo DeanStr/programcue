@@ -57,8 +57,15 @@ export class SubmissionSubmittedRevisionWorkflows extends SubmissionServiceFound
         "Verify your email before revising this application.",
       );
     }
-    const parsedPayload = draftPayloadSchema.parse(rawPayload);
     const currentForm = await this.getPublicForm(publicSlug);
+    const restoredPayload =
+      await this.restoreProtectedParticipantDraftSpeakerFields(
+        currentForm,
+        applicant,
+        rawPayload,
+        false,
+      );
+    const parsedPayload = draftPayloadSchema.parse(restoredPayload);
     const scope = await this.publicScope(currentForm.eventId);
     const identity = await airtableIntentCommand(
       SUBMITTED_REVISION_SCOPE,

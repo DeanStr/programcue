@@ -1682,6 +1682,131 @@ describe("Submissions D1 vertical slice", () => {
         displayName: "Co-speaker Owned Name",
         invitationStatus: "claimed",
       });
+      const protectedProfile = await env.DB.prepare(
+        "SELECT profile_revision AS revision FROM people WHERE id = ?",
+      )
+        .bind(claimed.applicant.personId)
+        .first<{ revision: number }>();
+      if (!protectedProfile) {
+        throw new Error("The claimed speaker profile is missing.");
+      }
+      await env.DB.batch([
+        env.DB.prepare(
+          `INSERT INTO event_participant_field_policies (
+             event_id, field_key, participant_access,
+             updated_by_person_id, updated_at
+           ) VALUES (?, 'name', 'hidden', ?, unixepoch())
+           ON CONFLICT(event_id, field_key) DO UPDATE SET
+             participant_access = excluded.participant_access,
+             updated_by_person_id = excluded.updated_by_person_id,
+             updated_at = excluded.updated_at`,
+        ).bind(viewer.eventId, viewer.personId),
+        env.DB.prepare(
+          `INSERT INTO event_participant_field_policies (
+             event_id, field_key, participant_access,
+             updated_by_person_id, updated_at
+           ) VALUES (?, 'biography', 'read_only', ?, unixepoch())
+           ON CONFLICT(event_id, field_key) DO UPDATE SET
+             participant_access = excluded.participant_access,
+             updated_by_person_id = excluded.updated_by_person_id,
+             updated_at = excluded.updated_at`,
+        ).bind(viewer.eventId, viewer.personId),
+      ]);
+      await service.updateClaimedSpeakerProfile(slug, claimed.applicant, {
+        revision: protectedProfile.revision,
+        name: "Attempted protected name",
+        biography: "Attempted protected biography.",
+      });
+      await expect(
+        env.DB.prepare(
+          "SELECT display_name AS name, biography FROM people WHERE id = ?",
+        )
+          .bind(claimed.applicant.personId)
+          .first(),
+      ).resolves.toEqual({
+        name: "Co-speaker Owned Name",
+        biography: "Biography owned by the claimed co-speaker.",
+      });
+      await expect(
+        service.getApplicantPortal(
+          slug,
+          new Request(`https://example.com/apply/${slug}`, {
+            headers: { cookie: claimed.cookie.split(";")[0] },
+          }),
+        ),
+      ).resolves.toMatchObject({
+        speakerProfile: {
+          biography: "Biography owned by the claimed co-speaker.",
+          fieldAccess: { name: "hidden", biography: "read_only" },
+        },
+      });
+      const protectedPortal = await service.getApplicantPortal(
+        slug,
+        new Request(`https://example.com/apply/${slug}`, {
+          headers: { cookie: claimed.cookie.split(";")[0] },
+        }),
+      );
+      expect(protectedPortal.speakerProfile).not.toHaveProperty("name");
+      expect(protectedPortal.applicant).not.toHaveProperty("name");
+      expect(protectedPortal.applicant).toHaveProperty(
+        "biography",
+        "Biography owned by the claimed co-speaker.",
+      );
+      await env.DB.prepare(
+        `UPDATE event_participant_field_policies
+            SET participant_access = 'hidden', updated_at = unixepoch()
+          WHERE event_id = ? AND field_key = 'biography'`,
+      )
+        .bind(viewer.eventId)
+        .run();
+      const fullyProtectedPortal = await service.getApplicantPortal(
+        slug,
+        new Request(`https://example.com/apply/${slug}`, {
+          headers: { cookie: claimed.cookie.split(";")[0] },
+        }),
+      );
+      expect(fullyProtectedPortal.applicant).not.toHaveProperty("name");
+      expect(fullyProtectedPortal.applicant).not.toHaveProperty("biography");
+      await env.DB.prepare(
+        `UPDATE event_participant_field_policies
+            SET participant_access = 'read_only', updated_at = unixepoch()
+          WHERE event_id = ? AND field_key = 'biography'`,
+      )
+        .bind(viewer.eventId)
+        .run();
+      await env.DB.prepare(
+        `UPDATE event_participant_field_policies
+            SET participant_access = 'editable', updated_at = unixepoch()
+          WHERE event_id = ? AND field_key = 'name'`,
+      )
+        .bind(viewer.eventId)
+        .run();
+      const partialProfile = await env.DB.prepare(
+        "SELECT profile_revision AS revision FROM people WHERE id = ?",
+      )
+        .bind(claimed.applicant.personId)
+        .first<{ revision: number }>();
+      await service.updateClaimedSpeakerProfile(slug, claimed.applicant, {
+        revision: partialProfile!.revision,
+        name: "Allowed partial profile name",
+        biography: "The protected biography must remain unchanged.",
+      });
+      await expect(
+        env.DB.prepare(
+          "SELECT display_name AS name, biography FROM people WHERE id = ?",
+        )
+          .bind(claimed.applicant.personId)
+          .first(),
+      ).resolves.toEqual({
+        name: "Allowed partial profile name",
+        biography: "Biography owned by the claimed co-speaker.",
+      });
+      await env.DB.prepare(
+        `DELETE FROM event_participant_field_policies
+          WHERE event_id = ? AND field_key IN ('name','biography')`,
+      )
+        .bind(viewer.eventId)
+        .run();
       const adminDetail = await service.getAdminSubmission(
         viewer,
         submissionId,

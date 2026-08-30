@@ -127,6 +127,8 @@ export type AdminSpeakerListItem = {
   outstandingTasks: number;
   completedTasks: number;
   quarantinedFiles: number;
+  pendingRoles: number;
+  missingRequiredFields: number;
   portalAccessAccepted: number;
   portalInvitationPending: number;
 };

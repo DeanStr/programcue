@@ -1,9 +1,21 @@
 import type { AirtableProviderBoundary } from "~/modules/airtable/airtable-provider-boundary.server";
+import {
+  type EventFieldDefinitionValue,
+  EventFieldService,
+  participantVisibleProfile,
+} from "~/modules/fields/event-field-service.server";
+import type {
+  FixedParticipantProfileFieldKey,
+  ParticipantFieldAccess,
+} from "~/modules/fields/event-field-types";
 import { parseEventFilePolicy } from "~/modules/files/file-policy";
 import { PublishedHeadshotService } from "~/modules/programme/published-headshot-service.server";
 import { canonicalSessionDetailsReviewTaskSql } from "~/modules/tasks/session-details-review.server";
 import type { Viewer } from "~/platform/auth/authorize.server";
-import { readSpeakerProfileHistory } from "./speaker-profile-revision.server";
+import {
+  readSpeakerProfileHistory,
+  type SpeakerProfileRevision,
+} from "./speaker-profile-revision.server";
 
 export type ProfileRow = {
   id: string;
@@ -19,6 +31,62 @@ export type ProfileRow = {
   profileStatus: "draft" | "published" | "archived";
   revision: number;
 };
+
+type ParticipantProfileProperty =
+  | "name"
+  | "biography"
+  | "pronunciation"
+  | "organisationName"
+  | "jobTitle"
+  | "linkedinUrl"
+  | "xHandle"
+  | "travelPreferences";
+
+type ParticipantProfileRow = Omit<ProfileRow, ParticipantProfileProperty> &
+  Partial<Pick<ProfileRow, ParticipantProfileProperty>>;
+
+type ParticipantProfileRevisionProperty =
+  | "displayName"
+  | "biography"
+  | "pronunciation"
+  | "organisationName"
+  | "jobTitle";
+
+type ParticipantProfileRevision = Omit<
+  SpeakerProfileRevision,
+  ParticipantProfileRevisionProperty
+> &
+  Partial<Pick<SpeakerProfileRevision, ParticipantProfileRevisionProperty>>;
+
+const revisionPropertyByPolicy = {
+  name: "displayName",
+  biography: "biography",
+  pronunciation: "pronunciation",
+  organisation_name: "organisationName",
+  job_title: "jobTitle",
+} as const satisfies Partial<
+  Record<FixedParticipantProfileFieldKey, ParticipantProfileRevisionProperty>
+>;
+
+function participantVisibleProfileHistory(
+  revisions: SpeakerProfileRevision[],
+  policies: Record<FixedParticipantProfileFieldKey, ParticipantFieldAccess>,
+) {
+  return revisions.map((revision) => {
+    const visible: Partial<SpeakerProfileRevision> = { ...revision };
+    if (policies.name === "hidden") {
+      delete visible.recordedByName;
+    }
+    for (const fieldKey of Object.keys(revisionPropertyByPolicy) as Array<
+      keyof typeof revisionPropertyByPolicy
+    >) {
+      if (policies[fieldKey] === "hidden") {
+        delete visible[revisionPropertyByPolicy[fieldKey]];
+      }
+    }
+    return visible as ParticipantProfileRevision;
+  });
+}
 
 export type SessionRow = {
   id: string;
@@ -38,15 +106,67 @@ export type SessionRow = {
   endsAt: number | null;
   roomName: string | null;
   sessionDetailsReviewTaskId: string | null;
+  roles: ParticipantRoleRow[];
+  customFields: EventFieldDefinitionValue[];
+};
+
+export type ParticipantRoleRow = {
+  sessionId: string;
+  role: "speaker" | "moderator" | "chair";
+  label: string;
+  position: number;
+  participationStatus: "pending" | "confirmed" | "declined";
+  participationRevision: number;
+  participationConfirmedAt: number | null;
+  participationDeclinedAt: number | null;
+  participationDeclineReason: string | null;
 };
 
 export type SessionParticipantRow = {
   sessionId: string;
   position: number;
-  name: string;
-  roleLabel: string | null;
+  name?: string;
+  roles: SessionParticipantRoleSummary[];
+};
+
+export type SessionParticipantRoleSummary = {
+  role: "speaker" | "moderator" | "chair";
+  label: string;
+  position: number;
   participationStatus: "pending" | "confirmed";
 };
+
+type SessionParticipantRoleProjection = Omit<SessionParticipantRow, "roles"> & {
+  personId: string;
+  name: string;
+  role: SessionParticipantRoleSummary["role"];
+  label: string;
+  rolePosition: number;
+  participationStatus: SessionParticipantRoleSummary["participationStatus"];
+};
+
+function groupSessionParticipants(
+  rows: SessionParticipantRoleProjection[],
+): SessionParticipantRow[] {
+  const participants = new Map<string, SessionParticipantRow>();
+  for (const row of rows) {
+    const key = `${row.sessionId}:${row.personId}`;
+    const participant = participants.get(key) ?? {
+      sessionId: row.sessionId,
+      position: row.position,
+      name: row.name,
+      roles: [],
+    };
+    participant.roles.push({
+      role: row.role,
+      label: row.label,
+      position: row.rolePosition,
+      participationStatus: row.participationStatus,
+    });
+    participants.set(key, participant);
+  }
+  return [...participants.values()];
+}
 
 export type FileRow = {
   id: string;
@@ -107,6 +227,7 @@ export class SpeakerPortalService {
       profile,
       event,
       sessions,
+      participantRoles,
       sessionParticipants,
       files,
       profileHistory,
@@ -199,14 +320,36 @@ export class SpeakerPortalService {
       `,
       )
         .bind(viewer.eventId, viewer.personId)
-        .all<SessionRow & { sessionDetailsReviewTaskCount: number }>(),
+        .all<
+          Omit<SessionRow, "roles" | "customFields"> & {
+            sessionDetailsReviewTaskCount: number;
+          }
+        >(),
+      this.env.DB.prepare(
+        `SELECT role.session_id AS sessionId, role.role, role.label,
+                role.position,
+                role.participation_status AS participationStatus,
+                role.participation_revision AS participationRevision,
+                role.participation_confirmed_at AS participationConfirmedAt,
+                role.participation_declined_at AS participationDeclinedAt,
+                role.participation_decline_reason AS participationDeclineReason
+           FROM session_participant_roles role
+           JOIN sessions session
+             ON session.id = role.session_id AND session.event_id = role.event_id
+          WHERE role.event_id = ? AND role.person_id = ?
+            AND session.status <> 'archived'
+          ORDER BY role.session_id, role.position, role.role`,
+      )
+        .bind(viewer.eventId, viewer.personId)
+        .all<ParticipantRoleRow>(),
       this.env.DB.prepare(
         `
         SELECT participant.session_id AS sessionId,
+               participant.person_id AS personId,
                participant.position,
                person.display_name AS name,
-               participant.role_label AS roleLabel,
-               participant.participation_status AS participationStatus
+               role.role, role.label, role.position AS rolePosition,
+               role.participation_status AS participationStatus
           FROM session_speakers viewer_relationship
           JOIN sessions session
             ON session.id = viewer_relationship.session_id
@@ -216,16 +359,21 @@ export class SpeakerPortalService {
            AND participant.event_id = viewer_relationship.event_id
            AND participant.person_id <> viewer_relationship.person_id
           JOIN people person ON person.id = participant.person_id
+          JOIN session_participant_roles role
+            ON role.event_id = participant.event_id
+           AND role.session_id = participant.session_id
+           AND role.person_id = participant.person_id
          WHERE viewer_relationship.event_id = ?
            AND viewer_relationship.person_id = ?
            AND viewer_relationship.participation_status IN ('pending','confirmed')
-           AND participant.participation_status IN ('pending','confirmed')
+           AND role.participation_status IN ('pending','confirmed')
            AND session.status <> 'archived'
-         ORDER BY participant.session_id, participant.position, person.display_name
+         ORDER BY participant.session_id, participant.position,
+                  person.display_name, role.position, role.role
       `,
       )
         .bind(viewer.eventId, viewer.personId)
-        .all<SessionParticipantRow>(),
+        .all<SessionParticipantRoleProjection>(),
       this.env.DB.prepare(
         `
         SELECT fa.id, fa.asset_kind AS kind,
@@ -529,12 +677,30 @@ export class SpeakerPortalService {
           { id: viewer.eventId },
           viewer.personId,
         );
+    const eventFields = new EventFieldService(this.env);
+    const [profileFieldPolicies, customPersonFields, participantSessionFields] =
+      await Promise.all([
+        eventFields.profilePolicies(viewer),
+        eventFields.values(viewer, "person", viewer.personId, true),
+        eventFields.participantSessionValues(viewer),
+      ]);
+    const groupedSessionParticipants = groupSessionParticipants(
+      sessionParticipants.results,
+    );
     return {
       profile: {
-        ...profile,
+        ...(participantVisibleProfile(
+          profile,
+          profileFieldPolicies,
+        ) as ParticipantProfileRow),
         programmePortraitUrl,
       },
-      profileHistory,
+      profileHistory: participantVisibleProfileHistory(
+        profileHistory,
+        profileFieldPolicies,
+      ),
+      profileFieldPolicies,
+      customPersonFields,
       event: {
         ...eventSummary,
         filePolicy: parseEventFilePolicy(filePolicyJson),
@@ -542,9 +708,21 @@ export class SpeakerPortalService {
       sessions: sessions.results.map(
         ({ sessionDetailsReviewTaskCount: _taskCount, ...session }) => ({
           ...session,
-          participants: sessionParticipants.results.filter(
-            (participant) => participant.sessionId === session.id,
+          roles: participantRoles.results.filter(
+            (role) => role.sessionId === session.id,
           ),
+          customFields: participantSessionFields
+            .filter((field) => field.sessionId === session.id)
+            .map(({ sessionId: _sessionId, ...field }) => field),
+          participants: groupedSessionParticipants
+            .filter((participant) => participant.sessionId === session.id)
+            .map(
+              (participant) =>
+                participantVisibleProfile(
+                  participant,
+                  profileFieldPolicies,
+                ) as SessionParticipantRow,
+            ),
         }),
       ),
       files: files.results.map(
@@ -554,6 +732,10 @@ export class SpeakerPortalService {
           ...file
         }) => ({
           ...file,
+          downloadUploaderName:
+            profileFieldPolicies.name === "hidden"
+              ? null
+              : file.downloadUploaderName,
           versions: versionRows.results.filter(
             (version) => version.assetId === file.id,
           ),

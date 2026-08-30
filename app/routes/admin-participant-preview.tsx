@@ -18,19 +18,30 @@ export const handle = {
     if (!preview || typeof preview !== "object" || !("available" in preview)) {
       throw new Error("The participant preview breadcrumb is unavailable.");
     }
-    return adminRecordBreadcrumbLabelAtPath(
-      data,
-      preview.available === true
-        ? ["preview", "portal", "profile", "name"]
-        : ["preview", "person", "name"],
-    );
+    if (preview.available === true) {
+      const portal = "portal" in preview ? preview.portal : null;
+      const profile =
+        portal && typeof portal === "object" && "profile" in portal
+          ? portal.profile
+          : null;
+      const name =
+        profile && typeof profile === "object" && "name" in profile
+          ? profile.name
+          : null;
+      return typeof name === "string" && name.trim() ? name : "Participant";
+    }
+    return adminRecordBreadcrumbLabelAtPath(data, [
+      "preview",
+      "person",
+      "name",
+    ]);
   },
 } satisfies AdminRecordBreadcrumbHandle;
 
 export const meta: Route.MetaFunction = ({ loaderData }) => [
   {
     title: loaderData
-      ? `${loaderData.preview.available ? loaderData.preview.portal.profile.name : loaderData.preview.person.name} · Participant preview · Program Cue`
+      ? `${loaderData.preview.available ? (loaderData.preview.portal.profile.name ?? "Participant") : loaderData.preview.person.name} · Participant preview · Program Cue`
       : "Participant preview · Program Cue",
   },
 ];

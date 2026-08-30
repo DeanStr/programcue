@@ -25,7 +25,7 @@ export async function loader({ request, context }: Route.LoaderArgs) {
       ...formatSpeakerEvent(portal.event),
     },
     viewer: {
-      name: viewer.name,
+      name: portal.profile.name ?? "Participant",
       email: viewer.email,
       demo: viewer.demo,
     },

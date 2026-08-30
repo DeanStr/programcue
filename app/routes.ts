@@ -155,6 +155,7 @@ export default [
     route("admin/search", "routes/admin-command-search.ts"),
     route("admin/views", "routes/admin-saved-views.ts"),
     route("admin/event", "routes/event-setup.tsx"),
+    route("admin/event/fields", "routes/admin-event-fields.tsx"),
     route("admin/branding", "routes/admin-branding.tsx"),
     route("admin/site", "routes/admin-public-site.tsx"),
     route("admin/branding/assets/:assetId", "routes/admin-branding-asset.ts"),

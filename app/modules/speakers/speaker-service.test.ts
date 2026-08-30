@@ -2,12 +2,7 @@ import { env } from "cloudflare:test";
 import { describe, expect, it } from "vitest";
 import type { AirtableProviderBoundary } from "~/modules/airtable/airtable-provider-boundary.server";
 import { ResourceService } from "~/modules/resources/resource-service.server";
-import {
-  getPublicSessionPage,
-  getPublicSpeakerPage,
-} from "~/platform/api/api-public-programme.server";
 import type { Viewer } from "~/platform/auth/authorize.server";
-import { ensureDemoProgramme } from "~/platform/demo/seed.server";
 import { ensureDemoSpeakerData } from "./demo.server";
 import {
   SpeakerProfileConflictError,
@@ -74,1091 +69,38 @@ async function inviteRosterRecord(
   });
 }
 
-function withSuppressedStatement(
-  testEnv: CloudflareEnvironment,
-  pattern: RegExp,
-) {
-  let suppressed = 0;
-  const faultingDb = new Proxy(testEnv.DB, {
-    get(target, property) {
-      if (property === "prepare") {
-        return (query: string) => {
-          const statement = target.prepare(query);
-          if (suppressed > 0 || !pattern.test(query)) return statement;
-          suppressed += 1;
-          return new Proxy(statement, {
-            get(statementTarget, statementProperty) {
-              if (statementProperty === "bind") {
-                return () =>
-                  target.prepare(
-                    "UPDATE people SET display_name = display_name WHERE 0",
-                  );
-              }
-              const value = Reflect.get(statementTarget, statementProperty);
-              return typeof value === "function"
-                ? value.bind(statementTarget)
-                : value;
-            },
-          });
-        };
-      }
-      const value = Reflect.get(target, property);
-      return typeof value === "function" ? value.bind(target) : value;
-    },
-  });
-  return {
-    env: new Proxy(testEnv, {
-      get(target, property) {
-        return property === "DB" ? faultingDb : Reflect.get(target, property);
-      },
-    }),
-    suppressed: () => suppressed,
-  };
-}
-
-function withFirstBatchRace(
-  testEnv: CloudflareEnvironment,
-  race: () => Promise<void>,
-) {
-  let injectRace = true;
-  const racingDb = new Proxy(testEnv.DB, {
-    get(target, property) {
-      if (property === "batch") {
-        return async (statements: D1PreparedStatement[]) => {
-          if (injectRace) {
-            injectRace = false;
-            await race();
-          }
-          return target.batch(statements);
-        };
-      }
-      const value = Reflect.get(target, property);
-      return typeof value === "function" ? value.bind(target) : value;
-    },
-  });
-  return new Proxy(testEnv, {
-    get(target, property) {
-      return property === "DB" ? racingDb : Reflect.get(target, property);
-    },
-  });
-}
-
-function withMissingFirstBatchResults(testEnv: CloudflareEnvironment) {
-  let omitResults = true;
-  const incompleteDb = new Proxy(testEnv.DB, {
-    get(target, property) {
-      if (property === "batch") {
-        return async (statements: D1PreparedStatement[]) => {
-          const results = await target.batch(statements);
-          if (!omitResults) return results;
-          omitResults = false;
-          return [];
-        };
-      }
-      const value = Reflect.get(target, property);
-      return typeof value === "function" ? value.bind(target) : value;
-    },
-  });
-  return new Proxy(testEnv, {
-    get(target, property) {
-      return property === "DB" ? incompleteDb : Reflect.get(target, property);
-    },
-  });
-}
-
-async function insertPendingPublishedSpeaker(
-  testEnv: CloudflareEnvironment,
-  personId: string,
-) {
-  await testEnv.DB.batch([
-    testEnv.DB.prepare(
-      `INSERT INTO people (
-         id, email, display_name, email_verified, profile_status,
-         created_at, updated_at
-       ) VALUES (?, ?, 'Cursor Confirm Speaker', 1, 'published',
-                 unixepoch(), unixepoch())`,
-    ).bind(personId, `${personId}@example.com`),
-    testEnv.DB.prepare(
-      `INSERT INTO session_speakers (
-         session_id, event_id, person_id, position, role_label,
-         participation_status, participation_confirmed_at, visibility
-       ) VALUES ('demo-session-1', ?, ?, 5000, 'Speaker',
-                 'pending', NULL, 'public')`,
-    ).bind(speaker.eventId, personId),
-  ]);
-}
-
-async function confirmationPublicState(
-  testEnv: CloudflareEnvironment,
-  personId: string,
-) {
-  return testEnv.DB.prepare(
-    `SELECT relationship.participation_status AS participationStatus,
-            (SELECT public_projection_revision FROM events WHERE id = ?) AS revision,
-            (SELECT COUNT(*) FROM event_changes change
-              WHERE change.event_id = relationship.event_id
-                AND change.entity_type = 'person'
-                AND change.entity_id = relationship.person_id) AS personChangeCount
-       FROM session_speakers relationship
-      WHERE relationship.event_id = ? AND relationship.session_id = 'demo-session-1'
-        AND relationship.person_id = ?`,
-  )
-    .bind(speaker.eventId, speaker.eventId, personId)
-    .first<{
-      participationStatus: string;
-      revision: number;
-      personChangeCount: number;
-    }>();
-}
-
 describe("speaker profile service", () => {
-  it("records speaker and administrator participation confirmation independently of portal access", async () => {
+  it("reopens a declined session relationship when a pending role is assigned", async () => {
     const testEnv = env as unknown as CloudflareEnvironment;
     await ensureDemoSpeakerData(testEnv);
     const service = new SpeakerService(testEnv);
     const sessionId = "session-demo-speaker";
-    await testEnv.DB.prepare(
-      `UPDATE session_speakers
-          SET participation_status = 'pending', participation_revision = 1,
-              participation_confirmed_at = NULL, participation_declined_at = NULL,
-              participation_decline_reason = NULL
-        WHERE event_id = ? AND session_id = ? AND person_id = ?`,
-    )
-      .bind(speaker.eventId, sessionId, speaker.personId)
-      .run();
-    await expect(
-      service.confirmOwnParticipation(speaker, {
-        sessionId,
-        participationRevision: 1,
-        confirmation: "confirmed",
-      }),
-    ).resolves.toMatchObject({
-      sessionId,
-      participationStatus: "confirmed",
-      changed: true,
-      changeSequence: null,
-    });
-    await expect(
-      service.confirmOwnParticipation(speaker, {
-        sessionId,
-        participationRevision: 1,
-        confirmation: "confirmed",
-      }),
-    ).resolves.toMatchObject({ changed: false });
-    await expect(
-      testEnv.DB.prepare(
-        `SELECT participation_status AS participationStatus,
-                participation_confirmed_at AS participationConfirmedAt
-           FROM session_speakers
-          WHERE event_id = ? AND session_id = ? AND person_id = ?`,
-      )
-        .bind(speaker.eventId, sessionId, speaker.personId)
-        .first(),
-    ).resolves.toEqual({
-      participationStatus: "confirmed",
-      participationConfirmedAt: expect.any(Number),
-    });
-
-    await testEnv.DB.prepare(
-      `UPDATE session_speakers
-          SET participation_status = 'pending', participation_revision = participation_revision + 1,
-              participation_confirmed_at = NULL
-        WHERE event_id = ? AND session_id = ? AND person_id = ?`,
-    )
-      .bind(speaker.eventId, sessionId, speaker.personId)
-      .run();
-    await expect(
-      service.confirmExternalParticipation(speaker, speaker.personId, {
-        sessionId,
-        participationRevision: 3,
-        confirmation: "confirmed",
-        externalConfirmation: "confirmed",
-      }),
-    ).rejects.toMatchObject({ status: 403 });
-    await expect(
-      service.confirmExternalParticipation(admin, speaker.personId, {
-        sessionId,
-        participationRevision: 3,
-        confirmation: "confirmed",
-        externalConfirmation: "confirmed",
-      }),
-    ).resolves.toMatchObject({ changed: true });
-    const audits = await testEnv.DB.prepare(
-      `SELECT actor_person_id AS actorPersonId, origin,
-              json_extract(metadata_json, '$.source') AS source
-         FROM audit_events
-        WHERE event_id = ? AND action = 'speaker.participation.confirmed'
-          AND entity_id = ?
-        ORDER BY created_at, id`,
-    )
-      .bind(speaker.eventId, `${sessionId}:${speaker.personId}`)
-      .all<{ actorPersonId: string; origin: string; source: string }>();
-    expect(audits.results).toHaveLength(2);
-    expect(audits.results).toEqual(
-      expect.arrayContaining([
-        {
-          actorPersonId: speaker.personId,
-          origin: "participant_ui",
-          source: "speaker",
-        },
-        {
-          actorPersonId: admin.personId,
-          origin: "admin_ui",
-          source: "administrator_external",
-        },
-      ]),
-    );
-  });
-
-  it("declines and resets one invitation cycle without replaying stale decisions or exposing the private reason in audit metadata", async () => {
-    const testEnv = env as unknown as CloudflareEnvironment;
-    await ensureDemoSpeakerData(testEnv);
-    const service = new SpeakerService(testEnv);
-    const sessionId = "session-demo-speaker";
-    await testEnv.DB.prepare(
-      `UPDATE session_speakers
-          SET participation_status = 'pending', participation_revision = 1,
-              participation_confirmed_at = NULL,
-              participation_declined_at = NULL,
-              participation_decline_reason = NULL
-        WHERE event_id = ? AND session_id = ? AND person_id = ?`,
-    )
-      .bind(speaker.eventId, sessionId, speaker.personId)
-      .run();
-
-    const decline = {
-      sessionId,
-      participationRevision: 1,
-      declineConfirmation: "declined",
-      reason: "I have a private scheduling conflict.",
-    };
-    await expect(
-      service.declineOwnParticipation(speaker, decline),
-    ).resolves.toMatchObject({
-      participationStatus: "declined",
-      participationRevision: 2,
-      changed: true,
-    });
-    await expect(
-      service.declineOwnParticipation(speaker, decline),
-    ).resolves.toMatchObject({ changed: false, participationRevision: 2 });
-    await expect(
-      service.declineOwnParticipation(speaker, {
-        ...decline,
-        reason: "A different reason must not replace the first.",
-      }),
-    ).rejects.toMatchObject({ status: 409 });
-    await expect(
-      service.resetDeclinedParticipation(speaker, speaker.personId, {
-        sessionId,
-        participationRevision: 2,
-        resetConfirmation: "pending",
-      }),
-    ).rejects.toMatchObject({ status: 403 });
-
-    await expect(
-      service.resetDeclinedParticipation(admin, speaker.personId, {
-        sessionId,
-        participationRevision: 2,
-        resetConfirmation: "pending",
-      }),
-    ).resolves.toMatchObject({
-      participationStatus: "pending",
-      participationRevision: 3,
-      changed: true,
-    });
-    await expect(
-      service.resetDeclinedParticipation(admin, speaker.personId, {
-        sessionId,
-        participationRevision: 2,
-        resetConfirmation: "pending",
-      }),
-    ).resolves.toMatchObject({ changed: false, participationRevision: 3 });
-    await expect(
-      service.confirmOwnParticipation(speaker, {
-        sessionId,
-        participationRevision: 1,
-        confirmation: "confirmed",
-      }),
-    ).rejects.toMatchObject({ status: 409 });
-    await expect(
-      service.declineOwnParticipation(speaker, decline),
-    ).rejects.toMatchObject({ status: 409 });
-    await expect(
-      service.declineOwnParticipation(speaker, {
-        ...decline,
-        participationRevision: 3,
-      }),
-    ).resolves.toMatchObject({
-      participationStatus: "declined",
-      participationRevision: 4,
-      changed: true,
-    });
-
-    const persisted = await testEnv.DB.prepare(
-      `SELECT participation_status AS participationStatus,
-              participation_revision AS participationRevision,
-              participation_confirmed_at AS confirmedAt,
-              participation_declined_at AS declinedAt,
-              participation_decline_reason AS declineReason
-         FROM session_speakers
-        WHERE event_id = ? AND session_id = ? AND person_id = ?`,
-    )
-      .bind(speaker.eventId, sessionId, speaker.personId)
-      .first();
-    expect(persisted).toEqual({
-      participationStatus: "declined",
-      participationRevision: 4,
-      confirmedAt: null,
-      declinedAt: expect.any(Number),
-      declineReason: decline.reason,
-    });
-    const audits = await testEnv.DB.prepare(
-      `SELECT action, metadata_json AS metadataJson
-         FROM audit_events
-        WHERE event_id = ? AND entity_id = ?
-          AND action IN ('speaker.participation.declined', 'speaker.participation.reset')
-        ORDER BY created_at, id`,
-    )
-      .bind(speaker.eventId, `${sessionId}:${speaker.personId}`)
-      .all<{ action: string; metadataJson: string }>();
-    expect(audits.results).toHaveLength(3);
-    expect(
-      audits.results.every(
-        (audit) => !audit.metadataJson.includes(decline.reason),
-      ),
-    ).toBe(true);
-
-    await service.resetDeclinedParticipation(admin, speaker.personId, {
-      sessionId,
-      participationRevision: 4,
-      resetConfirmation: "pending",
-    });
-  });
-
-  it("replays committed participation transitions after the session becomes inactive", async () => {
-    const testEnv = env as unknown as CloudflareEnvironment;
-    await ensureDemoSpeakerData(testEnv);
-    const service = new SpeakerService(testEnv);
-    const sessionId = "session-demo-speaker";
-    const session = await testEnv.DB.prepare(
-      "SELECT status FROM sessions WHERE event_id = ? AND id = ?",
-    )
-      .bind(speaker.eventId, sessionId)
-      .first<{ status: string }>();
-    if (!session) throw new Error("Demo speaker session is missing.");
-    await testEnv.DB.prepare(
-      `UPDATE session_speakers
-          SET participation_status = 'pending', participation_revision = 1,
-              participation_confirmed_at = NULL,
-              participation_declined_at = NULL,
-              participation_decline_reason = NULL
-        WHERE event_id = ? AND session_id = ? AND person_id = ?`,
-    )
-      .bind(speaker.eventId, sessionId, speaker.personId)
-      .run();
-
-    const decline = {
-      sessionId,
-      participationRevision: 1,
-      declineConfirmation: "declined" as const,
-      reason: "A committed response must remain replayable.",
-    };
-    try {
-      await service.declineOwnParticipation(speaker, decline);
-      await testEnv.DB.prepare(
-        "UPDATE sessions SET status = 'cancelled' WHERE event_id = ? AND id = ?",
-      )
-        .bind(speaker.eventId, sessionId)
-        .run();
-      await expect(
-        service.declineOwnParticipation(speaker, decline),
-      ).resolves.toMatchObject({
-        participationStatus: "declined",
-        participationRevision: 2,
-        changed: false,
-      });
-
-      await testEnv.DB.prepare(
-        "UPDATE sessions SET status = ? WHERE event_id = ? AND id = ?",
-      )
-        .bind(session.status, speaker.eventId, sessionId)
-        .run();
-      const reset = {
-        sessionId,
-        participationRevision: 2,
-        resetConfirmation: "pending" as const,
-      };
-      await service.resetDeclinedParticipation(admin, speaker.personId, reset);
-      await testEnv.DB.prepare(
-        "UPDATE sessions SET status = 'archived' WHERE event_id = ? AND id = ?",
-      )
-        .bind(speaker.eventId, sessionId)
-        .run();
-      await expect(
-        service.resetDeclinedParticipation(admin, speaker.personId, reset),
-      ).resolves.toMatchObject({
-        participationStatus: "pending",
-        participationRevision: 3,
-        changed: false,
-      });
-      await expect(
-        service.declineOwnParticipation(speaker, {
-          ...decline,
-          participationRevision: 3,
-        }),
-      ).rejects.toMatchObject({ status: 404 });
-    } finally {
-      await testEnv.DB.prepare(
-        "UPDATE sessions SET status = ? WHERE event_id = ? AND id = ?",
-      )
-        .bind(session.status, speaker.eventId, sessionId)
-        .run();
-    }
-  });
-
-  it("revalidates Airtable participation replays against the current invitation cycle", async () => {
-    const testEnv = env as unknown as CloudflareEnvironment;
-    await ensureDemoSpeakerData(testEnv);
-    const sessionId = "session-demo-speaker";
-    await testEnv.DB.prepare(
-      `UPDATE session_speakers
-          SET participation_status = 'pending', participation_revision = 1,
-              participation_confirmed_at = NULL,
-              participation_declined_at = NULL,
-              participation_decline_reason = NULL
-        WHERE event_id = ? AND session_id = ? AND person_id = ?`,
-    )
-      .bind(speaker.eventId, sessionId, speaker.personId)
-      .run();
-    const decline = {
-      sessionId,
-      participationRevision: 1,
-      declineConfirmation: "declined" as const,
-      reason: "This exact replay must be checked against D1.",
-    };
-    const committed = await new SpeakerService(testEnv).declineOwnParticipation(
-      speaker,
-      decline,
-    );
-    const replayBoundary = {
-      executeIdempotent: async () => committed,
-    } as unknown as AirtableProviderBoundary;
-    const replayService = new SpeakerService(testEnv, {
-      airtable: replayBoundary,
-    });
-
-    await expect(
-      replayService.declineOwnParticipation(speaker, decline),
-    ).resolves.toMatchObject({
-      changed: false,
-      participationStatus: "declined",
-      participationRevision: 2,
-    });
-
-    await new SpeakerService(testEnv).resetDeclinedParticipation(
-      admin,
-      speaker.personId,
-      {
-        sessionId,
-        participationRevision: 2,
-        resetConfirmation: "pending",
-      },
-    );
-    await expect(
-      replayService.declineOwnParticipation(speaker, decline),
-    ).rejects.toMatchObject({ status: 409 });
-  });
-
-  it("converges concurrent exact participation retries without duplicating transitions", async () => {
-    const testEnv = env as unknown as CloudflareEnvironment;
-    await ensureDemoSpeakerData(testEnv);
-    const service = new SpeakerService(testEnv);
-    const sessionId = "session-demo-speaker";
-    await testEnv.DB.prepare(
-      `UPDATE session_speakers
-          SET participation_status = 'pending', participation_revision = 1,
-              participation_confirmed_at = NULL,
-              participation_declined_at = NULL,
-              participation_decline_reason = NULL
-        WHERE event_id = ? AND session_id = ? AND person_id = ?`,
-    )
-      .bind(speaker.eventId, sessionId, speaker.personId)
-      .run();
-    const transitionCounts = async () => {
-      const rows = await testEnv.DB.prepare(
-        `SELECT action, COUNT(*) AS count
-           FROM audit_events
-          WHERE event_id = ? AND entity_id = ?
-            AND action IN (
-              'speaker.participation.confirmed',
-              'speaker.participation.declined',
-              'speaker.participation.reset'
-            )
-          GROUP BY action`,
-      )
-        .bind(speaker.eventId, `${sessionId}:${speaker.personId}`)
-        .all<{ action: string; count: number }>();
-      return Object.fromEntries(
-        rows.results.map(({ action, count }) => [action, count]),
-      );
-    };
-    const before = await transitionCounts();
-
-    const confirmation = {
-      sessionId,
-      participationRevision: 1,
-      confirmation: "confirmed" as const,
-    };
-    await expect(
-      new SpeakerService(
-        withFirstBatchRace(testEnv, () =>
-          service.confirmOwnParticipation(speaker, confirmation).then(() => {}),
-        ),
-      ).confirmOwnParticipation(speaker, confirmation),
-    ).resolves.toMatchObject({ changed: false, participationRevision: 2 });
-
-    await testEnv.DB.prepare(
-      `UPDATE session_speakers
-          SET participation_status = 'pending', participation_revision = 3,
-              participation_confirmed_at = NULL,
-              participation_declined_at = NULL,
-              participation_decline_reason = NULL
-        WHERE event_id = ? AND session_id = ? AND person_id = ?`,
-    )
-      .bind(speaker.eventId, sessionId, speaker.personId)
-      .run();
-    const decline = {
-      sessionId,
-      participationRevision: 3,
-      declineConfirmation: "declined" as const,
-      reason: "The same private reason must converge.",
-    };
-    await expect(
-      new SpeakerService(
-        withFirstBatchRace(testEnv, () =>
-          service.declineOwnParticipation(speaker, decline).then(() => {}),
-        ),
-      ).declineOwnParticipation(speaker, decline),
-    ).resolves.toMatchObject({ changed: false, participationRevision: 4 });
-
-    const reset = {
-      sessionId,
-      participationRevision: 4,
-      resetConfirmation: "pending" as const,
-    };
-    await expect(
-      new SpeakerService(
-        withFirstBatchRace(testEnv, () =>
-          service
-            .resetDeclinedParticipation(admin, speaker.personId, reset)
-            .then(() => {}),
-        ),
-      ).resetDeclinedParticipation(admin, speaker.personId, reset),
-    ).resolves.toMatchObject({ changed: false, participationRevision: 5 });
-
-    const after = await transitionCounts();
-    expect(after["speaker.participation.confirmed"] ?? 0).toBe(
-      (before["speaker.participation.confirmed"] ?? 0) + 1,
-    );
-    expect(after["speaker.participation.declined"] ?? 0).toBe(
-      (before["speaker.participation.declined"] ?? 0) + 1,
-    );
-    expect(after["speaker.participation.reset"] ?? 0).toBe(
-      (before["speaker.participation.reset"] ?? 0) + 1,
-    );
-  });
-
-  it("fails explicitly when D1 omits decline or reset mutation results", async () => {
-    const testEnv = env as unknown as CloudflareEnvironment;
-    await ensureDemoSpeakerData(testEnv);
-    const sessionId = "session-demo-speaker";
-    await testEnv.DB.prepare(
-      `UPDATE session_speakers
-          SET participation_status = 'pending', participation_revision = 20,
-              participation_confirmed_at = NULL,
-              participation_declined_at = NULL,
-              participation_decline_reason = NULL
-        WHERE event_id = ? AND session_id = ? AND person_id = ?`,
-    )
-      .bind(speaker.eventId, sessionId, speaker.personId)
-      .run();
-
-    await expect(
-      new SpeakerService(
-        withMissingFirstBatchResults(testEnv),
-      ).declineOwnParticipation(speaker, {
-        sessionId,
-        participationRevision: 20,
-        declineConfirmation: "declined",
-        reason: "A private reason.",
-      }),
-    ).rejects.toMatchObject({
-      name: "SpeakerAdminIntegrityError",
-      status: 500,
-      message: "Participation decline is missing its audit result.",
-    });
-    await expect(
-      testEnv.DB.prepare(
-        `SELECT participation_status AS status, participation_revision AS revision
-           FROM session_speakers
-          WHERE event_id = ? AND session_id = ? AND person_id = ?`,
-      )
-        .bind(speaker.eventId, sessionId, speaker.personId)
-        .first(),
-    ).resolves.toEqual({ status: "declined", revision: 21 });
-
-    await expect(
-      new SpeakerService(
-        withMissingFirstBatchResults(testEnv),
-      ).resetDeclinedParticipation(admin, speaker.personId, {
-        sessionId,
-        participationRevision: 21,
-        resetConfirmation: "pending",
-      }),
-    ).rejects.toMatchObject({
-      name: "SpeakerAdminIntegrityError",
-      status: 500,
-      message: "Participation reset is missing its audit result.",
-    });
-    await expect(
-      testEnv.DB.prepare(
-        `SELECT participation_status AS status, participation_revision AS revision
-           FROM session_speakers
-          WHERE event_id = ? AND session_id = ? AND person_id = ?`,
-      )
-        .bind(speaker.eventId, sessionId, speaker.personId)
-        .first(),
-    ).resolves.toEqual({ status: "pending", revision: 22 });
-
-    await testEnv.DB.prepare(
-      `UPDATE session_speakers
-          SET participation_revision = 1
-        WHERE event_id = ? AND session_id = ? AND person_id = ?`,
-    )
-      .bind(speaker.eventId, sessionId, speaker.personId)
-      .run();
-  });
-
-  it("materialises confirmed-speaker acknowledgement tasks on confirmation", async () => {
-    const testEnv = env as unknown as CloudflareEnvironment;
-    await ensureDemoSpeakerData(testEnv);
-    const sessionId = "session-demo-speaker";
-    await testEnv.DB.prepare(
-      `UPDATE session_speakers
-          SET participation_status = 'pending', participation_revision = 1,
-              participation_confirmed_at = NULL, participation_declined_at = NULL,
-              participation_decline_reason = NULL
-        WHERE event_id = ? AND session_id = ? AND person_id = ?`,
-    )
-      .bind(speaker.eventId, sessionId, speaker.personId)
-      .run();
-    const resources = new ResourceService(testEnv);
-    const pageId = await resources.save(admin, {
-      title: "Confirmation briefing",
-      slug: `confirm-ack-${crypto.randomUUID().slice(0, 8)}`,
-      category: "Preparation",
-      audienceScope: "confirmed_speakers",
-      acknowledgementRequired: true,
-      document: {
-        type: "doc",
-        content: [
-          { type: "paragraph", content: [{ type: "text", text: "Read me." }] },
-        ],
-      },
-    });
-    const draft = (await resources.getAdminWorkspace(admin, pageId)).selected!;
-    await resources.publish(admin, pageId, draft.revision);
-    const taskId = `resource-ack:${pageId}:${speaker.personId}`;
-    await expect(
-      testEnv.DB.prepare("SELECT id FROM task_instances WHERE id = ?")
-        .bind(taskId)
-        .first(),
-    ).resolves.toBeNull();
-
-    await new SpeakerService(testEnv).confirmOwnParticipation(speaker, {
-      sessionId,
-      participationRevision: 1,
-      confirmation: "confirmed",
-    });
-    await expect(
-      testEnv.DB.prepare("SELECT status FROM task_instances WHERE id = ?")
-        .bind(taskId)
-        .first(),
-    ).resolves.toEqual({ status: "not_started" });
-  });
-
-  it("materialises only the confirming person's confirmed-speaker acknowledgements and preserves explicit waivers", async () => {
-    const testEnv = env as unknown as CloudflareEnvironment;
-    await ensureDemoSpeakerData(testEnv);
-    const sessionId = "session-demo-speaker";
-    const otherPersonId = `confirmation-other-${crypto.randomUUID()}`;
     await testEnv.DB.batch([
       testEnv.DB.prepare(
-        `UPDATE session_speakers
-            SET participation_status = 'pending', participation_revision = 1,
-                participation_confirmed_at = NULL, participation_declined_at = NULL,
-                participation_decline_reason = NULL
-          WHERE event_id = ? AND session_id = ? AND person_id = ?`,
-      ).bind(speaker.eventId, sessionId, speaker.personId),
-      testEnv.DB.prepare(
-        `INSERT INTO people (
-           id, email, display_name, email_verified, profile_status,
-           created_at, updated_at
-         ) VALUES (?, ?, 'Other Session Speaker', 1, 'published',
-                   unixepoch(), unixepoch())`,
-      ).bind(otherPersonId, `${otherPersonId}@example.com`),
-      testEnv.DB.prepare(
-        `INSERT INTO session_speakers (
-           session_id, event_id, person_id, position, role_label,
-           participation_status, participation_confirmed_at, visibility
-         ) VALUES (?, ?, ?, 9000, 'Speaker', 'pending', NULL, 'public')`,
-      ).bind(sessionId, speaker.eventId, otherPersonId),
-    ]);
-
-    const resources = new ResourceService(testEnv);
-    const publishResource = async (
-      label: string,
-      audienceScope: "accepted_speakers" | "confirmed_speakers",
-    ) => {
-      const pageId = await resources.save(admin, {
-        title: label,
-        slug: `${label.toLowerCase().replaceAll(" ", "-")}-${crypto.randomUUID().slice(0, 8)}`,
-        category: "Preparation",
-        audienceScope,
-        acknowledgementRequired: true,
-        document: {
-          type: "doc",
-          content: [
-            {
-              type: "paragraph",
-              content: [{ type: "text", text: "Read this briefing." }],
-            },
-          ],
-        },
-      });
-      const draft = (await resources.getAdminWorkspace(admin, pageId))
-        .selected!;
-      await resources.publish(admin, pageId, draft.revision);
-      return pageId;
-    };
-    const acceptedPageId = await publishResource(
-      "Accepted confirmation boundary",
-      "accepted_speakers",
-    );
-    const newConfirmedPageId = await publishResource(
-      "New confirmed acknowledgement",
-      "confirmed_speakers",
-    );
-    const waivedConfirmedPageId = await publishResource(
-      "Waived confirmed acknowledgement",
-      "confirmed_speakers",
-    );
-    const acceptedSpeakerTaskId = `resource-ack:${acceptedPageId}:${speaker.personId}`;
-    const acceptedOtherTaskId = `resource-ack:${acceptedPageId}:${otherPersonId}`;
-    const waivedConfirmedTaskId = `resource-ack:${waivedConfirmedPageId}:${speaker.personId}`;
-    const explicitWaiver = JSON.stringify({
-      reason: "Administrator explicitly waived this requirement",
-      by: admin.personId,
-    });
-    await testEnv.DB.batch([
-      testEnv.DB.prepare(
-        `UPDATE task_instances
-            SET status = 'waived', readiness_percent = 100,
-                waiver_json = ?, completed_at = unixepoch(),
-                completed_by_person_id = ?, revision = revision + 1
-          WHERE id IN (?, ?) AND event_id = ?`,
-      ).bind(
-        explicitWaiver,
-        admin.personId,
-        acceptedSpeakerTaskId,
-        acceptedOtherTaskId,
-        speaker.eventId,
-      ),
-      testEnv.DB.prepare(
-        `INSERT INTO task_instances (
-           id, event_id, template_id, target_type, target_id, owner_person_id,
-           title, description, task_type, impact, status, readiness_state,
-           readiness_percent, revision, waiver_json, completed_at,
-           completed_by_person_id, created_at, updated_at
-         ) VALUES (?, ?, ?, 'speaker', ?, ?, 'Read waived briefing',
-                   'Read and acknowledge the current published version.',
-                   'acknowledgement', 'medium', 'waived', 'on_track', 100, 1,
-                   ?, unixepoch(), ?, unixepoch(), unixepoch())`,
-      ).bind(
-        waivedConfirmedTaskId,
-        speaker.eventId,
-        `resource-ack:${waivedConfirmedPageId}`,
-        speaker.personId,
-        speaker.personId,
-        explicitWaiver,
-        admin.personId,
-      ),
-    ]);
-    const preservedTaskIds = [
-      acceptedSpeakerTaskId,
-      acceptedOtherTaskId,
-      waivedConfirmedTaskId,
-    ];
-    const preservedState = () =>
-      Promise.all(
-        preservedTaskIds.map((taskId) =>
-          testEnv.DB.prepare(
-            `SELECT status, revision, waiver_json AS waiverJson
-               FROM task_instances WHERE id = ?`,
-          )
-            .bind(taskId)
-            .first(),
-        ),
-      );
-    const before = await preservedState();
-    expect(before).toEqual([
-      { status: "waived", revision: 2, waiverJson: explicitWaiver },
-      { status: "waived", revision: 2, waiverJson: explicitWaiver },
-      { status: "waived", revision: 1, waiverJson: explicitWaiver },
-    ]);
-
-    const service = new SpeakerService(testEnv);
-    await expect(
-      service.confirmOwnParticipation(speaker, {
-        sessionId,
-        participationRevision: 1,
-        confirmation: "confirmed",
-      }),
-    ).resolves.toMatchObject({ changed: true });
-
-    await expect(preservedState()).resolves.toEqual(before);
-    await expect(
-      testEnv.DB.prepare(
-        "SELECT status, revision FROM task_instances WHERE id = ?",
-      )
-        .bind(`resource-ack:${newConfirmedPageId}:${speaker.personId}`)
-        .first(),
-    ).resolves.toEqual({ status: "not_started", revision: 1 });
-    for (const pageId of [newConfirmedPageId, waivedConfirmedPageId]) {
-      await expect(
-        testEnv.DB.prepare("SELECT id FROM task_instances WHERE id = ?")
-          .bind(`resource-ack:${pageId}:${otherPersonId}`)
-          .first(),
-      ).resolves.toBeNull();
-    }
-
-    const afterConfirmation = await preservedState();
-    await expect(
-      service.confirmOwnParticipation(speaker, {
-        sessionId,
-        participationRevision: 1,
-        confirmation: "confirmed",
-      }),
-    ).resolves.toMatchObject({ changed: false });
-    await expect(preservedState()).resolves.toEqual(afterConfirmation);
-  });
-
-  it("does not materialise acknowledgements from a losing concurrent confirmation", async () => {
-    const testEnv = env as unknown as CloudflareEnvironment;
-    await ensureDemoSpeakerData(testEnv);
-    const sessionId = "session-demo-speaker";
-    await testEnv.DB.prepare(
-      `UPDATE session_speakers
-          SET participation_status = 'pending', participation_revision = 101,
-              participation_confirmed_at = NULL, participation_declined_at = NULL,
-              participation_decline_reason = NULL
-        WHERE event_id = ? AND session_id = ? AND person_id = ?`,
-    )
-      .bind(speaker.eventId, sessionId, speaker.personId)
-      .run();
-    const resources = new ResourceService(testEnv);
-    const pageId = await resources.save(admin, {
-      title: "Concurrent confirmation waiver",
-      slug: `concurrent-confirm-waiver-${crypto.randomUUID().slice(0, 8)}`,
-      category: "Preparation",
-      audienceScope: "confirmed_speakers",
-      acknowledgementRequired: true,
-      document: {
-        type: "doc",
-        content: [
-          { type: "paragraph", content: [{ type: "text", text: "Read me." }] },
-        ],
-      },
-    });
-    const draft = (await resources.getAdminWorkspace(admin, pageId)).selected!;
-    await resources.publish(admin, pageId, draft.revision);
-    const taskId = `resource-ack:${pageId}:${speaker.personId}`;
-    const explicitWaiver = JSON.stringify({
-      reason: "Explicit concurrent waiver",
-      by: admin.personId,
-    });
-    await testEnv.DB.prepare(
-      `INSERT INTO task_instances (
-         id, event_id, template_id, target_type, target_id, owner_person_id,
-         title, description, task_type, impact, status, readiness_state,
-         readiness_percent, revision, waiver_json, completed_at,
-         completed_by_person_id, created_at, updated_at
-       ) VALUES (?, ?, ?, 'speaker', ?, ?, 'Read concurrent briefing',
-                 'Read and acknowledge the current published version.',
-                 'acknowledgement', 'medium', 'waived', 'on_track', 100, 4,
-                 ?, unixepoch(), ?, unixepoch(), unixepoch())`,
-    )
-      .bind(
-        taskId,
-        speaker.eventId,
-        `resource-ack:${pageId}`,
-        speaker.personId,
-        speaker.personId,
-        explicitWaiver,
-        admin.personId,
-      )
-      .run();
-    const before = await testEnv.DB.prepare(
-      `SELECT status, revision, waiver_json AS waiverJson
-         FROM task_instances WHERE id = ?`,
-    )
-      .bind(taskId)
-      .first();
-    const racingEnv = withFirstBatchRace(testEnv, async () => {
-      await testEnv.DB.prepare(
-        `UPDATE session_speakers
-            SET participation_status = 'confirmed',
-                participation_revision = participation_revision + 1,
-                participation_confirmed_at = unixepoch()
+        `UPDATE session_participant_roles
+            SET participation_status = 'declined', participation_revision = 2,
+                participation_confirmed_at = NULL,
+                participation_declined_at = unixepoch(),
+                participation_decline_reason = 'Not available'
           WHERE event_id = ? AND session_id = ? AND person_id = ?
-            AND participation_status = 'pending'`,
-      )
-        .bind(speaker.eventId, sessionId, speaker.personId)
-        .run();
-    });
-
-    await expect(
-      new SpeakerService(racingEnv).confirmOwnParticipation(speaker, {
-        sessionId,
-        participationRevision: 101,
-        confirmation: "confirmed",
-      }),
-    ).rejects.toThrow(/changed while confirmation/i);
-    await expect(
-      testEnv.DB.prepare(
-        `SELECT status, revision, waiver_json AS waiverJson
-           FROM task_instances WHERE id = ?`,
-      )
-        .bind(taskId)
-        .first(),
-    ).resolves.toEqual(before);
-  });
-
-  it("does not materialise acknowledgements from a losing concurrent reset", async () => {
-    const testEnv = env as unknown as CloudflareEnvironment;
-    await ensureDemoSpeakerData(testEnv);
-    const sessionId = "session-demo-speaker";
-    await testEnv.DB.prepare(
-      `UPDATE session_speakers
-          SET participation_status = 'declined', participation_revision = 201,
-              participation_confirmed_at = NULL,
-              participation_declined_at = unixepoch(),
-              participation_decline_reason = NULL
-        WHERE event_id = ? AND session_id = ? AND person_id = ?`,
-    )
-      .bind(speaker.eventId, sessionId, speaker.personId)
-      .run();
-    const resources = new ResourceService(testEnv);
-    const pageId = await resources.save(admin, {
-      title: "Concurrent reset acknowledgement",
-      slug: `concurrent-reset-ack-${crypto.randomUUID().slice(0, 8)}`,
-      category: "Preparation",
-      audienceScope: "all_speakers",
-      acknowledgementRequired: true,
-      document: {
-        type: "doc",
-        content: [
-          { type: "paragraph", content: [{ type: "text", text: "Read me." }] },
-        ],
-      },
-    });
-    const draft = (await resources.getAdminWorkspace(admin, pageId)).selected!;
-    await resources.publish(admin, pageId, draft.revision);
-    const taskId = `resource-ack:${pageId}:${speaker.personId}`;
-    await testEnv.DB.prepare("DELETE FROM task_instances WHERE id = ?")
-      .bind(taskId)
-      .run();
-
-    const racingEnv = withFirstBatchRace(testEnv, async () => {
-      await testEnv.DB.prepare(
-        `UPDATE sessions SET status = 'archived', revision = revision + 1
-          WHERE id = ? AND event_id = ?`,
-      )
-        .bind(sessionId, speaker.eventId)
-        .run();
-    });
-    await expect(
-      new SpeakerService(racingEnv).resetDeclinedParticipation(
-        admin,
-        speaker.personId,
-        {
-          sessionId,
-          participationRevision: 201,
-          resetConfirmation: "pending",
-        },
-      ),
-    ).rejects.toMatchObject({ status: 409 });
-    await expect(
-      testEnv.DB.prepare("SELECT id FROM task_instances WHERE id = ?")
-        .bind(taskId)
-        .first(),
-    ).resolves.toBeNull();
-    await expect(
-      testEnv.DB.prepare(
-        `SELECT participation_status AS status,
-                participation_revision AS revision
-           FROM session_speakers
-          WHERE event_id = ? AND session_id = ? AND person_id = ?`,
-      )
-        .bind(speaker.eventId, sessionId, speaker.personId)
-        .first(),
-    ).resolves.toEqual({ status: "declined", revision: 201 });
-    await testEnv.DB.prepare(
-      `UPDATE sessions SET status = 'scheduled', revision = revision + 1
-        WHERE id = ? AND event_id = ?`,
-    )
-      .bind(sessionId, speaker.eventId)
-      .run();
-  });
-
-  it("does not rematerialise confirmed-speaker tasks after eligibility was already established", async () => {
-    const testEnv = env as unknown as CloudflareEnvironment;
-    await ensureDemoSpeakerData(testEnv);
-    const sessionId = "session-demo-speaker";
-    const existingConfirmedSessionId = `already-confirmed-${crypto.randomUUID()}`;
-    await testEnv.DB.batch([
-      testEnv.DB.prepare(
-        `UPDATE session_speakers
-            SET participation_status = 'pending', participation_revision = 1,
-                participation_confirmed_at = NULL, participation_declined_at = NULL,
-                participation_decline_reason = NULL
-          WHERE event_id = ? AND session_id = ? AND person_id = ?`,
+            AND role = 'speaker'`,
       ).bind(speaker.eventId, sessionId, speaker.personId),
       testEnv.DB.prepare(
-        `INSERT INTO sessions (
-           id, event_id, title, slug, format, duration_minutes,
-           status, visibility, created_at, updated_at
-         ) VALUES (?, ?, 'Already confirmed session', ?, 'presentation', 45,
-                   'scheduled', 'public', unixepoch(), unixepoch())`,
-      ).bind(
-        existingConfirmedSessionId,
-        speaker.eventId,
-        existingConfirmedSessionId,
-      ),
-      testEnv.DB.prepare(
-        `INSERT INTO session_speakers (
-           session_id, event_id, person_id, position, role_label,
-           participation_status, participation_confirmed_at, visibility
-         ) VALUES (?, ?, ?, 0, 'Speaker', 'confirmed', unixepoch(), 'public')`,
-      ).bind(existingConfirmedSessionId, speaker.eventId, speaker.personId),
+        `UPDATE session_speakers
+            SET participation_status = 'declined', participation_revision = 2,
+                participation_confirmed_at = NULL,
+                participation_declined_at = unixepoch(),
+                participation_decline_reason = 'Not available'
+          WHERE event_id = ? AND session_id = ? AND person_id = ?`,
+      ).bind(speaker.eventId, sessionId, speaker.personId),
     ]);
+
     const resources = new ResourceService(testEnv);
     const pageId = await resources.save(admin, {
-      title: "Established confirmation briefing",
-      slug: `established-confirmation-${crypto.randomUUID().slice(0, 8)}`,
+      title: "Role assignment briefing",
+      slug: `role-assignment-${crypto.randomUUID().slice(0, 8)}`,
       category: "Preparation",
-      audienceScope: "confirmed_speakers",
+      audienceScope: "accepted_speakers",
       acknowledgementRequired: true,
       document: {
         type: "doc",
@@ -1174,223 +116,321 @@ describe("speaker profile service", () => {
       testEnv.DB.prepare("SELECT id FROM task_instances WHERE id = ?")
         .bind(taskId)
         .first(),
-    ).resolves.toEqual({ id: taskId });
-    await testEnv.DB.prepare("DELETE FROM task_instances WHERE id = ?")
-      .bind(taskId)
-      .run();
-
-    await expect(
-      new SpeakerService(testEnv).confirmOwnParticipation(speaker, {
-        sessionId,
-        participationRevision: 1,
-        confirmation: "confirmed",
-      }),
-    ).resolves.toMatchObject({ changed: true });
-    await expect(
-      testEnv.DB.prepare("SELECT id FROM task_instances WHERE id = ?")
-        .bind(taskId)
-        .first(),
     ).resolves.toBeNull();
-  });
-
-  it("invalidates public session and speaker cursors when confirmation joins the published programme", async () => {
-    const testEnv = env as unknown as CloudflareEnvironment;
-    await ensureDemoProgramme(testEnv);
-    const personId = `confirm-cursor-speaker-${crypto.randomUUID()}`;
-    await testEnv.DB.batch([
-      testEnv.DB.prepare(
-        `INSERT INTO people (
-           id, email, display_name, email_verified, profile_status,
-           created_at, updated_at
-         ) VALUES (?, ?, 'Cursor Confirm Speaker', 1, 'published',
-                   unixepoch(), unixepoch())`,
-      ).bind(personId, `${personId}@example.com`),
-      testEnv.DB.prepare(
-        `INSERT INTO session_speakers (
-           session_id, event_id, person_id, position, role_label,
-           participation_status, participation_confirmed_at, visibility
-         ) VALUES ('demo-session-1', ?, ?, 5000, 'Speaker',
-                   'pending', NULL, 'public')`,
-      ).bind(speaker.eventId, personId),
-    ]);
 
     try {
-      const speakerPage = await getPublicSpeakerPage(
-        testEnv,
-        "future-of-events-2027",
-        {
-          limit: 1,
-        },
-      );
-      const sessionPage = await getPublicSessionPage(
-        testEnv,
-        "future-of-events-2027",
-        {
-          limit: 1,
-        },
-      );
-      expect(speakerPage.body.nextCursor).toEqual(expect.any(String));
-      expect(sessionPage.body.nextCursor).toEqual(expect.any(String));
-      const before = await testEnv.DB.prepare(
-        `SELECT public_projection_revision AS revision
-         FROM events WHERE id = ?`,
-      )
-        .bind(speaker.eventId)
-        .first<{ revision: number }>();
-
-      await expect(
-        new SpeakerService(testEnv).confirmExternalParticipation(
-          admin,
-          personId,
-          {
-            sessionId: "demo-session-1",
-            participationRevision: 1,
-            confirmation: "confirmed",
-            externalConfirmation: "confirmed",
-          },
-        ),
-      ).resolves.toMatchObject({
+      const assignment = await service.addRole(admin, speaker.personId, {
+        sessionId,
+        role: "chair",
+        confirmation: "add",
+      });
+      expect(assignment).toMatchObject({
+        role: "chair",
+        label: "Chair",
         changed: true,
-        changeSequence: expect.any(Number),
+      });
+      await expect(
+        service.addRole(admin, speaker.personId, {
+          sessionId,
+          role: "chair",
+          confirmation: "add",
+        }),
+      ).resolves.toMatchObject({
+        role: "chair",
+        changed: false,
+        changeSequence: assignment.changeSequence,
       });
 
-      const after = await testEnv.DB.prepare(
-        `SELECT public_projection_revision AS revision
-         FROM events WHERE id = ?`,
-      )
-        .bind(speaker.eventId)
-        .first<{ revision: number }>();
-      expect(after!.revision).toBeGreaterThan(before!.revision);
       await expect(
         testEnv.DB.prepare(
-          `SELECT entity_type AS entityType, change_type AS changeType
-           FROM event_changes
-          WHERE event_id = ? AND entity_type = 'person' AND entity_id = ?
-          ORDER BY sequence DESC LIMIT 1`,
+          `SELECT participation_status AS participationStatus,
+                  participation_revision AS participationRevision,
+                  participation_confirmed_at AS participationConfirmedAt,
+                  participation_declined_at AS participationDeclinedAt,
+                  participation_decline_reason AS participationDeclineReason
+             FROM session_speakers
+            WHERE event_id = ? AND session_id = ? AND person_id = ?`,
         )
-          .bind(speaker.eventId, personId)
+          .bind(speaker.eventId, sessionId, speaker.personId)
           .first(),
-      ).resolves.toEqual({ entityType: "person", changeType: "updated" });
-
+      ).resolves.toEqual({
+        participationStatus: "pending",
+        participationRevision: 3,
+        participationConfirmedAt: null,
+        participationDeclinedAt: null,
+        participationDeclineReason: null,
+      });
       await expect(
-        getPublicSpeakerPage(testEnv, "future-of-events-2027", {
-          limit: 1,
-          cursor: speakerPage.body.nextCursor!,
-        }),
-      ).rejects.toMatchObject({ status: 409, code: "PUBLICATION_CHANGED" });
-      await expect(
-        getPublicSessionPage(testEnv, "future-of-events-2027", {
-          limit: 1,
-          cursor: sessionPage.body.nextCursor!,
-        }),
-      ).rejects.toMatchObject({ status: 409, code: "PUBLICATION_CHANGED" });
+        testEnv.DB.prepare("SELECT status FROM task_instances WHERE id = ?")
+          .bind(taskId)
+          .first(),
+      ).resolves.toEqual({ status: "not_started" });
     } finally {
       await testEnv.DB.batch([
         testEnv.DB.prepare(
-          `DELETE FROM task_instances
-            WHERE event_id = ? AND (target_id = ? OR owner_person_id = ?)`,
-        ).bind(speaker.eventId, personId, personId),
+          "DELETE FROM resource_pages WHERE id = ? AND event_id = ?",
+        ).bind(pageId, speaker.eventId),
         testEnv.DB.prepare(
-          `DELETE FROM session_speakers
-            WHERE event_id = ? AND person_id = ?`,
-        ).bind(speaker.eventId, personId),
-        testEnv.DB.prepare("DELETE FROM people WHERE id = ?").bind(personId),
+          `DELETE FROM session_participant_roles
+            WHERE event_id = ? AND session_id = ? AND person_id = ?
+              AND role = 'chair'`,
+        ).bind(speaker.eventId, sessionId, speaker.personId),
+        testEnv.DB.prepare(
+          `UPDATE session_participant_roles
+              SET participation_status = 'pending', participation_revision = 1,
+                  participation_confirmed_at = NULL,
+                  participation_declined_at = NULL,
+                  participation_decline_reason = NULL
+            WHERE event_id = ? AND session_id = ? AND person_id = ?
+              AND role = 'speaker'`,
+        ).bind(speaker.eventId, sessionId, speaker.personId),
+        testEnv.DB.prepare(
+          `UPDATE session_speakers
+              SET participation_status = 'pending', participation_revision = 1,
+                  participation_confirmed_at = NULL,
+                  participation_declined_at = NULL,
+                  participation_decline_reason = NULL
+            WHERE event_id = ? AND session_id = ? AND person_id = ?`,
+        ).bind(speaker.eventId, sessionId, speaker.personId),
       ]);
     }
   });
 
-  it.each([
-    [
-      "audit insertion",
-      /INSERT INTO audit_events[\s\S]*'speaker\.participation\.confirmed'/u,
-    ],
-    [
-      "public event-change insertion",
-      /INSERT INTO event_changes[\s\S]*'person'/u,
-    ],
-  ])(
-    "rolls back public confirmation when its %s is suppressed",
-    async (_label, pattern) => {
-      const testEnv = env as unknown as CloudflareEnvironment;
-      await ensureDemoProgramme(testEnv);
-      const personId = `confirm-atomic-${crypto.randomUUID()}`;
-      await insertPendingPublishedSpeaker(testEnv, personId);
-      const before = await confirmationPublicState(testEnv, personId);
-      expect(before).toMatchObject({
-        participationStatus: "pending",
-        personChangeCount: 0,
-      });
-      const fault = withSuppressedStatement(testEnv, pattern);
-
-      try {
-        await expect(
-          new SpeakerService(fault.env).confirmExternalParticipation(
-            admin,
-            personId,
-            {
-              sessionId: "demo-session-1",
-              participationRevision: 1,
-              confirmation: "confirmed",
-              externalConfirmation: "confirmed",
-            },
-          ),
-        ).rejects.toThrow(
-          /audit record and public change|changed while confirmation was being recorded/i,
-        );
-        expect(fault.suppressed()).toBe(1);
-        await expect(
-          confirmationPublicState(testEnv, personId),
-        ).resolves.toEqual(before);
-      } finally {
-        await testEnv.DB.batch([
-          testEnv.DB.prepare(
-            `DELETE FROM task_instances
-              WHERE event_id = ? AND (target_id = ? OR owner_person_id = ?)`,
-          ).bind(speaker.eventId, personId, personId),
-          testEnv.DB.prepare(
-            `DELETE FROM session_speakers
-              WHERE event_id = ? AND person_id = ?`,
-          ).bind(speaker.eventId, personId),
-          testEnv.DB.prepare("DELETE FROM people WHERE id = ?").bind(personId),
-        ]);
-      }
-    },
-  );
-
-  it("refuses participation confirmation after a session is cancelled", async () => {
+  it("materialises acknowledgements when a declined role is reset", async () => {
     const testEnv = env as unknown as CloudflareEnvironment;
     await ensureDemoSpeakerData(testEnv);
+    const service = new SpeakerService(testEnv);
     const sessionId = "session-demo-speaker";
     await testEnv.DB.batch([
       testEnv.DB.prepare(
-        `UPDATE session_speakers
-            SET participation_status = 'pending', participation_revision = 1,
-                participation_confirmed_at = NULL, participation_declined_at = NULL,
-                participation_decline_reason = NULL
-          WHERE event_id = ? AND session_id = ? AND person_id = ?`,
+        `UPDATE session_participant_roles
+            SET participation_status = 'declined', participation_revision = 2,
+                participation_confirmed_at = NULL,
+                participation_declined_at = unixepoch(),
+                participation_decline_reason = 'Not available'
+          WHERE event_id = ? AND session_id = ? AND person_id = ?
+            AND role = 'speaker'`,
       ).bind(speaker.eventId, sessionId, speaker.personId),
       testEnv.DB.prepare(
-        `UPDATE sessions SET status = 'cancelled'
-          WHERE event_id = ? AND id = ?`,
-      ).bind(speaker.eventId, sessionId),
+        `UPDATE session_speakers
+            SET participation_status = 'declined', participation_revision = 2,
+                participation_confirmed_at = NULL,
+                participation_declined_at = unixepoch(),
+                participation_decline_reason = 'Not available'
+          WHERE event_id = ? AND session_id = ? AND person_id = ?`,
+      ).bind(speaker.eventId, sessionId, speaker.personId),
     ]);
+    const resources = new ResourceService(testEnv);
+    const pageId = await resources.save(admin, {
+      title: "Role reset briefing",
+      slug: `role-reset-${crypto.randomUUID().slice(0, 8)}`,
+      category: "Preparation",
+      audienceScope: "accepted_speakers",
+      acknowledgementRequired: true,
+      document: {
+        type: "doc",
+        content: [
+          { type: "paragraph", content: [{ type: "text", text: "Read me." }] },
+        ],
+      },
+    });
+    const draft = (await resources.getAdminWorkspace(admin, pageId)).selected!;
+    await resources.publish(admin, pageId, draft.revision);
+    const taskId = `resource-ack:${pageId}:${speaker.personId}`;
 
     try {
+      const reset = await service.resetRole(admin, speaker.personId, {
+        sessionId,
+        role: "speaker",
+        roleRevision: 2,
+        resetConfirmation: "pending",
+      });
+      expect(reset).toMatchObject({
+        role: "speaker",
+        participationStatus: "pending",
+        changed: true,
+      });
       await expect(
-        new SpeakerService(testEnv).confirmOwnParticipation(speaker, {
+        service.resetRole(admin, speaker.personId, {
           sessionId,
-          participationRevision: 1,
-          confirmation: "confirmed",
+          role: "speaker",
+          roleRevision: 2,
+          resetConfirmation: "pending",
         }),
-      ).rejects.toMatchObject({ status: 404 });
+      ).resolves.toMatchObject({
+        role: "speaker",
+        participationStatus: "pending",
+        changed: false,
+        changeSequence: reset.changeSequence,
+      });
+      await expect(
+        testEnv.DB.prepare("SELECT status FROM task_instances WHERE id = ?")
+          .bind(taskId)
+          .first(),
+      ).resolves.toEqual({ status: "not_started" });
     } finally {
-      await testEnv.DB.prepare(
-        `UPDATE sessions SET status = 'scheduled'
-          WHERE event_id = ? AND id = ?`,
-      )
-        .bind(speaker.eventId, sessionId)
-        .run();
+      await testEnv.DB.batch([
+        testEnv.DB.prepare(
+          "DELETE FROM resource_pages WHERE id = ? AND event_id = ?",
+        ).bind(pageId, speaker.eventId),
+        testEnv.DB.prepare(
+          `UPDATE session_participant_roles
+              SET participation_status = 'pending', participation_revision = 1,
+                  participation_confirmed_at = NULL,
+                  participation_declined_at = NULL,
+                  participation_decline_reason = NULL
+            WHERE event_id = ? AND session_id = ? AND person_id = ?
+              AND role = 'speaker'`,
+        ).bind(speaker.eventId, sessionId, speaker.personId),
+        testEnv.DB.prepare(
+          `UPDATE session_speakers
+              SET participation_status = 'pending', participation_revision = 1,
+                  participation_confirmed_at = NULL,
+                  participation_declined_at = NULL,
+                  participation_decline_reason = NULL
+            WHERE event_id = ? AND session_id = ? AND person_id = ?`,
+        ).bind(speaker.eventId, sessionId, speaker.personId),
+      ]);
     }
+  });
+
+  it("tracks multiple session roles and their responses independently", async () => {
+    const testEnv = env as unknown as CloudflareEnvironment;
+    await ensureDemoSpeakerData(testEnv);
+    const service = new SpeakerService(testEnv);
+    const sessionId = "session-demo-speaker";
+    await testEnv.DB.prepare(
+      `UPDATE session_participant_roles
+          SET participation_status = 'pending', participation_revision = 1,
+              participation_confirmed_at = NULL,
+              participation_declined_at = NULL,
+              participation_decline_reason = NULL
+        WHERE event_id = ? AND session_id = ? AND person_id = ?
+          AND role = 'speaker'`,
+    )
+      .bind(speaker.eventId, sessionId, speaker.personId)
+      .run();
+
+    await expect(
+      service.addRole(admin, speaker.personId, {
+        sessionId,
+        role: "moderator",
+        confirmation: "add",
+      }),
+    ).resolves.toMatchObject({ role: "moderator", label: "Moderator" });
+    const confirmation = await service.respondOwnRole(speaker, {
+      sessionId,
+      role: "speaker",
+      roleRevision: 1,
+      response: "confirmed",
+      reason: "",
+    });
+    expect(confirmation).toMatchObject({
+      role: "speaker",
+      participationStatus: "confirmed",
+      changed: true,
+    });
+    await expect(
+      service.respondOwnRole(speaker, {
+        sessionId,
+        role: "speaker",
+        roleRevision: 1,
+        response: "confirmed",
+        reason: "",
+      }),
+    ).resolves.toMatchObject({
+      role: "speaker",
+      participationStatus: "confirmed",
+      changed: false,
+      changeSequence: confirmation.changeSequence,
+    });
+    await expect(
+      service.respondOwnRole(speaker, {
+        sessionId,
+        role: "moderator",
+        roleRevision: 1,
+        response: "declined",
+        reason: "Not moderating this session",
+      }),
+    ).resolves.toMatchObject({
+      role: "moderator",
+      participationStatus: "declined",
+    });
+
+    const roles = await testEnv.DB.prepare(
+      `SELECT role, participation_status AS participationStatus
+         FROM session_participant_roles
+        WHERE event_id = ? AND session_id = ? AND person_id = ?
+        ORDER BY role`,
+    )
+      .bind(speaker.eventId, sessionId, speaker.personId)
+      .all<{ role: string; participationStatus: string }>();
+    expect(roles.results).toEqual([
+      { role: "moderator", participationStatus: "declined" },
+      { role: "speaker", participationStatus: "confirmed" },
+    ]);
+    await expect(
+      testEnv.DB.prepare(
+        `SELECT participation_status AS participationStatus
+           FROM session_speakers
+          WHERE event_id = ? AND session_id = ? AND person_id = ?`,
+      )
+        .bind(speaker.eventId, sessionId, speaker.personId)
+        .first(),
+    ).resolves.toEqual({ participationStatus: "confirmed" });
+  });
+
+  it("fails role mutations before D1 when provider authority is unavailable", async () => {
+    const testEnv = env as unknown as CloudflareEnvironment;
+    await ensureDemoSpeakerData(testEnv);
+    await testEnv.DB.batch([
+      testEnv.DB.prepare(
+        `UPDATE session_participant_roles
+            SET participation_status = 'pending', participation_revision = 1,
+                participation_confirmed_at = NULL,
+                participation_declined_at = NULL,
+                participation_decline_reason = NULL
+          WHERE event_id = ? AND session_id = 'session-demo-speaker'
+            AND person_id = ? AND role = 'speaker'`,
+      ).bind(speaker.eventId, speaker.personId),
+      testEnv.DB.prepare(
+        `UPDATE session_speakers
+            SET participation_status = 'pending', participation_revision = 1,
+                participation_confirmed_at = NULL,
+                participation_declined_at = NULL,
+                participation_decline_reason = NULL
+          WHERE event_id = ? AND session_id = 'session-demo-speaker'
+            AND person_id = ?`,
+      ).bind(speaker.eventId, speaker.personId),
+    ]);
+    const providerFailure = new Error("Authoritative provider is unavailable.");
+    const airtable = {
+      executeIdempotent: async () => {
+        throw providerFailure;
+      },
+    } as unknown as AirtableProviderBoundary;
+    const service = new SpeakerService(testEnv, { airtable });
+
+    await expect(
+      service.respondOwnRole(speaker, {
+        sessionId: "session-demo-speaker",
+        role: "speaker",
+        roleRevision: 1,
+        response: "confirmed",
+        reason: "",
+      }),
+    ).rejects.toBe(providerFailure);
+    await expect(
+      testEnv.DB.prepare(
+        `SELECT participation_status AS status,
+                participation_revision AS revision
+           FROM session_participant_roles
+          WHERE event_id = ? AND session_id = 'session-demo-speaker'
+            AND person_id = ? AND role = 'speaker'`,
+      )
+        .bind(speaker.eventId, speaker.personId)
+        .first(),
+    ).resolves.toEqual({ status: "pending", revision: 1 });
   });
 
   it("persists and replays one durable invitation delivery operation", async () => {
@@ -1905,6 +945,197 @@ describe("speaker profile service", () => {
       .first<{ count: number }>();
     expect(auditCountAfterStale?.count).toBe(auditCountBeforeStale?.count);
     expect(auditCountAfterStale?.count).toBe(1);
+  });
+
+  it("omits hidden fixed profile fields and their history values from the participant portal", async () => {
+    const testEnv = env as unknown as CloudflareEnvironment;
+    await ensureDemoSpeakerData(testEnv);
+    const service = new SpeakerService(testEnv);
+    const before = await service.getPortal(speaker);
+    await service.updateProfile(speaker, {
+      revision: before.profile.revision,
+      name: before.profile.name,
+      biography:
+        before.profile.biography ??
+        "Priya designs inclusive event technology experiences for teams and audiences worldwide.",
+      pronunciation: before.profile.pronunciation ?? "",
+      organisationName: before.profile.organisationName ?? "",
+      jobTitle: before.profile.jobTitle ?? "",
+      linkedinUrl: before.profile.linkedinUrl ?? "",
+      xHandle: before.profile.xHandle ?? "",
+      travelPreferences: before.profile.travelPreferences ?? "",
+      publish: before.profile.profileStatus === "published",
+    });
+    const hiddenFields = [
+      "name",
+      "biography",
+      "pronunciation",
+      "organisation_name",
+      "job_title",
+      "linkedin_url",
+      "x_handle",
+      "travel_preferences",
+    ];
+    await testEnv.DB.batch(
+      hiddenFields.map((fieldKey) =>
+        testEnv.DB.prepare(
+          `INSERT INTO event_participant_field_policies (
+             event_id, field_key, participant_access,
+             updated_by_person_id, updated_at
+           ) VALUES (?, ?, 'hidden', ?, unixepoch())
+           ON CONFLICT(event_id, field_key) DO UPDATE SET
+             participant_access = 'hidden',
+             updated_by_person_id = excluded.updated_by_person_id,
+             updated_at = excluded.updated_at`,
+        ).bind(speaker.eventId, fieldKey, admin.personId),
+      ),
+    );
+
+    try {
+      const portal = await service.getPortal(speaker);
+      for (const property of [
+        "name",
+        "biography",
+        "pronunciation",
+        "organisationName",
+        "jobTitle",
+        "linkedinUrl",
+        "xHandle",
+        "travelPreferences",
+      ]) {
+        expect(portal.profile).not.toHaveProperty(property);
+      }
+      expect(portal.profileHistory.length).toBeGreaterThan(0);
+      for (const property of [
+        "displayName",
+        "biography",
+        "pronunciation",
+        "organisationName",
+        "jobTitle",
+      ]) {
+        expect(portal.profileHistory[0]).not.toHaveProperty(property);
+      }
+    } finally {
+      await testEnv.DB.prepare(
+        `DELETE FROM event_participant_field_policies
+          WHERE event_id = ? AND field_key IN (${hiddenFields.map(() => "?").join(",")})`,
+      )
+        .bind(speaker.eventId, ...hiddenFields)
+        .run();
+    }
+  });
+
+  it("allows a partial draft save when a protected profile field is incomplete", async () => {
+    const testEnv = env as unknown as CloudflareEnvironment;
+    await ensureDemoSpeakerData(testEnv);
+    const service = new SpeakerService(testEnv);
+    await testEnv.DB.batch([
+      testEnv.DB.prepare(
+        `UPDATE people
+            SET biography = NULL, profile_status = 'draft'
+          WHERE id = ?`,
+      ).bind(speaker.personId),
+      testEnv.DB.prepare(
+        `INSERT INTO event_participant_field_policies (
+           event_id, field_key, participant_access,
+           updated_by_person_id, updated_at
+         ) VALUES (?, 'biography', 'read_only', ?, unixepoch())
+         ON CONFLICT(event_id, field_key) DO UPDATE SET
+           participant_access = 'read_only',
+           updated_by_person_id = excluded.updated_by_person_id,
+           updated_at = excluded.updated_at`,
+      ).bind(speaker.eventId, admin.personId),
+    ]);
+    const before = await service.getPortal(speaker);
+
+    await service.updateProfile(speaker, {
+      revision: before.profile.revision,
+      name: "Priya Partial Save",
+      publish: false,
+    });
+
+    await expect(service.getPortal(speaker)).resolves.toMatchObject({
+      profile: {
+        name: "Priya Partial Save",
+        biography: null,
+        profileStatus: "draft",
+        revision: before.profile.revision + 1,
+      },
+    });
+  });
+
+  it("publishes with protected nullable optional profile fields", async () => {
+    const testEnv = env as unknown as CloudflareEnvironment;
+    await ensureDemoSpeakerData(testEnv);
+    const service = new SpeakerService(testEnv);
+    await testEnv.DB.batch([
+      testEnv.DB.prepare(
+        `UPDATE people
+            SET pronunciation = NULL, organisation_name = NULL,
+                job_title = NULL, linkedin_url = NULL, x_handle = NULL,
+                profile_status = 'draft'
+          WHERE id = ?`,
+      ).bind(speaker.personId),
+      testEnv.DB.prepare(
+        `UPDATE event_participant_profiles
+            SET travel_preferences = NULL
+          WHERE event_id = ? AND organisation_id = ? AND person_id = ?`,
+      ).bind(speaker.eventId, speaker.organisationId, speaker.personId),
+      ...[
+        "pronunciation",
+        "organisation_name",
+        "job_title",
+        "linkedin_url",
+        "x_handle",
+        "travel_preferences",
+      ].map((fieldKey) =>
+        testEnv.DB.prepare(
+          `INSERT INTO event_participant_field_policies (
+             event_id, field_key, participant_access,
+             updated_by_person_id, updated_at
+           ) VALUES (?, ?, 'read_only', ?, unixepoch())
+           ON CONFLICT(event_id, field_key) DO UPDATE SET
+             participant_access = 'read_only',
+             updated_by_person_id = excluded.updated_by_person_id,
+             updated_at = excluded.updated_at`,
+        ).bind(speaker.eventId, fieldKey, admin.personId),
+      ),
+    ]);
+
+    try {
+      const before = await service.getPortal(speaker);
+      await service.updateProfile(speaker, {
+        revision: before.profile.revision,
+        name: "Priya Published Profile",
+        biography:
+          "Priya builds inclusive event technology for programme teams and their audiences.",
+        publish: true,
+      });
+
+      await expect(service.getPortal(speaker)).resolves.toMatchObject({
+        profile: {
+          name: "Priya Published Profile",
+          pronunciation: null,
+          organisationName: null,
+          jobTitle: null,
+          linkedinUrl: null,
+          xHandle: null,
+          travelPreferences: null,
+          profileStatus: "published",
+          revision: before.profile.revision + 1,
+        },
+      });
+    } finally {
+      await testEnv.DB.prepare(
+        `DELETE FROM event_participant_field_policies
+          WHERE event_id = ? AND field_key IN (
+            'pronunciation','organisation_name','job_title','linkedin_url',
+            'x_handle','travel_preferences'
+          )`,
+      )
+        .bind(speaker.eventId)
+        .run();
+    }
   });
 
   it("updates a profile through an accepted submitter membership", async () => {

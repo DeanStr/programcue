@@ -1946,10 +1946,11 @@ describe("onboarding task service", () => {
       );
       expect(checklist).toBeDefined();
 
-      await new SpeakerService(testEnv).declineOwnParticipation(speaker, {
+      await new SpeakerService(testEnv).respondOwnRole(speaker, {
         sessionId: "session-demo-speaker",
-        participationRevision: 1,
-        declineConfirmation: "declined",
+        role: "speaker",
+        roleRevision: 1,
+        response: "declined",
         reason: "I am unavailable for this session.",
       });
 

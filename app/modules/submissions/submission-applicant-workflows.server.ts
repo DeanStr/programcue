@@ -1,5 +1,10 @@
 import { z } from "zod";
 import { requireValue } from "~/lib/required-value";
+import {
+  EventFieldService,
+  type ParticipantProfilePolicies,
+  participantVisibleProfile,
+} from "~/modules/fields/event-field-service.server";
 import { FileService } from "~/modules/files/file-service.server";
 import type { PublicForm } from "./applicant-session.server";
 import { routeEvaluationCoSpeakerEmails } from "./evaluation-co-speaker-email-routing.server";
@@ -7,6 +12,8 @@ import { SubmissionApplicantEventService } from "./submission-applicant-events.s
 import { submissionApplicationAvailability } from "./submission-availability";
 import {
   type Applicant,
+  type ApplicantDraft,
+  type ParticipantApplicantDraft,
   SubmissionStateError,
 } from "./submission-repository.server";
 import {
@@ -27,6 +34,38 @@ import {
   SubmissionServiceFoundation,
   withdrawSubmissionSchema,
 } from "./submission-service-foundation.server";
+
+type VerifiedApplicant = Extract<Applicant, { verified: true }>;
+type ApplicantPortalView =
+  | (Omit<VerifiedApplicant, "name" | "biography"> &
+      Partial<Pick<VerifiedApplicant, "name" | "biography">>)
+  | Extract<Applicant, { verified: false }>;
+
+function participantVisibleApplicant(
+  applicant: Applicant,
+  policies: ParticipantProfilePolicies,
+): ApplicantPortalView {
+  if (!applicant.verified) return applicant;
+  return participantVisibleProfile(applicant, policies) as ApplicantPortalView;
+}
+
+function participantVisibleDraft(
+  draft: ApplicantDraft,
+  policies: ParticipantProfilePolicies,
+): ParticipantApplicantDraft {
+  return {
+    ...draft,
+    speakers: draft.speakers.map((speaker) => {
+      if (speaker.personId === null) return speaker;
+      const visible = {
+        ...speaker,
+      } as ParticipantApplicantDraft["speakers"][number];
+      if (policies.name === "hidden") delete visible.name;
+      if (policies.biography === "hidden") delete visible.biography;
+      return visible;
+    }),
+  };
+}
 
 export class SubmissionApplicantWorkflows extends SubmissionServiceFoundation {
   async authorizeApplicantProfileImport(request: Request, publicSlug: string) {
@@ -131,6 +170,39 @@ export class SubmissionApplicantWorkflows extends SubmissionServiceFoundation {
     return submissionApplicationAvailability(form);
   }
 
+  protected async applicantApplicationAvailability(
+    form: Awaited<ReturnType<SubmissionServiceFoundation["getPublicForm"]>>,
+    applicant: Applicant,
+    excludeSubmissionId?: string,
+  ) {
+    if (!applicant.verified || form.perPersonSubmissionLimit === null) {
+      return this.applicationAvailability(form);
+    }
+    const row = await this.env.DB.prepare(
+      `SELECT COUNT(*) AS count
+         FROM submissions submission
+         JOIN form_versions version
+           ON version.id = submission.form_version_id
+          AND version.event_id = submission.event_id
+        WHERE version.form_id = ? AND submission.event_id = ?
+          AND submission.submitter_person_id = ?
+          AND submission.status <> 'withdrawn'
+          AND (? IS NULL OR submission.id <> ?)`,
+    )
+      .bind(
+        form.id,
+        form.eventId,
+        applicant.personId,
+        excludeSubmissionId ?? null,
+        excludeSubmissionId ?? null,
+      )
+      .first<{ count: number }>();
+    return submissionApplicationAvailability({
+      ...form,
+      personSubmissionCount: row?.count ?? 0,
+    });
+  }
+
   protected async getApplicantVideoUpload(
     form: PublicForm,
     applicant: Applicant,
@@ -214,7 +286,9 @@ export class SubmissionApplicantWorkflows extends SubmissionServiceFoundation {
         : await this.getApplicantAccessForm(publicSlug, selectedId);
     const applicant =
       claimedContext?.applicant ?? (await this.applicants.get(request, form));
-    const availability = this.applicationAvailability(form);
+    const availability = applicant
+      ? await this.applicantApplicationAvailability(form, applicant)
+      : this.applicationAvailability(form);
     const revisionAvailability = this.applicationRevisionAvailability(form);
     if (!applicant) {
       const browserForm = applicantFormView(form);
@@ -225,10 +299,12 @@ export class SubmissionApplicantWorkflows extends SubmissionServiceFoundation {
         otherEventApplications: [],
         invitations: [],
         speakerProfile: null,
+        draftSpeakerFieldAccess: null,
         selected: null,
         selectedForm: browserForm,
         selectedUpload: null,
         availability,
+        selectedCanSubmit: false,
         selectedCanRevise: false,
       };
     }
@@ -320,24 +396,71 @@ export class SubmissionApplicantWorkflows extends SubmissionServiceFoundation {
             selected.id,
           )
         : null;
+    const selectedCanSubmit =
+      selected?.status === "draft" && applicant.verified
+        ? (
+            await this.applicantApplicationAvailability(
+              form,
+              applicant,
+              selected.id,
+            )
+          ).accepting
+        : false;
+    const profilePolicies = applicant.verified
+      ? await new EventFieldService(this.env).profilePolicies(
+          await this.publicScope(form.eventId),
+        )
+      : null;
+    const applicantView = profilePolicies
+      ? participantVisibleApplicant(applicant, profilePolicies)
+      : applicant;
+    const participantDrafts = profilePolicies
+      ? drafts.map((draft) => participantVisibleDraft(draft, profilePolicies))
+      : drafts;
+    const participantSelected = selected
+      ? (participantDrafts.find((draft) => draft.id === selected.id) ?? null)
+      : null;
+    let speakerProfile = null;
+    if (applicant.verified && claimedProfile && profilePolicies) {
+      const visible = participantVisibleProfile(
+        {
+          name: applicant.name,
+          biography: applicant.biography,
+        },
+        profilePolicies,
+      );
+      if (
+        profilePolicies.name !== "hidden" ||
+        profilePolicies.biography !== "hidden"
+      ) {
+        speakerProfile = {
+          ...visible,
+          revision: applicant.profileRevision,
+          fieldAccess: {
+            name: profilePolicies.name,
+            biography: profilePolicies.biography,
+          },
+        };
+      }
+    }
     return {
       form: applicantFormView(form),
-      applicant,
-      drafts,
+      applicant: applicantView,
+      drafts: participantDrafts,
       otherEventApplications: otherEventApplications.results,
       invitations,
-      speakerProfile:
-        applicant.verified && claimedProfile
-          ? {
-              name: applicant.name,
-              biography: applicant.biography,
-              revision: applicant.profileRevision,
-            }
-          : null,
-      selected,
+      speakerProfile,
+      draftSpeakerFieldAccess: profilePolicies
+        ? {
+            name: profilePolicies.name,
+            biography: profilePolicies.biography,
+          }
+        : null,
+      selected: participantSelected,
       selectedForm: applicantFormView(selectedForm),
       selectedUpload,
       availability,
+      selectedCanSubmit,
       selectedCanRevise:
         Boolean(selected) &&
         requireValue(selected, "Required selected is unavailable.").status ===
@@ -372,7 +495,10 @@ export class SubmissionApplicantWorkflows extends SubmissionServiceFoundation {
           draftId,
         );
         if (replay) return replay.id;
-        const availability = this.applicationAvailability(form);
+        const availability = await this.applicantApplicationAvailability(
+          form,
+          applicant,
+        );
         if (!availability.accepting) {
           throw new PublicFormUnavailableError(availability.reason);
         }
@@ -499,11 +625,18 @@ export class SubmissionApplicantWorkflows extends SubmissionServiceFoundation {
     applicant: Applicant,
     rawPayload: unknown,
   ) {
+    const restoredPayload =
+      await this.restoreProtectedParticipantDraftSpeakerFields(
+        currentForm,
+        applicant,
+        rawPayload,
+        true,
+      );
     const routed = await routeEvaluationCoSpeakerEmails(
       this.env,
       currentForm.eventId,
       applicant,
-      draftSavePayloadSchema.parse(rawPayload),
+      draftSavePayloadSchema.parse(restoredPayload),
     );
     const payload = routed.payload;
     if (
@@ -676,14 +809,26 @@ export class SubmissionApplicantWorkflows extends SubmissionServiceFoundation {
     rawPayload: unknown,
     operationId?: string,
   ) {
-    const availability = this.applicationAvailability(currentForm);
+    const restoredPayload =
+      await this.restoreProtectedParticipantDraftSpeakerFields(
+        currentForm,
+        applicant,
+        rawPayload,
+        false,
+      );
+    const parsedPayload = draftPayloadSchema.parse(restoredPayload);
+    const availability = await this.applicantApplicationAvailability(
+      currentForm,
+      applicant,
+      parsedPayload.submissionId,
+    );
     if (!availability.accepting)
       throw new PublicFormUnavailableError(availability.reason);
     const routed = await routeEvaluationCoSpeakerEmails(
       this.env,
       currentForm.eventId,
       applicant,
-      draftPayloadSchema.parse(rawPayload),
+      parsedPayload,
     );
     const payload = routed.payload;
     if (

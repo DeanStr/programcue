@@ -1,6 +1,7 @@
 import { CheckCircle2, History, RotateCcw } from "lucide-react";
 import { data, Form, Link, useActionData } from "react-router";
 import { ZodError } from "zod";
+import { EventFieldInputs } from "~/components/event-field-inputs";
 import { Button, ButtonLink } from "~/components/ui/button";
 import { DomainStatusBadge } from "~/components/ui/domain-status-badge";
 import { EventDateTime } from "~/components/ui/event-date-time";
@@ -9,6 +10,10 @@ import {
   ContentManagementService,
   ContentManagementStateError,
 } from "~/modules/content/content-management-service.server";
+import {
+  EventFieldService,
+  EventFieldStateError,
+} from "~/modules/fields/event-field-service.server";
 import { requireCurrentEventRole } from "~/platform/auth/current-event.server";
 import { getCloudflareContext } from "~/platform/cloudflare-context";
 import { recordRouteChange } from "~/platform/realtime/route-realtime.server";
@@ -31,11 +36,15 @@ async function administrator(
 export async function loader({ request, context, params }: Route.LoaderArgs) {
   const { env, viewer } = await administrator(request, context);
   const historyCursor = new URL(request.url).searchParams.get("history");
-  return new ContentManagementService(env).getSession(
-    viewer,
-    params.sessionId,
-    historyCursor,
-  );
+  const [content, customFields] = await Promise.all([
+    new ContentManagementService(env).getSession(
+      viewer,
+      params.sessionId,
+      historyCursor,
+    ),
+    new EventFieldService(env).values(viewer, "session", params.sessionId),
+  ]);
+  return { ...content, customFields };
 }
 
 export async function action({ request, context, params }: Route.ActionArgs) {
@@ -50,6 +59,27 @@ export async function action({ request, context, params }: Route.ActionArgs) {
   const intent = String(form.get("intent") ?? "");
   const service = new ContentManagementService(env);
   try {
+    if (intent === "save-event-fields") {
+      await new EventFieldService(env).saveValues(
+        viewer,
+        "session",
+        params.sessionId,
+        form,
+      );
+      const realtimeFailure = await recordRouteChange(env, viewer, {
+        entityType: "session",
+        entityId: params.sessionId,
+        changeType: "updated",
+      });
+      return data(
+        {
+          ok: true as const,
+          message: "Event-specific session fields saved.",
+          warning: realtimeFailure?.message ?? null,
+        },
+        { status: realtimeFailure ? 207 : 200 },
+      );
+    }
     const result =
       intent === "change-status"
         ? await service.changeStatus(viewer, {
@@ -103,6 +133,12 @@ export async function action({ request, context, params }: Route.ActionArgs) {
       );
     }
     if (error instanceof ContentManagementStateError) {
+      return data(
+        { ok: false as const, message: error.message },
+        { status: error.status },
+      );
+    }
+    if (error instanceof EventFieldStateError) {
       return data(
         { ok: false as const, message: error.message },
         { status: error.status },
@@ -239,6 +275,24 @@ export default function AdminContentSession({
           </div>
         )}
       </section>
+
+      {loaderData.customFields.length ? (
+        <section className="card pad mb" aria-labelledby="event-fields-title">
+          <div className="card-title">
+            <div>
+              <span className="pc-section-kicker">Event-specific</span>
+              <h2 id="event-fields-title">Additional session information</h2>
+            </div>
+          </div>
+          <Form method="post" className="stack mt">
+            <input type="hidden" name="intent" value="save-event-fields" />
+            <EventFieldInputs fields={loaderData.customFields} />
+            <Button type="submit" variant="primary">
+              Save additional information
+            </Button>
+          </Form>
+        </section>
+      ) : null}
 
       <section className="card pad" aria-labelledby="history-title">
         <div className="card-title">

@@ -25,7 +25,8 @@ beforeEach(async () => {
   await ensureDemoSubmissionForm(testEnv);
   await testEnv.DB.prepare(
     `UPDATE form_definitions
-        SET closes_at = NULL, submission_limit = NULL
+        SET opens_at = NULL, closes_at = NULL, submission_limit = NULL,
+            per_person_submission_limit = NULL
       WHERE event_id = ? AND public_slug = 'form'`,
   )
     .bind(viewer.eventId)
@@ -42,7 +43,18 @@ describe("participant application summary", () => {
 
     await testEnv.DB.prepare(
       `UPDATE form_definitions
-          SET closes_at = unixepoch() - 1
+          SET opens_at = unixepoch() + 3600
+        WHERE event_id = ? AND public_slug = 'form'`,
+    )
+      .bind(viewer.eventId)
+      .run();
+    await expect(service.getWorkspace(viewer)).resolves.toMatchObject({
+      availableForms: [],
+    });
+
+    await testEnv.DB.prepare(
+      `UPDATE form_definitions
+          SET opens_at = NULL, closes_at = unixepoch() - 1
         WHERE event_id = ? AND public_slug = 'form'`,
     )
       .bind(viewer.eventId)
@@ -106,6 +118,17 @@ describe("participant application summary", () => {
       ).bind(viewer.eventId),
     ]);
 
+    await expect(service.getWorkspace(viewer)).resolves.toMatchObject({
+      availableForms: [],
+    });
+
+    await testEnv.DB.prepare(
+      `UPDATE form_definitions
+          SET submission_limit = NULL, per_person_submission_limit = 1
+        WHERE event_id = ? AND public_slug = 'form'`,
+    )
+      .bind(viewer.eventId)
+      .run();
     await expect(service.getWorkspace(viewer)).resolves.toMatchObject({
       availableForms: [],
     });

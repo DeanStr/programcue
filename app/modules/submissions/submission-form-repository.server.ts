@@ -7,6 +7,7 @@ import {
   type FormWorkspace,
   mapForm,
   mapVersion,
+  openDateToEpoch,
   SubmissionRevisionConflictError,
   SubmissionStateError,
   settingsSnapshot,
@@ -39,8 +40,10 @@ export class SubmissionFormRepository {
              e.participant_support_url AS participantSupportUrl,
              e.file_policy_json AS filePolicyJson,
              f.name, f.kind, f.status,
-             f.public_slug AS publicSlug, f.closes_at AS closesAt,
-             f.submission_limit AS submissionLimit, f.min_speakers AS minSpeakers,
+             f.public_slug AS publicSlug, f.opens_at AS opensAt,
+             f.closes_at AS closesAt, f.submission_limit AS submissionLimit,
+             f.per_person_submission_limit AS perPersonSubmissionLimit,
+             f.min_speakers AS minSpeakers,
              f.max_speakers AS maxSpeakers, f.access_mode AS accessMode,
              f.access_password_hash AS accessPasswordHash,
              (SELECT COUNT(*) FROM submissions s
@@ -88,8 +91,11 @@ export class SubmissionFormRepository {
       name: draftVersion.settings.name ?? summary.name,
       kind: draftVersion.settings.kind ?? summary.kind,
       publicSlug: draftVersion.settings.publicSlug ?? summary.publicSlug,
+      opensAt: draftVersion.settings.opensAt ?? null,
       closesAt: draftVersion.settings.closesAt ?? null,
       submissionLimit: draftVersion.settings.submissionLimit ?? null,
+      perPersonSubmissionLimit:
+        draftVersion.settings.perPersonSubmissionLimit ?? null,
       minSpeakers: draftVersion.settings.minSpeakers ?? summary.minSpeakers,
       maxSpeakers: draftVersion.settings.maxSpeakers ?? null,
       accessMode: draftVersion.settings.accessMode ?? summary.accessMode,
@@ -158,11 +164,12 @@ export class SubmissionFormRepository {
       this.env.DB.prepare(
         `
         INSERT INTO form_definitions (
-          id, event_id, name, kind, status, public_slug, closes_at, submission_limit,
+          id, event_id, name, kind, status, public_slug, opens_at, closes_at,
+          submission_limit, per_person_submission_limit,
           min_speakers, max_speakers, access_mode, access_password_hash, created_by_person_id,
           last_operation_id, created_at, updated_at
         )
-        SELECT ?, ?, ?, ?, 'draft', ?, ?, ?, ?, ?, ?, ?, ?, ?, unixepoch(), unixepoch()
+        SELECT ?, ?, ?, ?, 'draft', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, unixepoch(), unixepoch()
          WHERE NOT EXISTS (
            SELECT 1 FROM form_definitions WHERE public_slug = ?
          )
@@ -174,8 +181,10 @@ export class SubmissionFormRepository {
         input.name,
         input.kind,
         input.publicSlug,
+        openDateToEpoch(input.openDate ?? null, eventExists.timezone),
         closeDateToEpoch(input.closeDate, eventExists.timezone),
         input.submissionLimit,
+        input.perPersonSubmissionLimit ?? null,
         input.minSpeakers,
         input.maxSpeakers,
         input.accessMode,
@@ -556,7 +565,8 @@ export class SubmissionFormRepository {
       this.env.DB.prepare(
         `
         UPDATE form_definitions
-           SET name = ?, kind = ?, public_slug = ?, closes_at = ?, submission_limit = ?,
+           SET name = ?, kind = ?, public_slug = ?, opens_at = ?, closes_at = ?,
+               submission_limit = ?, per_person_submission_limit = ?,
                min_speakers = ?, max_speakers = ?, access_mode = ?, access_password_hash = ?,
                status = 'published', revision = revision + 1, last_operation_id = ?,
                updated_at = unixepoch()
@@ -595,8 +605,10 @@ export class SubmissionFormRepository {
         workspace.name,
         workspace.kind,
         workspace.publicSlug,
+        workspace.opensAt,
         workspace.closesAt,
         workspace.submissionLimit,
+        workspace.perPersonSubmissionLimit,
         workspace.minSpeakers,
         workspace.maxSpeakers,
         workspace.accessMode,
@@ -801,8 +813,10 @@ export class SubmissionFormRepository {
              e.participant_support_url AS participantSupportUrl,
              e.file_policy_json AS filePolicyJson,
              f.name, f.kind, f.status,
-             f.public_slug AS publicSlug, f.closes_at AS closesAt,
-             f.submission_limit AS submissionLimit, f.min_speakers AS minSpeakers,
+             f.public_slug AS publicSlug, f.opens_at AS opensAt,
+             f.closes_at AS closesAt, f.submission_limit AS submissionLimit,
+             f.per_person_submission_limit AS perPersonSubmissionLimit,
+             f.min_speakers AS minSpeakers,
              f.max_speakers AS maxSpeakers, f.access_mode AS accessMode,
              f.access_password_hash AS accessPasswordHash,
              (SELECT COUNT(*) FROM submissions s JOIN form_versions sv ON sv.id = s.form_version_id WHERE sv.form_id = f.id AND s.status <> 'draft') AS submittedCount,
@@ -868,7 +882,9 @@ export class SubmissionFormRepository {
               e.participant_support_url AS participantSupportUrl,
               e.file_policy_json AS filePolicyJson,
               f.name, f.kind, f.status, f.public_slug AS publicSlug,
-              f.closes_at AS closesAt, f.submission_limit AS submissionLimit,
+              f.opens_at AS opensAt, f.closes_at AS closesAt,
+              f.submission_limit AS submissionLimit,
+              f.per_person_submission_limit AS perPersonSubmissionLimit,
               f.min_speakers AS minSpeakers, f.max_speakers AS maxSpeakers,
               f.access_mode AS accessMode,
               f.access_password_hash AS accessPasswordHash,
@@ -974,7 +990,9 @@ export class SubmissionFormRepository {
               e.participant_support_url AS participantSupportUrl,
               e.file_policy_json AS filePolicyJson,
               f.name, f.kind, f.status, f.public_slug AS publicSlug,
-              f.closes_at AS closesAt, f.submission_limit AS submissionLimit,
+              f.opens_at AS opensAt, f.closes_at AS closesAt,
+              f.submission_limit AS submissionLimit,
+              f.per_person_submission_limit AS perPersonSubmissionLimit,
               f.min_speakers AS minSpeakers, f.max_speakers AS maxSpeakers,
               f.access_mode AS accessMode,
               f.access_password_hash AS accessPasswordHash,
@@ -1063,7 +1081,9 @@ export class SubmissionFormRepository {
               e.participant_support_url AS participantSupportUrl,
               e.file_policy_json AS filePolicyJson,
               f.name, f.kind, f.status, f.public_slug AS publicSlug,
-              f.closes_at AS closesAt, f.submission_limit AS submissionLimit,
+              f.opens_at AS opensAt, f.closes_at AS closesAt,
+              f.submission_limit AS submissionLimit,
+              f.per_person_submission_limit AS perPersonSubmissionLimit,
               f.min_speakers AS minSpeakers, f.max_speakers AS maxSpeakers,
               f.access_mode AS accessMode,
               f.access_password_hash AS accessPasswordHash,
