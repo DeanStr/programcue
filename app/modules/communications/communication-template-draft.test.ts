@@ -1120,6 +1120,198 @@ describe("Communications D1 vertical slice", () => {
   });
 
   describe("template version concurrency", () => {
+    it("does not apply reminder compatibility rules to enabled non-reminder triggers", async () => {
+      const { testEnv } = await communicationEnvironment();
+      const service = new CommunicationService(testEnv);
+      const published = await service.saveTemplate(viewer, {
+        name: "Manual communication template",
+        category: "ad_hoc",
+        subject: "An update from {{event.name}}",
+        content: {
+          body: "Hello {{recipient.firstName}}, here is your event update.",
+          physicalAddress: "100 Programme Way, Toronto",
+        },
+      });
+      await service.publishTemplate(viewer, published.versionId);
+      await testEnv.DB.prepare(
+        `INSERT INTO communication_triggers (
+           id, event_id, template_id, trigger_type, configuration_json, enabled,
+           created_at, updated_at
+         ) VALUES (?, ?, ?, 'manual', ?, 1, unixepoch(), unixepoch())`,
+      )
+        .bind(
+          crypto.randomUUID(),
+          viewer.eventId,
+          published.templateId,
+          JSON.stringify({ recipient: "manual-recipient@example.com" }),
+        )
+        .run();
+
+      const replacement = await service.saveTemplate(viewer, {
+        templateId: published.templateId,
+        name: "Manual communication template",
+        category: "ad_hoc",
+        subject: "A revised update from {{event.name}}",
+        content: {
+          body: "Hello {{recipient.firstName}}, here is the revised event update.",
+          physicalAddress: "100 Programme Way, Toronto",
+        },
+      });
+      await expect(
+        service.publishTemplate(viewer, replacement.versionId),
+      ).resolves.toMatchObject({
+        id: replacement.versionId,
+        versionStatus: "published",
+      });
+    });
+
+    it("keeps the published reminder live when a draft conflicts with an enabled trigger", async () => {
+      const { testEnv } = await communicationEnvironment();
+      const service = new CommunicationService(testEnv);
+      const published = await service.saveTemplate(viewer, {
+        name: "Generic participant reminder",
+        category: "task_reminder",
+        subject: "Action needed for {{event.name}}",
+        content: {
+          body: "Hello {{recipient.firstName}}, your event action is still pending.",
+          physicalAddress: "100 Programme Way, Toronto",
+        },
+      });
+      await service.publishTemplate(viewer, published.versionId);
+      const incompatible = await service.saveTemplate(viewer, {
+        templateId: published.templateId,
+        name: "Generic participant reminder",
+        category: "task_reminder",
+        subject: "Reminder: {{task.title}}",
+        content: {
+          body: "Complete {{task.title}} by {{task.dueDate}}.",
+          physicalAddress: "100 Programme Way, Toronto",
+        },
+      });
+      await service.saveTrigger(viewer, {
+        templateId: published.templateId,
+        triggerType: "participation_pending",
+        audienceType: "pending_participants",
+        kind: "transactional",
+        sendHourUtc: 9,
+        enabled: true,
+      });
+
+      await expect(
+        service.publishTemplate(viewer, incompatible.versionId),
+      ).rejects.toThrow(/enabled participation_pending reminder/);
+      await expect(
+        service.saveTemplate(viewer, {
+          templateId: published.templateId,
+          name: "Generic participant reminder",
+          category: "task_reminder",
+          subject: "Another {{task.title}} reminder",
+          content: {
+            body: "Complete {{task.title}}.",
+            physicalAddress: "100 Programme Way, Toronto",
+          },
+        }),
+      ).rejects.toThrow(/enabled participation_pending reminder/);
+      await expect(
+        testEnv.DB.prepare(
+          `SELECT id, status FROM communication_template_versions
+            WHERE template_id = ? ORDER BY version_number`,
+        )
+          .bind(published.templateId)
+          .all(),
+      ).resolves.toMatchObject({
+        results: [
+          { id: published.versionId, status: "published" },
+          { id: incompatible.versionId, status: "draft" },
+        ],
+      });
+    });
+
+    it("rejects publication when a conflicting trigger is enabled after the compatibility read", async () => {
+      const { testEnv } = await communicationEnvironment();
+      const templates = new CommunicationTemplateService(testEnv);
+      const communications = new CommunicationService(testEnv);
+      const published = await templates.saveTemplate(viewer, {
+        name: "Concurrent participant reminder",
+        category: "task_reminder",
+        subject: "Action needed for {{event.name}}",
+        content: {
+          body: "Hello {{recipient.firstName}}, your event action is still pending.",
+          physicalAddress: "100 Programme Way, Toronto",
+        },
+      });
+      await templates.publishTemplate(viewer, published.versionId);
+      const incompatible = await templates.saveTemplate(viewer, {
+        templateId: published.templateId,
+        name: "Concurrent participant reminder",
+        category: "task_reminder",
+        subject: "Reminder: {{task.title}}",
+        content: {
+          body: "Complete {{task.title}}.",
+          physicalAddress: "100 Programme Way, Toronto",
+        },
+      });
+
+      type TemplateCompatibilityCheck = (
+        currentViewer: Viewer,
+        templateId: string,
+        template: Awaited<
+          ReturnType<CommunicationTemplateService["getTemplateVersion"]>
+        >,
+      ) => Promise<void>;
+      const internal = templates as unknown as {
+        assertEnabledTriggerCompatibility: TemplateCompatibilityCheck;
+      };
+      const checkCompatibility =
+        internal.assertEnabledTriggerCompatibility.bind(templates);
+      let markCompatibilityRead!: () => void;
+      const compatibilityRead = new Promise<void>((resolve) => {
+        markCompatibilityRead = resolve;
+      });
+      let releasePublication!: () => void;
+      const publicationReleased = new Promise<void>((resolve) => {
+        releasePublication = resolve;
+      });
+      internal.assertEnabledTriggerCompatibility = async (...args) => {
+        await checkCompatibility(...args);
+        markCompatibilityRead();
+        await publicationReleased;
+      };
+
+      const publication = templates.publishTemplate(
+        viewer,
+        incompatible.versionId,
+      );
+      const rejectedPublication = expect(publication).rejects.toThrow(
+        /changed before it could be published/,
+      );
+      await compatibilityRead;
+      await communications.saveTrigger(viewer, {
+        templateId: published.templateId,
+        triggerType: "participation_pending",
+        audienceType: "pending_participants",
+        kind: "transactional",
+        sendHourUtc: 9,
+        enabled: true,
+      });
+      releasePublication();
+
+      await rejectedPublication;
+      await expect(
+        testEnv.DB.prepare(
+          `SELECT id, status FROM communication_template_versions
+            WHERE template_id = ? ORDER BY version_number`,
+        )
+          .bind(published.templateId)
+          .all(),
+      ).resolves.toMatchObject({
+        results: [
+          { id: published.versionId, status: "published" },
+          { id: incompatible.versionId, status: "draft" },
+        ],
+      });
+    });
+
     it("allocates adjacent immutable versions when two template saves race", async () => {
       const { testEnv } = await communicationEnvironment();
       const service = new CommunicationService(testEnv);

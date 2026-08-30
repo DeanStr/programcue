@@ -19,6 +19,8 @@ import {
   DEMO_DECISION_TEMPLATE_ID,
   DEMO_DECISION_VERSION_ID,
   DEMO_EVALUATION_RESET_CONFIRMATION,
+  DEMO_PARTICIPANT_REMINDER_TEMPLATE_ID,
+  DEMO_PARTICIPANT_REMINDER_VERSION_ID,
   DEMO_REMINDER_TEMPLATE_ID,
   DEMO_REMINDER_VERSION_ID,
   DEMO_REVIEWER_REMINDER_TEMPLATE_ID,
@@ -479,7 +481,7 @@ export function demoBaselineIsComplete(evidence: DemoBaselineEvidence) {
     evidence.publishedSchedules === 1 &&
     evidence.canonicalEventConfiguration === 1 &&
     evidence.canonicalOrganisationMemberships === 1 &&
-    evidence.publishedTemplates === 5 &&
+    evidence.publishedTemplates === 6 &&
     evidence.verifiedDecisionSenders === 1 &&
     evidence.showcaseMemberships === 6 &&
     evidence.showcaseReviewerAssignments >= 1 &&
@@ -554,6 +556,14 @@ async function baselineEvidence(env: CloudflareEnvironment) {
                AND template.category = 'task_reminder'
                AND version.id = ?
                AND version.name = 'Speaker task reminder'
+               AND version.category = 'task_reminder'
+               AND version.channel = 'email')
+             OR
+             (template.id = '${DEMO_PARTICIPANT_REMINDER_TEMPLATE_ID}'
+               AND template.name = 'Participant action reminder'
+               AND template.category = 'task_reminder'
+               AND version.id = '${DEMO_PARTICIPANT_REMINDER_VERSION_ID}'
+               AND version.name = 'Participant action reminder'
                AND version.category = 'task_reminder'
                AND version.channel = 'email')
              OR

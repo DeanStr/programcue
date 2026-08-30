@@ -1,10 +1,13 @@
 import type { Viewer } from "~/platform/auth/authorize.server";
 import {
+  communicationTriggerConfigurationSchema,
+  reminderAudienceTypes,
   type SaveTemplateInput,
   saveTemplateSchema,
 } from "./communication-schema";
 import {
   assertNoUnresolvedTemplateContent,
+  assertReminderTriggerTemplateCompatible,
   CommunicationNotFoundError,
   CommunicationStateError,
   type CommunicationTemplateVersion,
@@ -13,6 +16,7 @@ import {
   mergeValues,
   parseContent,
   parseEmailSubject,
+  reminderTriggerTemplateSupportsAudience,
   type SenderRow,
   type TemplateVersionRow,
 } from "./communication-service-shared";
@@ -53,6 +57,62 @@ export async function renderStoredTemplatePreview(
 
 export class CommunicationTemplateService {
   constructor(private readonly env: CloudflareEnvironment) {}
+
+  private async assertEnabledTriggerCompatibility(
+    viewer: Viewer,
+    templateId: string,
+    template: Pick<
+      CommunicationTemplateVersion,
+      "subject" | "content" | "category"
+    >,
+  ) {
+    const triggers = await this.env.DB.prepare(
+      `SELECT trigger.id, trigger.trigger_type AS triggerType,
+              trigger.configuration_json AS configurationJson
+         FROM communication_triggers trigger
+         JOIN events event
+           ON event.id = trigger.event_id AND event.organisation_id = ?
+        WHERE trigger.event_id = ? AND trigger.template_id = ?
+          AND trigger.enabled = 1
+          AND trigger.trigger_type IN (
+            'task_due','task_overdue','application_draft','participation_pending'
+          )
+        ORDER BY trigger.id`,
+    )
+      .bind(viewer.organisationId, viewer.eventId, templateId)
+      .all<{
+        id: string;
+        triggerType: string;
+        configurationJson: string;
+      }>();
+    for (const trigger of triggers.results) {
+      const configuration = communicationTriggerConfigurationSchema.parse(
+        JSON.parse(trigger.configurationJson),
+      );
+      try {
+        assertReminderTriggerTemplateCompatible(
+          template,
+          configuration.audienceType,
+        );
+      } catch (error) {
+        if (!(error instanceof CommunicationStateError)) throw error;
+        throw new CommunicationStateError(
+          `This template is used by an enabled ${trigger.triggerType} reminder for ${configuration.audienceType}. ${error.message}`,
+        );
+      }
+    }
+  }
+
+  private compatibleReminderAudiences(
+    template: Pick<
+      CommunicationTemplateVersion,
+      "subject" | "content" | "category"
+    >,
+  ) {
+    return reminderAudienceTypes.filter((audienceType) =>
+      reminderTriggerTemplateSupportsAudience(template, audienceType),
+    );
+  }
 
   async listDeliveryHealth(
     viewer: Viewer,
@@ -447,11 +507,14 @@ export class CommunicationTemplateService {
         .bind(viewer.organisationId, templateId, viewer.eventId)
         .first();
       if (!existing) throw new CommunicationNotFoundError();
+      await this.assertEnabledTriggerCompatibility(viewer, templateId, parsed);
     }
     const event = await this.getEvent(viewer);
     const versionId = operation?.versionId ?? crypto.randomUUID();
     const saveOperationId = operation?.operationId ?? crypto.randomUUID();
     const preview = await renderStoredTemplatePreview(this.env, event, parsed);
+    const compatibleReminderAudiences =
+      this.compatibleReminderAudiences(parsed);
     let results: D1Result<unknown>[];
     try {
       results = await this.env.DB.batch([
@@ -464,6 +527,21 @@ export class CommunicationTemplateService {
         ON CONFLICT(id) DO UPDATE SET name = excluded.name, category = excluded.category,
           last_operation_id = excluded.last_operation_id, updated_at = unixepoch()
         WHERE communication_templates.event_id = excluded.event_id
+          AND NOT EXISTS (
+            SELECT 1 FROM communication_triggers trigger
+             WHERE trigger.event_id = communication_templates.event_id
+               AND trigger.template_id = communication_templates.id
+               AND trigger.enabled = 1
+               AND trigger.trigger_type IN (
+                 'task_due','task_overdue','application_draft','participation_pending'
+               )
+               AND (
+                 json_valid(trigger.configuration_json) = 0
+                 OR json_type(trigger.configuration_json, '$.audienceType') IS NOT 'text'
+                 OR json_extract(trigger.configuration_json, '$.audienceType')
+                      NOT IN (SELECT value FROM json_each(?))
+               )
+          )
       `,
         ).bind(
           templateId,
@@ -472,6 +550,7 @@ export class CommunicationTemplateService {
           parsed.category,
           saveOperationId,
           viewer.personId,
+          JSON.stringify(compatibleReminderAudiences),
         ),
         this.env.DB.prepare(
           `
@@ -490,6 +569,7 @@ export class CommunicationTemplateService {
               ON event.id = template.event_id AND event.organisation_id = ?
            WHERE template.id = ? AND template.event_id = ?
              AND template.status <> 'archived'
+             AND template.last_operation_id = ?
         RETURNING version_number AS versionNumber
       `,
         ).bind(
@@ -503,6 +583,7 @@ export class CommunicationTemplateService {
           viewer.organisationId,
           templateId,
           viewer.eventId,
+          saveOperationId,
         ),
         this.env.DB.prepare(
           `
@@ -544,6 +625,10 @@ export class CommunicationTemplateService {
     ) {
       const recovered = await recover?.();
       if (recovered) return recovered;
+      if (parsed.templateId)
+        throw new CommunicationStateError(
+          "An enabled reminder trigger changed before this template version could be saved. Review its audience compatibility and try again.",
+        );
       throw new CommunicationNotFoundError(
         "The authorised event no longer exists.",
       );
@@ -559,6 +644,13 @@ export class CommunicationTemplateService {
       throw new CommunicationStateError(
         "Only a draft template version can be published.",
       );
+    await this.assertEnabledTriggerCompatibility(
+      viewer,
+      version.templateId,
+      version,
+    );
+    const compatibleReminderAudiences =
+      this.compatibleReminderAudiences(version);
     const publishOperationId = crypto.randomUUID();
     const [claimed, , published] = await this.env.DB.batch([
       this.env.DB.prepare(
@@ -572,6 +664,21 @@ export class CommunicationTemplateService {
                 AND publish_version.template_id = communication_templates.id
                 AND publish_version.channel = 'email' AND publish_version.status = 'draft'
            )
+           AND NOT EXISTS (
+             SELECT 1 FROM communication_triggers trigger
+              WHERE trigger.event_id = communication_templates.event_id
+                AND trigger.template_id = communication_templates.id
+                AND trigger.enabled = 1
+                AND trigger.trigger_type IN (
+                  'task_due','task_overdue','application_draft','participation_pending'
+                )
+                AND (
+                  json_valid(trigger.configuration_json) = 0
+                  OR json_type(trigger.configuration_json, '$.audienceType') IS NOT 'text'
+                  OR json_extract(trigger.configuration_json, '$.audienceType')
+                       NOT IN (SELECT value FROM json_each(?))
+                )
+           )
       `,
       ).bind(
         publishOperationId,
@@ -579,6 +686,7 @@ export class CommunicationTemplateService {
         viewer.eventId,
         versionId,
         viewer.eventId,
+        JSON.stringify(compatibleReminderAudiences),
       ),
       this.env.DB.prepare(
         `

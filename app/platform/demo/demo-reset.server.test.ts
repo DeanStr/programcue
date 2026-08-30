@@ -241,7 +241,7 @@ describe("complete evaluator demo reset", () => {
         publishedSchedules: 1,
         canonicalEventConfiguration: 1,
         canonicalOrganisationMemberships: 1,
-        publishedTemplates: 5,
+        publishedTemplates: 6,
         showcaseCompletedReviews: 2,
         showcaseReviewScoreSpread: 1,
         showcaseDiscussionMessages: 1,
@@ -636,12 +636,26 @@ describe("complete evaluator demo reset", () => {
           .filter((template) => template.versionStatus === "published")
           .map((template) => template.name),
       ).toEqual([
+        "Participant action reminder",
         "Speaker welcome",
         "Speaker task reminder",
         "Reviewer reminder",
         "Proposal decision",
         "Submission confirmation",
       ]);
+      expect(
+        communicationCentre.templates.find(
+          (template) => template.name === "Participant action reminder",
+        ),
+      ).toMatchObject({
+        category: "task_reminder",
+        templateStatus: "active",
+        versionStatus: "published",
+        subject: "Action needed for {{event.name}}",
+        content: {
+          body: "Hi {{recipient.firstName}},\n\nYou have an action waiting for you in {{event.name}}. Please return to your participant workspace to complete it.",
+        },
+      });
       expect(
         communicationCentre.templates.find(
           (template) => template.name === "Speaker welcome",
@@ -1011,7 +1025,7 @@ describe("complete evaluator demo reset", () => {
         ).resolves.toEqual(
           expect.objectContaining({
             complete: false,
-            evidence: expect.objectContaining({ publishedTemplates: 4 }),
+            evidence: expect.objectContaining({ publishedTemplates: 5 }),
           }),
         );
         await expect(ensureJudgedDemoWorkflow(testEnvironment)).rejects.toThrow(
@@ -1038,7 +1052,7 @@ describe("complete evaluator demo reset", () => {
         ).resolves.toEqual(
           expect.objectContaining({
             complete: false,
-            evidence: expect.objectContaining({ publishedTemplates: 4 }),
+            evidence: expect.objectContaining({ publishedTemplates: 5 }),
           }),
         );
       } finally {
@@ -1096,7 +1110,7 @@ describe("complete evaluator demo reset", () => {
         ).resolves.toEqual(
           expect.objectContaining({
             complete: false,
-            evidence: expect.objectContaining({ publishedTemplates: 4 }),
+            evidence: expect.objectContaining({ publishedTemplates: 5 }),
           }),
         );
         await expect(ensureJudgedDemoWorkflow(testEnvironment)).rejects.toThrow(

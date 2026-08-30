@@ -11,6 +11,8 @@ import {
   DEMO_DECISION_SENDER_ID,
   DEMO_DECISION_TEMPLATE_ID,
   DEMO_DECISION_VERSION_ID,
+  DEMO_PARTICIPANT_REMINDER_TEMPLATE_ID,
+  DEMO_PARTICIPANT_REMINDER_VERSION_ID,
   DEMO_REMINDER_TEMPLATE_ID,
   DEMO_REMINDER_VERSION_ID,
   DEMO_REVIEWER_REMINDER_TEMPLATE_ID,
@@ -70,6 +72,39 @@ export async function seedJudgedDemoWorkflow(env: CloudflareEnvironment) {
       DEMO_REMINDER_TEMPLATE_ID,
       JSON.stringify({
         body: "Hi {{recipient.firstName}},\n\nPlease complete {{task.title}} for {{event.name}} by {{task.dueDate}}.",
+        physicalAddress: "255 Front Street West, Toronto, ON",
+      }),
+      DEMO_IDENTITIES.administrator.personId,
+    ),
+    env.DB.prepare(
+      `INSERT OR IGNORE INTO communication_templates (
+         id, event_id, name, category, status, created_by_person_id,
+         created_at, updated_at
+       ) VALUES (?, ?, 'Participant action reminder', 'task_reminder', 'active', ?,
+                 ?, ?)`,
+    ).bind(
+      DEMO_PARTICIPANT_REMINDER_TEMPLATE_ID,
+      DEMO_EVENT_ID,
+      DEMO_IDENTITIES.administrator.personId,
+      DEMO_COMMUNICATION_TEMPLATE_TIMESTAMP,
+      DEMO_COMMUNICATION_TEMPLATE_TIMESTAMP + 3,
+    ),
+    env.DB.prepare(
+      `INSERT OR IGNORE INTO communication_template_versions (
+         id, event_id, template_id, version_number, name, category, channel,
+         subject_template, content_json, rendered_preview_html, status,
+         created_by_person_id, created_at, published_at
+       ) VALUES (
+         ?, ?, ?, 1, 'Participant action reminder', 'task_reminder', 'email',
+         'Action needed for {{event.name}}', ?, NULL, 'published', ?,
+         unixepoch(), unixepoch()
+       )`,
+    ).bind(
+      DEMO_PARTICIPANT_REMINDER_VERSION_ID,
+      DEMO_EVENT_ID,
+      DEMO_PARTICIPANT_REMINDER_TEMPLATE_ID,
+      JSON.stringify({
+        body: "Hi {{recipient.firstName}},\n\nYou have an action waiting for you in {{event.name}}. Please return to your participant workspace to complete it.",
         physicalAddress: "255 Front Street West, Toronto, ON",
       }),
       DEMO_IDENTITIES.administrator.personId,

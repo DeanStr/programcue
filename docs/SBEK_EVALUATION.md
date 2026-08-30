@@ -182,9 +182,11 @@ The fixture combines two useful data states:
   assignments, accepted-speaker access or tasks.
 
 The baseline gives Jordan Alvarez organisation-administrator authority, a
-verified Resend sender, five published communication templates (`Speaker task
-reminder`, `Reviewer reminder`, `Speaker welcome`, `Submission confirmation`
-and `Proposal decision`), and dated showcase tasks. Task reminders snapshot
+verified Resend sender, six published communication templates (`Speaker task
+reminder`, `Participant action reminder`, `Reviewer reminder`, `Speaker
+welcome`, `Submission confirmation` and `Proposal decision`), and dated
+showcase tasks. The participant-action version is compatible with draft
+applicants and pending participants; task reminders snapshot
 `{{task.dueDate}}` in the event timezone and fail if a selected task has no due
 date. The canonical event also carries a venue address and HTTPS map link. The
 `Active speakers` audience is driven by event workflow state and

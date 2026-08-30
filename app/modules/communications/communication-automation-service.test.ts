@@ -672,6 +672,70 @@ describe("communication scheduling and reminder automation", () => {
     ).resolves.toEqual({ enabled: 0 });
   });
 
+  it("rejects saving a trigger whose audience cannot provide the template merge fields", async () => {
+    const { testEnv } = await environment();
+    const service = new CommunicationService(testEnv);
+    const template = await publishedTemplate(
+      service,
+      "task_reminder",
+      "Please complete {{task.title}} by {{task.dueDate}}.",
+    );
+
+    await expect(
+      service.saveTrigger(viewer, {
+        templateId: template.templateId,
+        triggerType: "application_draft",
+        audienceType: "draft_applicants",
+        kind: "transactional",
+        sendHourUtc: 9,
+        enabled: false,
+      }),
+    ).rejects.toThrow(/cannot provide \{\{task\.title\}\}/);
+    await expect(
+      testEnv.DB.prepare(
+        "SELECT COUNT(*) AS count FROM communication_triggers WHERE event_id = ? AND template_id = ?",
+      )
+        .bind(viewer.eventId, template.templateId)
+        .first(),
+    ).resolves.toEqual({ count: 0 });
+  });
+
+  it("rejects enabling a trigger after its published template becomes incompatible", async () => {
+    const { testEnv } = await environment();
+    const service = new CommunicationService(testEnv);
+    const template = await publishedTemplate(service, "task_reminder");
+    const trigger = await service.saveTrigger(viewer, {
+      templateId: template.templateId,
+      triggerType: "application_draft",
+      audienceType: "draft_applicants",
+      kind: "transactional",
+      sendHourUtc: 9,
+      enabled: false,
+    });
+    const incompatible = await service.saveTemplate(viewer, {
+      templateId: template.templateId,
+      name: "Incompatible application reminder",
+      category: "task_reminder",
+      subject: "Reminder: {{task.title}}",
+      content: {
+        body: "Please complete {{task.title}} by {{task.dueDate}}.",
+        physicalAddress: "100 Programme Way",
+      },
+    });
+    await service.publishTemplate(viewer, incompatible.versionId);
+
+    await expect(
+      service.setTriggerEnabled(viewer, trigger.id, true),
+    ).rejects.toThrow(/cannot provide \{\{task\.title\}\}/);
+    await expect(
+      testEnv.DB.prepare(
+        "SELECT enabled FROM communication_triggers WHERE id = ? AND event_id = ?",
+      )
+        .bind(trigger.id, viewer.eventId)
+        .first(),
+    ).resolves.toEqual({ enabled: 0 });
+  });
+
   it("rejects enabling a trigger whose reminder template is no longer published", async () => {
     const { testEnv } = await environment();
     const service = new CommunicationService(testEnv);

@@ -339,6 +339,38 @@ export function assertMergeAudienceCompatible(
   }
 }
 
+export function assertReminderTriggerTemplateCompatible(
+  template: Pick<
+    CommunicationTemplateVersion,
+    "subject" | "content" | "category"
+  >,
+  audienceType: AudienceType,
+) {
+  if (template.category !== "task_reminder") {
+    throw new CommunicationStateError(
+      "Reminder triggers require a task-reminder template.",
+    );
+  }
+  assertMergeAudienceCompatible(template, audienceType);
+}
+
+export function reminderTriggerTemplateSupportsAudience(
+  template: Pick<
+    CommunicationTemplateVersion,
+    "subject" | "content" | "category"
+  >,
+  audienceType: AudienceType,
+) {
+  if (template.category !== "task_reminder") return false;
+  try {
+    assertMergeAudienceCompatible(template, audienceType);
+    return true;
+  } catch (error) {
+    if (error instanceof CommunicationStateError) return false;
+    throw error;
+  }
+}
+
 export async function snapshotSourceValues(
   env: CloudflareEnvironment,
   eventId: string,

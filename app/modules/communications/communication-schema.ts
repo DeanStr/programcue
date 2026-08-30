@@ -148,13 +148,15 @@ const reminderTriggerTypeSchema = z.enum([
   "participation_pending",
 ]);
 
-const reminderAudienceTypeSchema = z.enum([
+export const reminderAudienceTypes = [
   "due_speakers",
   "overdue_speakers",
   "draft_applicants",
   "pending_participants",
   "event_administrators",
-]);
+] as const;
+
+const reminderAudienceTypeSchema = z.enum(reminderAudienceTypes);
 
 export const saveCommunicationTriggerSchema = z.object({
   id: z.uuid().optional(),

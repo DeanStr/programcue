@@ -14,7 +14,7 @@ import {
   saveCommunicationTriggerSchema,
 } from "./communication-schema";
 import {
-  assertMergeAudienceCompatible,
+  assertReminderTriggerTemplateCompatible,
   CommunicationQueueUnavailableError,
   CommunicationStateError,
 } from "./communication-service-shared";
@@ -196,7 +196,7 @@ export class CommunicationAutomationService {
     const template = await new CommunicationTemplateService(
       this.env,
     ).getTemplateVersion(viewer, published.id);
-    assertMergeAudienceCompatible(template, parsed.audienceType);
+    assertReminderTriggerTemplateCompatible(template, parsed.audienceType);
     if (parsed.enabled) await this.requireEnabledTriggerReadiness(viewer);
     const existing = parsed.id
       ? null
@@ -228,6 +228,7 @@ export class CommunicationAutomationService {
               SELECT 1 FROM communication_template_versions version
                WHERE version.template_id = template.id
                  AND version.event_id = template.event_id
+                 AND version.id = ?
                  AND version.channel = 'email' AND version.status = 'published'
             )
          ON CONFLICT(id) DO UPDATE SET
@@ -259,6 +260,7 @@ export class CommunicationAutomationService {
         viewer.organisationId,
         parsed.templateId,
         viewer.eventId,
+        published.id,
       ),
       this.env.DB.prepare(
         `INSERT INTO audit_events (
@@ -285,7 +287,7 @@ export class CommunicationAutomationService {
     ]);
     if ((results[0].meta.changes ?? 0) !== 1)
       throw new CommunicationStateError(
-        "Reminder trigger requires an active task-reminder template with a published email version in this event.",
+        "The reminder template changed before the trigger could be saved. Review its audience compatibility and try again.",
       );
     return { id };
   }
@@ -306,6 +308,7 @@ export class CommunicationAutomationService {
       throw new CommunicationStateError(
         "Reminder trigger was not found in this event.",
       );
+    let publishedVersionId: string | null = null;
     if (enabled) {
       const configuration = communicationTriggerConfigurationSchema.parse(
         JSON.parse(trigger.configurationJson),
@@ -329,10 +332,14 @@ export class CommunicationAutomationService {
         throw new CommunicationStateError(
           "Reminder trigger requires an active task-reminder template with a published email version in this event.",
         );
+      publishedVersionId = published.id;
       const template = await new CommunicationTemplateService(
         this.env,
       ).getTemplateVersion(viewer, published.id);
-      assertMergeAudienceCompatible(template, configuration.audienceType);
+      assertReminderTriggerTemplateCompatible(
+        template,
+        configuration.audienceType,
+      );
       await this.requireEnabledTriggerReadiness(viewer);
     }
     const results = await this.env.DB.batch([
@@ -340,13 +347,32 @@ export class CommunicationAutomationService {
         `UPDATE communication_triggers
             SET enabled = ?, updated_at = unixepoch()
           WHERE id = ? AND event_id = ?
-            AND EXISTS (SELECT 1 FROM events WHERE id = ? AND organisation_id = ?)`,
+            AND EXISTS (SELECT 1 FROM events WHERE id = ? AND organisation_id = ?)
+            AND (
+              ? = 0
+              OR EXISTS (
+                SELECT 1
+                  FROM communication_templates template
+                  JOIN communication_template_versions version
+                    ON version.template_id = template.id
+                   AND version.event_id = template.event_id
+                 WHERE template.id = communication_triggers.template_id
+                   AND template.event_id = communication_triggers.event_id
+                   AND template.category = 'task_reminder'
+                   AND template.status = 'active'
+                   AND version.id = ?
+                   AND version.channel = 'email'
+                   AND version.status = 'published'
+              )
+            )`,
       ).bind(
         enabled ? 1 : 0,
         id,
         viewer.eventId,
         viewer.eventId,
         viewer.organisationId,
+        enabled ? 1 : 0,
+        publishedVersionId,
       ),
       this.env.DB.prepare(
         `INSERT INTO audit_events (
@@ -368,7 +394,9 @@ export class CommunicationAutomationService {
     ]);
     if ((results[0].meta.changes ?? 0) !== 1)
       throw new CommunicationStateError(
-        "Reminder trigger was not found in this event.",
+        enabled
+          ? "The reminder template changed before the trigger could be enabled. Review its audience compatibility and try again."
+          : "Reminder trigger was not found in this event.",
       );
   }
 
