@@ -2,8 +2,12 @@ import {
   decryptWebhookSecret,
   signWebhookPayload,
 } from "../../app/platform/operations/webhook-crypto.server";
+import {
+  resolveWebhookHostname,
+  validateWebhookDestination,
+  type WebhookHostnameResolver,
+} from "../../app/platform/operations/webhook-endpoint-service.server";
 import { webhookDeliveryMessageSchema } from "../../app/platform/operations/webhook-schema";
-import { validateWebhookUrl } from "../../app/platform/operations/webhook-service.server";
 import {
   loadOperationClaim,
   notifyRealtimeAfterCommit,
@@ -250,6 +254,7 @@ export async function processWebhookDelivery(
   input: unknown,
   env: WebhookEnvironment,
   fetcher: typeof fetch = fetch,
+  resolveHostname: WebhookHostnameResolver = resolveWebhookHostname,
 ) {
   const message = webhookDeliveryMessageSchema.parse(input);
   let record = await env.DB.prepare(
@@ -449,18 +454,25 @@ export async function processWebhookDelivery(
 
   let response: Response;
   try {
-    const endpointUrl = validateWebhookUrl(record.endpointUrl);
+    const endpointUrl = await validateWebhookDestination(
+      record.endpointUrl,
+      resolveHostname,
+    );
     const timestamp = Math.floor(Date.now() / 1_000);
     const secret = await decryptWebhookSecret(
       record.secretCiphertext,
       record.endpointId,
       env.WEBHOOK_CREDENTIALS_KEY,
+      env.WEBHOOK_CREDENTIALS_PREVIOUS_KEY,
     );
     const signature = await signWebhookPayload(
       secret,
       timestamp,
       record.payloadJson,
     );
+    // Application profiles require global_fetch_strictly_public. Cloudflare's
+    // outbound proxy therefore enforces the actual connection destination as
+    // public after DNS resolution, closing the preflight-to-fetch rebinding gap.
     response = await fetcher(endpointUrl, {
       method: "POST",
       redirect: "manual",

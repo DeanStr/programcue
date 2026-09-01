@@ -686,6 +686,7 @@ export class AirtableRoomRepository {
           row.encryptedCredentials,
           this.env.INTEGRATION_CREDENTIALS_KEY,
           row.id,
+          this.env.INTEGRATION_CREDENTIALS_PREVIOUS_KEY,
         ),
       );
     } catch {

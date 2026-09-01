@@ -4,6 +4,11 @@ import {
   readBoundedResponseJson,
   readBoundedResponseText,
 } from "~/platform/http/read-response";
+import {
+  credentialKeyCandidates,
+  RotatingCredentialKeyConfigurationError,
+  rotatingCredentialKeyring,
+} from "~/platform/security/rotating-credential-key.server";
 import type { CalendarMethod } from "./calendar-schema";
 
 const PROVIDER_REQUEST_TIMEOUT_MS = 20_000;
@@ -529,20 +534,22 @@ function bytesBase64(value: Uint8Array) {
   return btoa(binary);
 }
 
-async function calendarCredentialKey(base64Key: string | undefined) {
-  if (!base64Key?.trim())
-    throw new CalendarProviderConfigurationError(
-      "CALENDAR_CREDENTIALS_KEY is required for connected calendars.",
+async function calendarCredentialKeyring(
+  base64Key: string | undefined,
+  previousBase64Key?: string,
+) {
+  try {
+    return await rotatingCredentialKeyring(
+      base64Key,
+      previousBase64Key,
+      "CALENDAR_CREDENTIALS_KEY",
     );
-  const keyBytes = base64Bytes(base64Key.trim());
-  if (keyBytes.byteLength !== 32)
-    throw new CalendarProviderConfigurationError(
-      "CALENDAR_CREDENTIALS_KEY must be a base64-encoded 32-byte key.",
-    );
-  return crypto.subtle.importKey("raw", keyBytes, "AES-GCM", false, [
-    "encrypt",
-    "decrypt",
-  ]);
+  } catch (error) {
+    if (error instanceof RotatingCredentialKeyConfigurationError) {
+      throw new CalendarProviderConfigurationError(error.message);
+    }
+    throw error;
+  }
 }
 
 export const calendarCredentialsSchema = z.object({
@@ -555,20 +562,77 @@ export const calendarCredentialsSchema = z.object({
 
 export type CalendarCredentials = z.infer<typeof calendarCredentialsSchema>;
 
+export type CalendarCredentialContext = {
+  connectionId: string;
+  organisationId: string;
+  provider: "google" | "microsoft";
+};
+
+const calendarCredentialGenerationSchema = z.string().regex(/^[a-f0-9]{32}$/u);
+
+function bytesHex(bytes: Uint8Array) {
+  return [...bytes].map((byte) => byte.toString(16).padStart(2, "0")).join("");
+}
+
+export async function calendarCredentialGeneration(encrypted: string) {
+  try {
+    const envelope = z
+      .object({
+        version: z.literal(2),
+        generation: calendarCredentialGenerationSchema,
+      })
+      .parse(JSON.parse(encrypted));
+    return envelope.generation;
+  } catch {
+    const digest = await crypto.subtle.digest(
+      "SHA-256",
+      new TextEncoder().encode(encrypted),
+    );
+    return bytesHex(new Uint8Array(digest).slice(0, 16));
+  }
+}
+
+function calendarCredentialAdditionalData(
+  context: CalendarCredentialContext,
+  generation: string,
+) {
+  return new TextEncoder().encode(
+    JSON.stringify([
+      "calendar-credentials",
+      2,
+      context.organisationId,
+      context.connectionId,
+      context.provider,
+      generation,
+    ]),
+  );
+}
+
 export async function encryptCalendarCredentials(
   input: CalendarCredentials,
   base64Key: string | undefined,
+  context: CalendarCredentialContext,
+  preservedGeneration?: string,
 ) {
   const credentials = calendarCredentialsSchema.parse(input);
-  const key = await calendarCredentialKey(base64Key);
+  const generation = calendarCredentialGenerationSchema.parse(
+    preservedGeneration ?? bytesHex(crypto.getRandomValues(new Uint8Array(16))),
+  );
+  const { active } = await calendarCredentialKeyring(base64Key);
   const iv = crypto.getRandomValues(new Uint8Array(12));
   const ciphertext = await crypto.subtle.encrypt(
-    { name: "AES-GCM", iv },
-    key,
+    {
+      name: "AES-GCM",
+      iv,
+      additionalData: calendarCredentialAdditionalData(context, generation),
+    },
+    active.key,
     new TextEncoder().encode(JSON.stringify(credentials)),
   );
   return JSON.stringify({
-    version: 1,
+    version: 2,
+    keyId: active.id,
+    generation,
     iv: bytesBase64(iv),
     ciphertext: bytesBase64(new Uint8Array(ciphertext)),
   });
@@ -577,8 +641,9 @@ export async function encryptCalendarCredentials(
 export async function decryptCalendarCredentials(
   encrypted: string,
   base64Key: string | undefined,
+  context: CalendarCredentialContext,
+  previousBase64Key?: string,
 ) {
-  const key = await calendarCredentialKey(base64Key);
   let envelope: unknown;
   try {
     envelope = JSON.parse(encrypted);
@@ -588,25 +653,71 @@ export async function decryptCalendarCredentials(
     );
   }
   const parsed = z
-    .object({ version: z.literal(1), iv: z.string(), ciphertext: z.string() })
+    .discriminatedUnion("version", [
+      z.object({
+        version: z.literal(1),
+        iv: z.string(),
+        ciphertext: z.string(),
+      }),
+      z.object({
+        version: z.literal(2),
+        keyId: z.string().length(16),
+        generation: calendarCredentialGenerationSchema,
+        iv: z.string(),
+        ciphertext: z.string(),
+      }),
+    ])
     .safeParse(envelope);
   if (!parsed.success)
     throw new CalendarProviderConfigurationError(
       "Connected calendar credentials use an unsupported encrypted envelope.",
     );
+  const keyring = await calendarCredentialKeyring(base64Key, previousBase64Key);
+  let candidates = keyring.candidates;
   try {
-    const plaintext = await crypto.subtle.decrypt(
-      { name: "AES-GCM", iv: base64Bytes(parsed.data.iv) },
-      key,
-      base64Bytes(parsed.data.ciphertext),
-    );
-    return calendarCredentialsSchema.parse(
-      JSON.parse(new TextDecoder().decode(plaintext)),
+    candidates = credentialKeyCandidates(
+      keyring,
+      parsed.data.version === 2 ? parsed.data.keyId : null,
     );
   } catch (error) {
-    if (error instanceof CalendarProviderConfigurationError) throw error;
-    throw new CalendarProviderConfigurationError(
-      "Connected calendar credentials could not be decrypted.",
-    );
+    if (error instanceof RotatingCredentialKeyConfigurationError) {
+      throw new CalendarProviderConfigurationError(error.message);
+    }
+    throw error;
   }
+  for (const candidate of candidates) {
+    try {
+      const plaintext = await crypto.subtle.decrypt(
+        {
+          name: "AES-GCM",
+          iv: base64Bytes(parsed.data.iv),
+          ...(parsed.data.version === 2
+            ? {
+                additionalData: calendarCredentialAdditionalData(
+                  context,
+                  parsed.data.generation,
+                ),
+              }
+            : {}),
+        },
+        candidate.key,
+        base64Bytes(parsed.data.ciphertext),
+      );
+      return calendarCredentialsSchema.parse(
+        JSON.parse(new TextDecoder().decode(plaintext)),
+      );
+    } catch {
+      // Version 1 has no key id or connection binding. It remains readable only
+      // long enough for the scheduled version-2 rewrap to complete.
+    }
+  }
+  throw new CalendarProviderConfigurationError(
+    "Connected calendar credentials could not be decrypted.",
+  );
+}
+
+export async function activeCalendarCredentialKeyId(
+  base64Key: string | undefined,
+) {
+  return (await calendarCredentialKeyring(base64Key)).active.id;
 }

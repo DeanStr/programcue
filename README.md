@@ -379,7 +379,41 @@ unaffected. Coordinate any required rotation with removal of the unreachable
 anonymous rows; do not retain a previous-key compatibility fallback.
 `CALENDAR_CREDENTIALS_KEY`, `INTEGRATION_CREDENTIALS_KEY` and
 `WEBHOOK_CREDENTIALS_KEY` must each be an independently generated,
-base64-encoded 32-byte AES-GCM key. Workers AI is the provisioned default and
+base64-encoded 32-byte AES-GCM key. Their version-2 envelopes contain a
+non-secret key identifier; calendar envelopes also authenticate the owning
+organisation, connection, provider and stable credential generation.
+
+Before the first rotation, deploy the recovery-capable application source and
+wait until the old deployment no longer receives traffic and its in-flight
+provider requests have drained; allow at least one minute after cutover. Then
+rotate one key with one atomic bulk-secret update: set its current value as the
+matching `*_PREVIOUS_KEY` and set a newly generated value as the active `*_KEY`.
+Do not update them with separate `secret put` commands because the intermediate
+deployment would be invalid. For example, use a local ignored JSON or dotenv
+file and run `npx wrangler secret bulk < rotation-secrets.json`.
+The minute scheduler then rewraps at most 100 rows of each credential type per
+run with compare-and-set updates; its `provider-credential-rewrap` structured
+log reports `rewrapped` and `remaining`. New writes always use the active key,
+in-flight calendar OAuth state accepts the one explicit previous key for its
+ten-minute lifetime, and an in-flight calendar token refresh can safely finish
+after a rewrap without repeating the provider exchange or losing a rotated
+refresh token, including when the refresh began on the pre-rotation deployment.
+Webhook API replays fingerprint the signing secret rather than its randomized
+envelope, so a rewrap does not look like a user-requested secret rotation; the
+rewrapper also upgrades still-live legacy ciphertext fingerprints before it
+changes the envelope, including legacy version-1 envelopes during this explicit
+rotation window. After `remaining` first reaches zero, exercise the
+affected provider operations and wait at least ten minutes for calendar OAuth
+state plus all requests on the pre-rotation deployment to drain. Run the
+rewrapper again and require a second `remaining = 0` observation before
+removing the matching previous key by setting it to `null` in one JSON
+bulk-secret update, then verify readiness again. (Dotenv bulk files cannot
+delete secrets.)
+Never leave a previous key installed as an indefinite fallback, and retain it
+in the approved backup-recovery key inventory until the associated backups
+expire.
+
+Workers AI is the provisioned default and
 uses the Cloudflare-hosted `@cf/deepseek-ai/deepseek-v4-flash-0731` model;
 that model requires a Workers Paid plan. Runtime readiness verifies the binding
 and exact model selection, while a real request after deployment proves billing

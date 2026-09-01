@@ -31,6 +31,7 @@ export type Viewer = {
   eventId: string;
   demo: boolean;
   evaluation?: boolean;
+  authenticationCreatedAt?: Date | null;
 };
 
 function invalidDemoIdentityCookie(): never {
@@ -161,6 +162,7 @@ export async function requireAuthenticatedPerson(
       evaluation: false,
       demoIdentity: selected.identityKey,
       restrictedOrganisationId: null,
+      authenticationCreatedAt: null,
     };
   }
 
@@ -177,6 +179,7 @@ export async function requireAuthenticatedPerson(
         evaluation: true,
         demoIdentity: null,
         restrictedOrganisationId: EVALUATION_ORGANISATION_ID,
+        authenticationCreatedAt: null,
       };
     }
   }
@@ -197,6 +200,7 @@ export async function requireAuthenticatedPerson(
     evaluation: false,
     demoIdentity: null,
     restrictedOrganisationId: null,
+    authenticationCreatedAt: session.session.createdAt,
   };
 }
 
@@ -208,8 +212,15 @@ async function resolveEventRole(
   unauthenticatedBehavior: "redirect" | "response",
   acceptPendingInvitation: boolean,
 ): Promise<Viewer> {
-  const { personId, name, email, demo, evaluation, restrictedOrganisationId } =
-    await requireAuthenticatedPerson(request, env, unauthenticatedBehavior);
+  const {
+    personId,
+    name,
+    email,
+    demo,
+    evaluation,
+    restrictedOrganisationId,
+    authenticationCreatedAt,
+  } = await requireAuthenticatedPerson(request, env, unauthenticatedBehavior);
 
   if (allowedRoles.length === 0)
     forbidden(eventRoleAccessMessage(allowedRoles));
@@ -442,6 +453,7 @@ async function resolveEventRole(
     eventId,
     demo,
     evaluation,
+    authenticationCreatedAt,
   };
 }
 

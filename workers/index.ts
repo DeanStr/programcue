@@ -38,6 +38,10 @@ import {
   requireRuntimeMode,
 } from "../app/platform/runtime-environment.server";
 import { requireProductionRuntimeReadiness } from "../app/platform/runtime-readiness.server";
+import {
+  providerCredentialRotationActive,
+  rewrapProviderCredentials,
+} from "../app/platform/security/provider-credential-rewrap.server";
 import { handleProgramCueQueueMessage } from "./communications-queue";
 import {
   D1_BACKUP_CRON,
@@ -63,6 +67,7 @@ declare global {
     MAILPIT_SEND_API_USERNAME?: string;
     MAILPIT_SEND_API_PASSWORD?: string;
     CALENDAR_CREDENTIALS_KEY?: string;
+    CALENDAR_CREDENTIALS_PREVIOUS_KEY?: string;
     GOOGLE_CALENDAR_CLIENT_ID?: string;
     GOOGLE_CALENDAR_CLIENT_SECRET?: string;
     MICROSOFT_CALENDAR_CLIENT_ID?: string;
@@ -72,7 +77,9 @@ declare global {
     MICROSOFT_AUTH_CLIENT_ID?: string;
     MICROSOFT_AUTH_CLIENT_SECRET?: string;
     INTEGRATION_CREDENTIALS_KEY?: string;
+    INTEGRATION_CREDENTIALS_PREVIOUS_KEY?: string;
     WEBHOOK_CREDENTIALS_KEY?: string;
+    WEBHOOK_CREDENTIALS_PREVIOUS_KEY?: string;
     TURNSTILE_SITE_KEY?: string;
     TURNSTILE_SECRET_KEY?: string;
     FILE_SCANNER_WEBHOOK_SECRET?: string;
@@ -521,7 +528,36 @@ export default {
         );
         throw error;
       });
+    const rewrapCredentials = () =>
+      observe(
+        "provider-credential-rewrap",
+        rewrapProviderCredentials(env),
+      ).then((result) => {
+        const rewrapped =
+          result.calendar + result.integrations + result.webhooks;
+        if (
+          rewrapped === 0 &&
+          result.remaining === 0 &&
+          !providerCredentialRotationActive(env)
+        ) {
+          return;
+        }
+        console.info(
+          JSON.stringify({
+            level: "info",
+            sourceRevision,
+            subsystem: "provider-credential-rewrap",
+            event: "scheduled-task-completed",
+            trigger: controller.cron,
+            rewrapped,
+            remaining: result.remaining,
+          }),
+        );
+      });
     if (controller.cron === "* * * * *") {
+      if (providerCredentialRotationActive(env)) {
+        ctx.waitUntil(rewrapCredentials());
+      }
       ctx.waitUntil(
         observe(
           "outbound-webhook-dispatch",

@@ -542,6 +542,7 @@ async function processClaimedAcceleventsExport(
         context.encryptedCredentials,
         env.INTEGRATION_CREDENTIALS_KEY,
         context.connectionId,
+        env.INTEGRATION_CREDENTIALS_PREVIOUS_KEY,
       ),
     );
     provider =

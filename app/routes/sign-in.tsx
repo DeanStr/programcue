@@ -72,6 +72,7 @@ export async function loader({ request, context }: Route.LoaderArgs) {
   }
   const url = new URL(request.url);
   const returnTo = safeReturnTo(url.searchParams.get("returnTo"));
+  const reauthentication = url.searchParams.get("reauthenticate") === "true";
   const oauthProvider =
     url.searchParams.get("provider") === "microsoft" ? "microsoft" : null;
   const oauthError = url.searchParams.get("error");
@@ -101,9 +102,13 @@ export async function loader({ request, context }: Route.LoaderArgs) {
   const session = await createAuth(env).api.getSession({
     headers: request.headers,
   });
-  if (session?.user && !requestedLinkProvider) return redirect(returnTo);
+  if (session?.user && !requestedLinkProvider && !reauthentication) {
+    return redirect(returnTo);
+  }
   return {
     returnTo,
+    reauthentication,
+    sessionEmail: reauthentication ? (session?.user.email ?? null) : null,
     oauthError: oauthError !== null,
     microsoftNeedsEmailProof:
       oauthProvider === "microsoft" &&
@@ -117,7 +122,10 @@ export async function loader({ request, context }: Route.LoaderArgs) {
           }
         : null,
     socialProviders: {
-      google: participantOAuth.google !== null,
+      // Google documents account selection and consent prompts, but neither
+      // proves a fresh authentication event. Keep Google for ordinary sign-in;
+      // privileged confirmation uses the email link or Microsoft's login prompt.
+      google: !reauthentication && participantOAuth.google !== null,
       microsoft: participantOAuth.microsoft !== null,
     },
     turnstileSiteKey: publicAbuseClientConfiguration(env).turnstileSiteKey,
@@ -144,8 +152,21 @@ async function beginSocialSignIn(
       { status: 422 },
     );
   }
-
   try {
+    const existingSession = await createAuth(env).api.getSession({
+      headers: request.headers,
+    });
+    const reauthenticate = Boolean(existingSession?.user);
+    if (reauthenticate && parsed.data.provider === "google") {
+      return data(
+        {
+          ok: false,
+          message:
+            "Use the email sign-in link or Microsoft to confirm your identity.",
+        },
+        { status: 422 },
+      );
+    }
     const configured = participantOAuthConfiguration(env);
     if (!configured[parsed.data.provider]) {
       return data(
@@ -167,8 +188,11 @@ async function beginSocialSignIn(
     const errorCallbackURL = `/sign-in?${new URLSearchParams({
       returnTo: parsed.data.returnTo,
       provider: parsed.data.provider,
+      ...(reauthenticate ? { reauthenticate: "true" } : {}),
     })}`;
-    const { headers, response } = await createAuth(env).api.signInSocial({
+    const { headers, response } = await createAuth(env, {
+      forceAuthentication: reauthenticate,
+    }).api.signInSocial({
       body: {
         provider: parsed.data.provider,
         callbackURL: parsed.data.returnTo,
@@ -493,9 +517,11 @@ export default function SignIn({ loaderData }: Route.ComponentProps) {
           <BrandMark />
           <span>Program Cue</span>
         </div>
-        <h1>Sign in</h1>
+        <h1>{loaderData.reauthentication ? "Sign in again" : "Sign in"}</h1>
         <p className="subtle">
-          Sign in or create an account. Email links expire after five minutes.
+          {loaderData.reauthentication
+            ? "Confirm your identity before changing API keys or webhook credentials."
+            : "Sign in or create an account. Email links expire after five minutes."}
         </p>
         {actionData ? (
           <p
@@ -583,6 +609,7 @@ export default function SignIn({ loaderData }: Route.ComponentProps) {
               name="email"
               type="email"
               autoComplete="email"
+              defaultValue={loaderData.sessionEmail ?? undefined}
               required
             />
           </label>

@@ -14,7 +14,9 @@ import {
 
 export type { WebhookEndpointListItem } from "./webhook-endpoint-service.server";
 export {
+  validateWebhookDestination,
   validateWebhookUrl,
+  type WebhookHostnameResolver,
   webhookEndpointSchema,
 } from "./webhook-endpoint-service.server";
 

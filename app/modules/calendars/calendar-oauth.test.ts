@@ -6,6 +6,7 @@ import { ensureDemoData } from "~/platform/demo/seed.server";
 import { CalendarAdministrationService } from "./calendar-administration-service.server";
 import { CalendarOAuthService } from "./calendar-oauth.server";
 import {
+  calendarCredentialGeneration,
   decryptCalendarCredentials,
   encryptCalendarCredentials,
 } from "./calendar-providers.server";
@@ -22,6 +23,9 @@ const viewer: Viewer = {
 
 const credentialKey = btoa(
   String.fromCharCode(...Array.from({ length: 32 }, (_, index) => index + 1)),
+);
+const rotatedCredentialKey = btoa(
+  String.fromCharCode(...Array.from({ length: 32 }, (_, index) => index + 65)),
 );
 
 async function oauthEnvironment(fetcher: typeof fetch) {
@@ -115,6 +119,11 @@ describe("direct-calendar OAuth", () => {
       decryptCalendarCredentials(
         connection!.encryptedCredentials!,
         credentialKey,
+        {
+          connectionId: connection!.id,
+          organisationId: viewer.organisationId,
+          provider: "google",
+        },
       ),
     ).resolves.toMatchObject({
       accessToken: "google-access-token",
@@ -202,7 +211,7 @@ describe("direct-calendar OAuth", () => {
       returnTo: "/admin/communications",
     });
     const connection = await testEnv.DB.prepare(
-      `SELECT encrypted_credentials AS encryptedCredentials, status
+      `SELECT id, encrypted_credentials AS encryptedCredentials, status
          FROM calendar_connections
         WHERE organisation_id = ? AND person_id = ? AND provider = 'microsoft'
           AND account_reference = ?`,
@@ -212,7 +221,7 @@ describe("direct-calendar OAuth", () => {
         viewer.personId,
         "microsoft-calendar-account-1",
       )
-      .first<{ encryptedCredentials: string; status: string }>();
+      .first<{ id: string; encryptedCredentials: string; status: string }>();
     expect(connection?.status).toBe("connected");
     expect(connection?.encryptedCredentials).not.toContain(
       "microsoft-calendar-refresh-token",
@@ -221,12 +230,131 @@ describe("direct-calendar OAuth", () => {
       decryptCalendarCredentials(
         connection!.encryptedCredentials,
         credentialKey,
+        {
+          connectionId: connection!.id,
+          organisationId: viewer.organisationId,
+          provider: "microsoft",
+        },
       ),
     ).resolves.toMatchObject({
       accessToken: "microsoft-calendar-access-token",
       refreshToken: "microsoft-calendar-refresh-token",
     });
     expect(requests[0]?.body).toContain("code_verifier=");
+  });
+
+  it("keeps pre-rotation OAuth state valid under the explicit previous key", async () => {
+    const accountReference = `google-rotation-${crypto.randomUUID()}`;
+    const fetcher = async (input: RequestInfo | URL) => {
+      if (String(input).includes("oauth2.googleapis.com/token")) {
+        return Response.json({
+          access_token: "rotated-google-access-token",
+          refresh_token: "rotated-google-refresh-token",
+          expires_in: 3_600,
+          token_type: "Bearer",
+        });
+      }
+      return Response.json({
+        sub: accountReference,
+        email: "rotation-calendar@example.com",
+      });
+    };
+    const { service, testEnv } = await oauthEnvironment(fetcher);
+    const started = await service.start(viewer, "google");
+    Object.assign(testEnv, {
+      CALENDAR_CREDENTIALS_KEY: rotatedCredentialKey,
+      CALENDAR_CREDENTIALS_PREVIOUS_KEY: credentialKey,
+    });
+
+    await expect(
+      new CalendarOAuthService(testEnv, fetcher).callback(viewer, {
+        state: new URL(started.authorizationUrl).searchParams.get("state")!,
+        code: "post-rotation-provider-code",
+        nonce: started.nonce,
+      }),
+    ).resolves.toMatchObject({ provider: "google" });
+
+    const connection = await testEnv.DB.prepare(
+      `SELECT id, encrypted_credentials AS encryptedCredentials
+         FROM calendar_connections
+        WHERE person_id = ? AND provider = 'google' AND account_reference = ?`,
+    )
+      .bind(viewer.personId, accountReference)
+      .first<{ id: string; encryptedCredentials: string }>();
+    await expect(
+      decryptCalendarCredentials(
+        connection!.encryptedCredentials,
+        rotatedCredentialKey,
+        {
+          connectionId: connection!.id,
+          organisationId: viewer.organisationId,
+          provider: "google",
+        },
+      ),
+    ).resolves.toMatchObject({
+      refreshToken: "rotated-google-refresh-token",
+    });
+  });
+
+  it("converges concurrent first callbacks on one decryptable account row", async () => {
+    const accountReference = `google-concurrent-${crypto.randomUUID()}`;
+    let profileCalls = 0;
+    let releaseProfiles!: () => void;
+    const profilesReady = new Promise<void>((resolve) => {
+      releaseProfiles = resolve;
+    });
+    const fetcher = async (input: RequestInfo | URL) => {
+      if (String(input).includes("oauth2.googleapis.com/token")) {
+        return Response.json({
+          access_token: `concurrent-access-${crypto.randomUUID()}`,
+          refresh_token: `concurrent-refresh-${crypto.randomUUID()}`,
+          expires_in: 3_600,
+          token_type: "Bearer",
+        });
+      }
+      profileCalls += 1;
+      if (profileCalls === 2) releaseProfiles();
+      await profilesReady;
+      return Response.json({
+        sub: accountReference,
+        email: "concurrent-calendar@example.com",
+      });
+    };
+    const { service, testEnv } = await oauthEnvironment(fetcher);
+    const [first, second] = await Promise.all([
+      service.start(viewer, "google"),
+      service.start(viewer, "google"),
+    ]);
+
+    await Promise.all(
+      [first, second].map((started, index) =>
+        service.callback(viewer, {
+          state: new URL(started.authorizationUrl).searchParams.get("state")!,
+          code: `concurrent-provider-code-${index}`,
+          nonce: started.nonce,
+        }),
+      ),
+    );
+
+    const rows = await testEnv.DB.prepare(
+      `SELECT id, encrypted_credentials AS encryptedCredentials
+         FROM calendar_connections
+        WHERE person_id = ? AND provider = 'google' AND account_reference = ?`,
+    )
+      .bind(viewer.personId, accountReference)
+      .all<{ id: string; encryptedCredentials: string }>();
+    expect(rows.results).toHaveLength(1);
+    await expect(
+      decryptCalendarCredentials(
+        rows.results[0]!.encryptedCredentials,
+        credentialKey,
+        {
+          connectionId: rows.results[0]!.id,
+          organisationId: viewer.organisationId,
+          provider: "google",
+        },
+      ),
+    ).resolves.toMatchObject({ tokenType: "Bearer" });
   });
 
   it("fails Microsoft account lookup explicitly when no usable email is returned", async () => {
@@ -342,6 +470,11 @@ describe("direct-calendar OAuth", () => {
         calendarId: "primary",
       },
       credentialKey,
+      {
+        connectionId,
+        organisationId: viewer.organisationId,
+        provider: "google",
+      },
     );
     await testEnv.DB.prepare(
       `INSERT INTO calendar_connections (
@@ -371,6 +504,11 @@ describe("direct-calendar OAuth", () => {
       decryptCalendarCredentials(
         refreshed!.encryptedCredentials,
         credentialKey,
+        {
+          connectionId,
+          organisationId: viewer.organisationId,
+          provider: "google",
+        },
       ),
     ).resolves.toMatchObject({
       accessToken: "refreshed-access-token",
@@ -406,6 +544,111 @@ describe("direct-calendar OAuth", () => {
     ).resolves.toEqual({ status: "needs_attention" });
   });
 
+  it("keeps a provider-rotated refresh token when key rewrapping races the refresh", async () => {
+    let markRefreshStarted!: () => void;
+    const refreshStarted = new Promise<void>((resolve) => {
+      markRefreshStarted = resolve;
+    });
+    let releaseRefresh!: () => void;
+    const refreshRelease = new Promise<void>((resolve) => {
+      releaseRefresh = resolve;
+    });
+    let refreshCalls = 0;
+    const fetcher = async () => {
+      refreshCalls += 1;
+      markRefreshStarted();
+      await refreshRelease;
+      return Response.json({
+        access_token: "rewrap-race-access-token",
+        refresh_token: "rewrap-race-rotated-refresh-token",
+        expires_in: 7_200,
+        token_type: "Bearer",
+      });
+    };
+    const { testEnv } = await oauthEnvironment(fetcher);
+    const oldDeploymentEnvironment = {
+      ...testEnv,
+      CALENDAR_CREDENTIALS_KEY: rotatedCredentialKey,
+      CALENDAR_CREDENTIALS_PREVIOUS_KEY: undefined,
+    } as CloudflareEnvironment;
+    const service = new CalendarOAuthService(oldDeploymentEnvironment, fetcher);
+    const connectionId = crypto.randomUUID();
+    const currentCredentials = {
+      accessToken: "rewrap-race-old-access-token",
+      refreshToken: "rewrap-race-old-refresh-token",
+      accessTokenExpiresAt: 1,
+      tokenType: "Bearer" as const,
+      calendarId: "primary",
+    };
+    const context = {
+      connectionId,
+      organisationId: viewer.organisationId,
+      provider: "google" as const,
+    };
+    const previousCiphertext = await encryptCalendarCredentials(
+      currentCredentials,
+      rotatedCredentialKey,
+      context,
+    );
+    await testEnv.DB.prepare(
+      `INSERT INTO calendar_connections (
+         id, organisation_id, event_id, person_id, provider, account_reference,
+         encrypted_credentials, scopes_json, status, expires_at, created_at, updated_at
+       ) VALUES (?, ?, ?, ?, 'google', ?, ?, '[]', 'connected', 1, unixepoch(), unixepoch())`,
+    )
+      .bind(
+        connectionId,
+        viewer.organisationId,
+        viewer.eventId,
+        viewer.personId,
+        `rewrap-race-${crypto.randomUUID()}`,
+        previousCiphertext,
+      )
+      .run();
+
+    const refreshing = service.refreshConnection(viewer, connectionId);
+    await refreshStarted;
+    try {
+      const activeCiphertext = await encryptCalendarCredentials(
+        currentCredentials,
+        credentialKey,
+        context,
+        await calendarCredentialGeneration(previousCiphertext),
+      );
+      await expect(
+        testEnv.DB.prepare(
+          `UPDATE calendar_connections
+              SET encrypted_credentials = ?, updated_at = unixepoch()
+            WHERE id = ? AND encrypted_credentials = ?`,
+        )
+          .bind(activeCiphertext, connectionId, previousCiphertext)
+          .run(),
+      ).resolves.toMatchObject({ meta: { changes: 1 } });
+    } finally {
+      releaseRefresh();
+    }
+
+    await expect(refreshing).resolves.toMatchObject({ refreshed: true });
+    expect(refreshCalls).toBe(1);
+    const stored = await testEnv.DB.prepare(
+      `SELECT encrypted_credentials AS encryptedCredentials, status
+         FROM calendar_connections WHERE id = ?`,
+    )
+      .bind(connectionId)
+      .first<{ encryptedCredentials: string; status: string }>();
+    expect(stored?.status).toBe("connected");
+    await expect(
+      decryptCalendarCredentials(
+        stored!.encryptedCredentials,
+        rotatedCredentialKey,
+        context,
+      ),
+    ).resolves.toMatchObject({
+      accessToken: "rewrap-race-access-token",
+      refreshToken: "rewrap-race-rotated-refresh-token",
+    });
+  });
+
   it("does not let a stale refresh failure overwrite concurrently rotated credentials", async () => {
     let markRefreshStarted!: () => void;
     const refreshStarted = new Promise<void>((resolve) => {
@@ -433,6 +676,11 @@ describe("direct-calendar OAuth", () => {
         calendarId: "primary",
       },
       credentialKey,
+      {
+        connectionId,
+        organisationId: viewer.organisationId,
+        provider: "google",
+      },
     );
     const replacementExpiresAt = Math.floor(Date.now() / 1_000) + 7_200;
     const replacementCredentials = await encryptCalendarCredentials(
@@ -444,6 +692,11 @@ describe("direct-calendar OAuth", () => {
         calendarId: "primary",
       },
       credentialKey,
+      {
+        connectionId,
+        organisationId: viewer.organisationId,
+        provider: "google",
+      },
     );
     await testEnv.DB.prepare(
       `INSERT INTO calendar_connections (

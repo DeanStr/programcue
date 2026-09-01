@@ -112,6 +112,31 @@
   frame.style.height = `${initialHeight}px`;
   frame.style.border = "0";
   frame.style.display = "block";
+  var handshakeTimer = null;
+  function announceProgramCueHostOrigin() {
+    frame.contentWindow?.postMessage(
+      {
+        type: "programcue:host-origin",
+        eventSlug: slug,
+        parentOrigin: window.location.origin,
+      },
+      widgetOrigin,
+    );
+  }
+  frame.addEventListener("load", function startProgramCueOriginHandshake() {
+    var attempts = 0;
+    if (handshakeTimer !== null) window.clearInterval(handshakeTimer);
+    announceProgramCueHostOrigin();
+    handshakeTimer = window.setInterval(function retryOriginHandshake() {
+      attempts += 1;
+      if (attempts >= 20) {
+        window.clearInterval(handshakeTimer);
+        handshakeTimer = null;
+        return;
+      }
+      announceProgramCueHostOrigin();
+    }, 250);
+  });
   target.appendChild(frame);
 
   window.addEventListener("message", function resizeProgramCueWidget(event) {
@@ -126,6 +151,10 @@
       return;
     var height = Math.ceil(message.height);
     if (height < 160 || height > 20000) return;
+    if (handshakeTimer !== null) {
+      window.clearInterval(handshakeTimer);
+      handshakeTimer = null;
+    }
     frame.style.height = `${height}px`;
   });
 })();

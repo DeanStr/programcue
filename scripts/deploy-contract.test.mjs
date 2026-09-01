@@ -64,6 +64,20 @@ test("Wrangler profiles have no structural configuration issues", () => {
   assert.deepEqual(issues, []);
 });
 
+test("application Workers require the strictly public global fetch boundary", () => {
+  const configs = readDeploymentConfigs();
+  configs.production.compatibility_flags = ["nodejs_compat"];
+
+  assert.ok(
+    validateDeploymentConfigs(configs).some(
+      ({ profile, kind, message }) =>
+        profile === "production" &&
+        kind === "configuration" &&
+        message.includes("global_fetch_strictly_public"),
+    ),
+  );
+});
+
 test("local itinerary secrets cannot be checked into Wrangler profiles", () => {
   const configs = readDeploymentConfigs();
   configs.development.vars.ANONYMOUS_ITINERARY_SECRET = "checked-in-secret";

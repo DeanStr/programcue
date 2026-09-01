@@ -32,6 +32,8 @@ type ResourceResult = {
 export type StoredWebhookSecret = {
   endpointId: string;
   secretFingerprint: string;
+  /** Absent on records written before plaintext-secret fingerprints. */
+  secretFingerprintVersion?: 2;
 };
 
 export function assertNew(itemId: string) {
@@ -72,10 +74,27 @@ export abstract class ApiAdministrationCommandExecutor {
     )
       .bind(stored.endpointId, viewer.eventId, viewer.organisationId)
       .first<{ secretCiphertext: string }>();
-    if (
-      !row ||
-      (await apiRequestHash(row.secretCiphertext)) !== stored.secretFingerprint
-    ) {
+    if (!row) {
+      throw new ApiError(
+        409,
+        "WEBHOOK_SECRET_SUPERSEDED",
+        "This command's webhook secret has since been rotated and can no longer be replayed",
+      );
+    }
+    const secret = await decryptWebhookSecret(
+      row.secretCiphertext,
+      stored.endpointId,
+      this.env.WEBHOOK_CREDENTIALS_KEY,
+      this.env.WEBHOOK_CREDENTIALS_PREVIOUS_KEY,
+    );
+    const fingerprintMatches =
+      stored.secretFingerprintVersion === 2
+        ? (await apiRequestHash(secret)) === stored.secretFingerprint
+        : stored.secretFingerprintVersion === undefined
+          ? (await apiRequestHash(row.secretCiphertext)) ===
+            stored.secretFingerprint
+          : false;
+    if (!fingerprintMatches) {
       throw new ApiError(
         409,
         "WEBHOOK_SECRET_SUPERSEDED",
@@ -84,11 +103,7 @@ export abstract class ApiAdministrationCommandExecutor {
     }
     return {
       endpointId: stored.endpointId,
-      secret: await decryptWebhookSecret(
-        row.secretCiphertext,
-        stored.endpointId,
-        this.env.WEBHOOK_CREDENTIALS_KEY,
-      ),
+      secret,
       secretCiphertext: row.secretCiphertext,
     };
   }

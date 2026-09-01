@@ -1,10 +1,24 @@
 import { z } from "zod";
 
-const encryptedEnvelopeSchema = z.object({
-  version: z.literal(1),
-  iv: z.string().min(1),
-  ciphertext: z.string().min(1),
-});
+import {
+  credentialKeyCandidates,
+  RotatingCredentialKeyConfigurationError,
+  rotatingCredentialKeyring,
+} from "~/platform/security/rotating-credential-key.server";
+
+const encryptedEnvelopeSchema = z.discriminatedUnion("version", [
+  z.object({
+    version: z.literal(1),
+    iv: z.string().min(1),
+    ciphertext: z.string().min(1),
+  }),
+  z.object({
+    version: z.literal(2),
+    keyId: z.string().min(16).max(16),
+    iv: z.string().min(1),
+    ciphertext: z.string().min(1),
+  }),
+]);
 
 export class IntegrationCredentialConfigurationError extends Error {
   constructor(message: string) {
@@ -30,22 +44,22 @@ function bytesToBase64(value: Uint8Array) {
   return btoa(binary);
 }
 
-async function importCredentialKey(base64Key: string | undefined) {
-  if (!base64Key?.trim()) {
-    throw new IntegrationCredentialConfigurationError(
-      "INTEGRATION_CREDENTIALS_KEY is required for external integrations.",
+async function integrationCredentialKeyring(
+  base64Key: string | undefined,
+  previousBase64Key?: string,
+) {
+  try {
+    return await rotatingCredentialKeyring(
+      base64Key,
+      previousBase64Key,
+      "INTEGRATION_CREDENTIALS_KEY",
     );
+  } catch (error) {
+    if (error instanceof RotatingCredentialKeyConfigurationError) {
+      throw new IntegrationCredentialConfigurationError(error.message);
+    }
+    throw error;
   }
-  const bytes = bytesFromBase64(base64Key);
-  if (bytes.byteLength !== 32) {
-    throw new IntegrationCredentialConfigurationError(
-      "INTEGRATION_CREDENTIALS_KEY must be a base64-encoded 32-byte key.",
-    );
-  }
-  return crypto.subtle.importKey("raw", bytes, "AES-GCM", false, [
-    "encrypt",
-    "decrypt",
-  ]);
 }
 
 export async function encryptIntegrationCredentials(
@@ -53,7 +67,7 @@ export async function encryptIntegrationCredentials(
   base64Key: string | undefined,
   connectionId: string,
 ) {
-  const key = await importCredentialKey(base64Key);
+  const { active } = await integrationCredentialKeyring(base64Key);
   const iv = crypto.getRandomValues(new Uint8Array(12));
   const ciphertext = await crypto.subtle.encrypt(
     {
@@ -61,11 +75,12 @@ export async function encryptIntegrationCredentials(
       iv,
       additionalData: new TextEncoder().encode(connectionId),
     },
-    key,
+    active.key,
     new TextEncoder().encode(JSON.stringify(credentials)),
   );
   return JSON.stringify({
-    version: 1,
+    version: 2,
+    keyId: active.id,
     iv: bytesToBase64(iv),
     ciphertext: bytesToBase64(new Uint8Array(ciphertext)),
   });
@@ -75,6 +90,7 @@ export async function decryptIntegrationCredentials(
   encrypted: string,
   base64Key: string | undefined,
   connectionId: string,
+  previousBase64Key?: string,
 ) {
   let envelope: z.infer<typeof encryptedEnvelopeSchema>;
   try {
@@ -84,22 +100,46 @@ export async function decryptIntegrationCredentials(
       "Integration credentials use an invalid encrypted envelope.",
     );
   }
+  const keyring = await integrationCredentialKeyring(
+    base64Key,
+    previousBase64Key,
+  );
+  let candidates = keyring.candidates;
   try {
-    const key = await importCredentialKey(base64Key);
-    const plaintext = await crypto.subtle.decrypt(
-      {
-        name: "AES-GCM",
-        iv: bytesFromBase64(envelope.iv),
-        additionalData: new TextEncoder().encode(connectionId),
-      },
-      key,
-      bytesFromBase64(envelope.ciphertext),
+    candidates = credentialKeyCandidates(
+      keyring,
+      envelope.version === 2 ? envelope.keyId : null,
     );
-    return JSON.parse(new TextDecoder().decode(plaintext)) as unknown;
   } catch (error) {
-    if (error instanceof IntegrationCredentialConfigurationError) throw error;
-    throw new IntegrationCredentialConfigurationError(
-      "Integration credentials could not be decrypted.",
-    );
+    if (error instanceof RotatingCredentialKeyConfigurationError) {
+      throw new IntegrationCredentialConfigurationError(error.message);
+    }
+    throw error;
   }
+  for (const candidate of candidates) {
+    try {
+      const plaintext = await crypto.subtle.decrypt(
+        {
+          name: "AES-GCM",
+          iv: bytesFromBase64(envelope.iv),
+          additionalData: new TextEncoder().encode(connectionId),
+        },
+        candidate.key,
+        bytesFromBase64(envelope.ciphertext),
+      );
+      return JSON.parse(new TextDecoder().decode(plaintext)) as unknown;
+    } catch {
+      // A version-1 envelope has no key id, so an explicit previous key is
+      // tried only during the bounded rotation window.
+    }
+  }
+  throw new IntegrationCredentialConfigurationError(
+    "Integration credentials could not be decrypted.",
+  );
+}
+
+export async function activeIntegrationCredentialKeyId(
+  base64Key: string | undefined,
+) {
+  return (await integrationCredentialKeyring(base64Key)).active.id;
 }

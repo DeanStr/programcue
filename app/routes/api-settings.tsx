@@ -24,6 +24,7 @@ import {
 } from "~/platform/api/api-key-service.server";
 import { apiKeyLifecycleState } from "~/platform/api/api-key-state";
 import { requireCurrentEventRole } from "~/platform/auth/current-event.server";
+import { requireRecentAuthentication } from "~/platform/auth/recent-authentication.server";
 import { getCloudflareContext } from "~/platform/cloudflare-context";
 import { outboundWebhookEventTypes } from "~/platform/operations/webhook-schema";
 import {
@@ -39,12 +40,14 @@ export const meta = () => [{ title: "API & webhooks · Program Cue" }];
 async function administrator(
   request: Request,
   context: Route.LoaderArgs["context"],
+  recentAuthentication = false,
 ) {
   const { env } = getCloudflareContext(context);
   const viewer = await requireCurrentEventRole(request, env, [
     "owner",
     "administrator",
   ]);
+  if (recentAuthentication) requireRecentAuthentication(request, viewer);
   return { env, viewer };
 }
 
@@ -60,7 +63,7 @@ export async function loader({ request, context }: Route.LoaderArgs) {
 }
 
 export async function action({ request, context }: Route.ActionArgs) {
-  const { env, viewer } = await administrator(request, context);
+  const { env, viewer } = await administrator(request, context, true);
   const form = await request.formData();
   const service = new ApiKeyService(env);
   const webhookService = new WebhookService(env);

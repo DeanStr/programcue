@@ -694,6 +694,70 @@ test("exports static programme files and mounts a filtered auto-resizing widget"
   expect(htmlExport.headers()["content-type"]).toContain("text/html");
   expect(await htmlExport.text()).toContain("<!doctype html>");
 
+  await page.route(`${e2eOrigin}/__programcue-direct-iframe-host`, (route) =>
+    route.fulfill({
+      contentType: "text/html",
+      body: `
+        <script>
+          window.resizeMessages = 0;
+          window.addEventListener("message", function (event) {
+            if (event.data?.type === "programcue:resize") {
+              window.resizeMessages += 1;
+            }
+          });
+        </script>
+        <iframe id="direct-embed"
+          src="${e2eOrigin}/embed/future-of-events-2027/sessions"></iframe>
+      `,
+    }),
+  );
+  await page.goto(`${e2eOrigin}/__programcue-direct-iframe-host`);
+  const directFrame = page.locator("#direct-embed");
+  await directFrame
+    .contentFrame()
+    .locator("body[data-hydrated='true']")
+    .waitFor();
+  expect(
+    await page.evaluate(
+      () => (window as unknown as { resizeMessages: number }).resizeMessages,
+    ),
+  ).toBe(0);
+  await page.evaluate(() => {
+    const iframe = document.querySelector<HTMLIFrameElement>("#direct-embed");
+    iframe?.contentWindow?.postMessage(
+      {
+        type: "programcue:host-origin",
+        eventSlug: "future-of-events-2027",
+        parentOrigin: "https://wrong.example",
+      },
+      window.location.origin,
+    );
+  });
+  await page.waitForTimeout(100);
+  expect(
+    await page.evaluate(
+      () => (window as unknown as { resizeMessages: number }).resizeMessages,
+    ),
+  ).toBe(0);
+  await page.evaluate(() => {
+    const iframe = document.querySelector<HTMLIFrameElement>("#direct-embed");
+    iframe?.contentWindow?.postMessage(
+      {
+        type: "programcue:host-origin",
+        eventSlug: "future-of-events-2027",
+        parentOrigin: window.location.origin,
+      },
+      window.location.origin,
+    );
+  });
+  await expect
+    .poll(() =>
+      page.evaluate(
+        () => (window as unknown as { resizeMessages: number }).resizeMessages,
+      ),
+    )
+    .toBeGreaterThan(0);
+
   // The real application CSP intentionally permits only HTTPS frames. Fulfil
   // a CSP-neutral loopback host document so the local HTTP test can exercise
   // the widget contract without inheriting Program Cue's response headers or

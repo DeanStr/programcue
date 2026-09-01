@@ -218,12 +218,17 @@ function validateCommonProfile(profile, config, spec, issues) {
       ),
     );
   }
-  if (!sameMembers(config.compatibility_flags, ["nodejs_compat"])) {
+  if (
+    !sameMembers(config.compatibility_flags, [
+      "nodejs_compat",
+      "global_fetch_strictly_public",
+    ])
+  ) {
     issues.push(
       issue(
         profile,
         "configuration",
-        "Worker compatibility_flags must contain only nodejs_compat.",
+        "Worker compatibility_flags must contain only nodejs_compat and global_fetch_strictly_public.",
       ),
     );
   }

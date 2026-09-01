@@ -281,6 +281,7 @@ export async function deliverCalendarProvider(input: {
     }
     if (
       invitation.connectionProvider !== message.provider ||
+      !invitation.connectionId ||
       !invitation.encryptedCredentials ||
       invitation.connectionStatus !== "connected" ||
       !invitation.connectionPersonId ||
@@ -296,6 +297,12 @@ export async function deliverCalendarProvider(input: {
       const credentials = await decryptCalendarCredentials(
         invitation.encryptedCredentials,
         env.CALENDAR_CREDENTIALS_KEY,
+        {
+          connectionId: invitation.connectionId,
+          organisationId: message.organisationId,
+          provider: message.provider,
+        },
+        env.CALENDAR_CREDENTIALS_PREVIOUS_KEY,
       );
       if (
         credentials.accessTokenExpiresAt !== invitation.connectionExpiresAt ||

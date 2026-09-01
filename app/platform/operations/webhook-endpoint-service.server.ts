@@ -53,21 +53,121 @@ export const webhookEndpointSchema = z
   })
   .strict();
 
-function isPrivateIpv4(hostname: string) {
-  const match = /^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/u.exec(hostname);
+function isIpv4Literal(hostname: string) {
+  return /^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/u.test(hostname);
+}
+
+function isPublicIpv4(address: string) {
+  const match = /^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/u.exec(address);
   if (!match) return false;
-  const parts = match.slice(1).map(Number);
-  if (parts.some((part) => part > 255)) return true;
-  const [a, b] = parts;
-  return (
+  const [a, b, c] = match.slice(1).map(Number);
+  if (match.slice(1).some((part) => Number(part) > 255)) return false;
+  return !(
     a === 0 ||
     a === 10 ||
     a === 127 ||
+    (a === 100 && b >= 64 && b <= 127) ||
     (a === 169 && b === 254) ||
     (a === 172 && b >= 16 && b <= 31) ||
+    (a === 192 && b === 0 && c === 0) ||
+    (a === 192 && b === 0 && c === 2) ||
     (a === 192 && b === 168) ||
+    (a === 192 && b === 88 && c === 99) ||
+    (a === 198 && (b === 18 || b === 19)) ||
+    (a === 198 && b === 51 && c === 100) ||
+    (a === 203 && b === 0 && c === 113) ||
     a >= 224
   );
+}
+
+function ipv6Bytes(address: string) {
+  const normalized = address.toLowerCase().split("%")[0];
+  if (!normalized || normalized.includes(".")) return null;
+  const halves = normalized.split("::");
+  if (halves.length > 2) return null;
+  const left = halves[0] ? halves[0].split(":") : [];
+  const right = halves[1] ? halves[1].split(":") : [];
+  const missing = 8 - left.length - right.length;
+  if ((halves.length === 1 && missing !== 0) || missing < 0) return null;
+  const words = [
+    ...left,
+    ...Array.from({ length: missing }, () => "0"),
+    ...right,
+  ];
+  if (
+    words.length !== 8 ||
+    words.some((word) => !/^[0-9a-f]{1,4}$/u.test(word))
+  ) {
+    return null;
+  }
+  return Uint8Array.from(
+    words.flatMap((word) => {
+      const value = Number.parseInt(word, 16);
+      return [value >> 8, value & 0xff];
+    }),
+  );
+}
+
+function isPublicIpv6(address: string) {
+  const bytes = ipv6Bytes(address);
+  if (!bytes) return false;
+  const first = bytes[0];
+  if (first === undefined || (first & 0xe0) !== 0x20) return false;
+  // Special-purpose, transition and documentation ranges must never be
+  // treated as delivery targets.
+  if (bytes[0] === 0x20 && bytes[1] === 0x01 && (bytes[2] ?? 0) <= 0x01) {
+    return false;
+  }
+  if (bytes[0] === 0x20 && bytes[1] === 0x02) return false;
+  if (
+    bytes[0] === 0x20 &&
+    bytes[1] === 0x01 &&
+    bytes[2] === 0x0d &&
+    bytes[3] === 0xb8
+  ) {
+    return false;
+  }
+  return !(bytes[0] === 0x3f && bytes[1] === 0xff);
+}
+
+export type WebhookHostnameResolver = (
+  hostname: string,
+) => Promise<readonly string[]>;
+
+export async function resolveWebhookHostname(
+  hostname: string,
+  fetcher: typeof fetch = fetch,
+) {
+  const resolveType = async (type: "A" | "AAAA") => {
+    const url = new URL("https://cloudflare-dns.com/dns-query");
+    url.searchParams.set("name", hostname);
+    url.searchParams.set("type", type);
+    const response = await fetcher(url, {
+      headers: { accept: "application/dns-json" },
+      signal: AbortSignal.timeout(5_000),
+    });
+    if (!response.ok) {
+      throw new Error(`Webhook DNS lookup returned HTTP ${response.status}.`);
+    }
+    const body = (await response.json()) as {
+      Status?: number;
+      Answer?: Array<{ type?: number; data?: string }>;
+    };
+    if (body.Status !== 0) {
+      throw new Error(
+        `Webhook DNS lookup returned DNS status ${String(body.Status)}.`,
+      );
+    }
+    const recordType = type === "A" ? 1 : 28;
+    return (body.Answer ?? [])
+      .filter(
+        (answer) =>
+          answer.type === recordType && typeof answer.data === "string",
+      )
+      .map((answer) => answer.data as string);
+  };
+  const results = await Promise.all([resolveType("A"), resolveType("AAAA")]);
+  return results.flat();
 }
 
 export function validateWebhookUrl(value: string) {
@@ -88,11 +188,31 @@ export function validateWebhookUrl(value: string) {
     hostname.endsWith(".local") ||
     hostname.endsWith(".internal") ||
     hostname.includes(":") ||
-    isPrivateIpv4(hostname)
+    isIpv4Literal(hostname)
   ) {
     throw new Error("Outbound webhook URLs must use a public DNS hostname.");
   }
   return url.toString();
+}
+
+export async function validateWebhookDestination(
+  value: string,
+  resolver: WebhookHostnameResolver = resolveWebhookHostname,
+) {
+  const validated = validateWebhookUrl(value);
+  const hostname = new URL(validated).hostname;
+  const addresses = await resolver(hostname);
+  if (
+    addresses.length === 0 ||
+    addresses.some(
+      (address) => !isPublicIpv4(address) && !isPublicIpv6(address),
+    )
+  ) {
+    throw new Error(
+      "Outbound webhook DNS must resolve only to public network addresses.",
+    );
+  }
+  return validated;
 }
 
 export type WebhookEndpointListItem = {
@@ -255,6 +375,7 @@ export class WebhookEndpointService {
             recovered.secretCiphertext,
             id,
             this.env.WEBHOOK_CREDENTIALS_KEY,
+            this.env.WEBHOOK_CREDENTIALS_PREVIOUS_KEY,
           ),
           secretCiphertext: recovered.secretCiphertext,
         };
@@ -443,6 +564,7 @@ export class WebhookEndpointService {
           current.secretCiphertext,
           endpointId,
           this.env.WEBHOOK_CREDENTIALS_KEY,
+          this.env.WEBHOOK_CREDENTIALS_PREVIOUS_KEY,
         ),
         secretCiphertext: current.secretCiphertext,
       };

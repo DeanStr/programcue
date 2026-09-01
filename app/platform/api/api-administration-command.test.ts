@@ -6,12 +6,14 @@ import { ensureEvaluationDecisionTemplateFixture } from "~/modules/evaluations/e
 import { ScheduleService } from "~/modules/schedule/schedule-service.server";
 import { ensureDemoSpeakerData } from "~/modules/speakers/demo.server";
 import { SubmissionService } from "~/modules/submissions/submission-service.server";
+import { apiRequestHash } from "~/platform/api/api.server";
 import { ApiParticipantService } from "~/platform/api/api-participant-service.server";
 import { cloudflareContext } from "~/platform/cloudflare-context";
 import {
   ensureDemoData,
   ensureDemoProgramme,
 } from "~/platform/demo/seed.server";
+import { encryptWebhookSecret } from "~/platform/operations/webhook-crypto.server";
 import { action as administrationAction } from "~/routes/api-administration-command";
 import { action as participantTaskAction } from "~/routes/api-participant-task-completion";
 
@@ -988,6 +990,79 @@ describe("versioned administration commands", () => {
     expect(stored!.ciphertext).not.toContain(secret);
     expect(stored!.responseJson).not.toContain(secret);
     expect(stored!.responseJson).not.toContain(stored!.ciphertext);
+
+    await testEnv.DB.prepare(
+      `UPDATE idempotency_records
+          SET response_json = ?
+        WHERE id = (SELECT last_operation_id FROM webhook_endpoints WHERE id = ?)`,
+    )
+      .bind(
+        JSON.stringify({
+          endpointId,
+          secretFingerprint: await apiRequestHash(stored!.ciphertext),
+        }),
+        endpointId,
+      )
+      .run();
+    const legacyReplay = await result(
+      await command(
+        "administrator",
+        "webhook-endpoints",
+        "new",
+        "save",
+        webhookBody,
+        webhookKey,
+        environment,
+      ),
+    );
+    expect(legacyReplay.result).toMatchObject({
+      endpointId,
+      secret,
+      replayed: true,
+    });
+    await testEnv.DB.prepare(
+      `UPDATE idempotency_records
+          SET response_json = ?
+        WHERE id = (SELECT last_operation_id FROM webhook_endpoints WHERE id = ?)`,
+    )
+      .bind(
+        JSON.stringify({
+          endpointId,
+          secretFingerprint: await apiRequestHash(secret),
+          secretFingerprintVersion: 2,
+        }),
+        endpointId,
+      )
+      .run();
+
+    const rewrappedCiphertext = await encryptWebhookSecret(
+      secret,
+      endpointId,
+      environment.WEBHOOK_CREDENTIALS_KEY,
+    );
+    await testEnv.DB.prepare(
+      `UPDATE webhook_endpoints
+          SET secret_ciphertext = ?, updated_at = unixepoch()
+        WHERE id = ? AND event_id = ?`,
+    )
+      .bind(rewrappedCiphertext, endpointId, eventId)
+      .run();
+    const replayedAfterRewrap = await result(
+      await command(
+        "administrator",
+        "webhook-endpoints",
+        "new",
+        "save",
+        webhookBody,
+        webhookKey,
+        environment,
+      ),
+    );
+    expect(replayedAfterRewrap.result).toMatchObject({
+      endpointId,
+      secret,
+      replayed: true,
+    });
 
     const testKey = `webhook-test-${suffix}`;
     const tested = await result(

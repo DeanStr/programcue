@@ -7,6 +7,10 @@ import {
   requireRuntimeMode,
   requiresProductionSecurity,
 } from "~/platform/runtime-environment.server";
+import {
+  credentialBytesFromBase64,
+  RotatingCredentialKeyConfigurationError,
+} from "~/platform/security/rotating-credential-key.server";
 
 const requiredProductionBindings = [
   "DB",
@@ -129,6 +133,62 @@ export function requireProductionRuntimeReadiness(
   ] as const) {
     if (typeof values[name] === "string" && values[name].trim().length < 32) {
       invalid.push(name);
+    }
+  }
+  const providerKeys: Array<{
+    name:
+      | "CALENDAR_CREDENTIALS_KEY"
+      | "CALENDAR_CREDENTIALS_PREVIOUS_KEY"
+      | "INTEGRATION_CREDENTIALS_KEY"
+      | "INTEGRATION_CREDENTIALS_PREVIOUS_KEY"
+      | "WEBHOOK_CREDENTIALS_KEY"
+      | "WEBHOOK_CREDENTIALS_PREVIOUS_KEY";
+    bytes: Uint8Array;
+  }> = [];
+  for (const [activeName, previousName] of [
+    ["CALENDAR_CREDENTIALS_KEY", "CALENDAR_CREDENTIALS_PREVIOUS_KEY"],
+    ["INTEGRATION_CREDENTIALS_KEY", "INTEGRATION_CREDENTIALS_PREVIOUS_KEY"],
+    ["WEBHOOK_CREDENTIALS_KEY", "WEBHOOK_CREDENTIALS_PREVIOUS_KEY"],
+  ] as const) {
+    try {
+      const active = credentialBytesFromBase64(
+        typeof values[activeName] === "string" ? values[activeName] : undefined,
+        activeName,
+      );
+      providerKeys.push({ name: activeName, bytes: active });
+    } catch (error) {
+      if (error instanceof RotatingCredentialKeyConfigurationError) {
+        invalid.push(activeName);
+      } else {
+        throw error;
+      }
+    }
+    const previousValue = values[previousName];
+    if (typeof previousValue !== "string" || !previousValue.trim()) continue;
+    try {
+      providerKeys.push({
+        name: previousName,
+        bytes: credentialBytesFromBase64(previousValue, previousName),
+      });
+    } catch (error) {
+      if (error instanceof RotatingCredentialKeyConfigurationError) {
+        invalid.push(previousName);
+      } else {
+        throw error;
+      }
+    }
+  }
+  for (let left = 0; left < providerKeys.length; left += 1) {
+    for (let right = left + 1; right < providerKeys.length; right += 1) {
+      const leftKey = providerKeys[left];
+      const rightKey = providerKeys[right];
+      if (
+        leftKey &&
+        rightKey &&
+        leftKey.bytes.every((byte, index) => byte === rightKey.bytes[index])
+      ) {
+        invalid.push(leftKey.name, rightKey.name);
+      }
     }
   }
   if (

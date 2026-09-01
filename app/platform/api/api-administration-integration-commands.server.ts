@@ -237,22 +237,23 @@ export class ApiAdministrationIntegrationCommands extends ApiAdministrationComma
                   row.secretCiphertext,
                   endpointId,
                   this.env.WEBHOOK_CREDENTIALS_KEY,
+                  this.env.WEBHOOK_CREDENTIALS_PREVIOUS_KEY,
                 ),
                 secretCiphertext: row.secretCiphertext,
               }
             : null;
         },
-        store: async ({ endpointId, secretCiphertext }) => ({
+        store: async ({ endpointId, secret }) => ({
           endpointId,
-          secretFingerprint: await apiRequestHash(secretCiphertext),
+          secretFingerprint: await apiRequestHash(secret),
+          secretFingerprintVersion: 2 as const,
         }),
         restore: (stored) => this.restoreCurrentWebhookSecret(viewer, stored),
       });
       const current = await this.restoreCurrentWebhookSecret(viewer, {
         endpointId: response.result.endpointId,
-        secretFingerprint: await apiRequestHash(
-          response.result.secretCiphertext,
-        ),
+        secretFingerprint: await apiRequestHash(response.result.secret),
+        secretFingerprintVersion: 2,
       });
       return {
         endpointId: current.endpointId,
@@ -357,22 +358,23 @@ export class ApiAdministrationIntegrationCommands extends ApiAdministrationComma
                   row.secretCiphertext,
                   itemId,
                   this.env.WEBHOOK_CREDENTIALS_KEY,
+                  this.env.WEBHOOK_CREDENTIALS_PREVIOUS_KEY,
                 ),
                 secretCiphertext: row.secretCiphertext,
               }
             : null;
         },
-        store: async ({ endpointId, secretCiphertext }) => ({
+        store: async ({ endpointId, secret }) => ({
           endpointId,
-          secretFingerprint: await apiRequestHash(secretCiphertext),
+          secretFingerprint: await apiRequestHash(secret),
+          secretFingerprintVersion: 2 as const,
         }),
         restore: (stored) => this.restoreCurrentWebhookSecret(viewer, stored),
       });
       const current = await this.restoreCurrentWebhookSecret(viewer, {
         endpointId: response.result.endpointId,
-        secretFingerprint: await apiRequestHash(
-          response.result.secretCiphertext,
-        ),
+        secretFingerprint: await apiRequestHash(response.result.secret),
+        secretFingerprintVersion: 2,
       });
       return {
         endpointId: current.endpointId,

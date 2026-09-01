@@ -112,10 +112,11 @@ export function participantOAuthConfiguration(
 
 export function participantOAuthProviderOptions(
   environment: CloudflareEnvironment,
+  forceAuthentication = false,
 ) {
   const participantOAuth = participantOAuthConfiguration(environment);
   return {
-    ...(participantOAuth.google
+    ...(participantOAuth.google && !forceAuthentication
       ? {
           google: {
             ...participantOAuth.google,
@@ -136,6 +137,7 @@ export function participantOAuthProviderOptions(
             responseMode: "form_post" as const,
             scope: ["openid", "email", "profile"],
             tenantId: "common",
+            ...(forceAuthentication ? { prompt: "login" as const } : {}),
           },
         }
       : {}),
@@ -227,7 +229,10 @@ async function sendMagicLink(
   });
 }
 
-export function createAuth(env: CloudflareEnvironment) {
+export function createAuth(
+  env: CloudflareEnvironment,
+  options: { forceAuthentication?: boolean } = {},
+) {
   requireAuthConfiguration(env);
   const database = createDatabase(env);
 
@@ -262,7 +267,10 @@ export function createAuth(env: CloudflareEnvironment) {
       },
     },
     verification: { modelName: "verification" },
-    socialProviders: participantOAuthProviderOptions(env),
+    socialProviders: participantOAuthProviderOptions(
+      env,
+      options.forceAuthentication,
+    ),
     plugins: [
       magicLink({
         expiresIn: 300,

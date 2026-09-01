@@ -26,6 +26,14 @@ async function health(testEnvironment: CloudflareEnvironment) {
   } as never);
 }
 
+function providerKey(offset: number) {
+  return btoa(
+    String.fromCharCode(
+      ...Array.from({ length: 32 }, (_, index) => (index + offset) % 256),
+    ),
+  );
+}
+
 afterEach(() => vi.restoreAllMocks());
 
 describe("service readiness", () => {
@@ -231,6 +239,34 @@ describe("service readiness", () => {
     }
   });
 
+  it("requires exact and independent provider credential rotation keys", async () => {
+    vi.spyOn(console, "error").mockImplementation(() => undefined);
+    const production = completeProductionEnvironment();
+    for (const overrides of [
+      { CALENDAR_CREDENTIALS_KEY: btoa("too-short") },
+      {
+        INTEGRATION_CREDENTIALS_PREVIOUS_KEY:
+          production.INTEGRATION_CREDENTIALS_KEY,
+      },
+      {
+        INTEGRATION_CREDENTIALS_PREVIOUS_KEY:
+          production.CALENDAR_CREDENTIALS_KEY,
+      },
+      {
+        CALENDAR_CREDENTIALS_PREVIOUS_KEY: providerKey(4),
+        WEBHOOK_CREDENTIALS_PREVIOUS_KEY: providerKey(4),
+      },
+      { WEBHOOK_CREDENTIALS_KEY: production.CALENDAR_CREDENTIALS_KEY },
+      { WEBHOOK_CREDENTIALS_PREVIOUS_KEY: "not base64%%%" },
+    ]) {
+      const response = await health({
+        ...production,
+        ...overrides,
+      } as CloudflareEnvironment);
+      expect(response.status).toBe(503);
+    }
+  });
+
   it("accepts complete local production bindings without calling providers", async () => {
     const response = await health(completeProductionEnvironment());
     expect(response.status).toBe(200);
@@ -276,7 +312,7 @@ function completeProductionEnvironment() {
     ANONYMOUS_ITINERARY_SECRET: "z".repeat(32),
     RESEND_API_KEY: "resend-key",
     RESEND_WEBHOOK_SECRET: "resend-webhook-secret",
-    CALENDAR_CREDENTIALS_KEY: "calendar-key",
+    CALENDAR_CREDENTIALS_KEY: providerKey(1),
     GOOGLE_CALENDAR_CLIENT_ID: "google-calendar-client",
     GOOGLE_CALENDAR_CLIENT_SECRET: "google-calendar-secret",
     MICROSOFT_CALENDAR_CLIENT_ID: "microsoft-calendar-client",
@@ -285,8 +321,8 @@ function completeProductionEnvironment() {
     GOOGLE_AUTH_CLIENT_SECRET: "google-auth-secret",
     MICROSOFT_AUTH_CLIENT_ID: "microsoft-auth-client",
     MICROSOFT_AUTH_CLIENT_SECRET: "microsoft-auth-secret",
-    INTEGRATION_CREDENTIALS_KEY: "integration-key",
-    WEBHOOK_CREDENTIALS_KEY: "webhook-key",
+    INTEGRATION_CREDENTIALS_KEY: providerKey(2),
+    WEBHOOK_CREDENTIALS_KEY: providerKey(3),
     TURNSTILE_SECRET_KEY: "turnstile-secret",
     FILE_SCANNER_DISPATCH_SECRET:
       "scanner-dispatch-secret-at-least-32-characters",

@@ -4,7 +4,9 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { Viewer } from "~/platform/auth/authorize.server";
 import { ensureDemoData } from "~/platform/demo/seed.server";
 import { signWebhookPayload } from "~/platform/operations/webhook-crypto.server";
+import { resolveWebhookHostname } from "~/platform/operations/webhook-endpoint-service.server";
 import {
+  validateWebhookDestination,
   validateWebhookUrl,
   WebhookAuditOriginRequiredError,
   WebhookEndpointCredentialsErasedError,
@@ -29,6 +31,7 @@ const viewer: Viewer & { auditOrigin: "admin_ui" } = {
 const credentialKey = btoa(
   String.fromCharCode(...Array.from({ length: 32 }, (_, index) => index)),
 );
+const publicResolver = async () => ["93.184.216.34"];
 
 describe("outbound webhooks", () => {
   beforeEach(async () => {
@@ -38,16 +41,73 @@ describe("outbound webhooks", () => {
       .run();
   });
 
-  it("rejects non-public or non-HTTPS destinations", () => {
+  it("rejects non-public destinations at configuration and delivery time", async () => {
     expect(() => validateWebhookUrl("http://hooks.example.com/events")).toThrow(
       "HTTPS",
     );
     expect(() => validateWebhookUrl("https://127.0.0.1/events")).toThrow(
       "public DNS",
     );
+    expect(() => validateWebhookUrl("https://192.0.2.1/events")).toThrow(
+      "public DNS",
+    );
+    expect(() => validateWebhookUrl("https://93.184.216.34/events")).toThrow(
+      "public DNS",
+    );
     expect(() => validateWebhookUrl("https://service.internal/events")).toThrow(
       "public DNS",
     );
+    await expect(
+      validateWebhookDestination(
+        "https://hooks.example.com/events",
+        async () => ["93.184.216.34", "127.0.0.1"],
+      ),
+    ).rejects.toThrow("only to public network addresses");
+    for (const address of [
+      "192.88.99.1",
+      "2001::1",
+      "2002:5db8:d822::1",
+      "2001:db8::1",
+    ]) {
+      await expect(
+        validateWebhookDestination(
+          "https://hooks.example.com/events",
+          async () => [address],
+        ),
+      ).rejects.toThrow("only to public network addresses");
+    }
+    await expect(
+      validateWebhookDestination(
+        "https://hooks.example.com/events",
+        publicResolver,
+      ),
+    ).resolves.toBe("https://hooks.example.com/events");
+  });
+
+  it("fails closed when either DNS address-family lookup is unavailable", async () => {
+    const partialFetcher = vi.fn(async (input: RequestInfo | URL) => {
+      const url = new URL(input instanceof Request ? input.url : String(input));
+      if (url.searchParams.get("type") === "A") {
+        return new Response(null, { status: 503 });
+      }
+      return Response.json({
+        Status: 0,
+        Answer: [{ type: 28, data: "2606:4700:4700::1111" }],
+      });
+    }) as unknown as typeof fetch;
+    await expect(
+      resolveWebhookHostname("hooks.example.com", partialFetcher),
+    ).rejects.toThrow("HTTP 503");
+
+    const failedDnsFetcher = vi.fn(async () =>
+      Response.json({
+        Status: 2,
+        Answer: [{ type: 1, data: "93.184.216.34" }],
+      }),
+    ) as unknown as typeof fetch;
+    await expect(
+      resolveWebhookHostname("hooks.example.com", failedDnsFetcher),
+    ).rejects.toThrow("DNS status 2");
   });
 
   it("does not re-enable an endpoint whose signing secret was erased", async () => {
@@ -185,7 +245,7 @@ describe("outbound webhooks", () => {
     )
       .bind(endpoint.id)
       .first<{ ciphertext: string }>();
-    expect(stored?.ciphertext).toMatch(/^v1:/u);
+    expect(stored?.ciphertext).toMatch(/^v2:/u);
     expect(stored?.ciphertext).not.toContain(endpoint.secret);
 
     const operation = await service.queueTest(viewer, endpoint.id);
@@ -212,7 +272,7 @@ describe("outbound webhooks", () => {
         });
       },
     );
-    await processWebhookDelivery(queued[0], testEnv, fetcher);
+    await processWebhookDelivery(queued[0], testEnv, fetcher, publicResolver);
 
     expect(fetcher).toHaveBeenCalledOnce();
     const request = requests[0];
@@ -296,6 +356,7 @@ describe("outbound webhooks", () => {
         requests.push(new Request(input, init));
         return new Response(null, { status: 204 });
       }),
+      publicResolver,
     );
     await claimReached;
     const rotated = await service.rotateSecret(viewer, endpoint.id);
@@ -369,6 +430,7 @@ describe("outbound webhooks", () => {
       queued[0],
       { ...testEnv, DB: delayedDb } as typeof testEnv,
       fetcher,
+      publicResolver,
     );
     await claimReached;
     try {
@@ -412,11 +474,21 @@ describe("outbound webhooks", () => {
     const failingFetcher = vi.fn(
       async () => new Response("try later", { status: 503 }),
     );
-    await processWebhookDelivery(queued[0], testEnv, failingFetcher);
+    await processWebhookDelivery(
+      queued[0],
+      testEnv,
+      failingFetcher,
+      publicResolver,
+    );
     // Queue delivery is at-least-once. A duplicate after the owned failure was
     // committed must wait for the operator retry transition instead of issuing
     // a second POST by claiming the terminal operation directly.
-    await processWebhookDelivery(queued[0], testEnv, failingFetcher);
+    await processWebhookDelivery(
+      queued[0],
+      testEnv,
+      failingFetcher,
+      publicResolver,
+    );
     expect(failingFetcher).toHaveBeenCalledOnce();
 
     expect(
@@ -471,6 +543,7 @@ describe("outbound webhooks", () => {
       recoveryMessage,
       testEnv,
       vi.fn(async () => new Response(null, { status: 204 })),
+      publicResolver,
     );
     await expect(
       env.DB.prepare(

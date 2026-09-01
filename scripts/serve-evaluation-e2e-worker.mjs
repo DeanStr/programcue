@@ -24,6 +24,7 @@ const privateDirectory = await mkdtemp(
 const variableFile = join(privateDirectory, "worker.env");
 const signingSecret = randomBytes(48).toString("base64url");
 const credential = () => randomBytes(48).toString("base64url");
+const providerCredentialKey = () => randomBytes(32).toString("base64");
 const turnstileServer = createServer((request, response) => {
   request.resume();
   response.writeHead(200, { "content-type": "application/json" });
@@ -82,7 +83,7 @@ try {
       `TURNSTILE_SITEVERIFY_URL=http://127.0.0.1:${turnstileAddress.port}/siteverify`,
       `RESEND_API_KEY=${credential()}`,
       `RESEND_WEBHOOK_SECRET=${credential()}`,
-      `CALENDAR_CREDENTIALS_KEY=${credential()}`,
+      `CALENDAR_CREDENTIALS_KEY=${providerCredentialKey()}`,
       `GOOGLE_CALENDAR_CLIENT_ID=${credential()}`,
       `GOOGLE_CALENDAR_CLIENT_SECRET=${credential()}`,
       `MICROSOFT_CALENDAR_CLIENT_ID=${credential()}`,
@@ -91,8 +92,8 @@ try {
       `GOOGLE_AUTH_CLIENT_SECRET=${credential()}`,
       `MICROSOFT_AUTH_CLIENT_ID=${credential()}`,
       `MICROSOFT_AUTH_CLIENT_SECRET=${credential()}`,
-      `INTEGRATION_CREDENTIALS_KEY=${credential()}`,
-      `WEBHOOK_CREDENTIALS_KEY=${credential()}`,
+      `INTEGRATION_CREDENTIALS_KEY=${providerCredentialKey()}`,
+      `WEBHOOK_CREDENTIALS_KEY=${providerCredentialKey()}`,
       `FILE_SCANNER_DISPATCH_SECRET=${credential()}`,
       `FILE_SCANNER_WEBHOOK_SECRET=${credential()}`,
       `R2_ACCESS_KEY_ID=${credential()}`,

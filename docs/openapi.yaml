@@ -425,7 +425,9 @@ paths:
         retries replay their stored canonical result and unresolved processing
         claims fail explicitly. Webhook-secret commands replay only while that
         secret remains current; retrying a superseded secret returns a conflict
-        instead of disclosing rotated credentials.
+        instead of disclosing rotated credentials. Creating or rotating webhook
+        credentials additionally requires a session created within the last
+        fifteen minutes; stale sessions receive RECENT_AUTHENTICATION_REQUIRED.
       security: [{ sessionAuth: [] }]
       parameters:
         - $ref: "#/components/parameters/EventId"

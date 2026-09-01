@@ -392,6 +392,12 @@ export class CalendarAdministrationService {
     const credentials = await decryptCalendarCredentials(
       invitation.encryptedCredentials,
       this.env.CALENDAR_CREDENTIALS_KEY,
+      {
+        connectionId: invitation.connectionId,
+        organisationId: viewer.organisationId,
+        provider: invitation.provider,
+      },
+      this.env.CALENDAR_CREDENTIALS_PREVIOUS_KEY,
     );
     if (
       invitation.expiresAt === null ||

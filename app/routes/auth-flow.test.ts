@@ -11,9 +11,12 @@ import {
   participantOAuthProviderOptions,
   trustedParticipantOAuthProviders,
 } from "~/platform/auth/auth.server";
+import { currentEventCookie } from "~/platform/auth/current-event.server";
 import { cloudflareContext } from "~/platform/cloudflare-context";
 import { ensureDemoData } from "~/platform/demo/seed.server";
 import { evaluationSessionCookie } from "~/platform/evaluation/evaluation-session.server";
+import { action as administrationCommandAction } from "./api-administration-command";
+import { action as apiSettingsAction } from "./api-settings";
 import { action as authApiAction, loader as authApiLoader } from "./auth-api";
 import { action as signInAction, loader as signInLoader } from "./sign-in";
 
@@ -320,6 +323,18 @@ describe("production authentication routes", () => {
       scope: ["openid", "email", "profile"],
     });
     expect(providers.microsoft).not.toHaveProperty("disableSignUp");
+    const forced = participantOAuthProviderOptions(
+      {
+        ...productionEnv(),
+        GOOGLE_AUTH_CLIENT_ID: "google-auth-client",
+        GOOGLE_AUTH_CLIENT_SECRET: "google-auth-secret",
+        MICROSOFT_AUTH_CLIENT_ID: "microsoft-auth-client",
+        MICROSOFT_AUTH_CLIENT_SECRET: "microsoft-auth-secret",
+      } as unknown as CloudflareEnvironment,
+      true,
+    );
+    expect(forced).not.toHaveProperty("google");
+    expect(forced.microsoft).toMatchObject({ prompt: "login" });
   });
 
   it.each([
@@ -330,6 +345,7 @@ describe("production authentication routes", () => {
         GOOGLE_AUTH_CLIENT_SECRET: "google-auth-secret",
       },
       "accounts.google.com",
+      null,
     ],
     [
       "microsoft",
@@ -338,10 +354,11 @@ describe("production authentication routes", () => {
         MICROSOFT_AUTH_CLIENT_SECRET: "microsoft-auth-secret",
       },
       "login.microsoftonline.com",
+      null,
     ],
   ] as const)(
     "starts %s participant OAuth with state and identity-only scopes",
-    async (provider, override, expectedHost) => {
+    async (provider, override, expectedHost, expectedPrompt) => {
       const tokenValidation = vi.fn(async () =>
         Response.json({
           success: true,
@@ -379,6 +396,7 @@ describe("production authentication routes", () => {
       expect(destination.searchParams.get("scope")).not.toMatch(
         /calendar|User\.Read|offline_access/i,
       );
+      expect(destination.searchParams.get("prompt")).toBe(expectedPrompt);
       expect(destination.toString()).not.toContain("attacker.example");
       expect(redirectResponse.headers.get("set-cookie")).toContain(
         "better-auth.state",
@@ -397,6 +415,88 @@ describe("production authentication routes", () => {
       }
     },
   );
+
+  it("derives Google step-up mode from the existing server session", async () => {
+    const { token, cookie } = await sessionCookie("person-demo-admin");
+    await env.DB.prepare(
+      "UPDATE auth_sessions SET created_at = unixepoch() - 901 WHERE token = ?",
+    )
+      .bind(token)
+      .run();
+    const response = await signInAction({
+      request: formRequest(
+        "http://localhost/sign-in",
+        {
+          _intent: "social_sign_in",
+          provider: "google",
+          returnTo: "/admin/api",
+          reauthenticate: "false",
+          "turnstile-token": "unused",
+        },
+        { cookie },
+      ),
+      params: {},
+      context: context({
+        ...productionEnv(),
+        GOOGLE_AUTH_CLIENT_ID: "google-auth-client",
+        GOOGLE_AUTH_CLIENT_SECRET: "google-auth-secret",
+      } as unknown as CloudflareEnvironment),
+    } as never);
+
+    if (response instanceof Response) {
+      throw new Error("Unsupported Google reauthentication redirected.");
+    }
+    expect(response.init?.status).toBe(422);
+    expect(response.data).toMatchObject({
+      ok: false,
+      message:
+        "Use the email sign-in link or Microsoft to confirm your identity.",
+    });
+  });
+
+  it("forces Microsoft login for an existing session despite a downgraded form", async () => {
+    const { token, cookie } = await sessionCookie("person-demo-admin");
+    await env.DB.prepare(
+      "UPDATE auth_sessions SET created_at = unixepoch() - 901 WHERE token = ?",
+    )
+      .bind(token)
+      .run();
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () =>
+        Response.json({
+          success: true,
+          hostname: "localhost",
+          action: "social_sign_in",
+        }),
+      ),
+    );
+    const response = await signInAction({
+      request: formRequest(
+        "http://localhost/sign-in",
+        {
+          _intent: "social_sign_in",
+          provider: "microsoft",
+          returnTo: "/admin/api",
+          reauthenticate: "false",
+          "turnstile-token": "social-turnstile-token",
+        },
+        { cookie, "cf-connecting-ip": "203.0.113.14" },
+      ),
+      params: {},
+      context: context({
+        ...productionEnv(),
+        MICROSOFT_AUTH_CLIENT_ID: "microsoft-auth-client",
+        MICROSOFT_AUTH_CLIENT_SECRET: "microsoft-auth-secret",
+      } as unknown as CloudflareEnvironment),
+    } as never);
+
+    expect(response).toBeInstanceOf(Response);
+    const destination = new URL(
+      (response as Response).headers.get("location")!,
+    );
+    expect(destination.searchParams.get("prompt")).toBe("login");
+  });
 
   it("links an unverified Microsoft email only after authenticated email proof", async () => {
     const testEnv = {
@@ -745,6 +845,124 @@ describe("production authentication routes", () => {
       microsoft: false,
     });
   });
+
+  it("allows an authenticated person to complete an explicit sign-in-again step", async () => {
+    const { cookie } = await sessionCookie("person-demo-admin");
+    const loaded = await signInLoader({
+      request: new Request(
+        "http://localhost/sign-in?returnTo=%2Fadmin%2Fapi&reauthenticate=true",
+        { headers: { cookie } },
+      ),
+      params: {},
+      context: context(productionEnv()),
+    } as never);
+    if (loaded instanceof Response) {
+      throw new Error("The explicit reauthentication page redirected away.");
+    }
+    expect(loaded).toMatchObject({
+      returnTo: "/admin/api",
+      reauthentication: true,
+      sessionEmail: "sbek-organizer@example.com",
+    });
+  });
+
+  it("hides Google when a fresh provider authentication cannot be required", async () => {
+    const { cookie } = await sessionCookie("person-demo-admin");
+    const loaded = await signInLoader({
+      request: new Request(
+        "http://localhost/sign-in?returnTo=%2Fadmin%2Fapi&reauthenticate=true",
+        { headers: { cookie } },
+      ),
+      params: {},
+      context: context({
+        ...productionEnv(),
+        GOOGLE_AUTH_CLIENT_ID: "google-auth-client",
+        GOOGLE_AUTH_CLIENT_SECRET: "google-auth-secret",
+      } as unknown as CloudflareEnvironment),
+    } as never);
+    if (loaded instanceof Response) {
+      throw new Error("The explicit reauthentication page redirected away.");
+    }
+    expect(loaded.socialProviders.google).toBe(false);
+  });
+
+  it("requires a recent session on the real API settings mutation boundary", async () => {
+    const testEnv = productionEnv();
+    const { token, cookie } = await sessionCookie("person-demo-admin");
+    await testEnv.DB.prepare(
+      "UPDATE auth_sessions SET created_at = unixepoch() - 901 WHERE token = ?",
+    )
+      .bind(token)
+      .run();
+    const selectedEvent = currentEventCookie("evt-foe-2025", testEnv).split(
+      ";",
+      1,
+    )[0];
+    let response: Response | null = null;
+    try {
+      await apiSettingsAction({
+        request: new Request("http://localhost/admin/api?tab=webhooks", {
+          method: "POST",
+          headers: { cookie: `${cookie}; ${selectedEvent}` },
+        }),
+        params: {},
+        context: context(testEnv),
+      } as never);
+    } catch (error) {
+      if (error instanceof Response) response = error;
+      else throw error;
+    }
+    expect(response?.status).toBe(303);
+    expect(response?.headers.get("location")).toBe(
+      "/sign-in?returnTo=%2Fadmin%2Fapi%3Ftab%3Dwebhooks&reauthenticate=true",
+    );
+  });
+
+  it.each(["save", "rotate-secret"])(
+    "requires a recent session for webhook credential command %s",
+    async (command) => {
+      const testEnv = productionEnv();
+      const { token, cookie } = await sessionCookie("person-demo-admin");
+      await testEnv.DB.prepare(
+        "UPDATE auth_sessions SET created_at = unixepoch() - 901 WHERE token = ?",
+      )
+        .bind(token)
+        .run();
+      const response = await administrationCommandAction({
+        request: new Request(
+          `http://localhost/api/v1/events/evt-foe-2025/administration/webhook-endpoints/${command === "save" ? "new" : "webhook-missing"}/${command}`,
+          {
+            method: "POST",
+            headers: {
+              cookie,
+              origin: "http://localhost",
+              "content-type": "application/json",
+              "idempotency-key": `recent-auth-${command}`,
+            },
+            body: "{}",
+          },
+        ),
+        params: {
+          eventId: "evt-foe-2025",
+          family: "webhook-endpoints",
+          itemId: command === "save" ? "new" : "webhook-missing",
+          command,
+        },
+        context: context(testEnv),
+      } as never);
+
+      expect(response.status).toBe(403);
+      await expect(response.json()).resolves.toMatchObject({
+        error: {
+          code: "RECENT_AUTHENTICATION_REQUIRED",
+          details: {
+            reauthenticationPath:
+              "/sign-in?returnTo=%2Fadmin%2Fapi%3Ftab%3Dwebhooks&reauthenticate=true",
+          },
+        },
+      });
+    },
+  );
 
   it("turns Microsoft's unverified-email failure into an email-proof handoff", async () => {
     const testEnv = {

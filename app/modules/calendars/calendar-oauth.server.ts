@@ -4,11 +4,17 @@ import type { Viewer } from "~/platform/auth/authorize.server";
 import { safeReturnTo } from "~/platform/auth/return-to";
 import { readBoundedResponseJson } from "~/platform/http/read-response";
 import {
+  credentialKeyCandidates,
+  RotatingCredentialKeyConfigurationError,
+  rotatingCredentialKeyring,
+} from "~/platform/security/rotating-credential-key.server";
+import {
   type CalendarCredentials,
   type CalendarOAuthCallbackPhase,
   CalendarOAuthUnexpectedError,
   CalendarProviderConfigurationError,
   CalendarProviderRequestError,
+  calendarCredentialGeneration,
   decryptCalendarCredentials,
   encryptCalendarCredentials,
 } from "./calendar-providers.server";
@@ -61,11 +67,19 @@ const statePayloadSchema = z.object({
   expiresAt: z.number().int().positive(),
 });
 
-const stateEnvelopeSchema = z.object({
-  version: z.literal(1),
-  iv: z.string(),
-  ciphertext: z.string(),
-});
+const stateEnvelopeSchema = z.discriminatedUnion("version", [
+  z.object({
+    version: z.literal(1),
+    iv: z.string(),
+    ciphertext: z.string(),
+  }),
+  z.object({
+    version: z.literal(2),
+    keyId: z.string().length(16),
+    iv: z.string(),
+    ciphertext: z.string(),
+  }),
+]);
 
 function required(value: string | undefined, name: string) {
   if (!value?.trim())
@@ -94,45 +108,40 @@ function base64UrlBytes(value: string) {
   }
 }
 
-async function stateKey(base64Key: string | undefined) {
-  const value = required(base64Key, "CALENDAR_CREDENTIALS_KEY");
-  let bytes: Uint8Array;
+async function oauthStateKeyring(
+  activeKey: string | undefined,
+  previousKey?: string,
+) {
   try {
-    const binary = atob(value);
-    bytes = Uint8Array.from(binary, (character) => character.charCodeAt(0));
-  } catch {
-    throw new CalendarProviderConfigurationError(
-      "CALENDAR_CREDENTIALS_KEY must be valid base64.",
+    return await rotatingCredentialKeyring(
+      activeKey,
+      previousKey,
+      "CALENDAR_CREDENTIALS_KEY",
     );
+  } catch (error) {
+    if (error instanceof RotatingCredentialKeyConfigurationError) {
+      throw new CalendarProviderConfigurationError(error.message);
+    }
+    throw error;
   }
-  if (bytes.byteLength !== 32)
-    throw new CalendarProviderConfigurationError(
-      "CALENDAR_CREDENTIALS_KEY must be a base64-encoded 32-byte key.",
-    );
-  return crypto.subtle.importKey(
-    "raw",
-    new Uint8Array(bytes).buffer,
-    "AES-GCM",
-    false,
-    ["encrypt", "decrypt"],
-  );
 }
 
 async function sealState(
   payload: z.infer<typeof statePayloadSchema>,
   keyValue: string | undefined,
 ) {
-  const key = await stateKey(keyValue);
+  const { active } = await oauthStateKeyring(keyValue);
   const iv = crypto.getRandomValues(new Uint8Array(12));
   const ciphertext = await crypto.subtle.encrypt(
     { name: "AES-GCM", iv },
-    key,
+    active.key,
     new TextEncoder().encode(JSON.stringify(payload)),
   );
   return bytesBase64Url(
     new TextEncoder().encode(
       JSON.stringify({
-        version: 1,
+        version: 2,
+        keyId: active.id,
         iv: bytesBase64Url(iv),
         ciphertext: bytesBase64Url(new Uint8Array(ciphertext)),
       }),
@@ -140,26 +149,74 @@ async function sealState(
   );
 }
 
-async function openState(token: string, keyValue: string | undefined) {
-  const key = await stateKey(keyValue);
+async function openState(
+  token: string,
+  activeKey: string | undefined,
+  previousKey?: string,
+) {
+  let envelope: z.infer<typeof stateEnvelopeSchema>;
   try {
-    const envelope = stateEnvelopeSchema.parse(
+    envelope = stateEnvelopeSchema.parse(
       JSON.parse(new TextDecoder().decode(base64UrlBytes(token))),
-    );
-    const plaintext = await crypto.subtle.decrypt(
-      { name: "AES-GCM", iv: base64UrlBytes(envelope.iv) },
-      key,
-      base64UrlBytes(envelope.ciphertext),
-    );
-    return statePayloadSchema.parse(
-      JSON.parse(new TextDecoder().decode(plaintext)),
     );
   } catch (error) {
     if (error instanceof CalendarProviderConfigurationError) throw error;
     throw new CalendarProviderConfigurationError(
-      "Calendar OAuth state is invalid or has been altered.",
+      "Calendar OAuth state is malformed.",
     );
   }
+  const keyring = await oauthStateKeyring(activeKey, previousKey);
+  let candidates = keyring.candidates;
+  try {
+    candidates = credentialKeyCandidates(
+      keyring,
+      envelope.version === 2 ? envelope.keyId : null,
+    );
+  } catch (error) {
+    if (error instanceof RotatingCredentialKeyConfigurationError) {
+      throw new CalendarProviderConfigurationError(
+        "Calendar OAuth state uses an unavailable encryption key.",
+      );
+    }
+    throw error;
+  }
+  for (const candidate of candidates) {
+    try {
+      const plaintext = await crypto.subtle.decrypt(
+        { name: "AES-GCM", iv: base64UrlBytes(envelope.iv) },
+        candidate.key,
+        base64UrlBytes(envelope.ciphertext),
+      );
+      return statePayloadSchema.parse(
+        JSON.parse(new TextDecoder().decode(plaintext)),
+      );
+    } catch {
+      // Version 1 has no key identifier. It remains readable under the one
+      // explicit previous key only for its bounded ten-minute lifetime.
+    }
+  }
+  throw new CalendarProviderConfigurationError(
+    "Calendar OAuth state is invalid or has been altered.",
+  );
+}
+
+async function stableCalendarConnectionId(
+  personId: string,
+  provider: DirectCalendarProviderName,
+  accountReference: string,
+) {
+  const digest = await crypto.subtle.digest(
+    "SHA-256",
+    new TextEncoder().encode(
+      JSON.stringify([
+        "calendar-connection",
+        personId,
+        provider,
+        accountReference,
+      ]),
+    ),
+  );
+  return `calendar-${bytesBase64Url(new Uint8Array(digest))}`;
 }
 
 async function pkceChallenge(verifier: string) {
@@ -432,21 +489,6 @@ export class CalendarOAuthService {
         : parseMicrosoftAccount(profileBody),
     );
     const expiresAt = Math.floor(Date.now() / 1_000) + token.expires_in;
-    const encrypted = await callbackPhase(
-      state.provider,
-      "credential-encryption",
-      () =>
-        encryptCalendarCredentials(
-          {
-            accessToken: token.access_token,
-            refreshToken,
-            accessTokenExpiresAt: expiresAt,
-            tokenType: token.token_type,
-            ...(state.provider === "google" ? { calendarId: "primary" } : {}),
-          },
-          this.env.CALENDAR_CREDENTIALS_KEY,
-        ),
-    );
     const existing = await callbackPhase(
       state.provider,
       "connection-lookup",
@@ -464,7 +506,33 @@ export class CalendarOAuthService {
       throw new CalendarProviderConfigurationError(
         "This calendar account is already connected for the participant in another organisation.",
       );
-    const id = existing?.id ?? crypto.randomUUID();
+    const id =
+      existing?.id ??
+      (await stableCalendarConnectionId(
+        viewer.personId,
+        state.provider,
+        account.reference,
+      ));
+    const encrypted = await callbackPhase(
+      state.provider,
+      "credential-encryption",
+      () =>
+        encryptCalendarCredentials(
+          {
+            accessToken: token.access_token,
+            refreshToken,
+            accessTokenExpiresAt: expiresAt,
+            tokenType: token.token_type,
+            ...(state.provider === "google" ? { calendarId: "primary" } : {}),
+          },
+          this.env.CALENDAR_CREDENTIALS_KEY,
+          {
+            connectionId: id,
+            organisationId: viewer.organisationId,
+            provider: state.provider,
+          },
+        ),
+    );
     const scopes = configuration.scope.split(" ");
     const results = await callbackPhase(
       state.provider,
@@ -540,6 +608,7 @@ export class CalendarOAuthService {
     const state = await openState(
       input.state,
       this.env.CALENDAR_CREDENTIALS_KEY,
+      this.env.CALENDAR_CREDENTIALS_PREVIOUS_KEY,
     );
     if (state.expiresAt <= Math.floor(Date.now() / 1_000))
       throw new CalendarProviderConfigurationError(
@@ -593,6 +662,7 @@ export class CalendarOAuthService {
       );
     const now = Math.floor(Date.now() / 1_000);
     let current: CalendarCredentials;
+    let credentialGeneration: string;
     try {
       if (connection.expiresAt === null)
         throw new CalendarProviderConfigurationError(
@@ -602,9 +672,18 @@ export class CalendarOAuthService {
         throw new CalendarProviderConfigurationError(
           "Calendar connection credentials were erased and the account must be connected again.",
         );
+      credentialGeneration = await calendarCredentialGeneration(
+        connection.encryptedCredentials,
+      );
       current = await decryptCalendarCredentials(
         connection.encryptedCredentials,
         this.env.CALENDAR_CREDENTIALS_KEY,
+        {
+          connectionId: connection.id,
+          organisationId: viewer.organisationId,
+          provider: connection.provider,
+        },
+        this.env.CALENDAR_CREDENTIALS_PREVIOUS_KEY,
       );
       if (current.accessTokenExpiresAt !== connection.expiresAt)
         throw new CalendarProviderConfigurationError(
@@ -683,6 +762,11 @@ export class CalendarOAuthService {
     const encrypted = await encryptCalendarCredentials(
       credentials,
       this.env.CALENDAR_CREDENTIALS_KEY,
+      {
+        connectionId: connection.id,
+        organisationId: viewer.organisationId,
+        provider: connection.provider,
+      },
     );
     const updated = await this.env.DB.prepare(
       `UPDATE calendar_connections
@@ -702,10 +786,59 @@ export class CalendarOAuthService {
         connection.encryptedCredentials,
       )
       .run();
-    if ((updated.meta.changes ?? 0) !== 1)
-      throw new CalendarProviderConfigurationError(
-        "Calendar credentials changed while the access token was refreshed.",
-      );
+    if ((updated.meta.changes ?? 0) !== 1) {
+      const latest = await this.env.DB.prepare(
+        `SELECT encrypted_credentials AS encryptedCredentials,
+                expires_at AS expiresAt, status
+           FROM calendar_connections
+          WHERE id = ? AND organisation_id = ? AND person_id = ?
+            AND (event_id IS NULL OR event_id = ?)`,
+      )
+        .bind(
+          connection.id,
+          viewer.organisationId,
+          viewer.personId,
+          viewer.eventId,
+        )
+        .first<{
+          encryptedCredentials: string | null;
+          expiresAt: number | null;
+          status: string;
+        }>();
+      const conflict = () =>
+        new CalendarProviderConfigurationError(
+          "Calendar credentials changed while the access token was refreshed.",
+        );
+      if (
+        !latest?.encryptedCredentials ||
+        latest.expiresAt !== connection.expiresAt ||
+        latest.status !== connection.status ||
+        (await calendarCredentialGeneration(latest.encryptedCredentials)) !==
+          credentialGeneration
+      )
+        throw conflict();
+      const recovered = await this.env.DB.prepare(
+        `UPDATE calendar_connections
+            SET encrypted_credentials = ?, expires_at = ?, status = 'connected',
+                updated_at = unixepoch()
+          WHERE id = ? AND organisation_id = ? AND person_id = ?
+            AND (event_id IS NULL OR event_id = ?)
+            AND encrypted_credentials = ? AND expires_at IS ? AND status = ?`,
+      )
+        .bind(
+          encrypted,
+          expiresAt,
+          connection.id,
+          viewer.organisationId,
+          viewer.personId,
+          viewer.eventId,
+          latest.encryptedCredentials,
+          latest.expiresAt,
+          latest.status,
+        )
+        .run();
+      if ((recovered.meta.changes ?? 0) !== 1) throw conflict();
+    }
     return { refreshed: true, expiresAt };
   }
 }

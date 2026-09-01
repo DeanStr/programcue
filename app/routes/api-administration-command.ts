@@ -15,6 +15,10 @@ import {
 import { ApiAdministrationCommandService } from "~/platform/api/api-administration-command-service.server";
 import { apiAdministrationFamilySchema } from "~/platform/api/api-command-contract";
 import { requireEventRole } from "~/platform/auth/authorize.server";
+import {
+  hasRecentAuthentication,
+  recentAuthenticationLocation,
+} from "~/platform/auth/recent-authentication.server";
 import { getCloudflareContext } from "~/platform/cloudflare-context";
 import { WebhookEndpointCredentialsErasedError } from "~/platform/operations/webhook-errors";
 import type { Route } from "./+types/api-administration-command";
@@ -124,6 +128,22 @@ export async function action({ request, params, context }: Route.ActionArgs) {
       [...roles],
       "response",
     );
+    if (
+      family === "webhook-endpoints" &&
+      (params.command === "save" || params.command === "rotate-secret") &&
+      !hasRecentAuthentication(viewer)
+    ) {
+      throw new ApiError(
+        403,
+        "RECENT_AUTHENTICATION_REQUIRED",
+        "Sign in again before creating or rotating webhook credentials",
+        {
+          reauthenticationPath: recentAuthenticationLocation(
+            "/admin/api?tab=webhooks",
+          ),
+        },
+      );
+    }
     const result = await new ApiAdministrationCommandService(env).execute(
       viewer,
       family,

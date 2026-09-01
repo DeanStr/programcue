@@ -279,6 +279,11 @@ describe("calendar administration", () => {
         calendarId: "primary",
       },
       credentialKey,
+      {
+        connectionId,
+        organisationId: viewer.organisationId,
+        provider: "google",
+      },
     );
     await testEnv.DB.batch([
       testEnv.DB.prepare(
