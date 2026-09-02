@@ -1856,3 +1856,44 @@ target projection as the unified results. The total and proposal/session
 breakdown are calculated after result filters and presets but before
 pagination; raw workspace array lengths are not presented as equivalent to
 the filtered result set.
+
+## Bounded Sessionboard-parity extensions
+
+Reporting depth starts with two fixed relational CSV contracts, Participant
+readiness and Session staffing, on the existing authorised export operation.
+The readiness report spans claimed application participation, session roles,
+tasks, required event fields and quarantined files; the staffing report spans
+session/person/role response, active draft-or-published placement and
+outstanding requirements. These reports do not introduce arbitrary joins,
+field selection, saved schemas, sharing, dashboards or scheduling. Existing
+roster filters are deliberately not coupled to exports until a concrete filter
+contract is required.
+
+Schedule-change notification is one event-level, opt-in transactional email
+trigger. The trigger follows its template's sole current published email
+version; each publication then pins that exact version and sender in immutable
+communication intent. The first publication is a baseline. Later revisions
+notify for session addition/removal, time or room movement, public-visibility
+change and title change. Description, track, format and duration edits do not
+send because they are editorial metadata changes rather than the bounded
+staffing/logistics signal. Pending and confirmed role holders are eligible,
+declined roles are not, and all affected sessions are grouped into one delivery
+per person. Publication preview exposes the exact cohort and invalid enabled
+configuration. The communication graph is committed atomically with schedule
+publication before Queue dispatch; a later dispatch failure is retryable and
+does not misrepresent the already published schedule. There is no inbox,
+channel preference matrix, digest scheduler, Slack or SMS path.
+
+Reviewer inability to review reuses the existing `recused` terminal assignment
+state instead of adding a parallel assignment lifecycle. Typed provenance
+distinguishes conflict, insufficient expertise, unavailable and other, with an
+optional private note. Only conflict creates an `evaluator_conflicts` record.
+Returned assignments are resolved for the reviewer but continue to reduce
+organiser coverage, so progress presents submitted, returned and resolved
+counts separately. The private abstention note is visible to authorised
+evaluation managers and excluded from audit metadata and applicant surfaces.
+Selecting a conflict exposes only the conflict-return path, so the reviewer
+cannot accidentally replace known conflict provenance with an ordinary return.
+An abandoned draft remains durable history after return, but organiser
+projections redact its scores, recommendation, feedback and notes, and review-
+cycle readiness does not count it as unfinished work.

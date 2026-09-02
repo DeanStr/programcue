@@ -23,6 +23,11 @@ export function buildSchedulePublicationStatements(input: {
   calendarIdempotencyKey: string;
   calendarMessage: ScheduleCalendarFanoutMessage;
   auditEventId: string;
+  notification: {
+    enabled: boolean;
+    operationId: string | null;
+    recipientCount: number;
+  };
   conflictInsert: (
     entryId: string,
     conflict: ScheduleConflict,
@@ -42,6 +47,7 @@ export function buildSchedulePublicationStatements(input: {
     calendarIdempotencyKey,
     calendarMessage,
     auditEventId,
+    notification,
     conflictInsert,
   } = input;
   const idempotencyRecordId = command ? crypto.randomUUID() : null;
@@ -438,6 +444,9 @@ export function buildSchedulePublicationStatements(input: {
                  response_status = 200,
                  response_json = json_object(
                    'calendarOperationId', ?,
+                   'notificationEnabled', ?,
+                   'notificationOperationId', ?,
+                   'notificationRecipientCount', ?,
                    'changeSequence', (
                      SELECT sequence FROM event_changes
                       WHERE event_id = ? AND entity_type = 'schedule_version'
@@ -469,6 +478,9 @@ export function buildSchedulePublicationStatements(input: {
         `,
       ).bind(
         calendarOperationId,
+        notification.enabled ? 1 : 0,
+        notification.operationId,
+        notification.recipientCount,
         viewer.eventId,
         parsed.scheduleVersionId,
         publishOperationId,

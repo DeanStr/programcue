@@ -80,6 +80,8 @@ test("schedule publication previews material changes and readiness", async ({
   );
   await expect(publication).toContainText("Publication readiness");
   await expect(publication).toContainText("No publication blockers found");
+  await expect(publication).toContainText("Participant change email");
+  await expect(publication).toContainText("Off for this event");
   await expect(
     publication.getByRole("button", { name: "Confirm publication" }),
   ).toBeEnabled();

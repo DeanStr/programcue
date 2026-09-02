@@ -100,9 +100,12 @@ export async function action({ request, params, context }: Route.ActionArgs) {
         changeCursor: realtime.changeCursor,
         realtimeWarning: realtime.realtimeWarning,
         calendar: publication.calendar,
+        notification: publication.notification,
         correlationId: requestCorrelationId,
       },
-      publication.calendar.dispatchError || realtime.realtimeWarning
+      publication.calendar.dispatchError ||
+        publication.notification.dispatchError ||
+        realtime.realtimeWarning
         ? 207
         : 200,
     );

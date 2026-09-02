@@ -576,23 +576,30 @@ export async function action({ request, context }: Route.ActionArgs) {
           data: {
             scheduleVersionId: publication.scheduleVersionId,
             calendarOperationId: publication.calendar.operationId,
+            notificationOperationId: publication.notification.operationId,
+            notificationRecipientCount: publication.notification.recipientCount,
           },
         });
         if (
           publication.calendar.dispatchError ||
+          publication.notification.dispatchError ||
           realtimeFailure ||
           webhook.warning
         ) {
           const calendarMessage = publication.calendar.dispatchError
             ? " Calendar invitations could not be sent. Retry them from the Operation Centre."
             : "";
+          const notificationMessage = publication.notification.dispatchError
+            ? " Participant change emails could not be queued. Retry them from the Operation Centre."
+            : "";
           return data(
             {
               ok: false,
               intent: "publish",
               committed: true,
-              error: `Schedule published successfully.${calendarMessage}${realtimeFailure ? ` ${realtimeFailure.message}` : ""}${webhook.warning ? ` ${webhook.warning}` : ""}`,
+              error: `Schedule published successfully.${calendarMessage}${notificationMessage}${realtimeFailure ? ` ${realtimeFailure.message}` : ""}${webhook.warning ? ` ${webhook.warning}` : ""}`,
               calendar: publication.calendar,
+              notification: publication.notification,
               webhookDeliveries: webhook.deliveries,
             },
             { status: 207 },
@@ -602,8 +609,11 @@ export async function action({ request, context }: Route.ActionArgs) {
           ok: true,
           intent: "publish",
           message:
-            "Schedule published. Calendar invitations are being sent to speakers.",
+            publication.notification.status === "queued"
+              ? `Schedule published. Calendar invitations and ${publication.notification.recipientCount} participant change email${publication.notification.recipientCount === 1 ? "" : "s"} are queued.`
+              : "Schedule published. Calendar invitations are being sent to speakers.",
           calendar: publication.calendar,
+          notification: publication.notification,
           webhookDeliveries: webhook.deliveries,
         };
       }

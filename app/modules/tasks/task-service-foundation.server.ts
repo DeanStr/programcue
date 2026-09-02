@@ -133,23 +133,47 @@ export function participantTaskAccessSql(
   alias: ParticipantTaskSqlAlias = "ti",
   requireCurrentResourceAudience = false,
 ) {
+  return participantTaskAccessForPersonIdSql(
+    alias,
+    "?",
+    requireCurrentResourceAudience,
+  );
+}
+
+function participantTaskAccessForPersonIdSql(
+  alias: ParticipantTaskSqlAlias,
+  personIdSql: string,
+  requireCurrentResourceAudience = false,
+) {
   const taskIdentityAccessSql = `(
     (${alias}.target_type = 'session' AND EXISTS (
       SELECT 1 FROM session_speakers participant_session
        WHERE participant_session.event_id = ${alias}.event_id
          AND participant_session.session_id = ${alias}.target_id
-         AND participant_session.person_id = ?
+         AND participant_session.person_id = ${personIdSql}
          AND participant_session.participation_status IN ('pending','confirmed')
     ))
     OR (${alias}.target_type <> 'session' AND (
-      ${alias}.owner_person_id = ?
-      OR (${alias}.target_type = 'speaker' AND ${alias}.target_id = ?)
+      ${alias}.owner_person_id = ${personIdSql}
+      OR (${alias}.target_type = 'speaker' AND ${alias}.target_id = ${personIdSql})
     ))
   )`;
   const currentTaskAccessSql = `(${taskIdentityAccessSql} AND ${participantCurrentTaskAccessSql(alias)})`;
   return requireCurrentResourceAudience
     ? `(${currentTaskAccessSql} AND ${participantResourceTaskAccessSql(alias)})`
     : currentTaskAccessSql;
+}
+
+/** Correlates participant task access with an outer `people person` row. */
+export function participantTaskAccessForPersonRowSql(
+  alias: ParticipantTaskSqlAlias,
+  requireCurrentResourceAudience = false,
+) {
+  return participantTaskAccessForPersonIdSql(
+    alias,
+    "person.id",
+    requireCurrentResourceAudience,
+  );
 }
 
 export function participantPrerequisitesAccessibleSql(

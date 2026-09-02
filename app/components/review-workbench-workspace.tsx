@@ -6,6 +6,7 @@ import {
 } from "~/components/review-workbench-model";
 import { ReviewerShell } from "~/components/reviewer-shell";
 import {
+  ReviewAbstentionDialog,
   ReviewActionNotice,
   ReviewConflictDialog,
   ReviewDraftConflictNotice,
@@ -38,6 +39,7 @@ function ReviewWorkbenchPage() {
       <ReviewSubmitDialog />
       <ReviewDraftConflictNotice />
       <ReviewConflictDialog />
+      <ReviewAbstentionDialog />
     </ReviewerShell>
   );
 }

@@ -31,6 +31,10 @@ export const scheduleTestEnv = new Proxy(
 export async function prepareScheduleServiceTest() {
   await ensureDemoData(env as unknown as CloudflareEnvironment);
   await env.DB.batch([
+    env.DB.prepare(
+      `DELETE FROM communication_triggers
+        WHERE event_id = ? AND trigger_type = 'schedule_published'`,
+    ).bind(scheduleTestViewer.eventId),
     env.DB.prepare("DELETE FROM schedule_review_links WHERE event_id = ?").bind(
       scheduleTestViewer.eventId,
     ),

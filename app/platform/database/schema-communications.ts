@@ -161,6 +161,9 @@ export const communicationTriggers = sqliteTable(
       table.triggerType,
       table.templateId,
     ),
+    uniqueIndex("ux_schedule_published_trigger_event")
+      .on(table.eventId)
+      .where(sql`${table.triggerType} = 'schedule_published'`),
   ],
 );
 

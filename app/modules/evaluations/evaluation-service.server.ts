@@ -206,6 +206,10 @@ export class EvaluationService {
   ) {
     return this.reviewSubmission.declareConflict(...args);
   }
+
+  abstain(...args: Parameters<EvaluationReviewSubmissionWorkflows["abstain"]>) {
+    return this.reviewSubmission.abstain(...args);
+  }
   moderate(...args: Parameters<EvaluationReviewerWorkflows["moderate"]>) {
     return this.reviews.moderate(...args);
   }

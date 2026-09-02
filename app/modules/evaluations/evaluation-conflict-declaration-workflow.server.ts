@@ -112,6 +112,8 @@ export class EvaluationConflictDeclarationWorkflow extends EvaluationServiceFoun
         `
         UPDATE evaluator_assignments
            SET status = 'recused', conflict_declared_at = unixepoch(),
+               abstention_reason = 'conflict', abstention_note = NULL,
+               abstained_at = unixepoch(),
                revision = revision + 1, last_operation_id = ?
          WHERE id = ? AND event_id = ? AND evaluator_person_id = ?
            AND revision = ? AND status IN ('assigned','in_progress','reopened')
@@ -222,6 +224,9 @@ export class EvaluationConflictDeclarationWorkflow extends EvaluationServiceFoun
                 AND assignment.status = 'recused'
                 AND assignment.revision = ?
                 AND assignment.conflict_declared_at IS NOT NULL
+                AND assignment.abstention_reason = 'conflict'
+                AND assignment.abstention_note IS NULL
+                AND assignment.abstained_at IS NOT NULL
                 AND assignment.last_operation_id = ?
            ) AND EXISTS (
              SELECT 1 FROM evaluator_conflicts conflict

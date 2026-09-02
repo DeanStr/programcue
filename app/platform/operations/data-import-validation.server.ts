@@ -3,16 +3,16 @@ import {
   roomInputSchema,
   sessionFormatInputSchema,
 } from "~/modules/events/event-schema";
-import {
-  type EventExportResource,
-  eventExportResources,
-} from "~/platform/operations/data-export-service.server";
 
-const importResources = eventExportResources.filter(
-  (resource): resource is Exclude<EventExportResource, "audit"> =>
-    resource !== "audit",
-);
-export type EventImportResource = Exclude<EventExportResource, "audit">;
+const importResources = [
+  "people",
+  "submissions",
+  "sessions",
+  "rooms",
+  "tracks",
+  "tasks",
+] as const;
+export type EventImportResource = (typeof importResources)[number];
 export type ImportScalar = string | number | boolean | null;
 
 export const importResourceSchema: z.ZodType<EventImportResource> =

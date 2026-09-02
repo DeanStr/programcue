@@ -95,7 +95,7 @@ export function EvaluationUnifiedResults() {
                       {result.completedReviewCount} / {result.assignmentCount}
                       {result.recusedCount ? (
                         <small className="subtle">
-                          {result.recusedCount} recusal
+                          {result.recusedCount} returned assignment
                           {result.recusedCount === 1 ? "" : "s"}
                         </small>
                       ) : null}
@@ -137,7 +137,7 @@ export function EvaluationUnifiedResults() {
                         ) : null}
                         {result.recusedCount ? (
                           <span className="pc-eval-flag is-warn">
-                            Recusal reduced coverage
+                            Returned assignments reduced coverage
                           </span>
                         ) : null}
                         {result.mixedRecommendations ? (

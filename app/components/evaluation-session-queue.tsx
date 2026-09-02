@@ -133,9 +133,11 @@ export function EvaluationSessionQueue() {
                                   .replace(/^./, (letter) =>
                                     letter.toUpperCase(),
                                   )}
-                                {assignment.weightedScore === null
-                                  ? ""
-                                  : ` · ${Number(assignment.weightedScore).toFixed(2)} / 5`}
+                                {(assignment.reviewStatus === "submitted" ||
+                                  assignment.reviewStatus === "locked") &&
+                                assignment.weightedScore !== null
+                                  ? ` · ${Number(assignment.weightedScore).toFixed(2)} / 5`
+                                  : ""}
                               </small>
                               {assignment.reviewStatus === "submitted" ||
                               assignment.reviewStatus === "locked" ? (

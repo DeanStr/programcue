@@ -52,16 +52,30 @@ export function EvaluationModerationPanel() {
                       {assignment.teamName ? ` · ${assignment.teamName}` : ""}
                       <small className="subtle">
                         {assignment.status.replaceAll("_", " ")}
-                        {assignment.weightedScore === null
-                          ? ""
-                          : ` · ${Number(assignment.weightedScore).toFixed(2)} / 5`}
-                        {assignment.recommendationLabel
+                        {(assignment.reviewStatus === "submitted" ||
+                          assignment.reviewStatus === "locked") &&
+                        assignment.weightedScore !== null
+                          ? ` · ${Number(assignment.weightedScore).toFixed(2)} / 5`
+                          : ""}
+                        {(assignment.reviewStatus === "submitted" ||
+                          assignment.reviewStatus === "locked") &&
+                        assignment.recommendationLabel
                           ? ` · ${assignment.recommendationLabel}`
                           : ""}
                       </small>
                       {assignment.conflictNotes ? (
                         <small className="subtle">
                           Conflict: {assignment.conflictNotes}
+                        </small>
+                      ) : null}
+                      {assignment.abstentionReason &&
+                      assignment.abstentionReason !== "conflict" ? (
+                        <small className="subtle">
+                          Returned:{" "}
+                          {assignment.abstentionReason.replaceAll("_", " ")}
+                          {assignment.abstentionNote
+                            ? ` · ${assignment.abstentionNote}`
+                            : ""}
                         </small>
                       ) : null}
                     </span>

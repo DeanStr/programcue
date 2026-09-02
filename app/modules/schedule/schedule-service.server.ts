@@ -214,6 +214,13 @@ export type SchedulePublicationResult = {
     status: "queued" | "queue_failed";
     dispatchError: string | null;
   };
+  notification: {
+    enabled: boolean;
+    recipientCount: number;
+    operationId: string | null;
+    status: "disabled" | "not_needed" | "queued" | "queue_failed";
+    dispatchError: string | null;
+  };
 };
 
 export class ScheduleService {

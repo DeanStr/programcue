@@ -97,9 +97,11 @@ export function ReviewScorePanel() {
     submitReviewTriggerRef,
     submitNextTriggerRef,
     conflictTriggerRef,
+    abstentionTriggerRef,
     editGeneration,
     inFlightSaveGeneration,
     setConflictOpen,
+    setAbstentionOpen,
     setShortcutsOpen,
     saveDraftTriggerRef,
     dirty,
@@ -638,6 +640,20 @@ export function ReviewScorePanel() {
                         : "No draft yet"}
               </span>
               <div className="review-action-group">
+                {conflictChoice !== "conflict" ? (
+                  <Button
+                    ref={abstentionTriggerRef}
+                    type="button"
+                    variant="danger"
+                    onClick={() => {
+                      clearAutosaveTimer();
+                      setAbstentionOpen(true);
+                    }}
+                    disabled={fetcher.state !== "idle"}
+                  >
+                    Cannot review
+                  </Button>
+                ) : null}
                 <Button
                   ref={saveDraftTriggerRef}
                   className="review-save-draft"

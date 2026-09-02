@@ -410,6 +410,8 @@ export class EvaluationAdminWorkspaceReader {
                r.recommendation_choices_snapshot_json AS recommendationChoicesSnapshotJson,
                r.submitter_feedback AS submitterFeedback,
                r.private_notes AS privateNotes,
+               a.abstention_reason AS abstentionReason,
+               a.abstention_note AS abstentionNote,
                conflict.notes AS conflictNotes,
                conflict.status AS conflictStatus
           FROM evaluator_assignments a
@@ -476,6 +478,13 @@ export class EvaluationAdminWorkspaceReader {
           confidence: number | null;
           submitterFeedback: string | null;
           privateNotes: string | null;
+          abstentionReason:
+            | "conflict"
+            | "insufficient_expertise"
+            | "unavailable"
+            | "other"
+            | null;
+          abstentionNote: string | null;
           conflictNotes: string | null;
           conflictStatus: string | null;
         }>(),
@@ -517,6 +526,7 @@ export class EvaluationAdminWorkspaceReader {
                THEN assignment.id END) AS unfinishedAssignmentCount,
              COUNT(DISTINCT CASE
                WHEN review.status IN ('draft','reopened')
+                AND assignment.status IN ('assigned','in_progress','reopened')
                THEN review.id END) AS unfinishedReviewCount,
              (SELECT COUNT(*)
                 FROM operation_jobs operation
@@ -598,7 +608,9 @@ export class EvaluationAdminWorkspaceReader {
           reviewerPersonId: reviewer.personId,
           reviewerName: reviewer.name,
           reviewerEmail: reviewer.email,
-          assignedCount: pendingCount + inProgressCount + completedCount,
+          assignedCount:
+            pendingCount + inProgressCount + completedCount + recusedCount,
+          resolvedCount: completedCount + recusedCount,
           completedCount,
           inProgressCount,
           pendingCount,
@@ -717,18 +729,33 @@ export class EvaluationAdminWorkspaceReader {
             recommendationChoicesSnapshotJson,
             `Review ${assignment.reviewId}`,
           );
-          const recommendationLabel = assignment.recommendation
+          const returnedDraft =
+            assignment.status === "recused" &&
+            (assignment.reviewStatus === "draft" ||
+              assignment.reviewStatus === "reopened");
+          const visibleAssignment = returnedDraft
+            ? {
+                ...assignment,
+                scoresJson: null,
+                weightedScore: null,
+                recommendation: null,
+                confidence: null,
+                submitterFeedback: null,
+                privateNotes: null,
+              }
+            : assignment;
+          const recommendationLabel = visibleAssignment.recommendation
             ? recommendationChoices.find(
-                (choice) => choice.id === assignment.recommendation,
+                (choice) => choice.id === visibleAssignment.recommendation,
               )?.label
             : null;
-          if (assignment.recommendation && !recommendationLabel) {
+          if (visibleAssignment.recommendation && !recommendationLabel) {
             throw new EvaluationStateError(
               `Review ${assignment.reviewId} has an invalid persisted recommendation.`,
             );
           }
           return {
-            ...assignment,
+            ...visibleAssignment,
             recommendationChoices,
             recommendationLabel,
           };

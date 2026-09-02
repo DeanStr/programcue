@@ -391,158 +391,272 @@ export function CommunicationAutomation({
       template.category === "task_reminder" &&
       template.versionStatus === "published",
   );
+  const scheduleTemplates = loaderData.templates.filter(
+    (template) =>
+      template.category === "schedule" &&
+      template.versionStatus === "published",
+  );
   return (
-    <section className="card pad">
-      <div className="card-title">
-        <h2>Reminder triggers</h2>
-        <span className="status info right">{loaderData.triggers.length}</span>
-      </div>
-      <p className="help">
-        The scheduled Worker marks expired tasks overdue, evaluates each trigger
-        once per UTC day and records every resulting send durably before Queue
-        dispatch.
-      </p>
-      <Form method="post" className="stack">
-        <input type="hidden" name="intent" value="save-trigger" />
-        <div className="form-row">
+    <div className="stack">
+      <section className="card pad">
+        <div className="card-title">
+          <h2>Reminder triggers</h2>
+          <span className="status info right">
+            {loaderData.triggers.length}
+          </span>
+        </div>
+        <p className="help">
+          The scheduled Worker marks expired tasks overdue, evaluates each
+          trigger once per UTC day and records every resulting send durably
+          before Queue dispatch.
+        </p>
+        <Form method="post" className="stack">
+          <input type="hidden" name="intent" value="save-trigger" />
+          <div className="form-row">
+            <label className="label">
+              Reminder template
+              <select
+                className="select"
+                name="templateId"
+                defaultValue=""
+                required
+              >
+                <option value="" disabled>
+                  Select a published task-reminder template
+                </option>
+                {reminderTemplates.map((template) => (
+                  <option key={template.templateId} value={template.templateId}>
+                    {template.name} · v{template.versionNumber}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="label">
+              Trigger
+              <select
+                className="select"
+                name="triggerType"
+                defaultValue="task_due"
+              >
+                <option value="task_due">Due within 24 hours</option>
+                <option value="task_overdue">Overdue</option>
+                <option value="application_draft">Unsubmitted drafts</option>
+                <option value="participation_pending">
+                  Pending participation responses
+                </option>
+              </select>
+            </label>
+          </div>
+          <div className="form-row comms-trigger-row">
+            <label className="label">
+              Audience
+              <select
+                className="select"
+                name="triggerAudience"
+                defaultValue="due_speakers"
+              >
+                <option value="due_speakers">
+                  Speakers due within 24 hours
+                </option>
+                <option value="overdue_speakers">Overdue speakers</option>
+                <option value="draft_applicants">Applicants with drafts</option>
+                <option value="pending_participants">
+                  Participants awaiting a response
+                </option>
+                <option value="event_administrators">
+                  Event administrators
+                </option>
+              </select>
+            </label>
+            <label className="label">
+              Send hour (UTC)
+              <input
+                className="field"
+                name="sendHourUtc"
+                type="number"
+                min={0}
+                max={23}
+                defaultValue={14}
+                required
+              />
+            </label>
+            <label className="label">
+              Policy
+              <select
+                className="select"
+                name="kind"
+                defaultValue="transactional"
+              >
+                <option value="transactional">Transactional</option>
+                <option value="optional">Optional / unsubscribe-aware</option>
+              </select>
+            </label>
+          </div>
+          <div className="row-actions">
+            {reminderTemplates.length ? null : (
+              <span className="help">
+                Publish a task-reminder template before enabling a trigger.
+              </span>
+            )}
+            <Button
+              type="submit"
+              disabled={working || !reminderTemplates.length}
+            >
+              {working && pendingIntent === "save-trigger"
+                ? "Saving…"
+                : "Enable reminder trigger"}
+            </Button>
+          </div>
+        </Form>
+        {loaderData.triggers.length ? (
+          <section
+            className="table-wrap mt"
+            aria-label="Automatic reminder triggers"
+            // biome-ignore lint/a11y/noNoninteractiveTabindex: Scrollable data regions need keyboard focus so arrow keys can expose overflow content.
+            tabIndex={0}
+          >
+            <table className="data-table">
+              <thead>
+                <tr>
+                  <th scope="col">Template</th>
+                  <th scope="col">Rule</th>
+                  <th scope="col">Last run</th>
+                  <th scope="col">Action</th>
+                </tr>
+              </thead>
+              <tbody>
+                {loaderData.triggers.map((trigger) => (
+                  <tr key={trigger.id}>
+                    <td>{trigger.templateName}</td>
+                    <td>
+                      {categoryLabel(trigger.triggerType)} ·{" "}
+                      {trigger.configuration.sendHourUtc}:00 UTC
+                      <small>
+                        {categoryLabel(trigger.configuration.audienceType)}
+                      </small>
+                    </td>
+                    <td>{trigger.configuration.lastRunBucket ?? "Not run"}</td>
+                    <td>
+                      <Form method="post">
+                        <input
+                          type="hidden"
+                          name="intent"
+                          value={
+                            trigger.enabled
+                              ? "disable-trigger"
+                              : "enable-trigger"
+                          }
+                        />
+                        <input
+                          type="hidden"
+                          name="triggerId"
+                          value={trigger.id}
+                        />
+                        <Button type="submit" size="small" disabled={working}>
+                          {trigger.enabled ? "Disable" : "Enable"}
+                        </Button>
+                      </Form>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </section>
+        ) : null}
+      </section>
+      <section
+        className="card pad"
+        aria-labelledby="schedule-change-email-heading"
+      >
+        <div className="card-title">
+          <div>
+            <h2 id="schedule-change-email-heading">Schedule-change email</h2>
+            <p className="help">
+              One transactional email per affected participant when a revised
+              schedule is published. Draft edits never send email.
+            </p>
+          </div>
+          <span
+            className={`status ${loaderData.scheduleChangeNotificationSetting.enabled ? "ok" : "info"} right`}
+          >
+            {loaderData.scheduleChangeNotificationSetting.enabled
+              ? "Enabled"
+              : "Off"}
+          </span>
+        </div>
+        <Form
+          key={`${loaderData.scheduleChangeNotificationSetting.enabled}:${loaderData.scheduleChangeNotificationSetting.templateVersionId ?? "none"}`}
+          method="post"
+          className="stack"
+        >
           <label className="label">
-            Reminder template
+            Published schedule template
             <select
               className="select"
-              name="templateId"
-              defaultValue=""
+              name="templateVersionId"
+              defaultValue={
+                loaderData.scheduleChangeNotificationSetting
+                  .templateVersionId ?? ""
+              }
               required
             >
               <option value="" disabled>
-                Select a published task-reminder template
+                Select a published schedule template
               </option>
-              {reminderTemplates.map((template) => (
-                <option key={template.templateId} value={template.templateId}>
+              {scheduleTemplates.map((template) => (
+                <option key={template.id} value={template.id}>
                   {template.name} · v{template.versionNumber}
                 </option>
               ))}
             </select>
           </label>
-          <label className="label">
-            Trigger
-            <select
-              className="select"
-              name="triggerType"
-              defaultValue="task_due"
-            >
-              <option value="task_due">Due within 24 hours</option>
-              <option value="task_overdue">Overdue</option>
-              <option value="application_draft">Unsubmitted drafts</option>
-              <option value="participation_pending">
-                Pending participation responses
-              </option>
-            </select>
-          </label>
-        </div>
-        <div className="form-row comms-trigger-row">
-          <label className="label">
-            Audience
-            <select
-              className="select"
-              name="triggerAudience"
-              defaultValue="due_speakers"
-            >
-              <option value="due_speakers">Speakers due within 24 hours</option>
-              <option value="overdue_speakers">Overdue speakers</option>
-              <option value="draft_applicants">Applicants with drafts</option>
-              <option value="pending_participants">
-                Participants awaiting a response
-              </option>
-              <option value="event_administrators">Event administrators</option>
-            </select>
-          </label>
-          <label className="label">
-            Send hour (UTC)
+          <label className="check-row">
             <input
-              className="field"
-              name="sendHourUtc"
-              type="number"
-              min={0}
-              max={23}
-              defaultValue={14}
-              required
+              type="checkbox"
+              name="enabled"
+              value="true"
+              defaultChecked={
+                loaderData.scheduleChangeNotificationSetting.enabled
+              }
             />
+            Notify pending and confirmed participants on publication
           </label>
-          <label className="label">
-            Policy
-            <select className="select" name="kind" defaultValue="transactional">
-              <option value="transactional">Transactional</option>
-              <option value="optional">Optional / unsubscribe-aware</option>
-            </select>
-          </label>
-        </div>
-        <div className="row-actions">
-          {reminderTemplates.length ? null : (
-            <span className="help">
-              Publish a task-reminder template before enabling a trigger.
-            </span>
-          )}
-          <Button type="submit" disabled={working || !reminderTemplates.length}>
-            {working && pendingIntent === "save-trigger"
-              ? "Saving…"
-              : "Enable reminder trigger"}
-          </Button>
-        </div>
-      </Form>
-      {loaderData.triggers.length ? (
-        <section
-          className="table-wrap mt"
-          aria-label="Automatic reminder triggers"
-          // biome-ignore lint/a11y/noNoninteractiveTabindex: Scrollable data regions need keyboard focus so arrow keys can expose overflow content.
-          tabIndex={0}
-        >
-          <table className="data-table">
-            <thead>
-              <tr>
-                <th scope="col">Template</th>
-                <th scope="col">Rule</th>
-                <th scope="col">Last run</th>
-                <th scope="col">Action</th>
-              </tr>
-            </thead>
-            <tbody>
-              {loaderData.triggers.map((trigger) => (
-                <tr key={trigger.id}>
-                  <td>{trigger.templateName}</td>
-                  <td>
-                    {categoryLabel(trigger.triggerType)} ·{" "}
-                    {trigger.configuration.sendHourUtc}:00 UTC
-                    <small>
-                      {categoryLabel(trigger.configuration.audienceType)}
-                    </small>
-                  </td>
-                  <td>{trigger.configuration.lastRunBucket ?? "Not run"}</td>
-                  <td>
-                    <Form method="post">
-                      <input
-                        type="hidden"
-                        name="intent"
-                        value={
-                          trigger.enabled ? "disable-trigger" : "enable-trigger"
-                        }
-                      />
-                      <input
-                        type="hidden"
-                        name="triggerId"
-                        value={trigger.id}
-                      />
-                      <Button type="submit" size="small" disabled={working}>
-                        {trigger.enabled ? "Disable" : "Enable"}
-                      </Button>
-                    </Form>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </section>
-      ) : null}
-    </section>
+          <p className="help">
+            Supported merge fields: {"{{schedule.changes}}"} and{" "}
+            {"{{schedule.url}}"}. Declined roles are excluded. The first
+            publication does not send a change email.
+          </p>
+          <div className="row-actions">
+            {!scheduleTemplates.length ? (
+              <span className="help">
+                Publish a schedule email template before enabling this setting.
+              </span>
+            ) : null}
+            <Button
+              type="submit"
+              name="intent"
+              value="save-schedule-change-notifications"
+              disabled={working || !scheduleTemplates.length}
+            >
+              {working && pendingIntent === "save-schedule-change-notifications"
+                ? "Saving…"
+                : "Save schedule email setting"}
+            </Button>
+            {loaderData.scheduleChangeNotificationSetting.enabled ? (
+              <Button
+                type="submit"
+                name="intent"
+                value="disable-schedule-change-notifications"
+                formNoValidate
+                disabled={working}
+              >
+                Disable
+              </Button>
+            ) : null}
+          </div>
+        </Form>
+      </section>
+    </div>
   );
 }
 

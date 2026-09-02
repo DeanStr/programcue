@@ -826,6 +826,74 @@ terminal supersession marker to every still-pending proposal regardless of its
 AI provider before replacing the event data.
 Deployment and fresh live-provider acceptance remain outstanding.
 
+## Bounded Sessionboard-comparison follow-through
+
+The 2 September repository candidate adds three deliberately fixed production
+slices. None is deployed evidence until the next release, and the new email
+path has no live-provider acceptance yet.
+
+- **Relational CSV reports — production slice:** Operation Centre now exposes
+  owner-authorised, event- and organisation-scoped Participant readiness and
+  Session staffing exports through the existing durable export operation and
+  audit path. Participant readiness emits one row per participant across
+  claimed applications, session roles and assigned work, with profile,
+  application, response, task, required-field, quarantined-file and readiness
+  counts. Session staffing emits one row per session/person/role with response,
+  the current draft-or-published placement and outstanding requirements. Both
+  retain the existing 10,000-row guard and CSV formula neutralisation. These
+  are fixed report contracts; configurable joins, selected fields, reusable
+  report definitions, dashboards and current-roster-filter propagation are not
+  implemented.
+- **Published schedule-change email — production slice; provider acceptance
+  outstanding:** Communications offers an event-level setting that is off by
+  default and requires an active published schedule-email template, verified
+  sender, configured provider, absolute programme URL and Queue binding before
+  enablement. A first publication establishes the baseline without sending.
+  Later publication previews report the exact eligible participant count and
+  block on invalid enabled configuration. Added, removed, moved, visibility-
+  changed and title-changed sessions notify pending or confirmed role holders,
+  exclude declined roles and combine all of one person's changes into one
+  transactional email. The exact template version, sender, rendered hashes,
+  recipient/change values, communication, deliveries, operation, audit and
+  event change commit in the schedule-publication batch before Queue dispatch;
+  publication-time guards revalidate configuration, addresses and role
+  eligibility. Changed-session recipient lookup uses one JSON-bound identifier
+  set rather than one D1 parameter per session, and disabled settings skip that
+  lookup entirely. A notification Queue failure leaves the schedule published
+  and exposes retryable Operation Centre state. The setup form remounts from
+  persisted enabled/template state after revalidation, so disabling cannot
+  leave a checked control that would silently re-enable email on the next save.
+  No inbox, per-person channel preferences, digests, Slack, SMS or draft-edit
+  sends are present.
+- **Reviewer abstention — production slice:** Reviewers can return an active
+  assignment with insufficient-expertise, unavailable or other plus an
+  optional private note; the existing conflict path records the fourth fixed
+  reason, conflict. Selecting conflict exposes only that conflict-return path,
+  so it cannot be replaced accidentally with ordinary abstention provenance.
+  Both paths use the existing terminal `recused` lifecycle, while typed
+  abstention provenance distinguishes a conflict from another inability to
+  review. Returned work leaves the reviewer queue resolved but is still
+  reported as reduced organiser coverage; reviewer progress now separates
+  submitted reviews, returned assignments and total resolved work. A returned
+  assignment's abandoned draft remains stored internally but its score,
+  recommendation, feedback and notes are redacted from the organiser workspace,
+  and it is not counted as an unfinished review. Non-conflict abstention creates
+  no conflict record, and its private note is omitted from audit metadata.
+
+Focused repository evidence covers 11 export tests, 30 schedule-publication
+tests and 40 reviewer/progress tests. Four Chromium workflows exercise the two
+report controls, notification setup (including enable/disable form state) and
+publication preview, and the reviewer dialog. The export evidence includes a
+shared session task counted for pending and confirmed co-presenters but not a
+declined owner. Schedule evidence includes disabled and enabled 99-session
+change sets. The reviewer workflow evidence covers mutually exclusive conflict
+and ordinary-return controls, an ordinary return leaving the queue, retained
+internal draft history, organiser redaction and review-cycle counts. Migration
+validation reports 112 application tables, 142 indexes and 172 triggers;
+generated TypeScript, the synchronized 33-path OpenAPI contract, the recovery
+drill, the production build and the complete unit/Worker and agent test lanes
+pass in the current workspace.
+
 ## Capability status
 
 | Capability                             | Status                                                                     | Verified implementation and boundary                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              |

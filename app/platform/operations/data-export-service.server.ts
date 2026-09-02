@@ -1,6 +1,7 @@
 import { z } from "zod";
 
 import { AirtableProviderBoundary } from "~/modules/airtable/airtable-provider-boundary.server";
+import { participantTaskAccessForPersonRowSql } from "~/modules/tasks/task-service-foundation.server";
 import type { Viewer } from "~/platform/auth/authorize.server";
 
 export const eventExportResources = [
@@ -10,6 +11,8 @@ export const eventExportResources = [
   "rooms",
   "tracks",
   "tasks",
+  "participant-readiness",
+  "session-staffing",
   "audit",
 ] as const;
 
@@ -352,6 +355,43 @@ export class DataExportService {
         "completedAt",
         "updatedAt",
       ],
+      "participant-readiness": [
+        "personId",
+        "email",
+        "name",
+        "organisation",
+        "jobTitle",
+        "profileStatus",
+        "applicationCount",
+        "draftApplications",
+        "submittedApplications",
+        "sessionCount",
+        "pendingRoles",
+        "confirmedRoles",
+        "declinedRoles",
+        "outstandingTasks",
+        "completedTasks",
+        "missingRequiredFields",
+        "quarantinedFiles",
+        "readinessStatus",
+      ],
+      "session-staffing": [
+        "sessionId",
+        "sessionTitle",
+        "sessionStatus",
+        "personId",
+        "personName",
+        "email",
+        "role",
+        "roleLabel",
+        "response",
+        "scheduleStatus",
+        "scheduleVersion",
+        "room",
+        "startsAt",
+        "endsAt",
+        "outstandingRequirements",
+      ],
       audit: [
         "id",
         "action",
@@ -566,6 +606,256 @@ export class DataExportService {
         completedAt: iso(row.completedAt),
         updatedAt: iso(row.updatedAt),
       })) as Array<Record<string, ExportValue>>;
+    }
+    if (resource === "participant-readiness") {
+      const result = await this.env.DB.prepare(
+        `
+        WITH participant_ids(person_id) AS (
+          SELECT role.person_id
+            FROM session_participant_roles role
+           WHERE role.event_id = ?
+          UNION
+          SELECT submission.submitter_person_id
+            FROM submissions submission
+           WHERE submission.event_id = ?
+             AND submission.submitter_person_id IS NOT NULL
+          UNION
+          SELECT speaker.person_id
+            FROM submission_speakers speaker
+           WHERE speaker.event_id = ? AND speaker.person_id IS NOT NULL
+             AND speaker.invitation_status = 'claimed'
+          UNION
+          SELECT task.owner_person_id
+            FROM task_instances task
+           WHERE task.event_id = ? AND task.owner_person_id IS NOT NULL
+          UNION
+          SELECT task.target_id
+            FROM task_instances task
+           WHERE task.event_id = ? AND task.target_type = 'speaker'
+        ), participant_rows AS (
+          SELECT person.id AS personId, person.email,
+                 COALESCE(contact_profile.display_name, person.display_name) AS name,
+                 COALESCE(contact_profile.organisation_name, person.organisation_name) AS organisation,
+                 COALESCE(contact_profile.job_title, person.job_title) AS jobTitle,
+                 person.profile_status AS profileStatus,
+                 (SELECT COUNT(*) FROM submissions application
+                   WHERE application.event_id = ?
+                     AND (
+                       application.submitter_person_id = person.id
+                       OR EXISTS (
+                         SELECT 1 FROM submission_speakers application_speaker
+                          WHERE application_speaker.event_id = application.event_id
+                            AND application_speaker.submission_id = application.id
+                            AND application_speaker.person_id = person.id
+                            AND application_speaker.invitation_status = 'claimed'
+                       )
+                     )) AS applicationCount,
+                 (SELECT COUNT(*) FROM submissions application
+                   WHERE application.event_id = ?
+                     AND application.status = 'draft'
+                     AND (
+                       application.submitter_person_id = person.id
+                       OR EXISTS (
+                         SELECT 1 FROM submission_speakers application_speaker
+                          WHERE application_speaker.event_id = application.event_id
+                            AND application_speaker.submission_id = application.id
+                            AND application_speaker.person_id = person.id
+                            AND application_speaker.invitation_status = 'claimed'
+                       )
+                     )) AS draftApplications,
+                 (SELECT COUNT(*) FROM submissions application
+                   WHERE application.event_id = ?
+                     AND application.status <> 'draft'
+                     AND (
+                       application.submitter_person_id = person.id
+                       OR EXISTS (
+                         SELECT 1 FROM submission_speakers application_speaker
+                          WHERE application_speaker.event_id = application.event_id
+                            AND application_speaker.submission_id = application.id
+                            AND application_speaker.person_id = person.id
+                            AND application_speaker.invitation_status = 'claimed'
+                       )
+                     )) AS submittedApplications,
+                 (SELECT COUNT(DISTINCT role.session_id)
+                    FROM session_participant_roles role
+                   WHERE role.event_id = ? AND role.person_id = person.id) AS sessionCount,
+                 (SELECT COUNT(*) FROM session_participant_roles role
+                    JOIN sessions role_session
+                      ON role_session.id = role.session_id
+                     AND role_session.event_id = role.event_id
+                   WHERE role.event_id = ? AND role.person_id = person.id
+                     AND role.participation_status = 'pending'
+                     AND role_session.status NOT IN ('cancelled','archived')) AS pendingRoles,
+                 (SELECT COUNT(*) FROM session_participant_roles role
+                   WHERE role.event_id = ? AND role.person_id = person.id
+                     AND role.participation_status = 'confirmed') AS confirmedRoles,
+                 (SELECT COUNT(*) FROM session_participant_roles role
+                   WHERE role.event_id = ? AND role.person_id = person.id
+                     AND role.participation_status = 'declined') AS declinedRoles,
+                 (SELECT COUNT(*) FROM task_instances task
+                   WHERE task.event_id = ?
+                     AND ${participantTaskAccessForPersonRowSql("task", true)}
+                     AND task.status NOT IN ('completed','waived')
+                     ) AS outstandingTasks,
+                 (SELECT COUNT(*) FROM task_instances task
+                   WHERE task.event_id = ?
+                     AND ${participantTaskAccessForPersonRowSql("task", true)}
+                     AND task.status IN ('completed','waived')
+                     ) AS completedTasks,
+                 (SELECT COUNT(*) FROM event_field_definitions definition
+                   WHERE definition.event_id = ?
+                     AND definition.owner_type = 'person'
+                     AND definition.status = 'active' AND definition.required = 1
+                     AND NOT EXISTS (
+                       SELECT 1 FROM event_field_values value
+                        WHERE value.definition_id = definition.id
+                          AND value.event_id = definition.event_id
+                          AND value.person_id = person.id
+                          AND (
+                            (definition.field_type IN ('short_text','long_text','date','single_choice')
+                              AND json_type(value.value_json) = 'text'
+                              AND trim(CAST(json_extract(value.value_json, '$') AS TEXT)) <> '')
+                            OR (definition.field_type = 'number'
+                              AND json_type(value.value_json) IN ('integer','real'))
+                            OR (definition.field_type = 'boolean'
+                              AND json_type(value.value_json) IN ('true','false'))
+                            OR (definition.field_type = 'multiple_choice'
+                              AND json_type(value.value_json) = 'array'
+                              AND json_array_length(value.value_json) > 0)
+                          )
+                     )) AS missingRequiredFields,
+                 (SELECT COUNT(*)
+                    FROM file_assets asset
+                    JOIN file_versions version ON version.id = (
+                      SELECT latest.id FROM file_versions latest
+                       WHERE latest.asset_id = asset.id
+                         AND latest.deleted_at IS NULL
+                       ORDER BY latest.version_number DESC
+                       LIMIT 1
+                    )
+                   WHERE asset.event_id = ?
+                     AND asset.owner_person_id = person.id
+                     AND asset.status <> 'deleted'
+                     AND version.upload_status = 'uploaded'
+                     AND version.signature_status = 'valid'
+                     AND version.scan_status = 'pending') AS quarantinedFiles
+            FROM participant_ids participant
+            JOIN people person ON person.id = participant.person_id
+            JOIN events event ON event.id = ? AND event.organisation_id = ?
+            LEFT JOIN organisation_contact_profiles contact_profile
+              ON contact_profile.organisation_id = event.organisation_id
+             AND contact_profile.person_id = person.id
+        )
+        SELECT participant.*,
+               CASE WHEN participant.profileStatus = 'published'
+                          AND participant.pendingRoles = 0
+                          AND participant.outstandingTasks = 0
+                          AND participant.missingRequiredFields = 0
+                          AND participant.quarantinedFiles = 0
+                    THEN 'ready' ELSE 'needs_attention' END AS readinessStatus
+          FROM participant_rows participant
+         ORDER BY participant.name COLLATE NOCASE, participant.personId
+         LIMIT ?
+      `,
+      )
+        .bind(
+          viewer.eventId,
+          viewer.eventId,
+          viewer.eventId,
+          viewer.eventId,
+          viewer.eventId,
+          viewer.eventId,
+          viewer.eventId,
+          viewer.eventId,
+          viewer.eventId,
+          viewer.eventId,
+          viewer.eventId,
+          viewer.eventId,
+          viewer.eventId,
+          viewer.eventId,
+          viewer.eventId,
+          viewer.eventId,
+          viewer.eventId,
+          viewer.organisationId,
+          limit,
+        )
+        .all<Record<string, ExportValue>>();
+      return result.results;
+    }
+    if (resource === "session-staffing") {
+      const result = await this.env.DB.prepare(
+        `
+        WITH active_schedule AS (
+          SELECT version.id, version.status, version.version_number
+            FROM schedule_versions version
+           WHERE version.event_id = ? AND version.status IN ('draft','published')
+           ORDER BY CASE version.status WHEN 'draft' THEN 0 ELSE 1 END,
+                    version.version_number DESC
+           LIMIT 1
+        )
+        SELECT session.id AS sessionId, session.title AS sessionTitle,
+               session.status AS sessionStatus, person.id AS personId,
+               COALESCE(contact_profile.display_name, person.display_name) AS personName,
+               person.email, role.role, role.label AS roleLabel,
+               role.participation_status AS response,
+               active_schedule.status AS scheduleStatus,
+               active_schedule.version_number AS scheduleVersion,
+               room.name AS room, entry.starts_at AS startsAt,
+               entry.ends_at AS endsAt,
+               (SELECT COUNT(*) FROM task_instances task
+                 WHERE task.event_id = session.event_id
+                   AND ${participantTaskAccessForPersonRowSql("task", true)}
+                   AND task.status NOT IN ('completed','waived')
+                   AND (
+                     (task.target_type = 'session' AND task.target_id = session.id)
+                     OR (task.target_type = 'speaker' AND task.target_id = person.id)
+                   )
+               ) AS outstandingRequirements
+          FROM session_participant_roles role
+          JOIN sessions session
+            ON session.id = role.session_id AND session.event_id = role.event_id
+          JOIN events event
+            ON event.id = session.event_id AND event.organisation_id = ?
+          JOIN people person ON person.id = role.person_id
+          LEFT JOIN organisation_contact_profiles contact_profile
+            ON contact_profile.organisation_id = event.organisation_id
+           AND contact_profile.person_id = person.id
+          LEFT JOIN active_schedule ON 1 = 1
+          LEFT JOIN schedule_entries entry
+            ON entry.schedule_version_id = active_schedule.id
+           AND entry.event_id = session.event_id
+           AND entry.session_id = session.id
+          LEFT JOIN rooms room
+            ON room.id = entry.room_id AND room.event_id = entry.event_id
+         WHERE role.event_id = ?
+         ORDER BY session.title COLLATE NOCASE, session.id,
+                  role.position, role.role, personName COLLATE NOCASE, person.id
+         LIMIT ?
+      `,
+      )
+        .bind(viewer.eventId, viewer.organisationId, viewer.eventId, limit)
+        .all<{
+          sessionId: string;
+          sessionTitle: string;
+          sessionStatus: string;
+          personId: string;
+          personName: string;
+          email: string;
+          role: string;
+          roleLabel: string;
+          response: string;
+          scheduleStatus: string | null;
+          scheduleVersion: number | null;
+          room: string | null;
+          startsAt: number | null;
+          endsAt: number | null;
+          outstandingRequirements: number;
+        }>();
+      return result.results.map((row) => ({
+        ...row,
+        startsAt: iso(row.startsAt),
+        endsAt: iso(row.endsAt),
+      }));
     }
     const result = await this.env.DB.prepare(
       `

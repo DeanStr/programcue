@@ -65,7 +65,8 @@ export class EvaluationReviewCycleStartWorkflow extends EvaluationServiceFoundat
                   AND round.event_id = assignment.event_id
                 WHERE round.event_id = plan.event_id
                   AND round.plan_id = plan.id
-                  AND review.status IN ('draft','reopened'))
+                  AND review.status IN ('draft','reopened')
+                  AND assignment.status IN ('assigned','in_progress','reopened'))
                 AS unfinishedReviewCount,
               (SELECT COUNT(*)
                  FROM operation_jobs operation
@@ -173,6 +174,7 @@ export class EvaluationReviewCycleStartWorkflow extends EvaluationServiceFoundat
        WHERE round.event_id = events.id
          AND round.plan_id = ?
          AND review.status IN ('draft','reopened')
+         AND assignment.status IN ('assigned','in_progress','reopened')
     )`;
     const statements: D1PreparedStatement[] = [
       this.env.DB.prepare(
@@ -472,7 +474,8 @@ export class EvaluationReviewCycleStartWorkflow extends EvaluationServiceFoundat
                     AND round.event_id = assignment.event_id
                   WHERE round.event_id = plan.event_id
                     AND round.plan_id = plan.id
-                    AND review.status IN ('draft','reopened'))
+                    AND review.status IN ('draft','reopened')
+                    AND assignment.status IN ('assigned','in_progress','reopened'))
                   AS unfinishedReviewCount,
                 (SELECT COUNT(*)
                    FROM operation_jobs operation

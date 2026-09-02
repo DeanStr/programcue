@@ -78,8 +78,19 @@ test("authenticated application stays within the mobile viewport", async ({
 });
 
 test("mobile administration sections reveal linked content without overflow", async ({
+  context,
   page,
 }) => {
+  await context.addCookies([
+    {
+      name: "program_cue_event",
+      value: "evt-foe-2025",
+      domain: "127.0.0.1",
+      path: "/",
+      httpOnly: true,
+      sameSite: "Lax",
+    },
+  ]);
   await waitForInterface(page, "/admin/command");
   await expect(
     page.getByRole("heading", { name: "Command Centre" }),
@@ -117,6 +128,88 @@ test("mobile administration sections reveal linked content without overflow", as
     name: /Calendar administration/,
   });
   await expect(calendars).toHaveAttribute("aria-expanded", "false");
+  await page
+    .getByRole("navigation", { name: "Delivery settings sections" })
+    .getByRole("link", { name: "Automation" })
+    .click();
+  await expect(
+    page.getByRole("heading", { name: "Schedule-change email" }),
+  ).toBeVisible();
+  const templateName = `Schedule change browser test ${Date.now()}`;
+  const savedTemplate = await page.evaluate(async (name) => {
+    const form = new FormData();
+    form.set("intent", "save-template");
+    form.set("name", name);
+    form.set("category", "schedule");
+    form.set("subject", "Your {{event.name}} schedule changed");
+    form.set(
+      "body",
+      "Hi {{recipient.firstName}}\n\n{{schedule.changes}}\n\n{{schedule.url}}",
+    );
+    form.set("physicalAddress", "255 Front Street West, Toronto, ON");
+    const response = await fetch("/admin/communications", {
+      method: "POST",
+      body: form,
+    });
+    return {
+      ok: response.ok,
+      status: response.status,
+      url: response.url,
+      text: await response.text(),
+    };
+  }, templateName);
+  expect(
+    savedTemplate.ok,
+    `${savedTemplate.status} ${savedTemplate.text}`,
+  ).toBeTruthy();
+  const templateVersionId = new URL(savedTemplate.url).searchParams.get(
+    "template",
+  );
+  expect(templateVersionId).not.toBeNull();
+  const publishedTemplate = await page.evaluate(async (versionId) => {
+    const form = new FormData();
+    form.set("intent", "publish-template");
+    form.set("templateVersionId", versionId);
+    const response = await fetch("/admin/communications", {
+      method: "POST",
+      body: form,
+    });
+    return {
+      ok: response.ok,
+      status: response.status,
+      text: await response.text(),
+    };
+  }, templateVersionId!);
+  expect(
+    publishedTemplate.ok,
+    `${publishedTemplate.status} ${publishedTemplate.text}`,
+  ).toBeTruthy();
+  await page.reload();
+  await page.locator("body[data-hydrated='true']").waitFor();
+
+  const scheduleEmail = page.locator("section").filter({
+    has: page.getByRole("heading", { name: "Schedule-change email" }),
+  });
+  const notificationCheckbox = scheduleEmail.getByLabel(
+    "Notify pending and confirmed participants on publication",
+  );
+  await expect(notificationCheckbox).not.toBeChecked();
+  await scheduleEmail
+    .getByLabel("Published schedule template")
+    .selectOption(templateVersionId!);
+  await notificationCheckbox.check();
+  await scheduleEmail
+    .getByRole("button", { name: "Save schedule email setting" })
+    .click();
+  await expect(
+    scheduleEmail.getByText("Enabled", { exact: true }),
+  ).toBeVisible();
+  await expect(notificationCheckbox).toBeChecked();
+  await scheduleEmail
+    .getByRole("button", { name: "Disable", exact: true })
+    .click();
+  await expect(scheduleEmail.getByText("Off", { exact: true })).toBeVisible();
+  await expect(notificationCheckbox).not.toBeChecked();
   await page
     .getByRole("navigation", { name: "Delivery settings sections" })
     .getByRole("link", { name: "Calendars" })

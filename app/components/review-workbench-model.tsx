@@ -105,10 +105,13 @@ export type ReviewWorkbenchModel = {
   submitReviewTriggerRef: RefObject<HTMLButtonElement | null>;
   submitNextTriggerRef: RefObject<HTMLButtonElement | null>;
   conflictTriggerRef: RefObject<HTMLButtonElement | null>;
+  abstentionTriggerRef: RefObject<HTMLButtonElement | null>;
   editGeneration: RefObject<number>;
   inFlightSaveGeneration: RefObject<number | null>;
   conflictOpen: boolean;
   setConflictOpen: Dispatch<SetStateAction<boolean>>;
+  abstentionOpen: boolean;
+  setAbstentionOpen: Dispatch<SetStateAction<boolean>>;
   shortcutsOpen: boolean;
   setShortcutsOpen: Dispatch<SetStateAction<boolean>>;
   submitMode: "stay" | "next" | null;
@@ -232,12 +235,14 @@ export function useReviewWorkbenchState({
   const submitReviewTriggerRef = useRef<HTMLButtonElement>(null);
   const submitNextTriggerRef = useRef<HTMLButtonElement>(null);
   const conflictTriggerRef = useRef<HTMLButtonElement>(null);
+  const abstentionTriggerRef = useRef<HTMLButtonElement>(null);
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const editGeneration = useRef(0);
   const serverSyncedEditGeneration = useRef(0);
   const inFlightSaveGeneration = useRef<number | null>(null);
   const recoveryAssignmentKey = useRef(assignmentKey);
   const [conflictOpen, setConflictOpen] = useState(false);
+  const [abstentionOpen, setAbstentionOpen] = useState(false);
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
   const [submitMode, setSubmitMode] = useState<"stay" | "next" | null>(null);
   const [dirty, setDirty] = useState(false);
@@ -477,6 +482,7 @@ export function useReviewWorkbenchState({
     if (
       readOnly ||
       conflictOpen ||
+      abstentionOpen ||
       submitMode !== null ||
       saveFailed ||
       !dirty ||
@@ -498,6 +504,7 @@ export function useReviewWorkbenchState({
       saveTimer.current = null;
     };
   }, [
+    abstentionOpen,
     conflictOpen,
     dirty,
     editVersion,
@@ -834,10 +841,13 @@ export function useReviewWorkbenchState({
     submitReviewTriggerRef,
     submitNextTriggerRef,
     conflictTriggerRef,
+    abstentionTriggerRef,
     editGeneration,
     inFlightSaveGeneration,
     conflictOpen,
     setConflictOpen,
+    abstentionOpen,
+    setAbstentionOpen,
     shortcutsOpen,
     setShortcutsOpen,
     submitMode,

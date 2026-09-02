@@ -346,6 +346,11 @@ export const evaluatorAssignments = sqliteTable(
     >(),
     dueAt: integer("due_at"),
     conflictDeclaredAt: integer("conflict_declared_at"),
+    abstentionReason: text("abstention_reason").$type<
+      "conflict" | "insufficient_expertise" | "unavailable" | "other"
+    >(),
+    abstentionNote: text("abstention_note"),
+    abstainedAt: integer("abstained_at"),
     assignedAt: integer("assigned_at").notNull().default(epochNow),
     submittedAt: integer("submitted_at"),
   },
@@ -357,6 +362,14 @@ export const evaluatorAssignments = sqliteTable(
         OR
         (${table.submissionId} IS NULL AND ${table.sessionId} IS NOT NULL AND ${table.sessionSnapshotJson} IS NOT NULL AND json_valid(${table.sessionSnapshotJson}))
       )`,
+    ),
+    check(
+      "evaluator_assignments_abstention_reason_check",
+      sql`${table.abstentionReason} IS NULL OR ${table.abstentionReason} IN ('conflict','insufficient_expertise','unavailable','other')`,
+    ),
+    check(
+      "evaluator_assignments_abstention_note_check",
+      sql`${table.abstentionNote} IS NULL OR (length(${table.abstentionNote}) BETWEEN 1 AND 2000 AND ${table.abstentionNote} = trim(${table.abstentionNote}))`,
     ),
     foreignKey({
       columns: [table.submissionId, table.eventId],
@@ -387,6 +400,11 @@ export const evaluatorAssignments = sqliteTable(
       table.eventId,
       table.sessionId,
       table.roundId,
+    ),
+    index("idx_assignments_event_abstention").on(
+      table.eventId,
+      table.status,
+      table.abstentionReason,
     ),
   ],
 );

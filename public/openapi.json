@@ -2475,7 +2475,7 @@
         },
         "responses": {
           "200": {
-            "description": "Schedule published, event change broadcast and durable calendar fan-out queued",
+            "description": "Schedule published, event change broadcast and durable calendar and participant-notification work queued",
             "content": {
               "application/json": {
                 "schema": {
@@ -2485,7 +2485,7 @@
             }
           },
           "207": {
-            "description": "Schedule publication committed, but realtime invalidation or durable calendar fan-out enqueue failed",
+            "description": "Schedule publication committed, but realtime invalidation, calendar fan-out or participant-notification enqueue failed",
             "content": {
               "application/json": {
                 "schema": {
@@ -7098,6 +7098,7 @@
           "changeCursor",
           "realtimeWarning",
           "calendar",
+          "notification",
           "correlationId"
         ],
         "properties": {
@@ -7124,6 +7125,9 @@
           "calendar": {
             "$ref": "#/components/schemas/CalendarFanoutSummary"
           },
+          "notification": {
+            "$ref": "#/components/schemas/ScheduleChangeNotificationSummary"
+          },
           "correlationId": {
             "type": "string"
           }
@@ -7144,6 +7148,47 @@
           "status": {
             "type": "string",
             "enum": [
+              "queued",
+              "queue_failed"
+            ]
+          },
+          "dispatchError": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        }
+      },
+      "ScheduleChangeNotificationSummary": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "enabled",
+          "recipientCount",
+          "operationId",
+          "status",
+          "dispatchError"
+        ],
+        "properties": {
+          "enabled": {
+            "type": "boolean"
+          },
+          "recipientCount": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "operationId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "disabled",
+              "not_needed",
               "queued",
               "queue_failed"
             ]

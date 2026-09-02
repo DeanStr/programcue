@@ -1,3 +1,7 @@
+import {
+  ScheduleChangeNotificationService,
+  type ScheduleChangeNotificationSummary,
+} from "~/modules/communications/schedule-change-notification.server";
 import { listPublishedSiteReferenceProblemsForSchedule } from "~/modules/public-site/public-site-publication-validation.server";
 import type { Viewer } from "~/platform/auth/authorize.server";
 import type {
@@ -66,6 +70,7 @@ export type SchedulePublicationPreview = {
     publicDependencies: string[];
   };
   warnings: ScheduleWorkspace["publicationConflicts"];
+  notifications: ScheduleChangeNotificationSummary;
 };
 
 type PublishedEntry = Pick<
@@ -264,10 +269,6 @@ export async function buildSchedulePublicationPreview(
       });
     }
     const fields: SchedulePublicationContentChange["fields"] = [];
-    const publiclyRenderable = session.visibility === "public";
-    if (!publiclyRenderable) {
-      continue;
-    }
     if (previous.title !== session.title) {
       fields.push({
         field: "title",
@@ -275,9 +276,11 @@ export async function buildSchedulePublicationPreview(
         after: session.title,
       });
     }
+    const publiclyRenderable = session.visibility === "public";
     if (
+      publiclyRenderable &&
       normalizedDescription(previous.description) !==
-      normalizedDescription(session.description)
+        normalizedDescription(session.description)
     ) {
       const before = excerptDescription(displayText(previous.description));
       const after = excerptDescription(displayText(session.description));
@@ -288,28 +291,33 @@ export async function buildSchedulePublicationPreview(
         ...(before.excerpted || after.excerpted ? { excerpted: true } : {}),
       });
     }
-    const previousTrack = publicTrackLabel(previous.trackId, workspace.tracks);
-    const nextTrack = publicTrackLabel(session.trackId, workspace.tracks);
-    if (previousTrack !== nextTrack) {
-      fields.push({
-        field: "track",
-        before: previousTrack,
-        after: nextTrack,
-      });
-    }
-    if (previous.format !== session.format) {
-      fields.push({
-        field: "format",
-        before: formatLabel(previous.format),
-        after: formatLabel(session.format),
-      });
-    }
-    if (previous.durationMinutes !== session.durationMinutes) {
-      fields.push({
-        field: "duration",
-        before: durationLabel(previous.durationMinutes),
-        after: durationLabel(session.durationMinutes),
-      });
+    if (publiclyRenderable) {
+      const previousTrack = publicTrackLabel(
+        previous.trackId,
+        workspace.tracks,
+      );
+      const nextTrack = publicTrackLabel(session.trackId, workspace.tracks);
+      if (previousTrack !== nextTrack) {
+        fields.push({
+          field: "track",
+          before: previousTrack,
+          after: nextTrack,
+        });
+      }
+      if (previous.format !== session.format) {
+        fields.push({
+          field: "format",
+          before: formatLabel(previous.format),
+          after: formatLabel(session.format),
+        });
+      }
+      if (previous.durationMinutes !== session.durationMinutes) {
+        fields.push({
+          field: "duration",
+          before: durationLabel(previous.durationMinutes),
+          after: durationLabel(session.durationMinutes),
+        });
+      }
     }
     if (fields.length) {
       content.push({ sessionId, title: session.title, fields });
@@ -343,15 +351,20 @@ export async function buildSchedulePublicationPreview(
     (conflict) => conflict.severity === "blocking",
   );
 
+  const changes = {
+    added: added.sort(compareLabels),
+    removed: removed.sort(compareLabels),
+    moved: moved.sort(compareLabels),
+    visibility: visibility.sort(compareLabels),
+    content: content.sort(compareLabels),
+  };
+  const notifications = await new ScheduleChangeNotificationService(
+    env,
+  ).inspect(viewer, publishedVersion?.versionNumber ?? null, changes);
+
   return {
     publishedVersionNumber: publishedVersion?.versionNumber ?? null,
-    changes: {
-      added: added.sort(compareLabels),
-      removed: removed.sort(compareLabels),
-      moved: moved.sort(compareLabels),
-      visibility: visibility.sort(compareLabels),
-      content: content.sort(compareLabels),
-    },
+    changes,
     blockers: {
       emptySchedule: workspace.entries.length === 0,
       conflicts: blockingConflicts,
@@ -363,5 +376,6 @@ export async function buildSchedulePublicationPreview(
     warnings: workspace.publicationConflicts.filter(
       (conflict) => conflict.severity !== "blocking",
     ),
+    notifications,
   };
 }

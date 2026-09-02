@@ -226,6 +226,13 @@ test("CSV import exposes a durable preview before confirming", async ({
       sameSite: "Lax",
     },
   ]);
+  await waitForInterface(page, "/admin/operations?panel=exports");
+  await expect(
+    page.getByRole("button", { name: "Participant readiness CSV" }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: "Session staffing CSV" }),
+  ).toBeVisible();
   const exported = await page.request.post("/admin/exports/rooms.csv", {
     headers: { origin: e2eOrigin },
     form: { idempotencyKey: crypto.randomUUID() },

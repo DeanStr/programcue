@@ -4,6 +4,7 @@ import { CommunicationDeliveryService } from "./communication-delivery-service.s
 import { CommunicationDraftService } from "./communication-draft-service.server";
 import { CommunicationTemplateService } from "./communication-template-service.server";
 import { ResendReconciliationService } from "./resend-reconciliation-service.server";
+import { ScheduleChangeNotificationService } from "./schedule-change-notification.server";
 import { SenderProfileService } from "./sender-profile-service.server";
 
 export type {
@@ -24,6 +25,7 @@ export class CommunicationService {
   private readonly senders: SenderProfileService;
   private readonly automation: CommunicationAutomationService;
   private readonly drafts: CommunicationDraftService;
+  private readonly scheduleChanges: ScheduleChangeNotificationService;
 
   constructor(env: CloudflareEnvironment) {
     this.templates = new CommunicationTemplateService(env);
@@ -32,6 +34,7 @@ export class CommunicationService {
     this.senders = new SenderProfileService(env);
     this.automation = new CommunicationAutomationService(env);
     this.drafts = new CommunicationDraftService(env);
+    this.scheduleChanges = new ScheduleChangeNotificationService(env);
   }
 
   listCentre(...args: Parameters<CommunicationTemplateService["listCentre"]>) {
@@ -147,6 +150,24 @@ export class CommunicationService {
     ...args: Parameters<CommunicationAutomationService["setTriggerEnabled"]>
   ) {
     return this.automation.setTriggerEnabled(...args);
+  }
+
+  getScheduleChangeNotificationSetting(
+    ...args: Parameters<ScheduleChangeNotificationService["getSetting"]>
+  ) {
+    return this.scheduleChanges.getSetting(...args);
+  }
+
+  saveScheduleChangeNotificationSetting(
+    ...args: Parameters<ScheduleChangeNotificationService["saveSetting"]>
+  ) {
+    return this.scheduleChanges.saveSetting(...args);
+  }
+
+  disableScheduleChangeNotificationSetting(
+    ...args: Parameters<ScheduleChangeNotificationService["disableSetting"]>
+  ) {
+    return this.scheduleChanges.disableSetting(...args);
   }
 }
 export function communicationErrorMessage(error: unknown) {

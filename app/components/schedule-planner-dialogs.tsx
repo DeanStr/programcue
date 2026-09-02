@@ -357,7 +357,8 @@ export function SchedulePublicationDialog({
     preview.blockers.contentVisibility.length +
     preview.blockers.contentApproval.length +
     preview.blockers.unconfirmedSpeakers.length +
-    preview.blockers.publicDependencies.length;
+    preview.blockers.publicDependencies.length +
+    Number(Boolean(preview.notifications.problem));
   const changeCount =
     preview.changes.added.length +
     preview.changes.removed.length +
@@ -537,6 +538,46 @@ export function SchedulePublicationDialog({
             </ul>
           </div>
         ) : null}
+      </section>
+
+      <section aria-labelledby="schedule-publication-notifications">
+        <h3 id="schedule-publication-notifications">
+          Participant change email
+        </h3>
+        {!preview.notifications.enabled ? (
+          <div className="validation-item info">
+            <strong>Off for this event</strong>
+            <span>No participants will be emailed by this publication.</span>
+          </div>
+        ) : preview.notifications.problem ? (
+          <div className="validation-item error">
+            <strong>Notification setup needs attention</strong>
+            <span>{preview.notifications.problem}</span>
+          </div>
+        ) : preview.notifications.eligibleParticipantCount ? (
+          <div className="validation-item info">
+            <strong>
+              {preview.notifications.eligibleParticipantCount} participant
+              {preview.notifications.eligibleParticipantCount === 1 ? "" : "s"}{" "}
+              will be notified
+            </strong>
+            <span>
+              Changes across {preview.notifications.materialSessionCount}{" "}
+              session
+              {preview.notifications.materialSessionCount === 1 ? "" : "s"} will
+              be combined into one email per person after publication.
+            </span>
+          </div>
+        ) : (
+          <div className="validation-item ok">
+            <strong>No participant change email is needed</strong>
+            <span>
+              {preview.publishedVersionNumber
+                ? "No pending or confirmed participant is attached to a materially changed session."
+                : "The first schedule publication establishes the baseline and does not send change notifications."}
+            </span>
+          </div>
+        )}
       </section>
 
       <section aria-labelledby="schedule-publication-readiness">

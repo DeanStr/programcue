@@ -149,6 +149,7 @@ export async function loader({ request, context }: Route.LoaderArgs) {
     event,
     deliveryHealth,
     organisationCommunicationSettings,
+    scheduleChangeNotificationSetting,
   ] = await Promise.all([
     communicationService.listCentre(viewer, {
       filter: activeFilter ?? undefined,
@@ -165,6 +166,7 @@ export async function loader({ request, context }: Route.LoaderArgs) {
       period: requestedDeliveryPeriod === "lifetime" ? "lifetime" : "recent",
     }),
     new OrganisationCommunicationSettingsService(env).get(viewer),
+    communicationService.getScheduleChangeNotificationSetting(viewer),
   ]);
   const requestedTemplate = search.get("template");
   const selected =
@@ -258,6 +260,7 @@ export async function loader({ request, context }: Route.LoaderArgs) {
     canManageOrganisationCommunicationSettings:
       organisationCommunicationSettings.canManage,
     deliveryHealth,
+    scheduleChangeNotificationSetting,
     notice: persistedSave
       ? `Draft version ${selected.versionNumber} saved.`
       : "",
@@ -439,6 +442,28 @@ async function handleTemplateAutomationIntent({
       ok: true,
       intent,
       message: "Automatic reminder trigger is active.",
+    });
+  }
+  if (intent === "save-schedule-change-notifications") {
+    await service.saveScheduleChangeNotificationSetting(viewer, {
+      templateVersionId: String(form.get("templateVersionId") ?? ""),
+      enabled: form.get("enabled") === "true",
+    });
+    return data<ActionResult>({
+      ok: true,
+      intent,
+      message:
+        form.get("enabled") === "true"
+          ? "Published schedule changes will notify affected participants."
+          : "Published schedule-change notifications are disabled.",
+    });
+  }
+  if (intent === "disable-schedule-change-notifications") {
+    await service.disableScheduleChangeNotificationSetting(viewer);
+    return data<ActionResult>({
+      ok: true,
+      intent,
+      message: "Published schedule-change notifications are disabled.",
     });
   }
   if (intent === "enable-trigger" || intent === "disable-trigger") {

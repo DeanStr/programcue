@@ -43,11 +43,11 @@ const assignment = {
   weightedScore: 4.5,
 };
 
-function renderQueue() {
+function renderQueue(selectedAssignment = assignment) {
   const value = {
     loaderData: {
       sessions: [session],
-      assignments: [assignment],
+      assignments: [selectedAssignment],
       teams: [
         {
           id: "team-one",
@@ -64,7 +64,7 @@ function renderQueue() {
       reviewFilter: null,
     },
     activeRound: round,
-    activeRoundAssignments: [assignment],
+    activeRoundAssignments: [selectedAssignment],
     assignmentTargets: [
       {
         value: "team:team-one",
@@ -112,5 +112,18 @@ describe("session reviewer assignments", () => {
     expect(markup).toContain('value="person:person-available"');
     expect(markup).not.toContain('value="person:person-assigned"');
     expect(markup).not.toContain("Active-round session reviews");
+  });
+
+  it("does not render a returned assignment's abandoned draft score", () => {
+    const markup = renderQueue({
+      ...assignment,
+      status: "recused",
+      reviewStatus: "draft",
+      weightedScore: 1.25,
+    });
+
+    expect(markup).toContain("Jordan Lee</strong> · Recused");
+    expect(markup).not.toContain("1.25 / 5");
+    expect(markup).not.toContain("Reopen review");
   });
 });

@@ -229,4 +229,8 @@ export const representativeMergeValues: MergeValues = {
     "The reviewers appreciated the practical examples and suggested clarifying the intended audience.",
   "task.title": "Upload final presentation",
   "task.dueDate": "Sep 20, 2026, 5:00 PM (America/Toronto)",
+  "schedule.changes":
+    "Moved: Practical AI — Main stage, May 21, 10:00 AM → Studio, May 21, 11:00 AM",
+  "schedule.url":
+    "https://app.programcue.com/public/programme/future-of-events-2027",
 };

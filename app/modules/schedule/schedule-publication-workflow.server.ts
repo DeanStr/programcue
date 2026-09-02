@@ -4,8 +4,11 @@ import {
   type ScheduleCalendarFanoutMessage,
   scheduleCalendarFanoutMessageSchema,
 } from "~/modules/calendars/calendar-schema";
+import { CommunicationStateError } from "~/modules/communications/communication-service-shared";
+import { ScheduleChangeNotificationService } from "~/modules/communications/schedule-change-notification.server";
 import { validatePublishedSiteReferencesForSchedule } from "~/modules/public-site/public-site-publication-validation.server";
 import type { Viewer } from "~/platform/auth/authorize.server";
+import { isAtomicBatchGuardError } from "~/platform/database/atomic-batch-guard.server";
 import { WebhookService } from "~/platform/operations/webhook-service.server";
 import { scheduleConflictInsert } from "./schedule-conflict-statement.server";
 import {
@@ -15,6 +18,7 @@ import {
   SchedulePublicationBlockedError,
   ScheduleRevisionConflictError,
 } from "./schedule-errors";
+import { buildSchedulePublicationPreview } from "./schedule-publication-preview.server";
 import { SchedulePublicationReadiness } from "./schedule-publication-readiness.server";
 import { buildSchedulePublicationStatements } from "./schedule-publication-statements.server";
 import { schedulePublishSchema } from "./schedule-schema";
@@ -106,6 +110,24 @@ export class SchedulePublicationWorkflow {
     }
     const calendarOperationId = (response as { calendarOperationId: string })
       .calendarOperationId;
+    const notificationOperationIdValue = (
+      response as { notificationOperationId?: unknown }
+    ).notificationOperationId;
+    const notificationOperationId =
+      typeof notificationOperationIdValue === "string"
+        ? notificationOperationIdValue
+        : null;
+    const notificationEnabled =
+      (response as { notificationEnabled?: unknown }).notificationEnabled === 1;
+    const notificationRecipientCountValue = (
+      response as { notificationRecipientCount?: unknown }
+    ).notificationRecipientCount;
+    const notificationRecipientCount =
+      typeof notificationRecipientCountValue === "number" &&
+      Number.isSafeInteger(notificationRecipientCountValue) &&
+      notificationRecipientCountValue >= 0
+        ? notificationRecipientCountValue
+        : 0;
     const operation = await this.env.DB.prepare(
       `
       SELECT status, last_error AS lastError
@@ -121,6 +143,21 @@ export class SchedulePublicationWorkflow {
         "The completed schedule publication is missing its calendar fan-out operation.",
       );
     }
+    const notificationOperation = notificationOperationId
+      ? await this.env.DB.prepare(
+          `SELECT status, last_error AS lastError
+             FROM operation_jobs
+            WHERE id = ? AND event_id = ? AND organisation_id = ?
+              AND type = 'communication.send'`,
+        )
+          .bind(notificationOperationId, viewer.eventId, viewer.organisationId)
+          .first<{ status: string; lastError: string | null }>()
+      : null;
+    if (notificationOperationId && !notificationOperation) {
+      throw new Error(
+        "The completed schedule publication is missing its participant notification operation.",
+      );
+    }
     const queueFailed = operation.status === "queue_failed";
     return {
       published: true,
@@ -134,6 +171,28 @@ export class SchedulePublicationWorkflow {
             "The calendar fan-out Queue dispatch failed.")
           : null,
       },
+      notification: notificationOperationId
+        ? {
+            enabled: true,
+            recipientCount: notificationRecipientCount,
+            operationId: notificationOperationId,
+            status:
+              notificationOperation?.status === "queue_failed"
+                ? "queue_failed"
+                : "queued",
+            dispatchError:
+              notificationOperation?.status === "queue_failed"
+                ? (notificationOperation.lastError ??
+                  "The participant notification Queue dispatch failed.")
+                : null,
+          }
+        : {
+            enabled: notificationEnabled,
+            recipientCount: 0,
+            operationId: null,
+            status: notificationEnabled ? "not_needed" : "disabled",
+            dispatchError: null,
+          },
     };
   }
   async publishD1(
@@ -223,6 +282,32 @@ export class SchedulePublicationWorkflow {
     if (blockingConflicts.length)
       throw new SchedulePublicationBlockedError(blockingConflicts);
 
+    const publicationPreview = await buildSchedulePublicationPreview(
+      this.env,
+      viewer,
+      workspace,
+    );
+    if (!publicationPreview) throw new ScheduleNotFoundError();
+    const scheduleNotifications = new ScheduleChangeNotificationService(
+      this.env,
+    );
+    let notificationPreparation: Awaited<
+      ReturnType<ScheduleChangeNotificationService["prepare"]>
+    >;
+    try {
+      notificationPreparation = await scheduleNotifications.prepare(
+        viewer,
+        publicationPreview.publishedVersionNumber,
+        parsed.scheduleVersionId,
+        publicationPreview.changes,
+      );
+    } catch (error) {
+      if (error instanceof CommunicationStateError) {
+        throw new ScheduleConfigurationError(error.message);
+      }
+      throw error;
+    }
+
     if (workspace.event.repositoryProvider === "airtable") {
       await new AirtableProgrammeRepository(this.env).stagePublication(
         {
@@ -264,6 +349,10 @@ export class SchedulePublicationWorkflow {
         data: {
           scheduleVersionId: parsed.scheduleVersionId,
           calendarOperationId,
+          notificationOperationId:
+            notificationPreparation.plan?.operationId ?? null,
+          notificationRecipientCount:
+            notificationPreparation.plan?.recipientCount ?? 0,
         },
       },
       auditEventId,
@@ -282,6 +371,11 @@ export class SchedulePublicationWorkflow {
         calendarIdempotencyKey,
         calendarMessage,
         auditEventId,
+        notification: {
+          enabled: notificationPreparation.summary.enabled,
+          operationId: notificationPreparation.plan?.operationId ?? null,
+          recipientCount: notificationPreparation.plan?.recipientCount ?? 0,
+        },
         conflictInsert: (entryId, conflict, operationId) =>
           scheduleConflictInsert(
             this.env,
@@ -292,8 +386,42 @@ export class SchedulePublicationWorkflow {
             operationId,
           ),
       });
+    if (notificationPreparation.plan) {
+      statements.push(
+        ...scheduleNotifications.publicationStatements({
+          viewer: {
+            ...viewer,
+            personId: actor.personId ?? null,
+          },
+          actorId: actor.actorId ?? null,
+          scheduleVersionId: parsed.scheduleVersionId,
+          publicationOperationId: publishOperationId,
+          plan: notificationPreparation.plan,
+        }),
+      );
+    } else if (notificationPreparation.zeroRecipientGuard) {
+      statements.push(
+        scheduleNotifications.zeroRecipientPublicationGuardStatement({
+          viewer,
+          scheduleVersionId: parsed.scheduleVersionId,
+          publicationOperationId: publishOperationId,
+          guard: notificationPreparation.zeroRecipientGuard,
+        }),
+      );
+    }
     statements.push(...preparedWebhook.statements);
-    const results = await this.env.DB.batch(statements);
+    const results = await this.env.DB.batch(statements).catch((error) => {
+      if (
+        (notificationPreparation.plan ||
+          notificationPreparation.zeroRecipientGuard) &&
+        isAtomicBatchGuardError(error)
+      ) {
+        throw new ScheduleRevisionConflictError(
+          "Schedule publication evidence, participant eligibility, or outbound delivery configuration changed before publication. Review the publication preview and try again.",
+        );
+      }
+      throw error;
+    });
     const publishing = results[publishingIndex];
     if ((publishing?.meta.changes ?? 0) !== 1) {
       if (command) {
@@ -385,12 +513,68 @@ export class SchedulePublicationWorkflow {
         dispatchError,
       };
     }
+    let notification: SchedulePublicationResult["notification"] =
+      notificationPreparation.plan
+        ? {
+            enabled: true,
+            recipientCount: notificationPreparation.plan.recipientCount,
+            operationId: notificationPreparation.plan.operationId,
+            status: "queued",
+            dispatchError: null,
+          }
+        : {
+            enabled: notificationPreparation.summary.enabled,
+            recipientCount: 0,
+            operationId: null,
+            status: notificationPreparation.summary.enabled
+              ? "not_needed"
+              : "disabled",
+            dispatchError: null,
+          };
+    if (notificationPreparation.plan) {
+      try {
+        await operationsQueue.send(notificationPreparation.plan.message);
+      } catch (error) {
+        const dispatchError = (
+          error instanceof Error ? error.message : String(error)
+        ).slice(0, 2_000);
+        await this.env.DB.batch([
+          this.env.DB.prepare(
+            `UPDATE operation_jobs
+                SET status = 'queue_failed', last_error = ?,
+                    updated_at = unixepoch()
+              WHERE id = ? AND event_id = ? AND type = 'communication.send'
+                AND status = 'queued'`,
+          ).bind(
+            dispatchError,
+            notificationPreparation.plan.operationId,
+            viewer.eventId,
+          ),
+          this.env.DB.prepare(
+            `UPDATE communications
+                SET status = 'failed', updated_at = unixepoch()
+              WHERE id = ? AND event_id = ? AND operation_id = ?
+                AND status = 'queued'`,
+          ).bind(
+            notificationPreparation.plan.communicationId,
+            viewer.eventId,
+            notificationPreparation.plan.operationId,
+          ),
+        ]);
+        notification = {
+          ...notification,
+          status: "queue_failed",
+          dispatchError,
+        };
+      }
+    }
     await webhookService.dispatchPreparedEvent(preparedWebhook);
     return {
       published: true,
       scheduleVersionId: parsed.scheduleVersionId,
       changeSequence,
       calendar,
+      notification,
     };
   }
 }

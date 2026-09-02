@@ -309,3 +309,70 @@ export function ReviewConflictDialog() {
     </Dialog>
   ) : null;
 }
+
+export function ReviewAbstentionDialog() {
+  const {
+    workspace,
+    fetcher,
+    abstentionOpen,
+    setAbstentionOpen,
+    abstentionTriggerRef,
+    readOnly,
+    cancelAutosave,
+  } = useReviewWorkbenchModel();
+  return abstentionOpen && workspace.selected && !readOnly ? (
+    <Dialog
+      title="Cannot review this assignment"
+      description="Return the assignment without submitting a review."
+      onClose={() => setAbstentionOpen(false)}
+      returnFocus={abstentionTriggerRef}
+      footer={null}
+    >
+      <fetcher.Form
+        method="post"
+        className="stack"
+        onSubmit={() => {
+          cancelAutosave();
+          setAbstentionOpen(false);
+        }}
+      >
+        <input type="hidden" name="intent" value="abstain" />
+        <input
+          type="hidden"
+          name="assignmentId"
+          value={workspace.selected.id}
+        />
+        <label className="label">
+          Reason
+          <select className="select" name="reason" defaultValue="" required>
+            <option value="" disabled>
+              Choose a reason
+            </option>
+            <option value="insufficient_expertise">
+              Insufficient expertise
+            </option>
+            <option value="unavailable">Unavailable</option>
+            <option value="other">Other</option>
+          </select>
+        </label>
+        <label className="label">
+          Private note (optional)
+          <textarea className="textarea" name="note" maxLength={2000} />
+        </label>
+        <p className="help">
+          This resolves the assignment for your queue but reduces organizer
+          coverage. The private note is never shared with the applicant.
+        </p>
+        <Button
+          type="submit"
+          variant="danger"
+          disabled={fetcher.state !== "idle"}
+        >
+          {fetcher.state === "submitting"
+            ? "Returning…"
+            : "Return without review"}
+        </Button>
+      </fetcher.Form>
+    </Dialog>
+  ) : null;
+}

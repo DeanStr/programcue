@@ -29,6 +29,8 @@ const exportResources = [
   "rooms",
   "tracks",
   "tasks",
+  "participant-readiness",
+  "session-staffing",
   "audit",
 ] as const;
 

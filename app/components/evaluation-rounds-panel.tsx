@@ -367,7 +367,7 @@ export function EvaluationRoundsPanel() {
                         progress.pendingCount + progress.inProgressCount;
                       const percentage = progress.assignedCount
                         ? Math.round(
-                            (progress.completedCount / progress.assignedCount) *
+                            (progress.resolvedCount / progress.assignedCount) *
                               100,
                           )
                         : 0;
@@ -378,10 +378,11 @@ export function EvaluationRoundsPanel() {
                             <small className="subtle">
                               {" · "}
                               {progress.assignedCount} assigned ·{" "}
-                              {progress.completedCount} complete · {percentage}%
+                              {progress.completedCount} reviews submitted
                               {progress.recusedCount
-                                ? ` · ${progress.recusedCount} recused`
+                                ? ` · ${progress.recusedCount} returned`
                                 : ""}
+                              {` · ${percentage}% resolved`}
                             </small>
                           </span>
                           {loaderData.canPrepareReviewerReminders &&

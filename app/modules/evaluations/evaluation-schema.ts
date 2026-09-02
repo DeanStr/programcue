@@ -354,6 +354,12 @@ export const conflictDeclarationSchema = z.object({
     .max(2_000),
 });
 
+export const reviewAbstentionSchema = z.object({
+  assignmentId: z.string().trim().min(1),
+  reason: z.enum(["insufficient_expertise", "unavailable", "other"]),
+  note: z.string().trim().max(2_000).optional(),
+});
+
 export const evaluationDiscussionTargetSchema = z.object({
   roundId: z.string().trim().min(1).max(200),
   targetType: z.enum(["submission", "session"]),
@@ -719,4 +725,5 @@ export type ReviewDraftInput = z.infer<typeof reviewDraftSchema>;
 export type ConflictDeclarationInput = z.infer<
   typeof conflictDeclarationSchema
 >;
+export type ReviewAbstentionInput = z.infer<typeof reviewAbstentionSchema>;
 export type DecisionInput = z.infer<typeof decisionSchema>;

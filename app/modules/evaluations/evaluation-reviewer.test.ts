@@ -1084,6 +1084,125 @@ describe("evaluation vertical slice", () => {
       await resetEvaluationFixture();
     });
 
+    it("returns an assignment for a typed non-conflict reason without creating a conflict", async () => {
+      const { assignmentId, initialReview, service, testEnv } =
+        await prepareReviewerAiGenerationFixture(
+          `eval-abstention-${crypto.randomUUID()}`,
+        );
+      await service.saveReview(
+        evaluator,
+        completeReviewInput(assignmentId, initialReview.revision, "submit"),
+        "participant_ui",
+      );
+      await service.reopenReview(
+        admin,
+        {
+          assignmentId,
+          reason: "The reviewer needs to correct the submitted assessment.",
+          confirmed: true,
+        },
+        "admin_ui",
+      );
+
+      await service.abstain(
+        evaluator,
+        {
+          assignmentId,
+          reason: "insufficient_expertise",
+          note: "The specialist methodology falls outside my review area.",
+        },
+        "participant_ui",
+      );
+
+      expect(
+        await testEnv.DB.prepare(
+          `SELECT status, conflict_declared_at AS conflictDeclaredAt,
+                  abstention_reason AS abstentionReason,
+                  abstention_note AS abstentionNote,
+                  abstained_at IS NOT NULL AS hasAbstainedAt
+             FROM evaluator_assignments
+            WHERE id = ? AND event_id = ?`,
+        )
+          .bind(assignmentId, evaluator.eventId)
+          .first(),
+      ).toEqual({
+        status: "recused",
+        conflictDeclaredAt: null,
+        abstentionReason: "insufficient_expertise",
+        abstentionNote:
+          "The specialist methodology falls outside my review area.",
+        hasAbstainedAt: 1,
+      });
+      expect(
+        await testEnv.DB.prepare(
+          `SELECT COUNT(*) AS count FROM evaluator_conflicts conflict
+            JOIN evaluator_assignments assignment
+              ON assignment.round_id = conflict.round_id
+             AND assignment.evaluator_person_id = conflict.evaluator_person_id
+             AND assignment.submission_id IS conflict.submission_id
+             AND assignment.session_id IS conflict.session_id
+           WHERE assignment.id = ? AND assignment.event_id = ?`,
+        )
+          .bind(assignmentId, evaluator.eventId)
+          .first(),
+      ).toEqual({ count: 0 });
+      expect(
+        await testEnv.DB.prepare(
+          `SELECT action, json_extract(metadata_json, '$.reason') AS reason,
+                  instr(metadata_json, ?) AS noteLeak
+             FROM audit_events
+            WHERE event_id = ? AND entity_id = ?
+              AND action = 'review.abstained'`,
+        )
+          .bind(
+            "The specialist methodology falls outside my review area.",
+            evaluator.eventId,
+            assignmentId,
+          )
+          .first(),
+      ).toEqual({
+        action: "review.abstained",
+        reason: "insufficient_expertise",
+        noteLeak: 0,
+      });
+      await expect(
+        testEnv.DB.prepare(
+          `SELECT status, weighted_score AS weightedScore, recommendation,
+                  private_notes AS privateNotes
+             FROM reviews
+            WHERE assignment_id = ? AND event_id = ?`,
+        )
+          .bind(assignmentId, evaluator.eventId)
+          .first(),
+      ).resolves.toEqual({
+        status: "reopened",
+        weightedScore: 4,
+        recommendation: "accept",
+        privateNotes: "Atomic batch test.",
+      });
+      const adminWorkspace = await service.getAdminWorkspace(admin);
+      expect(
+        adminWorkspace.assignments.find(
+          (assignment) => assignment.id === assignmentId,
+        ),
+      ).toMatchObject({
+        status: "recused",
+        reviewStatus: "reopened",
+        scoresJson: null,
+        weightedScore: null,
+        recommendation: null,
+        recommendationLabel: null,
+        confidence: null,
+        submitterFeedback: null,
+        privateNotes: null,
+      });
+      expect(adminWorkspace.reviewCyclePreview).toMatchObject({
+        unfinishedAssignmentCount: 0,
+        unfinishedReviewCount: 0,
+      });
+      await resetEvaluationFixture();
+    });
+
     it("records the explicit ingress origin for reviewer and manager actions", async () => {
       const { assignmentId, initialReview, service } =
         await prepareReviewerAiGenerationFixture(

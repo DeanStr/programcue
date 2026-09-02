@@ -383,7 +383,7 @@ describe("schedule publication preview", () => {
     });
   });
 
-  it("does not list private session edits as public content", async () => {
+  it("lists only a private session title edit as notification content", async () => {
     const service = new ScheduleService(scheduleTestEnv);
     const publishedId = await service.createDraft(viewer);
     let workspace = await service.getWorkspace(viewer);
@@ -438,7 +438,19 @@ describe("schedule publication preview", () => {
       viewer,
       workspace,
     );
-    expect(preview?.changes.content).toEqual([]);
+    expect(preview?.changes.content).toEqual([
+      {
+        sessionId: "schedule-test-one",
+        title: "Internal only title",
+        fields: [
+          {
+            field: "title",
+            before: "First test session",
+            after: "Internal only title",
+          },
+        ],
+      },
+    ]);
     expect(preview?.changes.visibility).toEqual([
       {
         sessionId: "schedule-test-one",
@@ -447,6 +459,7 @@ describe("schedule publication preview", () => {
         to: "private",
       },
     ]);
+    expect(preview?.notifications.materialSessionCount).toBe(1);
   });
 
   it("excerpts long public description changes", async () => {

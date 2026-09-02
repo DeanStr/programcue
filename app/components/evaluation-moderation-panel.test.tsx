@@ -50,4 +50,50 @@ describe("evaluation moderation reviewer outcomes", () => {
     expect(markup).toContain("Strong accept");
     expect(markup).not.toContain("strong_accept");
   });
+
+  it("does not render abandoned draft outcomes for a returned assignment", () => {
+    const activeRound = { id: "round-a", name: "Initial review" };
+    const model = {
+      loaderData: {
+        submissions: [
+          {
+            id: "submission-a",
+            title: "A proposal",
+            status: "in_review",
+            reviewableInCurrentCycle: true,
+          },
+        ],
+        moderations: [],
+      },
+      activeRound,
+      activeRoundAssignments: [
+        {
+          id: "assignment-a",
+          submissionId: "submission-a",
+          evaluatorName: "A reviewer",
+          teamName: null,
+          status: "recused",
+          reviewStatus: "draft",
+          weightedScore: 1.25,
+          recommendation: "reject",
+          recommendationLabel: "Reject draft signal",
+          conflictNotes: null,
+          abstentionReason: "unavailable",
+          abstentionNote: null,
+        },
+      ],
+      setModerationSubmissionId: () => undefined,
+      setReopenAssignmentId: () => undefined,
+    } as unknown as EvaluationAdminModel;
+
+    const markup = renderToStaticMarkup(
+      <EvaluationAdminModelContext.Provider value={model}>
+        <EvaluationModerationPanel />
+      </EvaluationAdminModelContext.Provider>,
+    );
+
+    expect(markup).toContain("Returned: unavailable");
+    expect(markup).not.toContain("1.25 / 5");
+    expect(markup).not.toContain("Reject draft signal");
+  });
 });

@@ -83,7 +83,10 @@ test("a reviewer denied an administrator page receives a usable recovery path", 
   ).toBeVisible();
 });
 
-test("review submission confirmation preserves context", async ({ page }) => {
+test("review submission and return controls preserve context", async ({
+  page,
+  request,
+}) => {
   test.setTimeout(60_000);
   await page.context().addCookies([
     {
@@ -211,6 +214,11 @@ test("review submission confirmation preserves context", async ({ page }) => {
   await conflict.getByRole("button", { name: "Close" }).click();
   await expect(conflict).toBeHidden();
   await expect(declare).toBeFocused();
+  await expect(page.getByRole("button", { name: "Cannot review" })).toHaveCount(
+    0,
+  );
+
+  await page.getByRole("radio", { name: /No conflict/ }).check();
   await expect(page.locator(".review-save-state")).toHaveText("Saved");
   await page.reload();
   await page.locator("body[data-hydrated='true']").waitFor();
@@ -222,6 +230,35 @@ test("review submission confirmation preserves context", async ({ page }) => {
         .getByRole("radio", { name: "4", exact: true }),
     ).toBeChecked();
   }
+  const currentQueueItem = page
+    .getByRole("navigation", { name: "Assigned review sources" })
+    .locator('a[aria-current="page"]');
+  const returnedAssignmentHref = await currentQueueItem.getAttribute("href");
+  expect(returnedAssignmentHref).not.toBeNull();
+
+  const cannotReview = page.getByRole("button", { name: "Cannot review" });
+  await cannotReview.click();
+  const abstention = page.getByRole("dialog", {
+    name: "Cannot review this assignment",
+  });
+  await expect(abstention).toContainText(
+    "Return the assignment without submitting a review",
+  );
+  await abstention.getByLabel("Reason").selectOption("unavailable");
+  await abstention
+    .getByLabel("Private note (optional)")
+    .fill("Unavailable for the remainder of this review cycle.");
+  await abstention
+    .getByRole("button", { name: "Return without review" })
+    .click();
+  await expect(abstention).toBeHidden();
+  await expect(queueItems).toHaveCount(1);
+  await expect(
+    page
+      .getByRole("navigation", { name: "Assigned review sources" })
+      .locator(`a[href="${returnedAssignmentHref}"]`),
+  ).toHaveCount(0);
+  await resetDemoEvent(request);
 });
 
 test("review source remains visible at the final scoring controls", async ({

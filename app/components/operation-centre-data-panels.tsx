@@ -155,7 +155,10 @@ export function DataExportPanel({
               value={loaderData.exportIntents[resource]}
             />
             <Button type="submit">
-              {resource.replace(/^./, (letter) => letter.toUpperCase())} CSV
+              {resource
+                .replaceAll("-", " ")
+                .replace(/^./, (letter) => letter.toUpperCase())}{" "}
+              CSV
             </Button>
           </Form>
         ))}

@@ -1,10 +1,16 @@
 import { env } from "cloudflare:test";
 import { beforeEach, describe, expect, it } from "vitest";
+import { CommunicationService } from "~/modules/communications/communication-service.server";
+import { ScheduleChangeNotificationService } from "~/modules/communications/schedule-change-notification.server";
 import { ContentManagementService } from "~/modules/content/content-management-service.server";
 import { CANONICAL_EVENT_FILE_POLICY_JSON } from "~/modules/files/file-policy";
 import { PublicProgrammeService } from "~/modules/programme/public-programme-service.server";
 import type { Viewer } from "~/platform/auth/authorize.server";
 import { processScheduleCalendarFanout } from "../../../workers/communications-queue";
+import {
+  buildSchedulePublicationPreview,
+  type SchedulePublicationPreview,
+} from "./schedule-publication-preview.server";
 import {
   createScheduleReviewToken,
   hashScheduleReviewToken,
@@ -22,6 +28,704 @@ import { eventLocalTimeEpoch } from "./schedule-time";
 beforeEach(prepareScheduleServiceTest);
 
 describe("schedule publication workflows", () => {
+  function manyMaterialChanges(): SchedulePublicationPreview["changes"] {
+    return {
+      added: Array.from({ length: 99 }, (_, index) => ({
+        sessionId: `changed-session-${index}`,
+        title: `Changed session ${index}`,
+      })),
+      removed: [],
+      moved: [],
+      visibility: [],
+      content: [],
+    };
+  }
+
+  async function enableScheduleChangeNotifications(
+    testEnv: CloudflareEnvironment,
+  ) {
+    await env.DB.prepare(
+      `INSERT OR IGNORE INTO sender_profiles (
+         id, event_id, name, from_name, from_email, reply_to_email,
+         provider, status, created_at, updated_at
+       ) VALUES (
+         'schedule-change-test-sender', ?, 'Schedule change test sender',
+         'Program Cue', 'events@example.com', 'reply@example.com',
+         'resend', 'verified', unixepoch(), unixepoch()
+       )`,
+    )
+      .bind(viewer.eventId)
+      .run();
+    await env.DB.prepare(
+      `UPDATE sender_profiles
+          SET provider = 'resend', status = 'verified'
+        WHERE id = 'schedule-change-test-sender' AND event_id = ?`,
+    )
+      .bind(viewer.eventId)
+      .run();
+    const communications = new CommunicationService(testEnv);
+    const saved = await communications.saveTemplate(viewer, {
+      name: `Schedule change ${crypto.randomUUID()}`,
+      category: "schedule",
+      subject: "Your {{event.name}} schedule changed",
+      content: {
+        body: "Hello {{recipient.firstName}},\n\n{{schedule.changes}}\n\nView the programme: {{schedule.url}}",
+        physicalAddress: "100 Programme Way, Toronto",
+      },
+    });
+    await communications.publishTemplate(viewer, saved.versionId);
+    await communications.saveScheduleChangeNotificationSetting(viewer, {
+      templateVersionId: saved.versionId,
+      enabled: true,
+    });
+    return saved.versionId;
+  }
+
+  async function createPublishedNotificationBaseline() {
+    const startsAt = Date.parse("2027-05-22T13:00:00Z") / 1_000;
+    const endsAt = startsAt + 3_600;
+    await env.DB.batch([
+      env.DB.prepare(
+        `INSERT INTO schedule_versions (
+           id, event_id, version_number, name, status, revision,
+           created_by_person_id, created_at, published_at
+         ) VALUES (
+           'schedule-notification-baseline', ?, 1,
+           'Published notification baseline', 'published', 1, ?,
+           unixepoch(), unixepoch()
+         )`,
+      ).bind(viewer.eventId, viewer.personId),
+      env.DB.prepare(
+        `UPDATE schedule_session_contents
+            SET content_status = 'approved', approved_by_person_id = ?,
+                approved_at = unixepoch(), approval_source = 'editorial'
+          WHERE schedule_version_id = 'schedule-notification-baseline'
+            AND event_id = ? AND session_id = 'schedule-test-one'`,
+      ).bind(viewer.personId, viewer.eventId),
+      env.DB.prepare(
+        `INSERT INTO schedule_entries (
+           id, event_id, schedule_version_id, session_id, room_id,
+           starts_at, ends_at, revision, created_at, updated_at
+         ) VALUES (
+           'schedule-notification-baseline-entry', ?,
+           'schedule-notification-baseline', 'schedule-test-one', 'main',
+           ?, ?, 1, unixepoch(), unixepoch()
+         )`,
+      ).bind(viewer.eventId, startsAt, endsAt),
+      env.DB.prepare(
+        `UPDATE sessions SET status = 'published'
+          WHERE id = 'schedule-test-one' AND event_id = ?`,
+      ).bind(viewer.eventId),
+      env.DB.prepare(
+        `UPDATE events SET programme_published_at = unixepoch()
+          WHERE id = ? AND organisation_id = ?`,
+      ).bind(viewer.eventId, viewer.organisationId),
+      env.DB.prepare(
+        `INSERT OR IGNORE INTO session_speakers (
+           session_id, event_id, person_id, position, role_label,
+           participation_status, participation_confirmed_at, visibility
+         ) VALUES (
+           'schedule-test-one', ?, 'person-demo-submitter', 1, 'Moderator',
+           'confirmed', unixepoch(), 'public'
+         )`,
+      ).bind(viewer.eventId),
+      env.DB.prepare(
+        `INSERT OR IGNORE INTO session_speakers (
+           session_id, event_id, person_id, position, role_label,
+           participation_status, participation_confirmed_at, visibility
+         ) VALUES (
+           'schedule-test-one', ?, 'person-demo-evaluator', 2, 'Chair',
+           'confirmed', unixepoch(), 'public'
+         )`,
+      ).bind(viewer.eventId),
+      env.DB.prepare(
+        `UPDATE session_participant_roles
+            SET participation_status = 'pending',
+                participation_confirmed_at = NULL,
+                participation_declined_at = NULL,
+                participation_decline_reason = NULL,
+                participation_revision = participation_revision + 1,
+                updated_at = unixepoch()
+          WHERE event_id = ? AND session_id = 'schedule-test-one'
+            AND person_id = 'person-demo-submitter'`,
+      ).bind(viewer.eventId),
+      env.DB.prepare(
+        `UPDATE session_participant_roles
+            SET participation_status = 'declined',
+                participation_confirmed_at = NULL,
+                participation_declined_at = unixepoch(),
+                participation_decline_reason = 'Unavailable',
+                participation_revision = participation_revision + 1,
+                updated_at = unixepoch()
+          WHERE event_id = ? AND session_id = 'schedule-test-one'
+            AND person_id = 'person-demo-evaluator'`,
+      ).bind(viewer.eventId),
+    ]);
+    return { startsAt, endsAt };
+  }
+
+  it("persists one aggregated change email per pending or confirmed participant on revision publication", async () => {
+    const queued: unknown[] = [];
+    const testEnv = new Proxy(scheduleTestEnv, {
+      get(target, property, receiver) {
+        if (property === "OPERATIONS_QUEUE") {
+          return {
+            send: async (message: unknown) => {
+              queued.push(message);
+              return {
+                metadata: { metrics: { backlogCount: 0, backlogBytes: 0 } },
+              };
+            },
+          } satisfies Pick<Queue, "send">;
+        }
+        return Reflect.get(target, property, receiver);
+      },
+    });
+    await enableScheduleChangeNotifications(testEnv);
+    const baseline = await createPublishedNotificationBaseline();
+    const service = new ScheduleService(testEnv);
+    const versionId = await service.createDraft(viewer);
+    let workspace = await service.getWorkspace(viewer);
+    await service.place(viewer, {
+      scheduleVersionId: versionId,
+      scheduleRevision: workspace.version!.revision,
+      sessionId: "schedule-test-one",
+      roomId: "301a",
+      startsAt: baseline.startsAt + 3_600,
+      endsAt: baseline.endsAt + 3_600,
+    });
+    workspace = await service.getWorkspace(viewer);
+
+    expect(workspace.version?.status).toBe("draft");
+    await expect(
+      buildSchedulePublicationPreview(testEnv, viewer, workspace),
+    ).resolves.toMatchObject({
+      notifications: {
+        enabled: true,
+        materialSessionCount: 1,
+        eligibleParticipantCount: 2,
+        ready: true,
+        problem: null,
+      },
+    });
+    const publication = await service.publish(viewer, {
+      scheduleVersionId: versionId,
+      scheduleRevision: workspace.version!.revision,
+    });
+
+    expect(publication.notification).toMatchObject({
+      enabled: true,
+      recipientCount: 2,
+      status: "queued",
+      dispatchError: null,
+    });
+    expect(queued).toEqual([
+      expect.objectContaining({ type: "schedule.calendar_fanout" }),
+      expect.objectContaining({
+        type: "communication.send",
+        operationId: publication.notification.operationId,
+      }),
+    ]);
+    const deliveries = await env.DB.prepare(
+      `SELECT delivery.person_id AS personId,
+              delivery.source_values_json AS sourceValuesJson,
+              delivery.status
+         FROM communication_deliveries delivery
+        WHERE delivery.communication_id = (
+          SELECT communication.id FROM communications communication
+           WHERE communication.operation_id = ?
+        )
+        ORDER BY delivery.person_id`,
+    )
+      .bind(publication.notification.operationId)
+      .all<{
+        personId: string;
+        sourceValuesJson: string;
+        status: string;
+      }>();
+    expect(deliveries.results.map((delivery) => delivery.personId)).toEqual([
+      "person-demo-speaker",
+      "person-demo-submitter",
+    ]);
+    expect(deliveries.results).not.toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ personId: "person-demo-evaluator" }),
+      ]),
+    );
+    for (const delivery of deliveries.results) {
+      expect(delivery.status).toBe("queued");
+      expect(
+        JSON.parse(delivery.sourceValuesJson)["schedule.changes"],
+      ).toContain("Moved: First test session");
+    }
+  });
+
+  it("does not query recipients for 99 changed sessions while notifications are disabled", async () => {
+    let recipientQueryCount = 0;
+    const trackingDb = new Proxy(env.DB, {
+      get(target, property, receiver) {
+        if (property !== "prepare")
+          return Reflect.get(target, property, receiver);
+        return (query: string) => {
+          if (query.includes("FROM session_participant_roles role"))
+            recipientQueryCount += 1;
+          return target.prepare(query);
+        };
+      },
+    });
+    const testEnv = new Proxy(scheduleTestEnv, {
+      get(target, property, receiver) {
+        if (property === "DB") return trackingDb;
+        return Reflect.get(target, property, receiver);
+      },
+    });
+
+    await expect(
+      new ScheduleChangeNotificationService(testEnv).inspect(
+        viewer,
+        1,
+        manyMaterialChanges(),
+      ),
+    ).resolves.toEqual({
+      enabled: false,
+      materialSessionCount: 99,
+      eligibleParticipantCount: 0,
+      ready: true,
+      problem: null,
+    });
+    expect(recipientQueryCount).toBe(0);
+  });
+
+  it("queries 99 changed sessions with one JSON binding when notifications are enabled", async () => {
+    await enableScheduleChangeNotifications(scheduleTestEnv);
+
+    await expect(
+      new ScheduleChangeNotificationService(scheduleTestEnv).inspect(
+        viewer,
+        1,
+        manyMaterialChanges(),
+      ),
+    ).resolves.toEqual({
+      enabled: true,
+      materialSessionCount: 99,
+      eligibleParticipantCount: 0,
+      ready: true,
+      problem: null,
+    });
+  });
+
+  it("rejects invalid enabled notification configuration without eligible recipients", async () => {
+    const versionId = await enableScheduleChangeNotifications(scheduleTestEnv);
+    await env.DB.prepare(
+      `UPDATE communication_template_versions
+          SET status = 'draft'
+        WHERE id = ? AND event_id = ?`,
+    )
+      .bind(versionId, viewer.eventId)
+      .run();
+    const notifications = new ScheduleChangeNotificationService(
+      scheduleTestEnv,
+    );
+
+    await expect(
+      notifications.inspect(viewer, 1, manyMaterialChanges()),
+    ).resolves.toMatchObject({
+      enabled: true,
+      materialSessionCount: 99,
+      eligibleParticipantCount: 0,
+      ready: false,
+      problem: expect.stringMatching(
+        /active published schedule email template/i,
+      ),
+    });
+    await expect(
+      notifications.prepare(
+        viewer,
+        1,
+        crypto.randomUUID(),
+        manyMaterialChanges(),
+      ),
+    ).rejects.toThrow(/active published schedule email template/i);
+  });
+
+  it("rolls back a failed notification-setting update without recording false audit evidence", async () => {
+    const versionId = await enableScheduleChangeNotifications(scheduleTestEnv);
+    const auditBefore = await env.DB.prepare(
+      `SELECT COUNT(*) AS count
+         FROM audit_events
+        WHERE event_id = ?
+          AND action = 'communication.schedule_change_setting.saved'`,
+    )
+      .bind(viewer.eventId)
+      .first<{ count: number }>();
+    let raced = false;
+    const racingDb = new Proxy(env.DB, {
+      get(target, property, receiver) {
+        if (property !== "batch")
+          return Reflect.get(target, property, receiver);
+        return async (statements: D1PreparedStatement[]) => {
+          raced = true;
+          await target
+            .prepare(
+              `UPDATE communication_template_versions
+                  SET status = 'draft'
+                WHERE id = ? AND event_id = ?`,
+            )
+            .bind(versionId, viewer.eventId)
+            .run();
+          return target.batch(statements);
+        };
+      },
+    });
+    const racingEnv = new Proxy(scheduleTestEnv, {
+      get(target, property, receiver) {
+        if (property === "DB") return racingDb;
+        return Reflect.get(target, property, receiver);
+      },
+    });
+
+    try {
+      await expect(
+        new CommunicationService(
+          racingEnv,
+        ).saveScheduleChangeNotificationSetting(viewer, {
+          templateVersionId: versionId,
+          enabled: false,
+        }),
+      ).rejects.toThrow(/changed before it could be saved/i);
+      expect(raced).toBe(true);
+      await expect(
+        env.DB.prepare(
+          `SELECT enabled FROM communication_triggers
+            WHERE event_id = ? AND trigger_type = 'schedule_published'`,
+        )
+          .bind(viewer.eventId)
+          .first(),
+      ).resolves.toEqual({ enabled: 1 });
+      await expect(
+        env.DB.prepare(
+          `SELECT COUNT(*) AS count
+             FROM audit_events
+            WHERE event_id = ?
+              AND action = 'communication.schedule_change_setting.saved'`,
+        )
+          .bind(viewer.eventId)
+          .first(),
+      ).resolves.toEqual(auditBefore);
+    } finally {
+      await env.DB.prepare(
+        `UPDATE communication_template_versions
+            SET status = 'published'
+          WHERE id = ? AND event_id = ?`,
+      )
+        .bind(versionId, viewer.eventId)
+        .run();
+    }
+  });
+
+  it("records one disable audit and rejects a repeated disable without another audit", async () => {
+    await enableScheduleChangeNotifications(scheduleTestEnv);
+    const communications = new CommunicationService(scheduleTestEnv);
+
+    await communications.disableScheduleChangeNotificationSetting(viewer);
+    await expect(
+      communications.disableScheduleChangeNotificationSetting(viewer),
+    ).rejects.toThrow(/already disabled/i);
+
+    await expect(
+      env.DB.prepare(
+        `SELECT COUNT(*) AS count
+           FROM audit_events
+          WHERE event_id = ?
+            AND action = 'communication.schedule_change_setting.disabled'`,
+      )
+        .bind(viewer.eventId)
+        .first(),
+    ).resolves.toEqual({ count: 1 });
+  });
+
+  it("aborts publication when a participant becomes notification-eligible after preview", async () => {
+    await enableScheduleChangeNotifications(scheduleTestEnv);
+    const baseline = await createPublishedNotificationBaseline();
+    const service = new ScheduleService(scheduleTestEnv);
+    const versionId = await service.createDraft(viewer);
+    let workspace = await service.getWorkspace(viewer);
+    await service.place(viewer, {
+      scheduleVersionId: versionId,
+      scheduleRevision: workspace.version!.revision,
+      sessionId: "schedule-test-one",
+      roomId: "301a",
+      startsAt: baseline.startsAt + 3_600,
+      endsAt: baseline.endsAt + 3_600,
+    });
+    workspace = await service.getWorkspace(viewer);
+    const latePersonId = `schedule-late-recipient-${crypto.randomUUID()}`;
+    let raced = false;
+    const racingDb = new Proxy(env.DB, {
+      get(target, property, receiver) {
+        if (property !== "batch")
+          return Reflect.get(target, property, receiver);
+        return async (statements: D1PreparedStatement[]) => {
+          raced = true;
+          await target.batch([
+            target
+              .prepare(
+                `INSERT INTO people (
+                   id, email, display_name, profile_status, created_at, updated_at
+                 ) VALUES (?, ?, 'Late notification recipient', 'published',
+                           unixepoch(), unixepoch())`,
+              )
+              .bind(latePersonId, `${latePersonId}@example.com`),
+            target
+              .prepare(
+                `INSERT INTO session_speakers (
+                   session_id, event_id, person_id, position, role_label,
+                   participation_status, participation_confirmed_at, visibility
+                 ) VALUES (
+                   'schedule-test-one', ?, ?, 99, 'Late participant',
+                   'confirmed', unixepoch(), 'public'
+                 )`,
+              )
+              .bind(viewer.eventId, latePersonId),
+          ]);
+          return target.batch(statements);
+        };
+      },
+    });
+    const racingEnv = new Proxy(scheduleTestEnv, {
+      get(target, property, receiver) {
+        if (property === "DB") return racingDb;
+        return Reflect.get(target, property, receiver);
+      },
+    });
+
+    try {
+      await expect(
+        new ScheduleService(racingEnv).publish(viewer, {
+          scheduleVersionId: versionId,
+          scheduleRevision: workspace.version!.revision,
+        }),
+      ).rejects.toThrow(/participant eligibility/i);
+      expect(raced).toBe(true);
+      await expect(
+        env.DB.prepare(
+          `SELECT status FROM schedule_versions
+            WHERE id = ? AND event_id = ?`,
+        )
+          .bind(versionId, viewer.eventId)
+          .first(),
+      ).resolves.toEqual({ status: "draft" });
+    } finally {
+      await env.DB.prepare(
+        `DELETE FROM session_speakers
+          WHERE event_id = ? AND session_id = 'schedule-test-one'
+            AND person_id = ?`,
+      )
+        .bind(viewer.eventId, latePersonId)
+        .run();
+      await env.DB.prepare("DELETE FROM people WHERE id = ?")
+        .bind(latePersonId)
+        .run();
+    }
+  });
+
+  it("aborts publication when the first notification recipient becomes eligible during publication", async () => {
+    await enableScheduleChangeNotifications(scheduleTestEnv);
+    const baseline = await createPublishedNotificationBaseline();
+    await env.DB.prepare(
+      `UPDATE session_participant_roles
+          SET participation_status = 'declined',
+              participation_confirmed_at = NULL,
+              participation_declined_at = unixepoch(),
+              participation_decline_reason = 'Unavailable',
+              participation_revision = participation_revision + 1,
+              updated_at = unixepoch()
+        WHERE event_id = ? AND session_id = 'schedule-test-one'
+          AND person_id IN ('person-demo-speaker', 'person-demo-submitter')`,
+    )
+      .bind(viewer.eventId)
+      .run();
+    const service = new ScheduleService(scheduleTestEnv);
+    const versionId = await service.createDraft(viewer);
+    let workspace = await service.getWorkspace(viewer);
+    await service.place(viewer, {
+      scheduleVersionId: versionId,
+      scheduleRevision: workspace.version!.revision,
+      sessionId: "schedule-test-one",
+      roomId: "301a",
+      startsAt: baseline.startsAt + 3_600,
+      endsAt: baseline.endsAt + 3_600,
+    });
+    workspace = await service.getWorkspace(viewer);
+    await expect(
+      buildSchedulePublicationPreview(scheduleTestEnv, viewer, workspace),
+    ).resolves.toMatchObject({
+      notifications: { enabled: true, eligibleParticipantCount: 0 },
+    });
+
+    const latePersonId = `schedule-first-late-recipient-${crypto.randomUUID()}`;
+    let raced = false;
+    const racingDb = new Proxy(env.DB, {
+      get(target, property, receiver) {
+        if (property !== "batch")
+          return Reflect.get(target, property, receiver);
+        return async (statements: D1PreparedStatement[]) => {
+          raced = true;
+          await target.batch([
+            target
+              .prepare(
+                `INSERT INTO people (
+                   id, email, display_name, profile_status, created_at, updated_at
+                 ) VALUES (?, ?, 'First late notification recipient',
+                           'published', unixepoch(), unixepoch())`,
+              )
+              .bind(latePersonId, `${latePersonId}@example.com`),
+            target
+              .prepare(
+                `INSERT INTO session_speakers (
+                   session_id, event_id, person_id, position, role_label,
+                   participation_status, participation_confirmed_at, visibility
+                 ) VALUES (
+                   'schedule-test-one', ?, ?, 100, 'Late participant',
+                   'confirmed', unixepoch(), 'public'
+                 )`,
+              )
+              .bind(viewer.eventId, latePersonId),
+          ]);
+          return target.batch(statements);
+        };
+      },
+    });
+    const racingEnv = new Proxy(scheduleTestEnv, {
+      get(target, property, receiver) {
+        if (property === "DB") return racingDb;
+        return Reflect.get(target, property, receiver);
+      },
+    });
+
+    try {
+      await expect(
+        new ScheduleService(racingEnv).publish(viewer, {
+          scheduleVersionId: versionId,
+          scheduleRevision: workspace.version!.revision,
+        }),
+      ).rejects.toThrow(/participant eligibility/i);
+      expect(raced).toBe(true);
+      await expect(
+        env.DB.prepare(
+          `SELECT status FROM schedule_versions
+            WHERE id = ? AND event_id = ?`,
+        )
+          .bind(versionId, viewer.eventId)
+          .first(),
+      ).resolves.toEqual({ status: "draft" });
+    } finally {
+      await env.DB.prepare(
+        `UPDATE session_participant_roles
+            SET participation_status = CASE person_id
+                  WHEN 'person-demo-speaker' THEN 'confirmed'
+                  ELSE 'pending'
+                END,
+                participation_confirmed_at = CASE person_id
+                  WHEN 'person-demo-speaker' THEN unixepoch()
+                  ELSE NULL
+                END,
+                participation_declined_at = NULL,
+                participation_decline_reason = NULL,
+                participation_revision = participation_revision + 1,
+                updated_at = unixepoch()
+          WHERE event_id = ? AND session_id = 'schedule-test-one'
+            AND person_id IN ('person-demo-speaker', 'person-demo-submitter')`,
+      )
+        .bind(viewer.eventId)
+        .run();
+      await env.DB.prepare(
+        `DELETE FROM session_speakers
+          WHERE event_id = ? AND session_id = 'schedule-test-one'
+            AND person_id = ?`,
+      )
+        .bind(viewer.eventId, latePersonId)
+        .run();
+      await env.DB.prepare("DELETE FROM people WHERE id = ?")
+        .bind(latePersonId)
+        .run();
+    }
+  });
+
+  it("keeps a published revision committed and records retryable state when only change-email dispatch fails", async () => {
+    const testEnv = new Proxy(scheduleTestEnv, {
+      get(target, property, receiver) {
+        if (property === "OPERATIONS_QUEUE") {
+          return {
+            send: async (message: unknown) => {
+              if (
+                message &&
+                typeof message === "object" &&
+                "type" in message &&
+                message.type === "communication.send"
+              ) {
+                throw new Error("temporary notification Queue failure");
+              }
+              return {
+                metadata: { metrics: { backlogCount: 0, backlogBytes: 0 } },
+              };
+            },
+          } satisfies Pick<Queue, "send">;
+        }
+        return Reflect.get(target, property, receiver);
+      },
+    });
+    await enableScheduleChangeNotifications(testEnv);
+    const baseline = await createPublishedNotificationBaseline();
+    const service = new ScheduleService(testEnv);
+    const versionId = await service.createDraft(viewer);
+    let workspace = await service.getWorkspace(viewer);
+    const entry = workspace.entries.find(
+      (candidate) => candidate.sessionId === "schedule-test-one",
+    )!;
+    await service.place(viewer, {
+      scheduleVersionId: versionId,
+      scheduleRevision: workspace.version!.revision,
+      sessionId: entry.sessionId,
+      roomId: entry.roomId,
+      startsAt: baseline.startsAt + 7_200,
+      endsAt: baseline.endsAt + 7_200,
+    });
+    workspace = await service.getWorkspace(viewer);
+    const publication = await service.publish(viewer, {
+      scheduleVersionId: versionId,
+      scheduleRevision: workspace.version!.revision,
+    });
+
+    expect(publication.notification).toMatchObject({
+      enabled: true,
+      recipientCount: 2,
+      status: "queue_failed",
+      dispatchError: "temporary notification Queue failure",
+    });
+    await expect(
+      env.DB.prepare(
+        `SELECT status FROM schedule_versions WHERE id = ? AND event_id = ?`,
+      )
+        .bind(versionId, viewer.eventId)
+        .first(),
+    ).resolves.toEqual({ status: "published" });
+    await expect(
+      env.DB.prepare(
+        `SELECT operation.status, communication.status AS communicationStatus
+           FROM operation_jobs operation
+           JOIN communications communication
+             ON communication.operation_id = operation.id
+          WHERE operation.id = ? AND operation.event_id = ?`,
+      )
+        .bind(publication.notification.operationId, viewer.eventId)
+        .first(),
+    ).resolves.toEqual({
+      status: "queue_failed",
+      communicationStatus: "failed",
+    });
+  });
+
   it("keeps the live published programme intact while a published session moves in a draft", async () => {
     const schedule = new ScheduleService(scheduleTestEnv);
     const publicProgramme = new PublicProgrammeService(

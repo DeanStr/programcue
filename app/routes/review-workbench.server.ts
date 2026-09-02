@@ -108,6 +108,7 @@ export async function action({ request, context }: ActionFunctionArgs) {
   const intent = String(values.get("intent") ?? "");
   if (
     intent !== "conflict" &&
+    intent !== "abstain" &&
     intent !== "save" &&
     intent !== "submit" &&
     intent !== "add-discussion-message" &&
@@ -178,6 +179,34 @@ export async function action({ request, context }: ActionFunctionArgs) {
         message:
           "Conflict declared. The assignment was returned for reassignment.",
         clearedAssignmentId: String(values.get("assignmentId") ?? ""),
+      };
+    }
+    if (intent === "abstain") {
+      await service.abstain(
+        viewer,
+        {
+          assignmentId: values.get("assignmentId"),
+          reason: values.get("reason"),
+          note: values.get("note") || undefined,
+        },
+        "participant_ui",
+      );
+      const assignmentId = String(values.get("assignmentId") ?? "");
+      const realtimeFailure = await recordRouteChange(env, viewer, {
+        entityType: "evaluator_assignment",
+        entityId: assignmentId,
+        changeType: "updated",
+      });
+      if (realtimeFailure) {
+        return data(
+          { ...realtimeFailure, clearedAssignmentId: assignmentId },
+          { status: 207 },
+        );
+      }
+      return {
+        ok: true,
+        message: "Assignment returned without a review.",
+        clearedAssignmentId: assignmentId,
       };
     }
     const scores: Record<string, FormDataEntryValue> = {};

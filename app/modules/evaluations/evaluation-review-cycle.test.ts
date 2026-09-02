@@ -316,7 +316,7 @@ describe("explicit evaluation review cycles", () => {
     ).resolves.toMatchObject({ archivedPlanId: "demo-evaluation-plan" });
   });
 
-  it("atomically archives the current plan and rounds while preserving unfinished history", async () => {
+  it("archives a cycle without counting a returned draft as unfinished", async () => {
     const service = new EvaluationService(
       env as unknown as CloudflareEnvironment,
     );
@@ -339,22 +339,31 @@ describe("explicit evaluation review cycles", () => {
     )
       .bind(admin.eventId, oldAssignment!.id)
       .run();
+    await env.DB.prepare(
+      `UPDATE evaluator_assignments
+          SET status = 'recused', abstention_reason = 'unavailable',
+              abstained_at = unixepoch(), revision = revision + 1
+        WHERE id = ? AND event_id = ?`,
+    )
+      .bind(oldAssignment!.id, admin.eventId)
+      .run();
 
     const workspace = await service.getAdminWorkspace(admin);
     expect(workspace.reviewCyclePreview).toEqual({
-      unfinishedAssignmentCount: 2,
-      unfinishedReviewCount: 1,
+      unfinishedAssignmentCount: 1,
+      unfinishedReviewCount: 0,
       runningAssessmentOperationCount: 0,
     });
     const result = await service.startReviewCycle(admin, {
       ...newCycleInput,
-      expectedUnfinishedReviewCount: 1,
+      expectedUnfinishedAssignmentCount: 1,
+      expectedUnfinishedReviewCount: 0,
     });
 
     expect(result).toMatchObject({
       archivedPlanId: "demo-evaluation-plan",
-      unfinishedAssignmentCount: 2,
-      unfinishedReviewCount: 1,
+      unfinishedAssignmentCount: 1,
+      unfinishedReviewCount: 0,
     });
     const state = await env.DB.prepare(
       `SELECT
@@ -400,7 +409,7 @@ describe("explicit evaluation review cycles", () => {
       newPlanStatus: "active",
       newRoundStatus: "active",
       newCriterionCount: 2,
-      oldAssignmentStatus: "assigned",
+      oldAssignmentStatus: "recused",
       oldReviewStatus: "draft",
       auditCount: 1,
     });
