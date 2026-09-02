@@ -377,7 +377,7 @@
     position: relative;
     min-width: 0;
     min-height: 52px;
-    padding: 5px 2px;
+    padding: var(--space-1) 2px;
     border: 0;
     border-radius: var(--radius-sm);
     background: transparent;
