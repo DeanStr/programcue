@@ -1,6 +1,6 @@
 # Verified implementation status
 
-Last verified: 2026-09-01.
+Last verified: 2026-09-02.
 
 This is the canonical implementation audit and requirements traceability record. The product specification remains authoritative for intended scope; this file records observed code, focused tests, deployment evidence and bounded production acceptance.
 
@@ -171,7 +171,7 @@ migration and remote-schema validation. The migration and application behavior
 are included in the current production release; a fresh live multi-participant
 decision exercise remains external acceptance.
 
-The current, not-yet-deployed candidate deepens participant operations without
+The current production release deepens participant operations without
 introducing a generic workflow engine. Migration
 `0055_participant_operations_depth.sql` adds independent Speaker, Moderator and
 Chair roles per person/session relationship; each role has its own revisioned
@@ -179,17 +179,31 @@ accept/decline/reset lifecycle while the legacy relationship status remains a
 derived compatibility aggregate. Organisers can assign only those three roles,
 and both participant and administrator surfaces operate on the exact role.
 Focused Worker coverage proves that accepting one role and declining another do
-not overwrite each other. Live production acceptance remains outstanding.
+not overwrite each other. On 2 September 2026, production source
+`1ba0531993304bb52274526803b8356bbb996739` passed the outstanding live
+multi-role acceptance through `/evaluate`. Jordan Alvarez assigned Priya Shah a
+Moderator role alongside her pending Speaker role for _Designing inclusive
+event technology_. Priya accepted Speaker and declined Moderator with a private
+reason; both results survived reload, the participant surface reported the
+mixed response complete, and the organiser surface showed Speaker accepted,
+Moderator declined and the private reason with an exact Moderator reset
+control. Guarded preliminary passes were restored before the completed run.
+The final bounded evaluator reset completed, removed the evaluator-added role,
+returned Speaker to awaiting response, preserved the clean SBEK baselines and
+the browser then locked evaluation. No page exception, console error,
+production 5xx response or provider send occurred.
 
-The same candidate adds an optional application opening date and a separate
-per-person submission cap. Form drafts and immutable published settings retain
-both controls, public availability reports not-yet-open forms honestly, and the
-final D1 submission boundary rechecks opening, closing, total capacity and the
+The same production release adds an optional application opening date and a
+separate per-person submission cap. Form drafts and immutable published
+settings retain both controls, public availability reports not-yet-open forms
+honestly, and the final D1 submission boundary rechecks opening, closing, total
+capacity and the
 verified participant's active-application count. The daily reminder engine now
 supports two additional fixed cohorts—unsubmitted verified drafts and pending
 participant roles—using the existing sender-readiness, preview, idempotency and
-durable Queue path. This is a production slice with focused local coverage; no
-provider send or deployment acceptance is claimed for the new cohorts.
+durable Queue path. This is a deployed production slice with focused local
+coverage; no provider send or focused live acceptance is claimed for the new
+cohorts.
 
 Event settings now exposes explicit hidden/read-only/editable policies for the
 standard participant profile and constrained event-owned person/session fields.
@@ -201,8 +215,8 @@ Retention remaps participant-owned values and cascades retained identities
 through role rows. The speaker readiness roster now reports outstanding tasks,
 pending role responses, unpublished profiles, missing required person fields
 and quarantined files separately and offers the fixed pending-response reminder
-cohort. This candidate is locally implemented and migration-validated; browser
-acceptance passed for the focused participant workflows, while deployed
+cohort. This production release is migration-validated; repository browser
+acceptance passed for the focused participant workflows, while focused live
 production acceptance remains outstanding.
 
 The speaker roster keeps expanded manual-entry and CSV-import controls above a
