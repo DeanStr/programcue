@@ -171,12 +171,12 @@ export function DeliveryConfiguration({
               loudest way this page had of saying nothing was wrong. */}
           {loaderData.senders.length ? (
             <section
-              className="table-wrap"
+              className="table-wrap pc-responsive-table-wrap"
               aria-label="Sender profiles"
               // biome-ignore lint/a11y/noNoninteractiveTabindex: Scrollable data regions need keyboard focus so arrow keys can expose overflow content.
               tabIndex={0}
             >
-              <table className="data-table">
+              <table className="data-table pc-responsive-table">
                 <thead>
                   <tr>
                     <th scope="col">Sender</th>
@@ -187,20 +187,26 @@ export function DeliveryConfiguration({
                 <tbody>
                   {loaderData.senders.map((sender) => (
                     <tr key={sender.id}>
-                      <td>
+                      <td
+                        className="pc-record-primary-cell"
+                        data-label="Sender"
+                      >
                         {sender.fromName}
                         <small>
                           {sender.name} · {sender.fromEmail}
                         </small>
                       </td>
-                      <td>
+                      <td data-label="Status">
                         <span
                           className={`status ${sender.status === "verified" ? "success" : sender.status === "disabled" ? "info" : "warning"}`}
                         >
                           {sender.status}
                         </span>
                       </td>
-                      <td>
+                      <td
+                        className="pc-record-action-cell"
+                        data-label="Actions"
+                      >
                         <div className="row-actions">
                           {sender.status !== "disabled" && !localCapture ? (
                             <Form method="post">
@@ -397,7 +403,7 @@ export function CommunicationAutomation({
       template.versionStatus === "published",
   );
   return (
-    <div className="stack">
+    <div className="stack comms-automation">
       <section className="card pad">
         <div className="card-title">
           <h2>Reminder triggers</h2>

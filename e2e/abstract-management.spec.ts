@@ -350,7 +350,9 @@ test.describe
         page.locator(".validation-item.ok[role='status']"),
       ).toContainText(/assignment/i);
       await openEvaluationView(page, "Setup");
-      await expect(initialCard).toContainText("1 assigned · 0 complete · 0%");
+      await expect(initialCard).toContainText(
+        "1 assigned · 0 reviews submitted · 0% resolved",
+      );
       await initialCard.getByLabel("Include Sam Whitfield in reminder").check();
       await initialCard
         .getByRole("button", { name: "Prepare selected reminders" })

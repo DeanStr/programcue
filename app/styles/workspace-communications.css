@@ -1,5 +1,12 @@
 /* Communications */
 
+.comms-automation .select {
+  width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 /* --- Delivery readiness ---------------------------------------------------
    One instrument, not three mini-cards. The verdict is the section heading;
    the strip is a checklist. Each cell still states the state in a word as

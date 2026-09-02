@@ -18,13 +18,26 @@ async function expectNoHorizontalPageOverflow(
 ) {
   await expect
     .poll(() =>
-      page.evaluate(
-        () =>
-          document.documentElement.scrollWidth <=
-          document.documentElement.clientWidth,
-      ),
+      page.evaluate(() => {
+        const viewportWidth = document.documentElement.clientWidth;
+        const scrollWidth = document.documentElement.scrollWidth;
+        if (scrollWidth <= viewportWidth) return "";
+
+        const sources = Array.from(document.body.querySelectorAll("*"))
+          .filter(
+            (element) =>
+              element.scrollWidth > element.clientWidth + 1 &&
+              getComputedStyle(element).overflowX === "visible",
+          )
+          .map(
+            (element) =>
+              `${element.tagName.toLowerCase()}${element.id ? `#${element.id}` : ""}.${Array.from(element.classList).join(".")}`,
+          )
+          .slice(0, 8);
+        return JSON.stringify({ viewportWidth, scrollWidth, sources });
+      }),
     )
-    .toBe(true);
+    .toBe("");
 }
 
 async function expectNoContrastViolations(
