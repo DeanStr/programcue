@@ -731,7 +731,7 @@ test("organisers preview unpublished edits and publish a replacement", async ({
 
   await page
     .getByRole("complementary", { name: "Primary navigation" })
-    .getByRole("link", { name: "Speakers", exact: true })
+    .getByRole("link", { name: "Event speakers", exact: true })
     .click();
   const unsavedDialog = page.getByRole("dialog", {
     name: "Leave without saving the event website?",

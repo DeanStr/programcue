@@ -189,7 +189,9 @@ test("schedule and programme render the event calendar date and timezone", async
 
   await waitForInterface(page, "/admin/programme");
   await expect(
-    page.getByRole("link", { name: "Public programme" }),
+    page.getByRole("link", {
+      name: /Public programme.*opens in a new tab/,
+    }),
   ).toHaveAttribute("href", "/public/programme/future-of-events-2027");
   await expect(
     page.getByText("Event timezone · America/Toronto"),
