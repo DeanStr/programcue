@@ -26,7 +26,7 @@ import type { SpeakerRosterProfileAction } from "~/modules/speakers/speaker-rost
 import type { Route } from "./+types/admin-speakers";
 import type { ActionResult } from "./admin-speakers.server";
 
-export const meta = () => [{ title: "Speakers · Program Cue" }];
+export const meta = () => [{ title: "Event speakers · Program Cue" }];
 
 function workflowLabel(value: string) {
   return `${value.slice(0, 1).toUpperCase()}${value.slice(1)}`;
@@ -162,7 +162,7 @@ export default function AdminSpeakers({ loaderData }: Route.ComponentProps) {
     <div className="crm-workspace">
       <div className="page-head pc-page-header">
         <div>
-          <h1>Speakers</h1>
+          <h1>Event speakers</h1>
         </div>
         <div className="page-actions">
           <Button
@@ -172,7 +172,7 @@ export default function AdminSpeakers({ loaderData }: Route.ComponentProps) {
           >
             Add speaker
           </Button>
-          <ButtonLink to="/admin/crm">Speaker Network</ButtonLink>
+          <ButtonLink to="/admin/crm">Speaker directory</ButtonLink>
           <ButtonLink to="/admin/resources">Resources</ButtonLink>
           <ButtonLink to="/admin/tasks">Manage tasks</ButtonLink>
           {summary.pendingRoles ? (

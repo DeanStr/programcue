@@ -132,7 +132,7 @@ export class SpeakerRosterRecordCommands {
       .first();
     if (mergedContact) {
       throw new SpeakerAdminStateError(
-        "This email belongs to a merged Speaker Network contact. Use the primary contact instead.",
+        "This email belongs to a merged speaker directory contact. Use the primary contact instead.",
         409,
       );
     }

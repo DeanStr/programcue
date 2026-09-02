@@ -9,6 +9,7 @@ import {
   adminCommandRecordSelection,
   adminCommandRecordsForKey,
   adminCommandSearchKey,
+  adminNavigationCommandValue,
   adminPageBreadcrumbs,
   adminRecordBreadcrumb,
   canOpenAdminAssistant,
@@ -117,6 +118,20 @@ describe("administrator navigation context", () => {
     expect(adminCommandMatches("", "anything")).toBe(true);
   });
 
+  it("keeps renamed navigation destinations findable by their legacy names", () => {
+    const commandValue = (id: string) =>
+      adminNavigationCommandValue(NAV_ITEMS.find(([itemId]) => itemId === id)!);
+    expect(adminCommandMatches("speaker network", commandValue("crm"))).toBe(
+      true,
+    );
+    expect(
+      adminCommandMatches("programme publishing", commandValue("programme")),
+    ).toBe(true);
+    expect(adminCommandMatches("programme", commandValue("schedule"))).toBe(
+      true,
+    );
+  });
+
   it("keeps an event section and current workflow in detail breadcrumbs", () => {
     expect(adminPageBreadcrumbs("/admin/submissions/form")).toEqual([
       { label: "Applications", href: "/admin/submissions" },
@@ -136,11 +151,11 @@ describe("administrator navigation context", () => {
         label: "Priya Raman",
       }),
     ).toEqual([
-      { label: "Speakers", href: "/admin/speakers" },
+      { label: "Event speakers", href: "/admin/speakers" },
       { label: "Priya Raman", href: null },
     ]);
     expect(adminPageBreadcrumbs("/admin/crm/pipeline")).toEqual([
-      { label: "Speaker network", href: "/admin/crm" },
+      { label: "Speaker directory", href: "/admin/crm" },
       { label: "Sourcing pipeline", href: null },
     ]);
   });
@@ -191,7 +206,7 @@ describe("administrator navigation context", () => {
         state: "unavailable",
       }),
     ).toEqual([
-      { label: "Speakers", href: "/admin/speakers" },
+      { label: "Event speakers", href: "/admin/speakers" },
       { label: "Speaker", href: null },
     ]);
   });
@@ -253,7 +268,7 @@ describe("administrator navigation context", () => {
     expect(canOpenAdminAssistant("unexpected_role")).toBe(false);
   });
 
-  it("keeps seven stable workspace families and their tools at the second level", () => {
+  it("keeps stable workspace families and their tools at the second level", () => {
     const groups = primaryNavigationGroups(NAV_ITEMS);
     expect(groups.map((group) => group.label)).toEqual([
       "Event work",
@@ -263,6 +278,7 @@ describe("administrator navigation context", () => {
       "command",
       "submissions",
       "speakers",
+      "tasks",
       "schedule",
       "communications",
     ]);
@@ -276,7 +292,6 @@ describe("administrator navigation context", () => {
         "crm",
         "content",
         "programme",
-        "tasks",
         "branding",
         "site",
         "integrations",
@@ -356,7 +371,7 @@ describe("administrator navigation context", () => {
     ).toEqual(["content", "programme"]);
     expect(
       primaryNavigationChildren("communications", NAV_ITEMS).map(([id]) => id),
-    ).toEqual(["tasks"]);
+    ).toEqual([]);
     expect(
       primaryNavigationChildren("event", NAV_ITEMS).map(([id]) => id),
     ).toEqual(["branding", "site"]);

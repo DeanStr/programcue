@@ -764,7 +764,10 @@ Lead with the answer, include material uncertainty, and end with the safest conc
           ).toISOString(),
           percentage: input.readinessContext.readiness.percentage,
           status: input.readinessContext.readiness.status,
-          declaredBlockers: input.readinessContext.readiness.declaredBlockers,
+          criticalConditionCount:
+            input.readinessContext.readiness.criticalConditionCount,
+          warningConditionCount:
+            input.readinessContext.readiness.warningConditionCount,
           summary: parsedAdvisory.data.summary,
           priorities: parsedAdvisory.data.priorities.map((priority) => {
             const blocker = blockerByKey.get(priority.blockerKey);

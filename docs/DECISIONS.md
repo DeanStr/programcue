@@ -1809,3 +1809,50 @@ score. A speaker needs attention when a profile is unpublished, a role response
 is pending, a required event field is missing, an accessible task is incomplete
 or a file is quarantined. The UI exposes the reasons and fixed reminder cohorts
 instead of hiding prioritization behind a weighted formula.
+
+## Role-aware participant navigation and bounded review scoring
+
+The participant workspace retains every stable route on desktop. At phone
+width it exposes four labelled primary destinations plus More: participants
+with application work prioritise Applications, participants with sessions
+prioritise Sessions, and participants with both capabilities keep both. Tasks
+remains primary for every participant; less-used destinations remain in More,
+which also represents the active state of a contained route. This is a durable
+capability-based arrangement, not a ranking that changes with transient task
+counts or whichever of a participant's memberships wins role resolution.
+Application capability is projected by the participant portal itself after its
+single repository-authority checkpoint, using an organisation-, event- and
+person-scoped existence query. Full application payloads are loaded and
+validated only when the participant opens the Applications workspace.
+
+At the three-column desktop breakpoint the review queue, source and rubric form
+one viewport-bounded work surface. Source and rubric scroll independently,
+rubric progress and commit controls stay visible, and the queue scrolls only
+when its contents exceed the available height. Narrower layouts retain normal
+document flow rather than stacking several short nested scroll regions.
+
+## Operational truth and administrator information architecture
+
+The Command Centre treats percentage as progress and qualitative status as an
+operational assessment. Danger-severity condition categories are counted as
+critical conditions and take precedence over percentage, producing
+`needs_attention`; warning-only conditions may remain `on_track`, while a
+sub-75 score without a critical condition is `at_risk`. Headline counts describe
+condition categories, while each condition card reports its affected-record
+count; one record may legitimately appear in more than one category. Only 100%
+with no active condition is `ready`. The readiness domain service owns these
+states and counts, and contextual AI may prioritise that evidence but cannot
+recalculate or relabel it.
+
+Tasks & readiness is a first-level Event work destination because its speaker,
+session and event requirements are not subordinate to Communications. The
+administrator IA distinguishes Event speakers from the organisation-wide
+Speaker directory, names the actual planning workspace Schedule planner, and
+names its publication child Public programme & embeds. Route URLs remain
+stable; the command palette retains the former labels as search aliases.
+
+Evaluation summary metrics describe the same round- and filter-scoped review
+target projection as the unified results. The total and proposal/session
+breakdown are calculated after result filters and presets but before
+pagination; raw workspace array lengths are not presented as equivalent to
+the filtered result set.

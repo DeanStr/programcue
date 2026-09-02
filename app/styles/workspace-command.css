@@ -221,6 +221,11 @@
   --score-label: var(--state-warn-text);
   --score-fill: var(--state-warn-solid);
 }
+.command-score[data-state="needs_attention"] {
+  --score-tone: var(--state-bad-text);
+  --score-label: var(--state-bad-text);
+  --score-fill: var(--state-bad-solid);
+}
 .command-score-kicker {
   margin-bottom: var(--space-3);
 }
@@ -253,6 +258,12 @@
   font-weight: var(--weight-semibold);
   letter-spacing: var(--tracking-snug);
   padding-bottom: 0.28em;
+}
+.command-score-condition {
+  margin: var(--space-3) 0 0;
+  color: var(--score-label);
+  font-size: var(--text-sm);
+  font-weight: var(--weight-semibold);
 }
 /* The track fills its column. A 192px stub under a 72px numeral read as a
    leftover; at column width it reads as the gauge it is. */

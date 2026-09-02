@@ -354,7 +354,19 @@ export default function CommandCentre({ loaderData }: Route.ComponentProps) {
       ? "Ready"
       : loaderData.readiness.status === "on_track"
         ? "On track"
-        : "At risk";
+        : loaderData.readiness.status === "needs_attention"
+          ? "Needs attention"
+          : "At risk";
+  const readinessConditionLabel = [
+    loaderData.readiness.criticalConditionCount
+      ? `${loaderData.readiness.criticalConditionCount} critical condition${loaderData.readiness.criticalConditionCount === 1 ? "" : "s"}`
+      : null,
+    loaderData.readiness.warningConditionCount
+      ? `${loaderData.readiness.warningConditionCount} warning condition${loaderData.readiness.warningConditionCount === 1 ? "" : "s"}`
+      : null,
+  ]
+    .filter(Boolean)
+    .join(" · ");
   const blockerCount = loaderData.blockers.length;
   /* The panel exists to expose the workflows that are not ready. In domain
      order the two zeros landed in the middle of six rows and had to be hunted
@@ -453,6 +465,9 @@ export default function CommandCentre({ loaderData }: Route.ComponentProps) {
             </strong>
             <span className="command-score-state">{readinessLabel}</span>
           </p>
+          {readinessConditionLabel ? (
+            <p className="command-score-condition">{readinessConditionLabel}</p>
+          ) : null}
           <div className="command-score-track" aria-hidden>
             <span style={{ width: `${loaderData.readiness.percentage}%` }} />
           </div>

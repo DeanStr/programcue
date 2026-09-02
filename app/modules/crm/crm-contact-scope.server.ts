@@ -7,7 +7,7 @@ export const CONTACT_RELATIONSHIP_REQUIRED_MESSAGE =
 const CONTACT_RELATIONSHIP_CONSTRAINT =
   /NOT NULL constraint failed: (?:organisation_contacts|organisation_contact_profiles)\.person_id/u;
 export const CONTACT_IDENTITY_INVARIANT_MESSAGE =
-  "The Speaker Network contact identity was missing after creation.";
+  "The speaker directory contact identity was missing after creation.";
 
 export const contactScopeCte = `WITH candidate_contact_ids(person_id) AS (
   SELECT contact.person_id

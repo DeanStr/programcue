@@ -24,7 +24,7 @@ export class CrmImportService {
   async preview(viewer: OrganisationAdministrator, rawCsv: string) {
     if (new TextEncoder().encode(rawCsv).byteLength > IMPORT_BYTES_LIMIT) {
       throw new CrmStateError(
-        "Speaker Network CSV files cannot exceed 512 KB.",
+        "Speaker directory CSV files cannot exceed 512 KB.",
         422,
       );
     }

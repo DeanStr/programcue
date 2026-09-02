@@ -1007,6 +1007,65 @@ error. The reference route exercises mounted workspace navigation, operational
 rows, format/status presentation and a consequential confirmation
 with affected records and focus restoration.
 
+On 1 September 2026 two audited responsive-workflow defects were closed with
+production-shaped browser evidence. At the three-column desktop breakpoint the
+review workbench is bounded to the available viewport: source, rubric and an
+overflowing queue scroll locally, while rubric progress and commit actions stay
+inside the same visible work surface. Normal-flow recovery and action notices
+reserve their actual height before the work surface receives the remaining
+space. A 1280×720 Chromium assertion scrolls to the final scoring controls and
+verifies that meaningful source context, the complete action bar and keyboard
+focus remain visible simultaneously; at a 500px-tall desktop viewport the same
+contract survives a real save notice and committee discussion remains reachable
+below the bounded surface. At phone width the participant shell now exposes
+four labelled, capability-aware primary destinations plus a labelled More
+control instead of overflowing eight icon-only links. Secondary routes remain
+pointer- and keyboard-reachable, More shows when it contains the current route,
+Escape closes it and restores focus, and activating a primary route closes an
+already-open menu for keyboard users. Applicant, mixed-participant and
+accepted-speaker priorities have focused unit coverage. Chromium coverage
+verifies the contract without horizontal overflow at 320 pixels and the
+repository's 200%-equivalent layout; reviewed desktop workbench and mobile
+participant-navigation visual baselines were updated. Manual screen-reader
+acceptance remains external.
+
+The follow-on operational-truth and information-architecture audit is also
+implemented as repository and browser evidence. Command Centre readiness now
+separates its progress percentage from a blocker-aware qualitative state:
+danger conditions produce Needs attention regardless of percentage, while
+critical and warning category counts remain explicit in the authoritative
+snapshot and contextual-AI presentation. Individual condition cards retain
+their affected-record counts, which may overlap without being presented as a
+unique-record total. Tasks & readiness is a first-level Event work
+destination. Administrator navigation and matching page headings now
+distinguish Event speakers from the organisation-wide Speaker directory and
+Schedule planner from its Public programme & embeds child; former labels remain
+command-search aliases and route URLs are unchanged. Evaluation metrics now
+report Review targets with a proposal/session breakdown derived from the same
+round-, coverage- and preset-filtered result projection before pagination.
+The focused gate passed 50 files/493 tests with generated TypeScript. The
+production build and six affected Chromium workflows pass; the 26-case
+responsive visual inventory passed before the final review corrections, and
+its six directly affected desktop/mobile cases were rerun afterward. The
+browser contract also verifies that the seeded 8-target total becomes 6
+sessions and 0 proposals under the Unassigned coverage filter. This is local
+repository/browser evidence, not a new deployment claim.
+
+On 2 September 2026 the readiness and participant-shell follow-up review was
+closed. Readiness headline totals now count danger and warning condition
+categories rather than summing overlapping affected records; an exact domain
+test covers one overdue critical speaker upload appearing in two critical
+categories and one warning category. The participant portal now derives its
+application capability with a scoped existence query under the portal's single
+repository-readability checkpoint. It no longer loads and validates a complete
+application summary merely to arrange navigation, and focused coverage verifies
+primary-submitter and claimed-co-speaker access without leaking another
+participant's application. The focused gate passed 47 changed test files and
+478 tests with generated TypeScript; the six directly affected test files
+passed 51 tests, and the production build plus the 320-pixel navigation,
+200%-equivalent layout and desktop/mobile Command Centre visual contracts pass.
+This is repository evidence, not a deployment claim.
+
 At phone width, the reviewer score heading keeps criterion progress and a
 keyboard-usable jump to the distant commit actions in view. Public programme
 metadata uses the 13px dense-data role and session-save actions meet the 44px

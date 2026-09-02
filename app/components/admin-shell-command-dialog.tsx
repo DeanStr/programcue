@@ -35,6 +35,7 @@ import type {
 import {
   adminAssistantDraft,
   adminAssistantIntent,
+  adminNavigationCommandValue,
 } from "./admin-shell-navigation";
 import { Dialog } from "./dialog";
 
@@ -380,11 +381,10 @@ export function AdminCommandDialog({
       : [];
 
   const navigateMatches = navigationItems.filter(
-    ([id, , label, description]) =>
+    (item) =>
       // The dedicated assistant command preserves the `ask …` draft handoff
       // and gives this destination a single, unambiguous palette result.
-      id !== "assistant" &&
-      staticMatch(`navigate ${label} ${description ?? ""}`),
+      item[0] !== "assistant" && staticMatch(adminNavigationCommandValue(item)),
   );
   const createMatches = matching(createCommands, canRunCommands);
   const actionMatches = matching(actionCommands, canRunCommands);

@@ -123,7 +123,7 @@ export default function AdminCrmOutreach({ loaderData }: Route.ComponentProps) {
           </p>
         </div>
         <ButtonLink to="/admin/crm">
-          <ArrowLeft aria-hidden size={15} /> Speaker Network directory
+          <ArrowLeft aria-hidden size={15} /> Speaker directory
         </ButtonLink>
       </div>
       {actionData ? (

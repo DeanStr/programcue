@@ -53,9 +53,9 @@
 .reviewer-shell .speaker-main {
   min-width: 0;
 }
-/* The three columns cap at the same height and scroll independently. The queue
-   sizes to its own content instead: a stretched panel holding two items was
-   580px of empty white on the column that is meant to show progress. */
+/* Desktop applies the viewport constraint below. Narrower layouts return to
+   document flow so touch and keyboard users do not cross several short scroll
+   regions while moving down a single-column form. */
 .reviewer-shell .review-layout {
   display: grid;
   grid-template-columns: minmax(220px, 0.5fr) minmax(360px, 1.1fr) minmax(
@@ -220,9 +220,6 @@
 .reviewer-shell .review-answer.prose dd {
   line-height: var(--leading-normal);
 }
-/* The column caps itself and scrolls its body, so the commit bar stays on
-   screen. It no longer borrows its height from a stretched grid row — the
-   queue beside it is sized by its own content now. */
 .reviewer-shell .review-score {
   grid-column: auto;
   min-width: 0;
@@ -902,10 +899,73 @@
   border-color: var(--line);
 }
 
-/* The three-column case is the only one where the panel owns its own scroll
-   container and the bar already sits at the bottom of it. Everywhere else the
-   page scrolls, and a static bar puts Submit 2,600px below the fold. */
 @media (min-width: 1181px) {
+  /* At the three-column breakpoint, source and rubric are one work surface.
+     The shell and its main region establish the available viewport height;
+     the flex column then reserves the real height of headings and feedback
+     notices before giving the remainder to the independently scrolling work
+     surface. Discussion continues in normal document flow below it. */
+  .reviewer-shell {
+    min-height: 0;
+    height: calc(100dvh - var(--eval-banner-offset, 0px));
+    display: flex;
+    flex-direction: column;
+  }
+  .reviewer-shell .review-top {
+    flex: 0 0 auto;
+  }
+  .reviewer-shell > .speaker-main {
+    flex: 1 1 auto;
+    min-height: 0;
+  }
+  .reviewer-shell .review-workbench-viewport {
+    height: 100%;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+  }
+  .reviewer-shell .review-workbench-viewport > :not(.review-layout) {
+    flex: 0 0 auto;
+  }
+  .reviewer-shell .review-layout {
+    flex: 1 1 auto;
+    min-height: 0;
+    height: auto;
+    align-items: stretch;
+  }
+  .reviewer-shell .review-queue {
+    align-self: stretch;
+    max-height: 100%;
+    overflow-y: auto;
+    scrollbar-gutter: stable;
+  }
+  .reviewer-shell .review-detail {
+    height: 100%;
+    max-height: 100%;
+    overflow-y: auto;
+    scrollbar-gutter: stable;
+  }
+  .reviewer-shell .review-score {
+    height: 100%;
+    max-height: 100%;
+    overflow: hidden;
+  }
+  .reviewer-shell .review-score-form {
+    height: 100%;
+  }
+  .reviewer-shell .review-score-body {
+    overflow-y: auto;
+    scrollbar-gutter: stable;
+  }
+  .reviewer-shell .review-score-head {
+    position: sticky;
+    top: 0;
+    z-index: 3;
+    padding: var(--space-2) 0;
+    border-bottom: 1px solid var(--line);
+    background: color-mix(in srgb, var(--surface) 96%, transparent);
+    backdrop-filter: blur(8px);
+  }
   .reviewer-shell .review-actions {
     position: static;
     flex: 0 0 auto;

@@ -167,14 +167,14 @@ const OPERATIONS_DESTINATIONS: readonly Destination[] = [
   {
     to: "/admin/speakers",
     icon: Users,
-    label: "Speakers",
+    label: "Event speakers",
     detail: "Roster, profiles and readiness.",
   },
   {
     to: "/admin/tasks",
     icon: ListChecks,
-    label: "Tasks",
-    detail: "Assigned operational work.",
+    label: "Tasks & readiness",
+    detail: "Speaker, session and event readiness work.",
   },
   {
     to: "/admin/content",
@@ -185,7 +185,7 @@ const OPERATIONS_DESTINATIONS: readonly Destination[] = [
   {
     to: "/admin/schedule",
     icon: CalendarClock,
-    label: "Schedule",
+    label: "Schedule planner",
     detail: "The planner and its conflicts.",
   },
   {
@@ -197,7 +197,7 @@ const OPERATIONS_DESTINATIONS: readonly Destination[] = [
   {
     to: "/admin/crm",
     icon: Contact,
-    label: "Speaker network",
+    label: "Speaker directory",
     detail: "Prospects and the invitation pipeline.",
   },
   {

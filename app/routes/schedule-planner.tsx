@@ -8,7 +8,7 @@ import type { Route } from "./+types/schedule-planner";
 
 export { action, loader } from "./schedule-planner.server";
 
-export const meta = () => [{ title: "Schedule Planner · Program Cue" }];
+export const meta = () => [{ title: "Schedule planner · Program Cue" }];
 
 export function shouldRevalidateScheduleMutation(
   actionResult: unknown,

@@ -34,7 +34,7 @@ export const handle = adminRecordBreadcrumbHandle(["contact", "name"]);
 
 export const meta = ({ loaderData }: Route.MetaArgs) => [
   {
-    title: `${loaderData?.contact.name ?? "Speaker contact"} · Speaker network · Program Cue`,
+    title: `${loaderData?.contact.name ?? "Speaker contact"} · Speaker directory · Program Cue`,
   },
 ];
 
@@ -128,7 +128,7 @@ export async function action({ request, context, params }: Route.ActionArgs) {
       } satisfies ActionResult;
     }
     return data<ActionResult>(
-      { ok: false, message: "Unsupported Speaker Network contact action." },
+      { ok: false, message: "Unsupported speaker directory contact action." },
       { status: 400 },
     );
   } catch (error) {
@@ -174,7 +174,7 @@ export default function AdminCrmContact({ loaderData }: Route.ComponentProps) {
     const form = event.currentTarget;
     confirm(
       {
-        title: "Merge these Speaker Network contacts?",
+        title: "Merge these speaker directory contacts?",
         description: `${keptEmail} stays in the organization directory. Notes, tags and pipeline history move across, and the secondary contact stops appearing.`,
         records: [mergedEmail],
         confirmLabel: `Keep ${keptEmail}`,
@@ -198,7 +198,7 @@ export default function AdminCrmContact({ loaderData }: Route.ComponentProps) {
           </div>
           <div className="page-actions">
             <ButtonLink to="/admin/crm">
-              <ArrowLeft aria-hidden size={15} /> Speaker Network directory
+              <ArrowLeft aria-hidden size={15} /> Speaker directory
             </ButtonLink>
             <ButtonLink to="/admin/crm/pipeline">
               <Network aria-hidden size={15} /> Pipeline
@@ -252,7 +252,7 @@ export default function AdminCrmContact({ loaderData }: Route.ComponentProps) {
             </div>
             <p>
               These contacts have the same normalized name. Choose which record
-              remains visible as the primary Speaker Network contact. Linked
+              remains visible as the primary speaker directory contact. Linked
               identities are refused rather than merged unsafely.
             </p>
             <div className="stack mt">
@@ -456,8 +456,8 @@ export default function AdminCrmContact({ loaderData }: Route.ComponentProps) {
             <p className="subtle">
               Adds this contact to the event roster as a prospect without
               creating account access or sending email. Their
-              organisation-scoped Network profile remains visible in the
-              Speakers workspace, where invitations are sent explicitly.
+              organisation-scoped directory profile remains visible in the Event
+              speakers workspace, where invitations are sent explicitly.
             </p>
             <Form method="post" className="stack mt">
               <input type="hidden" name="_intent" value="add_to_event" />

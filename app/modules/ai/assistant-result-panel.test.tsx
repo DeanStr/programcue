@@ -23,8 +23,9 @@ describe("contextual AI result panel", () => {
       readiness: {
         generatedAt: "2026-08-15T10:42:00.000Z",
         percentage: 73,
-        status: "at_risk",
-        declaredBlockers: 2,
+        status: "needs_attention",
+        criticalConditionCount: 2,
+        warningConditionCount: 1,
         summary: "Two recorded blockers need administrator attention.",
         priorities: [
           {
@@ -47,7 +48,7 @@ describe("contextual AI result panel", () => {
         {
           id: "event-readiness",
           label: "Event readiness",
-          detail: "73% · at risk",
+          detail: "73% · needs attention",
           href: "/admin/command",
           source: "Program Cue D1",
         },
@@ -60,7 +61,8 @@ describe("contextual AI result panel", () => {
       </MemoryRouter>,
     );
 
-    expect(markup).toContain("73% · at risk");
+    expect(markup).toContain("73% · needs attention");
+    expect(markup).toContain("2 critical conditions · 1 warning condition");
     expect(markup).toContain("Recommended next actions");
     expect(markup).toContain("Critical tasks incomplete");
     expect(markup).toContain("Critical · 2 affected");

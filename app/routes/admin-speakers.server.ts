@@ -23,7 +23,7 @@ import {
 } from "~/platform/evaluation/evaluator-email-alias.server";
 import type { Route } from "./+types/admin-speakers";
 
-export const meta = () => [{ title: "Speakers · Program Cue" }];
+export const meta = () => [{ title: "Event speakers · Program Cue" }];
 
 export type ActionResult = {
   ok: boolean;

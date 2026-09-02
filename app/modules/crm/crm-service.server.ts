@@ -233,7 +233,7 @@ export class CrmService {
         returningSpeakers: number;
       }>();
     if (!summary)
-      throw new Error("The Speaker Network dashboard could not be read.");
+      throw new Error("The speaker directory dashboard could not be read.");
     const companies = await this.env.DB.prepare(
       `${contactScopeCte}
        SELECT COALESCE(profile.organisation_name, person.organisation_name) AS name,
@@ -368,7 +368,9 @@ export class CrmService {
         duplicateCount: number;
       }>();
     if (!contact)
-      throw new Response("Speaker Network contact not found.", { status: 404 });
+      throw new Response("Speaker directory contact not found.", {
+        status: 404,
+      });
     const [tags, notes, connections, duplicateRows, pipeline] =
       await Promise.all([
         this.env.DB.prepare(
@@ -505,7 +507,7 @@ export class CrmService {
         .bind(viewer.organisationId, personId)
         .first();
       if (!exists)
-        throw new Response("Speaker Network contact not found.", {
+        throw new Response("Speaker directory contact not found.", {
           status: 404,
         });
     }
@@ -647,7 +649,7 @@ export class CrmService {
       throw new Error(CONTACT_IDENTITY_INVARIANT_MESSAGE);
     }
     if ((linked.meta.changes ?? 0) !== 1 || (audit.meta.changes ?? 0) !== 1) {
-      throw new Error("The Speaker Network contact could not be created.");
+      throw new Error("The speaker directory contact could not be created.");
     }
     return {
       personId: resolved.personId,
@@ -740,7 +742,7 @@ export class CrmService {
         /UNIQUE constraint failed: crm_segments/i.test(error.message)
       ) {
         throw new CrmStateError(
-          "A Speaker Network segment with that name already exists.",
+          "A speaker directory segment with that name already exists.",
         );
       }
       throw error;
@@ -776,7 +778,9 @@ export class CrmService {
       .bind(id, viewer.organisationId, viewer.personId)
       .first<{ name: string; filtersJson: string }>();
     if (!row)
-      throw new Response("Speaker Network segment not found.", { status: 404 });
+      throw new Response("Speaker directory segment not found.", {
+        status: 404,
+      });
     return {
       id,
       name: row.name,

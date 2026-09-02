@@ -169,7 +169,7 @@ describe("contextual administrator actions", () => {
       textResponse(
         JSON.stringify({
           summary:
-            "The event remains at risk while recorded operational blockers require attention.",
+            "The event needs attention while recorded operational blockers remain unresolved.",
           priorities,
           uncertainties: [
             "The snapshot does not quantify dependencies between blocker groups.",
@@ -187,9 +187,10 @@ describe("contextual administrator actions", () => {
       readiness: {
         percentage: snapshot.readiness.percentage,
         status: snapshot.readiness.status,
-        declaredBlockers: snapshot.readiness.declaredBlockers,
+        criticalConditionCount: snapshot.readiness.criticalConditionCount,
+        warningConditionCount: snapshot.readiness.warningConditionCount,
         summary:
-          "The event remains at risk while recorded operational blockers require attention.",
+          "The event needs attention while recorded operational blockers remain unresolved.",
         priorities: priorities.map((priority, index) => ({
           ...priority,
           label: snapshot.blockers[index]!.label,

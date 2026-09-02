@@ -22,7 +22,7 @@ import { getCloudflareContext } from "~/platform/cloudflare-context";
 import type { Route } from "./+types/admin-section";
 
 export const meta: Route.MetaFunction = () => [
-  { title: "Programme publishing · Program Cue" },
+  { title: "Public programme & embeds · Program Cue" },
 ];
 
 export async function loader({ request, params, context }: Route.LoaderArgs) {
@@ -235,7 +235,7 @@ export default function AdminSection({ loaderData }: Route.ComponentProps) {
     <div className="programme-publishing">
       <div className="page-head pc-page-header">
         <div>
-          <h1>Programme publishing</h1>
+          <h1>Public programme & embeds</h1>
           <p>
             Inspect the programme that is available to attendees and continue
             editing in the schedule planner.
@@ -266,7 +266,7 @@ export default function AdminSection({ loaderData }: Route.ComponentProps) {
         </div>
         <div className="page-actions">
           <ButtonLink variant="primary" to="/admin/schedule">
-            Open schedule
+            Open schedule planner
           </ButtonLink>
         </div>
       </div>
@@ -281,7 +281,7 @@ export default function AdminSection({ loaderData }: Route.ComponentProps) {
             <Link
               to={`/admin/schedule?session=${encodeURIComponent(loaderData.createdSessionId)}&created=1${loaderData.createdSessionNeedsAttention ? "&attention=1" : ""}`}
             >
-              Open the new session in Schedule Planner
+              Open the new session in Schedule planner
             </Link>
             .
           </span>
@@ -296,7 +296,7 @@ export default function AdminSection({ loaderData }: Route.ComponentProps) {
       </p>
       <AdminWorkspaceTabs<ProgrammeWorkspacePanel>
         className="programme-workspace-tabs"
-        label="Programme publishing views"
+        label="Public programme and embed views"
         panels={[
           { id: "programme", label: "Programme", meta: summary.total },
           { id: "builder", label: "Embed builder" },

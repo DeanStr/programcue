@@ -115,9 +115,19 @@ function ReadinessAdvisoryPanel({ result }: { result: ContextualAiResult }) {
   const statusTone =
     readiness.status === "ready"
       ? "success"
-      : readiness.status === "at_risk"
+      : readiness.status === "at_risk" || readiness.status === "needs_attention"
         ? "danger"
         : "warning";
+  const conditionSummary = [
+    readiness.criticalConditionCount
+      ? `${readiness.criticalConditionCount} critical condition${readiness.criticalConditionCount === 1 ? "" : "s"}`
+      : null,
+    readiness.warningConditionCount
+      ? `${readiness.warningConditionCount} warning condition${readiness.warningConditionCount === 1 ? "" : "s"}`
+      : null,
+  ]
+    .filter(Boolean)
+    .join(" · ");
   return (
     <section className="card pad" aria-live="polite">
       <div className="card-title">
@@ -133,8 +143,7 @@ function ReadinessAdvisoryPanel({ result }: { result: ContextualAiResult }) {
       </div>
       <p>{readiness.summary}</p>
       <p className="help">
-        {readiness.declaredBlockers} recorded blocker
-        {readiness.declaredBlockers === 1 ? "" : "s"}. Program Cue calculates
+        {conditionSummary || "No active conditions"}. Program Cue calculates
         readiness; AI only prioritises the recorded evidence.
       </p>
       {readiness.priorities.length ? (

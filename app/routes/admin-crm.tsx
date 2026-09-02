@@ -22,7 +22,7 @@ import { requireOrganisationAdministrator } from "~/platform/auth/organisation.s
 import { getCloudflareContext } from "~/platform/cloudflare-context";
 import type { Route } from "./+types/admin-crm";
 
-export const meta = () => [{ title: "Speaker Network · Program Cue" }];
+export const meta = () => [{ title: "Speaker directory · Program Cue" }];
 
 type ActionResult = {
   ok: boolean;
@@ -95,7 +95,7 @@ export async function action({ request, context }: Route.ActionArgs) {
         return data<ActionResult>(
           {
             ok: false,
-            message: "Speaker Network CSV files cannot exceed 512 KB.",
+            message: "Speaker directory CSV files cannot exceed 512 KB.",
           },
           { status: 422 },
         );
@@ -127,7 +127,7 @@ export async function action({ request, context }: Route.ActionArgs) {
       return redirect("/admin/crm?segmentSaved=yes");
     }
     return data<ActionResult>(
-      { ok: false, message: "Unsupported Speaker Network action." },
+      { ok: false, message: "Unsupported speaker directory action." },
       { status: 400 },
     );
   } catch (error) {
@@ -139,7 +139,7 @@ export async function action({ request, context }: Route.ActionArgs) {
             error instanceof CrmStateError
               ? error.message
               : (error.issues[0]?.message ??
-                "Review the Speaker Network fields."),
+                "Review the speaker directory fields."),
         },
         { status: error instanceof CrmStateError ? error.status : 422 },
       );
@@ -226,9 +226,9 @@ export default function AdminCrm({ loaderData }: Route.ComponentProps) {
       <div className="page-head pc-page-header">
         <div>
           <span className="pc-page-eyebrow">
-            Organization workspace · all events
+            Organisation-wide · all events
           </span>
-          <h1>Speaker Network</h1>
+          <h1>Speaker directory</h1>
           <p className="crm-caption">
             Reusable profiles, private relationship context, and sourcing
             prospects into events without re-entering data.
@@ -672,10 +672,7 @@ export default function AdminCrm({ loaderData }: Route.ComponentProps) {
           )}
         </Form>
         {directory.page > 1 || directory.hasNext ? (
-          <nav
-            className="crm-pager"
-            aria-label="Speaker Network directory pages"
-          >
+          <nav className="crm-pager" aria-label="Speaker directory pages">
             {directory.page > 1 ? (
               <ButtonLink
                 to={`/admin/crm?${directoryPageQuery(

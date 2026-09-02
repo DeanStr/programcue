@@ -10,6 +10,7 @@ import {
   evaluationResultFlags,
   matchesEvaluationResultPreset,
 } from "./evaluation-result-workbench";
+import { summarizeEvaluationReviewTargets } from "./evaluation-results-summary";
 import { decisionDraftEffectPreviewSchema } from "./evaluation-schema";
 import type { EvaluationService } from "./evaluation-service.server";
 
@@ -952,7 +953,8 @@ export async function buildEvaluationAdminResultsModel(input: {
       });
     })
     .sort(compareResults);
-  const resultsTotal = allResults.length;
+  const reviewTargetSummary = summarizeEvaluationReviewTargets(allResults);
+  const resultsTotal = reviewTargetSummary.total;
   const resultsPageCount = Math.max(
     1,
     Math.ceil(resultsTotal / resultsPageSize),
@@ -1087,6 +1089,7 @@ export async function buildEvaluationAdminResultsModel(input: {
     resultsPage,
     resultsPageSize,
     resultsTotal,
+    reviewTargetSummary,
     resultsPageCount,
     resultCriterionNames,
     resultsExportIntent: crypto.randomUUID(),

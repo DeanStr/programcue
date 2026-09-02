@@ -825,6 +825,13 @@
   font-size: var(--text-sm);
   font-weight: var(--weight-semibold);
 }
+.pc-eval-metric .detail {
+  display: block;
+  margin-top: var(--space-1);
+  color: var(--text-tertiary);
+  font-size: var(--text-2xs);
+  line-height: var(--leading-snug);
+}
 
 .pc-eval-toolbar {
   display: flex;

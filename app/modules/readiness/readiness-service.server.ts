@@ -8,7 +8,10 @@ import {
 import {
   calculateOverallReadiness,
   calculateReadiness,
+  type OperationalReadinessStatus,
+  operationalReadinessStatus,
   type ReadinessTask,
+  summarizeReadinessConditions,
 } from "./readiness-rules";
 
 type CountRow = { total: number; complete?: number; failed?: number };
@@ -58,8 +61,9 @@ export type CommandCentreSnapshot = {
   cursor: number;
   readiness: {
     percentage: number;
-    status: "ready" | "on_track" | "at_risk";
-    declaredBlockers: number;
+    status: OperationalReadinessStatus;
+    criticalConditionCount: number;
+    warningConditionCount: number;
     explanation: string;
   };
   setupGuide: ProgrammeSetupStep[];
@@ -617,10 +621,9 @@ export class ReadinessService {
       ] satisfies ReadinessBlocker[]
     ).filter((blocker) => blocker.count > 0);
 
-    const declaredBlockers = blockers.reduce(
-      (sum, blocker) => sum + blocker.count,
-      0,
-    );
+    const { criticalConditionCount, warningConditionCount } =
+      summarizeReadinessConditions(blockers);
+    const activeConditionCount = criticalConditionCount + warningConditionCount;
     const setupGuide = [
       {
         key: "event-details",
@@ -677,7 +680,7 @@ export class ReadinessService {
       setupPhases.length,
     );
     const percentage = Math.min(
-      calculateOverallReadiness(workflows, declaredBlockers),
+      calculateOverallReadiness(workflows, activeConditionCount),
       setupPercentage,
     );
     return {
@@ -687,15 +690,15 @@ export class ReadinessService {
       cursor: numeric(event.baselineCursor),
       readiness: {
         percentage,
-        status:
-          percentage === 100
-            ? "ready"
-            : percentage >= 75
-              ? "on_track"
-              : "at_risk",
-        declaredBlockers,
+        status: operationalReadinessStatus({
+          percentage,
+          criticalConditionCount,
+          warningConditionCount,
+        }),
+        criticalConditionCount,
+        warningConditionCount,
         explanation:
-          "Equal-weighted average across six operational workflows, capped by completion of the four programme setup phases. Any declared blocker prevents a 100% ready result.",
+          "Equal-weighted average across six operational workflows, capped by completion of the four programme setup phases. Any active condition category prevents a 100% result, and critical conditions take precedence in the qualitative status. Affected-record counts remain on the individual condition cards and may overlap.",
       },
       setupGuide,
       workflows,

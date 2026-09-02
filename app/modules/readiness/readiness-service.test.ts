@@ -170,7 +170,15 @@ describe("D1-backed command centre", () => {
     ).getCommandCentre(viewer);
     expect(snapshot.eventTimezone).toBe("America/Toronto");
     expect(snapshot.readiness.percentage).toBeLessThan(100);
-    expect(snapshot.readiness.declaredBlockers).toBeGreaterThan(0);
+    expect(snapshot.readiness.criticalConditionCount).toBe(
+      snapshot.blockers.filter((blocker) => blocker.severity === "danger")
+        .length,
+    );
+    expect(snapshot.readiness.warningConditionCount).toBe(
+      snapshot.blockers.filter((blocker) => blocker.severity === "warning")
+        .length,
+    );
+    expect(snapshot.readiness.status).toBe("needs_attention");
     expect(snapshot.blockers.map((blocker) => blocker.key)).toEqual(
       expect.arrayContaining([
         "overdue_tasks",
@@ -180,6 +188,19 @@ describe("D1-backed command centre", () => {
         "unscheduled_sessions",
       ]),
     );
+    expect(
+      snapshot.blockers
+        .filter((blocker) =>
+          ["overdue_tasks", "critical_tasks", "speaker_assets"].includes(
+            blocker.key,
+          ),
+        )
+        .map(({ key, count, severity }) => ({ key, count, severity })),
+    ).toEqual([
+      { key: "overdue_tasks", count: 1, severity: "danger" },
+      { key: "critical_tasks", count: 1, severity: "danger" },
+      { key: "speaker_assets", count: 1, severity: "warning" },
+    ]);
     expect(
       snapshot.workflows.find((workflow) => workflow.key === "speakers")?.score,
     ).toBe(0);

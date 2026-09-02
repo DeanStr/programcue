@@ -447,12 +447,12 @@ test.describe
       await captureLaptopViewport(page, "tasks-readiness-templates");
     });
 
-    test("Schedule Planner keeps the focused planning canvas visible", async ({
+    test("Schedule planner keeps the focused planning canvas visible", async ({
       page,
     }) => {
       await openHydrated(page, "/admin/schedule?session=demo-session-1");
       await expect(
-        page.getByRole("heading", { name: "Schedule Planner", level: 1 }),
+        page.getByRole("heading", { name: "Schedule planner", level: 1 }),
       ).toBeInViewport();
       await expect(page.locator(".schedule-canvas")).toBeInViewport();
       await captureLaptopViewport(page, "schedule-planner");
@@ -524,6 +524,13 @@ test.describe
           page.getByRole("heading", { level: 1 }).first(),
         ).toBeVisible();
         await waitForSurfaceReady(page, surface.name);
+        if (surface.name === "command-centre") {
+          const readiness = page.getByRole("region", { name: "Readiness" });
+          await expect(readiness.getByText("Needs attention")).toBeVisible();
+          await expect(
+            readiness.getByText("1 critical condition"),
+          ).toBeVisible();
+        }
         const isolateFixedSpeakerNavigation =
           testInfo.project.name === "mobile-chromium" &&
           surface.role === "speaker";

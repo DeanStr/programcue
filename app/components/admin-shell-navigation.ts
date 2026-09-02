@@ -51,20 +51,30 @@ export const NAV_ITEMS = [
   /* Sparkles is the universal "a machine wrote this" glyph and the palette
      already spends it on the assistant. Humans score submissions here. */
   ["review", ClipboardCheck, "Review & selection"],
-  ["speakers", UsersRound, "Speakers"],
-  ["crm", ContactRound, "Speaker network"],
+  ["speakers", UsersRound, "Event speakers", "Current event speaker roster"],
+  [
+    "crm",
+    ContactRound,
+    "Speaker directory",
+    "Organisation-wide contacts and sourcing across events",
+  ],
   ["resources", BookOpen, "Speaker resources"],
-  ["schedule", CalendarDays, "Programme"],
+  ["schedule", CalendarDays, "Schedule planner"],
   ["communications", Mail, "Communications"],
-  ["tasks", ListChecks, "Tasks"],
+  [
+    "tasks",
+    ListChecks,
+    "Tasks & readiness",
+    "Speaker, session and event readiness work",
+  ],
   /* Files and FileStack are the same stacked-paper outline at 16px, which is
      exactly the size the rail runs at when the icon is the only label. */
   ["content", FolderOpen, "Session content & files"],
   [
     "programme",
     PanelTop,
-    "Programme publishing",
-    "Published schedule, attendee programme and website embeds",
+    "Public programme & embeds",
+    "Attendee programme and website embeds",
   ],
   ["integrations", Cable, "Integrations"],
   ["settings", Settings, "API & webhooks"],
@@ -76,7 +86,14 @@ export const NAV_ITEMS = [
 const NAV_GROUPS = [
   {
     label: "Event work",
-    ids: ["command", "submissions", "speakers", "schedule", "communications"],
+    ids: [
+      "command",
+      "submissions",
+      "speakers",
+      "tasks",
+      "schedule",
+      "communications",
+    ],
   },
   {
     label: "Administration",
@@ -84,8 +101,8 @@ const NAV_GROUPS = [
   },
 ] as const;
 
-/* Speaker Network and Resources are full workspaces that no rail entry pointed
-   at, so the rail marked Speakers current for them and contradicted the
+/* Speaker Directory and Resources are full workspaces that no rail entry pointed
+   at, so the rail marked Event speakers current for them and contradicted the
    breadcrumb printed directly below it. They are the speaker family's second
    level and appear whenever that family is where you are. */
 const NAV_CHILDREN: Record<string, ReadonlyArray<string>> = {
@@ -93,7 +110,6 @@ const NAV_CHILDREN: Record<string, ReadonlyArray<string>> = {
   submissions: ["review"],
   speakers: ["crm", "resources"],
   schedule: ["content", "programme"],
-  communications: ["tasks"],
   event: ["branding", "site"],
   operations: ["integrations", "settings"],
 };
@@ -211,6 +227,27 @@ export function adminCommandMatches(query: string, candidate: string) {
   return queryWords.every((word) => normalizedCandidate.includes(word));
 }
 
+const ADMIN_NAVIGATION_SEARCH_ALIASES: Partial<
+  Record<(typeof NAV_ITEMS)[number][0], ReadonlyArray<string>>
+> = {
+  crm: ["Speaker network"],
+  programme: ["Programme publishing"],
+  schedule: ["Programme"],
+  speakers: ["Speakers"],
+  tasks: ["Tasks"],
+};
+
+export function adminNavigationCommandValue([
+  id,
+  ,
+  label,
+  description,
+]: AdminNavigationItem) {
+  const aliases =
+    ADMIN_NAVIGATION_SEARCH_ALIASES[id as (typeof NAV_ITEMS)[number][0]] ?? [];
+  return `navigate ${label} ${description ?? ""} ${aliases.join(" ")}`;
+}
+
 /**
  * Treat `ask …`, `ask: …` and `ask assistant: …` as an explicit assistant
  * handoff. The prompt remains a draft on the assistant page; parsing it here
@@ -324,7 +361,7 @@ export function adminPageBreadcrumbs(
     section === "events"
       ? "Event settings"
       : section === "sessions"
-        ? "Programme"
+        ? "Schedule planner"
         : section === "files"
           ? "Event settings"
           : (ADMIN_SECTION_LABELS[section] ??

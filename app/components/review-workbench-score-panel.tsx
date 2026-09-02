@@ -3,7 +3,6 @@ import { AlertTriangle, Lock, Send } from "lucide-react";
 import { useReviewWorkbenchModel } from "~/components/review-workbench-model";
 import { Button } from "~/components/ui/button";
 import { EmptyState } from "~/components/ui/states";
-import { ReviewDiscussionPanel } from "./review-workbench-discussion-panel";
 import {
   ReviewQueuePanel,
   ReviewSubmissionPanel,
@@ -701,13 +700,10 @@ export function ReviewWorkspaceState() {
       />
     </section>
   ) : (
-    <>
-      <div className="review-layout">
-        <ReviewQueuePanel />
-        <ReviewSubmissionPanel />
-        <ReviewScorePanel />
-      </div>
-      <ReviewDiscussionPanel />
-    </>
+    <div className="review-layout">
+      <ReviewQueuePanel />
+      <ReviewSubmissionPanel />
+      <ReviewScorePanel />
+    </div>
   );
 }

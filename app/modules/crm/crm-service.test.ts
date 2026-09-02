@@ -1201,7 +1201,7 @@ describe("organisation speaker CRM", () => {
     expect(failure).toBeInstanceOf(Error);
     expect(failure).not.toBeInstanceOf(CrmStateError);
     expect((failure as Error).message).toBe(
-      "The Speaker Network contact identity was missing after creation.",
+      "The speaker directory contact identity was missing after creation.",
     );
   });
 
@@ -1276,7 +1276,7 @@ describe("organisation speaker CRM", () => {
         `name,email,bio\nLarge,large@example.com,${"x".repeat(512_000)}`,
       ),
     ).rejects.toMatchObject({
-      message: "Speaker Network CSV files cannot exceed 512 KB.",
+      message: "Speaker directory CSV files cannot exceed 512 KB.",
       status: 422,
     });
 

@@ -224,6 +224,123 @@ test("review submission confirmation preserves context", async ({ page }) => {
   }
 });
 
+test("review source remains visible at the final scoring controls", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1280, height: 720 });
+  await page.context().addCookies([
+    {
+      name: "program_cue_event",
+      value: "evt-foe-2025",
+      domain: "127.0.0.1",
+      path: "/",
+      httpOnly: true,
+      sameSite: "Lax",
+    },
+    {
+      name: "program_cue_demo_identity",
+      value: "evaluator",
+      domain: "127.0.0.1",
+      path: "/",
+      httpOnly: true,
+      sameSite: "Lax",
+    },
+  ]);
+  const response = await page.goto("/review/workbench");
+  expect(response?.ok()).toBeTruthy();
+  await page.locator("body[data-hydrated='true']").waitFor();
+
+  const sourceReference = page.locator("#review-submission-title");
+  const scoreBody = page.locator(".review-score-body");
+  const privateNotes = page.getByLabel("Private notes");
+  const scoreProgress = page.locator(".review-score-progress");
+  const reviewActions = page.locator("#review-actions");
+
+  const measureWorkbench = () =>
+    page.evaluate(() => {
+      const workbench = document.querySelector<HTMLElement>(".review-layout");
+      const source = document.querySelector<HTMLElement>(".review-detail");
+      const rubric = document.querySelector<HTMLElement>(".review-score-body");
+      const actions = document.querySelector<HTMLElement>("#review-actions");
+      if (!workbench || !source || !rubric || !actions) return null;
+      const workbenchBounds = workbench.getBoundingClientRect();
+      const sourceBounds = source.getBoundingClientRect();
+      const actionBounds = actions.getBoundingClientRect();
+      return {
+        pageScrollY: Math.round(window.scrollY),
+        workbenchBottom: Math.round(workbenchBounds.bottom),
+        sourceVisibleHeight: Math.round(
+          Math.min(sourceBounds.bottom, window.innerHeight) -
+            Math.max(sourceBounds.top, 0),
+        ),
+        actionsBottom: Math.round(actionBounds.bottom),
+        viewportHeight: window.innerHeight,
+        sourceOverflow: getComputedStyle(source).overflowY,
+        rubricOverflow: getComputedStyle(rubric).overflowY,
+      };
+    });
+
+  await scoreBody.evaluate((element) => {
+    element.scrollTop = element.scrollHeight;
+  });
+  await expect(privateNotes).toBeInViewport();
+  await expect(scoreProgress).toBeInViewport();
+  await expect(reviewActions).toBeInViewport();
+  await expect(sourceReference).toBeInViewport();
+
+  const layout = await measureWorkbench();
+  expect(layout).not.toBeNull();
+  expect(layout!.pageScrollY).toBe(0);
+  expect(layout!.sourceVisibleHeight).toBeGreaterThan(200);
+  expect(layout!.actionsBottom).toBeLessThanOrEqual(layout!.viewportHeight);
+  expect(layout!.sourceOverflow).toBe("auto");
+  expect(layout!.rubricOverflow).toBe("auto");
+
+  await privateNotes.focus();
+  await expect(privateNotes).toBeFocused();
+  await expect(privateNotes).toBeInViewport();
+  await expect(sourceReference).toBeInViewport();
+
+  await page.setViewportSize({ width: 1280, height: 500 });
+  await scoreBody.evaluate((element) => {
+    element.scrollTop = element.scrollHeight;
+  });
+  await expect(privateNotes).toBeInViewport();
+  await expect(reviewActions).toBeInViewport();
+  await expect(sourceReference).toBeInViewport();
+  const shortLayout = await measureWorkbench();
+  expect(shortLayout).not.toBeNull();
+  expect(shortLayout!.pageScrollY).toBe(0);
+  expect(shortLayout!.workbenchBottom).toBeLessThanOrEqual(
+    shortLayout!.viewportHeight,
+  );
+  expect(shortLayout!.actionsBottom).toBeLessThanOrEqual(
+    shortLayout!.viewportHeight,
+  );
+
+  await page.getByRole("button", { name: "Save draft" }).click();
+  await expect(
+    page.getByRole("status").filter({ hasText: "Review saved." }),
+  ).toBeVisible();
+  const noticeLayout = await measureWorkbench();
+  expect(noticeLayout).not.toBeNull();
+  expect(noticeLayout!.pageScrollY).toBe(0);
+  expect(noticeLayout!.workbenchBottom).toBeLessThanOrEqual(
+    noticeLayout!.viewportHeight,
+  );
+  expect(noticeLayout!.actionsBottom).toBeLessThanOrEqual(
+    noticeLayout!.viewportHeight,
+  );
+  await expect(sourceReference).toBeInViewport();
+  await expect(reviewActions).toBeInViewport();
+
+  const discussionHeading = page.getByRole("heading", {
+    name: "Committee discussion",
+  });
+  await discussionHeading.scrollIntoViewIfNeeded();
+  await expect(discussionHeading).toBeInViewport();
+});
+
 test("evaluation administration exposes onboarding and consequential previews", async ({
   page,
 }) => {
@@ -249,6 +366,14 @@ test("evaluation administration exposes onboarding and consequential previews", 
   const response = await page.goto("/admin/review");
   expect(response?.ok()).toBeTruthy();
   await page.locator("body[data-hydrated='true']").waitFor();
+
+  const reviewTargetMetric = page
+    .locator(".pc-eval-metric")
+    .filter({ hasText: "Review targets" });
+  await expect(reviewTargetMetric.locator(".value")).toHaveText("8");
+  await expect(reviewTargetMetric.locator(".detail")).toHaveText(
+    "2 proposals · 6 sessions",
+  );
 
   await openEvaluationView(page, "Setup");
   await page.getByText("Manage evaluation access", { exact: true }).click();
@@ -283,6 +408,19 @@ test("evaluation administration exposes onboarding and consequential previews", 
   await expect(page.getByLabel("Coverage filter")).toContainText(
     "Incomplete reviews",
   );
+  await page.getByLabel("Coverage filter").selectOption("unassigned");
+  await page.getByRole("button", { name: "Apply" }).click();
+  await expect(page).toHaveURL(/(?:\?|&)filter=unassigned(?:&|$)/u);
+  await expect(reviewTargetMetric.locator(".value")).toHaveText("6");
+  await expect(reviewTargetMetric.locator(".detail")).toHaveText(
+    "0 proposals · 6 sessions",
+  );
+  await expect(unifiedResults.locator("tbody > tr")).toHaveCount(6);
+
+  await page.getByLabel("Coverage filter").selectOption("");
+  await page.getByRole("button", { name: "Apply" }).click();
+  await expect(page).toHaveURL(/(?:\?|&)filter=(?:&|$)/u);
+  await expect(reviewTargetMetric.locator(".value")).toHaveText("8");
   await openEvaluationView(page, "Assignments");
   await page.getByRole("link", { name: "Open discussion" }).first().click();
   await expect(

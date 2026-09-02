@@ -96,7 +96,7 @@ test("administrator navigation groups stable workspace families without hiding p
     navigation.getByRole("link", { name: "Session content & files" }),
   ).toBeVisible();
   await expect(
-    navigation.getByRole("link", { name: "Speaker network" }),
+    navigation.getByRole("link", { name: "Speaker directory" }),
   ).toHaveCount(0);
   await expect(
     navigation.getByRole("link", { name: "Speaker resources" }),
@@ -118,20 +118,20 @@ test("administrator navigation groups stable workspace families without hiding p
   await waitForInterface(page, "/admin/speakers");
   const main = page.locator("#main");
   await expect(
-    main.getByRole("link", { name: "Speaker Network" }),
+    main.getByRole("link", { name: "Speaker directory" }),
   ).toHaveAttribute("href", "/admin/crm");
   await expect(main.getByRole("link", { name: "Resources" })).toHaveAttribute(
     "href",
     "/admin/resources",
   );
   // Both are full workspaces, so the rail names them as the speaker family's
-  // second level rather than marking Speakers current and contradicting the
+  // second level rather than marking Event speakers current and contradicting the
   // breadcrumb below it.
   const speakerRail = page.getByRole("complementary", {
     name: "Primary navigation",
   });
   await expect(
-    speakerRail.getByRole("link", { name: "Speaker network" }),
+    speakerRail.getByRole("link", { name: "Speaker directory" }),
   ).toHaveAttribute("href", "/admin/crm");
   await expect(
     speakerRail.getByRole("link", { name: "Speaker resources" }),
@@ -141,16 +141,15 @@ test("administrator navigation groups stable workspace families without hiding p
   const crmRail = page.getByRole("complementary", {
     name: "Primary navigation",
   });
-  // The page is Speaker Network, so that is what claims aria-current. Speakers
-  // marks the family instead of claiming to be the page and contradicting the
+  // The page is Speaker directory, so that is what claims aria-current. Event
+  // speakers marks the family instead of claiming to be the page and contradicting the
   // breadcrumb underneath it.
   await expect(
-    crmRail.getByRole("link", { name: "Speaker network" }),
+    crmRail.getByRole("link", { name: "Speaker directory" }),
   ).toHaveAttribute("aria-current", "page");
-  await expect(crmRail.getByRole("link", { name: "Speakers" })).toHaveAttribute(
-    "data-family-current",
-    "",
-  );
+  await expect(
+    crmRail.getByRole("link", { name: "Event speakers" }),
+  ).toHaveAttribute("data-family-current", "");
 
   await page.setViewportSize({ width: 390, height: 844 });
   await page.getByRole("button", { name: "Open navigation" }).click();
@@ -338,6 +337,113 @@ test("review scoring exposes every criterion control at mobile width", async ({
   expect(overflow).toBeLessThanOrEqual(1);
 });
 
+test("participant mobile navigation exposes every destination at 320 pixels", async ({
+  page,
+}) => {
+  await selectDemoRole(page, "speaker");
+  await page.setViewportSize({ width: 320, height: 700 });
+  await waitForInterface(page, "/participant/dashboard");
+
+  const navigation = page.getByRole("navigation", {
+    name: "Participant workspace",
+  });
+  const mobileNavigation = navigation.locator(".speaker-nav-mobile");
+  const primaryLinks = mobileNavigation.locator(":scope > a");
+  const more = mobileNavigation.getByRole("button", {
+    name: "More",
+    exact: true,
+  });
+  await expect(primaryLinks).toHaveCount(4);
+  for (const label of ["Overview", "Applications", "My sessions", "Tasks"]) {
+    const link = mobileNavigation.getByRole("link", { name: label });
+    await expect(link).toBeVisible();
+    await expect(link.locator("span")).toBeVisible();
+  }
+  await expect(more).toBeVisible();
+
+  const primaryBounds = await mobileNavigation
+    .locator(":scope > a, :scope > .speaker-nav-more > button")
+    .evaluateAll((items) =>
+      items.map((item) => {
+        const bounds = item.getBoundingClientRect();
+        return { left: bounds.left, right: bounds.right };
+      }),
+    );
+  for (const bounds of primaryBounds) {
+    expect(bounds.left).toBeGreaterThanOrEqual(0);
+    expect(bounds.right).toBeLessThanOrEqual(320);
+  }
+
+  await more.click();
+  const secondaryNavigation = mobileNavigation.locator(
+    "#participant-more-destinations",
+  );
+  await expect(secondaryNavigation).toBeVisible();
+  const profile = secondaryNavigation.getByRole("link", { name: "Profile" });
+  await expect(profile).toBeVisible();
+  await profile.click();
+  await expect(page).toHaveURL(/\/participant\/profile$/u);
+  await expect(
+    mobileNavigation.getByRole("button", { name: /More/ }),
+  ).toHaveAttribute("data-route-active", "");
+
+  await waitForInterface(page, "/participant/dashboard");
+  const reopenedMore = page
+    .locator(".speaker-nav-mobile")
+    .getByRole("button", { name: "More", exact: true });
+  await reopenedMore.focus();
+  await page.keyboard.press("Enter");
+  await expect(page.locator("#participant-more-destinations")).toBeVisible();
+  await page.keyboard.press("Shift+Tab");
+  await expect(
+    page
+      .locator(".speaker-nav-mobile")
+      .getByRole("link", { name: "Tasks", exact: true }),
+  ).toBeFocused();
+  await page.keyboard.press("Enter");
+  await expect(page).toHaveURL(/\/participant\/tasks$/u);
+  await expect(page.locator("#participant-more-destinations")).toBeHidden();
+
+  await waitForInterface(page, "/participant/dashboard");
+  const escapeMore = page
+    .locator(".speaker-nav-mobile")
+    .getByRole("button", { name: "More", exact: true });
+  await escapeMore.focus();
+  await page.keyboard.press("Enter");
+  await expect(page.locator("#participant-more-destinations")).toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect(page.locator("#participant-more-destinations")).toBeHidden();
+  await expect(escapeMore).toBeFocused();
+  await page.keyboard.press("Enter");
+  const keyboardProfile = page
+    .locator("#participant-more-destinations")
+    .getByRole("link", { name: "Profile" });
+  const secondaryLinkCount = await page
+    .locator("#participant-more-destinations")
+    .getByRole("link")
+    .count();
+  for (let index = 0; index < secondaryLinkCount; index += 1) {
+    await page.keyboard.press("Tab");
+    if (
+      await keyboardProfile.evaluate(
+        (element) => document.activeElement === element,
+      )
+    ) {
+      break;
+    }
+  }
+  await expect(keyboardProfile).toBeFocused();
+  await page.keyboard.press("Enter");
+  await expect(page).toHaveURL(/\/participant\/profile$/u);
+
+  const overflow = await page.evaluate(
+    () =>
+      document.documentElement.scrollWidth -
+      document.documentElement.clientWidth,
+  );
+  expect(overflow).toBeLessThanOrEqual(1);
+});
+
 test("representative shells remain usable at a 200 percent equivalent layout viewport", async ({
   page,
 }) => {
@@ -355,6 +461,23 @@ test("representative shells remain usable at a 200 percent equivalent layout vie
     if (path.startsWith("/admin/")) await selectDemoRole(page, "administrator");
     await waitForInterface(page, path);
     await expect(page.locator("#main")).toBeVisible();
+    if (path === "/participant/dashboard") {
+      const mobileNavigation = page.locator(".speaker-nav-mobile");
+      await expect(mobileNavigation.locator(":scope > a")).toHaveCount(4);
+      await expect(
+        mobileNavigation.getByRole("button", { name: "More", exact: true }),
+      ).toBeVisible();
+      for (const label of [
+        "Overview",
+        "Applications",
+        "My sessions",
+        "Tasks",
+      ]) {
+        await expect(
+          mobileNavigation.getByRole("link", { name: label }).locator("span"),
+        ).toBeVisible();
+      }
+    }
     const overflow = await page.evaluate(
       () =>
         document.documentElement.scrollWidth -

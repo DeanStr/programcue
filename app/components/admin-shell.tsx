@@ -62,6 +62,7 @@ export {
   adminCommandRecordSelection,
   adminCommandRecordsForKey,
   adminCommandSearchKey,
+  adminNavigationCommandValue,
   adminPageBreadcrumbs,
   adminRecordBreadcrumb,
   canOpenAdminAssistant,

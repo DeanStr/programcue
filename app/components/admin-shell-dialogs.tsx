@@ -47,9 +47,9 @@ function readableRole(role: string) {
 const VIEW_AREA_LABELS: Record<SavedViewArea, string> = {
   submissions: "Applications",
   evaluations: "Review & selection",
-  speakers: "Speakers",
-  sessions: "Schedule",
-  tasks: "Tasks",
+  speakers: "Event speakers",
+  sessions: "Schedule planner",
+  tasks: "Tasks & readiness",
   operations: "Operations",
 };
 

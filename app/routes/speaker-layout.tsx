@@ -28,6 +28,7 @@ export async function loader({ request, context }: Route.LoaderArgs) {
       name: portal.profile.name ?? "Participant",
       email: viewer.email,
       demo: viewer.demo,
+      role: viewer.role,
     },
   };
 }
@@ -39,6 +40,8 @@ export default function SpeakerLayout({ loaderData }: Route.ComponentProps) {
       event={loaderData.event}
       viewer={viewer}
       canManageAvailability={loaderData.canManageAvailability}
+      hasParticipantApplications={portal.hasApplications}
+      hasParticipantSessions={portal.sessions.length > 0}
     >
       <Outlet context={{ portal, viewer }} />
     </SpeakerShell>

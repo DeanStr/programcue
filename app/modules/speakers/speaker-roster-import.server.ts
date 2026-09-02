@@ -326,7 +326,7 @@ export class SpeakerRosterImportService {
         invalid.push({
           rowNumber: row.rowNumber,
           errors: [
-            "This email belongs to a merged Speaker Network contact. Use the primary contact instead.",
+            "This email belongs to a merged speaker directory contact. Use the primary contact instead.",
           ],
         });
         return [];

@@ -32,7 +32,7 @@ export const handle = adminRecordBreadcrumbHandle([
 export const meta: Route.MetaFunction = ({ loaderData }) => [
   {
     title: loaderData
-      ? `${loaderData.detail.profile.name} · Speakers · Program Cue`
+      ? `${loaderData.detail.profile.name} · Event speakers · Program Cue`
       : "Speaker · Program Cue",
   },
 ];

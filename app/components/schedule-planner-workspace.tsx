@@ -127,7 +127,7 @@ export function SchedulePlannerWorkspace({
     <div className="schedule-page">
       <div className="page-head schedule-page-head">
         <div>
-          <h1>Schedule Planner</h1>
+          <h1>Schedule planner</h1>
           <p className="schedule-page-stats">
             {workspace.entries.length} placed · {unscheduledCount} to place ·{" "}
             {workspace.conflicts.length ? (

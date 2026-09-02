@@ -13,6 +13,8 @@ describe("saved view name suggestion", () => {
   });
 
   it("uses the area name when no URL filters are active", () => {
-    expect(suggestedSavedViewName("tasks", "/admin/tasks")).toBe("Tasks view");
+    expect(suggestedSavedViewName("tasks", "/admin/tasks")).toBe(
+      "Tasks & readiness view",
+    );
   });
 });

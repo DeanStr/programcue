@@ -18,7 +18,7 @@ function context() {
 
 afterEach(() => vi.restoreAllMocks());
 
-describe("Speaker Network event handoff", () => {
+describe("speaker directory event handoff", () => {
   it("reports a successful handoff without changing the current event", async () => {
     await ensureDemoData(env as unknown as CloudflareEnvironment);
     const handoff = vi

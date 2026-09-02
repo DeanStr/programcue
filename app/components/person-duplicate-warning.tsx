@@ -37,7 +37,7 @@ export function PersonDuplicateWarning({
         </ul>
         {truncated ? (
           <p>
-            More matches exist. Search the Speakers directory before continuing.
+            More matches exist. Search the speaker directory before continuing.
           </p>
         ) : null}
       </div>

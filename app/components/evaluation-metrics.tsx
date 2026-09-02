@@ -19,10 +19,16 @@ export function EvaluationMetrics() {
         <strong className="value pc-num">{loaderData.evaluators.length}</strong>
       </section>
       <section className="pc-eval-metric">
-        <span className="label">Submissions</span>
+        <span className="label">Review targets</span>
         <strong className="value pc-num">
-          {loaderData.submissions.length}
+          {loaderData.reviewTargetSummary.total}
         </strong>
+        <span className="detail">
+          {loaderData.reviewTargetSummary.proposals} proposal
+          {loaderData.reviewTargetSummary.proposals === 1 ? "" : "s"} ·{" "}
+          {loaderData.reviewTargetSummary.sessions} session
+          {loaderData.reviewTargetSummary.sessions === 1 ? "" : "s"}
+        </span>
       </section>
     </div>
   );

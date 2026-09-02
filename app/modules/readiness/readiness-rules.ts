@@ -17,6 +17,25 @@ export type WorkflowReadiness = {
   score: number;
 };
 
+export type OperationalReadinessStatus =
+  | "ready"
+  | "on_track"
+  | "at_risk"
+  | "needs_attention";
+
+export function summarizeReadinessConditions(
+  conditions: ReadonlyArray<{ severity: "danger" | "warning" }>,
+) {
+  return {
+    criticalConditionCount: conditions.filter(
+      (condition) => condition.severity === "danger",
+    ).length,
+    warningConditionCount: conditions.filter(
+      (condition) => condition.severity === "warning",
+    ).length,
+  };
+}
+
 export function calculateReadiness(tasks: ReadonlyArray<ReadinessTask>) {
   if (!tasks.length) return { percentage: 100, blockers: 0 };
   let achieved = 0;
@@ -40,12 +59,12 @@ export function calculateReadiness(tasks: ReadonlyArray<ReadinessTask>) {
 
 export function calculateOverallReadiness(
   workflows: ReadonlyArray<WorkflowReadiness>,
-  declaredBlockers: number,
+  activeConditionCount: number,
 ) {
-  if (!Number.isInteger(declaredBlockers) || declaredBlockers < 0) {
-    throw new Error("Declared blockers must be a non-negative integer.");
+  if (!Number.isInteger(activeConditionCount) || activeConditionCount < 0) {
+    throw new Error("Active conditions must be a non-negative integer.");
   }
-  if (!workflows.length) return declaredBlockers > 0 ? 0 : 100;
+  if (!workflows.length) return activeConditionCount > 0 ? 0 : 100;
   const total = workflows.reduce((sum, workflow) => {
     if (
       !Number.isFinite(workflow.score) ||
@@ -59,5 +78,28 @@ export function calculateOverallReadiness(
     return sum + workflow.score;
   }, 0);
   const average = Math.round(total / workflows.length);
-  return declaredBlockers > 0 ? Math.min(99, average) : average;
+  return activeConditionCount > 0 ? Math.min(99, average) : average;
+}
+
+export function operationalReadinessStatus(input: {
+  percentage: number;
+  criticalConditionCount: number;
+  warningConditionCount: number;
+}): OperationalReadinessStatus {
+  const { percentage, criticalConditionCount, warningConditionCount } = input;
+  if (!Number.isFinite(percentage) || percentage < 0 || percentage > 100) {
+    throw new Error("Overall readiness must be between 0 and 100.");
+  }
+  for (const [label, count] of [
+    ["Critical conditions", criticalConditionCount],
+    ["Warning conditions", warningConditionCount],
+  ] as const) {
+    if (!Number.isInteger(count) || count < 0) {
+      throw new Error(`${label} must be a non-negative integer.`);
+    }
+  }
+  if (criticalConditionCount > 0) return "needs_attention";
+  if (percentage < 75) return "at_risk";
+  if (percentage === 100 && warningConditionCount === 0) return "ready";
+  return "on_track";
 }

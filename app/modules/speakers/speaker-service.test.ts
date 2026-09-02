@@ -1,7 +1,8 @@
 import { env } from "cloudflare:test";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import type { AirtableProviderBoundary } from "~/modules/airtable/airtable-provider-boundary.server";
 import { ResourceService } from "~/modules/resources/resource-service.server";
+import { ensureDemoSubmissionForm } from "~/modules/submissions/demo-submissions.server";
 import type { Viewer } from "~/platform/auth/authorize.server";
 import { ensureDemoSpeakerData } from "./demo.server";
 import {
@@ -820,6 +821,98 @@ describe("speaker profile service", () => {
     )
       .bind(created.membershipId)
       .run();
+  });
+
+  it("derives application capability inside the scoped portal read", async () => {
+    const testEnv = env as unknown as CloudflareEnvironment;
+    await ensureDemoSpeakerData(testEnv);
+    await ensureDemoSubmissionForm(testEnv);
+    const suffix = crypto.randomUUID();
+    const submissionId = `portal-application-${suffix}`;
+    const otherPersonId = `portal-other-speaker-${suffix}`;
+    const formVersion = await testEnv.DB.prepare(
+      `SELECT version.id
+         FROM form_versions version
+         JOIN form_definitions form
+           ON form.id = version.form_id AND form.event_id = version.event_id
+        WHERE version.event_id = ? AND version.status = 'published'
+          AND form.public_slug = 'form'`,
+    )
+      .bind(speaker.eventId)
+      .first<{ id: string }>();
+    if (!formVersion) throw new Error("Expected the published demo form.");
+    await testEnv.DB.batch([
+      testEnv.DB.prepare(
+        `INSERT INTO people (id, email, display_name, email_verified)
+         VALUES (?, ?, 'Unrelated Portal Speaker', 1)`,
+      ).bind(otherPersonId, `${otherPersonId}@example.test`),
+      testEnv.DB.prepare(
+        `INSERT INTO memberships (
+           id, organisation_id, event_id, person_id, role,
+           invited_at, accepted_at, created_at
+         ) VALUES (?, ?, ?, ?, 'speaker', unixepoch(), unixepoch(), unixepoch())`,
+      ).bind(
+        crypto.randomUUID(),
+        speaker.organisationId,
+        speaker.eventId,
+        otherPersonId,
+      ),
+      testEnv.DB.prepare(
+        `INSERT INTO submissions (
+           id, event_id, form_version_id, submitter_person_id,
+           public_reference, title, status, revision, created_at, updated_at
+         ) VALUES (?, ?, ?, ?, ?, 'Scoped portal application', 'draft', 1,
+                   unixepoch(), unixepoch())`,
+      ).bind(
+        submissionId,
+        speaker.eventId,
+        formVersion.id,
+        speaker.personId,
+        `PC-PORTAL-${suffix}`,
+      ),
+    ]);
+    const assertReadable = vi.fn(async () => null);
+    const service = new SpeakerService(testEnv, {
+      airtable: { assertReadable } as unknown as AirtableProviderBoundary,
+    });
+    const otherSpeaker: Viewer = {
+      personId: otherPersonId,
+      name: "Unrelated Portal Speaker",
+      email: `${otherPersonId}@example.test`,
+      role: "speaker",
+      organisationId: speaker.organisationId,
+      eventId: speaker.eventId,
+      demo: true,
+    };
+
+    await expect(service.getPortal(speaker)).resolves.toMatchObject({
+      hasApplications: true,
+    });
+    await expect(service.getPortal(otherSpeaker)).resolves.toMatchObject({
+      hasApplications: false,
+    });
+    expect(assertReadable).toHaveBeenCalledTimes(2);
+
+    await testEnv.DB.prepare(
+      `INSERT INTO submission_speakers (
+         id, event_id, submission_id, person_id, email, display_name,
+         role_label, position, invitation_status, is_primary,
+         invited_at, claimed_at, created_at, updated_at
+       ) VALUES (?, ?, ?, ?, ?, 'Unrelated Portal Speaker', 'Co-speaker', 1,
+                 'claimed', 0, unixepoch(), unixepoch(), unixepoch(), unixepoch())`,
+    )
+      .bind(
+        crypto.randomUUID(),
+        speaker.eventId,
+        submissionId,
+        otherPersonId,
+        otherSpeaker.email,
+      )
+      .run();
+    await expect(service.getPortal(otherSpeaker)).resolves.toMatchObject({
+      hasApplications: true,
+    });
+    expect(assertReadable).toHaveBeenCalledTimes(3);
   });
 
   it("loads only the authenticated speaker workspace and protects revision updates", async () => {

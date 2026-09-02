@@ -231,6 +231,7 @@ export class SpeakerPortalService {
       sessionParticipants,
       files,
       profileHistory,
+      applicationAccess,
     ] = await Promise.all([
       this.env.DB.prepare(
         `
@@ -534,9 +535,48 @@ export class SpeakerPortalService {
         eventId: viewer.eventId,
         personId: viewer.personId,
       }),
+      this.env.DB.prepare(
+        `SELECT EXISTS (
+           SELECT 1
+             FROM submissions submission
+             JOIN events event
+               ON event.id = submission.event_id
+              AND event.organisation_id = ?
+             JOIN form_versions version
+               ON version.id = submission.form_version_id
+              AND version.event_id = submission.event_id
+             JOIN form_definitions form
+               ON form.id = version.form_id
+              AND form.event_id = submission.event_id
+            WHERE submission.event_id = ?
+              AND (
+                submission.submitter_person_id = ?
+                OR EXISTS (
+                  SELECT 1
+                    FROM submission_speakers speaker
+                   WHERE speaker.submission_id = submission.id
+                     AND speaker.event_id = submission.event_id
+                     AND speaker.person_id = ?
+                     AND speaker.invitation_status = 'claimed'
+                )
+              )
+         ) AS hasApplications`,
+      )
+        .bind(
+          viewer.organisationId,
+          viewer.eventId,
+          viewer.personId,
+          viewer.personId,
+        )
+        .first<{ hasApplications: number }>(),
     ]);
     if (!profile || !event)
       throw new Response("Speaker workspace not found.", { status: 404 });
+    if (!applicationAccess) {
+      throw new Error(
+        "Participant application availability could not be read.",
+      );
+    }
     const duplicateSessionReview = sessions.results.find(
       (session) => session.sessionDetailsReviewTaskCount > 1,
     );
@@ -701,6 +741,7 @@ export class SpeakerPortalService {
       ),
       profileFieldPolicies,
       customPersonFields,
+      hasApplications: Boolean(applicationAccess.hasApplications),
       event: {
         ...eventSummary,
         filePolicy: parseEventFilePolicy(filePolicyJson),

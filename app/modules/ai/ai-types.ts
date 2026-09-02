@@ -115,8 +115,9 @@ export type AiAttribution = {
 export type AiReadinessAdvisory = {
   generatedAt: string;
   percentage: number;
-  status: "ready" | "on_track" | "at_risk";
-  declaredBlockers: number;
+  status: "ready" | "on_track" | "at_risk" | "needs_attention";
+  criticalConditionCount: number;
+  warningConditionCount: number;
   summary: string;
   priorities: Array<{
     blockerKey: string;

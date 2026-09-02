@@ -58,11 +58,9 @@ test("organization CRM covers directory, relationship, pipeline, handoff and out
     .inputValue();
 
   await page.goto("/admin/crm");
+  await expect(page.getByText("Organisation-wide · all events")).toBeVisible();
   await expect(
-    page.getByText("Organization workspace · all events"),
-  ).toBeVisible();
-  await expect(
-    page.getByRole("heading", { name: "Speaker Network", level: 1 }),
+    page.getByRole("heading", { name: "Speaker directory", level: 1 }),
   ).toBeVisible();
 
   await page.getByText("Import speaker contacts from CSV").click();
@@ -105,7 +103,10 @@ test("organization CRM covers directory, relationship, pipeline, handoff and out
     page.getByRole("button", { name: "Remove AI tag" }),
   ).toBeVisible();
 
-  await page.getByRole("link", { name: "Speaker Network directory" }).click();
+  await page
+    .locator("#main .page-actions")
+    .getByRole("link", { name: "Speaker directory" })
+    .click();
   await expect(page).toHaveURL(/\/admin\/crm$/u);
   await page.locator('select[name="tag"]').selectOption("AI");
   await page.getByRole("button", { name: "Apply filters" }).click();
