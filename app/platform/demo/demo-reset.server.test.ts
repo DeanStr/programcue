@@ -3,7 +3,6 @@ import { describe, expect, it } from "vitest";
 
 import { DEFAULT_EVENT_BRAND_ACCENT } from "~/lib/brand";
 import { AiAssistantService } from "~/modules/ai/ai-assistant-service.server";
-import { assistantProposalMetadataSchema } from "~/modules/ai/ai-tools.server";
 import { CommunicationService } from "~/modules/communications/communication-service.server";
 import { EvaluationService } from "~/modules/evaluations/evaluation-service.server";
 import { ProgrammeEmbedService } from "~/modules/programme/programme-embed-service.server";
@@ -11,7 +10,6 @@ import { getValidatedPublishedPublicSite } from "~/modules/public-site/validated
 import { eventLocalCalendarDate } from "~/modules/schedule/schedule-time";
 import { readSpeakerProfileHistory } from "~/modules/speakers/speaker-profile-revision.server";
 import { SubmissionService } from "~/modules/submissions/submission-service.server";
-import type { Viewer } from "~/platform/auth/authorize.server";
 import {
   DEMO_ASSISTANT_FIXTURE_MODEL,
   DEMO_VENUE_ADDRESS,
@@ -40,62 +38,12 @@ import {
   prepareJudgedDemoWorkflow,
   resetDemoEvent,
 } from "./demo-reset.server";
+import {
+  demoAdministrator,
+  demoEnvironment,
+  taskProposalMetadata,
+} from "./demo-reset.server.test-support";
 import { ensureDemoData } from "./seed.server";
-
-function demoEnvironment(overrides: Partial<CloudflareEnvironment> = {}) {
-  return {
-    ...(env as unknown as CloudflareEnvironment),
-    APP_ENV: "demo",
-    DEMO_MODE: "true",
-    DEFAULT_EVENT_ID: DEMO_EVENT_ID,
-    ...overrides,
-  } as CloudflareEnvironment;
-}
-
-const demoAdministrator: Viewer = {
-  personId: "person-demo-admin",
-  name: "Jordan Alvarez",
-  email: "sbek-organizer@example.com",
-  role: "administrator",
-  organisationId: DEMO_ORGANISATION_ID,
-  eventId: DEMO_EVENT_ID,
-  demo: true,
-};
-
-function taskProposalMetadata(proposalId: string, model: string) {
-  return assistantProposalMetadataSchema.parse({
-    version: 1,
-    toolName: "propose_task",
-    runId: crypto.randomUUID(),
-    model,
-    arguments: {
-      title: "Confirm venue accessibility handoff",
-      description: "Confirm the documented handoff with the venue team.",
-      targetType: "event",
-      targetId: DEMO_EVENT_ID,
-      ownerPersonId: null,
-      taskType: "administrator_only",
-      impact: "high",
-      dueAt: null,
-      dependencyIds: [],
-    },
-    preview: {
-      id: proposalId,
-      toolName: "propose_task",
-      title: "Confirm venue accessibility handoff",
-      summary: "Create one administrator task for the demo event.",
-      consequence: "Approval creates one durable event task.",
-      changes: [
-        {
-          field: "Task",
-          before: null,
-          after: "Confirm venue accessibility handoff",
-        },
-      ],
-      approvalRequired: true,
-    },
-  });
-}
 
 describe("complete evaluator demo reset", () => {
   describe("cleanup inventory", () => {

@@ -1,15 +1,10 @@
-import { z } from "zod";
-import {
-  participantTaskAccessSql,
-  taskConfiguration,
-} from "~/modules/tasks/task-service-foundation.server";
+import type { z } from "zod";
 import {
   type assetKindSchema,
   DIRECT_MULTIPART_PART_SIZE_BYTES,
   detectInspectionContentType,
   type FileInspectionSource,
   FilePolicyError,
-  parseEventFilePolicy,
   validateDirectFileDeclaration,
   validateFileSignature,
 } from "./file-policy";
@@ -20,18 +15,16 @@ import {
 } from "./file-scan-dispatch.server";
 import {
   FileAccessError,
-  FileService,
   isMissingR2MultipartUpload,
   stableLogicalAssetId,
   type UploadTarget,
-  uploadTargetSchema,
 } from "./file-service.server";
 import { MultipartR2Provider } from "./multipart-r2-provider.server";
 import {
-  isApplicantActor,
   MultipartUploadAccessRepository,
   multipartIdempotencyKey,
 } from "./multipart-upload-access.server";
+import { MultipartUploadAuthorizer } from "./multipart-upload-authorizer.server";
 import type {
   MultipartActor,
   MultipartRow,
@@ -43,128 +36,42 @@ import {
 } from "./multipart-upload-errors";
 import { requireR2S3Configuration } from "./r2-s3-signing.server";
 
+export {
+  multipartAbortSchema,
+  multipartCompleteSchema,
+  multipartInitiateSchema,
+  multipartListPartsSchema,
+  multipartPartUrlSchema,
+  multipartResumeSchema,
+} from "./multipart-upload-contract";
 export type { ApplicantMultipartActor } from "./multipart-upload-contracts";
-
-const MULTIPART_EXPIRY_SECONDS = 24 * 60 * 60;
-const REQUEST_CLAIM_SECONDS = 60;
-const REVOKED_COMPLETION_REASON =
-  "Multipart completion was revoked because its target or file policy is no longer eligible.";
-
-type TaskFileScope = "participant_document" | "session_deliverable";
-type TaskFileKind = "slides" | "video" | "supporting_document";
-type TaskEvidenceFilePolicy = {
-  fileScope: TaskFileScope;
-  fileKind?: TaskFileKind;
-};
-
-export const multipartInitiateSchema = z.object({
-  target: uploadTargetSchema,
-  filename: z.string().trim().min(1).max(180),
-  contentType: z.string().trim().toLowerCase().min(1).max(160),
-  sizeBytes: z.number().int().positive().max(1_073_741_824),
-  idempotencyKey: z
-    .string()
-    .trim()
-    .min(16)
-    .max(160)
-    .regex(/^[a-zA-Z0-9._:-]+$/),
-});
-
-export const multipartPartUrlSchema = z.object({
-  versionId: z.string().min(1).max(160),
-  partNumber: z.number().int().min(1).max(10_000),
-});
-
-export const multipartResumeSchema = multipartInitiateSchema;
-
-export const multipartListPartsSchema = z.object({
-  versionId: z.string().min(1).max(160),
-});
-
-export const multipartCompleteSchema = z.object({
-  versionId: z.string().min(1).max(160),
-  parts: z
-    .array(
-      z.object({
-        partNumber: z.number().int().min(1).max(10_000),
-        etag: z.string().trim().min(1).max(200),
-      }),
-    )
-    .min(1)
-    .max(10_000),
-});
-
-export const multipartAbortSchema = z.object({
-  versionId: z.string().min(1).max(160),
-});
-
-function multipartAuditProvenance(actor: MultipartActor) {
-  if (isApplicantActor(actor)) {
-    return {
-      actorKind: actor.personId ? ("person" as const) : ("system" as const),
-      origin: "public_form" as const,
-    };
-  }
-  return {
-    actorKind: "person" as const,
-    origin: ["owner", "administrator"].includes(actor.role)
-      ? ("admin_ui" as const)
-      : ("participant_ui" as const),
-  };
-}
-
 export {
   FileMultipartConflictError,
   FileMultipartIncompleteError,
   FileMultipartStateError,
 } from "./multipart-upload-errors";
 
-function expectedPartCount(
-  row: Pick<MultipartRow, "sizeBytes" | "partSizeBytes">,
-) {
-  return Math.ceil(row.sizeBytes / row.partSizeBytes);
-}
-
-async function sha256(value: string) {
-  const digest = await crypto.subtle.digest(
-    "SHA-256",
-    new TextEncoder().encode(value),
-  );
-  return Array.from(new Uint8Array(digest), (byte) =>
-    byte.toString(16).padStart(2, "0"),
-  ).join("");
-}
-
-function normalizedManifest(
-  parts: z.infer<typeof multipartCompleteSchema>["parts"],
-  expected: number,
-) {
-  const normalized = parts
-    .map((part) => ({
-      partNumber: part.partNumber,
-      etag: part.etag.replace(/^"|"$/g, ""),
-    }))
-    .sort((left, right) => left.partNumber - right.partNumber);
-  if (normalized.length !== expected)
-    throw new FileMultipartStateError(
-      `Completion requires exactly ${expected} uploaded parts.`,
-    );
-  normalized.forEach((part, index) => {
-    if (part.partNumber !== index + 1)
-      throw new FileMultipartStateError(
-        "Multipart completion requires one contiguous entry for every part.",
-      );
-    if (!/^[\x21-\x7e]{1,200}$/.test(part.etag))
-      throw new FileMultipartStateError(
-        `Part ${part.partNumber} was not stored correctly. Start the upload again.`,
-      );
-  });
-  return normalized;
-}
+import {
+  expectedPartCount,
+  MULTIPART_EXPIRY_SECONDS,
+  multipartAbortSchema,
+  multipartAuditProvenance,
+  multipartCompleteSchema,
+  multipartInitiateSchema,
+  multipartListPartsSchema,
+  multipartPartUrlSchema,
+  multipartResumeSchema,
+  normalizedManifest,
+  REQUEST_CLAIM_SECONDS,
+  REVOKED_COMPLETION_REASON,
+  sha256,
+  type TaskEvidenceFilePolicy,
+} from "./multipart-upload-contract";
 
 export class MultipartUploadService {
   private readonly provider: MultipartR2Provider;
   private readonly access: MultipartUploadAccessRepository;
+  private readonly authorizer: MultipartUploadAuthorizer;
 
   constructor(
     private readonly env: CloudflareEnvironment,
@@ -172,6 +79,7 @@ export class MultipartUploadService {
   ) {
     this.provider = new MultipartR2Provider(env, dependencies);
     this.access = new MultipartUploadAccessRepository(env);
+    this.authorizer = new MultipartUploadAuthorizer(env);
   }
 
   private requireBucket() {
@@ -179,79 +87,18 @@ export class MultipartUploadService {
   }
 
   private participantTaskGuard(actor: MultipartActor) {
-    if (
-      isApplicantActor(actor) ||
-      ["owner", "administrator"].includes(actor.role)
-    ) {
-      return null;
-    }
-    return {
-      sql: participantTaskAccessSql("task"),
-      bindings: [actor.personId, actor.personId, actor.personId],
-    };
+    return this.authorizer.participantTaskGuard(actor);
   }
 
   private async assertTarget(actor: MultipartActor, target: UploadTarget) {
-    if (isApplicantActor(actor)) {
-      if (
-        target.targetType !== "submission" ||
-        target.targetId !== actor.submissionId ||
-        target.assetKind !== "video"
-      )
-        throw new FileAccessError(
-          "Applicant multipart uploads are limited to the authorized draft video field.",
-        );
-      const owned = await this.env.DB.prepare(
-        `SELECT 1
-           FROM submissions submission
-           JOIN events event
-             ON event.id = submission.event_id AND event.organisation_id = ?
-          WHERE submission.id = ? AND submission.event_id = ?
-            AND submission.status = 'draft'
-            AND (
-              (? IS NOT NULL AND submission.submitter_person_id = ?)
-              OR (? IS NULL AND submission.submitter_person_id IS NULL)
-            )`,
-      )
-        .bind(
-          actor.organisationId,
-          actor.submissionId,
-          actor.eventId,
-          actor.personId,
-          actor.personId,
-          actor.personId,
-        )
-        .first();
-      if (!owned)
-        throw new FileAccessError(
-          "The draft submission is no longer available for this applicant.",
-        );
-      return null;
-    }
-    const files = new FileService(this.env);
-    if (["owner", "administrator"].includes(actor.role)) {
-      await files.assertAdminTarget(actor, target);
-      return null;
-    } else {
-      return files.assertParticipantTarget(actor, target);
-    }
+    return this.authorizer.assertTarget(actor, target);
   }
 
   private assertSameRequest(
     row: MultipartRow,
     input: z.infer<typeof multipartInitiateSchema>,
   ) {
-    if (
-      row.targetType !== input.target.targetType ||
-      row.targetId !== input.target.targetId ||
-      row.assetKind !== input.target.assetKind ||
-      row.filename !== input.filename ||
-      row.contentType !== input.contentType ||
-      row.sizeBytes !== input.sizeBytes
-    )
-      throw new FileMultipartConflictError(
-        "This idempotency key was already used for a different multipart upload.",
-      );
+    this.authorizer.assertSameRequest(row, input);
   }
 
   private assertAuthorisedTaskAsset(
@@ -259,98 +106,32 @@ export class MultipartUploadService {
     authorisedAssetId: string | null,
     row: MultipartRow,
   ) {
-    if (
-      target.targetType === "task" &&
-      authorisedAssetId !== null &&
-      row.assetId !== authorisedAssetId
-    ) {
-      throw new FileAccessError(
-        "This upload no longer belongs to the task's canonical evidence asset.",
-      );
-    }
+    this.authorizer.assertAuthorisedTaskAsset(target, authorisedAssetId, row);
   }
 
   private uploadTarget(row: MultipartRow) {
-    return uploadTargetSchema.parse({
-      targetType: row.targetType,
-      targetId: row.targetId,
-      assetKind: row.assetKind,
-    });
+    return this.authorizer.uploadTarget(row);
   }
 
   private async taskEvidenceFilePolicy(
     actor: MultipartActor,
     target: UploadTarget,
   ): Promise<TaskEvidenceFilePolicy | undefined> {
-    if (target.targetType !== "task" || target.assetKind !== "task_evidence") {
-      return undefined;
-    }
-    const task = await this.env.DB.prepare(
-      `SELECT task_type AS taskType, target_type AS targetType,
-              configuration_json AS configurationJson
-         FROM task_instances
-        WHERE id = ? AND event_id = ?`,
-    )
-      .bind(target.targetId, actor.eventId)
-      .first<{
-        taskType: string;
-        targetType: string;
-        configurationJson: string;
-      }>();
-    if (task?.taskType !== "file_upload") {
-      throw new FileAccessError("This task does not accept file evidence.");
-    }
-    let configuration: ReturnType<typeof taskConfiguration>;
-    try {
-      configuration = taskConfiguration(task.configurationJson);
-    } catch {
-      throw new FileAccessError(
-        "This file task has invalid purpose or target configuration. Ask an administrator to repair it.",
-      );
-    }
-    if (
-      (configuration.fileScope === "participant_document" &&
-        task.targetType === "speaker") ||
-      (configuration.fileScope === "session_deliverable" &&
-        task.targetType === "session")
-    ) {
-      return {
-        fileScope: configuration.fileScope,
-        ...(configuration.fileKind ? { fileKind: configuration.fileKind } : {}),
-      };
-    }
-    throw new FileAccessError(
-      "This file task has invalid purpose or target configuration. Ask an administrator to repair it.",
-    );
+    return this.authorizer.taskEvidenceFilePolicy(actor, target);
   }
 
   private assertCurrentDeclaration(
     row: MultipartRow,
     taskFilePolicy?: TaskEvidenceFilePolicy,
   ) {
-    const target = this.uploadTarget(row);
-    validateDirectFileDeclaration(
-      target.assetKind,
-      { name: row.filename, type: row.contentType, size: row.sizeBytes },
-      parseEventFilePolicy(row.filePolicyJson),
-      {
-        taskFileScope: taskFilePolicy?.fileScope,
-        taskFileKind: taskFilePolicy?.fileKind,
-      },
-    );
+    this.authorizer.assertCurrentDeclaration(row, taskFilePolicy);
   }
 
   private async assertCurrentUploadAllowed(
     actor: MultipartActor,
     row: MultipartRow,
   ) {
-    const target = this.uploadTarget(row);
-    const authorisedAssetId = await this.assertTarget(actor, target);
-    this.assertAuthorisedTaskAsset(target, authorisedAssetId, row);
-    this.assertCurrentDeclaration(
-      row,
-      await this.taskEvidenceFilePolicy(actor, target),
-    );
+    await this.authorizer.assertCurrentUploadAllowed(actor, row);
   }
 
   private response(row: MultipartRow, duplicate: boolean) {

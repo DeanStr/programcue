@@ -1,4 +1,3 @@
-import { z } from "zod";
 import type { AuditOrigin } from "~/platform/audit/audit-contract";
 import type { Viewer } from "~/platform/auth/authorize.server";
 import {
@@ -6,34 +5,14 @@ import {
   isAtomicBatchGuardError,
 } from "~/platform/database/atomic-batch-guard.server";
 import { WebhookService } from "~/platform/operations/webhook-service.server";
-import {
-  EvaluationRevisionConflictError,
-  EvaluationStateError,
-  EvaluationValidationError,
-} from "./evaluation-errors";
-import { parseRecommendationChoicesJson } from "./evaluation-recommendation-choices";
-import {
-  planReviewResponses,
-  type ReviewCriterion,
-} from "./evaluation-review-plan";
-import {
-  reviewDraftSchema,
-  reviewerAiCriterionSuggestionsSchema,
-} from "./evaluation-schema";
+import { EvaluationRevisionConflictError } from "./evaluation-errors";
+import { resolveEvaluationReviewAiProvenance } from "./evaluation-review-ai-provenance.server";
+import { loadEvaluationReviewSaveContext } from "./evaluation-review-save-context.server";
+import { reviewDraftSchema } from "./evaluation-schema";
 import { EvaluationServiceFoundation } from "./evaluation-service-foundation.server";
 import { reviewableSubmissionSql } from "./evaluation-submission-review-eligibility.server";
 
 type ReviewerActionOrigin = Extract<AuditOrigin, "participant_ui" | "api">;
-
-async function reviewSourceSnapshotHash(value: string) {
-  const digest = await crypto.subtle.digest(
-    "SHA-256",
-    new TextEncoder().encode(value),
-  );
-  return Array.from(new Uint8Array(digest), (byte) =>
-    byte.toString(16).padStart(2, "0"),
-  ).join("");
-}
 
 export class EvaluationReviewSaveWorkflow extends EvaluationServiceFoundation {
   async saveReview(
@@ -57,354 +36,42 @@ export class EvaluationReviewSaveWorkflow extends EvaluationServiceFoundation {
   ) {
     await this.assertViewerEvent(viewer);
     const parsed = reviewDraftSchema.parse(input);
-    const assignment = await this.env.DB.prepare(
-      `
-        SELECT a.id, a.status, a.revision,
-             a.submission_id AS submissionId, a.session_id AS sessionId,
-             a.round_id AS roundId, r.scorecard_id AS scorecardId,
-             r.scorecard_version AS scorecardVersion,
-             r.recommendation_choices_json AS recommendationChoicesJson,
-             COALESCE(submission.submitted_snapshot_json, a.session_snapshot_json)
-               AS sourceSnapshotJson
-        FROM evaluator_assignments a
-        JOIN evaluation_rounds r ON r.id = a.round_id AND r.event_id = a.event_id
-        JOIN evaluation_plans plan
-          ON plan.id = r.plan_id AND plan.event_id = r.event_id
-        JOIN evaluation_round_reviewers pool
-          ON pool.event_id = a.event_id
-         AND pool.round_id = a.round_id
-         AND pool.person_id = a.evaluator_person_id
-        JOIN events event ON event.id = a.event_id
-         AND event.organisation_id = ?
-        LEFT JOIN submissions submission
-          ON submission.id = a.submission_id
-         AND submission.event_id = a.event_id
-        LEFT JOIN sessions session
-          ON session.id = a.session_id AND session.event_id = a.event_id
-       WHERE a.id = ? AND a.event_id = ? AND a.evaluator_person_id = ?
-         AND a.status IN ('assigned','in_progress','reopened')
-         AND plan.status = 'active' AND r.status = 'active'
-         AND (r.opens_at IS NULL OR r.opens_at <= unixepoch())
-         AND (r.closes_at IS NULL OR r.closes_at > unixepoch())
-         AND (
-           (a.submission_id IS NOT NULL
-            AND ${reviewableSubmissionSql("submission", "review")})
-           OR
-           (a.session_id IS NOT NULL
-            AND session.status NOT IN ('cancelled','archived'))
-         )
-    `,
-    )
-      .bind(
-        viewer.organisationId,
-        parsed.assignmentId,
-        viewer.eventId,
-        viewer.personId,
-      )
-      .first<{
-        id: string;
-        status: string;
-        revision: number;
-        submissionId: string | null;
-        sessionId: string | null;
-        roundId: string;
-        scorecardId: string;
-        scorecardVersion: number;
-        recommendationChoicesJson: string;
-        sourceSnapshotJson: string | null;
-      }>();
-    if (!assignment)
-      throw new EvaluationStateError(
-        "This assignment is unavailable or already submitted.",
-      );
-    if (!assignment.sourceSnapshotJson) {
-      throw new EvaluationStateError(
-        "This assignment has no immutable source snapshot.",
-      );
-    }
-    const recommendationChoices = parseRecommendationChoicesJson(
-      assignment.recommendationChoicesJson,
-      `Evaluation round ${assignment.roundId}`,
-    );
-    if (
-      parsed.recommendation !== null &&
-      !recommendationChoices.some(
-        (choice) => choice.id === parsed.recommendation,
-      )
-    ) {
-      throw new EvaluationValidationError(
-        "Select a recommendation available for this evaluation round.",
-      );
-    }
-    const recommendationChoicesSnapshotJson = JSON.stringify(
-      recommendationChoices,
-    );
-    const sourceSnapshotHash = await reviewSourceSnapshotHash(
-      assignment.sourceSnapshotJson,
-    );
-    const criteria = await this.env.DB.prepare(
-      `SELECT criterion.id, criterion.name, criterion.description,
-              criterion.input_type AS inputType,
-              criterion.options_json AS optionsJson,
-              criterion.weight_percent AS weightPercent, criterion.required,
-              criterion.position
-         FROM evaluation_criteria criterion
-         JOIN evaluation_rounds round
-           ON round.id = criterion.round_id AND round.event_id = criterion.event_id
-         JOIN events event
-           ON event.id = criterion.event_id AND event.organisation_id = ?
-        WHERE criterion.event_id = ? AND criterion.round_id = ?
-        ORDER BY criterion.position`,
-    )
-      .bind(viewer.organisationId, viewer.eventId, assignment.roundId)
-      .all<ReviewCriterion>();
-    const { criteriaSnapshotJson, responses, weightedScore } =
-      planReviewResponses(criteria.results, parsed.scores, parsed.intent);
-    const criterionInputTypeById = new Map(
-      criteria.results.map((criterion) => [criterion.id, criterion.inputType]),
-    );
-    const existing = await this.env.DB.prepare(
-      `SELECT review.id, review.revision, review.status,
-              review.ai_suggestion_id AS aiSuggestionId,
-              review.imported_criterion_ids_json AS importedCriterionIdsJson,
-              review.scores_json AS scoresJson,
-              review.recommendation_choices_snapshot_json AS recommendationChoicesSnapshotJson
-         FROM reviews review
-         JOIN events event
-           ON event.id = review.event_id AND event.organisation_id = ?
-        WHERE review.event_id = ? AND review.assignment_id = ?`,
-    )
-      .bind(viewer.organisationId, viewer.eventId, assignment.id)
-      .first<{
-        id: string;
-        revision: number;
-        status: string;
-        aiSuggestionId: string | null;
-        importedCriterionIdsJson: string;
-        scoresJson: string;
-        recommendationChoicesSnapshotJson: string;
-      }>();
-    if ((existing?.revision ?? 0) !== parsed.revision)
-      throw new EvaluationRevisionConflictError();
-    const reviewId = existing?.id ?? crypto.randomUUID();
-    if (
-      existing &&
-      JSON.stringify(
-        parseRecommendationChoicesJson(
-          existing.recommendationChoicesSnapshotJson,
-          `Review ${existing.id}`,
-        ),
-      ) !== recommendationChoicesSnapshotJson
-    ) {
-      throw new EvaluationStateError(
-        `Review ${existing.id} does not match its assigned recommendation choices.`,
-      );
-    }
-    let existingImportedCriterionIds: string[] = [];
-    let existingResponses: Record<string, string | number | boolean> = {};
-    try {
-      existingImportedCriterionIds = z
-        .array(z.string().min(1).max(200))
-        .max(30)
-        .parse(JSON.parse(existing?.importedCriterionIdsJson ?? "[]"));
-      existingResponses = z
-        .record(
-          z.string().min(1),
-          z.union([z.string(), z.number(), z.boolean()]),
-        )
-        .parse(JSON.parse(existing?.scoresJson ?? "{}"));
-    } catch {
-      throw new EvaluationStateError(
-        `Review ${reviewId} has invalid persisted scores or AI suggestion provenance.`,
-      );
-    }
-    const suggestionId =
-      parsed.suggestionId ?? existing?.aiSuggestionId ?? null;
-    const importedCriterionIds = parsed.suggestionId
-      ? parsed.importedCriterionIds
-      : existingImportedCriterionIds;
-    if (
-      existing?.aiSuggestionId &&
-      parsed.suggestionId &&
-      existing.aiSuggestionId !== parsed.suggestionId
-    ) {
-      throw new EvaluationValidationError(
-        "A review cannot replace its imported AI suggestion with another suggestion.",
-      );
-    }
-    let suggestion: {
-      status: "offered" | "imported";
-      assignmentRevision: number;
-      scorecardId: string;
-      scorecardVersion: number;
-      sourceSnapshotHash: string;
-      suggestions: z.infer<typeof reviewerAiCriterionSuggestionsSchema>;
-    } | null = null;
-    if (suggestionId) {
-      const row = await this.env.DB.prepare(
-        `SELECT suggestion.status,
-                suggestion.assignment_revision AS assignmentRevision,
-                suggestion.scorecard_id AS scorecardId,
-                suggestion.scorecard_version AS scorecardVersion,
-                suggestion.source_snapshot_hash AS sourceSnapshotHash,
-                suggestion.suggestions_json AS suggestionsJson
-           FROM reviewer_ai_suggestions suggestion
-           JOIN events event
-             ON event.id = suggestion.event_id AND event.organisation_id = ?
-            AND event.repository_provider = 'd1'
-          WHERE suggestion.id = ? AND suggestion.event_id = ?
-            AND suggestion.assignment_id = ?
-            AND suggestion.evaluator_person_id = ?
-            AND suggestion.status IN ('offered','imported')`,
-      )
-        .bind(
-          viewer.organisationId,
-          suggestionId,
-          viewer.eventId,
-          assignment.id,
-          viewer.personId,
-        )
-        .first<{
-          status: "offered" | "imported";
-          assignmentRevision: number;
-          scorecardId: string;
-          scorecardVersion: number;
-          sourceSnapshotHash: string;
-          suggestionsJson: string;
-        }>();
-      if (!row) {
-        throw new EvaluationValidationError(
-          "This AI suggestion is unavailable for this review assignment.",
-        );
-      }
-      let suggestions: z.infer<typeof reviewerAiCriterionSuggestionsSchema>;
-      try {
-        suggestions = reviewerAiCriterionSuggestionsSchema.parse(
-          JSON.parse(row.suggestionsJson),
-        );
-      } catch {
-        throw new EvaluationStateError(
-          `AI suggestion ${suggestionId} has invalid persisted criterion content.`,
-        );
-      }
-      suggestion = { ...row, suggestions };
-      if (
-        (suggestion.status === "offered" &&
-          suggestion.assignmentRevision !== assignment.revision) ||
-        suggestion.scorecardId !== assignment.scorecardId ||
-        suggestion.scorecardVersion !== assignment.scorecardVersion ||
-        suggestion.sourceSnapshotHash !== sourceSnapshotHash
-      ) {
-        throw new EvaluationRevisionConflictError(
-          "The assignment or scorecard changed after AI suggestions were generated. Refresh before saving.",
-        );
-      }
-      const suggestedClosedValues = new Map(
-        suggestion.suggestions
-          .filter((item) => item.suggestedValue !== null)
-          .map((item) => [item.criterionId, item.suggestedValue]),
-      );
-      if (importedCriterionIds.some((id) => !suggestedClosedValues.has(id))) {
-        throw new EvaluationValidationError(
-          "Only closed criteria from this AI suggestion can be imported.",
-        );
-      }
-      if (!existing?.aiSuggestionId) {
-        if (!importedCriterionIds.length) {
-          throw new EvaluationValidationError(
-            "This AI suggestion has no unanswered closed criteria to import.",
-          );
-        }
-        if (
-          importedCriterionIds.some((id) =>
-            Object.hasOwn(existingResponses, id),
-          )
-        ) {
-          throw new EvaluationValidationError(
-            "AI suggestions can only fill criteria that were unanswered in the saved review.",
-          );
-        }
-        if (
-          importedCriterionIds.some((id) => {
-            const response = responses[id];
-            const persistedValue =
-              criterionInputTypeById.get(id) === "yes_no"
-                ? response === true
-                  ? "yes"
-                  : response === false
-                    ? "no"
-                    : ""
-                : String(response ?? "");
-            return persistedValue !== suggestedClosedValues.get(id);
-          })
-        ) {
-          throw new EvaluationValidationError(
-            "Each imported AI criterion must retain its exact suggested value.",
-          );
-        }
-      }
-      if (
-        existing?.aiSuggestionId &&
-        (existingImportedCriterionIds.length !== importedCriterionIds.length ||
-          existingImportedCriterionIds.some(
-            (id) => !importedCriterionIds.includes(id),
-          ))
-      ) {
-        throw new EvaluationValidationError(
-          "Imported AI criterion provenance cannot be changed after it is saved.",
-        );
-      }
-    } else if (
-      importedCriterionIds.length ||
-      parsed.confirmedAiCriterionIds.length
-    ) {
-      throw new EvaluationValidationError(
-        "AI criterion provenance requires an available reviewer suggestion.",
-      );
-    }
-    const unchangedImportedCriterionIds = suggestion
-      ? suggestion.suggestions
-          .filter((item) => {
-            if (
-              item.suggestedValue === null ||
-              !importedCriterionIds.includes(item.criterionId)
-            ) {
-              return false;
-            }
-            const response = responses[item.criterionId];
-            const persistedValue =
-              criterionInputTypeById.get(item.criterionId) === "yes_no"
-                ? response === true
-                  ? "yes"
-                  : response === false
-                    ? "no"
-                    : ""
-                : String(response ?? "");
-            return persistedValue === item.suggestedValue;
-          })
-          .map((item) => item.criterionId)
-      : [];
-    if (
-      parsed.confirmedAiCriterionIds.some(
-        (id) => !unchangedImportedCriterionIds.includes(id),
-      )
-    ) {
-      throw new EvaluationValidationError(
-        "Only unchanged imported AI criteria can be confirmed.",
-      );
-    }
-    if (
-      parsed.intent === "submit" &&
-      unchangedImportedCriterionIds.some(
-        (id) => !parsed.confirmedAiCriterionIds.includes(id),
-      )
-    ) {
-      throw new EvaluationValidationError(
-        "Confirm every unchanged AI-derived criterion before submitting the review.",
-      );
-    }
-    const confirmedAiCriterionIds =
-      parsed.intent === "submit" ? unchangedImportedCriterionIds : [];
+    const {
+      assignment,
+      recommendationChoicesSnapshotJson,
+      sourceSnapshotHash,
+      criteriaSnapshotJson,
+      responses,
+      weightedScore,
+      criterionInputTypeById,
+      existing,
+      reviewId,
+    } = await loadEvaluationReviewSaveContext({
+      env: this.env,
+      viewer,
+      parsed,
+    });
+    const {
+      suggestion,
+      suggestionId,
+      importedCriterionIds,
+      confirmedAiCriterionIds,
+    } = await resolveEvaluationReviewAiProvenance({
+      env: this.env,
+      viewer,
+      parsed,
+      context: {
+        assignment,
+        recommendationChoicesSnapshotJson,
+        sourceSnapshotHash,
+        criteriaSnapshotJson,
+        responses,
+        weightedScore,
+        criterionInputTypeById,
+        existing,
+        reviewId,
+      },
+    });
     const nextRevision = parsed.revision + 1;
     const operationId = crypto.randomUUID();
     const status = parsed.intent === "submit" ? "submitted" : "draft";

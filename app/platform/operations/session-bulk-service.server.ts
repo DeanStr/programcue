@@ -1,4 +1,3 @@
-import { z } from "zod";
 import { requireValue } from "~/lib/required-value";
 
 import type { Viewer } from "~/platform/auth/authorize.server";
@@ -10,120 +9,21 @@ import {
   evaluationFixtureResetIsRunning,
   shouldFenceEvaluationFixtureMutation,
 } from "~/platform/evaluation/evaluation-fixture-reset-lock.server";
+import {
+  sessionBulkActionLabels as actionLabels,
+  type SessionBulkPreviewOptions as PreviewOptions,
+  parseSessionBulkJson as parseJson,
+  sessionBulkPreviewInputSchema as previewInputSchema,
+  type SessionBulkAction,
+  type SessionBulkItem,
+  type SessionBulkSummary,
+  type SessionRow,
+  sortedSessionValues as sorted,
+  storedSessionBulkItemSchema as storedItemSchema,
+  storedSessionBulkSummarySchema as storedSummarySchema,
+} from "./session-bulk-contract";
 
-const bulkActionSchema = z.enum([
-  "add_tag",
-  "remove_tag",
-  "archive",
-  "restore",
-]);
-
-export type SessionBulkAction = z.infer<typeof bulkActionSchema>;
-
-const previewInputSchema = z
-  .object({
-    action: bulkActionSchema,
-    sessionIds: z
-      .array(z.string().trim().min(1).max(200))
-      .min(1, "Select at least one session.")
-      .max(100, "A bulk update is limited to 100 sessions."),
-    tagId: z.string().trim().max(200).nullish(),
-    tagName: z.string().trim().max(80).nullish(),
-    colourToken: z
-      .enum(["slate", "indigo", "emerald", "amber", "rose"])
-      .nullish(),
-  })
-  .transform((value) => ({
-    ...value,
-    sessionIds: [...new Set(value.sessionIds)],
-    tagId: value.tagId || null,
-    tagName: value.tagName || null,
-    colourToken: value.colourToken ?? "indigo",
-  }))
-  .superRefine((value, context) => {
-    if (value.action === "add_tag" && !value.tagId && !value.tagName) {
-      context.addIssue({
-        code: "custom",
-        path: ["tagName"],
-        message: "Choose an existing tag or enter a new tag name.",
-      });
-    }
-    if (value.action === "add_tag" && value.tagId && value.tagName) {
-      context.addIssue({
-        code: "custom",
-        path: ["tagName"],
-        message: "Choose an existing tag or create a new one, not both.",
-      });
-    }
-    if (value.action === "remove_tag" && !value.tagId) {
-      context.addIssue({
-        code: "custom",
-        path: ["tagId"],
-        message: "Choose the tag to remove.",
-      });
-    }
-    if (
-      (value.action === "archive" || value.action === "restore") &&
-      (value.tagId || value.tagName)
-    ) {
-      context.addIssue({
-        code: "custom",
-        message: "Archive and restore actions do not accept tag settings.",
-      });
-    }
-  });
-
-const storedItemSchema = z.object({
-  sessionId: z.string().min(1),
-  title: z.string().min(1),
-  expectedRevision: z.number().int().positive(),
-  archivePreviousStatus: z.enum(["unscheduled", "cancelled"]).nullable(),
-  before: z.object({
-    status: z.enum([
-      "unscheduled",
-      "scheduled",
-      "published",
-      "cancelled",
-      "archived",
-    ]),
-    tags: z.array(z.string()),
-  }),
-  after: z.object({
-    status: z.enum([
-      "unscheduled",
-      "scheduled",
-      "published",
-      "cancelled",
-      "archived",
-    ]),
-    tags: z.array(z.string()),
-  }),
-});
-
-const storedSummarySchema = z.object({
-  action: bulkActionSchema,
-  label: z.string(),
-  tagId: z.string().nullable(),
-  tagName: z.string().nullable(),
-  colourToken: z.string().nullable(),
-  createsTag: z.boolean(),
-  changeCount: z.number().int().nonnegative(),
-  skippedCount: z.number().int().nonnegative(),
-  invalidCount: z.number().int().nonnegative(),
-  undoOf: z.string().nullable(),
-  undoDeadline: z.number().int().nullable(),
-  deleteTagAfterRemoval: z.boolean(),
-  undoExpiresAt: z.number().int().nullable().optional(),
-  undoneBy: z.string().nullable().optional(),
-});
-
-type SessionRow = {
-  id: string;
-  title: string;
-  status: "unscheduled" | "scheduled" | "published" | "cancelled" | "archived";
-  revision: number;
-  previousStatus: "unscheduled" | "cancelled" | null;
-};
+export type { SessionBulkAction } from "./session-bulk-contract";
 
 export type SessionBulkWorkspace = {
   sessions: Array<SessionRow & { tags: Array<{ id: string; name: string }> }>;
@@ -140,41 +40,14 @@ export type SessionBulkOperation = {
   status: string;
   createdAt: number;
   completedAt: number | null;
-  summary: z.infer<typeof storedSummarySchema>;
+  summary: SessionBulkSummary;
   items: Array<{
     id: string;
     status: string;
     errorMessage: string | null;
-    result: z.infer<typeof storedItemSchema>;
+    result: SessionBulkItem;
   }>;
 };
-
-type PreviewOptions = {
-  undoOf?: string;
-  undoDeadline?: number;
-  deleteTagAfterRemoval?: boolean;
-  operationId?: string;
-  idempotencyKey?: string;
-};
-
-const actionLabels: Record<SessionBulkAction, string> = {
-  add_tag: "Add tag",
-  remove_tag: "Remove tag",
-  archive: "Archive sessions",
-  restore: "Restore sessions",
-};
-
-function parseJson(value: string, context: string): unknown {
-  try {
-    return JSON.parse(value);
-  } catch {
-    throw new Error(`${context} contains invalid JSON.`);
-  }
-}
-
-function sorted(values: string[]) {
-  return [...values].sort((left, right) => left.localeCompare(right));
-}
 
 export class SessionBulkStateError extends Error {
   constructor(message: string) {

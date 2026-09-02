@@ -12,7 +12,13 @@ import {
   useNavigation,
   useSubmit,
 } from "react-router";
-
+import {
+  buildSpeakerRosterPulse,
+  speakerInitials as initials,
+  omittedRosterProfileLabel,
+  rosterProfileActionLabel,
+  speakerWorkflowLabel as workflowLabel,
+} from "~/components/admin-speaker-roster-presentation";
 import { PersonDuplicateWarning } from "~/components/person-duplicate-warning";
 import { PersonLookup } from "~/components/person-lookup";
 import { Button, ButtonLink } from "~/components/ui/button";
@@ -22,43 +28,10 @@ import {
   statusPresentation,
 } from "~/components/ui/domain-status-badge";
 import { EventDateTime } from "~/components/ui/event-date-time";
-import type { SpeakerRosterProfileAction } from "~/modules/speakers/speaker-roster-import.server";
 import type { Route } from "./+types/admin-speakers";
 import type { ActionResult } from "./admin-speakers.server";
 
 export const meta = () => [{ title: "Event speakers · Program Cue" }];
-
-function workflowLabel(value: string) {
-  return `${value.slice(0, 1).toUpperCase()}${value.slice(1)}`;
-}
-
-function rosterProfileActionLabel(action: SpeakerRosterProfileAction) {
-  switch (action) {
-    case "create_identity_and_profile":
-      return "New neutral identity and organisation profile";
-    case "create_organisation_profile":
-      return "Canonical profile retained; organisation profile created";
-    case "update_organisation_profile":
-      return "Canonical profile retained; organisation profile updated";
-    case "retain_organisation_profile":
-      return "Canonical retained; imported details already match";
-  }
-}
-
-function omittedRosterProfileLabel(action: SpeakerRosterProfileAction) {
-  return action === "update_organisation_profile" ||
-    action === "retain_organisation_profile"
-    ? "Not supplied (retained)"
-    : "Not supplied (left empty)";
-}
-
-function initials(name: string) {
-  return name
-    .split(/\s+/)
-    .map((part) => part[0])
-    .slice(0, 2)
-    .join("");
-}
 
 export { action, loader } from "./admin-speakers.server";
 
@@ -143,21 +116,7 @@ export default function AdminSpeakers({ loaderData }: Route.ComponentProps) {
       workflowStatus: filters.workflowStatus ?? "",
       page: String(targetPage),
     }).toString();
-  const pulse = [
-    `${summary.knownSpeakers} ${summary.knownSpeakers === 1 ? "speaker" : "speakers"}`,
-    `${summary.readySpeakers} ready`,
-    summary.outstandingTasks ? `${summary.outstandingTasks} outstanding` : null,
-    summary.pendingRoles ? `${summary.pendingRoles} responses pending` : null,
-    summary.missingRequiredFields
-      ? `${summary.missingRequiredFields} required fields missing`
-      : null,
-    summary.quarantinedFiles ? `${summary.quarantinedFiles} quarantined` : null,
-    activePendingInvitationCount
-      ? `${activePendingInvitationCount} invitations pending`
-      : null,
-  ]
-    .filter(Boolean)
-    .join(" · ");
+  const pulse = buildSpeakerRosterPulse(summary, activePendingInvitationCount);
   return (
     <div className="crm-workspace">
       <div className="page-head pc-page-header">

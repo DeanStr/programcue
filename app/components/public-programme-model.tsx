@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useFetcher, useLocation, useNavigate } from "react-router";
+import { useLocation, useNavigate } from "react-router";
 
 import {
   publicProgrammeSurfacePath,
@@ -10,7 +10,8 @@ import {
   clearUnavailablePublicProgrammeFacets,
 } from "~/modules/programme/public-programme-filter-state";
 import { eventLocalCalendarDate } from "~/modules/schedule/schedule-time";
-
+import { usePublicProgrammeEmbedResize } from "./public-programme-embed-resize";
+import { usePublicProgrammeItineraryModel } from "./public-programme-itinerary-model";
 import {
   distinctSorted,
   formatDay,
@@ -38,26 +39,8 @@ export function usePublicProgrammeModel(loaderData: PublicProgrammeLoaderData) {
   const embedded = loaderData.embedded;
   const shared = loaderData.shared;
   const embedOptions = loaderData.embedOptions;
-  type PublicProgrammeActionData = {
-    ok?: boolean;
-    error?: string;
-    shareUrl?: string;
-  };
-  type PublicProgrammeAction = () => Promise<PublicProgrammeActionData>;
-  const fetcher = useFetcher<PublicProgrammeAction>();
-  const [turnstileToken, setTurnstileToken] = useState("");
-  const [turnstileResetKey, setTurnstileResetKey] = useState(0);
-  const [itineraryVerificationPrompted, setItineraryVerificationPrompted] =
-    useState(false);
-  const itineraryVerificationRef = useRef<HTMLFieldSetElement | null>(null);
-  const previousFetcherState = useRef(fetcher.state);
-  const shareUrl =
-    fetcher.data &&
-    "shareUrl" in fetcher.data &&
-    typeof fetcher.data.shareUrl === "string"
-      ? fetcher.data.shareUrl
-      : null;
-  const saved = loaderData.itinerary;
+  const itinerary = usePublicProgrammeItineraryModel(loaderData);
+  const { fetcher, saved, shareUrl } = itinerary;
   const initialPublicSearch = useRef(new URLSearchParams(location.search));
   const pendingClientSearches = useRef(new Set<string>());
   const [query, setQueryState] = useState(
@@ -270,44 +253,7 @@ export function usePublicProgrammeModel(loaderData: PublicProgrammeLoaderData) {
     !embedded || visibleEmbedFields.has(field);
   const showSpeakerDirectory = !embedded || embedOptions.showSpeakerDirectory;
   const showSpeakerDetails = showEmbedField("speaker-details");
-  useEffect(() => {
-    if (!embedded) return;
-    let parentOrigin: string | null = null;
-    const publishHeight = () => {
-      if (!parentOrigin) return;
-      window.parent.postMessage(
-        {
-          type: "programcue:resize",
-          eventSlug: programme.event.slug,
-          height: Math.ceil(document.documentElement.scrollHeight),
-        },
-        parentOrigin,
-      );
-    };
-    const receiveHostOrigin = (event: MessageEvent) => {
-      const message = event.data;
-      if (
-        event.source !== window.parent ||
-        event.origin === "null" ||
-        message?.type !== "programcue:host-origin" ||
-        message.eventSlug !== programme.event.slug ||
-        message.parentOrigin !== event.origin
-      ) {
-        return;
-      }
-      parentOrigin = event.origin;
-      publishHeight();
-    };
-    window.addEventListener("message", receiveHostOrigin);
-    const observer = new ResizeObserver(publishHeight);
-    observer.observe(document.body);
-    window.addEventListener("load", publishHeight);
-    return () => {
-      observer.disconnect();
-      window.removeEventListener("message", receiveHostOrigin);
-      window.removeEventListener("load", publishHeight);
-    };
-  }, [embedded, programme.event.slug]);
+  usePublicProgrammeEmbedResize(embedded, programme.event.slug);
   useEffect(() => {
     if (embedded) return;
     const nextQuery = query.trim();
@@ -619,13 +565,6 @@ export function usePublicProgrammeModel(loaderData: PublicProgrammeLoaderData) {
       .map((other) => [session.title, other.title] as const),
   );
 
-  useEffect(() => {
-    if (previousFetcherState.current !== "idle" && fetcher.state === "idle") {
-      setTurnstileResetKey((value) => value + 1);
-    }
-    previousFetcherState.current = fetcher.state;
-  }, [fetcher.state]);
-
   // Opening a speaker profile moves reading position to the panel; closing it
   // returns focus to the exact control that opened it.
   useEffect(() => {
@@ -798,46 +737,6 @@ export function usePublicProgrammeModel(loaderData: PublicProgrammeLoaderData) {
     setSelectedId(sessionId);
   }
 
-  function requiresItineraryVerification(sessionId: string) {
-    return (
-      !saved.includes(sessionId) &&
-      loaderData.itineraryVerificationRequired &&
-      loaderData.turnstileSiteKey !== null &&
-      !turnstileToken
-    );
-  }
-
-  function updateTurnstileToken(token: string) {
-    setTurnstileToken(token);
-    if (token) setItineraryVerificationPrompted(false);
-  }
-
-  function toggle(sessionId: string) {
-    if (shared) return;
-    if (requiresItineraryVerification(sessionId)) {
-      setItineraryVerificationPrompted(true);
-      window.requestAnimationFrame(() => {
-        const verification = itineraryVerificationRef.current;
-        verification?.focus({ preventScroll: true });
-        verification?.scrollIntoView({
-          behavior: window.matchMedia("(prefers-reduced-motion: reduce)")
-            .matches
-            ? "auto"
-            : "smooth",
-          block: "center",
-        });
-      });
-      return;
-    }
-    void fetcher.submit(
-      {
-        intent: saved.includes(sessionId) ? "remove" : "add",
-        sessionId,
-        "turnstile-token": turnstileToken,
-      },
-      { method: "post" },
-    );
-  }
   return {
     loaderData,
     surface: loaderData.surface,
@@ -846,11 +745,11 @@ export function usePublicProgrammeModel(loaderData: PublicProgrammeLoaderData) {
     shared,
     embedOptions,
     fetcher,
-    turnstileToken,
-    updateTurnstileToken,
-    turnstileResetKey,
-    itineraryVerificationPrompted,
-    itineraryVerificationRef,
+    turnstileToken: itinerary.turnstileToken,
+    updateTurnstileToken: itinerary.updateTurnstileToken,
+    turnstileResetKey: itinerary.turnstileResetKey,
+    itineraryVerificationPrompted: itinerary.itineraryVerificationPrompted,
+    itineraryVerificationRef: itinerary.itineraryVerificationRef,
     shareUrl,
     saved,
     query,
@@ -905,8 +804,8 @@ export function usePublicProgrammeModel(loaderData: PublicProgrammeLoaderData) {
     toggleSpeakerBiography,
     clearFilters,
     selectSavedSession,
-    requiresItineraryVerification,
-    toggle,
+    requiresItineraryVerification: itinerary.requiresItineraryVerification,
+    toggle: itinerary.toggle,
   };
 }
 

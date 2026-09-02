@@ -2,6 +2,17 @@ import { createHash, randomUUID } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import {
+  advancePhase,
+  clamp01,
+  compressBusSample,
+  db,
+  equalPowerPan,
+  midiToFrequency,
+  smoothstep,
+  tableHarmonic,
+  tableSine,
+} from "./score-dsp.mjs";
 
 /**
  * Program Cue launch film score
@@ -23,15 +34,15 @@ const BPM = 120;
 const BEATS_PER_BAR = 4;
 const TICKS_PER_BEAT = 4;
 const TICKS_PER_BAR = BEATS_PER_BAR * TICKS_PER_BEAT;
-const TAU = Math.PI * 2;
-
 const generatorPath = fileURLToPath(import.meta.url);
 const scriptDirectory = path.dirname(generatorPath);
+const dspPath = path.join(scriptDirectory, "score-dsp.mjs");
 const repoRoot = path.resolve(scriptDirectory, "../..");
 const timelinePath = path.join(repoRoot, "video", "timeline.json");
 const sha256File = (filePath) =>
   createHash("sha256").update(fs.readFileSync(filePath)).digest("hex");
 const generatorSha256 = sha256File(generatorPath);
+const dspSha256 = sha256File(dspPath);
 // These keys associate the authored value arrays below with named scenes.
 // They never drive playback order; timeline.json remains the only editorial
 // ordering, and orderAuthoredValues() remaps every array onto that lock.
@@ -654,58 +665,6 @@ for (const [sceneIndex, statements] of MOTIF_STATEMENTS.entries()) {
     seenBars.add(bar);
   }
 }
-
-const SINE_TABLE_SIZE = 8192;
-const SINE_TABLE_MASK = SINE_TABLE_SIZE - 1;
-const SINE_TABLE = new Float64Array(SINE_TABLE_SIZE);
-for (let index = 0; index < SINE_TABLE_SIZE; index += 1) {
-  SINE_TABLE[index] = Math.sin((index / SINE_TABLE_SIZE) * TAU);
-}
-
-const clamp01 = (value) => Math.max(0, Math.min(1, value));
-const smoothstep = (value) => {
-  const t = clamp01(value);
-  return t * t * (3 - 2 * t);
-};
-const midiToFrequency = (midi) => 440 * 2 ** ((midi - 69) / 12);
-const tableSine = (phase) =>
-  SINE_TABLE[((phase * SINE_TABLE_SIZE) | 0) & SINE_TABLE_MASK];
-const tableHarmonic = (phase, harmonic) =>
-  SINE_TABLE[((phase * harmonic * SINE_TABLE_SIZE) | 0) & SINE_TABLE_MASK];
-const advancePhase = (phase, increment) => {
-  phase += increment;
-  if (phase >= 1) phase -= Math.floor(phase);
-  return phase;
-};
-const db = (value) => 20 * Math.log10(Math.max(value, Number.EPSILON));
-const equalPowerPan = (pan) => {
-  const angle = (clamp01((pan + 1) / 2) * Math.PI) / 2;
-  return [Math.cos(angle), Math.sin(angle)];
-};
-
-// A deterministic, very gentle bus stage. It only acts above the knee, which
-// buys a few dB of crest-factor headroom for the final loudness target while
-// retaining the kick/impact shape. This is intentionally not a brickwall
-// limiter; the subsequent static gain is still capped by true-peak headroom.
-const compressBusSample = (value) => {
-  const sign = value < 0 ? -1 : 1;
-  const magnitude = Math.abs(value);
-  const threshold = 0.34;
-  const knee = 0.1;
-  const ratio = 3.5;
-  const lower = threshold - knee / 2;
-  const upper = threshold + knee / 2;
-  if (magnitude <= lower) return value;
-  if (magnitude >= upper) {
-    return sign * (threshold + (magnitude - threshold) / ratio);
-  }
-  const proportion = (magnitude - lower) / knee;
-  const compressed =
-    magnitude +
-    (threshold + (magnitude - threshold) / ratio - magnitude) *
-      smoothstep(proportion);
-  return sign * compressed;
-};
 
 const outputDirectory = path.dirname(OUTPUT_PATH);
 
@@ -1894,7 +1853,8 @@ async function main() {
     outputHandle = undefined;
     if (
       sha256File(timelinePath) !== PICTURE_LOCK.sha256 ||
-      sha256File(generatorPath) !== generatorSha256
+      sha256File(generatorPath) !== generatorSha256 ||
+      sha256File(dspPath) !== dspSha256
     ) {
       throw new Error(
         "Score inputs changed during generation; the stale staging file was not installed.",

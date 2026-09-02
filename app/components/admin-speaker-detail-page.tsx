@@ -1,8 +1,6 @@
 import {
-  ArrowLeft,
   CalendarClock,
   Download,
-  Eye,
   FileCheck2,
   ListChecks,
   LockKeyhole,
@@ -10,6 +8,7 @@ import {
 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Form, useActionData, useNavigation } from "react-router";
+import { AdminSpeakerDetailHeader } from "~/components/admin-speaker-detail-header";
 import { DirectMultipartUpload } from "~/components/direct-multipart-upload";
 import { EventFieldInputs } from "~/components/event-field-inputs";
 import { SpeakerActionNotice } from "~/components/speaker-action-notice";
@@ -47,14 +46,6 @@ function formatTimestamp(epoch: number, timezone: string) {
 function formatBytes(sizeBytes: number | null) {
   if (sizeBytes === null) return "Size unknown";
   return `${(sizeBytes / 1_048_576).toFixed(sizeBytes < 1_048_576 ? 2 : 1)} MB`;
-}
-
-function initials(name: string) {
-  return name
-    .split(/\s+/)
-    .map((part) => part[0])
-    .slice(0, 2)
-    .join("");
 }
 
 export function AdminSpeakerDetailPage({
@@ -112,61 +103,13 @@ export function AdminSpeakerDetailPage({
       ) : null}
       {actionDialog}
       <div className="crm-workspace crm-record">
-        <div className="page-head pc-page-header">
-          <div className="crm-record-hero">
-            {headshot ? (
-              <img
-                className="crm-record-avatar"
-                src={`/admin/speakers/${profile.id}/files/${headshot.id}?view=headshot`}
-                alt=""
-              />
-            ) : (
-              <span className="crm-record-avatar is-fallback">
-                {initials(profile.name)}
-              </span>
-            )}
-            <div>
-              <h1>{profile.name}</h1>
-              <p className="crm-caption">
-                {[profile.jobTitle, profile.organisationName]
-                  .filter(Boolean)
-                  .join(" · ") || "No title or organisation recorded yet"}
-              </p>
-              <p className="crm-caption">{profile.email}</p>
-              <div className="crm-status-line">
-                <DomainStatusBadge
-                  domain="content"
-                  status={profile.profileStatus}
-                />
-                <span className="status">
-                  {sessions.length}{" "}
-                  {sessions.length === 1 ? "session" : "sessions"}
-                </span>
-                <span
-                  className={`status ${tasks.outstanding ? "warning" : "success"}`}
-                >
-                  {tasks.outstanding
-                    ? `${tasks.outstanding} outstanding`
-                    : "Ready"}
-                </span>
-                <span className="status">
-                  {files.length} {files.length === 1 ? "file" : "files"}
-                </span>
-              </div>
-            </div>
-          </div>
-          <div className="page-actions">
-            <ButtonLink to="/admin/speakers">
-              <ArrowLeft aria-hidden size={15} /> Back to roster
-            </ButtonLink>
-            <ButtonLink to="/admin/tasks">
-              <ListChecks aria-hidden size={15} /> Manage tasks
-            </ButtonLink>
-            <ButtonLink to={`/admin/speakers/${profile.id}/preview`}>
-              <Eye aria-hidden size={15} /> Preview participant view
-            </ButtonLink>
-          </div>
-        </div>
+        <AdminSpeakerDetailHeader
+          profile={profile}
+          headshot={headshot}
+          sessionCount={sessions.length}
+          outstandingTaskCount={tasks.outstanding}
+          fileCount={files.length}
+        />
         <SpeakerActionNotice notice={actionData} />
         <div className="crm-record-grid">
           <section className="crm-record-section" id="profile">

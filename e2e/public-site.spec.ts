@@ -1,7 +1,19 @@
-import { expect, type Locator, type Page, test } from "@playwright/test";
+import { expect, test } from "@playwright/test";
 
 import { acceptConfirm } from "./support/confirm-dialog";
 import { cssColourContrastRatio } from "./support/css-contrast";
+import {
+  ensurePageContentOpen,
+  expectFixedPageOutline,
+  homeColumnCounts,
+  openHomepageSection,
+  openSitePanel,
+  openSiteRecord,
+  paintedColours,
+  resolvedColorMix,
+  SPONSOR_LOGO_URL,
+  serveSponsorLogo,
+} from "./support/public-site";
 import { resetDemoEvent } from "./support/reset-demo-event";
 
 /* The editor renders the published homepage markup inside a 390px frame in a
@@ -16,128 +28,15 @@ import { resetDemoEvent } from "./support/reset-demo-event";
 
 /* The editor is a card of switched panels, so reaching a control is choosing
    its panel and then opening the row that owns it. */
-const SITE_PANELS = {
-  Homepage: "Homepage and appearance",
-  Pages: "Event pages",
-  Sponsors: "Sponsors",
-  Recordings: "Session recordings",
-} as const;
-
-async function openSitePanel(page: Page, tab: keyof typeof SITE_PANELS) {
-  await page
-    .locator(".public-site-editor-tabs button")
-    .filter({ hasText: new RegExp(`^${tab}`) })
-    .click();
-  await expect(
-    page.getByRole("region", { name: SITE_PANELS[tab] }),
-  ).toBeVisible();
-}
-
-async function openDisclosure(disclosure: Locator) {
-  if (!(await disclosure.evaluate((el) => el.hasAttribute("open")))) {
-    await disclosure.locator(":scope > summary").click();
-  }
-  await expect
-    .poll(async () => disclosure.evaluate((el) => el.hasAttribute("open")))
-    .toBe(true);
-  return disclosure;
-}
-
-async function openHomepageSection(page: Page, label: string) {
-  await openSitePanel(page, "Homepage");
-  return openDisclosure(
-    page
-      .locator(".public-site-section-row")
-      .filter({ hasText: label })
-      .locator("details.public-site-section-editor"),
-  );
-}
-
-async function openSiteRecord(page: Page, name: string) {
-  return openDisclosure(
-    page.locator("details.public-site-record-disclosure").filter({
-      has: page.locator("summary strong", { hasText: new RegExp(`^${name}$`) }),
-    }),
-  );
-}
-
-async function ensurePageContentOpen(editor: Locator) {
-  const pageContent = editor.getByRole("textbox", { name: "Page content" });
-  if (await pageContent.isVisible()) return;
-  await editor.locator(":scope > details > summary").click();
-  await expect(pageContent).toBeVisible();
-}
-
-async function paintedColours(locator: Locator) {
-  return locator.evaluate((element) => {
-    const style = getComputedStyle(element);
-    return { ink: style.color, background: style.backgroundColor };
-  });
-}
-
-async function resolvedColorMix(locator: Locator, mix: string) {
-  return locator.evaluate((element, value) => {
-    const probe = document.createElement("span");
-    probe.style.backgroundColor = value;
-    element.appendChild(probe);
-    const color = getComputedStyle(probe).backgroundColor;
-    probe.remove();
-    return color;
-  }, mix);
-}
-
 /* A fixed page has no section heading between its title and its body, so the
    restricted Markdown subheads and the Sponsors page's tier headings all sit at
    level 2: the page reads title then peers rather than dropping to a subsection
    and climbing back out of it. `heading-order` is an axe best-practice rule
    rather than a WCAG one, so the axe surface added for these pages does not
    check it and this does. */
-async function expectFixedPageOutline(page: Page) {
-  const levels = await page
-    .locator(".public-site-page")
-    .evaluate((element) =>
-      [...element.querySelectorAll("h1, h2, h3, h4, h5, h6")].map((heading) =>
-        Number(heading.tagName.slice(1)),
-      ),
-    );
-  expect(levels.length).toBeGreaterThan(1);
-  expect(levels[0]).toBe(1);
-  expect([...new Set(levels.slice(1))]).toEqual([2]);
-}
-
 /* A 120x40 PNG served from the test process, so a sponsor mark is a real
    decoded image with real intrinsic dimensions and the suite still makes no
    outbound request. */
-const SPONSOR_LOGO_URL = "https://example.com/partner-logo.png";
-const SPONSOR_LOGO_PNG = Buffer.from(
-  "iVBORw0KGgoAAAANSUhEUgAAAHgAAAAoCAYAAAA16j4lAAAAWklEQVR42u3RQREAAAQAQYlU8Ne/" +
-    "DzmYfVyB28iu0d/CBMACLMACLMACLMCABViABViABViAAQuwAAuwAAuwAAswYAEWYAEWYAEWYMAC" +
-    "LMACLMACLMCABVg3W7uWFmEIQ/JRAAAAAElFTkSuQmCC",
-  "base64",
-);
-
-async function serveSponsorLogo(page: Page) {
-  await page.route(SPONSOR_LOGO_URL, (route) =>
-    route.fulfill({ contentType: "image/png", body: SPONSOR_LOGO_PNG }),
-  );
-}
-
-async function homeColumnCounts(home: Locator) {
-  return home.evaluate((element) => {
-    const columns = (selector: string) => {
-      const parent = element.querySelector(selector);
-      if (!parent) return 0;
-      return new Set(
-        [...parent.children].map((child) => (child as HTMLElement).offsetLeft),
-      ).size;
-    };
-    return {
-      features: columns(".public-site-feature-grid"),
-      statistics: columns(".public-site-statistics"),
-    };
-  });
-}
-
 test.beforeEach(async ({ context, request }) => {
   await resetDemoEvent(request);
   await context.addCookies([

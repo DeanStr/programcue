@@ -1,0 +1,26 @@
+/* Task administration controls. */
+.task-admin-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  flex-wrap: wrap;
+}
+.task-admin-actions details {
+  position: relative;
+}
+.task-admin-actions details[open] {
+  padding: var(--space-2);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  box-shadow: var(--elev-3);
+}
+.task-dependency-list {
+  display: grid;
+  gap: var(--space-2);
+  max-height: 180px;
+  overflow: auto;
+  padding: var(--space-2);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+}

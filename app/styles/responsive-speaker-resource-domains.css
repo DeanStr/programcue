@@ -1,0 +1,86 @@
+/* Shared responsive refinements for speaker, task, and resource surfaces. */
+@media (max-width: 1180px) {
+  .speaker-task-row,
+  .speaker-session-row {
+    grid-template-columns: 20px minmax(0, 1fr);
+  }
+  .speaker-task-done,
+  .speaker-session-measure {
+    grid-column: 2;
+    justify-items: start;
+    text-align: left;
+  }
+  .resource-admin-layout {
+    grid-template-columns: 220px minmax(0, 1fr);
+  }
+  .resource-authoring-grid {
+    grid-template-columns: 1fr;
+  }
+  .resource-secondary-actions {
+    grid-template-columns: 1fr;
+  }
+  .resource-attachment-upload {
+    justify-content: flex-start;
+  }
+}
+@media (max-width: 760px) {
+  .speaker-viewer-identity {
+    display: none;
+  }
+  .speaker-portal-head {
+    align-items: flex-start;
+  }
+  .speaker-portal-head h1 {
+    font-size: var(--text-xl);
+  }
+  .speaker-readiness strong {
+    font-size: var(--text-2xl);
+  }
+  .speaker-task,
+  .speaker-session-card {
+    scroll-margin-top: 16px;
+    scroll-margin-bottom: calc(96px + env(safe-area-inset-bottom, 0px));
+  }
+  .speaker-files-toolbar
+    .speaker-upload-form
+    > label:has([name="directAssetKind"]) {
+    flex: 1 1 100%;
+  }
+  .speaker-task-action,
+  .speaker-task-note,
+  .speaker-task-versions,
+  .speaker-task-comment,
+  .speaker-task .task-comment {
+    padding-left: 0;
+    margin-left: 0;
+  }
+  .resource-acknowledge {
+    display: flex;
+  }
+  .resource-admin-layout {
+    grid-template-columns: 1fr;
+  }
+  .resource-admin-index {
+    position: static;
+  }
+  .resource-settings-grid {
+    grid-template-columns: 1fr;
+  }
+  .resource-attachment-upload {
+    display: grid;
+  }
+  .resource-secondary-actions {
+    padding: var(--space-3);
+  }
+  .file-version-row {
+    grid-template-columns: 20px minmax(0, 1fr) auto;
+  }
+  .file-version-row .status,
+  .speaker-file-actions {
+    grid-column: 2;
+    justify-self: start;
+  }
+  .speaker-resource-content {
+    overflow: hidden;
+  }
+}

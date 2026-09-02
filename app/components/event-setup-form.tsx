@@ -1,4 +1,3 @@
-import { CircleAlert, CircleCheck } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Form,
@@ -16,28 +15,29 @@ import {
   EventRepositoryDialogs,
 } from "~/components/event-setup-dialogs";
 import {
+  countChangedFields,
+  countChangedRecords,
+  eventSetupFieldValues,
+} from "~/components/event-setup-dirty-state";
+import {
   EventAccessPanels,
   EventFilePolicyPanel,
   EventIdentityPanels,
   EventRepositoryPanel,
   EventRoomsPanel,
 } from "~/components/event-setup-panels";
+import {
+  EventSetupCommitActions,
+  ResultNotice,
+} from "~/components/event-setup-status";
 import { AdminPageSection } from "~/components/ui/admin-page-sections";
 import { AdminWorkspaceTabs } from "~/components/ui/admin-workspace-tabs";
-import { Button, ButtonLink } from "~/components/ui/button";
+import { ButtonLink } from "~/components/ui/button";
 import { ConfirmDialog, useConfirm } from "~/components/ui/confirm-dialog";
 import { ErrorSummary } from "~/components/ui/error-summary";
 import type { EventSetup } from "~/modules/events/event-repository.server";
 import type { IncompleteEventSummary } from "~/modules/events/event-repository-recovery.server";
 import type { ActionResponse, action } from "~/routes/event-setup";
-
-const eventSetupBaselineExcludedFields = new Set([
-  "_intent",
-  "revision",
-  "rooms",
-  "tracks",
-  "sessionFormats",
-]);
 
 const EVENT_SETUP_PANELS = [
   { id: "identity", label: "Identity" },
@@ -78,147 +78,6 @@ function eventSetupPanelForErrors(
   )
     return "data" satisfies EventSetupPanel;
   return "identity" satisfies EventSetupPanel;
-}
-
-function eventSetupFieldValues(form: HTMLFormElement) {
-  const fields = new Map<string, string[]>();
-  for (const [name, value] of new FormData(form)) {
-    if (eventSetupBaselineExcludedFields.has(name)) continue;
-    if (typeof value !== "string") {
-      throw new Error(
-        `Event Setup field ${name} unexpectedly contains a file. Files require an explicit dirty-state comparison.`,
-      );
-    }
-    const values = fields.get(name);
-    if (values) values.push(value);
-    else fields.set(name, [value]);
-  }
-  return fields;
-}
-
-/* The count is what the operator is shown, so it counts fields rather than
-   keystrokes. An unchecked box leaves the form data entirely, which is why a
-   name present on one side only is a change and not an absence. */
-function countChangedFields(
-  saved: ReadonlyMap<string, string[]>,
-  current: ReadonlyMap<string, string[]>,
-) {
-  let changed = 0;
-  for (const name of new Set([...saved.keys(), ...current.keys()])) {
-    const savedValues = saved.get(name);
-    const currentValues = current.get(name);
-    if (
-      !savedValues ||
-      !currentValues ||
-      savedValues.length !== currentValues.length ||
-      savedValues.some((value, index) => value !== currentValues[index])
-    )
-      changed += 1;
-  }
-  return changed;
-}
-
-/* Rooms, tracks and formats keep their loaded order, so an index-wise
-   comparison sees an edited record as one change and an added or removed one
-   as one more. */
-function countChangedRecords(
-  saved: readonly unknown[],
-  current: readonly unknown[],
-) {
-  let changed = Math.abs(saved.length - current.length);
-  for (let index = 0; index < Math.min(saved.length, current.length); index++) {
-    if (JSON.stringify(saved[index]) !== JSON.stringify(current[index]))
-      changed += 1;
-  }
-  return changed;
-}
-
-/* One result banner, three sources. The mark is a real icon at one optical
-   size: the "△" it replaces is a hollow geometric shape, not a warning
-   triangle, and it was carrying the failure state of a save. */
-function ResultNotice({ response }: { response: ActionResponse }) {
-  return (
-    <div
-      className={`card pad mb validation-item event-setup-notice ${response.ok ? "ok" : "error"}`}
-      role={response.ok ? "status" : "alert"}
-    >
-      {response.ok ? (
-        <CircleCheck aria-hidden size={18} />
-      ) : (
-        <CircleAlert aria-hidden size={18} />
-      )}
-      <span>{response.message}</span>
-    </div>
-  );
-}
-
-function EventSetupCommitActions({
-  compact = false,
-  changeCount,
-  hasAnyUnsavedChanges,
-  pendingRecordDraftPresent,
-  saving,
-  onDiscard,
-  pendingHelpId,
-  className,
-}: {
-  compact?: boolean;
-  changeCount: number;
-  hasAnyUnsavedChanges: boolean;
-  pendingRecordDraftPresent: boolean;
-  saving: boolean;
-  onDiscard(): void;
-  pendingHelpId: string;
-  className?: string;
-}) {
-  return (
-    <div
-      className={`event-setup-actions${className ? ` ${className}` : ""}`}
-      data-dirty={hasAnyUnsavedChanges ? "true" : undefined}
-    >
-      {pendingRecordDraftPresent ? (
-        <p className="event-setup-state is-blocked" id={pendingHelpId}>
-          <CircleAlert aria-hidden size={16} />
-          {compact
-            ? "Finish the unfinished item"
-            : "Add or clear the unfinished room, resource, track or format before saving."}
-        </p>
-      ) : changeCount ? (
-        <p className="event-setup-state is-dirty">
-          <CircleAlert aria-hidden size={16} />
-          {compact
-            ? `${changeCount} unsaved`
-            : `${changeCount} unsaved ${changeCount === 1 ? "change" : "changes"}`}
-        </p>
-      ) : (
-        <p className="event-setup-state">
-          <CircleCheck aria-hidden size={16} />
-          Saved
-        </p>
-      )}
-      <div className="event-setup-actions-buttons">
-        <Button
-          type="button"
-          size={compact ? "small" : undefined}
-          onClick={onDiscard}
-          disabled={!hasAnyUnsavedChanges || saving}
-        >
-          {compact ? "Discard" : "Discard changes"}
-        </Button>
-        <Button
-          type="submit"
-          variant="primary"
-          size={compact ? "small" : undefined}
-          disabled={saving || pendingRecordDraftPresent}
-          aria-describedby={
-            pendingRecordDraftPresent ? pendingHelpId : undefined
-          }
-        >
-          {saving ? "Saving…" : compact ? "Save" : "Save event"}
-        </Button>
-      </div>
-    </div>
-  );
 }
 
 export function EventSetupForm({
