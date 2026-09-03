@@ -85,7 +85,14 @@ test("schedule publication previews material changes and readiness", async ({
   await expect(
     publication.getByRole("button", { name: "Confirm publication" }),
   ).toBeEnabled();
-  await publication.getByRole("button", { name: "Cancel" }).click();
+  await publication
+    .getByRole("button", { name: "Confirm publication" })
+    .click();
+  await expect(publication).toBeHidden();
+  const digest = page.getByRole("region", {
+    name: /version \d+ change digest/i,
+  });
+  await expect(digest).toContainText("0 material changes");
 });
 
 test("schedule and programme render the event calendar date and timezone", async ({
@@ -697,6 +704,55 @@ test.describe("mutable schedule authoring", () => {
       name: "Auto-place unscheduled sessions",
     });
     await expect(autoPlace).toBeEnabled();
+    const scenarioName = `First-fit comparison ${unique}`;
+    await page.getByLabel("Scenario name").fill(scenarioName);
+    await page.getByRole("button", { name: "Review proposed plan" }).click();
+    const scenarioPreview = page.getByRole("dialog", {
+      name: `Save scenario · ${scenarioName}`,
+    });
+    await expect(
+      scenarioPreview.getByTestId("auto-placement-proposal"),
+    ).toHaveCount(2);
+    await scenarioPreview.getByLabel(titles[1]).uncheck();
+    await scenarioPreview
+      .getByRole("button", { name: "Save 1 selected placement" })
+      .click();
+    await expectStatus(page, /Scenario .* saved/);
+    const scenario = page.locator(".schedule-scenario-card").filter({
+      hasText: scenarioName,
+    });
+    await expect(scenario).toContainText("Ready to compare");
+    await expect(scenario).toContainText("Selected moves");
+    await expect(scenario).toContainText("Warnings");
+    await scenario.getByRole("button", { name: "Review saved plan" }).click();
+    const savedPreview = page.getByRole("dialog", {
+      name: `Scenario · ${scenarioName}`,
+    });
+    await expect(
+      savedPreview.getByTestId("auto-placement-proposal"),
+    ).toHaveCount(2);
+    for (const title of titles) {
+      await expect(
+        savedPreview.getByText(title, { exact: true }),
+      ).toBeVisible();
+    }
+    await expect(savedPreview.getByLabel(titles[1])).not.toBeChecked();
+    await savedPreview
+      .getByRole("button", { name: "Apply 1 selected placement" })
+      .click();
+    await expect(savedPreview).toBeHidden();
+    await expectStatus(page, /Auto-place applied 1 placement/);
+    await expect(
+      page.getByText(/1 deselected proposal remains unscheduled/),
+    ).toBeVisible();
+    await expect(scenario).toContainText("Needs refresh");
+    await expect(
+      page.locator(".schedule-entry-draggable").filter({ hasText: titles[0] }),
+    ).toHaveCount(1);
+    await expect(
+      page.locator(".schedule-entry-draggable").filter({ hasText: titles[1] }),
+    ).toHaveCount(0);
+
     await autoPlace.click();
     const preview = page.getByRole("dialog", {
       name: "Preview auto-placement",
@@ -705,16 +761,13 @@ test.describe("mutable schedule authoring", () => {
     await expect(
       preview.getByRole("heading", { name: "Proposed placements" }),
     ).toBeVisible();
-    await expect(preview.getByTestId("auto-placement-proposal")).toHaveCount(2);
-    for (const title of titles) {
-      await expect(preview.getByText(title, { exact: true })).toBeVisible();
-    }
+    await expect(preview.getByTestId("auto-placement-proposal")).toHaveCount(1);
+    await expect(preview.getByText(titles[1], { exact: true })).toBeVisible();
     await preview.getByLabel(titles[1]).uncheck();
-    await preview.getByLabel(titles[0]).uncheck();
     await expect(
       preview.getByRole("button", { name: "Apply 0 selected placements" }),
     ).toBeDisabled();
-    await preview.getByLabel(titles[0]).check();
+    await preview.getByLabel(titles[1]).check();
     await expect(
       preview.getByRole("button", { name: "Apply 1 selected placement" }),
     ).toBeEnabled();
@@ -724,21 +777,19 @@ test.describe("mutable schedule authoring", () => {
 
     await expectStatus(page, /Auto-place applied 1 placement/);
     await expect(
-      page.getByText(/1 deselected proposal remains unscheduled/),
-    ).toBeVisible();
-    await expect(
       page.locator(".schedule-entry-draggable").filter({ hasText: titles[0] }),
     ).toBeVisible();
     await expect(
       page.locator(".schedule-entry-draggable").filter({ hasText: titles[1] }),
-    ).toHaveCount(0);
+    ).toBeVisible();
     await expect(page.getByText(/draft.*not published/i)).toBeVisible();
+    await expect(scenario).toContainText("Needs refresh");
     await expect(
       page.locator(".schedule-entry-draggable").filter({ hasText: titles[0] }),
     ).toHaveCount(1);
     await expect(
       page.locator(".schedule-entry-draggable").filter({ hasText: titles[1] }),
-    ).toHaveCount(0);
+    ).toHaveCount(1);
 
     const publicProgramme = await page.request.get(
       "/api/v1/public/events/future-of-events-2027/programme",
@@ -755,7 +806,7 @@ test.describe("mutable schedule authoring", () => {
     ).toHaveCount(1);
     await expect(
       page.locator(".schedule-entry-draggable").filter({ hasText: titles[1] }),
-    ).toHaveCount(0);
+    ).toHaveCount(1);
   });
 
   test("explains why an unpublished speaker blocks auto-placement", async ({

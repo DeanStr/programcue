@@ -18,6 +18,7 @@ import {
   SchedulePublicationBlockedError,
   ScheduleRevisionConflictError,
 } from "./schedule-errors";
+import { buildSchedulePublicationDigest } from "./schedule-publication-digest.server";
 import { buildSchedulePublicationPreview } from "./schedule-publication-preview.server";
 import { SchedulePublicationReadiness } from "./schedule-publication-readiness.server";
 import { buildSchedulePublicationStatements } from "./schedule-publication-statements.server";
@@ -375,6 +376,10 @@ export class SchedulePublicationWorkflow {
           enabled: notificationPreparation.summary.enabled,
           operationId: notificationPreparation.plan?.operationId ?? null,
           recipientCount: notificationPreparation.plan?.recipientCount ?? 0,
+        },
+        publicationDigest: {
+          previousVersionNumber: publicationPreview.publishedVersionNumber,
+          value: buildSchedulePublicationDigest(publicationPreview.changes),
         },
         conflictInsert: (entryId, conflict, operationId) =>
           scheduleConflictInsert(

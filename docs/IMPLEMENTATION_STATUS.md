@@ -889,10 +889,61 @@ declined owner. Schedule evidence includes disabled and enabled 99-session
 change sets. The reviewer workflow evidence covers mutually exclusive conflict
 and ordinary-return controls, an ordinary return leaving the queue, retained
 internal draft history, organiser redaction and review-cycle counts. Migration
-validation reports 112 application tables, 142 indexes and 172 triggers;
+validation reports 115 application tables, 146 indexes and 172 triggers;
 generated TypeScript, the synchronized 33-path OpenAPI contract, the recovery
 drill, the production build and the complete unit/Worker and agent test lanes
 pass in the current workspace.
+
+## 3 September 2026 bounded UX/AI increment
+
+**Production slices in the repository:** the Command Centre now exposes one
+deterministically ranked top action, groups remaining conditions by operational
+meaning and derives a real URL-addressable seven-day task condition from
+existing due dates. The due-soon group excludes critical work already shown at
+higher priority, and the separate header reminder CTA was removed so it cannot
+compete with “Do this next.” AI controls collapse to a setup notice when the
+selected provider is unavailable; the ordinary readiness actions remain
+present.
+
+Schedule Scenario Lab lite persists up to ten named, private proposals against
+the one active draft. The user reviews the existing deterministic auto-placement
+proposal and selects which moves define the named alternative; the server
+recomputes and validates that selection before saving it with its source
+revisions. Current warnings remain visible, application failure retains the
+comparison dialog and error context, and selective or complete application uses
+the existing confirmation command. A changed source makes the scenario
+inapplicable. The primary planning canvas remains before Scenario Lab and
+publication history at laptop sizes. Scenarios do not create a parallel
+schedule version or publish independently. Schedule publication now commits a
+durable, bounded latest-change digest atomically with the published version:
+category counts are exact, while stored affected-record highlights are capped
+at twenty per category and exclude before/after content bodies.
+
+Minimal operator AI feedback is persisted only for the requesting person’s
+completed AI operation in the current organisation/event. It supports helpful
+or a focused not-helpful reason plus optional bounded detail, and the result UI
+allows the requester to change a recorded rating. Audit metadata does not copy
+that detail, prompts or result bodies. This is feedback capture, not a
+telemetry/experimentation dashboard. Existing URL-based saved views
+already cover reusable filtered report destinations, so no additional saved-
+report or semantic-layer schema was added. `/evaluate` and the optional numeric
+AI assessment were not changed.
+
+The clean-room recovery drill runs the whole-database SQLite `quick_check`
+directly against each closed local D1 file after Workerd's SQL endpoint proved
+unable to fit that schema-wide check in its memory budget. It does not replace
+the global check with table-scoped checks; row counts, index/trigger inventory
+and foreign-key validation remain separate assertions.
+
+Focused repository evidence covers deterministic action ordering and result
+rendering plus Worker-backed scenario persistence/staleness/event isolation,
+atomic publication-digest persistence and AI-feedback ownership/type checks.
+The complete core repository gate and the changed-test selection pass. Focused
+Playwright execution passes thirteen desktop schedule tests plus the three
+Command Centre/mobile-layout journeys in desktop Chromium and mobile WebKit.
+These are repository results rather than deployed acceptance. A fresh
+SBEK/manual evaluation was not performed for this ordinary development
+increment.
 
 ## Capability status
 

@@ -1,5 +1,6 @@
 import { desc, sql } from "drizzle-orm";
 import {
+  check,
   foreignKey,
   index,
   integer,
@@ -117,6 +118,61 @@ export const operationJobs = sqliteTable(
         sql`${table.type} = 'content.zip.export'
           AND ${table.status} IN ('completed', 'failed', 'cancelled')`,
       ),
+  ],
+);
+
+export const aiOperationFeedback = sqliteTable(
+  "ai_operation_feedback",
+  {
+    id: text("id").primaryKey(),
+    organisationId: text("organisation_id").notNull(),
+    eventId: text("event_id").notNull(),
+    operationId: text("operation_id").notNull(),
+    personId: text("person_id")
+      .notNull()
+      .references(() => people.id),
+    rating: text("rating").notNull().$type<"helpful" | "not_helpful">(),
+    reason: text("reason").$type<
+      "incorrect" | "missing_evidence" | "wrong_record" | "unsafe" | "other"
+    >(),
+    detail: text("detail"),
+    lastOperationId: text("last_operation_id").notNull(),
+    createdAt: integer("created_at").notNull().default(epochNow),
+    updatedAt: integer("updated_at").notNull().default(epochNow),
+  },
+  (table) => [
+    uniqueIndex("ai_operation_feedback_operation_person_unique").on(
+      table.operationId,
+      table.personId,
+    ),
+    index("idx_ai_operation_feedback_event_created").on(
+      table.eventId,
+      desc(table.createdAt),
+    ),
+    foreignKey({
+      columns: [table.eventId, table.organisationId],
+      foreignColumns: [events.id, events.organisationId],
+    }).onDelete("cascade"),
+    foreignKey({
+      columns: [table.operationId, table.eventId],
+      foreignColumns: [operationJobs.id, operationJobs.eventId],
+    }).onDelete("cascade"),
+    check(
+      "ai_operation_feedback_rating_check",
+      sql`${table.rating} IN ('helpful', 'not_helpful')`,
+    ),
+    check(
+      "ai_operation_feedback_reason_check",
+      sql`${table.reason} IS NULL OR ${table.reason} IN ('incorrect', 'missing_evidence', 'wrong_record', 'unsafe', 'other')`,
+    ),
+    check(
+      "ai_operation_feedback_detail_check",
+      sql`${table.detail} IS NULL OR (length(${table.detail}) BETWEEN 1 AND 500 AND ${table.detail} = trim(${table.detail}))`,
+    ),
+    check(
+      "ai_operation_feedback_shape_check",
+      sql`(${table.rating} = 'helpful' AND ${table.reason} IS NULL) OR (${table.rating} = 'not_helpful' AND ${table.reason} IS NOT NULL)`,
+    ),
   ],
 );
 

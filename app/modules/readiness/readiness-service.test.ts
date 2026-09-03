@@ -207,6 +207,51 @@ describe("D1-backed command centre", () => {
     expect(snapshot.cursor).toBeGreaterThan(0);
   });
 
+  it("keeps due-soon work distinct from the higher-priority critical group", async () => {
+    const service = new ReadinessService(
+      env as unknown as CloudflareEnvironment,
+    );
+    const before = await service.getCommandCentre(viewer);
+    const blockerCount = (key: string) =>
+      before.blockers.find((blocker) => blocker.key === key)?.count ?? 0;
+    await env.DB.batch([
+      env.DB.prepare(
+        `INSERT INTO task_instances (
+           id, event_id, target_type, target_id, title, task_type, impact,
+           status, readiness_state, readiness_percent, due_at,
+           created_at, updated_at
+         ) VALUES (
+           'readiness-due-soon-high', ?, 'event', ?, 'Upcoming high task',
+           'administrator_only', 'high', 'not_started', 'on_track', 0,
+           unixepoch() + 3600, unixepoch(), unixepoch()
+         )`,
+      ).bind(viewer.eventId, viewer.eventId),
+      env.DB.prepare(
+        `INSERT INTO task_instances (
+           id, event_id, target_type, target_id, title, task_type, impact,
+           status, readiness_state, readiness_percent, due_at,
+           created_at, updated_at
+         ) VALUES (
+           'readiness-due-soon-critical', ?, 'event', ?,
+           'Upcoming critical task', 'administrator_only', 'critical',
+           'not_started', 'on_track', 0, unixepoch() + 3600,
+           unixepoch(), unixepoch()
+         )`,
+      ).bind(viewer.eventId, viewer.eventId),
+    ]);
+
+    const after = await service.getCommandCentre(viewer);
+    expect(
+      after.blockers.find((blocker) => blocker.key === "due_soon_tasks"),
+    ).toMatchObject({
+      count: blockerCount("due_soon_tasks") + 1,
+      href: "/admin/tasks?state=due_soon&impact=non_critical",
+    });
+    expect(
+      after.blockers.find((blocker) => blocker.key === "critical_tasks")?.count,
+    ).toBe(blockerCount("critical_tasks") + 1);
+  });
+
   it("keeps mutations committed during snapshot reads newer than its cursor", async () => {
     const baseEnv = env as unknown as CloudflareEnvironment;
     let injected = false;

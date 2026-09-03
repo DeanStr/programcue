@@ -183,6 +183,47 @@ describe("administrator task filters", () => {
     }
   });
 
+  it("filters due-soon work precisely and can exclude critical tasks", async () => {
+    const original = await workerEnv.DB.prepare(
+      `SELECT due_at AS dueAt, impact
+         FROM task_instances
+        WHERE id = 'task-demo-handbook' AND event_id = ?`,
+    )
+      .bind(eventId)
+      .first<{ dueAt: number | null; impact: string }>();
+    expect(original).not.toBeNull();
+    await workerEnv.DB.prepare(
+      `UPDATE task_instances
+          SET due_at = unixepoch() + 3600, impact = 'medium'
+        WHERE id = 'task-demo-handbook' AND event_id = ?`,
+    )
+      .bind(eventId)
+      .run();
+    try {
+      const dueSoon = await load("?state=due_soon&impact=non_critical");
+      expect(dueSoon.tasks.map((task) => task.id)).toContain(
+        "task-demo-handbook",
+      );
+      expect(
+        dueSoon.tasks.every(
+          (task) =>
+            task.impact !== "critical" &&
+            task.dueAt !== null &&
+            task.dueAt >= dueSoon.now &&
+            task.dueAt <= dueSoon.now + 7 * 24 * 60 * 60,
+        ),
+      ).toBe(true);
+    } finally {
+      await workerEnv.DB.prepare(
+        `UPDATE task_instances
+            SET due_at = ?, impact = ?
+          WHERE id = 'task-demo-handbook' AND event_id = ?`,
+      )
+        .bind(original!.dueAt, original!.impact, eventId)
+        .run();
+    }
+  });
+
   it("keeps administrator-only session work in readiness after every participant declines", async () => {
     const before = await load();
     const sessionId = crypto.randomUUID();

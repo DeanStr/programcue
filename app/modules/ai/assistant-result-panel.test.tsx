@@ -1,5 +1,5 @@
 import { renderToStaticMarkup } from "react-dom/server";
-import { MemoryRouter } from "react-router";
+import { createMemoryRouter, RouterProvider } from "react-router";
 import { describe, expect, it } from "vitest";
 import type { ContextualAiResult } from "./ai-types";
 import { ContextualAiResultPanel } from "./assistant-result-panel";
@@ -15,6 +15,7 @@ const attribution = {
 describe("contextual AI result panel", () => {
   it("renders a readiness advisory as native actions without exposing raw model markup", () => {
     const result: ContextualAiResult = {
+      operationId: "ai-operation-readiness-test",
       kind: "readiness_summary",
       title: "AI readiness summary",
       content: "**Raw model table** | should not render",
@@ -55,11 +56,11 @@ describe("contextual AI result panel", () => {
       ],
     };
 
-    const markup = renderToStaticMarkup(
-      <MemoryRouter>
-        <ContextualAiResultPanel result={result} />
-      </MemoryRouter>,
+    const router = createMemoryRouter(
+      [{ path: "*", element: <ContextualAiResultPanel result={result} /> }],
+      { initialEntries: ["/"] },
     );
+    const markup = renderToStaticMarkup(<RouterProvider router={router} />);
 
     expect(markup).toContain("73% · needs attention");
     expect(markup).toContain("2 critical conditions · 1 warning condition");
@@ -70,12 +71,14 @@ describe("contextual AI result panel", () => {
     expect(markup).toContain("Why AI ranked this:");
     expect(markup).toContain("Resolve critical work");
     expect(markup).toContain("Sources inspected (1)");
+    expect(markup).toContain("Was this AI result useful?");
     expect(markup).not.toContain("Raw model table");
     expect(markup).not.toContain("Inspected evidence</h3>");
   });
 
   it("fails fast when a readiness result is missing its validated advisory", () => {
     const result: ContextualAiResult = {
+      operationId: "ai-operation-invalid-test",
       kind: "readiness_summary",
       title: "AI readiness summary",
       content: "Unvalidated output",
@@ -84,12 +87,12 @@ describe("contextual AI result panel", () => {
       evidence: [],
     };
 
+    const router = createMemoryRouter(
+      [{ path: "*", element: <ContextualAiResultPanel result={result} /> }],
+      { initialEntries: ["/"] },
+    );
     expect(() =>
-      renderToStaticMarkup(
-        <MemoryRouter>
-          <ContextualAiResultPanel result={result} />
-        </MemoryRouter>,
-      ),
+      renderToStaticMarkup(<RouterProvider router={router} />),
     ).toThrow(/missing its validated structured advisory/u);
   });
 });

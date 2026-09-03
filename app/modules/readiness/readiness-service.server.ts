@@ -11,6 +11,7 @@ import {
   type OperationalReadinessStatus,
   operationalReadinessStatus,
   type ReadinessTask,
+  selectTopReadinessAction,
   summarizeReadinessConditions,
 } from "./readiness-rules";
 
@@ -52,6 +53,7 @@ export type ReadinessBlocker = {
   detail: string;
   href: string;
   action: string;
+  group: "must_resolve" | "due_soon" | "waiting" | "plan_next";
 };
 
 export type CommandCentreSnapshot = {
@@ -69,6 +71,7 @@ export type CommandCentreSnapshot = {
   setupGuide: ProgrammeSetupStep[];
   workflows: ReadinessWorkflow[];
   blockers: ReadinessBlocker[];
+  topAction: ReadinessBlocker | null;
   deliveryHealth: Array<{
     channel: DeliveryChannel;
     acceptedOrDelivered: number;
@@ -438,6 +441,15 @@ export class ReadinessService {
     const criticalTasks = tasks.filter(
       (task) => incomplete.has(task.status) && task.impact === "critical",
     );
+    const dueSoonBoundary = now + 7 * 24 * 60 * 60;
+    const dueSoonTasks = tasks.filter(
+      (task) =>
+        incomplete.has(task.status) &&
+        task.impact !== "critical" &&
+        task.dueAt !== null &&
+        task.dueAt >= now &&
+        task.dueAt <= dueSoonBoundary,
+    );
     const speakerTasks = tasks.filter((task) => task.targetType === "speaker");
     const missingSpeakerAssets = speakerTasks.filter(
       (task) => task.taskType === "file_upload" && incomplete.has(task.status),
@@ -536,6 +548,7 @@ export class ReadinessService {
           detail: "Incomplete tasks whose due date has passed.",
           href: "/admin/tasks?state=overdue",
           action: "Review overdue work",
+          group: "must_resolve",
         },
         {
           key: "critical_tasks",
@@ -545,6 +558,18 @@ export class ReadinessService {
           detail: "Declared critical work is not complete.",
           href: "/admin/tasks?impact=critical&state=open",
           action: "Resolve critical work",
+          group: "must_resolve",
+        },
+        {
+          key: "due_soon_tasks",
+          label: "Other tasks due in 7 days",
+          count: dueSoonTasks.length,
+          severity: "warning",
+          detail:
+            "Incomplete readiness work is due within the next seven days.",
+          href: "/admin/tasks?state=due_soon&impact=non_critical",
+          action: "Review upcoming deadlines",
+          group: "due_soon",
         },
         {
           key: "speaker_assets",
@@ -554,6 +579,7 @@ export class ReadinessService {
           detail: "Speaker file requests still need an approved upload.",
           href: "/admin/tasks?target=speaker&type=file_upload&state=open",
           action: "Follow up with speakers",
+          group: "waiting",
         },
         {
           key: "unassigned_reviews",
@@ -563,6 +589,7 @@ export class ReadinessService {
           detail: "Submitted proposals have no active evaluator assignment.",
           href: "/admin/review?filter=unassigned",
           action: "Assign evaluators",
+          group: "waiting",
         },
         {
           key: "unscheduled_sessions",
@@ -572,6 +599,7 @@ export class ReadinessService {
           detail: "Active sessions still need a time and room.",
           href: "/admin/schedule?filter=unscheduled",
           action: "Open schedule planner",
+          group: "plan_next",
         },
         {
           key: "schedule_conflicts",
@@ -581,6 +609,7 @@ export class ReadinessService {
           detail: "Unresolved conflicts will prevent publication.",
           href: "/admin/schedule?filter=conflicts",
           action: "Resolve conflicts",
+          group: "must_resolve",
         },
         {
           key: "delivery_failures",
@@ -590,6 +619,7 @@ export class ReadinessService {
           detail: "Messages bounced, were suppressed or failed.",
           href: "/admin/communications?filter=failed",
           action: "Inspect deliveries",
+          group: "must_resolve",
         },
         {
           key: "integration_failures",
@@ -599,6 +629,7 @@ export class ReadinessService {
           detail: "Connections or integration runs need attention.",
           href: "/admin/integrations?filter=attention",
           action: "Inspect integrations",
+          group: "must_resolve",
         },
         {
           key: "operation_failures",
@@ -608,6 +639,7 @@ export class ReadinessService {
           detail: "Active durable operations failed or partially failed.",
           href: "/admin/operations?status=failed",
           action: "Review failed operations",
+          group: "must_resolve",
         },
         {
           key: "unpublished_schedule",
@@ -617,6 +649,7 @@ export class ReadinessService {
           detail: "A newer schedule draft has not been published.",
           href: "/admin/schedule?filter=draft",
           action: "Review draft changes",
+          group: "plan_next",
         },
       ] satisfies ReadinessBlocker[]
     ).filter((blocker) => blocker.count > 0);
@@ -703,6 +736,7 @@ export class ReadinessService {
       setupGuide,
       workflows,
       blockers,
+      topAction: selectTopReadinessAction(blockers),
       deliveryHealth: deliveryChannels.results.map((row) => ({
         ...row,
         percentage: percent(row.acceptedOrDelivered, row.total),

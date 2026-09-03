@@ -5,8 +5,10 @@ import {
   stableCalendarUid,
 } from "~/modules/calendars/ics.server";
 import { getAutoPlacementReadiness } from "~/modules/schedule/schedule-auto-placement";
+import { loadLatestSchedulePublicationDigest } from "~/modules/schedule/schedule-publication-digest.server";
 import { buildSchedulePublicationPreview } from "~/modules/schedule/schedule-publication-preview.server";
 import { ScheduleReviewProjectionError } from "~/modules/schedule/schedule-review-projection";
+import { MAX_ACTIVE_SCHEDULE_SCENARIOS } from "~/modules/schedule/schedule-scenario-service.server";
 import {
   ScheduleConfigurationError,
   ScheduleIdempotencyConflictError,
@@ -75,6 +77,7 @@ export async function loader({ request, context }: Route.LoaderArgs) {
   ]);
   const service = new ScheduleService(env);
   const workspace = await service.getWorkspace(viewer);
+  const scenarios = await service.listScenarios(viewer, workspace);
   const autoPlacementReadiness = getAutoPlacementReadiness(workspace);
   const calendarPreviews = Object.fromEntries(
     workspace.entries.map((entry) => {
@@ -106,11 +109,10 @@ export async function loader({ request, context }: Route.LoaderArgs) {
       return [session.id, { payload, ics: generateInvitationIcs(payload) }];
     }),
   );
-  const publicationPreview = await buildSchedulePublicationPreview(
-    env,
-    viewer,
-    workspace,
-  );
+  const [publicationPreview, publicationDigest] = await Promise.all([
+    buildSchedulePublicationPreview(env, viewer, workspace),
+    loadLatestSchedulePublicationDigest(env, viewer),
+  ]);
   const searchParams = new URL(request.url).searchParams;
   const requestedFilter = searchParams.get("filter");
   const activeFilter =
@@ -196,10 +198,14 @@ export async function loader({ request, context }: Route.LoaderArgs) {
     intentId: crypto.randomUUID(),
     calendarPreviews,
     publicationPreview,
+    publicationDigest,
     reviewLinks: reviewLinkList.items,
     reviewLinkOmittedInactiveCount: reviewLinkList.omittedInactiveCount,
     reviewLinkCreateIntentId: crypto.randomUUID(),
     reviewLinkSummary,
+    scenarios,
+    scenarioLimit: MAX_ACTIVE_SCHEDULE_SCENARIOS,
+    scenarioCreateIntentId: crypto.randomUUID(),
   };
 }
 
@@ -273,6 +279,64 @@ export async function action({ request, context }: Route.ActionArgs) {
           warning: realtimeFailure?.message ?? null,
         };
         return data(response, realtimeFailure ? { status: 207 } : undefined);
+      }
+      case "scenario-create": {
+        let selectedSessionIds: unknown;
+        try {
+          selectedSessionIds = JSON.parse(
+            String(values.get("selectedSessionIds") ?? ""),
+          );
+        } catch {
+          return data(
+            {
+              ok: false,
+              intent,
+              error:
+                "The selected scenario placements are invalid. Prepare a fresh proposal.",
+            },
+            { status: 422 },
+          );
+        }
+        const scenario = await service.createScenario(viewer, {
+          scenarioId: values.get("scenarioId"),
+          name: values.get("name"),
+          selectedSessionIds,
+        });
+        const realtimeFailure = await recordRouteChange(env, viewer, {
+          entityType: "schedule_scenario",
+          entityId: scenario.id,
+          changeType: "created",
+        });
+        return data(
+          {
+            ok: !realtimeFailure,
+            committed: true,
+            intent,
+            message: `Scenario “${scenario.name}” saved. The draft schedule was not changed.`,
+            warning: realtimeFailure?.message ?? null,
+          },
+          realtimeFailure ? { status: 207 } : undefined,
+        );
+      }
+      case "scenario-discard": {
+        const scenario = await service.discardScenario(viewer, {
+          scenarioId: values.get("scenarioId"),
+        });
+        const realtimeFailure = await recordRouteChange(env, viewer, {
+          entityType: "schedule_scenario",
+          entityId: scenario.scenarioId,
+          changeType: "deleted",
+        });
+        return data(
+          {
+            ok: !realtimeFailure,
+            committed: true,
+            intent,
+            message: "Schedule scenario discarded.",
+            warning: realtimeFailure?.message ?? null,
+          },
+          realtimeFailure ? { status: 207 } : undefined,
+        );
       }
       case "place": {
         const result = await service.place(viewer, {

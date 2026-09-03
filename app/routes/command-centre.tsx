@@ -18,6 +18,7 @@ import { PageHeader } from "~/components/ui/page-header";
 import { EmptyState } from "~/components/ui/states";
 import { StatusBadge } from "~/components/ui/status-badge";
 import { AiAssistantService } from "~/modules/ai/ai-assistant-service.server";
+import { AiProviderSettingsService } from "~/modules/ai/ai-provider.server";
 import type {
   AiProposalPreview,
   ContextualAiResult,
@@ -52,11 +53,12 @@ export async function loader({ request, context }: Route.LoaderArgs) {
     "administrator",
   ]);
   await ensureDemoEvaluationData(env);
-  const [snapshot, reminderOptions] = await Promise.all([
+  const [snapshot, reminderOptions, aiReadiness] = await Promise.all([
     new ReadinessService(env).getCommandCentre(viewer),
     new AiAssistantService(env).reminderDeliveryOptions(viewer),
+    new AiProviderSettingsService(env).readiness(viewer),
   ]);
-  return { ...snapshot, reminderOptions };
+  return { ...snapshot, reminderOptions, aiReadiness };
 }
 
 type ContextActionResponse =
@@ -338,6 +340,13 @@ function CommandReadinessCommand() {
   );
 }
 
+const blockerGroupLabels = {
+  must_resolve: "Must resolve",
+  due_soon: "Due soon",
+  waiting: "Waiting or follow-up",
+  plan_next: "Plan next",
+} as const;
+
 export default function CommandCentre({ loaderData }: Route.ComponentProps) {
   const completedSetupSteps = loaderData.setupGuide.filter(
     (step) => step.complete,
@@ -346,9 +355,6 @@ export default function CommandCentre({ loaderData }: Route.ComponentProps) {
   const completedWorkflowPhases = workflowPhases.filter(
     (phase) => phase.complete,
   ).length;
-  const hasOverdueTasks = loaderData.blockers.some(
-    (blocker) => blocker.key === "overdue_tasks",
-  );
   const readinessLabel =
     loaderData.readiness.status === "ready"
       ? "Ready"
@@ -368,6 +374,16 @@ export default function CommandCentre({ loaderData }: Route.ComponentProps) {
     .filter(Boolean)
     .join(" · ");
   const blockerCount = loaderData.blockers.length;
+  const remainingBlockers = loaderData.blockers.filter(
+    (blocker) => blocker.key !== loaderData.topAction?.key,
+  );
+  const blockerGroups = Object.entries(blockerGroupLabels)
+    .map(([key, label]) => ({
+      key: key as keyof typeof blockerGroupLabels,
+      label,
+      blockers: remainingBlockers.filter((blocker) => blocker.group === key),
+    }))
+    .filter((group) => group.blockers.length > 0);
   /* The panel exists to expose the workflows that are not ready. In domain
      order the two zeros landed in the middle of six rows and had to be hunted
      for. */
@@ -389,14 +405,6 @@ export default function CommandCentre({ loaderData }: Route.ComponentProps) {
               eventId={loaderData.eventId}
               cursor={loaderData.cursor}
             />
-            {hasOverdueTasks ? (
-              <ButtonLink
-                variant="primary"
-                to="/admin/communications?audience=overdue_speakers&category=task_reminder"
-              >
-                Prepare overdue reminder
-              </ButtonLink>
-            ) : null}
             <ButtonLink to="/admin/event">Event settings</ButtonLink>
           </>
         }
@@ -495,32 +503,53 @@ export default function CommandCentre({ loaderData }: Route.ComponentProps) {
           </div>
           {blockerCount ? (
             <div className="command-blockers">
-              {loaderData.blockers.map((blocker) => (
+              {loaderData.topAction ? (
                 <Link
-                  className={`command-blocker ${blocker.severity === "danger" ? "is-danger" : "is-warning"}`}
-                  to={blocker.href}
-                  key={blocker.key}
+                  className={`command-top-action ${loaderData.topAction.severity === "danger" ? "is-danger" : "is-warning"}`}
+                  to={loaderData.topAction.href}
                 >
-                  {blocker.severity === "danger" ? (
-                    <AlertTriangle aria-label="Critical" size={18} />
-                  ) : (
-                    <AlertCircle aria-label="Needs attention" size={18} />
-                  )}
-                  <span className="command-blocker-copy">
-                    <strong>
-                      {blocker.label}
-                      <b className="pc-num command-blocker-count">
-                        {blocker.count}
-                      </b>
-                    </strong>
-                    <small>{blocker.action}</small>
+                  <span className="command-top-action-kicker">
+                    Do this next
                   </span>
-                  <ChevronRight
-                    aria-hidden
-                    className="command-blocker-go"
-                    size={16}
-                  />
+                  <strong>{loaderData.topAction.action}</strong>
+                  <small>
+                    {loaderData.topAction.label} · {loaderData.topAction.count}{" "}
+                    affected
+                  </small>
+                  <ChevronRight aria-hidden size={18} />
                 </Link>
+              ) : null}
+              {blockerGroups.map((group) => (
+                <section className="command-blocker-group" key={group.key}>
+                  <h3>{group.label}</h3>
+                  {group.blockers.map((blocker) => (
+                    <Link
+                      className={`command-blocker ${blocker.severity === "danger" ? "is-danger" : "is-warning"}`}
+                      to={blocker.href}
+                      key={blocker.key}
+                    >
+                      {blocker.severity === "danger" ? (
+                        <AlertTriangle aria-label="Critical" size={18} />
+                      ) : (
+                        <AlertCircle aria-label="Needs attention" size={18} />
+                      )}
+                      <span className="command-blocker-copy">
+                        <strong>
+                          {blocker.label}
+                          <b className="pc-num command-blocker-count">
+                            {blocker.count}
+                          </b>
+                        </strong>
+                        <small>{blocker.action}</small>
+                      </span>
+                      <ChevronRight
+                        aria-hidden
+                        className="command-blocker-go"
+                        size={16}
+                      />
+                    </Link>
+                  ))}
+                </section>
               ))}
             </div>
           ) : (
@@ -570,9 +599,22 @@ export default function CommandCentre({ loaderData }: Route.ComponentProps) {
         id="command-assistants"
         aria-label="Assistants and delivery"
       >
-        <CommandReminderComposer options={loaderData.reminderOptions} />
+        {loaderData.aiReadiness.configured ? (
+          <CommandReminderComposer options={loaderData.reminderOptions} />
+        ) : (
+          <section className="command-ai-unavailable">
+            <div className="command-panel-head">
+              <h2 className="command-section-head">AI assistance</h2>
+              <span className="command-qualifier">Optional</span>
+            </div>
+            <p>{loaderData.aiReadiness.problem}</p>
+            <ButtonLink to="/admin/assistant">Configure AI provider</ButtonLink>
+          </section>
+        )}
         <div className="command-assist-side">
-          <CommandReadinessCommand />
+          {loaderData.aiReadiness.configured ? (
+            <CommandReadinessCommand />
+          ) : null}
           <section className="command-delivery">
             <div className="command-panel-head">
               <h2 className="command-band-head">Delivery</h2>

@@ -1,5 +1,179 @@
 /* Schedule planner surface. Room board mechanics live in
    schedule-operations.css; this sheet owns the designed objects. */
+.schedule-scenarios {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  display: grid;
+  gap: var(--space-4);
+  margin: 0 0 var(--space-4);
+  padding: var(--space-4);
+}
+.schedule-scenarios-head {
+  align-items: end;
+  display: grid;
+  gap: var(--space-5);
+  grid-template-columns: minmax(0, 1fr) minmax(300px, 0.7fr);
+}
+.schedule-scenarios-head h2,
+.schedule-scenario-card h3,
+.schedule-scenarios-head p {
+  margin: 0;
+}
+.schedule-scenarios-head .eyebrow {
+  color: var(--brand-700);
+  font-size: var(--text-2xs);
+  font-weight: var(--weight-semibold);
+  letter-spacing: var(--tracking-snug);
+  text-transform: uppercase;
+}
+.schedule-scenario-create {
+  align-items: end;
+  display: grid;
+  gap: var(--space-3);
+  grid-template-columns: minmax(0, 1fr) auto;
+}
+.schedule-scenario-list {
+  display: grid;
+  gap: var(--space-3);
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+}
+.schedule-scenario-card {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  display: grid;
+  gap: var(--space-3);
+  padding: var(--space-4);
+}
+.schedule-scenario-title {
+  align-items: start;
+  display: flex;
+  gap: var(--space-3);
+}
+.schedule-scenario-title > svg {
+  color: var(--brand-700);
+  flex: none;
+}
+.schedule-scenario-title p,
+.schedule-scenario-empty,
+.schedule-scenario-stale {
+  color: var(--text-secondary);
+  font-size: var(--text-xs);
+  margin: 0;
+}
+.schedule-scenario-stale {
+  color: var(--state-warn-text);
+}
+.schedule-scenario-metrics {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  margin: 0;
+}
+.schedule-scenario-metrics div {
+  border-left: 1px solid var(--border);
+  padding-left: var(--space-3);
+}
+.schedule-scenario-metrics div:first-child {
+  border-left: 0;
+  padding-left: 0;
+}
+.schedule-scenario-metrics dt {
+  color: var(--text-tertiary);
+  font-size: var(--text-2xs);
+}
+.schedule-scenario-metrics dd {
+  font-size: var(--text-lg);
+  font-weight: var(--weight-semibold);
+  margin: 0;
+}
+.schedule-scenario-actions {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+@media (max-width: 760px) {
+  .schedule-scenarios-head,
+  .schedule-scenario-create {
+    grid-template-columns: 1fr;
+  }
+}
+.schedule-publication-digest {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  display: grid;
+  gap: var(--space-4);
+  margin: 0 0 var(--space-4);
+  padding: var(--space-4);
+}
+.schedule-publication-digest-head {
+  align-items: start;
+  display: flex;
+  gap: var(--space-3);
+}
+.schedule-publication-digest-head > svg {
+  color: var(--brand-700);
+  flex: none;
+}
+.schedule-publication-digest-head h2,
+.schedule-publication-digest-head p {
+  margin: 0;
+}
+.schedule-publication-digest-head .eyebrow {
+  color: var(--brand-700);
+  font-size: var(--text-2xs);
+  font-weight: var(--weight-semibold);
+  letter-spacing: var(--tracking-snug);
+  text-transform: uppercase;
+}
+.schedule-publication-digest-counts {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  margin: 0;
+}
+.schedule-publication-digest-counts div {
+  border-left: 1px solid var(--border);
+  padding-left: var(--space-3);
+}
+.schedule-publication-digest-counts div:first-child {
+  border-left: 0;
+  padding-left: 0;
+}
+.schedule-publication-digest-counts dt {
+  color: var(--text-tertiary);
+  font-size: var(--text-2xs);
+}
+.schedule-publication-digest-counts dd {
+  font-size: var(--text-lg);
+  font-weight: var(--weight-semibold);
+  margin: 0;
+}
+.schedule-publication-digest > details > summary {
+  color: var(--text-secondary);
+  cursor: pointer;
+  font-size: var(--text-sm);
+  font-weight: var(--weight-semibold);
+}
+.schedule-publication-digest-details {
+  display: grid;
+  gap: var(--space-3);
+  padding-top: var(--space-3);
+}
+.schedule-publication-digest-details h3,
+.schedule-publication-digest-details ul {
+  margin: 0;
+}
+@media (max-width: 600px) {
+  .schedule-publication-digest-counts {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: var(--space-3);
+  }
+  .schedule-publication-digest-counts div:nth-child(odd) {
+    border-left: 0;
+    padding-left: 0;
+  }
+}
 .schedule-summary {
   display: grid;
   border: 1px solid var(--line);

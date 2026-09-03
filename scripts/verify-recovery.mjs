@@ -10,6 +10,7 @@ import {
 } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
+import { DatabaseSync } from "node:sqlite";
 
 import { DEFAULT_EVENT_BRAND_ACCENT } from "../app/lib/brand.ts";
 import { resolvePackageExecutable } from "./package-executable.mjs";
@@ -60,34 +61,85 @@ function quoteIdentifier(identifier) {
   return `"${identifier}"`;
 }
 
+async function assertWholeDatabaseIntegrity(cwd) {
+  const d1Directory = join(
+    cwd,
+    ".wrangler",
+    "state",
+    "v3",
+    "d1",
+    "miniflare-D1DatabaseObject",
+  );
+  const candidates = (await readdir(d1Directory))
+    .filter((entry) => entry.endsWith(".sqlite") && entry !== "metadata.sqlite")
+    .sort();
+  if (candidates.length !== 1) {
+    fail(`Expected one local D1 SQLite database, found ${candidates.length}.`);
+  }
+  const databaseFile = join(d1Directory, candidates[0]);
+  const sqlite = new DatabaseSync(databaseFile, { readOnly: true });
+  try {
+    const results = sqlite.prepare("PRAGMA quick_check").all();
+    if (results.length !== 1 || results[0]?.quick_check !== "ok") {
+      fail("The whole-database SQLite quick_check did not return ok.");
+    }
+  } finally {
+    sqlite.close();
+  }
+}
+
 async function inspectDatabase(cwd, config, tables) {
-  const countStatements = tables.map(
+  const countSelects = tables.map(
     (table) =>
       `SELECT '${table}' AS tableName, COUNT(*) AS rowCount FROM ${quoteIdentifier(table)}`,
   );
-  const statements = [
-    ...countStatements,
+  const countResults = [];
+  for (let index = 0; index < countSelects.length; index += 20) {
+    const batch = countSelects.slice(index, index + 20);
+    const batchResults = parseResults(
+      runWrangler(
+        cwd,
+        config,
+        ["d1", "execute", database, "--command", batch.join("; ")],
+        { json: true },
+      ),
+    );
+    if (batchResults.length !== batch.length)
+      fail(
+        `Expected ${batch.length} table-count result sets, received ${batchResults.length}.`,
+      );
+    countResults.push(...batchResults);
+  }
+  const inspectionStatements = [
     "SELECT COUNT(*) AS indexCount FROM sqlite_schema WHERE type = 'index' AND name NOT LIKE 'sqlite_%'",
     "SELECT COUNT(*) AS triggerCount FROM sqlite_schema WHERE type = 'trigger'",
     "PRAGMA foreign_key_check",
-    "PRAGMA quick_check",
-  ].join("; ");
-  const results = parseResults(
-    runWrangler(
-      cwd,
-      config,
-      ["d1", "execute", database, "--command", statements],
-      { json: true },
-    ),
-  );
-  const expectedResults = countStatements.length + 4;
-  if (results.length !== expectedResults)
+  ];
+  const inspectionResults = [];
+  for (const statement of inspectionStatements) {
+    try {
+      inspectionResults.push(
+        ...parseResults(
+          runWrangler(
+            cwd,
+            config,
+            ["d1", "execute", database, "--command", statement],
+            { json: true },
+          ),
+        ),
+      );
+    } catch (error) {
+      fail(
+        `Inspection statement failed (${statement}): ${error instanceof Error ? error.message : String(error)}`,
+      );
+    }
+  }
+  if (inspectionResults.length !== 3)
     fail(
-      `Expected ${expectedResults} inspection result sets, received ${results.length}.`,
+      `Expected 3 inspection result sets, received ${inspectionResults.length}.`,
     );
   const counts = Object.fromEntries(
-    results
-      .slice(0, countStatements.length)
+    countResults
       .flatMap((result) => result.results)
       .map((row) => [String(row.tableName), Number(row.rowCount)]),
   );
@@ -95,14 +147,13 @@ async function inspectDatabase(cwd, config, tables) {
     fail(
       `Expected ${tables.length} table counts, received ${Object.keys(counts).length}.`,
     );
-  const indexResult = results[countStatements.length];
-  const triggerResult = results[countStatements.length + 1];
-  const foreignKeyResult = results[countStatements.length + 2];
-  const integrityResult = results[countStatements.length + 3];
+  const [indexResult, triggerResult, foreignKeyResult] = inspectionResults;
   if (foreignKeyResult.results.length !== 0)
     fail("Foreign-key violations were found.");
-  if (integrityResult.results[0]?.quick_check !== "ok")
-    fail("SQLite quick_check did not return ok.");
+  /* Workerd's local D1 SQL endpoint exhausts its memory budget on this
+     schema-wide check. Run the same SQLite integrity check directly against
+     the closed local D1 file instead of weakening it to per-table checks. */
+  await assertWholeDatabaseIntegrity(cwd);
   return {
     counts,
     indexCount: Number(indexResult.results[0]?.indexCount),

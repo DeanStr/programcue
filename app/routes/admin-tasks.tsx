@@ -32,8 +32,9 @@ const taskFiltersSchema = z
       "completed",
       "waived",
       "overdue",
+      "due_soon",
     ]),
-    impact: z.enum(["", "critical", "high", "medium", "low"]),
+    impact: z.enum(["", "critical", "non_critical", "high", "medium", "low"]),
     target: z.enum(["", "speaker", "session", "event"]),
     type: z.enum([
       "",
@@ -120,6 +121,12 @@ export async function loader({ request, context }: Route.LoaderArgs) {
     (task.status === "overdue" ||
       task.readinessState === "overdue" ||
       (task.dueAt !== null && task.dueAt < now));
+  const dueSoonBoundary = now + 7 * 24 * 60 * 60;
+  const isDueSoon = (task: (typeof workspace.tasks)[number]) =>
+    open.has(task.status) &&
+    task.dueAt !== null &&
+    task.dueAt >= now &&
+    task.dueAt <= dueSoonBoundary;
   const readinessTasks = workspace.tasks.filter(
     (task) => task.readinessRelevant,
   );
@@ -131,11 +138,18 @@ export async function loader({ request, context }: Route.LoaderArgs) {
           ? open.has(task.status)
           : filters.state === "overdue"
             ? isOverdue(task)
-            : task.status === filters.state);
+            : filters.state === "due_soon"
+              ? isDueSoon(task)
+              : task.status === filters.state);
+      const impactMatches =
+        !filters.impact ||
+        (filters.impact === "non_critical"
+          ? task.impact !== "critical"
+          : task.impact === filters.impact);
       return (
         (!filters.task || task.id === filters.task) &&
         stateMatches &&
-        (!filters.impact || task.impact === filters.impact) &&
+        impactMatches &&
         (!filters.target || task.targetType === filters.target) &&
         (!filters.type || task.taskType === filters.type)
       );

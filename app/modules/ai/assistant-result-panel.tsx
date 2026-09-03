@@ -5,7 +5,8 @@ import {
   ShieldCheck,
   Sparkles,
 } from "lucide-react";
-import { Form, Link } from "react-router";
+import { useEffect, useState } from "react";
+import { Form, Link, useFetcher } from "react-router";
 import { Button, ButtonLink } from "~/components/ui/button";
 import { requireValue } from "~/lib/required-value";
 import type {
@@ -105,6 +106,75 @@ function EvidenceList({
   );
 }
 
+type AiFeedbackResponse =
+  | { ok: true; operationId: string; rating: "helpful" | "not_helpful" }
+  | { ok: false; error: string };
+
+function AiFeedbackControl({ operationId }: { operationId: string }) {
+  const fetcher = useFetcher<AiFeedbackResponse>();
+  const [editing, setEditing] = useState(false);
+  const pending = fetcher.state !== "idle";
+  useEffect(() => {
+    if (fetcher.state === "idle" && fetcher.data?.ok) setEditing(false);
+  }, [fetcher.data, fetcher.state]);
+  if (fetcher.data?.ok && !editing) {
+    return (
+      <div className="help ai-feedback-recorded">
+        <span role="status">Feedback recorded.</span>
+        <Button type="button" size="small" onClick={() => setEditing(true)}>
+          Change feedback
+        </Button>
+      </div>
+    );
+  }
+  return (
+    <details className="pc-disclosure ai-feedback" open={editing || undefined}>
+      <summary>Was this AI result useful?</summary>
+      <div className="stack mt">
+        <fetcher.Form method="post" action="/ai/feedback">
+          <input type="hidden" name="operationId" value={operationId} />
+          <input type="hidden" name="rating" value="helpful" />
+          <Button type="submit" size="small" disabled={pending}>
+            Helpful
+          </Button>
+        </fetcher.Form>
+        <fetcher.Form method="post" action="/ai/feedback" className="stack">
+          <input type="hidden" name="operationId" value={operationId} />
+          <input type="hidden" name="rating" value="not_helpful" />
+          <label className="label">
+            What needs attention?
+            <select className="select" name="reason" required>
+              <option value="">Choose a reason</option>
+              <option value="incorrect">Incorrect</option>
+              <option value="missing_evidence">Missing evidence</option>
+              <option value="wrong_record">Used the wrong record</option>
+              <option value="unsafe">Potentially unsafe</option>
+              <option value="other">Other</option>
+            </select>
+          </label>
+          <label className="label">
+            Detail (optional)
+            <textarea
+              className="textarea"
+              name="detail"
+              maxLength={500}
+              rows={2}
+            />
+          </label>
+          <Button type="submit" size="small" disabled={pending}>
+            Send feedback
+          </Button>
+        </fetcher.Form>
+        {fetcher.data && !fetcher.data.ok ? (
+          <p className="field-error" role="alert">
+            {fetcher.data.error}
+          </p>
+        ) : null}
+      </div>
+    </details>
+  );
+}
+
 function ReadinessAdvisoryPanel({ result }: { result: ContextualAiResult }) {
   if (!result.readiness) {
     throw new Error(
@@ -188,6 +258,7 @@ function ReadinessAdvisoryPanel({ result }: { result: ContextualAiResult }) {
       ) : null}
       <Attribution attribution={result.attribution} />
       <EvidenceList evidence={result.evidence} compact />
+      <AiFeedbackControl operationId={result.operationId} />
     </section>
   );
 }
@@ -485,6 +556,7 @@ export function AssistantResultPanel({
         >
           Open assistant operation
         </ButtonLink>
+        <AiFeedbackControl operationId={result.operationId} />
       </section>
       {showProposals
         ? result.proposals.map((proposal) => (
@@ -527,6 +599,7 @@ export function ContextualAiResultPanel({
       )}
       <Attribution attribution={result.attribution} />
       <EvidenceList evidence={result.evidence} />
+      <AiFeedbackControl operationId={result.operationId} />
     </section>
   );
 }

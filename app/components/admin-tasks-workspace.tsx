@@ -153,6 +153,7 @@ export function AdminTasksWorkspace({
                 <option value="completed">Completed</option>
                 <option value="waived">Waived</option>
                 <option value="overdue">Overdue</option>
+                <option value="due_soon">Due in 7 days</option>
               </select>
             </label>
             <label className="label">
@@ -193,6 +194,7 @@ export function AdminTasksWorkspace({
               >
                 <option value="">All impacts</option>
                 <option value="critical">Critical</option>
+                <option value="non_critical">Non-critical</option>
                 <option value="high">High</option>
                 <option value="medium">Medium</option>
                 <option value="low">Low</option>

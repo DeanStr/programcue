@@ -133,6 +133,7 @@ export default [
   route("admin/events/:eventId/changes", "routes/event-changes.ts"),
   route("admin/assistant/stream", "routes/assistant-stream.ts"),
   route("ai/context", "routes/ai-context-action.ts"),
+  route("ai/feedback", "routes/ai-feedback.ts"),
   route("admin/exports/:resource.csv", "routes/admin-data-export.ts"),
   route("admin", "routes/admin-index.ts"),
   layout("routes/admin-layout.tsx", [

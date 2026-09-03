@@ -1,6 +1,7 @@
 import type { ScheduleCalendarFanoutMessage } from "~/modules/calendars/calendar-schema";
 import { scheduleCalendarFanoutSnapshotStatements } from "~/modules/calendars/calendar-service.server";
 import { PUBLIC_SITE_SCHEDULE_ATOMIC_GUARD } from "~/modules/public-site/public-site-publication-validation.server";
+import type { SchedulePublicationDigest } from "./schedule-publication-digest.server";
 import type { ScheduleConflict } from "./schedule-rules";
 import type { schedulePublishSchema } from "./schedule-schema";
 import type {
@@ -28,6 +29,10 @@ export function buildSchedulePublicationStatements(input: {
     operationId: string | null;
     recipientCount: number;
   };
+  publicationDigest: {
+    previousVersionNumber: number | null;
+    value: SchedulePublicationDigest;
+  };
   conflictInsert: (
     entryId: string,
     conflict: ScheduleConflict,
@@ -48,6 +53,7 @@ export function buildSchedulePublicationStatements(input: {
     calendarMessage,
     auditEventId,
     notification,
+    publicationDigest,
     conflictInsert,
   } = input;
   const idempotencyRecordId = command ? crypto.randomUUID() : null;
@@ -198,6 +204,29 @@ export function buildSchedulePublicationStatements(input: {
          WHERE id = ? AND event_id = ? AND status = 'publishing' AND publication_operation_id = ?
       `,
     ).bind(parsed.scheduleVersionId, viewer.eventId, publishOperationId),
+    env.DB.prepare(
+      `
+        INSERT INTO schedule_publication_digests (
+          schedule_version_id, event_id, publication_operation_id,
+          previous_version_number, digest_json, created_at
+        )
+        SELECT ?, ?, ?, ?, ?, unixepoch()
+         WHERE EXISTS (
+           SELECT 1 FROM schedule_versions
+            WHERE id = ? AND event_id = ? AND status = 'published'
+              AND publication_operation_id = ?
+         )
+      `,
+    ).bind(
+      parsed.scheduleVersionId,
+      viewer.eventId,
+      publishOperationId,
+      publicationDigest.previousVersionNumber,
+      JSON.stringify(publicationDigest.value),
+      parsed.scheduleVersionId,
+      viewer.eventId,
+      publishOperationId,
+    ),
     env.DB.prepare(
       `
         UPDATE sessions
@@ -369,7 +398,10 @@ export function buildSchedulePublicationStatements(input: {
       actor.personId ?? null,
       actor.actorId ?? null,
       parsed.scheduleVersionId,
-      JSON.stringify({ entryCount: workspace.entries.length }),
+      JSON.stringify({
+        entryCount: workspace.entries.length,
+        changeCounts: publicationDigest.value.counts,
+      }),
       parsed.scheduleVersionId,
       publishOperationId,
     ),

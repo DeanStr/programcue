@@ -315,6 +315,60 @@
 
 .command-blockers {
   display: grid;
+  gap: var(--space-3);
+}
+.command-top-action {
+  --blocker-ink: var(--state-warn-text);
+  --blocker-surface: var(--state-warn-surface);
+  align-items: center;
+  background: var(--blocker-surface);
+  border: 1px solid var(--state-warn-border);
+  border-radius: var(--radius-sm);
+  color: inherit;
+  display: grid;
+  gap: 2px var(--space-3);
+  grid-template-columns: minmax(0, 1fr) auto;
+  padding: var(--space-4);
+  text-decoration: none;
+}
+.command-top-action.is-danger {
+  --blocker-ink: var(--state-bad-text);
+  --blocker-surface: var(--state-bad-surface);
+  border-color: var(--state-bad-border);
+}
+.command-top-action-kicker,
+.command-top-action small {
+  color: var(--blocker-ink);
+  font-size: var(--text-xs);
+}
+.command-top-action-kicker,
+.command-top-action strong,
+.command-top-action small {
+  grid-column: 1;
+}
+.command-top-action > svg {
+  color: var(--blocker-ink);
+  grid-column: 2;
+  grid-row: 1 / span 3;
+}
+.command-top-action-kicker {
+  font-weight: var(--weight-semibold);
+  letter-spacing: var(--tracking-snug);
+  text-transform: uppercase;
+}
+.command-top-action strong {
+  font-size: var(--text-base);
+}
+.command-blocker-group {
+  display: grid;
+}
+.command-blocker-group h3 {
+  color: var(--text-tertiary);
+  font-size: var(--text-2xs);
+  font-weight: var(--weight-semibold);
+  letter-spacing: var(--tracking-snug);
+  margin: var(--space-2) 0 0;
+  text-transform: uppercase;
 }
 .command-blocker {
   position: relative;
@@ -518,6 +572,16 @@
 .command-support > *,
 .command-assist-side > * {
   min-width: 0;
+}
+.command-ai-unavailable {
+  align-content: start;
+  display: grid;
+  gap: var(--space-3);
+}
+.command-ai-unavailable p {
+  color: var(--text-secondary);
+  margin: 0;
+  max-width: 62ch;
 }
 /* Wrapping flex rather than two fixed tracks. The pair only fits side by side
    once each control clears the widest option it has to show ("Speakers with

@@ -142,6 +142,7 @@ export type AiAssistantResult = {
 };
 
 export type ContextualAiResult = {
+  operationId: string;
   kind:
     | "review_aid"
     | "readiness_summary"

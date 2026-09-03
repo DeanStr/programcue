@@ -116,6 +116,40 @@ const autoPlacementUnplacedSchema = z.object({
 
 export const MAX_AUTO_PLACEMENT_SESSIONS = 500;
 
+export const scheduleScenarioCreateSchema = z
+  .object({
+    scenarioId: z.string().uuid(),
+    name: z
+      .string()
+      .trim()
+      .min(1, "Name this schedule scenario.")
+      .max(80, "Keep the scenario name to 80 characters.")
+      .refine(
+        (value) => !/[\r\n\0]/u.test(value),
+        "The scenario name cannot contain line breaks.",
+      ),
+    selectedSessionIds: z
+      .array(z.string().trim().min(1))
+      .min(1, "Select at least one proposed placement.")
+      .max(MAX_AUTO_PLACEMENT_SESSIONS),
+  })
+  .superRefine((value, context) => {
+    if (
+      new Set(value.selectedSessionIds).size !== value.selectedSessionIds.length
+    ) {
+      context.addIssue({
+        code: "custom",
+        path: ["selectedSessionIds"],
+        message: "Select each proposed session once.",
+      });
+    }
+  })
+  .strict();
+
+export const scheduleScenarioDiscardSchema = z
+  .object({ scenarioId: z.string().uuid() })
+  .strict();
+
 export const scheduleAutoPlacementConfirmSchema = z
   .object({
     idempotencyKey: editorIdempotencyKeySchema,

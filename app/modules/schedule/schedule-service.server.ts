@@ -27,6 +27,10 @@ import type {
   SpeakerBlackoutWindow,
 } from "./schedule-rules";
 import {
+  type ScheduleScenario,
+  ScheduleScenarioService,
+} from "./schedule-scenario-service.server";
+import {
   scheduleAutoPlacementConfirmSchema,
   scheduleNotesSchema,
   scheduleSessionContentSchema,
@@ -232,6 +236,7 @@ export class ScheduleService {
   private readonly breakWorkflow: ScheduleBreakWorkflow;
   private readonly publicationWorkflow: SchedulePublicationWorkflow;
   private readonly reviewLinkService: ScheduleReviewLinkService;
+  private readonly scenarioService: ScheduleScenarioService;
   private projectionDepth = 0;
 
   constructor(
@@ -274,6 +279,11 @@ export class ScheduleService {
       this.env,
       workflowDependencies,
     );
+    this.scenarioService = new ScheduleScenarioService(this.env, {
+      ...workflowDependencies,
+      previewAutoPlacement: (viewer: ScheduleEventScope) =>
+        this.autoPlacementWorkflow.preview(viewer),
+    });
   }
 
   private async queueSessionWebhook(
@@ -427,6 +437,21 @@ export class ScheduleService {
         requestHash,
       },
     );
+  }
+
+  async listScenarios(
+    viewer: ScheduleEventScope,
+    workspace?: ScheduleWorkspace,
+  ): Promise<ScheduleScenario[]> {
+    return this.scenarioService.list(viewer, workspace);
+  }
+
+  async createScenario(viewer: Viewer, input: unknown) {
+    return this.scenarioService.create(viewer, input);
+  }
+
+  async discardScenario(viewer: Viewer, input: unknown) {
+    return this.scenarioService.discard(viewer, input);
   }
 
   async getConflictedSessionIds(

@@ -17,6 +17,55 @@ export type WorkflowReadiness = {
   score: number;
 };
 
+export type ReadinessActionCandidate = {
+  key: string;
+  severity: "danger" | "warning";
+};
+
+const READINESS_ACTION_PRIORITY = [
+  "schedule_conflicts",
+  "overdue_tasks",
+  "critical_tasks",
+  "delivery_failures",
+  "integration_failures",
+  "operation_failures",
+  "due_soon_tasks",
+  "speaker_assets",
+  "unassigned_reviews",
+  "unscheduled_sessions",
+  "unpublished_schedule",
+] as const;
+
+const readinessActionRank = new Map<string, number>(
+  READINESS_ACTION_PRIORITY.map((key, index) => [key, index]),
+);
+
+/**
+ * Choose one stable next action without asking AI to reinterpret operational
+ * state. Unknown future conditions still sort after declared critical ones and
+ * before warnings, then by key so the result never depends on query order.
+ */
+export function selectTopReadinessAction<T extends ReadinessActionCandidate>(
+  conditions: ReadonlyArray<T>,
+): T | null {
+  return (
+    [...conditions].sort((left, right) => {
+      if (left.severity !== right.severity) {
+        return left.severity === "danger" ? -1 : 1;
+      }
+      const leftRank = readinessActionRank.get(left.key);
+      const rightRank = readinessActionRank.get(right.key);
+      if (leftRank !== undefined || rightRank !== undefined) {
+        return (
+          (leftRank ?? READINESS_ACTION_PRIORITY.length) -
+          (rightRank ?? READINESS_ACTION_PRIORITY.length)
+        );
+      }
+      return left.key.localeCompare(right.key);
+    })[0] ?? null
+  );
+}
+
 export type OperationalReadinessStatus =
   | "ready"
   | "on_track"

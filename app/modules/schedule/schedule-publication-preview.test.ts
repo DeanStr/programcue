@@ -1,5 +1,6 @@
 import { env } from "cloudflare:test";
 import { beforeEach, describe, expect, it } from "vitest";
+import { loadLatestSchedulePublicationDigest } from "./schedule-publication-digest.server";
 import { buildSchedulePublicationPreview } from "./schedule-publication-preview.server";
 import { ScheduleService } from "./schedule-service.server";
 import {
@@ -34,6 +35,47 @@ beforeEach(async () => {
 });
 
 describe("schedule publication preview", () => {
+  it("persists the confirmed change digest atomically with publication", async () => {
+    const service = new ScheduleService(scheduleTestEnv);
+    const versionId = await service.createDraft(viewer);
+    let workspace = await service.getWorkspace(viewer);
+    const startsAt = eventLocalTimeEpoch(
+      workspace.event.startsAt,
+      workspace.event.timezone,
+      9,
+    );
+    await service.place(viewer, {
+      scheduleVersionId: versionId,
+      scheduleRevision: workspace.version!.revision,
+      sessionId: "schedule-test-one",
+      roomId: "main",
+      startsAt,
+      endsAt: startsAt + 3_600,
+    });
+    await approveScheduledTestContent(versionId);
+    workspace = await service.getWorkspace(viewer);
+    await service.publish(viewer, {
+      scheduleVersionId: versionId,
+      scheduleRevision: workspace.version!.revision,
+    });
+
+    await expect(
+      loadLatestSchedulePublicationDigest(scheduleTestEnv, viewer),
+    ).resolves.toMatchObject({
+      scheduleVersionId: versionId,
+      versionNumber: 1,
+      previousVersionNumber: null,
+      digest: {
+        counts: { added: 1, total: 1 },
+        highlights: {
+          added: [
+            { sessionId: "schedule-test-one", title: "First test session" },
+          ],
+        },
+      },
+    });
+  });
+
   it("shows the exact draft blockers before publication", async () => {
     const service = new ScheduleService(scheduleTestEnv);
     const versionId = await service.createDraft(viewer);

@@ -19,7 +19,9 @@ import {
   conflictTypeLabel,
   sessionFormatLabel,
 } from "./schedule-planner-workspace-helpers";
+import { SchedulePublicationDigestPanel } from "./schedule-publication-digest-panel";
 import { ScheduleReviewLinksPanel } from "./schedule-review-links-panel";
+import { ScheduleScenariosPanel } from "./schedule-scenarios-panel";
 import { useSchedulePlannerController } from "./use-schedule-planner-controller";
 
 export {
@@ -625,6 +627,16 @@ export function SchedulePlannerWorkspace({
           ) : null}
         </DragOverlay>
       </DndContext>
+      <ScheduleScenariosPanel
+        workspace={workspace}
+        autoPlacementFetcher={autoPlacementFetcher}
+        clearAutoError={clearAutoError}
+        autoError={autoError}
+      />
+      <SchedulePublicationDigestPanel
+        publication={workspace.publicationDigest}
+        timeZone={workspace.event.timezone}
+      />
       <ScheduleReviewLinksPanel workspace={workspace} />
       {autoPreview ? (
         <AutoPlacementPreviewDialog

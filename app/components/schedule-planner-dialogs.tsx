@@ -114,6 +114,12 @@ export function AutoPlacementPreviewDialog({
   fetcher,
   dismiss,
   clearError,
+  title = "Preview auto-placement",
+  intro,
+  applyDisabledReason = null,
+  onApplySubmit,
+  error = null,
+  saveScenario,
 }: {
   preview: AutoPlacementPreview;
   workspace: SchedulePlannerWorkspaceData;
@@ -121,6 +127,12 @@ export function AutoPlacementPreviewDialog({
   fetcher: ScheduleFetcher;
   dismiss: () => void;
   clearError: () => void;
+  title?: string;
+  intro?: string;
+  applyDisabledReason?: string | null;
+  onApplySubmit?: () => void;
+  error?: string | null;
+  saveScenario?: { scenarioId: string; name: string };
 }) {
   const [selectedSessionIds, setSelectedSessionIds] = useState(
     () => preview.selectedSessionIds,
@@ -129,7 +141,7 @@ export function AutoPlacementPreviewDialog({
   const proposal = serializeAutoPlacementPreview(preview, selectedSessionIds);
   return (
     <Dialog
-      title="Preview auto-placement"
+      title={title}
       onClose={() => {
         if (fetcher.state === "idle") dismiss();
       }}
@@ -142,19 +154,54 @@ export function AutoPlacementPreviewDialog({
           >
             Cancel
           </Button>
-          <fetcher.Form method="post" onSubmit={clearError}>
-            <input type="hidden" name="intent" value="auto-place-confirm" />
-            <input type="hidden" name="proposal" value={proposal} />
+          <fetcher.Form
+            method="post"
+            onSubmit={() => {
+              clearError();
+              onApplySubmit?.();
+            }}
+          >
+            <input
+              type="hidden"
+              name="intent"
+              value={saveScenario ? "scenario-create" : "auto-place-confirm"}
+            />
+            {saveScenario ? (
+              <>
+                <input
+                  type="hidden"
+                  name="scenarioId"
+                  value={saveScenario.scenarioId}
+                />
+                <input type="hidden" name="name" value={saveScenario.name} />
+                <input
+                  type="hidden"
+                  name="selectedSessionIds"
+                  value={JSON.stringify(
+                    preview.placements
+                      .map((placement) => placement.sessionId)
+                      .filter((sessionId) => selectedIds.has(sessionId)),
+                  )}
+                />
+              </>
+            ) : (
+              <input type="hidden" name="proposal" value={proposal} />
+            )}
             <Button
               variant="primary"
               type="submit"
               disabled={
-                selectedSessionIds.length === 0 || fetcher.state !== "idle"
+                selectedSessionIds.length === 0 ||
+                fetcher.state !== "idle" ||
+                applyDisabledReason !== null
               }
+              title={applyDisabledReason ?? undefined}
             >
               {fetcher.state === "idle"
-                ? `Apply ${selectedSessionIds.length} selected placement${selectedSessionIds.length === 1 ? "" : "s"}`
-                : "Applying placements…"}
+                ? `${saveScenario ? "Save" : "Apply"} ${selectedSessionIds.length} selected placement${selectedSessionIds.length === 1 ? "" : "s"}`
+                : saveScenario
+                  ? "Saving scenario…"
+                  : "Applying placements…"}
             </Button>
           </fetcher.Form>
         </>
@@ -162,10 +209,23 @@ export function AutoPlacementPreviewDialog({
     >
       <div className="stack" data-testid="auto-placement-preview">
         <p>
-          Suggested placements for this draft schedule, based on what is already
-          scheduled. Nothing is published by this action, and you can change any
-          placement afterwards.
+          {intro ??
+            "Suggested placements for this draft schedule, based on what is already scheduled. Nothing is published by this action, and you can change any placement afterwards."}
         </p>
+        {applyDisabledReason ? (
+          <div className="validation-item warn" role="status">
+            <strong>This scenario cannot be applied.</strong>
+            <span>{applyDisabledReason}</span>
+          </div>
+        ) : null}
+        {error ? (
+          <div className="validation-item error" role="alert">
+            <strong>
+              {saveScenario ? "Scenario not saved" : "Apply failed"}
+            </strong>
+            <span>{error}</span>
+          </div>
+        ) : null}
         <div className="grid grid-3">
           <div className="metric">
             <span className="value">{preview.sessionRevisions.length}</span>
@@ -173,7 +233,9 @@ export function AutoPlacementPreviewDialog({
           </div>
           <div className="metric">
             <span className="value">{selectedSessionIds.length}</span>
-            <span className="label">Selected to apply</span>
+            <span className="label">
+              Selected to {saveScenario ? "save" : "apply"}
+            </span>
           </div>
           <div className="metric">
             <span className="value">{preview.unplaced.length}</span>

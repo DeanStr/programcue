@@ -123,6 +123,7 @@ export class DemoResetStorageError extends Error {
 // and a demo reset must not weaken that production invariant.
 export const DEMO_RESET_EVENT_TABLES = [
   "assistant_proposal_executions",
+  "ai_operation_feedback",
   "api_keys",
   "webhook_endpoints",
   "saved_views",
@@ -159,6 +160,8 @@ export const DEMO_RESET_EVENT_TABLES = [
   "event_public_sites",
   "programme_embeds",
   "public_itineraries",
+  "schedule_scenarios",
+  "schedule_publication_digests",
   "schedule_review_links",
   "schedule_conflicts",
   "schedule_entries",

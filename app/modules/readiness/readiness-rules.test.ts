@@ -4,6 +4,7 @@ import {
   calculateOverallReadiness,
   calculateReadiness,
   operationalReadinessStatus,
+  selectTopReadinessAction,
   summarizeReadinessConditions,
 } from "./readiness-rules";
 
@@ -99,5 +100,20 @@ describe("readiness rules", () => {
         warningConditionCount: 0,
       }),
     ).toThrow(/non-negative integer/);
+  });
+
+  it("selects one stable operational action independently of query order", () => {
+    const conditions = [
+      { key: "speaker_assets", severity: "warning" as const },
+      { key: "overdue_tasks", severity: "danger" as const },
+      { key: "schedule_conflicts", severity: "danger" as const },
+    ];
+    expect(selectTopReadinessAction(conditions)).toEqual(
+      expect.objectContaining({ key: "schedule_conflicts" }),
+    );
+    expect(selectTopReadinessAction([...conditions].reverse())).toEqual(
+      expect.objectContaining({ key: "schedule_conflicts" }),
+    );
+    expect(selectTopReadinessAction([])).toBeNull();
   });
 });

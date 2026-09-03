@@ -827,6 +827,7 @@ Lead with the answer, include material uncertainty, and end with the safest conc
       }
       const model = response.model ?? provider.model;
       const result: ContextualAiResult = {
+        operationId: correlationId,
         kind: input.kind,
         title: input.title,
         content,

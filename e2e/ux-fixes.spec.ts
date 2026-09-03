@@ -111,16 +111,11 @@ test("mobile administration sections reveal linked content without overflow", as
   await expect(
     page.getByRole("heading", { name: "Overall readiness" }),
   ).toBeVisible();
+  await expect(page.getByText("Do this next", { exact: true })).toBeVisible();
   await expect(page.getByRole("heading", { name: "Workflows" })).toBeVisible();
-  await expect(page.getByLabel("Operational focus")).toBeVisible();
-  // The reminder foundation and purpose are required inputs that shape the
-  // draft, so they are shown outright rather than behind a disclosure.
-  const reminderSelector = page.getByLabel("Approved reminder foundation");
-  await expect(reminderSelector).toBeVisible();
-  await expect(page.getByLabel("Message purpose")).toBeVisible();
-  const selectorBox = await reminderSelector.boundingBox();
-  expect(selectorBox).not.toBeNull();
-  expect(selectorBox!.x + selectorBox!.width).toBeLessThanOrEqual(390);
+  await expect(
+    page.getByRole("link", { name: "Configure AI provider" }),
+  ).toHaveAttribute("href", "/admin/assistant");
   await expectNoHorizontalPageOverflow(page);
 
   await waitForInterface(page, "/admin/operations?panel=activity");

@@ -1897,3 +1897,54 @@ cannot accidentally replace known conflict provenance with an ordinary return.
 An abandoned draft remains durable history after return, but organiser
 projections redact its scores, recommendation, feedback and notes, and review-
 cycle readiness does not count it as unfinished work.
+
+## Operational prioritisation, schedule scenarios and bounded AI feedback
+
+The Command Centre selects one “Do this next” action with a fixed domain-owned
+priority order. Critical conditions precede warnings; schedule publication
+conflicts, overdue work and other declared operational failures have explicit
+relative priority. Remaining conditions are grouped as Must resolve, Due soon,
+Waiting or follow-up, and Plan next. The seven-day due-soon condition is derived
+from existing task due dates and excludes critical work already represented by
+the higher-priority critical condition. Its destination uses the same explicit
+due-soon/non-critical filters. This is presentation over authoritative
+readiness records, not an assignment queue, workflow engine or AI ranking. When
+no AI provider is configured, the large AI controls collapse to one optional
+setup notice while deterministic actions remain available.
+
+Schedule scenarios are private, immutable auto-placement proposals attached to
+the single active draft; they are not additional `schedule_versions`. The user
+first reviews the existing deterministic placement proposal and selects the
+moves that define the named alternative. Saving recomputes the proposal
+server-side, rejects selections outside it, and records the selected intent
+with its exact draft, event, policy and session revisions. Applying the saved
+selection, or changing that selection during review, goes through the existing
+auto-placement confirmation command and its commit-time revalidation. Current
+warning evidence is recomputed from authoritative rules; stale warning evidence
+is not presented as current. A later source change makes the saved scenario
+inspectable but inapplicable until a fresh scenario is created. An event may
+keep at most ten active scenarios. There are no natural-language constraints,
+alternative optimisers, scenario-specific authority rules or parallel draft
+publication paths.
+
+Every successful schedule publication stores a change digest in the same D1
+batch that makes the schedule authoritative. Category counts are exact. Stored
+record highlights are capped at twenty per category and content changes retain
+field names rather than previous/new bodies; the pre-publication confirmation
+continues to show the full exact diff. This makes the latest publication
+explainable without risking an oversized row or building a reporting system.
+
+AI feedback belongs to the requesting person’s completed, event-scoped
+`ai.*` operation. It records helpful or not helpful, one focused problem reason
+and an optional bounded detail, and the requesting person may correct the
+recorded classification through the same result UI. Audit metadata records the
+classification and whether detail exists, not the free-text detail. The result
+store does not copy model prompts or outputs and does not introduce experiments,
+incident routing or a telemetry dashboard.
+
+Existing saved views already persist authorised administrator URLs, including
+their filters and sorting, and existing exports remain the report contracts.
+No separate saved-report schema or semantic reporting layer is introduced
+without a concrete filter/export contract that the current saved-view mechanism
+cannot represent. The evaluator guide and optional numeric AI assessment remain
+unchanged.

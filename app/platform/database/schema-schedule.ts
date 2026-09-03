@@ -467,6 +467,108 @@ export const scheduleVersions = sqliteTable(
   ],
 );
 
+export const scheduleScenarios = sqliteTable(
+  "schedule_scenarios",
+  {
+    id: text("id").primaryKey(),
+    organisationId: text("organisation_id").notNull(),
+    eventId: text("event_id").notNull(),
+    scheduleVersionId: text("schedule_version_id").notNull(),
+    createdByPersonId: text("created_by_person_id")
+      .notNull()
+      .references(() => people.id),
+    name: text("name").notNull(),
+    baseScheduleRevision: integer("base_schedule_revision").notNull(),
+    eventRevision: integer("event_revision").notNull(),
+    policyRevision: integer("policy_revision").notNull(),
+    previewJson: text("preview_json").notNull(),
+    creationOperationId: text("creation_operation_id").notNull(),
+    createdAt: integer("created_at").notNull().default(epochNow),
+    discardOperationId: text("discard_operation_id"),
+    discardedAt: integer("discarded_at"),
+  },
+  (table) => [
+    uniqueIndex("schedule_scenarios_id_event_unique").on(
+      table.id,
+      table.eventId,
+    ),
+    uniqueIndex("schedule_scenarios_creation_operation_unique").on(
+      table.creationOperationId,
+    ),
+    uniqueIndex("schedule_scenarios_discard_operation_unique").on(
+      table.discardOperationId,
+    ),
+    index("idx_schedule_scenarios_event_active")
+      .on(table.eventId, desc(table.createdAt))
+      .where(sql`${table.discardedAt} IS NULL`),
+    uniqueIndex("ux_schedule_scenarios_active_name")
+      .on(table.eventId, sql`lower(${table.name})`)
+      .where(sql`${table.discardedAt} IS NULL`),
+    foreignKey({
+      columns: [table.eventId, table.organisationId],
+      foreignColumns: [events.id, events.organisationId],
+    }).onDelete("cascade"),
+    foreignKey({
+      columns: [table.scheduleVersionId, table.eventId],
+      foreignColumns: [scheduleVersions.id, scheduleVersions.eventId],
+    }).onDelete("cascade"),
+    check(
+      "schedule_scenarios_name_check",
+      sql`length(${table.name}) BETWEEN 1 AND 80 AND ${table.name} = trim(${table.name})`,
+    ),
+    check(
+      "schedule_scenarios_revisions_check",
+      sql`${table.baseScheduleRevision} > 0 AND ${table.eventRevision} > 0 AND ${table.policyRevision} > 0`,
+    ),
+    check(
+      "schedule_scenarios_name_characters_check",
+      sql`instr(${table.name}, char(10)) = 0 AND instr(${table.name}, char(13)) = 0 AND instr(${table.name}, char(0)) = 0`,
+    ),
+    check(
+      "schedule_scenarios_preview_json_check",
+      sql`json_valid(${table.previewJson}) AND json_type(${table.previewJson}) = 'object' AND length(${table.previewJson}) <= 1048576`,
+    ),
+    check(
+      "schedule_scenarios_discard_check",
+      sql`(${table.discardedAt} IS NULL AND ${table.discardOperationId} IS NULL) OR (${table.discardedAt} >= ${table.createdAt} AND ${table.discardOperationId} IS NOT NULL)`,
+    ),
+  ],
+);
+
+export const schedulePublicationDigests = sqliteTable(
+  "schedule_publication_digests",
+  {
+    scheduleVersionId: text("schedule_version_id").primaryKey(),
+    eventId: text("event_id").notNull(),
+    publicationOperationId: text("publication_operation_id").notNull(),
+    previousVersionNumber: integer("previous_version_number"),
+    digestJson: text("digest_json").notNull(),
+    createdAt: integer("created_at").notNull().default(epochNow),
+  },
+  (table) => [
+    uniqueIndex("schedule_publication_digests_operation_event_unique").on(
+      table.publicationOperationId,
+      table.eventId,
+    ),
+    index("idx_schedule_publication_digests_event_created").on(
+      table.eventId,
+      desc(table.createdAt),
+    ),
+    foreignKey({
+      columns: [table.scheduleVersionId, table.eventId],
+      foreignColumns: [scheduleVersions.id, scheduleVersions.eventId],
+    }).onDelete("cascade"),
+    check(
+      "schedule_publication_digests_previous_version_check",
+      sql`${table.previousVersionNumber} IS NULL OR ${table.previousVersionNumber} > 0`,
+    ),
+    check(
+      "schedule_publication_digests_json_check",
+      sql`json_valid(${table.digestJson}) AND json_type(${table.digestJson}) = 'object' AND length(${table.digestJson}) <= 1048576`,
+    ),
+  ],
+);
+
 export const scheduleSessionContents = sqliteTable(
   "schedule_session_contents",
   {
