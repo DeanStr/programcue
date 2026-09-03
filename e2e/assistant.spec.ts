@@ -427,7 +427,7 @@ test("assistant reminder preview can be edited and queues exactly once only afte
   ).toBeVisible();
 });
 
-test("contextual AI actions stay inside the readiness and review workflows", async ({
+test("contextual AI surfaces stay inside the readiness and review workflows", async ({
   page,
 }) => {
   const commandResponse = await page.goto("/admin/command");
@@ -436,24 +436,21 @@ test("contextual AI actions stay inside the readiness and review workflows", asy
   const reloadResponse = await page.reload();
   expect(reloadResponse?.headers()["cache-control"]).toBe("private, no-store");
   await page.locator("body[data-hydrated='true']").waitFor();
-  const readinessAction = page.getByRole("button", {
-    name: "Summarise readiness blockers",
+  const assistantRegion = page.getByRole("region", {
+    name: "Assistants and delivery",
   });
-  await expect(readinessAction).toBeVisible();
-  const actionRequest = page.waitForRequest(
-    (request) => new URL(request.url()).pathname === "/ai/context.data",
-  );
-  const actionResponse = page.waitForResponse(
-    (response) => new URL(response.url()).pathname === "/ai/context.data",
-  );
-  await readinessAction.click();
-  expect((await actionRequest).method()).toBe("POST");
-  expect((await actionResponse).headers()["cache-control"]).toBe(
-    "private, no-store",
-  );
   await expect(
-    page.locator(".command-advisor").getByRole("alert"),
-  ).toContainText(/not configured/i);
+    assistantRegion.getByRole("heading", { name: "AI assistance" }),
+  ).toBeVisible();
+  await expect(assistantRegion.getByText(/not configured/i)).toBeVisible();
+  await expect(
+    assistantRegion.getByRole("link", { name: "Configure AI provider" }),
+  ).toHaveAttribute("href", "/admin/assistant");
+  await expect(
+    assistantRegion.getByRole("button", {
+      name: "Summarise readiness blockers",
+    }),
+  ).toHaveCount(0);
 
   await page.context().addCookies([
     {
