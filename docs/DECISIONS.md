@@ -1948,3 +1948,15 @@ No separate saved-report schema or semantic reporting layer is introduced
 without a concrete filter/export contract that the current saved-view mechanism
 cannot represent. The evaluator guide and optional numeric AI assessment remain
 unchanged.
+
+## D1 production integrity validation
+
+Release validation inventories production tables from `sqlite_master` and runs
+`PRAGMA quick_check(table)` for every customer-inspectable table. A single
+database-wide `PRAGMA quick_check` exceeded D1's query memory after migration
+0057 even though every table-scoped check succeeded. The inventory is resolved
+at release time so later tables cannot be omitted silently, and any missing,
+failed or non-`ok` result blocks deployment. Cloudflare's protected `_cf_`
+internal tables are excluded because D1 rejects direct inspection of them.
+Foreign-key validation and the explicit migration/schema contracts remain
+separate blocking checks.

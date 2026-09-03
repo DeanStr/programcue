@@ -386,6 +386,50 @@ function wranglerFailureMessage(result) {
   return "Wrangler returned no diagnostic.";
 }
 
+function executeRemoteCommands(commands, label) {
+  const result = spawnSync(
+    resolvePackageExecutable("wrangler", "wrangler"),
+    [
+      "d1",
+      "execute",
+      "program-cue-db-wnam",
+      "--remote",
+      "--config",
+      resolve(repositoryRoot, "wrangler.jsonc"),
+      "--command",
+      commands.join("; "),
+      "--json",
+    ],
+    {
+      cwd: repositoryRoot,
+      encoding: "utf8",
+      maxBuffer: 4 * 1024 * 1024,
+      timeout: REMOTE_SCHEMA_TIMEOUT_MS,
+    },
+  );
+  if (result.error?.code === "ETIMEDOUT") {
+    throw new Error(`Remote D1 ${label} timed out.`);
+  }
+  if (result.error) {
+    throw new Error(`Remote D1 ${label} could not start Wrangler.`);
+  }
+  if (result.status !== 0) {
+    throw new Error(
+      `Remote D1 ${label} could not query production: ${wranglerFailureMessage(result)}`,
+    );
+  }
+  let response;
+  try {
+    response = JSON.parse(result.stdout);
+  } catch {
+    throw new Error(`Remote D1 ${label} received invalid JSON.`);
+  }
+  if (!Array.isArray(response)) {
+    throw new Error(`Remote D1 ${label} received an invalid response.`);
+  }
+  return response;
+}
+
 export function validateRemoteSchemaEvidence(
   response,
   localMigrationNames,
@@ -591,14 +635,13 @@ function run() {
         `SELECT '${tableName}' AS tableName, id, seq, "table", "from", "to", on_delete FROM pragma_foreign_key_list('${tableName}')`,
     )
     .join(" UNION ALL ");
-  const command = [
+  const commands = [
     "SELECT name FROM d1_migrations ORDER BY id",
     "PRAGMA table_info(event_brand_assets)",
     `SELECT type, name, sql FROM sqlite_master WHERE name IN (${objectNames}) ORDER BY type, name`,
     "PRAGMA table_info(reviews)",
     "PRAGMA table_info(review_revisions)",
     "PRAGMA table_info(reviewer_ai_suggestions)",
-    "PRAGMA quick_check",
     "PRAGMA foreign_key_check",
     publicSiteColumnQuery,
     publicSiteForeignKeyQuery,
@@ -607,44 +650,61 @@ function run() {
          OR json_extract(configuration_json, '$.theme') NOT IN ('light','dark','system')`,
     pendingTaskConfigurationInventoryQuery,
     "PRAGMA table_info(session_speakers)",
-  ].join("; ");
-  const result = spawnSync(
-    resolvePackageExecutable("wrangler", "wrangler"),
-    [
-      "d1",
-      "execute",
-      "program-cue-db-wnam",
-      "--remote",
-      "--config",
-      resolve(repositoryRoot, "wrangler.jsonc"),
-      "--command",
-      command,
-      "--json",
-    ],
-    {
-      cwd: repositoryRoot,
-      encoding: "utf8",
-      maxBuffer: 4 * 1024 * 1024,
-      timeout: REMOTE_SCHEMA_TIMEOUT_MS,
-    },
+  ];
+  const response = executeRemoteCommands(
+    commands.slice(0, 6),
+    "schema metadata validation",
   );
-  if (result.error?.code === "ETIMEDOUT") {
-    throw new Error("Remote D1 schema validation timed out.");
-  }
-  if (result.error) {
-    throw new Error("Remote D1 schema validation could not start Wrangler.");
-  }
-  if (result.status !== 0) {
+  const tableInventoryResponse = executeRemoteCommands(
+    [
+      "SELECT name FROM sqlite_master WHERE type = 'table' AND substr(name, 1, 4) <> '_cf_' ORDER BY name",
+    ],
+    "integrity table inventory",
+  );
+  if (tableInventoryResponse.length !== 1) {
     throw new Error(
-      `Remote D1 schema validation could not query production: ${wranglerFailureMessage(result)}`,
+      "Remote D1 integrity table inventory returned an unexpected result set.",
     );
   }
-  let response;
-  try {
-    response = JSON.parse(result.stdout);
-  } catch {
-    throw new Error("Remote D1 schema validation received invalid JSON.");
+  const tableNames = successfulResults(
+    tableInventoryResponse[0],
+    "integrity table inventory",
+  ).map((row) => row.name);
+  if (
+    tableNames.length === 0 ||
+    tableNames.some((name) => typeof name !== "string" || name.length === 0)
+  ) {
+    throw new Error("Remote D1 integrity table inventory was invalid.");
   }
+  const integrityResponse = executeRemoteCommands(
+    tableNames.map(
+      (name) => `PRAGMA quick_check('${name.replaceAll("'", "''")}')`,
+    ),
+    "table integrity validation",
+  );
+  if (integrityResponse.length !== tableNames.length) {
+    throw new Error(
+      "Remote D1 table integrity validation returned an unexpected result set.",
+    );
+  }
+  for (const [index, result] of integrityResponse.entries()) {
+    const rows = successfulResults(
+      result,
+      `integrity for table ${tableNames[index]}`,
+    );
+    if (rows.length !== 1 || rows[0]?.quick_check !== "ok") {
+      throw new Error(
+        `Remote D1 quick_check did not return ok for table ${tableNames[index]}.`,
+      );
+    }
+  }
+  response.push({ results: [{ quick_check: "ok" }], success: true });
+  response.push(
+    ...executeRemoteCommands(
+      commands.slice(6),
+      "schema relationship validation",
+    ),
+  );
   const evidence = validateRemoteSchemaEvidence(response, localMigrationNames, {
     allowPendingMigrations,
   });
