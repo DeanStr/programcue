@@ -95,6 +95,20 @@ test("schedule publication previews material changes and readiness", async ({
   await expect(digest).toContainText("0 material changes");
 });
 
+test("Scenario Lab explains how to create an eligible starting session", async ({
+  page,
+}) => {
+  await waitForInterface(page, "/admin/schedule");
+  await createNextScheduleDraft(page);
+  const scenarioLab = page.locator(".schedule-scenarios");
+  await expect(scenarioLab).toContainText(
+    "The remaining unplaced sessions are not unscheduled",
+  );
+  await expect(
+    scenarioLab.getByRole("link", { name: "Create an unscheduled session" }),
+  ).toHaveAttribute("href", "/admin/sessions/new");
+});
+
 test("schedule and programme render the event calendar date and timezone", async ({
   page,
 }) => {

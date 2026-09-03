@@ -912,7 +912,10 @@ recomputes and validates that selection before saving it with its source
 revisions. Current warnings remain visible, application failure retains the
 comparison dialog and error context, and selective or complete application uses
 the existing confirmation command. A changed source makes the scenario
-inapplicable. The primary planning canvas remains before Scenario Lab and
+inapplicable. When an active draft cannot create a proposal, Scenario Lab shows
+the authoritative readiness reason. If there is no unscheduled session to work
+from, it also links directly to session creation instead of leaving that setup
+implicit. The primary planning canvas remains before Scenario Lab and
 publication history at laptop sizes. Scenarios do not create a parallel
 schedule version or publish independently. Schedule publication now commits a
 durable, bounded latest-change digest atomically with the published version:
@@ -924,7 +927,10 @@ completed AI operation in the current organisation/event. It supports helpful
 or a focused not-helpful reason plus optional bounded detail, and the result UI
 allows the requester to change a recorded rating. Audit metadata does not copy
 that detail, prompts or result bodies. This is feedback capture, not a
-telemetry/experimentation dashboard. Existing URL-based saved views
+telemetry/experimentation dashboard. The result does not expose its change
+control until the preceding feedback persistence and route revalidation have
+settled, preventing an immediately opened correction form from being closed by
+the prior request. Existing URL-based saved views
 already cover reusable filtered report destinations, so no additional saved-
 report or semantic-layer schema was added. `/evaluate` and the optional numeric
 AI assessment were not changed.

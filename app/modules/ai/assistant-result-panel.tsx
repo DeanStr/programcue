@@ -117,7 +117,7 @@ function AiFeedbackControl({ operationId }: { operationId: string }) {
   useEffect(() => {
     if (fetcher.state === "idle" && fetcher.data?.ok) setEditing(false);
   }, [fetcher.data, fetcher.state]);
-  if (fetcher.data?.ok && !editing) {
+  if (fetcher.state === "idle" && fetcher.data?.ok && !editing) {
     return (
       <div className="help ai-feedback-recorded">
         <span role="status">Feedback recorded.</span>

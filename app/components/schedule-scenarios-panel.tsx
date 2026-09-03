@@ -1,7 +1,7 @@
 import { GitCompareArrows } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { useFetcher } from "react-router";
-import { Button } from "~/components/ui/button";
+import { Button, ButtonLink } from "~/components/ui/button";
 import type { AutoPlacementPreview } from "~/modules/schedule/schedule-auto-placement";
 import type { action as schedulePlannerAction } from "~/routes/schedule-planner.server";
 import { AutoPlacementPreviewDialog } from "./schedule-planner-dialogs";
@@ -107,6 +107,11 @@ export function ScheduleScenariosPanel({
     workspace.version?.status === "draft" &&
     workspace.autoPlacementReadiness.canPreview &&
     scenarioCapacityAvailable;
+  const scenarioUnavailableReason =
+    workspace.version?.status === "draft" &&
+    !workspace.autoPlacementReadiness.canPreview
+      ? workspace.autoPlacementReadiness.disabledReason
+      : null;
   return (
     <section
       className="schedule-scenarios"
@@ -164,6 +169,16 @@ export function ScheduleScenariosPanel({
           role={notice.tone === "error" ? "alert" : "status"}
         >
           <span>{notice.text}</span>
+        </div>
+      ) : null}
+      {scenarioUnavailableReason ? (
+        <div className="validation-item schedule-notice info mb" role="status">
+          <span>{scenarioUnavailableReason}</span>
+          {workspace.autoPlacementReadiness.unscheduledCount === 0 ? (
+            <ButtonLink size="small" to="/admin/sessions/new">
+              Create an unscheduled session
+            </ButtonLink>
+          ) : null}
         </div>
       ) : null}
       {workspace.scenarios.length ? (
