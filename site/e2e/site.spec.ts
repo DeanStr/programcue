@@ -59,7 +59,7 @@ test("published pages and the account journey are reachable", {
   );
   await expect(film.locator("source")).toHaveAttribute(
     "src",
-    "https://media.programcue.com/films/program-cue-launch-92cab554.mp4",
+    "https://media.programcue.com/films/program-cue-launch-3e750f9b8eb9c0f6.mp4",
   );
   await expect(film.locator("track")).toHaveAttribute(
     "src",
@@ -78,7 +78,7 @@ test("published pages and the account journey are reachable", {
     page.getByRole("heading", { level: 1, name: "Product film transcript" }),
   ).toBeVisible();
   await expect(page.locator("main")).toContainText(
-    "One programme. Every workflow. Fully connected.",
+    "Shared source. Visible ownership. Clear next move.",
   );
 
   await openReady(page, "/terms");

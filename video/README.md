@@ -130,11 +130,12 @@ applicable Remotion licence approval and, for any ElevenLabs-derived audio,
 the applicable ElevenLabs plan and commercial-use approval. Credentials are
 never part of that record or the repository.
 
-The website currently retains the previously approved Eleven Music v2 master
-at the immutable `program-cue-launch-92cab554.mp4` URL. The current working cut
-reuses that exact soundtrack and remains unpublished. Promoting the new picture
-still requires a validated master, an immutable upload and an atomic update of
-the release manifest, poster, captions and HTML transcript.
+The selected website release is `program-cue-launch-3e750f9b8eb9c0f6.mp4`, rendered
+from commit `d03454c5` and approved for publication on 5 September 2026.
+It retains the exact previously approved Eleven Music v2 soundtrack. The
+release bundle pins the validated master, its poster, 70-cue caption track
+and matching HTML transcript. Future picture changes require a newly validated
+master, an immutable upload and an atomic update of the whole site bundle.
 
 ## Editorial boundaries
 

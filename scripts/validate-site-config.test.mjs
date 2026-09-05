@@ -361,8 +361,8 @@ describe("published pages", () => {
     const captionIssues = brokenSite(({ replace }) =>
       replace(
         "program-cue-product-film-en.vtt",
-        "Readiness is 75 percent",
-        "Readiness is 76 percent",
+        "Picture fades.",
+        "Picture ends.",
       ),
     );
     const transcriptIssues = brokenSite(({ replace }) =>
@@ -401,11 +401,11 @@ describe("published pages", () => {
   });
 
   test("the product-film URL is pinned to the released master", () => {
-    const issues = brokenSite(({ replace }) =>
+    const issues = brokenSite(({ read, replace }) =>
       replace(
         "index.html",
-        "program-cue-launch-92cab554.mp4",
-        "program-cue-launch-unreleased.mp4",
+        JSON.parse(read("product-film-release.json")).videoUrl,
+        "https://media.programcue.com/films/program-cue-launch-unreleased.mp4",
       ),
     );
     assert.ok(reports(issues, "URLs must match the released master"));

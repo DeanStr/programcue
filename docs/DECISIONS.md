@@ -1790,6 +1790,14 @@ The 4 September 2026 instruction selects that delivery's exact soundtrack for
 the revised picture. It does not itself publish or approve replacement of the
 public video before the new master passes its delivery gates.
 
+On 5 September 2026 the release owner approved publication of the revised
+picture rendered from `d03454c5`, retaining that exact approved soundtrack.
+The selected master hash is
+`3e750f9b8eb9c0f6989799247c5cde0247a2d2069fa7de225551ca0920911caf`.
+Its bundle uses the 10-second poster frame, current 70-cue descriptions and a
+matching HTML transcript; technical media validation and all 196 sampled
+source comparisons passed before selection.
+
 The public website delivers that approved master as one immutable progressive
 MP4 from the dedicated `programcue-media` R2 bucket at
 `media.programcue.com`. Its versioned object key includes the accepted master

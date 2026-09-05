@@ -1,13 +1,13 @@
 {
   "schemaVersion": 1,
-  "videoUrl": "https://media.programcue.com/films/program-cue-launch-92cab554.mp4",
-  "masterSha256Prefix": "92cab554",
-  "masterSha256": "92cab55415c237c77b4564ee2155fdacf05ad6787dc42daea159b6df54d52fb4",
+  "videoUrl": "https://media.programcue.com/films/program-cue-launch-3e750f9b8eb9c0f6.mp4",
+  "masterSha256Prefix": "3e750f9b8eb9c0f6",
+  "masterSha256": "3e750f9b8eb9c0f6989799247c5cde0247a2d2069fa7de225551ca0920911caf",
   "audioSource": "eleven_music_v2",
   "audioStreamSha256": "765c22a5d90541d27b75ce759b4c9b3fa2664a67cd8cbc75cb46ce94a81ffdd2",
   "decodedAudioSha256": "d7c97054a0d324e21327a6dc50347f3b373eadd19ba3f9eac5a13671762dcfa3",
   "captionsFile": "program-cue-product-film-en.vtt",
-  "captionsSha256": "3e3d24bf73f5b849dd0a4d091d7462d4640c8bed9dcf976c5214e724d544264f",
+  "captionsSha256": "6754eeaede91bc6b64f6ec5786e184465f4231cd655713ef322aa96841ccd6ce",
   "posterFile": "images/program-cue-product-film-poster.webp",
-  "posterSha256": "1d3cff5da55f8efb04332e27ed7afe393c50e548f689212380ee42485fce44d3"
+  "posterSha256": "be3fcd28d25bcc86b8c0d96bd77b3f9c7d1c995ffb303c8e9e3f884b43f02392"
 }
